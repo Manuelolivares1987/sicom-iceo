@@ -1,0 +1,106 @@
+import { clsx, type ClassValue } from 'clsx'
+import { twMerge } from 'tailwind-merge'
+
+export function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs))
+}
+
+export function formatCLP(value: number): string {
+  return new Intl.NumberFormat('es-CL', {
+    style: 'currency',
+    currency: 'CLP',
+    minimumFractionDigits: 0,
+  }).format(value)
+}
+
+export function formatPercent(value: number, decimals = 1): string {
+  return `${value.toFixed(decimals)}%`
+}
+
+export function formatDate(date: string | Date): string {
+  return new Intl.DateTimeFormat('es-CL', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  }).format(new Date(date))
+}
+
+export function formatDateTime(date: string | Date): string {
+  return new Intl.DateTimeFormat('es-CL', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(date))
+}
+
+export function getICEOColor(valor: number): string {
+  if (valor >= 95) return 'text-iceo-excelencia'
+  if (valor >= 85) return 'text-iceo-bueno'
+  if (valor >= 70) return 'text-iceo-aceptable'
+  return 'text-iceo-deficiente'
+}
+
+export function getICEOBgColor(valor: number): string {
+  if (valor >= 95) return 'bg-iceo-excelencia'
+  if (valor >= 85) return 'bg-iceo-bueno'
+  if (valor >= 70) return 'bg-iceo-aceptable'
+  return 'bg-iceo-deficiente'
+}
+
+export function getICEOLabel(valor: number): string {
+  if (valor >= 95) return 'Excelencia'
+  if (valor >= 85) return 'Bueno'
+  if (valor >= 70) return 'Aceptable'
+  return 'Deficiente'
+}
+
+export function getEstadoOTColor(estado: string): string {
+  const colores: Record<string, string> = {
+    creada: 'bg-gray-100 text-gray-700',
+    asignada: 'bg-blue-100 text-blue-700',
+    en_ejecucion: 'bg-amber-100 text-amber-700',
+    pausada: 'bg-orange-100 text-orange-700',
+    ejecutada_ok: 'bg-green-100 text-green-700',
+    ejecutada_con_observaciones: 'bg-yellow-100 text-yellow-700',
+    no_ejecutada: 'bg-red-100 text-red-700',
+    cancelada: 'bg-gray-200 text-gray-500',
+  }
+  return colores[estado] || 'bg-gray-100 text-gray-700'
+}
+
+export function getEstadoOTLabel(estado: string): string {
+  const labels: Record<string, string> = {
+    creada: 'Creada',
+    asignada: 'Asignada',
+    en_ejecucion: 'En Ejecución',
+    pausada: 'Pausada',
+    ejecutada_ok: 'Ejecutada OK',
+    ejecutada_con_observaciones: 'Con Observaciones',
+    no_ejecutada: 'No Ejecutada',
+    cancelada: 'Cancelada',
+  }
+  return labels[estado] || estado
+}
+
+export function getSemaforoColor(estado: string): string {
+  const colores: Record<string, string> = {
+    operativo: 'bg-semaforo-verde',
+    en_mantenimiento: 'bg-semaforo-amarillo',
+    fuera_servicio: 'bg-semaforo-rojo',
+    dado_baja: 'bg-gray-400',
+    en_transito: 'bg-semaforo-azul',
+  }
+  return colores[estado] || 'bg-gray-400'
+}
+
+export function getCriticidadColor(criticidad: string): string {
+  const colores: Record<string, string> = {
+    critica: 'bg-red-600 text-white',
+    alta: 'bg-orange-500 text-white',
+    media: 'bg-yellow-400 text-yellow-900',
+    baja: 'bg-green-500 text-white',
+  }
+  return colores[criticidad] || 'bg-gray-400'
+}

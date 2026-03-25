@@ -1,0 +1,92 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ─── Base ────────────────────────────────────────────────────── */
+body {
+  @apply bg-gray-50 text-gray-900 antialiased;
+  font-family: 'Inter', system-ui, sans-serif;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ─── Custom Scrollbar (green themed) ─────────────────────────── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-gray-100 rounded-full;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-pillado-green-300 rounded-full;
+  transition: background-color 0.2s;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-pillado-green-500;
+}
+
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #8bcc95 #f3f4f6;
+}
+
+/* ─── Focus & Selection ───────────────────────────────────────── */
+::selection {
+  @apply bg-pillado-green-100 text-pillado-green-900;
+}
+
+/* ─── Print Styles ────────────────────────────────────────────── */
+@media print {
+  body {
+    @apply bg-white text-black;
+  }
+
+  .no-print,
+  nav,
+  aside,
+  header {
+    display: none !important;
+  }
+
+  .print-break {
+    page-break-before: always;
+  }
+
+  .print-container {
+    width: 100%;
+    max-width: 100%;
+    margin: 0;
+    padding: 0;
+  }
+
+  table {
+    font-size: 10px;
+  }
+
+  @page {
+    margin: 1.5cm;
+    size: A4 landscape;
+  }
+}
+
+/* ─── Utility Layers ──────────────────────────────────────────── */
+@layer components {
+  .card-hover {
+    @apply transition-shadow duration-200 hover:shadow-md;
+  }
+
+  .stat-card {
+    @apply rounded-xl bg-white p-6 shadow-sm border border-gray-100 card-hover;
+  }
+
+  .badge-semaforo {
+    @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium;
+  }
+}
