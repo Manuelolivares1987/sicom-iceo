@@ -860,7 +860,7 @@ BEGIN
     BEGIN
         INSERT INTO auditoria_eventos (
             tabla,
-            operacion,
+            accion,
             registro_id,
             datos_anteriores,
             datos_nuevos,
