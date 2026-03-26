@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import Link from 'next/link'
 import {
   Settings,
   Users,
@@ -13,6 +14,7 @@ import {
   MapPin,
   Wrench,
   ClipboardList,
+  ChevronRight,
 } from 'lucide-react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -359,6 +361,31 @@ function ParametrosTab() {
               </p>
             </div>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Checklist Templates Link */}
+      <Card>
+        <CardContent className="p-0">
+          <Link
+            href="/dashboard/admin/checklist-templates"
+            className="flex items-center justify-between rounded-lg px-6 py-5 transition-colors hover:bg-gray-50"
+          >
+            <div className="flex items-center gap-4">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-orange-50">
+                <ClipboardList className="h-5 w-5 text-orange-500" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-gray-900">
+                  Plantillas de Checklist
+                </p>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Gestionar los checklists por defecto para cada tipo de OT
+                </p>
+              </div>
+            </div>
+            <ChevronRight className="h-5 w-5 text-gray-400" />
+          </Link>
         </CardContent>
       </Card>
 

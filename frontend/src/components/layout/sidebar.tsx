@@ -17,6 +17,7 @@ import {
   ShieldCheck,
   BarChart3,
   Gauge,
+  ClipboardCheck,
   FileSpreadsheet,
   Eye,
   Settings,
@@ -28,6 +29,7 @@ import { cn } from '@/lib/utils'
 
 const navItems: Array<{ label: string; href: string; icon: any; module?: Module }> = [
   { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+  { label: 'Mis OTs', href: '/dashboard/mis-ots', icon: ClipboardCheck, module: 'ordenes_trabajo' as Module },
   { label: 'Contratos', href: '/dashboard/contratos', icon: FileText, module: 'contratos' },
   { label: 'Activos', href: '/dashboard/activos', icon: Cog, module: 'activos' },
   { label: 'Órdenes de Trabajo', href: '/dashboard/ordenes-trabajo', icon: ClipboardList, module: 'ordenes_trabajo' },

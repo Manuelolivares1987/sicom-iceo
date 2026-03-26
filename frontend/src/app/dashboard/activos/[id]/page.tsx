@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import {
@@ -23,7 +23,10 @@ import {
   Camera,
   FileText,
   Package,
+  Download,
+  Printer,
 } from 'lucide-react'
+import QRCode from 'qrcode'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -587,11 +590,24 @@ function QRModal({
 }) {
   const generarQR = useGenerarQR()
   const [copied, setCopied] = useState(false)
+  const [qrImageUrl, setQrImageUrl] = useState<string>('')
 
   const qrUrl =
     typeof window !== 'undefined'
       ? `${window.location.origin}/equipo/${activo.id}`
       : `/equipo/${activo.id}`
+
+  // Generate QR image when modal opens
+  useEffect(() => {
+    if (open) {
+      const urlToEncode = activo.qr_url || `https://pilladoiceo.netlify.app/equipo/${activo.id}`
+      QRCode.toDataURL(urlToEncode, {
+        width: 300,
+        margin: 2,
+        color: { dark: '#000000', light: '#FFFFFF' },
+      }).then(setQrImageUrl).catch(() => {})
+    }
+  }, [open, activo.qr_url, activo.id])
 
   const handleCopy = async () => {
     try {
@@ -607,9 +623,46 @@ function QRModal({
     generarQR.mutate(activo.id)
   }
 
+  function handleDownload() {
+    if (!qrImageUrl) return
+    const link = document.createElement('a')
+    link.download = `QR-${activo.codigo}.png`
+    link.href = qrImageUrl
+    link.click()
+  }
+
+  function handlePrint() {
+    if (!qrImageUrl) return
+    const printWindow = window.open('', '_blank')
+    if (!printWindow) return
+    printWindow.document.write(`
+      <html><head><title>QR - ${activo.codigo}</title>
+      <style>body{text-align:center;font-family:sans-serif;padding:20px}
+      img{width:250px}h2{margin:10px 0 5px}p{color:#666;margin:2px}</style></head>
+      <body>
+      <img src="${qrImageUrl}" />
+      <h2>${activo.codigo}</h2>
+      <p>${activo.nombre || ''}</p>
+      <p>${activo.modelo?.marca?.nombre || ''} — ${activo.modelo?.nombre || ''}</p>
+      <p>SICOM-ICEO — Pillado Empresas</p>
+      </body></html>
+    `)
+    printWindow.document.close()
+    printWindow.print()
+  }
+
   return (
     <Modal open={open} onClose={onClose} title="Codigo QR del equipo">
       <div className="space-y-5">
+        {/* QR Image */}
+        {qrImageUrl && (
+          <div className="flex flex-col items-center rounded-lg bg-gray-50 px-4 py-6">
+            <img src={qrImageUrl} alt={`QR ${activo.codigo}`} className="h-[250px] w-[250px]" />
+            <p className="mt-3 font-mono text-lg font-bold text-gray-900">{activo.codigo}</p>
+            <p className="text-sm text-gray-500">{activo.nombre || ''}</p>
+          </div>
+        )}
+
         {/* QR value */}
         {activo.qr_code && (
           <div className="rounded-lg bg-gray-50 px-4 py-4 text-center">
@@ -639,6 +692,26 @@ function QRModal({
               {copied ? 'Copiado!' : 'Copiar URL'}
             </Button>
           </div>
+        </div>
+
+        {/* Action buttons */}
+        <div className="grid grid-cols-2 gap-3">
+          <Button
+            variant="outline"
+            onClick={handleDownload}
+            disabled={!qrImageUrl}
+          >
+            <Download className="h-4 w-4 mr-2" />
+            Descargar QR
+          </Button>
+          <Button
+            variant="outline"
+            onClick={handlePrint}
+            disabled={!qrImageUrl}
+          >
+            <Printer className="h-4 w-4 mr-2" />
+            Imprimir
+          </Button>
         </div>
 
         {/* Generate / Regenerate button */}
