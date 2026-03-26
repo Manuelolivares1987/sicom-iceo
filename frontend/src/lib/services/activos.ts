@@ -157,3 +157,20 @@ export async function getHistorialMantenimiento(activoId: string) {
     .order('fecha_programada', { ascending: false })
   return { data, error }
 }
+
+// Get KPIs per asset via RPC
+export async function getKPIActivo(activoId: string) {
+  const { data, error } = await supabase.rpc('rpc_kpi_activo', {
+    p_activo_id: activoId,
+  })
+  return { data, error }
+}
+
+// Get asset ranking by health score
+export async function getRankingActivos() {
+  const { data, error } = await supabase
+    .from('v_ranking_activos')
+    .select('*')
+    .limit(50)
+  return { data, error }
+}

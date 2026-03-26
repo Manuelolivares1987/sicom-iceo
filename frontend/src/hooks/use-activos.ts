@@ -12,6 +12,8 @@ import {
   getFichaActivo,
   generarQRActivo,
   getHistorialMantenimiento,
+  getKPIActivo,
+  getRankingActivos,
 } from '@/lib/services/activos'
 import type { Activo } from '@/types/database'
 
@@ -188,6 +190,29 @@ export function useGenerarQR() {
     onSuccess: (_data, activoId) => {
       queryClient.invalidateQueries({ queryKey: ['activo', activoId] })
       queryClient.invalidateQueries({ queryKey: ['ficha-activo', activoId] })
+    },
+  })
+}
+
+export function useKPIActivo(activoId?: string) {
+  return useQuery({
+    queryKey: ['kpi-activo', activoId],
+    queryFn: async () => {
+      const { data, error } = await getKPIActivo(activoId!)
+      if (error) throw error
+      return data
+    },
+    enabled: !!activoId,
+  })
+}
+
+export function useRankingActivos() {
+  return useQuery({
+    queryKey: ['ranking-activos'],
+    queryFn: async () => {
+      const { data, error } = await getRankingActivos()
+      if (error) throw error
+      return data
     },
   })
 }
