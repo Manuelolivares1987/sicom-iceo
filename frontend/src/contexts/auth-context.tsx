@@ -35,10 +35,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .from('usuarios_perfil')
       .select('*')
       .eq('id', userId)
-      .single()
+      .maybeSingle()
 
     if (perfilError) {
       console.error('Error fetching perfil:', perfilError.message)
+      setPerfil(null)
+      return
+    }
+
+    if (!data) {
+      console.warn('No se encontró perfil para el usuario. Cree un registro en usuarios_perfil.')
       setPerfil(null)
       return
     }
