@@ -61,6 +61,42 @@ export async function createCertificacion(
   return { data: created as Certificacion | null, error }
 }
 
+// Get all certifications with activo info
+export async function getAllCertificaciones(filters?: {
+  estado?: string
+  tipo?: string
+  faena_id?: string
+}) {
+  let query = supabase
+    .from('certificaciones')
+    .select('*, activo:activos(id, codigo, nombre, tipo, faena_id, faena:faenas(nombre))')
+    .order('fecha_vencimiento', { ascending: true })
+
+  if (filters?.estado) query = query.eq('estado', filters.estado)
+  if (filters?.tipo) query = query.eq('tipo', filters.tipo)
+  if (filters?.faena_id) query = query.eq('activo.faena_id', filters.faena_id)
+
+  const { data, error } = await query
+  return { data, error }
+}
+
+// Get certification stats
+export async function getCertificacionStats() {
+  const { data, error } = await supabase
+    .from('certificaciones')
+    .select('estado')
+
+  if (error || !data) return { data: null, error }
+
+  const stats = {
+    total: data.length,
+    vigentes: data.filter(c => c.estado === 'vigente').length,
+    por_vencer: data.filter(c => c.estado === 'por_vencer').length,
+    vencidas: data.filter(c => c.estado === 'vencido').length,
+  }
+  return { data: stats, error: null }
+}
+
 export async function getProximosVencimientos(dias: number = 30) {
   const hoy = new Date().toISOString().split('T')[0]
   const limite = new Date()

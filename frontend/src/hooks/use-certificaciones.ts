@@ -3,6 +3,8 @@ import {
   getCertificaciones,
   getCertificacionesVencidas,
   getProximosVencimientos,
+  getAllCertificaciones,
+  getCertificacionStats,
   createCertificacion,
 } from '@/lib/services/certificaciones'
 import type { Certificacion } from '@/types/database'
@@ -36,6 +38,32 @@ export function useProximosVencimientos(dias?: number) {
     queryKey: ['proximos-vencimientos', dias],
     queryFn: async () => {
       const { data, error } = await getProximosVencimientos(dias)
+      if (error) throw error
+      return data
+    },
+  })
+}
+
+export function useAllCertificaciones(filters?: {
+  estado?: string
+  tipo?: string
+  faena_id?: string
+}) {
+  return useQuery({
+    queryKey: ['all-certificaciones', filters],
+    queryFn: async () => {
+      const { data, error } = await getAllCertificaciones(filters)
+      if (error) throw error
+      return data
+    },
+  })
+}
+
+export function useCertificacionStats() {
+  return useQuery({
+    queryKey: ['certificacion-stats'],
+    queryFn: async () => {
+      const { data, error } = await getCertificacionStats()
       if (error) throw error
       return data
     },

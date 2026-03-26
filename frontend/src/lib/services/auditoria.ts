@@ -2,6 +2,7 @@ import { supabase } from '@/lib/supabase'
 
 export interface AuditoriaFilters {
   tabla?: string
+  accion?: string
   registro_id?: string
   usuario_id?: string
   fecha_desde?: string
@@ -14,6 +15,7 @@ export async function getEventosAuditoria(filters?: AuditoriaFilters) {
     .select('*')
 
   if (filters?.tabla) query = query.eq('tabla', filters.tabla)
+  if (filters?.accion) query = query.eq('accion', filters.accion)
   if (filters?.registro_id) query = query.eq('registro_id', filters.registro_id)
   if (filters?.usuario_id) query = query.eq('usuario_id', filters.usuario_id)
   if (filters?.fecha_desde) query = query.gte('created_at', filters.fecha_desde)
