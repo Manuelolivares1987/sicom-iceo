@@ -13,6 +13,7 @@ import {
   ShieldCheck,
   Lock,
   Calculator,
+  DollarSign,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -27,7 +28,7 @@ import {
   TableHead,
   TableCell,
 } from '@/components/ui/table'
-import { formatPercent, cn } from '@/lib/utils'
+import { formatPercent, formatCLP, cn } from '@/lib/utils'
 import {
   useICEOPeriodo,
   useICEOHistorico,
@@ -36,6 +37,7 @@ import {
   useKPIDefiniciones,
   useCalcularICEO,
 } from '@/hooks/use-kpi-iceo'
+import { useIncentivos, useCalcularIncentivos } from '@/hooks/use-incentivos'
 import { getContratoActivo } from '@/lib/services/contratos'
 import type { AreaKPI } from '@/types/database'
 import {
@@ -90,6 +92,7 @@ function buildPeriodoInicio(year: number, month: number): string {
 // ---------------------------------------------------------------------------
 export default function ICEOPage() {
   const [expandedArea, setExpandedArea] = useState<string | null>('A')
+  const [showIncentivos, setShowIncentivos] = useState(false)
   const [contratoId, setContratoId] = useState<string>('')
 
   // Period selector state
@@ -139,6 +142,13 @@ export default function ICEOPage() {
   const { data: definiciones } = useKPIDefiniciones()
 
   const calcularICEOMutation = useCalcularICEO()
+
+  // Incentivos hooks
+  const { data: incentivos, isLoading: loadingIncentivos } = useIncentivos(
+    contratoId || undefined,
+    periodoInicio
+  )
+  const calcularIncentivosMutation = useCalcularIncentivos()
 
   const isLoading = loadingPeriodo || loadingMediciones || !contratoId
 
@@ -619,6 +629,151 @@ export default function ICEOPage() {
                 </p>
               )}
             </CardContent>
+          </Card>
+
+          {/* Incentivos del Periodo */}
+          <Card>
+            <button
+              type="button"
+              onClick={() => setShowIncentivos(!showIncentivos)}
+              className="flex w-full items-center justify-between p-4 text-left"
+            >
+              <CardTitle className="flex items-center gap-2">
+                <DollarSign className="h-5 w-5 text-pillado-green-600" />
+                Incentivos del Periodo
+              </CardTitle>
+              {showIncentivos ? (
+                <ChevronUp className="h-5 w-5 text-gray-400" />
+              ) : (
+                <ChevronDown className="h-5 w-5 text-gray-400" />
+              )}
+            </button>
+            {showIncentivos && (
+              <CardContent className="border-t border-gray-100 pt-4">
+                {/* Incentivo status badge */}
+                <div className="mb-4 flex flex-wrap items-center gap-3">
+                  {iceoPeriodo.incentivo_habilitado ? (
+                    <Badge variant="bueno" className="gap-1 px-3 py-1">
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                      Incentivo Habilitado
+                    </Badge>
+                  ) : (
+                    <Badge variant="deficiente" className="gap-1 px-3 py-1">
+                      <XCircle className="h-3.5 w-3.5" />
+                      Incentivo Bloqueado — Bloqueante(s) incumplido(s)
+                    </Badge>
+                  )}
+                  {iceoPeriodo.incentivo_habilitado && (
+                    <span className="text-sm text-gray-600">
+                      ICEO: <strong>{iceoPeriodo.iceo_final?.toFixed(1)}</strong> — Tramo: <strong>{(iceoPeriodo as any).tramo_incentivo ?? '-'}</strong> — Payout: <strong>{(iceoPeriodo as any).porcentaje_payout != null ? formatPercent((iceoPeriodo as any).porcentaje_payout) : '-'}</strong>
+                    </span>
+                  )}
+                </div>
+
+                {/* Calcular button */}
+                <div className="mb-4">
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={() => {
+                      if (!contratoId) return
+                      const periodoFin = new Date(selectedYear, selectedMonth + 1, 0)
+                      const periodoFinStr = `${periodoFin.getFullYear()}-${String(periodoFin.getMonth() + 1).padStart(2, '0')}-${String(periodoFin.getDate()).padStart(2, '0')}`
+                      calcularIncentivosMutation.mutate({ contratoId, periodoInicio, periodoFin: periodoFinStr })
+                    }}
+                    disabled={calcularIncentivosMutation.isPending || !contratoId}
+                    className="gap-1"
+                  >
+                    {calcularIncentivosMutation.isPending ? (
+                      <Spinner size="sm" />
+                    ) : (
+                      <Calculator className="h-4 w-4" />
+                    )}
+                    Calcular Incentivos
+                  </Button>
+                  {calcularIncentivosMutation.isSuccess && (
+                    <p className="mt-2 text-sm text-green-600 flex items-center gap-1">
+                      <TrendingUp className="h-4 w-4" />
+                      Incentivos calculados exitosamente
+                    </p>
+                  )}
+                  {calcularIncentivosMutation.isError && (
+                    <p className="mt-2 text-sm text-red-600">
+                      Error: {(calcularIncentivosMutation.error as Error)?.message ?? 'Error desconocido'}
+                    </p>
+                  )}
+                </div>
+
+                {/* Incentivos table */}
+                {loadingIncentivos ? (
+                  <div className="flex justify-center py-8">
+                    <Spinner size="md" className="text-pillado-green-600" />
+                  </div>
+                ) : incentivos && incentivos.length > 0 ? (
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Nombre</TableHead>
+                          <TableHead>Cargo</TableHead>
+                          <TableHead className="text-right">Sueldo Base</TableHead>
+                          <TableHead className="text-right">% Max</TableHead>
+                          <TableHead className="text-center">Tramo</TableHead>
+                          <TableHead className="text-right">Monto Maximo</TableHead>
+                          <TableHead className="text-right">Monto Real</TableHead>
+                          <TableHead className="text-right">Monto Final</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {incentivos.map((inc: any) => (
+                          <TableRow key={inc.id}>
+                            <TableCell className="text-sm font-medium">
+                              {inc.usuario?.nombre_completo ?? inc.nombre_completo ?? '-'}
+                            </TableCell>
+                            <TableCell className="text-sm text-gray-600">
+                              {inc.usuario?.cargo ?? inc.cargo ?? '-'}
+                            </TableCell>
+                            <TableCell className="text-right font-mono text-sm">
+                              {formatCLP(inc.sueldo_base ?? 0)}
+                            </TableCell>
+                            <TableCell className="text-right text-sm">
+                              {inc.porcentaje_max != null ? formatPercent(inc.porcentaje_max) : '-'}
+                            </TableCell>
+                            <TableCell className="text-center text-sm font-semibold">
+                              {inc.tramo ?? '-'}
+                            </TableCell>
+                            <TableCell className="text-right font-mono text-sm">
+                              {formatCLP(inc.monto_incentivo_maximo ?? 0)}
+                            </TableCell>
+                            <TableCell className="text-right font-mono text-sm">
+                              {formatCLP(inc.monto_incentivo_real ?? 0)}
+                            </TableCell>
+                            <TableCell className="text-right font-mono text-sm font-semibold">
+                              {formatCLP(inc.monto_incentivo_final ?? 0)}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                        {/* Total row */}
+                        <TableRow className="border-t-2 border-gray-300 bg-gray-50">
+                          <TableCell colSpan={7} className="text-right text-sm font-bold">
+                            Total
+                          </TableCell>
+                          <TableCell className="text-right font-mono text-sm font-bold">
+                            {formatCLP(
+                              incentivos.reduce((sum: number, inc: any) => sum + (inc.monto_incentivo_final ?? 0), 0)
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      </TableBody>
+                    </Table>
+                  </div>
+                ) : (
+                  <p className="py-4 text-center text-sm text-gray-400">
+                    Sin datos de incentivos para este periodo. Haga clic en "Calcular Incentivos" para generar.
+                  </p>
+                )}
+              </CardContent>
+            )}
           </Card>
         </>
       )}

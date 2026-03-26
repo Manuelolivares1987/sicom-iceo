@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { BarChart3, Lock, RefreshCw, TrendingUp, TrendingDown, ChevronDown, ChevronUp } from 'lucide-react'
+import { BarChart3, Lock, RefreshCw, TrendingUp, TrendingDown, ChevronDown, ChevronUp, Eye } from 'lucide-react'
 import {
   BarChart,
   Bar,
@@ -17,6 +17,7 @@ import { Badge } from '@/components/ui/badge'
 import { Spinner } from '@/components/ui/spinner'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Button } from '@/components/ui/button'
+import { Modal } from '@/components/ui/modal'
 import { Select } from '@/components/ui/select'
 import {
   Table,
@@ -28,6 +29,7 @@ import {
 } from '@/components/ui/table'
 import { getContratoActivo } from '@/lib/services/contratos'
 import { useKPIDefiniciones, useMedicionesKPI, useCalcularKPIs } from '@/hooks/use-kpi-iceo'
+import { useKPIDrillDown } from '@/hooks/use-incentivos'
 import { formatPercent } from '@/lib/utils'
 import type { AreaKPI } from '@/types/database'
 
@@ -123,9 +125,10 @@ interface KPIAreaSectionProps {
       es_bloqueante: boolean
     }
   }>
+  onDrillDown?: (codigo: string) => void
 }
 
-function KPIAreaSection({ area, definiciones, mediciones }: KPIAreaSectionProps) {
+function KPIAreaSection({ area, definiciones, mediciones, onDrillDown }: KPIAreaSectionProps) {
   const [expanded, setExpanded] = useState(true)
   const config = AREA_CONFIG[area]
 
@@ -197,12 +200,13 @@ function KPIAreaSection({ area, definiciones, mediciones }: KPIAreaSectionProps)
                 <TableHead className="text-right">Peso</TableHead>
                 <TableHead className="text-right">Ponderado</TableHead>
                 <TableHead className="text-center">Bloq.</TableHead>
+                <TableHead className="text-center">Detalle</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {rows.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center text-gray-400 py-8">
+                  <TableCell colSpan={10} className="text-center text-gray-400 py-8">
                     Sin definiciones de KPI para esta area
                   </TableCell>
                 </TableRow>
@@ -249,6 +253,17 @@ function KPIAreaSection({ area, definiciones, mediciones }: KPIAreaSectionProps)
                       ) : (
                         <span className="text-gray-300">-</span>
                       )}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <button
+                        type="button"
+                        onClick={() => onDrillDown?.(row.codigo)}
+                        className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium text-pillado-green-600 hover:bg-pillado-green-50 transition-colors"
+                        title="Ver detalle"
+                      >
+                        <Eye className="h-3.5 w-3.5" />
+                        Detalle
+                      </button>
                     </TableCell>
                   </TableRow>
                 ))
@@ -310,7 +325,16 @@ export default function KpiPage() {
     periodoInicio
   )
 
+  const [drillDownKPI, setDrillDownKPI] = useState<string | null>(null)
+
   const calcularMutation = useCalcularKPIs()
+
+  const { data: drillDownData, isLoading: loadingDrillDown } = useKPIDrillDown(
+    drillDownKPI ?? undefined,
+    contratoId || undefined,
+    undefined,
+    periodoInicio
+  )
 
   const yearOptions = useMemo(() => {
     const currentYear = now.getFullYear()
@@ -419,6 +443,7 @@ export default function KpiPage() {
             <KPIAreaSection
               key={area}
               area={area}
+              onDrillDown={(codigo) => setDrillDownKPI(codigo)}
               definiciones={(definiciones as Array<{
                 id: string
                 codigo: string
@@ -454,6 +479,78 @@ export default function KpiPage() {
           ))}
         </div>
       )}
+
+      {/* Drill-down modal */}
+      <Modal
+        open={!!drillDownKPI}
+        onClose={() => setDrillDownKPI(null)}
+        title={`Detalle KPI ${drillDownKPI ?? ''}`}
+        className="sm:max-w-2xl"
+      >
+        {loadingDrillDown ? (
+          <div className="flex justify-center py-8">
+            <Spinner size="md" />
+          </div>
+        ) : drillDownData ? (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              <div>
+                <p className="text-gray-500">Valor Medido</p>
+                <p className="font-semibold">{(drillDownData as any).valor_medido ?? '-'}</p>
+              </div>
+              <div>
+                <p className="text-gray-500">Meta</p>
+                <p className="font-semibold">{(drillDownData as any).meta ?? '-'}</p>
+              </div>
+              <div>
+                <p className="text-gray-500">% Cumplimiento</p>
+                <p className="font-semibold">
+                  {(drillDownData as any).porcentaje_cumplimiento != null
+                    ? formatPercent((drillDownData as any).porcentaje_cumplimiento)
+                    : '-'}
+                </p>
+              </div>
+              <div>
+                <p className="text-gray-500">Puntaje</p>
+                <p className="font-semibold">{(drillDownData as any).puntaje ?? '-'}</p>
+              </div>
+            </div>
+            {(drillDownData as any).formula_descripcion && (
+              <div className="rounded-lg bg-gray-50 p-3 text-sm">
+                <p className="text-xs font-semibold text-gray-400 mb-1">Formula</p>
+                <p className="text-gray-700">{(drillDownData as any).formula_descripcion}</p>
+              </div>
+            )}
+            {Array.isArray((drillDownData as any).registros_fuente) && (drillDownData as any).registros_fuente.length > 0 && (
+              <div>
+                <h4 className="text-sm font-semibold text-gray-700 mb-2">Registros Fuente</h4>
+                <div className="overflow-x-auto max-h-64">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        {Object.keys((drillDownData as any).registros_fuente[0]).map((key) => (
+                          <TableHead key={key} className="text-xs">{key}</TableHead>
+                        ))}
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {(drillDownData as any).registros_fuente.map((registro: Record<string, unknown>, idx: number) => (
+                        <TableRow key={idx}>
+                          {Object.values(registro).map((val, vi) => (
+                            <TableCell key={vi} className="text-xs">{String(val ?? '-')}</TableCell>
+                          ))}
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <p className="py-4 text-center text-sm text-gray-400">Sin datos de drill-down disponibles</p>
+        )}
+      </Modal>
     </div>
   )
 }
