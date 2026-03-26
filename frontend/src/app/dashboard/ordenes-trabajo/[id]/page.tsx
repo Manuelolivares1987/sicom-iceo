@@ -627,6 +627,7 @@ export default function OrdenTrabajoDetailPage() {
   const { data: ot, isLoading, error } = useOrdenTrabajo(id)
   const { data: checklistData } = useChecklistOT(id)
   const { data: evidenciasData } = useEvidenciasOT(id)
+  const { data: materialesData } = useMaterialesOT(id)
 
   const [activeTab, setActiveTab] = useState('checklist')
 
@@ -963,17 +964,73 @@ export default function OrdenTrabajoDetailPage() {
           )
         }}
       >
-        <div>
-          <label className="mb-1 block text-xs font-medium text-gray-500">
-            Observaciones del supervisor (opcional)
-          </label>
-          <textarea
-            value={cerrarObs}
-            onChange={(e) => setCerrarObs(e.target.value)}
-            placeholder="Observaciones de cierre..."
-            rows={3}
-            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-purple-500 focus:outline-none"
-          />
+        <div className="space-y-4">
+          {/* Resumen de costos para el supervisor */}
+          <div className="rounded-lg bg-gray-50 p-3 space-y-2">
+            <p className="text-xs font-semibold text-gray-600 uppercase">Resumen de Costos</p>
+            <div className="grid grid-cols-2 gap-2 text-sm">
+              <div>
+                <span className="text-gray-500">Materiales:</span>
+                <span className="ml-1 font-mono font-medium">{formatCLP(otData.costo_materiales ?? 0)}</span>
+              </div>
+              <div>
+                <span className="text-gray-500">Mano de obra:</span>
+                <span className="ml-1 font-mono font-medium">{formatCLP(otData.costo_mano_obra ?? 0)}</span>
+              </div>
+              <div>
+                <span className="text-gray-500">Horas hombre:</span>
+                <span className="ml-1 font-mono">{otData.horas_hombre ?? 0} hrs</span>
+              </div>
+              <div>
+                <span className="text-gray-500">Tarifa/hora:</span>
+                <span className="ml-1 font-mono">{formatCLP(otData.tarifa_hora ?? 0)}</span>
+              </div>
+            </div>
+            <div className="border-t border-gray-200 pt-2 flex justify-between">
+              <span className="font-semibold text-gray-700">Costo Total:</span>
+              <span className="font-mono font-bold text-pillado-green-600">
+                {formatCLP((otData.costo_materiales ?? 0) + (otData.costo_mano_obra ?? 0))}
+              </span>
+            </div>
+            {(otData.horas_hombre ?? 0) === 0 && (
+              <p className="text-xs text-amber-600 flex items-center gap-1">
+                <AlertTriangle className="h-3 w-3" />
+                Sin horas hombre registradas — el costo de MO puede estar incompleto
+              </p>
+            )}
+          </div>
+          {/* Contadores de completitud */}
+          <div className="grid grid-cols-3 gap-2 text-center text-xs">
+            <div className="rounded bg-green-50 p-2">
+              <div className="font-bold text-green-700">{(evidenciasData ?? []).length}</div>
+              <div className="text-green-600">Evidencias</div>
+            </div>
+            <div className="rounded bg-blue-50 p-2">
+              <div className="font-bold text-blue-700">
+                {(checklistData ?? []).filter((c: any) => c.resultado != null).length}/{(checklistData ?? []).length}
+              </div>
+              <div className="text-blue-600">Checklist</div>
+            </div>
+            <div className="rounded bg-purple-50 p-2">
+              <div className="font-bold text-purple-700">
+                {(materialesData ?? []).length}
+              </div>
+              <div className="text-purple-600">Materiales</div>
+            </div>
+          </div>
+          {/* Observaciones */}
+          <div>
+            <label className="mb-1 block text-xs font-medium text-gray-500">
+              Observaciones del supervisor (opcional)
+            </label>
+            <textarea
+              value={cerrarObs}
+              onChange={(e) => setCerrarObs(e.target.value)}
+              placeholder="Observaciones de cierre..."
+              rows={3}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-purple-500 focus:outline-none"
+            />
+          </div>
         </div>
       </ConfirmDialog>
     </div>
