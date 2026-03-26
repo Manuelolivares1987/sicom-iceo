@@ -484,8 +484,8 @@ export default function KpiPage() {
       <Modal
         open={!!drillDownKPI}
         onClose={() => setDrillDownKPI(null)}
-        title={`Detalle KPI ${drillDownKPI ?? ''}`}
-        className="sm:max-w-2xl"
+        title={`KPI ${(drillDownData as any)?.kpi_codigo ?? drillDownKPI} — ${(drillDownData as any)?.kpi_nombre ?? ''}`}
+        className="sm:max-w-3xl"
       >
         {loadingDrillDown ? (
           <div className="flex justify-center py-8">
@@ -493,43 +493,75 @@ export default function KpiPage() {
           </div>
         ) : drillDownData ? (
           <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-3 text-sm">
-              <div>
-                <p className="text-gray-500">Valor Medido</p>
-                <p className="font-semibold">{(drillDownData as any).valor_medido ?? '-'}</p>
-              </div>
-              <div>
-                <p className="text-gray-500">Meta</p>
-                <p className="font-semibold">{(drillDownData as any).meta ?? '-'}</p>
-              </div>
-              <div>
-                <p className="text-gray-500">% Cumplimiento</p>
-                <p className="font-semibold">
-                  {(drillDownData as any).porcentaje_cumplimiento != null
-                    ? formatPercent((drillDownData as any).porcentaje_cumplimiento)
-                    : '-'}
-                </p>
-              </div>
-              <div>
-                <p className="text-gray-500">Puntaje</p>
-                <p className="font-semibold">{(drillDownData as any).puntaje ?? '-'}</p>
+            {/* Fórmula de cálculo */}
+            <div className="rounded-lg bg-blue-50 border border-blue-100 p-4">
+              <p className="text-xs font-bold text-blue-600 uppercase mb-1">Fórmula de Cálculo</p>
+              <p className="text-sm text-blue-900 font-mono">{(drillDownData as any).kpi_formula || 'No definida'}</p>
+              <div className="mt-2 flex flex-wrap gap-3 text-xs text-blue-700">
+                <span>Unidad: <strong>{(drillDownData as any).kpi_unidad || '%'}</strong></span>
+                <span>Meta: <strong>{(drillDownData as any).kpi_meta}</strong></span>
+                <span>Peso: <strong>{((drillDownData as any).kpi_peso * 100).toFixed(1)}%</strong></span>
+                {(drillDownData as any).kpi_bloqueante && (
+                  <span className="text-red-600 font-semibold flex items-center gap-1">
+                    <Lock className="h-3 w-3" /> Bloqueante
+                  </span>
+                )}
               </div>
             </div>
-            {(drillDownData as any).formula_descripcion && (
-              <div className="rounded-lg bg-gray-50 p-3 text-sm">
-                <p className="text-xs font-semibold text-gray-400 mb-1">Formula</p>
-                <p className="text-gray-700">{(drillDownData as any).formula_descripcion}</p>
+
+            {/* Resultado del período */}
+            {(drillDownData as any).medicion ? (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="rounded-lg bg-gray-50 p-3 text-center">
+                  <p className="text-[10px] text-gray-500 uppercase">Valor Medido</p>
+                  <p className="text-lg font-bold text-gray-900">
+                    {Number((drillDownData as any).medicion.valor_medido).toFixed(2)}
+                  </p>
+                </div>
+                <div className="rounded-lg bg-gray-50 p-3 text-center">
+                  <p className="text-[10px] text-gray-500 uppercase">% Cumplimiento</p>
+                  <p className={`text-lg font-bold ${
+                    (drillDownData as any).medicion.porcentaje_cumplimiento >= 95 ? 'text-green-600' :
+                    (drillDownData as any).medicion.porcentaje_cumplimiento >= 80 ? 'text-yellow-600' : 'text-red-600'
+                  }`}>
+                    {formatPercent((drillDownData as any).medicion.porcentaje_cumplimiento)}
+                  </p>
+                </div>
+                <div className="rounded-lg bg-gray-50 p-3 text-center">
+                  <p className="text-[10px] text-gray-500 uppercase">Puntaje</p>
+                  <p className="text-lg font-bold text-gray-900">{Number((drillDownData as any).medicion.puntaje).toFixed(0)}</p>
+                </div>
+                <div className="rounded-lg bg-gray-50 p-3 text-center">
+                  <p className="text-[10px] text-gray-500 uppercase">Ponderado</p>
+                  <p className="text-lg font-bold text-pillado-green-600">{Number((drillDownData as any).medicion.valor_ponderado).toFixed(2)}</p>
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-sm text-amber-700">
+                Sin medición para este período. Ejecute "Calcular KPIs" primero.
               </div>
             )}
-            {Array.isArray((drillDownData as any).registros_fuente) && (drillDownData as any).registros_fuente.length > 0 && (
+
+            {/* Período y fecha cálculo */}
+            <div className="flex justify-between text-xs text-gray-500">
+              <span>Período: {(drillDownData as any).periodo}</span>
+              {(drillDownData as any).medicion?.calculado_en && (
+                <span>Calculado: {new Date((drillDownData as any).medicion.calculado_en).toLocaleString('es-CL')}</span>
+              )}
+            </div>
+
+            {/* Registros fuente */}
+            {Array.isArray((drillDownData as any).registros_fuente) && (drillDownData as any).registros_fuente.length > 0 ? (
               <div>
-                <h4 className="text-sm font-semibold text-gray-700 mb-2">Registros Fuente</h4>
-                <div className="overflow-x-auto max-h-64">
+                <h4 className="text-sm font-semibold text-gray-700 mb-2">
+                  Datos Fuente ({(drillDownData as any).total_registros} registros)
+                </h4>
+                <div className="overflow-x-auto max-h-64 rounded-lg border">
                   <Table>
                     <TableHeader>
                       <TableRow>
                         {Object.keys((drillDownData as any).registros_fuente[0]).map((key) => (
-                          <TableHead key={key} className="text-xs">{key}</TableHead>
+                          <TableHead key={key} className="text-xs whitespace-nowrap">{key.replace(/_/g, ' ')}</TableHead>
                         ))}
                       </TableRow>
                     </TableHeader>
@@ -537,7 +569,7 @@ export default function KpiPage() {
                       {(drillDownData as any).registros_fuente.map((registro: Record<string, unknown>, idx: number) => (
                         <TableRow key={idx}>
                           {Object.values(registro).map((val, vi) => (
-                            <TableCell key={vi} className="text-xs">{String(val ?? '-')}</TableCell>
+                            <TableCell key={vi} className="text-xs whitespace-nowrap">{String(val ?? '-')}</TableCell>
                           ))}
                         </TableRow>
                       ))}
@@ -545,6 +577,8 @@ export default function KpiPage() {
                   </Table>
                 </div>
               </div>
+            ) : (
+              <p className="text-sm text-gray-400 text-center py-2">Sin registros fuente para este período</p>
             )}
           </div>
         ) : (
