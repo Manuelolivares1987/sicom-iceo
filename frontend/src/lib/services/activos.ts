@@ -113,3 +113,21 @@ export async function getCostosByActivo(activoId: string) {
     .order('created_at', { ascending: false })
   return { data, error }
 }
+
+// Update asset metrics (km, hours, cycles) — may trigger PM OTs
+export async function actualizarMetricasActivo(data: {
+  activo_id: string
+  kilometraje?: number
+  horas_uso?: number
+  ciclos?: number
+  usuario_id?: string
+}) {
+  const { data: result, error } = await supabase.rpc('rpc_actualizar_metricas_activo', {
+    p_activo_id: data.activo_id,
+    p_kilometraje: data.kilometraje ?? null,
+    p_horas_uso: data.horas_uso ?? null,
+    p_ciclos: data.ciclos ?? null,
+    p_usuario_id: data.usuario_id ?? null,
+  })
+  return { data: result, error }
+}

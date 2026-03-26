@@ -14,6 +14,11 @@ import {
   crearConteoInventario,
   registrarLineaConteo,
   completarConteo,
+  transferirInventario,
+  aprobarConteo,
+  getCostosPorOT,
+  getCostosPorActivo,
+  getCostosPorFaena,
 } from '@/lib/services/inventario'
 
 // ── Queries ──────────────────────────────────────────────
@@ -242,6 +247,84 @@ export function useCompletarConteo() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['conteos'] })
+    },
+  })
+}
+
+export function useTransferirInventario() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (payload: {
+      bodega_origen_id: string
+      bodega_destino_id: string
+      producto_id: string
+      cantidad: number
+      usuario_id: string
+      motivo?: string | null
+    }) => {
+      const { data, error } = await transferirInventario(payload)
+      if (error) throw error
+      return data
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['stock-bodega'] })
+      queryClient.invalidateQueries({ queryKey: ['movimientos'] })
+      queryClient.invalidateQueries({ queryKey: ['valorizacion-total'] })
+      queryClient.invalidateQueries({ queryKey: ['kardex'] })
+    },
+  })
+}
+
+export function useAprobarConteo() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async ({ conteoId, supervisorId }: { conteoId: string; supervisorId: string }) => {
+      const { data, error } = await aprobarConteo(conteoId, supervisorId)
+      if (error) throw error
+      return data
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['conteos'] })
+      queryClient.invalidateQueries({ queryKey: ['stock-bodega'] })
+      queryClient.invalidateQueries({ queryKey: ['movimientos'] })
+      queryClient.invalidateQueries({ queryKey: ['valorizacion-total'] })
+    },
+  })
+}
+
+// ── Vistas de costos ──────────────────────────────────────
+
+export function useCostosPorOT(otId?: string) {
+  return useQuery({
+    queryKey: ['costos-por-ot', otId],
+    queryFn: async () => {
+      const { data, error } = await getCostosPorOT(otId)
+      if (error) throw error
+      return data
+    },
+  })
+}
+
+export function useCostosPorActivo(activoId?: string) {
+  return useQuery({
+    queryKey: ['costos-por-activo', activoId],
+    queryFn: async () => {
+      const { data, error } = await getCostosPorActivo(activoId)
+      if (error) throw error
+      return data
+    },
+  })
+}
+
+export function useCostosPorFaena() {
+  return useQuery({
+    queryKey: ['costos-por-faena'],
+    queryFn: async () => {
+      const { data, error } = await getCostosPorFaena()
+      if (error) throw error
+      return data
     },
   })
 }

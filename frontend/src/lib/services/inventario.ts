@@ -349,6 +349,61 @@ export async function completarConteo(conteoId: string) {
   return { data, error }
 }
 
+// ── Transferencia ──────────────────────────────────────────────────
+
+export async function transferirInventario(data: {
+  bodega_origen_id: string
+  bodega_destino_id: string
+  producto_id: string
+  cantidad: number
+  usuario_id: string
+  motivo?: string | null
+}) {
+  const { data: result, error } = await supabase.rpc('rpc_transferir_inventario', {
+    p_bodega_origen_id: data.bodega_origen_id,
+    p_bodega_destino_id: data.bodega_destino_id,
+    p_producto_id: data.producto_id,
+    p_cantidad: data.cantidad,
+    p_usuario_id: data.usuario_id,
+    p_motivo: data.motivo ?? null,
+  })
+  return { data: result, error }
+}
+
+// ── Aprobar conteo ────────────────────────────────────────────────
+
+export async function aprobarConteo(conteoId: string, supervisorId: string) {
+  const { data: result, error } = await supabase.rpc('rpc_aprobar_conteo_inventario', {
+    p_conteo_id: conteoId,
+    p_supervisor_id: supervisorId,
+  })
+  return { data: result, error }
+}
+
+// ── Costos ────────────────────────────────────────────────────────
+
+export async function getCostosPorOT(otId?: string) {
+  let query = supabase.from('v_costos_por_ot').select('*')
+  if (otId) query = query.eq('ot_id', otId)
+  const { data, error } = await query.order('fecha_programada', { ascending: false })
+  return { data, error }
+}
+
+export async function getCostosPorActivo(activoId?: string) {
+  let query = supabase.from('v_costos_por_activo').select('*')
+  if (activoId) query = query.eq('activo_id', activoId)
+  const { data, error } = await query.order('costo_total', { ascending: false })
+  return { data, error }
+}
+
+export async function getCostosPorFaena() {
+  const { data, error } = await supabase
+    .from('v_costos_por_faena')
+    .select('*')
+    .order('costo_total', { ascending: false })
+  return { data, error }
+}
+
 // ── Aliases (used by hooks) ─────────────────────────────────────────
 
 export const registrarSalida = registrarSalidaInventario

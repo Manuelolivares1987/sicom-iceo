@@ -8,6 +8,7 @@ import {
   getPlanesByActivo,
   getCertificacionesByActivo,
   getCostosByActivo,
+  actualizarMetricasActivo,
 } from '@/lib/services/activos'
 import type { Activo } from '@/types/database'
 
@@ -121,6 +122,30 @@ export function useUpdateActivo() {
     onSuccess: (_data, { id }) => {
       queryClient.invalidateQueries({ queryKey: ['activo', id] })
       queryClient.invalidateQueries({ queryKey: ['activos'] })
+    },
+  })
+}
+
+export function useActualizarMetricas() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (payload: {
+      activo_id: string
+      kilometraje?: number
+      horas_uso?: number
+      ciclos?: number
+      usuario_id?: string
+    }) => {
+      const { data, error } = await actualizarMetricasActivo(payload)
+      if (error) throw error
+      return data
+    },
+    onSuccess: (_data, { activo_id }) => {
+      queryClient.invalidateQueries({ queryKey: ['activo', activo_id] })
+      queryClient.invalidateQueries({ queryKey: ['activos'] })
+      queryClient.invalidateQueries({ queryKey: ['planes-mantenimiento'] })
+      queryClient.invalidateQueries({ queryKey: ['proximas-mantenimientos'] })
     },
   })
 }
