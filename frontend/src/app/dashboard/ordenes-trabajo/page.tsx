@@ -305,8 +305,9 @@ export default function OrdenesTrabajoPage() {
 
       {/* Error */}
       {error && (
-        <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-center text-sm text-red-700">
-          Error al cargar ordenes de trabajo. Intente nuevamente.
+        <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          <p className="font-semibold">Error al cargar órdenes de trabajo</p>
+          <p className="mt-1 text-xs text-red-500 font-mono">{(error as any)?.message || String(error)}</p>
         </div>
       )}
 
