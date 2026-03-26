@@ -70,11 +70,11 @@ export interface CreateOTParams {
   contrato_id: string
   faena_id: string
   activo_id: string
-  prioridad: Prioridad
-  fecha_programada: string
-  responsable_id: string
+  prioridad?: Prioridad
+  fecha_programada?: string
+  responsable_id?: string
   plan_mantenimiento_id?: string | null
-  usuario_id: string
+  usuario_id?: string
 }
 
 export async function createOrdenTrabajo(params: CreateOTParams) {
@@ -83,11 +83,11 @@ export async function createOrdenTrabajo(params: CreateOTParams) {
     p_contrato_id: params.contrato_id,
     p_faena_id: params.faena_id,
     p_activo_id: params.activo_id,
-    p_prioridad: params.prioridad,
-    p_fecha_programada: params.fecha_programada,
-    p_responsable_id: params.responsable_id,
+    p_prioridad: params.prioridad || 'normal',
+    p_fecha_programada: params.fecha_programada || null,
+    p_responsable_id: params.responsable_id || null,
     p_plan_mantenimiento_id: params.plan_mantenimiento_id ?? null,
-    p_usuario_id: params.usuario_id,
+    p_usuario_id: params.usuario_id || null,
   })
 
   return { data, error }

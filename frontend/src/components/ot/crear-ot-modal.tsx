@@ -28,8 +28,8 @@ const crearOTSchema = z.object({
   ]),
   activo_id: z.string().min(1, 'Seleccione un activo'),
   prioridad: z.enum(['emergencia', 'urgente', 'alta', 'normal', 'baja']),
-  fecha_programada: z.string().min(1, 'Ingrese una fecha'),
-  responsable_id: z.string().min(1, 'Seleccione un responsable'),
+  fecha_programada: z.string().optional(),
+  responsable_id: z.string().optional(),
   observaciones: z.string().optional(),
 })
 
@@ -81,7 +81,7 @@ export function CrearOTModal({
   const createOT = useCreateOT()
 
   // Dynamic option lists loaded from Supabase
-  const [activos, setActivos] = useState<{ value: string; label: string }[]>([])
+  const [activos, setActivos] = useState<{ value: string; label: string; faena_id?: string }[]>([])
   const [responsables, setResponsables] = useState<{ value: string; label: string }[]>([])
   const [loadingData, setLoadingData] = useState(false)
   const [rpcError, setRpcError] = useState<string | null>(null)
@@ -123,7 +123,8 @@ export function CrearOTModal({
           setActivos(
             activosRes.data.map((a: any) => ({
               value: a.id,
-              label: a.nombre || a.codigo,
+              label: `${a.codigo} — ${a.nombre || ''}`,
+              faena_id: a.faena_id,
             }))
           )
         }
@@ -142,16 +143,20 @@ export function CrearOTModal({
   function onSubmit(values: CrearOTForm) {
     setRpcError(null)
 
+    // Get faena from selected activo if not provided
+    const selectedActivo = activos.find(a => a.value === values.activo_id)
+    const resolvedFaenaId = faenaId || selectedActivo?.faena_id || ''
+
     createOT.mutate(
       {
         tipo: values.tipo as TipoOT,
         contrato_id: contratoId,
-        faena_id: faenaId || '',
+        faena_id: resolvedFaenaId,
         activo_id: values.activo_id,
         prioridad: values.prioridad as Prioridad,
-        fecha_programada: values.fecha_programada,
-        responsable_id: values.responsable_id,
-        usuario_id: user?.id || '',
+        fecha_programada: values.fecha_programada || undefined,
+        responsable_id: values.responsable_id || undefined,
+        usuario_id: user?.id || undefined,
       },
       {
         onSuccess: (data) => {

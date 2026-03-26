@@ -20,6 +20,7 @@ import {
 import { formatCLP, formatDate, getEstadoOTColor, getEstadoOTLabel } from '@/lib/utils'
 import { useOrdenesTrabajo } from '@/hooks/use-ordenes-trabajo'
 import { getFaenas } from '@/lib/services/faenas'
+import { getContratoActivo } from '@/lib/services/contratos'
 // Types used: TipoOT, EstadoOT, Prioridad — from filter values
 
 // ---------------------------------------------------------------------------
@@ -202,6 +203,7 @@ export default function OrdenesTrabajoPage() {
   const [prioridadFilter, setPrioridadFilter] = useState('')
   const [search, setSearch] = useState('')
   const [showCrearModal, setShowCrearModal] = useState(false)
+  const [contratoId, setContratoId] = useState('')
 
   // Faenas for filter dropdown
   const [faenaOptions, setFaenaOptions] = useState<{ value: string; label: string }[]>([
@@ -209,6 +211,7 @@ export default function OrdenesTrabajoPage() {
   ])
 
   useEffect(() => {
+    // Load faenas
     getFaenas().then(({ data }) => {
       if (data) {
         setFaenaOptions([
@@ -216,6 +219,10 @@ export default function OrdenesTrabajoPage() {
           ...data.map((f) => ({ value: f.id, label: f.nombre })),
         ])
       }
+    })
+    // Load contrato activo
+    getContratoActivo().then(({ data }) => {
+      if (data) setContratoId(data.id)
     })
   }, [])
 
@@ -391,7 +398,7 @@ export default function OrdenesTrabajoPage() {
           setShowCrearModal(false)
           alert('Orden de trabajo creada exitosamente')
         }}
-        contratoId=""
+        contratoId={contratoId}
         faenaId={faenaFilter || undefined}
       />
     </div>
