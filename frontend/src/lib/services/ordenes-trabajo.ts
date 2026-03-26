@@ -182,14 +182,12 @@ export async function getChecklistOT(otId: string) {
 
 export async function updateChecklistItem(
   id: string,
-  completadoOrData: boolean | {
-    resultado?: string
+  data: {
+    resultado?: 'ok' | 'no_ok' | 'na' | null
     observacion?: string | null
     foto_url?: string | null
-    completado_en?: string
     completado_por?: string
-  },
-  observacion?: string
+  }
 ) {
   // Validate OT is not in terminal state
   const { data: item } = await supabase
@@ -210,17 +208,20 @@ export async function updateChecklistItem(
     }
   }
 
-  // Support both legacy (id, data) and hook (id, completado, observacion) call styles
-  const data = typeof completadoOrData === 'boolean'
-    ? {
-        resultado: completadoOrData ? 'ok' : null,
-        observacion: observacion ?? null,
-        completado_en: completadoOrData ? new Date().toISOString() : null,
-      }
-    : completadoOrData
+  const updatePayload: Record<string, unknown> = {}
+
+  if (data.resultado !== undefined) {
+    updatePayload.resultado = data.resultado
+    // Set timestamp when a resultado is selected (ok, no_ok, na)
+    updatePayload.completado_en = data.resultado ? new Date().toISOString() : null
+  }
+  if (data.observacion !== undefined) updatePayload.observacion = data.observacion
+  if (data.foto_url !== undefined) updatePayload.foto_url = data.foto_url
+  if (data.completado_por !== undefined) updatePayload.completado_por = data.completado_por
+
   const { data: updated, error } = await supabase
     .from('checklist_ot')
-    .update(data)
+    .update(updatePayload)
     .eq('id', id)
     .select()
     .single()

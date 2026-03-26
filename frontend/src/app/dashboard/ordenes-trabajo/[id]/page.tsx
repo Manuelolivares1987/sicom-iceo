@@ -153,7 +153,7 @@ function ResultRadio({
   )
 }
 
-function ChecklistTab({ otId, disabled }: { otId: string; disabled?: boolean }) {
+function ChecklistTab({ otId, disabled, userId }: { otId: string; disabled?: boolean; userId?: string }) {
   const { data: items, isLoading } = useChecklistOT(otId)
   const updateItem = useUpdateChecklistItem()
   const [observations, setObservations] = useState<Record<string, string>>({})
@@ -197,8 +197,9 @@ function ChecklistTab({ otId, disabled }: { otId: string; disabled?: boolean }) 
                   updateItem.mutate({
                     otId,
                     itemId: item.id,
-                    completado: v === 'ok',
-                    observacion: observations[item.id] || item.observacion || undefined,
+                    resultado: v as 'ok' | 'no_ok' | 'na',
+                    observacion: observations[item.id] ?? item.observacion ?? undefined,
+                    completado_por: userId || undefined,
                   })
                 }}
               />
@@ -218,7 +219,6 @@ function ChecklistTab({ otId, disabled }: { otId: string; disabled?: boolean }) 
                     updateItem.mutate({
                       otId,
                       itemId: item.id,
-                      completado: item.resultado === 'ok',
                       observacion: obs,
                     })
                   }
@@ -678,7 +678,7 @@ export default function OrdenTrabajoDetailPage() {
       {/* Tab content */}
       <Card>
         <CardContent className="p-4 sm:p-6">
-          {activeTab === 'checklist' && id && <ChecklistTab otId={id} disabled={isOTClosed} />}
+          {activeTab === 'checklist' && id && <ChecklistTab otId={id} disabled={isOTClosed} userId={userId} />}
           {activeTab === 'evidencias' && id && <EvidenciasTab otId={id} disabled={isOTClosed} />}
           {activeTab === 'materiales' && id && <MaterialesTab otId={id} />}
           {activeTab === 'historial' && id && <HistorialTab otId={id} />}

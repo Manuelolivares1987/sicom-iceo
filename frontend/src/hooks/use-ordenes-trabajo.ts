@@ -236,15 +236,24 @@ export function useUpdateChecklistItem() {
     mutationFn: async ({
       otId,
       itemId,
-      completado,
+      resultado,
       observacion,
+      foto_url,
+      completado_por,
     }: {
       otId: string
       itemId: string
-      completado: boolean
-      observacion?: string
+      resultado?: 'ok' | 'no_ok' | 'na' | null
+      observacion?: string | null
+      foto_url?: string | null
+      completado_por?: string
     }) => {
-      const { data, error } = await updateChecklistItem(itemId, completado, observacion)
+      const { data, error } = await updateChecklistItem(itemId, {
+        resultado,
+        observacion,
+        foto_url,
+        completado_por,
+      })
       if (error) throw error
       return data
     },
