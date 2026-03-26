@@ -131,3 +131,29 @@ export async function actualizarMetricasActivo(data: {
   })
   return { data: result, error }
 }
+
+// Get asset ficha via RPC (for QR scan)
+export async function getFichaActivo(activoId: string) {
+  const { data, error } = await supabase.rpc('rpc_ficha_activo', {
+    p_activo_id: activoId,
+  })
+  return { data, error }
+}
+
+// Generate QR code for asset
+export async function generarQRActivo(activoId: string) {
+  const { data, error } = await supabase.rpc('rpc_generar_qr_activo', {
+    p_activo_id: activoId,
+  })
+  return { data, error }
+}
+
+// Get maintenance history via view
+export async function getHistorialMantenimiento(activoId: string) {
+  const { data, error } = await supabase
+    .from('v_historial_mantenimiento_activo')
+    .select('*')
+    .eq('activo_id', activoId)
+    .order('fecha_programada', { ascending: false })
+  return { data, error }
+}

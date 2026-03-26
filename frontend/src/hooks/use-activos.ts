@@ -9,6 +9,9 @@ import {
   getCertificacionesByActivo,
   getCostosByActivo,
   actualizarMetricasActivo,
+  getFichaActivo,
+  generarQRActivo,
+  getHistorialMantenimiento,
 } from '@/lib/services/activos'
 import type { Activo } from '@/types/database'
 
@@ -146,6 +149,45 @@ export function useActualizarMetricas() {
       queryClient.invalidateQueries({ queryKey: ['activos'] })
       queryClient.invalidateQueries({ queryKey: ['planes-mantenimiento'] })
       queryClient.invalidateQueries({ queryKey: ['proximas-mantenimientos'] })
+    },
+  })
+}
+
+export function useFichaActivo(activoId?: string) {
+  return useQuery({
+    queryKey: ['ficha-activo', activoId],
+    queryFn: async () => {
+      const { data, error } = await getFichaActivo(activoId!)
+      if (error) throw error
+      return data
+    },
+    enabled: !!activoId,
+  })
+}
+
+export function useHistorialMantenimiento(activoId?: string) {
+  return useQuery({
+    queryKey: ['historial-mantenimiento', activoId],
+    queryFn: async () => {
+      const { data, error } = await getHistorialMantenimiento(activoId!)
+      if (error) throw error
+      return data
+    },
+    enabled: !!activoId,
+  })
+}
+
+export function useGenerarQR() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (activoId: string) => {
+      const { data, error } = await generarQRActivo(activoId)
+      if (error) throw error
+      return data
+    },
+    onSuccess: (_data, activoId) => {
+      queryClient.invalidateQueries({ queryKey: ['activo', activoId] })
+      queryClient.invalidateQueries({ queryKey: ['ficha-activo', activoId] })
     },
   })
 }

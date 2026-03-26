@@ -16,11 +16,20 @@ import {
   ChevronDown,
   ChevronUp,
   AlertTriangle,
+  QrCode,
+  History,
+  Copy,
+  RefreshCw,
+  Camera,
+  FileText,
+  Package,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
 import { EmptyState } from '@/components/ui/empty-state'
+import { Modal } from '@/components/ui/modal'
 import {
   Table,
   TableHeader,
@@ -43,6 +52,8 @@ import {
   usePlanesByActivo,
   useCertificacionesByActivo,
   useCostosByActivo,
+  useHistorialMantenimiento,
+  useGenerarQR,
 } from '@/hooks/use-activos'
 
 // ---------------------------------------------------------------------------
@@ -53,6 +64,7 @@ const TABS = [
   { key: 'planes', label: 'Planes PM', icon: ClipboardList },
   { key: 'certificaciones', label: 'Certificaciones', icon: ShieldCheck },
   { key: 'costos', label: 'Costos', icon: DollarSign },
+  { key: 'historial', label: 'Historial Completo', icon: History },
 ] as const
 
 type TabKey = (typeof TABS)[number]['key']
@@ -477,12 +489,188 @@ function TabCostos({ activoId }: { activoId: string }) {
 }
 
 // ---------------------------------------------------------------------------
+// Tab: Historial Completo
+// ---------------------------------------------------------------------------
+function TabHistorial({ activoId }: { activoId: string }) {
+  const { data: historial, isLoading } = useHistorialMantenimiento(activoId)
+
+  if (isLoading) return <div className="flex justify-center py-12"><Spinner size="lg" className="text-pillado-green-600" /></div>
+
+  if (!historial || historial.length === 0) {
+    return <EmptyState icon={History} title="Sin historial" description="No hay intervenciones registradas para este activo." />
+  }
+
+  return (
+    <div className="space-y-3">
+      {(historial as any[]).map((item: any, idx: number) => (
+        <Card key={item.id ?? idx}>
+          <CardContent className="p-4 space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-gray-500">
+                  {item.fecha_programada ? formatDate(item.fecha_programada) : '—'}
+                </span>
+                <Badge variant="default">{item.tipo ?? '—'}</Badge>
+              </div>
+              <Badge className={getEstadoOTColor(item.estado)}>{getEstadoOTLabel(item.estado)}</Badge>
+            </div>
+
+            <div className="flex items-center justify-between">
+              {item.folio ? (
+                <Link
+                  href={`/dashboard/ordenes-trabajo/${item.ot_id ?? item.id}`}
+                  className="font-mono text-sm font-bold text-pillado-green-600 hover:underline"
+                >
+                  {item.folio}
+                </Link>
+              ) : (
+                <span className="text-sm text-gray-400">Sin folio</span>
+              )}
+              {item.responsable && (
+                <span className="text-xs text-gray-500">{item.responsable}</span>
+              )}
+            </div>
+
+            <div className="flex flex-wrap gap-3 text-xs text-gray-500">
+              {item.checklist_ok != null && (
+                <span className="flex items-center gap-1">
+                  <ClipboardList className="h-3.5 w-3.5" />
+                  {item.checklist_ok}/{item.checklist_total}
+                  {item.checklist_no_ok > 0 && (
+                    <span className="text-red-500"> ({item.checklist_no_ok} no ok)</span>
+                  )}
+                </span>
+              )}
+              {item.evidencias_count > 0 && (
+                <span className="flex items-center gap-1">
+                  <Camera className="h-3.5 w-3.5" />
+                  {item.evidencias_count}
+                </span>
+              )}
+              {item.materiales_count > 0 && (
+                <span className="flex items-center gap-1">
+                  <Package className="h-3.5 w-3.5" />
+                  {item.materiales_count}
+                </span>
+              )}
+              {item.costo_total > 0 && (
+                <span className="flex items-center gap-1">
+                  <DollarSign className="h-3.5 w-3.5" />
+                  {formatCLP(item.costo_total)}
+                </span>
+              )}
+              {item.horas_fuera_servicio > 0 && (
+                <span className="flex items-center gap-1 text-orange-600">
+                  <AlertTriangle className="h-3.5 w-3.5" />
+                  {item.horas_fuera_servicio}h fuera de servicio
+                </span>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// QR Modal
+// ---------------------------------------------------------------------------
+function QRModal({
+  open,
+  onClose,
+  activo,
+}: {
+  open: boolean
+  onClose: () => void
+  activo: any
+}) {
+  const generarQR = useGenerarQR()
+  const [copied, setCopied] = useState(false)
+
+  const qrUrl =
+    typeof window !== 'undefined'
+      ? `${window.location.origin}/equipo/${activo.id}`
+      : `/equipo/${activo.id}`
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(qrUrl)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      // ignore
+    }
+  }
+
+  const handleGenerar = () => {
+    generarQR.mutate(activo.id)
+  }
+
+  return (
+    <Modal open={open} onClose={onClose} title="Codigo QR del equipo">
+      <div className="space-y-5">
+        {/* QR value */}
+        {activo.qr_code && (
+          <div className="rounded-lg bg-gray-50 px-4 py-4 text-center">
+            <p className="text-[10px] font-medium uppercase tracking-wider text-gray-400 mb-2">
+              Valor QR
+            </p>
+            <p className="font-mono text-lg font-bold text-gray-900 break-all">
+              {activo.qr_code}
+            </p>
+          </div>
+        )}
+
+        {/* URL */}
+        <div>
+          <p className="text-xs font-medium text-gray-500 mb-1">URL publica</p>
+          <div className="flex items-center gap-2">
+            <code className="flex-1 rounded-md bg-gray-100 px-3 py-2 text-xs font-mono text-gray-700 break-all">
+              {qrUrl}
+            </code>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleCopy}
+              className="shrink-0"
+            >
+              <Copy className="h-4 w-4 mr-1" />
+              {copied ? 'Copiado!' : 'Copiar URL'}
+            </Button>
+          </div>
+        </div>
+
+        {/* Generate / Regenerate button */}
+        <Button
+          onClick={handleGenerar}
+          disabled={generarQR.isPending}
+          className="w-full"
+        >
+          {generarQR.isPending ? (
+            <Spinner size="sm" className="mr-2" />
+          ) : (
+            <RefreshCw className="h-4 w-4 mr-2" />
+          )}
+          {activo.qr_code ? 'Regenerar QR' : 'Generar QR'}
+        </Button>
+
+        <p className="text-center text-xs text-gray-400">
+          Imprima este codigo QR y peguelo en el equipo
+        </p>
+      </div>
+    </Modal>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Main page
 // ---------------------------------------------------------------------------
 export default function ActivoDetailPage() {
   const params = useParams()
   const id = params.id as string
   const [activeTab, setActiveTab] = useState<TabKey>('ots')
+  const [qrOpen, setQrOpen] = useState(false)
 
   const { data: activo, isLoading, error } = useActivo(id)
 
@@ -529,10 +717,17 @@ export default function ActivoDetailPage() {
                 <p className="text-sm text-gray-500">{activo.nombre ?? activo.codigo}</p>
               </div>
             </div>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Badge variant="default">{getTipoActivoLabel(activo.tipo)}</Badge>
               <Badge className={getCriticidadColor(activo.criticidad)}>{getCriticidadLabel(activo.criticidad)}</Badge>
               <Badge variant={activo.estado as any}>{getEstadoActivoLabel(activo.estado)}</Badge>
+              <button
+                onClick={() => setQrOpen(true)}
+                className="rounded-md p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-pillado-green-600"
+                title="Ver codigo QR"
+              >
+                <QrCode className="h-5 w-5" />
+              </button>
             </div>
           </div>
 
@@ -589,6 +784,10 @@ export default function ActivoDetailPage() {
       {activeTab === 'planes' && <TabPlanes activoId={id} />}
       {activeTab === 'certificaciones' && <TabCertificaciones activoId={id} />}
       {activeTab === 'costos' && <TabCostos activoId={id} />}
+      {activeTab === 'historial' && <TabHistorial activoId={id} />}
+
+      {/* QR Modal */}
+      <QRModal open={qrOpen} onClose={() => setQrOpen(false)} activo={activo} />
     </div>
   )
 }
