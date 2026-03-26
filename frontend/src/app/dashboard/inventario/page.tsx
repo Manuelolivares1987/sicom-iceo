@@ -503,10 +503,12 @@ export default function InventarioPage() {
           <CardContent className="flex flex-col items-center justify-center py-16 text-center">
             <Package className="mb-4 h-12 w-12 text-gray-300" />
             <p className="text-lg font-medium text-gray-500">Conteos de Inventario</p>
-            <p className="mt-1 text-sm text-gray-400">Proximo conteo programado: 01/04/2026</p>
-            <Button variant="primary" className="mt-4">
-              Iniciar Conteo
-            </Button>
+            <p className="mt-1 text-sm text-gray-400">Gestione conteos fisicos con scanner de codigo de barras</p>
+            <Link href="/dashboard/inventario/conteo">
+              <Button variant="primary" className="mt-4">
+                Ir a Conteos
+              </Button>
+            </Link>
           </CardContent>
         </Card>
       )}

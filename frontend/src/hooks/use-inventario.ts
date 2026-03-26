@@ -9,6 +9,11 @@ import {
   registrarEntrada,
   getMovimientos,
   getKardex,
+  getConteos,
+  getConteoDetalle,
+  crearConteoInventario,
+  registrarLineaConteo,
+  completarConteo,
 } from '@/lib/services/inventario'
 
 // ── Queries ──────────────────────────────────────────────
@@ -159,6 +164,84 @@ export function useRegistrarEntrada() {
       queryClient.invalidateQueries({ queryKey: ['movimientos'] })
       queryClient.invalidateQueries({ queryKey: ['valorizacion-total'] })
       queryClient.invalidateQueries({ queryKey: ['kardex'] })
+    },
+  })
+}
+
+// ── Conteos ─────────────────────────────────────────────
+
+export function useConteos(filters?: { bodega_id?: string; estado?: string }) {
+  return useQuery({
+    queryKey: ['conteos', filters],
+    queryFn: async () => {
+      const { data, error } = await getConteos(filters)
+      if (error) throw error
+      return data
+    },
+  })
+}
+
+export function useConteoDetalle(conteoId?: string) {
+  return useQuery({
+    queryKey: ['conteo-detalle', conteoId],
+    queryFn: async () => {
+      const { data, error } = await getConteoDetalle(conteoId!)
+      if (error) throw error
+      return data
+    },
+    enabled: !!conteoId,
+  })
+}
+
+export function useCrearConteo() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (payload: {
+      bodega_id: string
+      tipo: string
+      responsable_id: string
+    }) => {
+      const { data, error } = await crearConteoInventario(payload)
+      if (error) throw error
+      return data
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['conteos'] })
+    },
+  })
+}
+
+export function useRegistrarLineaConteo() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (payload: {
+      conteo_id: string
+      producto_id: string
+      stock_fisico: number
+    }) => {
+      const { data, error } = await registrarLineaConteo(payload)
+      if (error) throw error
+      return data
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['conteo-detalle', variables.conteo_id] })
+    },
+  })
+}
+
+export function useCompletarConteo() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (conteoId: string) => {
+      const { data, error } = await completarConteo(conteoId)
+      if (error) throw error
+      return data
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['conteos'] })
     },
   })
 }

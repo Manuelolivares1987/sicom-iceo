@@ -235,21 +235,95 @@ export async function getKardex(bodegaId: string, productoId: string) {
 
 // ── Conteos ──────────────────────────────────────────────────────────
 
-export async function crearConteo(data: {
+// Get conteos with details
+export async function getConteos(filters?: { bodega_id?: string; estado?: string }) {
+  let query = supabase
+    .from('conteos_inventario')
+    .select('*, bodega:bodegas(nombre), responsable:usuarios_perfil(nombre_completo), supervisor:usuarios_perfil!conteos_inventario_supervisor_aprobacion_id_fkey(nombre_completo)')
+    .order('created_at', { ascending: false })
+
+  if (filters?.bodega_id) query = query.eq('bodega_id', filters.bodega_id)
+  if (filters?.estado) query = query.eq('estado', filters.estado)
+
+  const { data, error } = await query
+  return { data, error }
+}
+
+// Get conteo detail lines
+export async function getConteoDetalle(conteoId: string) {
+  const { data, error } = await supabase
+    .from('conteo_detalle')
+    .select('*, producto:productos(codigo, nombre, unidad_medida, codigo_barras)')
+    .eq('conteo_id', conteoId)
+    .order('created_at', { ascending: true })
+  return { data, error }
+}
+
+// Create a new physical count
+export async function crearConteoInventario(data: {
   bodega_id: string
-  tipo: string
+  tipo: string // 'ciclico' | 'general' | 'selectivo'
   responsable_id: string
-  observaciones?: string | null
 }) {
   const { data: conteo, error } = await supabase
     .from('conteos_inventario')
-    .insert(data)
+    .insert({
+      bodega_id: data.bodega_id,
+      tipo: data.tipo,
+      responsable_id: data.responsable_id,
+      fecha_inicio: new Date().toISOString(),
+      estado: 'en_proceso',
+    })
     .select()
     .single()
-
   return { data: conteo, error }
 }
 
+// Legacy alias
+export const crearConteo = crearConteoInventario
+
+// Register a count line (product scanned/counted)
+export async function registrarLineaConteo(data: {
+  conteo_id: string
+  producto_id: string
+  stock_fisico: number
+}) {
+  // Get current system stock
+  const { data: conteo } = await supabase
+    .from('conteos_inventario')
+    .select('bodega_id')
+    .eq('id', data.conteo_id)
+    .single()
+
+  if (!conteo) return { data: null, error: { message: 'Conteo no encontrado' } }
+
+  const { data: stockData } = await supabase
+    .from('stock_bodega')
+    .select('cantidad, costo_promedio')
+    .eq('bodega_id', conteo.bodega_id)
+    .eq('producto_id', data.producto_id)
+    .maybeSingle()
+
+  const stockSistema = stockData?.cantidad ?? 0
+  const diferencia = data.stock_fisico - stockSistema
+  const difValorizada = Math.abs(diferencia) * (stockData?.costo_promedio ?? 0)
+
+  const { data: detalle, error } = await supabase
+    .from('conteo_detalle')
+    .insert({
+      conteo_id: data.conteo_id,
+      producto_id: data.producto_id,
+      stock_sistema: stockSistema,
+      stock_fisico: data.stock_fisico,
+      diferencia_valorizada: difValorizada,
+    })
+    .select('*, producto:productos(codigo, nombre, unidad_medida)')
+    .single()
+
+  return { data: detalle, error }
+}
+
+// Legacy alias
 export async function registrarConteoDetalle(data: {
   conteo_id: string
   producto_id: string
@@ -257,40 +331,21 @@ export async function registrarConteoDetalle(data: {
   cantidad_contada: number
   observacion?: string | null
 }) {
-  // Get stock_sistema from stock_bodega
-  const { data: stock } = await supabase
-    .from('stock_bodega')
-    .select('cantidad')
-    .eq('bodega_id', data.bodega_id)
-    .eq('producto_id', data.producto_id)
-    .single()
-
-  const { data: detalle, error } = await supabase
-    .from('conteo_detalle')
-    .insert({
-      conteo_id: data.conteo_id,
-      producto_id: data.producto_id,
-      stock_sistema: stock?.cantidad ?? 0,
-      cantidad_contada: data.cantidad_contada,
-      observacion: data.observacion ?? null,
-    })
-    .select()
-    .single()
-
-  return { data: detalle, error }
+  return registrarLineaConteo({
+    conteo_id: data.conteo_id,
+    producto_id: data.producto_id,
+    stock_fisico: data.cantidad_contada,
+  })
 }
 
-export async function getConteos(bodegaId?: string) {
-  let query = supabase
+// Complete a count
+export async function completarConteo(conteoId: string) {
+  const { data, error } = await supabase
     .from('conteos_inventario')
-    .select('*')
-
-  if (bodegaId) {
-    query = query.eq('bodega_id', bodegaId)
-  }
-
-  const { data, error } = await query.order('created_at', { ascending: false })
-
+    .update({ estado: 'completado', fecha_fin: new Date().toISOString() })
+    .eq('id', conteoId)
+    .select()
+    .single()
   return { data, error }
 }
 

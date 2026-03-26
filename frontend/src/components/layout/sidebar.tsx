@@ -5,6 +5,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useAuth } from '@/contexts/auth-context'
+import { usePermissions, type Module } from '@/hooks/use-permissions'
 import {
   LayoutDashboard,
   FileText,
@@ -25,20 +26,20 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-const navItems = [
+const navItems: Array<{ label: string; href: string; icon: any; module?: Module }> = [
   { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { label: 'Contratos', href: '/dashboard/contratos', icon: FileText },
-  { label: 'Activos', href: '/dashboard/activos', icon: Cog },
-  { label: 'Órdenes de Trabajo', href: '/dashboard/ordenes-trabajo', icon: ClipboardList },
-  { label: 'Mantenimiento', href: '/dashboard/mantenimiento', icon: Wrench },
-  { label: 'Inventario', href: '/dashboard/inventario', icon: Package },
-  { label: 'Abastecimiento', href: '/dashboard/abastecimiento', icon: Fuel },
-  { label: 'Cumplimiento', href: '/dashboard/cumplimiento', icon: ShieldCheck },
-  { label: 'KPI', href: '/dashboard/kpi', icon: BarChart3 },
-  { label: 'ICEO', href: '/dashboard/iceo', icon: Gauge },
-  { label: 'Reportes', href: '/dashboard/reportes', icon: FileSpreadsheet },
-  { label: 'Auditoría', href: '/dashboard/auditoria', icon: Eye },
-  { label: 'Administración', href: '/dashboard/admin', icon: Settings },
+  { label: 'Contratos', href: '/dashboard/contratos', icon: FileText, module: 'contratos' },
+  { label: 'Activos', href: '/dashboard/activos', icon: Cog, module: 'activos' },
+  { label: 'Órdenes de Trabajo', href: '/dashboard/ordenes-trabajo', icon: ClipboardList, module: 'ordenes_trabajo' },
+  { label: 'Mantenimiento', href: '/dashboard/mantenimiento', icon: Wrench, module: 'mantenimiento' },
+  { label: 'Inventario', href: '/dashboard/inventario', icon: Package, module: 'inventario' },
+  { label: 'Abastecimiento', href: '/dashboard/abastecimiento', icon: Fuel, module: 'abastecimiento' },
+  { label: 'Cumplimiento', href: '/dashboard/cumplimiento', icon: ShieldCheck, module: 'cumplimiento' },
+  { label: 'KPI', href: '/dashboard/kpi', icon: BarChart3, module: 'kpi' },
+  { label: 'ICEO', href: '/dashboard/iceo', icon: Gauge, module: 'iceo' },
+  { label: 'Reportes', href: '/dashboard/reportes', icon: FileSpreadsheet, module: 'reportes' },
+  { label: 'Auditoría', href: '/dashboard/auditoria', icon: Eye, module: 'auditoria' },
+  { label: 'Administración', href: '/dashboard/admin', icon: Settings, module: 'admin' },
 ]
 
 interface SidebarProps {
@@ -50,6 +51,14 @@ interface SidebarProps {
 export default function Sidebar({ collapsed, onToggle, onClose }: SidebarProps) {
   const pathname = usePathname()
   const { perfil, signOut } = useAuth()
+  const { canView } = usePermissions()
+
+  // Filter nav items based on role permissions (Dashboard is always visible)
+  const visibleNavItems = useMemo(
+    () => navItems.filter((item) => !item.module || canView(item.module)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [perfil?.rol]
+  )
 
   const displayName = perfil?.nombre_completo ?? 'Usuario'
   const displayRole = perfil?.cargo ?? perfil?.rol ?? ''
@@ -106,7 +115,7 @@ export default function Sidebar({ collapsed, onToggle, onClose }: SidebarProps) 
 
       {/* Navigation */}
       <nav className="flex-1 space-y-0.5 overflow-y-auto px-2 py-3">
-        {navItems.map((item) => {
+        {visibleNavItems.map((item) => {
           const Icon = item.icon
           const active = isActive(item.href)
           return (

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Settings,
   Users,
@@ -29,6 +29,8 @@ import {
 import { Button } from '@/components/ui/button'
 import { getUsuarios, getSystemStats } from '@/lib/services/admin'
 import { formatDate } from '@/lib/utils'
+import { useToast } from '@/hooks/use-toast'
+import { EditarUsuarioModal } from '@/components/admin/editar-usuario-modal'
 import type { RolUsuario } from '@/types/database'
 
 // --- Hooks ---
@@ -146,7 +148,7 @@ function VistaGeneralTab() {
   )
 }
 
-function UsuariosTab() {
+function UsuariosTab({ onEditUsuario }: { onEditUsuario: (usuario: any) => void }) {
   const { data: usuarios, isLoading } = useUsuarios()
 
   if (isLoading) {
@@ -233,7 +235,7 @@ function UsuariosTab() {
                   </span>
                 </TableCell>
                 <TableCell className="text-right">
-                  <Button variant="ghost" size="sm">
+                  <Button variant="ghost" size="sm" onClick={() => onEditUsuario(usuario)}>
                     Editar
                   </Button>
                 </TableCell>
@@ -445,6 +447,20 @@ function ParametrosTab() {
 
 export default function AdminPage() {
   const [activeTab, setActiveTab] = useState<TabId>('general')
+  const [selectedUsuario, setSelectedUsuario] = useState<any>(null)
+  const [showEditModal, setShowEditModal] = useState(false)
+  const toast = useToast()
+  const queryClient = useQueryClient()
+
+  function handleEditUsuario(usuario: any) {
+    setSelectedUsuario(usuario)
+    setShowEditModal(true)
+  }
+
+  function handleSaved() {
+    queryClient.invalidateQueries({ queryKey: ['admin', 'usuarios'] })
+    toast.success('Usuario actualizado correctamente.')
+  }
 
   return (
     <div className="space-y-6">
@@ -484,8 +500,16 @@ export default function AdminPage() {
 
       {/* Tab Content */}
       {activeTab === 'general' && <VistaGeneralTab />}
-      {activeTab === 'usuarios' && <UsuariosTab />}
+      {activeTab === 'usuarios' && <UsuariosTab onEditUsuario={handleEditUsuario} />}
       {activeTab === 'parametros' && <ParametrosTab />}
+
+      {/* Edit User Modal */}
+      <EditarUsuarioModal
+        open={showEditModal}
+        onClose={() => setShowEditModal(false)}
+        usuario={selectedUsuario}
+        onSaved={handleSaved}
+      />
     </div>
   )
 }
