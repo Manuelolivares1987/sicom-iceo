@@ -47,6 +47,7 @@ import {
 } from '@/hooks/use-ordenes-trabajo'
 import { OTInfoHeader } from '@/components/ot/ot-info-header'
 import { OTActionBar } from '@/components/ot/ot-action-bar'
+import { isTerminalState } from '@/domain/ot/transitions'
 
 // ---------------------------------------------------------------------------
 // Tabs
@@ -152,7 +153,7 @@ function ResultRadio({
   )
 }
 
-function ChecklistTab({ otId }: { otId: string }) {
+function ChecklistTab({ otId, disabled }: { otId: string; disabled?: boolean }) {
   const { data: items, isLoading } = useChecklistOT(otId)
   const updateItem = useUpdateChecklistItem()
   const [observations, setObservations] = useState<Record<string, string>>({})
@@ -171,6 +172,12 @@ function ChecklistTab({ otId }: { otId: string }) {
 
   return (
     <div className="space-y-3">
+      {disabled && (
+        <div className="flex items-center gap-2 rounded-lg bg-amber-50 border border-amber-200 p-3 text-sm text-amber-700">
+          <AlertTriangle className="h-4 w-4 shrink-0" />
+          Esta OT está cerrada. El checklist no puede modificarse.
+        </div>
+      )}
       {(items as any[]).map((item: any, idx: number) => (
         <Card key={item.id}>
           <CardContent className="p-4">
@@ -185,7 +192,7 @@ function ChecklistTab({ otId }: { otId: string }) {
               </div>
               <ResultRadio
                 value={item.resultado}
-                disabled={updateItem.isPending}
+                disabled={disabled || updateItem.isPending}
                 onChange={(v) => {
                   updateItem.mutate({
                     otId,
@@ -200,6 +207,7 @@ function ChecklistTab({ otId }: { otId: string }) {
               <input
                 type="text"
                 placeholder="Observación..."
+                disabled={disabled}
                 value={observations[item.id] ?? item.observacion ?? ''}
                 onChange={(e) =>
                   setObservations((prev) => ({ ...prev, [item.id]: e.target.value }))
@@ -215,11 +223,12 @@ function ChecklistTab({ otId }: { otId: string }) {
                     })
                   }
                 }}
-                className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm placeholder:text-gray-400 focus:border-pillado-green-500 focus:outline-none"
+                className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm placeholder:text-gray-400 focus:border-pillado-green-500 focus:outline-none disabled:bg-gray-100 disabled:opacity-50"
               />
               <button
                 type="button"
-                className="flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 text-gray-400 hover:bg-gray-50"
+                disabled={disabled}
+                className="flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 text-gray-400 hover:bg-gray-50 disabled:opacity-50"
               >
                 <Camera className="h-4 w-4" />
               </button>
@@ -231,7 +240,7 @@ function ChecklistTab({ otId }: { otId: string }) {
   )
 }
 
-function EvidenciasTab({ otId }: { otId: string }) {
+function EvidenciasTab({ otId, disabled }: { otId: string; disabled?: boolean }) {
   const { data: evidencias, isLoading } = useEvidenciasOT(otId)
   const addEvidencia = useAddEvidencia()
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -281,7 +290,13 @@ function EvidenciasTab({ otId }: { otId: string }) {
     <div className="space-y-6">
       {/* Upload controls */}
       <div className="space-y-3">
-        {!showUploadForm ? (
+        {disabled && (
+          <div className="flex items-center gap-2 rounded-lg bg-amber-50 border border-amber-200 p-3 text-sm text-amber-700">
+            <AlertTriangle className="h-4 w-4 shrink-0" />
+            Esta OT está cerrada. No se puede agregar evidencia.
+          </div>
+        )}
+        {!disabled && !showUploadForm && (
           <Button
             variant="primary"
             size="lg"
@@ -291,7 +306,8 @@ function EvidenciasTab({ otId }: { otId: string }) {
             <Camera className="h-5 w-5" />
             Subir Evidencia
           </Button>
-        ) : (
+        )}
+        {!disabled && showUploadForm && (
           <Card>
             <CardContent className="space-y-3 p-4">
               <div className="flex gap-3">
@@ -547,6 +563,8 @@ export default function OrdenTrabajoDetailPage() {
   const userId = user?.id ?? ''
 
   const { data: ot, isLoading, error } = useOrdenTrabajo(id)
+  const { data: checklistData } = useChecklistOT(id)
+  const { data: evidenciasData } = useEvidenciasOT(id)
 
   const [activeTab, setActiveTab] = useState('checklist')
 
@@ -603,6 +621,7 @@ export default function OrdenTrabajoDetailPage() {
   }
 
   const otData = ot as any
+  const isOTClosed = isTerminalState(otData.estado)
 
   return (
     <div className="pb-24">
@@ -659,8 +678,8 @@ export default function OrdenTrabajoDetailPage() {
       {/* Tab content */}
       <Card>
         <CardContent className="p-4 sm:p-6">
-          {activeTab === 'checklist' && id && <ChecklistTab otId={id} />}
-          {activeTab === 'evidencias' && id && <EvidenciasTab otId={id} />}
+          {activeTab === 'checklist' && id && <ChecklistTab otId={id} disabled={isOTClosed} />}
+          {activeTab === 'evidencias' && id && <EvidenciasTab otId={id} disabled={isOTClosed} />}
           {activeTab === 'materiales' && id && <MaterialesTab otId={id} />}
           {activeTab === 'historial' && id && <HistorialTab otId={id} />}
         </CardContent>
@@ -730,6 +749,17 @@ export default function OrdenTrabajoDetailPage() {
         loading={finalizarMut.isPending}
         onCancel={() => { setShowFinalizar(false); setFinalizarObs('') }}
         onConfirm={() => {
+          const pendingMandatory = (checklistData ?? []).filter(
+            (item: any) => item.obligatorio && !item.resultado
+          )
+          if (pendingMandatory.length > 0) {
+            setActionError(`Hay ${pendingMandatory.length} items obligatorios sin completar en el checklist.`)
+            return
+          }
+          if ((evidenciasData ?? []).length === 0) {
+            setActionError('No se puede finalizar sin evidencia. Tarea sin evidencia = tarea no ejecutada.')
+            return
+          }
           finalizarMut.mutate(
             { id: id!, userId, observaciones: finalizarObs || undefined },
             {

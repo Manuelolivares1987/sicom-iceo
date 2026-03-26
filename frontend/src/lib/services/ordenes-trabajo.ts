@@ -191,6 +191,25 @@ export async function updateChecklistItem(
   },
   observacion?: string
 ) {
+  // Validate OT is not in terminal state
+  const { data: item } = await supabase
+    .from('checklist_ot')
+    .select('ot_id')
+    .eq('id', id)
+    .single()
+
+  if (item) {
+    const { data: ot } = await supabase
+      .from('ordenes_trabajo')
+      .select('estado')
+      .eq('id', item.ot_id)
+      .single()
+
+    if (ot && ['ejecutada_ok', 'ejecutada_con_observaciones', 'no_ejecutada', 'cancelada'].includes(ot.estado)) {
+      return { data: null, error: { message: 'No se puede modificar el checklist de una OT cerrada.' } }
+    }
+  }
+
   // Support both legacy (id, data) and hook (id, completado, observacion) call styles
   const data = typeof completadoOrData === 'boolean'
     ? {
@@ -217,6 +236,17 @@ export async function addEvidenciaOT(
   tipo: string,
   descripcion?: string
 ) {
+  // Validate OT is not in terminal state
+  const { data: ot } = await supabase
+    .from('ordenes_trabajo')
+    .select('estado')
+    .eq('id', otId)
+    .single()
+
+  if (ot && ['ejecutada_ok', 'ejecutada_con_observaciones', 'no_ejecutada', 'cancelada'].includes(ot.estado)) {
+    return { data: null, error: { message: 'No se puede agregar evidencia a una OT cerrada.' } }
+  }
+
   const fileExt = file.name.split('.').pop()
   const filePath = `${otId}/${Date.now()}.${fileExt}`
 
@@ -234,19 +264,31 @@ export async function addEvidenciaOT(
 
   const { data: { user } } = await supabase.auth.getUser()
 
-  const { data, error } = await supabase
-    .from('evidencias_ot')
-    .insert({
-      ot_id: otId,
-      tipo,
-      archivo_url: publicUrl,
-      descripcion: descripcion ?? null,
-      created_by: user?.id ?? null,
-    })
-    .select()
-    .single()
+  try {
+    const { data, error } = await supabase
+      .from('evidencias_ot')
+      .insert({
+        ot_id: otId,
+        tipo,
+        archivo_url: publicUrl,
+        descripcion: descripcion ?? null,
+        created_by: user?.id ?? null,
+      })
+      .select()
+      .single()
 
-  return { data, error }
+    if (error) {
+      // Cleanup uploaded file if DB insert fails
+      await supabase.storage.from('evidencias-ot').remove([filePath])
+      return { data: null, error }
+    }
+
+    return { data, error: null }
+  } catch (err) {
+    // Cleanup uploaded file on unexpected error
+    await supabase.storage.from('evidencias-ot').remove([filePath])
+    return { data: null, error: err }
+  }
 }
 
 export async function getEvidenciasOT(otId: string) {
