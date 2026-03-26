@@ -54,33 +54,47 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_mv_ot_stats
 -- ── VM: Base para KPIs de inventario (exactitud, merma) ──
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS mv_inventario_stats_periodo AS
+WITH movs AS (
+    SELECT
+        b.faena_id,
+        b.id AS bodega_id,
+        DATE_TRUNC('month', mi.created_at)::DATE AS periodo,
+        p.categoria,
+        COUNT(*) FILTER (WHERE mi.tipo = 'salida') AS salidas_count,
+        COALESCE(SUM(mi.cantidad) FILTER (WHERE mi.tipo = 'salida'), 0) AS volumen_salidas,
+        COALESCE(SUM(mi.cantidad * mi.costo_unitario) FILTER (WHERE mi.tipo = 'salida'), 0) AS valor_salidas,
+        COALESCE(SUM(mi.cantidad) FILTER (WHERE mi.tipo = 'merma'), 0) AS volumen_mermas,
+        COALESCE(SUM(mi.cantidad * mi.costo_unitario) FILTER (WHERE mi.tipo = 'merma'), 0) AS valor_mermas,
+        COALESCE(SUM(mi.cantidad) FILTER (WHERE mi.tipo = 'entrada'), 0) AS volumen_entradas
+    FROM movimientos_inventario mi
+    JOIN bodegas b ON b.id = mi.bodega_id
+    JOIN productos p ON p.id = mi.producto_id
+    GROUP BY b.faena_id, b.id, periodo, p.categoria
+),
+conteos AS (
+    SELECT
+        ci.bodega_id,
+        DATE_TRUNC('month', ci.created_at)::DATE AS periodo,
+        COUNT(*) AS items_contados_total,
+        COUNT(*) FILTER (WHERE cd.diferencia = 0) AS items_sin_diferencia
+    FROM conteo_detalle cd
+    JOIN conteos_inventario ci ON ci.id = cd.conteo_id
+    GROUP BY ci.bodega_id, periodo
+)
 SELECT
-    b.faena_id,
-    DATE_TRUNC('month', mi.created_at)::DATE AS periodo,
-    p.categoria,
-    -- Movimientos
-    COUNT(*) FILTER (WHERE mi.tipo = 'salida') AS salidas_count,
-    COALESCE(SUM(mi.cantidad) FILTER (WHERE mi.tipo = 'salida'), 0) AS volumen_salidas,
-    COALESCE(SUM(mi.cantidad * mi.costo_unitario) FILTER (WHERE mi.tipo = 'salida'), 0) AS valor_salidas,
-    COALESCE(SUM(mi.cantidad) FILTER (WHERE mi.tipo = 'merma'), 0) AS volumen_mermas,
-    COALESCE(SUM(mi.cantidad * mi.costo_unitario) FILTER (WHERE mi.tipo = 'merma'), 0) AS valor_mermas,
-    COALESCE(SUM(mi.cantidad) FILTER (WHERE mi.tipo = 'entrada'), 0) AS volumen_entradas,
-    -- Conteos
-    (SELECT COUNT(*) FROM conteo_detalle cd
-     JOIN conteos_inventario ci ON ci.id = cd.conteo_id
-     WHERE ci.bodega_id = b.id
-       AND cd.diferencia = 0
-       AND ci.created_at >= DATE_TRUNC('month', mi.created_at)
-       AND ci.created_at < DATE_TRUNC('month', mi.created_at) + INTERVAL '1 month') AS items_sin_diferencia,
-    (SELECT COUNT(*) FROM conteo_detalle cd
-     JOIN conteos_inventario ci ON ci.id = cd.conteo_id
-     WHERE ci.bodega_id = b.id
-       AND ci.created_at >= DATE_TRUNC('month', mi.created_at)
-       AND ci.created_at < DATE_TRUNC('month', mi.created_at) + INTERVAL '1 month') AS items_contados_total
-FROM movimientos_inventario mi
-JOIN bodegas b ON b.id = mi.bodega_id
-JOIN productos p ON p.id = mi.producto_id
-GROUP BY b.faena_id, periodo, p.categoria, b.id;
+    m.faena_id,
+    m.periodo,
+    m.categoria,
+    m.salidas_count,
+    m.volumen_salidas,
+    m.valor_salidas,
+    m.volumen_mermas,
+    m.valor_mermas,
+    m.volumen_entradas,
+    COALESCE(c.items_sin_diferencia, 0) AS items_sin_diferencia,
+    COALESCE(c.items_contados_total, 0) AS items_contados_total
+FROM movs m
+LEFT JOIN conteos c ON c.bodega_id = m.bodega_id AND c.periodo = m.periodo;
 
 -- ── VM: Base para KPIs de certificaciones ──
 
