@@ -11,8 +11,6 @@ import {
   X,
   Minus,
   Upload,
-  Play,
-  Pause,
   CheckCircle2,
   XCircle,
   Image as ImageIcon,
@@ -47,6 +45,8 @@ import {
   useUpdateChecklistItem,
   useAddEvidencia,
 } from '@/hooks/use-ordenes-trabajo'
+import { OTInfoHeader } from '@/components/ot/ot-info-header'
+import { OTActionBar } from '@/components/ot/ot-action-bar'
 
 // ---------------------------------------------------------------------------
 // Tabs
@@ -57,19 +57,6 @@ const tabs = [
   { id: 'materiales', label: 'Materiales', icon: Package },
   { id: 'historial', label: 'Historial', icon: History },
 ]
-
-// ---------------------------------------------------------------------------
-// Tipo label helper
-// ---------------------------------------------------------------------------
-const tipoLabels: Record<string, string> = {
-  inspeccion: 'Inspección',
-  preventivo: 'Preventivo',
-  correctivo: 'Correctivo',
-  abastecimiento: 'Abastecimiento',
-  lubricacion: 'Lubricación',
-  inventario: 'Inventario',
-  regularizacion: 'Regularización',
-}
 
 // ---------------------------------------------------------------------------
 // Confirmation dialog
@@ -616,11 +603,6 @@ export default function OrdenTrabajoDetailPage() {
   }
 
   const otData = ot as any
-  const activoLabel = otData.activo ? (otData.activo.nombre || otData.activo.codigo) : '—'
-  const faenaLabel = otData.faena?.nombre || '—'
-  const responsableLabel = otData.responsable?.nombre_completo || '—'
-  const tipoLabel = tipoLabels[otData.tipo] || otData.tipo
-  const prioridadLabel = (otData.prioridad as string).charAt(0).toUpperCase() + (otData.prioridad as string).slice(1)
 
   return (
     <div className="pb-24">
@@ -633,22 +615,8 @@ export default function OrdenTrabajoDetailPage() {
         Volver a Ordenes
       </Link>
 
-      {/* Header */}
-      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">{otData.folio}</h1>
-          <p className="text-sm text-gray-500">{activoLabel} — {faenaLabel}</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Badge className={getEstadoOTColor(otData.estado)}>
-            {getEstadoOTLabel(otData.estado)}
-          </Badge>
-          <Badge variant={(otData.prioridad || 'default') as any}>{prioridadLabel}</Badge>
-          <span className="inline-flex items-center rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-semibold text-blue-700">
-            {tipoLabel}
-          </span>
-        </div>
-      </div>
+      {/* Header + Info grid */}
+      <OTInfoHeader ot={otData} />
 
       {/* Feedback */}
       {actionError && (
@@ -666,26 +634,6 @@ export default function OrdenTrabajoDetailPage() {
           {actionSuccess}
         </div>
       )}
-
-      {/* Info grid */}
-      <Card className="mb-6">
-        <CardContent className="grid grid-cols-2 gap-4 p-4 sm:grid-cols-3 lg:grid-cols-4">
-          {[
-            { label: 'Activo', value: activoLabel },
-            { label: 'Faena', value: faenaLabel },
-            { label: 'Responsable', value: responsableLabel },
-            { label: 'Cuadrilla', value: otData.cuadrilla || '—' },
-            { label: 'Fecha Programada', value: otData.fecha_programada ? formatDate(otData.fecha_programada) : '—' },
-            { label: 'Fecha Inicio', value: otData.fecha_inicio ? formatDateTime(otData.fecha_inicio) : '—' },
-            { label: 'Fecha Término', value: otData.fecha_termino ? formatDateTime(otData.fecha_termino) : 'En curso' },
-          ].map((item) => (
-            <div key={item.label}>
-              <p className="text-xs font-medium text-gray-400">{item.label}</p>
-              <p className="text-sm font-semibold text-gray-900">{item.value}</p>
-            </div>
-          ))}
-        </CardContent>
-      </Card>
 
       {/* Tabs */}
       <div className="mb-4 flex gap-1 overflow-x-auto rounded-xl bg-gray-100 p-1">
@@ -719,74 +667,14 @@ export default function OrdenTrabajoDetailPage() {
       </Card>
 
       {/* Bottom action bar */}
-      <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-gray-200 bg-white p-4 shadow-lg sm:static sm:mt-6 sm:border-0 sm:bg-transparent sm:p-0 sm:shadow-none">
-        <div className="flex flex-wrap gap-2">
-          {(otData.estado === 'asignada') && (
-            <Button
-              variant="primary"
-              size="lg"
-              className="flex-1 sm:flex-none"
-              onClick={() => { clearFeedback(); setShowIniciar(true) }}
-            >
-              <Play className="h-5 w-5" />
-              Iniciar
-            </Button>
-          )}
-          {otData.estado === 'en_ejecucion' && (
-            <>
-              <Button
-                variant="secondary"
-                size="lg"
-                className="flex-1 sm:flex-none"
-                onClick={() => { clearFeedback(); setShowPausar(true) }}
-              >
-                <Pause className="h-5 w-5" />
-                Pausar
-              </Button>
-              <Button
-                variant="primary"
-                size="lg"
-                className="flex-1 sm:flex-none"
-                onClick={() => { clearFeedback(); setShowFinalizar(true) }}
-              >
-                <CheckCircle2 className="h-5 w-5" />
-                Finalizar
-              </Button>
-              <Button
-                variant="danger"
-                size="lg"
-                className="flex-1 sm:flex-none"
-                onClick={() => { clearFeedback(); setShowNoEjecutada(true) }}
-              >
-                <XCircle className="h-5 w-5" />
-                No Ejecutada
-              </Button>
-            </>
-          )}
-          {otData.estado === 'pausada' && (
-            <>
-              <Button
-                variant="primary"
-                size="lg"
-                className="flex-1 sm:flex-none"
-                onClick={() => { clearFeedback(); setShowIniciar(true) }}
-              >
-                <Play className="h-5 w-5" />
-                Reanudar
-              </Button>
-              <Button
-                variant="danger"
-                size="lg"
-                className="flex-1 sm:flex-none"
-                onClick={() => { clearFeedback(); setShowNoEjecutada(true) }}
-              >
-                <XCircle className="h-5 w-5" />
-                No Ejecutada
-              </Button>
-            </>
-          )}
-        </div>
-      </div>
+      <OTActionBar
+        estado={otData.estado}
+        onIniciar={() => { clearFeedback(); setShowIniciar(true) }}
+        onPausar={() => { clearFeedback(); setShowPausar(true) }}
+        onFinalizar={() => { clearFeedback(); setShowFinalizar(true) }}
+        onNoEjecutada={() => { clearFeedback(); setShowNoEjecutada(true) }}
+        loading={iniciarMut.isPending || pausarMut.isPending || finalizarMut.isPending || noEjecutarMut.isPending}
+      />
 
       {/* Confirmation dialogs */}
       <ConfirmDialog

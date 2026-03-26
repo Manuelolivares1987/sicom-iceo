@@ -1,8 +1,9 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { Search, Plus, ChevronDown, Eye } from 'lucide-react'
+import { CrearOTModal } from '@/components/ot/crear-ot-modal'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -200,6 +201,7 @@ export default function OrdenesTrabajoPage() {
   const [faenaFilter, setFaenaFilter] = useState('')
   const [prioridadFilter, setPrioridadFilter] = useState('')
   const [search, setSearch] = useState('')
+  const [showCrearModal, setShowCrearModal] = useState(false)
 
   // Faenas for filter dropdown
   const [faenaOptions, setFaenaOptions] = useState<{ value: string; label: string }[]>([
@@ -244,12 +246,15 @@ export default function OrdenesTrabajoPage() {
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="text-2xl font-bold text-gray-900">Ordenes de Trabajo</h1>
-        <Link href="/dashboard/ordenes-trabajo/nueva">
-          <Button variant="primary" size="lg" className="w-full sm:w-auto">
-            <Plus className="h-5 w-5" />
-            Nueva OT
-          </Button>
-        </Link>
+        <Button
+          variant="primary"
+          size="lg"
+          className="w-full sm:w-auto"
+          onClick={() => setShowCrearModal(true)}
+        >
+          <Plus className="h-5 w-5" />
+          Nueva OT
+        </Button>
       </div>
 
       {/* Filters */}
@@ -376,6 +381,18 @@ export default function OrdenesTrabajoPage() {
           </div>
         </>
       )}
+
+      {/* Crear OT Modal */}
+      <CrearOTModal
+        open={showCrearModal}
+        onClose={() => setShowCrearModal(false)}
+        onCreated={() => {
+          setShowCrearModal(false)
+          alert('Orden de trabajo creada exitosamente')
+        }}
+        contratoId=""
+        faenaId={faenaFilter || undefined}
+      />
     </div>
   )
 }

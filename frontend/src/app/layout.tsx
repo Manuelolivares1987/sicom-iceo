@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import './globals.css'
 import { QueryProvider } from '@/contexts/query-provider'
 import { AuthProvider } from '@/contexts/auth-context'
+import { ToastProvider } from '@/contexts/toast-context'
 
 export const metadata: Metadata = {
   title: 'SICOM-ICEO | Pillado Empresas',
@@ -21,7 +22,9 @@ export default function RootLayout({
     <html lang="es">
       <body>
         <QueryProvider>
-          <AuthProvider>{children}</AuthProvider>
+          <AuthProvider>
+            <ToastProvider>{children}</ToastProvider>
+          </AuthProvider>
         </QueryProvider>
       </body>
     </html>
