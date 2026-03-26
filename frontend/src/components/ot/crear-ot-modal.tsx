@@ -113,7 +113,7 @@ export function CrearOTModal({
     Promise.all([
       getActivos(faenaId ? { faena_id: faenaId } : undefined),
       supabase
-        .from('usuario_perfiles')
+        .from('usuarios_perfil')
         .select('id, nombre_completo, cargo')
         .eq('activo', true)
         .order('nombre_completo'),
