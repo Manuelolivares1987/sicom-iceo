@@ -25,14 +25,14 @@ const OT_LIST_SELECT = `
   *,
   activo:activos(id, codigo, nombre, tipo),
   faena:faenas(id, codigo, nombre),
-  responsable:usuarios_perfil(id, nombre_completo, cargo)
+  responsable:usuarios_perfil!ordenes_trabajo_responsable_id_fkey(id, nombre_completo, cargo)
 `
 
 const OT_DETAIL_SELECT = `
   *,
   activo:activos(*, modelo:modelos(*, marca:marcas(*))),
   faena:faenas(*),
-  responsable:usuarios_perfil(id, nombre_completo, cargo, email)
+  responsable:usuarios_perfil!ordenes_trabajo_responsable_id_fkey(id, nombre_completo, cargo, email)
 `
 
 // ── CRUD ─────────────────────────────────────────────────────────────

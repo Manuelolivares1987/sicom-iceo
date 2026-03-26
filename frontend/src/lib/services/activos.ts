@@ -76,7 +76,7 @@ export async function createActivo(
 export async function getOTsByActivo(activoId: string) {
   const { data, error } = await supabase
     .from('ordenes_trabajo')
-    .select('id, folio, tipo, estado, prioridad, fecha_programada, fecha_inicio, fecha_termino, costo_total, responsable:usuarios_perfil(nombre_completo)')
+    .select('id, folio, tipo, estado, prioridad, fecha_programada, fecha_inicio, fecha_termino, costo_total, responsable:usuarios_perfil!ordenes_trabajo_responsable_id_fkey(nombre_completo)')
     .eq('activo_id', activoId)
     .order('created_at', { ascending: false })
   return { data, error }
