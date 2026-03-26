@@ -42,12 +42,13 @@ import {
   usePausarOT,
   useFinalizarOT,
   useNoEjecutarOT,
+  useCerrarOTSupervisor,
   useUpdateChecklistItem,
   useAddEvidencia,
 } from '@/hooks/use-ordenes-trabajo'
 import { OTInfoHeader } from '@/components/ot/ot-info-header'
 import { OTActionBar } from '@/components/ot/ot-action-bar'
-import { isTerminalState } from '@/domain/ot/transitions'
+import { isImmutableState, isAwaitingClosure } from '@/domain/ot/transitions'
 
 // ---------------------------------------------------------------------------
 // Tabs
@@ -573,12 +574,15 @@ export default function OrdenTrabajoDetailPage() {
   const pausarMut = usePausarOT()
   const finalizarMut = useFinalizarOT()
   const noEjecutarMut = useNoEjecutarOT()
+  const cerrarMut = useCerrarOTSupervisor()
 
   // Confirmation dialogs
   const [showIniciar, setShowIniciar] = useState(false)
   const [showPausar, setShowPausar] = useState(false)
   const [showFinalizar, setShowFinalizar] = useState(false)
   const [showNoEjecutada, setShowNoEjecutada] = useState(false)
+  const [showCerrar, setShowCerrar] = useState(false)
+  const [cerrarObs, setCerrarObs] = useState('')
   const [finalizarObs, setFinalizarObs] = useState('')
   const [noEjecutadaCausa, setNoEjecutadaCausa] = useState('')
   const [noEjecutadaDetalle, setNoEjecutadaDetalle] = useState('')
@@ -621,7 +625,8 @@ export default function OrdenTrabajoDetailPage() {
   }
 
   const otData = ot as any
-  const isOTClosed = isTerminalState(otData.estado)
+  const isOTClosed = isImmutableState(otData.estado)
+  const awaitsClosure = isAwaitingClosure(otData.estado)
 
   return (
     <div className="pb-24">
@@ -685,7 +690,7 @@ export default function OrdenTrabajoDetailPage() {
         </CardContent>
       </Card>
 
-      {/* Bottom action bar */}
+      {/* Bottom action bar — technician actions */}
       <OTActionBar
         estado={otData.estado}
         onIniciar={() => { clearFeedback(); setShowIniciar(true) }}
@@ -694,6 +699,25 @@ export default function OrdenTrabajoDetailPage() {
         onNoEjecutada={() => { clearFeedback(); setShowNoEjecutada(true) }}
         loading={iniciarMut.isPending || pausarMut.isPending || finalizarMut.isPending || noEjecutarMut.isPending}
       />
+
+      {/* Supervisor closure bar — only when OT awaits closure */}
+      {awaitsClosure && (
+        <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-purple-200 bg-purple-50 p-4 lg:left-64">
+          <div className="mx-auto flex max-w-4xl items-center justify-between gap-4">
+            <div className="text-sm text-purple-700">
+              <span className="font-semibold">Pendiente de cierre supervisor.</span> Revise checklist, evidencia y costos antes de cerrar.
+            </div>
+            <Button
+              variant="primary"
+              onClick={() => { clearFeedback(); setShowCerrar(true) }}
+              loading={cerrarMut.isPending}
+              className="!bg-purple-600 hover:!bg-purple-700 shrink-0"
+            >
+              Cerrar OT
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Confirmation dialogs */}
       <ConfirmDialog
@@ -849,6 +873,46 @@ export default function OrdenTrabajoDetailPage() {
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-pillado-green-500 focus:outline-none"
             />
           </div>
+        </div>
+      </ConfirmDialog>
+
+      {/* Supervisor closure dialog */}
+      <ConfirmDialog
+        open={showCerrar}
+        title="Cierre Supervisor"
+        message={`Cerrará definitivamente la OT ${otData.folio}. Esto congela costos, actualiza plan PM y bloquea toda modificación.`}
+        confirmLabel="Cerrar Definitivamente"
+        variant="primary"
+        loading={cerrarMut.isPending}
+        onCancel={() => { setShowCerrar(false); setCerrarObs('') }}
+        onConfirm={() => {
+          cerrarMut.mutate(
+            { id: id!, supervisorId: userId, observaciones: cerrarObs || undefined },
+            {
+              onSuccess: () => {
+                setShowCerrar(false)
+                setCerrarObs('')
+                showSuccess('OT cerrada definitivamente por supervisor')
+              },
+              onError: (err: any) => {
+                setShowCerrar(false)
+                setActionError(err?.message || 'Error al cerrar la OT')
+              },
+            }
+          )
+        }}
+      >
+        <div>
+          <label className="mb-1 block text-xs font-medium text-gray-500">
+            Observaciones del supervisor (opcional)
+          </label>
+          <textarea
+            value={cerrarObs}
+            onChange={(e) => setCerrarObs(e.target.value)}
+            placeholder="Observaciones de cierre..."
+            rows={3}
+            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-purple-500 focus:outline-none"
+          />
         </div>
       </ConfirmDialog>
     </div>

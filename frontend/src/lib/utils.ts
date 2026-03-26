@@ -48,6 +48,7 @@ export function getEstadoOTColor(estado: string): string {
     ejecutada_con_observaciones: 'bg-yellow-100 text-yellow-700',
     no_ejecutada: 'bg-red-100 text-red-700',
     cancelada: 'bg-gray-200 text-gray-500',
+    cerrada: 'bg-purple-100 text-purple-700',
   }
   return colores[estado] || 'bg-gray-100 text-gray-700'
 }
@@ -62,6 +63,7 @@ export function getEstadoOTLabel(estado: string): string {
     ejecutada_con_observaciones: 'Con Observaciones',
     no_ejecutada: 'No Ejecutada',
     cancelada: 'Cancelada',
+    cerrada: 'Cerrada',
   }
   return labels[estado] || estado
 }

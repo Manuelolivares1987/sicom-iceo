@@ -352,6 +352,7 @@ export async function getOTsStats(faenaId?: string) {
     ejecutada_con_observaciones: 0,
     no_ejecutada: 0,
     cancelada: 0,
+    cerrada: 0,
   }
 
   for (const row of data) {
