@@ -35,26 +35,8 @@ export function formatDateTime(date: string | Date): string {
   }).format(new Date(date))
 }
 
-export function getICEOColor(valor: number): string {
-  if (valor >= 95) return 'text-iceo-excelencia'
-  if (valor >= 85) return 'text-iceo-bueno'
-  if (valor >= 70) return 'text-iceo-aceptable'
-  return 'text-iceo-deficiente'
-}
-
-export function getICEOBgColor(valor: number): string {
-  if (valor >= 95) return 'bg-iceo-excelencia'
-  if (valor >= 85) return 'bg-iceo-bueno'
-  if (valor >= 70) return 'bg-iceo-aceptable'
-  return 'bg-iceo-deficiente'
-}
-
-export function getICEOLabel(valor: number): string {
-  if (valor >= 95) return 'Excelencia'
-  if (valor >= 85) return 'Bueno'
-  if (valor >= 70) return 'Aceptable'
-  return 'Deficiente'
-}
+// ICEO presentation functions — source of truth is domain/kpi/calculator
+export { getICEOColor, getICEOBgColor, getICEOLabel } from '@/domain/kpi/calculator'
 
 export function getEstadoOTColor(estado: string): string {
   const colores: Record<string, string> = {
