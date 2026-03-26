@@ -34,7 +34,7 @@ export async function getICEOPeriodo(
   if (faenaId) query = query.eq('faena_id', faenaId)
   if (periodoInicio) query = query.eq('periodo_inicio', periodoInicio)
 
-  const { data, error } = await query.single()
+  const { data, error } = await query.order('periodo_inicio', { ascending: false }).limit(1).maybeSingle()
 
   return { data: data as ICEOPeriodo | null, error }
 }
