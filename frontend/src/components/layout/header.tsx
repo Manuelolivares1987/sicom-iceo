@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
+import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
   Menu,
@@ -11,12 +12,14 @@ import {
   User,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useAuth } from '@/contexts/auth-context'
+import { useConteoNoLeidas } from '@/hooks/use-alertas'
 
 const breadcrumbMap: Record<string, string> = {
   '/dashboard': 'Dashboard',
   '/dashboard/contratos': 'Contratos',
   '/dashboard/activos': 'Activos',
-  '/dashboard/ordenes': 'Órdenes de Trabajo',
+  '/dashboard/ordenes-trabajo': 'Órdenes de Trabajo',
   '/dashboard/mantenimiento': 'Mantenimiento',
   '/dashboard/inventario': 'Inventario',
   '/dashboard/abastecimiento': 'Abastecimiento',
@@ -35,7 +38,21 @@ interface HeaderProps {
 export default function Header({ onMenuToggle }: HeaderProps) {
   const pathname = usePathname()
   const [showUserMenu, setShowUserMenu] = useState(false)
-  const unreadCount = 3
+  const { perfil, signOut } = useAuth()
+  const { data: unreadCount = 0 } = useConteoNoLeidas()
+
+  const displayName = perfil?.nombre_completo ?? 'Usuario'
+  const displayEmail = perfil?.email ?? ''
+  const initials = useMemo(
+    () =>
+      displayName
+        .split(' ')
+        .map((w) => w[0])
+        .join('')
+        .slice(0, 2)
+        .toUpperCase(),
+    [displayName]
+  )
 
   const currentLabel = breadcrumbMap[pathname] || 'Dashboard'
 
@@ -88,7 +105,7 @@ export default function Header({ onMenuToggle }: HeaderProps) {
           onClick={() => setShowUserMenu(!showUserMenu)}
           className="flex h-9 w-9 items-center justify-center rounded-full bg-pillado-green-500 text-sm font-bold text-white hover:bg-pillado-green-600"
         >
-          JP
+          {initials}
         </button>
 
         {showUserMenu && (
@@ -99,14 +116,21 @@ export default function Header({ onMenuToggle }: HeaderProps) {
             />
             <div className="absolute right-0 top-12 z-50 w-56 rounded-lg border border-gray-200 bg-white py-1 shadow-lg">
               <div className="border-b border-gray-100 px-4 py-3">
-                <p className="text-sm font-medium text-gray-900">Juan Pérez</p>
-                <p className="text-xs text-gray-500">jperez@pilladoempresas.cl</p>
+                <p className="text-sm font-medium text-gray-900">{displayName}</p>
+                <p className="text-xs text-gray-500">{displayEmail}</p>
               </div>
-              <button className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50">
+              <Link
+                href="/dashboard/admin"
+                onClick={() => setShowUserMenu(false)}
+                className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
+              >
                 <User className="h-4 w-4" />
                 Mi Perfil
-              </button>
-              <button className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50">
+              </Link>
+              <button
+                onClick={() => { setShowUserMenu(false); signOut() }}
+                className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50"
+              >
                 <LogOut className="h-4 w-4" />
                 Cerrar Sesión
               </button>

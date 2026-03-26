@@ -1,9 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useAuth } from '@/contexts/auth-context'
 import {
   LayoutDashboard,
   FileText,
@@ -28,7 +29,7 @@ const navItems = [
   { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { label: 'Contratos', href: '/dashboard/contratos', icon: FileText },
   { label: 'Activos', href: '/dashboard/activos', icon: Cog },
-  { label: 'Órdenes de Trabajo', href: '/dashboard/ordenes', icon: ClipboardList },
+  { label: 'Órdenes de Trabajo', href: '/dashboard/ordenes-trabajo', icon: ClipboardList },
   { label: 'Mantenimiento', href: '/dashboard/mantenimiento', icon: Wrench },
   { label: 'Inventario', href: '/dashboard/inventario', icon: Package },
   { label: 'Abastecimiento', href: '/dashboard/abastecimiento', icon: Fuel },
@@ -48,6 +49,20 @@ interface SidebarProps {
 
 export default function Sidebar({ collapsed, onToggle, onClose }: SidebarProps) {
   const pathname = usePathname()
+  const { perfil, signOut } = useAuth()
+
+  const displayName = perfil?.nombre_completo ?? 'Usuario'
+  const displayRole = perfil?.cargo ?? perfil?.rol ?? ''
+  const initials = useMemo(
+    () =>
+      displayName
+        .split(' ')
+        .map((w) => w[0])
+        .join('')
+        .slice(0, 2)
+        .toUpperCase(),
+    [displayName]
+  )
 
   const isActive = (href: string) => {
     if (href === '/dashboard') return pathname === '/dashboard'
@@ -118,18 +133,19 @@ export default function Sidebar({ collapsed, onToggle, onClose }: SidebarProps) 
       <div className="border-t border-white/10 p-3">
         <div className="flex items-center gap-3">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-pillado-green-500 text-sm font-bold">
-            JP
+            {initials}
           </div>
           {!collapsed && (
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium">Juan Pérez</p>
+              <p className="truncate text-sm font-medium">{displayName}</p>
               <p className="truncate text-xs text-gray-400">
-                Jefe de Operaciones
+                {displayRole}
               </p>
             </div>
           )}
           {!collapsed && (
             <button
+              onClick={() => signOut()}
               className="rounded-md p-1.5 text-gray-400 hover:bg-white/10 hover:text-white"
               title="Cerrar sesión"
             >

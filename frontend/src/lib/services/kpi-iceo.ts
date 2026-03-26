@@ -64,7 +64,7 @@ export async function calcularKPIs(
   periodoInicio?: string,
   periodoFin?: string
 ) {
-  const { data, error } = await supabase.rpc('calcular_todos_kpi', {
+  const { data, error } = await supabase.rpc('rpc_calcular_iceo_periodo', {
     p_contrato_id: contratoId,
     p_faena_id: faenaId ?? null,
     p_periodo_inicio: periodoInicio ?? new Date().toISOString().slice(0, 10),
@@ -80,7 +80,7 @@ export async function calcularICEO(
   periodoInicio?: string,
   periodoFin?: string
 ) {
-  const { data, error } = await supabase.rpc('calcular_iceo', {
+  const { data, error } = await supabase.rpc('rpc_calcular_iceo_periodo', {
     p_contrato_id: contratoId,
     p_faena_id: faenaId ?? null,
     p_periodo_inicio: periodoInicio ?? new Date().toISOString().slice(0, 10),
@@ -110,7 +110,7 @@ export async function getBloqueantesStatus(
     .from('mediciones_kpi')
     .select('*, kpi:kpi_definiciones!inner(*)')
     .eq('contrato_id', contratoId)
-    .eq('kpi_definiciones.es_bloqueante', true)
+    .eq('kpi.es_bloqueante', true)
 
   if (faenaId) query = query.eq('faena_id', faenaId)
   if (periodoInicio) query = query.eq('periodo_inicio', periodoInicio)

@@ -144,72 +144,18 @@ export async function registrarSalidaInventario(data: {
   motivo?: string | null
   usuario_id: string
 }) {
-  // CRITICAL: OT is mandatory for salidas
-  if (!data.ot_id) {
-    return {
-      data: null,
-      error: { message: 'No se permite salida sin OT asociada', details: '', hint: '', code: 'VALIDATION' },
-    }
-  }
-  if (!data.producto_id) {
-    return {
-      data: null,
-      error: { message: 'producto_id es obligatorio', details: '', hint: '', code: 'VALIDATION' },
-    }
-  }
-  if (!data.usuario_id) {
-    return {
-      data: null,
-      error: { message: 'usuario_id es obligatorio', details: '', hint: '', code: 'VALIDATION' },
-    }
-  }
-  if (data.cantidad <= 0) {
-    return {
-      data: null,
-      error: { message: 'La cantidad debe ser mayor a 0', details: '', hint: '', code: 'VALIDATION' },
-    }
-  }
+  const { data: result, error } = await supabase.rpc('rpc_registrar_salida_inventario', {
+    p_bodega_id: data.bodega_id,
+    p_producto_id: data.producto_id,
+    p_cantidad: data.cantidad,
+    p_ot_id: data.ot_id,
+    p_usuario_id: data.usuario_id,
+    p_activo_id: data.activo_id ?? null,
+    p_lote: data.lote ?? null,
+    p_motivo: data.motivo ?? null,
+  })
 
-  // Verify stock availability and get costo_promedio
-  const { data: stock, error: stockError } = await supabase
-    .from('stock_bodega')
-    .select('cantidad, costo_promedio')
-    .eq('bodega_id', data.bodega_id)
-    .eq('producto_id', data.producto_id)
-    .single()
-
-  if (stockError) {
-    return {
-      data: null,
-      error: { message: 'No se encontro stock para este producto en la bodega', details: stockError.message, hint: '', code: 'NOT_FOUND' },
-    }
-  }
-
-  if (stock.cantidad < data.cantidad) {
-    return {
-      data: null,
-      error: { message: `Stock insuficiente. Disponible: ${stock.cantidad}`, details: '', hint: '', code: 'INSUFFICIENT_STOCK' },
-    }
-  }
-
-  const { data: movimiento, error } = await supabase
-    .from('movimientos_inventario')
-    .insert({
-      bodega_id: data.bodega_id,
-      producto_id: data.producto_id,
-      tipo: 'salida' as const,
-      cantidad: data.cantidad,
-      costo_unitario: stock.costo_promedio,
-      ot_id: data.ot_id,
-      activo_id: data.activo_id ?? null,
-      lote: data.lote ?? null,
-      motivo: data.motivo ?? null,
-      usuario_id: data.usuario_id,
-    })
-    .select()
-    .single()
-
-  return { data: movimiento as MovimientoInventario | null, error }
+  return { data: result, error }
 }
 
 export async function registrarEntradaInventario(data: {
@@ -222,73 +168,40 @@ export async function registrarEntradaInventario(data: {
   lote?: string | null
   fecha_vencimiento?: string | null
 }) {
-  const { data: movimiento, error } = await supabase
-    .from('movimientos_inventario')
-    .insert({
-      bodega_id: data.bodega_id,
-      producto_id: data.producto_id,
-      tipo: 'entrada' as const,
-      cantidad: data.cantidad,
-      costo_unitario: data.costo_unitario,
-      documento_referencia: data.documento_referencia,
-      usuario_id: data.usuario_id,
-      lote: data.lote ?? null,
-      fecha_vencimiento: data.fecha_vencimiento ?? null,
-    })
-    .select()
-    .single()
+  const { data: result, error } = await supabase.rpc('rpc_registrar_entrada_inventario', {
+    p_bodega_id: data.bodega_id,
+    p_producto_id: data.producto_id,
+    p_cantidad: data.cantidad,
+    p_costo_unitario: data.costo_unitario,
+    p_documento_referencia: data.documento_referencia,
+    p_usuario_id: data.usuario_id,
+    p_lote: data.lote ?? null,
+    p_fecha_vencimiento: data.fecha_vencimiento ?? null,
+  })
 
-  return { data: movimiento as MovimientoInventario | null, error }
+  return { data: result, error }
 }
 
 export async function registrarAjuste(data: {
   bodega_id: string
   producto_id: string
   cantidad: number
-  tipo: 'ajuste_positivo' | 'ajuste_negativo'
   motivo: string
   ot_id?: string | null
   usuario_id: string
+  autorizado_por?: string | null
 }) {
-  if (!data.motivo) {
-    return {
-      data: null,
-      error: { message: 'El motivo es obligatorio para ajustes', details: '', hint: '', code: 'VALIDATION' },
-    }
-  }
+  const { data: result, error } = await supabase.rpc('rpc_registrar_ajuste_inventario', {
+    p_bodega_id: data.bodega_id,
+    p_producto_id: data.producto_id,
+    p_cantidad: data.cantidad,
+    p_motivo: data.motivo,
+    p_usuario_id: data.usuario_id,
+    p_ot_id: data.ot_id ?? null,
+    p_autorizado_por: data.autorizado_por ?? null,
+  })
 
-  // Negative adjustments require OT
-  if (data.tipo === 'ajuste_negativo' && !data.ot_id) {
-    return {
-      data: null,
-      error: { message: 'Ajustes negativos requieren OT asociada', details: '', hint: '', code: 'VALIDATION' },
-    }
-  }
-
-  // Get costo_promedio for the adjustment
-  const { data: stock } = await supabase
-    .from('stock_bodega')
-    .select('costo_promedio')
-    .eq('bodega_id', data.bodega_id)
-    .eq('producto_id', data.producto_id)
-    .single()
-
-  const { data: movimiento, error } = await supabase
-    .from('movimientos_inventario')
-    .insert({
-      bodega_id: data.bodega_id,
-      producto_id: data.producto_id,
-      tipo: data.tipo,
-      cantidad: data.cantidad,
-      costo_unitario: stock?.costo_promedio ?? 0,
-      motivo: data.motivo,
-      ot_id: data.ot_id ?? null,
-      usuario_id: data.usuario_id,
-    })
-    .select()
-    .single()
-
-  return { data: movimiento as MovimientoInventario | null, error }
+  return { data: result, error }
 }
 
 export async function getMovimientos(filters?: MovimientoFilters) {

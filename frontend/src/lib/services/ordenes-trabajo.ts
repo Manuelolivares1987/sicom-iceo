@@ -65,16 +65,32 @@ export async function getOrdenTrabajoById(id: string) {
   return { data: data as OrdenTrabajo | null, error }
 }
 
-export async function createOrdenTrabajo(
-  data: Database['public']['Tables']['ordenes_trabajo']['Insert']
-) {
-  const { data: created, error } = await supabase
-    .from('ordenes_trabajo')
-    .insert(data)
-    .select(OT_DETAIL_SELECT)
-    .single()
+export interface CreateOTParams {
+  tipo: TipoOT
+  contrato_id: string
+  faena_id: string
+  activo_id: string
+  prioridad: Prioridad
+  fecha_programada: string
+  responsable_id: string
+  plan_mantenimiento_id?: string | null
+  usuario_id: string
+}
 
-  return { data: created as OrdenTrabajo | null, error }
+export async function createOrdenTrabajo(params: CreateOTParams) {
+  const { data, error } = await supabase.rpc('rpc_crear_ot', {
+    p_tipo: params.tipo,
+    p_contrato_id: params.contrato_id,
+    p_faena_id: params.faena_id,
+    p_activo_id: params.activo_id,
+    p_prioridad: params.prioridad,
+    p_fecha_programada: params.fecha_programada,
+    p_responsable_id: params.responsable_id,
+    p_plan_mantenimiento_id: params.plan_mantenimiento_id ?? null,
+    p_usuario_id: params.usuario_id,
+  })
+
+  return { data, error }
 }
 
 export async function updateOrdenTrabajo(
@@ -91,61 +107,65 @@ export async function updateOrdenTrabajo(
   return { data: updated as OrdenTrabajo | null, error }
 }
 
-// ── State transitions ────────────────────────────────────────────────
+// ── State transitions (via RPC) ─────────────────────────────────────
 
-export async function iniciarOT(id: string) {
-  return updateOrdenTrabajo(id, {
-    estado: 'en_ejecucion',
-    fecha_inicio: new Date().toISOString(),
+export async function iniciarOT(id: string, userId: string) {
+  const { data, error } = await supabase.rpc('rpc_transicion_ot', {
+    p_ot_id: id,
+    p_nuevo_estado: 'en_ejecucion',
+    p_usuario_id: userId,
   })
+
+  return { data, error }
 }
 
-export async function pausarOT(id: string, motivo?: string) {
-  return updateOrdenTrabajo(id, {
-    estado: 'pausada',
-    ...(motivo ? { observaciones: motivo } : {}),
+export async function pausarOT(id: string, userId: string, motivo?: string) {
+  const { data, error } = await supabase.rpc('rpc_transicion_ot', {
+    p_ot_id: id,
+    p_nuevo_estado: 'pausada',
+    p_usuario_id: userId,
+    p_observaciones: motivo ?? null,
   })
+
+  return { data, error }
 }
 
-export async function finalizarOT(id: string, observaciones?: string) {
-  const estado: EstadoOT = observaciones
-    ? 'ejecutada_con_observaciones'
-    : 'ejecutada_ok'
-
-  return updateOrdenTrabajo(id, {
-    estado,
-    fecha_termino: new Date().toISOString(),
-    observaciones: observaciones ?? null,
+export async function finalizarOT(id: string, userId: string, observaciones?: string) {
+  const { data, error } = await supabase.rpc('rpc_transicion_ot', {
+    p_ot_id: id,
+    p_nuevo_estado: 'ejecutada_ok',
+    p_usuario_id: userId,
+    p_observaciones: observaciones ?? null,
   })
+
+  return { data, error }
 }
 
 export async function noEjecutarOT(
   id: string,
+  userId: string,
   causa: string,
   detalle?: string
 ) {
-  if (!causa) {
-    return {
-      data: null,
-      error: { message: 'La causa de no ejecucion es obligatoria', details: '', hint: '', code: 'VALIDATION' },
-    }
-  }
-
-  return updateOrdenTrabajo(id, {
-    estado: 'no_ejecutada',
-    causa_no_ejecucion: causa,
-    detalle_no_ejecucion: detalle ?? null,
+  const { data, error } = await supabase.rpc('rpc_transicion_ot', {
+    p_ot_id: id,
+    p_nuevo_estado: 'no_ejecutada',
+    p_usuario_id: userId,
+    p_causa_no_ejecucion: causa,
+    p_detalle_no_ejecucion: detalle ?? null,
   })
+
+  return { data, error }
 }
 
-export async function cerrarOTSupervisor(id: string, observaciones?: string) {
-  const { data: { user } } = await supabase.auth.getUser()
-
-  return updateOrdenTrabajo(id, {
-    fecha_cierre_supervisor: new Date().toISOString(),
-    supervisor_cierre_id: user?.id ?? null,
-    observaciones_supervisor: observaciones ?? null,
+export async function cerrarOTSupervisor(id: string, supervisorId: string, observaciones?: string) {
+  const { data, error } = await supabase.rpc('rpc_cerrar_ot_supervisor', {
+    p_ot_id: id,
+    p_supervisor_id: supervisorId,
+    p_observaciones: observaciones ?? null,
   })
+
+  return { data, error }
 }
 
 // ── Checklist ────────────────────────────────────────────────────────
@@ -221,7 +241,7 @@ export async function addEvidenciaOT(
       tipo,
       archivo_url: publicUrl,
       descripcion: descripcion ?? null,
-      subido_por: user?.id ?? null,
+      created_by: user?.id ?? null,
     })
     .select()
     .single()

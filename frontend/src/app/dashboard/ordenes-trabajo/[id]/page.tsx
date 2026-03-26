@@ -3,6 +3,7 @@
 import { useState, useRef } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
+import { useAuth } from '@/contexts/auth-context'
 import {
   ArrowLeft,
   Camera,
@@ -555,6 +556,8 @@ function HistorialTab({ otId }: { otId: string }) {
 export default function OrdenTrabajoDetailPage() {
   const params = useParams()
   const id = params?.id as string | undefined
+  const { user } = useAuth()
+  const userId = user?.id ?? ''
 
   const { data: ot, isLoading, error } = useOrdenTrabajo(id)
 
@@ -794,7 +797,7 @@ export default function OrdenTrabajoDetailPage() {
         loading={iniciarMut.isPending}
         onCancel={() => setShowIniciar(false)}
         onConfirm={() => {
-          iniciarMut.mutate(id!, {
+          iniciarMut.mutate({ id: id!, userId }, {
             onSuccess: () => {
               setShowIniciar(false)
               showSuccess('OT iniciada correctamente')
@@ -816,7 +819,7 @@ export default function OrdenTrabajoDetailPage() {
         onCancel={() => setShowPausar(false)}
         onConfirm={() => {
           pausarMut.mutate(
-            { id: id! },
+            { id: id!, userId },
             {
               onSuccess: () => {
                 setShowPausar(false)
@@ -840,7 +843,7 @@ export default function OrdenTrabajoDetailPage() {
         onCancel={() => { setShowFinalizar(false); setFinalizarObs('') }}
         onConfirm={() => {
           finalizarMut.mutate(
-            { id: id!, observaciones: finalizarObs || undefined },
+            { id: id!, userId, observaciones: finalizarObs || undefined },
             {
               onSuccess: () => {
                 setShowFinalizar(false)
@@ -887,7 +890,7 @@ export default function OrdenTrabajoDetailPage() {
             return
           }
           noEjecutarMut.mutate(
-            { id: id!, causa: noEjecutadaCausa, detalle: noEjecutadaDetalle || undefined },
+            { id: id!, userId, causa: noEjecutadaCausa, detalle: noEjecutadaDetalle || undefined },
             {
               onSuccess: () => {
                 setShowNoEjecutada(false)

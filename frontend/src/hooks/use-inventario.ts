@@ -110,9 +110,9 @@ export function useRegistrarSalida() {
       bodega_id: string
       producto_id: string
       cantidad: number
-      costo_unitario: number
       ot_id: string | null
       activo_id?: string | null
+      lote?: string | null
       motivo?: string | null
       usuario_id: string
     }) => {
@@ -149,7 +149,6 @@ export function useRegistrarEntrada() {
       usuario_id: string
       lote?: string | null
       fecha_vencimiento?: string | null
-      motivo?: string | null
     }) => {
       const { data, error } = await registrarEntrada(payload)
       if (error) throw error

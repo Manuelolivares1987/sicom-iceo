@@ -89,6 +89,10 @@ export function useBloqueantesStatus(
 
 // ── Mutations ────────────────────────────────────────────
 
+/**
+ * Calculates KPIs for a period. Now uses the unified rpc_calcular_iceo_periodo
+ * that computes both KPIs and ICEO in a single call.
+ */
 export function useCalcularKPIs() {
   const queryClient = useQueryClient()
 
@@ -113,20 +117,19 @@ export function useCalcularKPIs() {
       if (error) throw error
       return data
     },
-    onSuccess: (_data, { contratoId, faenaId }) => {
+    onSuccess: (_data, { contratoId }) => {
       queryClient.invalidateQueries({ queryKey: ['mediciones-kpi', contratoId] })
-      queryClient.invalidateQueries({
-        queryKey: ['bloqueantes-status', contratoId],
-      })
-      if (faenaId) {
-        queryClient.invalidateQueries({
-          queryKey: ['mediciones-kpi', contratoId, faenaId],
-        })
-      }
+      queryClient.invalidateQueries({ queryKey: ['bloqueantes-status', contratoId] })
+      queryClient.invalidateQueries({ queryKey: ['iceo-periodo', contratoId] })
+      queryClient.invalidateQueries({ queryKey: ['iceo-historico', contratoId] })
     },
   })
 }
 
+/**
+ * Calculates ICEO for a period. Uses the same unified RPC as useCalcularKPIs.
+ * Kept for backward compatibility - callers can use either hook.
+ */
 export function useCalcularICEO() {
   const queryClient = useQueryClient()
 
@@ -155,6 +158,7 @@ export function useCalcularICEO() {
       queryClient.invalidateQueries({ queryKey: ['iceo-periodo', contratoId] })
       queryClient.invalidateQueries({ queryKey: ['iceo-historico', contratoId] })
       queryClient.invalidateQueries({ queryKey: ['mediciones-kpi', contratoId] })
+      queryClient.invalidateQueries({ queryKey: ['bloqueantes-status', contratoId] })
     },
   })
 }

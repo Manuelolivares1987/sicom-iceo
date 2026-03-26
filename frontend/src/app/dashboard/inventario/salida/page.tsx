@@ -139,7 +139,6 @@ export default function SalidaInventarioPage() {
         bodega_id: bodegaId,
         producto_id: selectedProducto.id,
         cantidad: parseInt(cantidad),
-        costo_unitario: costoUnitario,
         ot_id: selectedOT.id,
         motivo: observaciones || null,
         usuario_id: user!.id,

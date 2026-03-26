@@ -158,6 +158,9 @@ export function useScanner(
   // ── Cleanup on unmount ─────────────────────────────────
   useEffect(() => {
     return () => {
+      if (wedgeTimerRef.current) {
+        clearTimeout(wedgeTimerRef.current)
+      }
       const scanner = scannerRef.current
       if (scanner) {
         try {

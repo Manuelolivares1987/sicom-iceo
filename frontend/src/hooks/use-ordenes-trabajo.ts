@@ -16,6 +16,7 @@ import {
   getMaterialesOT,
   getHistorialOT,
 } from '@/lib/services/ordenes-trabajo'
+import type { CreateOTParams } from '@/lib/services/ordenes-trabajo'
 import type { OrdenTrabajo } from '@/types/database'
 
 // ── Queries ──────────────────────────────────────────────
@@ -108,8 +109,8 @@ export function useCreateOT() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async (payload: Record<string, unknown>) => {
-      const { data, error } = await createOrdenTrabajo(payload as any)
+    mutationFn: async (payload: CreateOTParams) => {
+      const { data, error } = await createOrdenTrabajo(payload)
       if (error) throw error
       return data
     },
@@ -123,12 +124,12 @@ export function useIniciarOT() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async (id: string) => {
-      const { data, error } = await iniciarOT(id)
+    mutationFn: async ({ id, userId }: { id: string; userId: string }) => {
+      const { data, error } = await iniciarOT(id, userId)
       if (error) throw error
       return data
     },
-    onSuccess: (_data, id) => {
+    onSuccess: (_data, { id }) => {
       queryClient.invalidateQueries({ queryKey: ['orden-trabajo', id] })
       queryClient.invalidateQueries({ queryKey: ['ordenes-trabajo'] })
     },
@@ -139,8 +140,8 @@ export function usePausarOT() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async ({ id, motivo }: { id: string; motivo?: string }) => {
-      const { data, error } = await pausarOT(id, motivo)
+    mutationFn: async ({ id, userId, motivo }: { id: string; userId: string; motivo?: string }) => {
+      const { data, error } = await pausarOT(id, userId, motivo)
       if (error) throw error
       return data
     },
@@ -157,12 +158,14 @@ export function useFinalizarOT() {
   return useMutation({
     mutationFn: async ({
       id,
+      userId,
       observaciones,
     }: {
       id: string
+      userId: string
       observaciones?: string
     }) => {
-      const { data, error } = await finalizarOT(id, observaciones)
+      const { data, error } = await finalizarOT(id, userId, observaciones)
       if (error) throw error
       return data
     },
@@ -180,14 +183,16 @@ export function useNoEjecutarOT() {
   return useMutation({
     mutationFn: async ({
       id,
+      userId,
       causa,
       detalle,
     }: {
       id: string
+      userId: string
       causa: string
       detalle?: string
     }) => {
-      const { data, error } = await noEjecutarOT(id, causa, detalle)
+      const { data, error } = await noEjecutarOT(id, userId, causa, detalle)
       if (error) throw error
       return data
     },
@@ -205,12 +210,14 @@ export function useCerrarOTSupervisor() {
   return useMutation({
     mutationFn: async ({
       id,
+      supervisorId,
       observaciones,
     }: {
       id: string
+      supervisorId: string
       observaciones?: string
     }) => {
-      const { data, error } = await cerrarOTSupervisor(id, observaciones)
+      const { data, error } = await cerrarOTSupervisor(id, supervisorId, observaciones)
       if (error) throw error
       return data
     },
