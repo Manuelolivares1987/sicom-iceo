@@ -411,18 +411,16 @@ BEGIN
                 severidad,
                 entidad_tipo,
                 entidad_id,
-                faena_id,
                 created_at
             ) VALUES (
                 'stock_minimo',
                 'Stock bajo minimo: ' || v_producto_nombre,
                 'El producto "' || v_producto_nombre || '" tiene stock ' ||
                     v_nuevo_stock || ' unidades, por debajo del minimo de ' ||
-                    v_stock_minimo || ' unidades.',
-                'alta',
+                    v_stock_minimo || ' unidades en bodega ' || NEW.bodega_id || '.',
+                'warning',
                 'producto',
                 NEW.producto_id,
-                (SELECT b.faena_id FROM bodegas b WHERE b.id = NEW.bodega_id),
                 NOW()
             );
         EXCEPTION WHEN undefined_table THEN
@@ -608,10 +606,9 @@ BEGIN
                         severidad,
                         entidad_tipo,
                         entidad_id,
-                        faena_id,
                         created_at
                     ) VALUES (
-                        'certificacion_' || v_estado_nuevo::TEXT,
+                        'vencimiento',
                         CASE v_estado_nuevo
                             WHEN 'por_vencer' THEN 'Certificacion proxima a vencer'
                             WHEN 'vencido'    THEN 'Certificacion VENCIDA'
@@ -623,12 +620,11 @@ BEGIN
                                 WHEN 'vencido'    THEN ' ha VENCIDO el ' || r.fecha_vencimiento::TEXT
                             END || '.',
                         CASE v_estado_nuevo
-                            WHEN 'por_vencer' THEN 'media'
-                            WHEN 'vencido'    THEN 'critica'
+                            WHEN 'por_vencer' THEN 'warning'
+                            WHEN 'vencido'    THEN 'critical'
                         END,
                         'certificacion',
                         r.id,
-                        (SELECT a.faena_id FROM activos a WHERE a.id = r.activo_id),
                         NOW()
                     );
                 EXCEPTION WHEN undefined_table THEN NULL;
