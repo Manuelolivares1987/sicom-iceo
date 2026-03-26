@@ -646,6 +646,7 @@ export default function OrdenTrabajoDetailPage() {
   const [showCerrar, setShowCerrar] = useState(false)
   const [cerrarObs, setCerrarObs] = useState('')
   const [finalizarObs, setFinalizarObs] = useState('')
+  const [finalizarError, setFinalizarError] = useState<string | null>(null)
   const [noEjecutadaCausa, setNoEjecutadaCausa] = useState('')
   const [noEjecutadaDetalle, setNoEjecutadaDetalle] = useState('')
 
@@ -833,19 +834,20 @@ export default function OrdenTrabajoDetailPage() {
         message={`Se finalizará ${otData.folio}. Si tiene observaciones, la OT quedará como "Ejecutada con Observaciones".`}
         confirmLabel="Finalizar"
         loading={finalizarMut.isPending}
-        onCancel={() => { setShowFinalizar(false); setFinalizarObs('') }}
+        onCancel={() => { setShowFinalizar(false); setFinalizarObs(''); setFinalizarError(null) }}
         onConfirm={() => {
           const pendingMandatory = (checklistData ?? []).filter(
             (item: any) => item.obligatorio && !item.resultado
           )
           if (pendingMandatory.length > 0) {
-            setActionError(`Hay ${pendingMandatory.length} items obligatorios sin completar en el checklist.`)
+            setFinalizarError(`Hay ${pendingMandatory.length} items obligatorios sin completar en el checklist. Vaya a la tab "Checklist" y complete todos los ítems obligatorios.`)
             return
           }
           if ((evidenciasData ?? []).length === 0) {
-            setActionError('No se puede finalizar sin evidencia. Tarea sin evidencia = tarea no ejecutada.')
+            setFinalizarError('No se puede finalizar sin evidencia fotográfica. Vaya a la tab "Evidencias" y suba al menos 1 foto.')
             return
           }
+          setFinalizarError(null)
           finalizarMut.mutate(
             { id: id!, userId, observaciones: finalizarObs || undefined },
             {
@@ -862,17 +864,28 @@ export default function OrdenTrabajoDetailPage() {
           )
         }}
       >
-        <div>
-          <label className="mb-1 block text-xs font-medium text-gray-500">
-            Observaciones (opcional)
-          </label>
-          <textarea
-            value={finalizarObs}
-            onChange={(e) => setFinalizarObs(e.target.value)}
-            placeholder="Agregar observaciones..."
-            rows={3}
-            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-pillado-green-500 focus:outline-none"
-          />
+        <div className="space-y-3">
+          {finalizarError && (
+            <div className="flex items-start gap-2 rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700">
+              <AlertTriangle className="h-5 w-5 shrink-0 mt-0.5 text-red-500" />
+              <div>
+                <p className="font-semibold">No se puede finalizar</p>
+                <p className="mt-1">{finalizarError}</p>
+              </div>
+            </div>
+          )}
+          <div>
+            <label className="mb-1 block text-xs font-medium text-gray-500">
+              Observaciones (opcional)
+            </label>
+            <textarea
+              value={finalizarObs}
+              onChange={(e) => setFinalizarObs(e.target.value)}
+              placeholder="Agregar observaciones..."
+              rows={3}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-pillado-green-500 focus:outline-none"
+            />
+          </div>
         </div>
       </ConfirmDialog>
 
