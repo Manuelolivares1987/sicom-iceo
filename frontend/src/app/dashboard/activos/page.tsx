@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import Link from 'next/link'
 import {
   Search,
   LayoutGrid,
@@ -112,6 +113,7 @@ function ActivoCard({ activo }: { activo: Activo }) {
   const faenaNombre = activo.faena?.nombre ?? '—'
 
   return (
+    <Link href={`/dashboard/activos/${activo.id}`} className="block">
     <Card className="transition-shadow hover:shadow-md">
       <CardContent className="p-4">
         {/* Header */}
@@ -163,6 +165,7 @@ function ActivoCard({ activo }: { activo: Activo }) {
         </div>
       </CardContent>
     </Card>
+    </Link>
   )
 }
 
@@ -353,8 +356,12 @@ export default function ActivosPage() {
                   <TableCell>
                     <span className={cn('inline-flex h-3 w-3 rounded-full', getSemaforoColor(a.estado))} />
                   </TableCell>
-                  <TableCell className="font-mono text-xs font-semibold">{a.codigo}</TableCell>
-                  <TableCell className="font-medium">{a.nombre ?? a.codigo}</TableCell>
+                  <TableCell className="font-mono text-xs font-semibold">
+                    <Link href={`/dashboard/activos/${a.id}`} className="text-pillado-green-600 hover:underline">{a.codigo}</Link>
+                  </TableCell>
+                  <TableCell className="font-medium">
+                    <Link href={`/dashboard/activos/${a.id}`} className="hover:text-pillado-green-600 hover:underline">{a.nombre ?? a.codigo}</Link>
+                  </TableCell>
                   <TableCell className="text-xs text-gray-500">{tipoLabels[a.tipo] || a.tipo}</TableCell>
                   <TableCell className="text-xs text-gray-500">
                     {a.modelo?.marca?.nombre ?? ''}{a.modelo?.marca?.nombre && a.modelo?.nombre ? ' — ' : ''}{a.modelo?.nombre ?? ''}

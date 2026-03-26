@@ -71,3 +71,45 @@ export async function createActivo(
 
   return { data: created as Activo | null, error }
 }
+
+// Get OT history for an asset
+export async function getOTsByActivo(activoId: string) {
+  const { data, error } = await supabase
+    .from('ordenes_trabajo')
+    .select('id, folio, tipo, estado, prioridad, fecha_programada, fecha_inicio, fecha_termino, costo_total, responsable:usuarios_perfil(nombre_completo)')
+    .eq('activo_id', activoId)
+    .order('created_at', { ascending: false })
+  return { data, error }
+}
+
+// Get maintenance plans for an asset
+export async function getPlanesByActivo(activoId: string) {
+  const { data, error } = await supabase
+    .from('planes_mantenimiento')
+    .select('*, pauta:pautas_fabricante(id, nombre, tipo_plan, frecuencia_dias, frecuencia_km, frecuencia_horas, frecuencia_ciclos, items_checklist, materiales_estimados)')
+    .eq('activo_id', activoId)
+    .eq('activo_plan', true)
+    .order('proxima_ejecucion_fecha', { ascending: true })
+  return { data, error }
+}
+
+// Get certifications for an asset
+export async function getCertificacionesByActivo(activoId: string) {
+  const { data, error } = await supabase
+    .from('certificaciones')
+    .select('*')
+    .eq('activo_id', activoId)
+    .order('fecha_vencimiento', { ascending: true })
+  return { data, error }
+}
+
+// Get cost summary for an asset (total spent on OTs)
+export async function getCostosByActivo(activoId: string) {
+  const { data, error } = await supabase
+    .from('movimientos_inventario')
+    .select('costo_unitario, cantidad, tipo, created_at, producto:productos(nombre), ot:ordenes_trabajo(folio)')
+    .eq('activo_id', activoId)
+    .in('tipo', ['salida', 'merma'])
+    .order('created_at', { ascending: false })
+  return { data, error }
+}

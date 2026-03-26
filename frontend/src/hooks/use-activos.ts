@@ -4,6 +4,10 @@ import {
   getActivoById,
   createActivo,
   updateActivo,
+  getOTsByActivo,
+  getPlanesByActivo,
+  getCertificacionesByActivo,
+  getCostosByActivo,
 } from '@/lib/services/activos'
 import type { Activo } from '@/types/database'
 
@@ -29,6 +33,54 @@ export function useActivo(id: string | undefined) {
       return data
     },
     enabled: !!id,
+  })
+}
+
+export function useOTsByActivo(activoId?: string) {
+  return useQuery({
+    queryKey: ['ots-activo', activoId],
+    queryFn: async () => {
+      const { data, error } = await getOTsByActivo(activoId!)
+      if (error) throw error
+      return data
+    },
+    enabled: !!activoId,
+  })
+}
+
+export function usePlanesByActivo(activoId?: string) {
+  return useQuery({
+    queryKey: ['planes-activo', activoId],
+    queryFn: async () => {
+      const { data, error } = await getPlanesByActivo(activoId!)
+      if (error) throw error
+      return data
+    },
+    enabled: !!activoId,
+  })
+}
+
+export function useCertificacionesByActivo(activoId?: string) {
+  return useQuery({
+    queryKey: ['certificaciones-activo', activoId],
+    queryFn: async () => {
+      const { data, error } = await getCertificacionesByActivo(activoId!)
+      if (error) throw error
+      return data
+    },
+    enabled: !!activoId,
+  })
+}
+
+export function useCostosByActivo(activoId?: string) {
+  return useQuery({
+    queryKey: ['costos-activo', activoId],
+    queryFn: async () => {
+      const { data, error } = await getCostosByActivo(activoId!)
+      if (error) throw error
+      return data
+    },
+    enabled: !!activoId,
   })
 }
 
