@@ -184,11 +184,29 @@ function ChecklistTab({ otId, disabled, userId }: { otId: string; disabled?: boo
           <CardContent className="p-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex-1">
-                <p className="text-sm font-medium text-gray-900">
-                  {idx + 1}. {item.descripcion}
-                </p>
+                <div className="flex items-center gap-1.5">
+                  <p className="text-sm font-medium text-gray-900">
+                    {idx + 1}. {item.descripcion}
+                  </p>
+                  {item.requiere_foto && (
+                    <span title="Requiere foto">
+                      <Camera className="h-3.5 w-3.5 text-blue-500 shrink-0" />
+                    </span>
+                  )}
+                </div>
+                {item.resultado === 'no_ok' && item.obligatorio && (
+                  <p className="mt-1 text-xs font-medium text-red-600 flex items-center gap-1">
+                    <AlertTriangle className="h-3 w-3" />
+                    Item obligatorio NO OK
+                  </p>
+                )}
                 {item.observacion && (
                   <p className="mt-1 text-xs text-gray-500">{item.observacion}</p>
+                )}
+                {item.completado_en && (
+                  <p className="mt-1 text-xs text-gray-400">
+                    Completado: {formatDateTime(item.completado_en)}{item.completado_por ? ` por ${item.completado_por}` : ''}
+                  </p>
                 )}
               </div>
               <ResultRadio
@@ -287,8 +305,34 @@ function EvidenciasTab({ otId, disabled }: { otId: string; disabled?: boolean })
 
   const evidenciasList = (evidencias ?? []) as any[]
 
+  // Count by tipo
+  const countByTipo = evidenciasList.reduce((acc: Record<string, number>, e: any) => {
+    const t = e.tipo || 'otro'
+    acc[t] = (acc[t] || 0) + 1
+    return acc
+  }, {} as Record<string, number>)
+  const tipoLabels = ['antes', 'durante', 'después', 'documento', 'firma']
+
   return (
     <div className="space-y-6">
+      {/* Summary */}
+      {evidenciasList.length > 0 ? (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg bg-blue-50 border border-blue-200 p-3 text-sm text-blue-700">
+          <span className="font-semibold">{evidenciasList.length} evidencia{evidenciasList.length !== 1 ? 's' : ''} cargada{evidenciasList.length !== 1 ? 's' : ''}</span>
+          <span className="text-blue-400">|</span>
+          {tipoLabels.filter((t) => countByTipo[t]).map((t) => (
+            <Badge key={t} className="bg-blue-100 text-blue-700 text-xs">
+              {t.charAt(0).toUpperCase() + t.slice(1)}: {countByTipo[t]}
+            </Badge>
+          ))}
+        </div>
+      ) : (
+        <div className="flex items-center gap-2 rounded-lg bg-amber-50 border border-amber-200 p-3 text-sm text-amber-700">
+          <AlertTriangle className="h-4 w-4 shrink-0" />
+          Sin evidencias
+        </div>
+      )}
+
       {/* Upload controls */}
       <div className="space-y-3">
         {disabled && (
@@ -442,13 +486,30 @@ function MaterialesTab({ otId }: { otId: string }) {
   const items = (materiales ?? []) as any[]
 
   if (items.length === 0) {
-    return <p className="py-8 text-center text-gray-400">No hay materiales registrados</p>
+    return (
+      <div className="py-8 text-center">
+        <Package className="mx-auto h-10 w-10 text-gray-300 mb-2" />
+        <p className="text-gray-400">No se han registrado materiales en esta OT</p>
+      </div>
+    )
   }
 
   const total = items.reduce((s: number, m: any) => s + (m.costo_total ?? m.cantidad * m.costo_unitario), 0)
 
   return (
     <div>
+      {/* Resumen de Costos */}
+      <div className="mb-4 rounded-lg bg-gray-50 border border-gray-200 p-4 flex items-center justify-between">
+        <div>
+          <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Resumen de Costos</p>
+          <p className="text-sm text-gray-700 mt-1">{items.length} material{items.length !== 1 ? 'es' : ''} consumido{items.length !== 1 ? 's' : ''}</p>
+        </div>
+        <div className="text-right">
+          <p className="text-xs text-gray-500">Costo Total</p>
+          <p className="text-lg font-bold text-gray-900">{formatCLP(total)}</p>
+        </div>
+      </div>
+
       {/* Desktop */}
       <div className="hidden sm:block">
         <Table>
