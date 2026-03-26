@@ -170,7 +170,7 @@ function KPIAreaSection({ area, definiciones, mediciones }: KPIAreaSectionProps)
             <div>
               <CardTitle>{config.title}</CardTitle>
               <p className="text-sm text-gray-500 mt-0.5">
-                {areaDefiniciones.length} indicadores | Puntaje ponderado: {totalPonderado.toFixed(2)}
+                {areaDefiniciones.length} indicadores | Puntaje ponderado: {(totalPonderado ?? 0).toFixed(2)}
               </p>
             </div>
           </div>
@@ -214,10 +214,10 @@ function KPIAreaSection({ area, definiciones, mediciones }: KPIAreaSectionProps)
                       <span className="text-sm">{row.nombre}</span>
                     </TableCell>
                     <TableCell className="text-right font-mono">
-                      {row.valor_medido !== null ? row.valor_medido.toFixed(2) : '-'}
+                      {row.valor_medido != null ? Number(row.valor_medido).toFixed(2) : '-'}
                     </TableCell>
                     <TableCell className="text-right font-mono">
-                      {row.meta.toFixed(2)}
+                      {row.meta != null ? Number(row.meta).toFixed(2) : '-'}
                     </TableCell>
                     <TableCell className="text-right">
                       {row.porcentaje_cumplimiento !== null ? (
@@ -231,13 +231,13 @@ function KPIAreaSection({ area, definiciones, mediciones }: KPIAreaSectionProps)
                       )}
                     </TableCell>
                     <TableCell className="text-right font-mono">
-                      {row.puntaje.toFixed(1)}
+                      {row.puntaje != null ? Number(row.puntaje).toFixed(1) : '-'}
                     </TableCell>
                     <TableCell className="text-right font-mono text-gray-500">
                       {formatPercent(row.peso * 100, 0)}
                     </TableCell>
                     <TableCell className="text-right font-mono font-medium">
-                      {row.valor_ponderado.toFixed(2)}
+                      {row.valor_ponderado != null ? Number(row.valor_ponderado).toFixed(2) : '-'}
                     </TableCell>
                     <TableCell className="text-center">
                       {row.es_bloqueante ? (
@@ -267,7 +267,7 @@ function KPIAreaSection({ area, definiciones, mediciones }: KPIAreaSectionProps)
                     <XAxis dataKey="name" tick={{ fontSize: 12 }} />
                     <YAxis domain={[0, 100]} tick={{ fontSize: 12 }} />
                     <Tooltip
-                      formatter={(value: number) => [value.toFixed(1), 'Puntaje']}
+                      formatter={(value: number) => [(value ?? 0).toFixed(1), 'Puntaje']}
                       contentStyle={{
                         borderRadius: '8px',
                         border: '1px solid #e5e7eb',
