@@ -6,6 +6,7 @@ import {
   createRutaDespacho,
   updateRutaEstado,
   createAbastecimiento,
+  getPuntosPorFaena,
 } from '@/lib/services/abastecimiento'
 
 // ── Queries ──────────────────────────────────────────────
@@ -40,6 +41,18 @@ export function useRutaStats(faenaId?: string) {
       if (error) throw error
       return data
     },
+  })
+}
+
+export function usePuntosPorFaena(faenaId: string | undefined) {
+  return useQuery({
+    queryKey: ['puntos-faena', faenaId],
+    queryFn: async () => {
+      const { data, error } = await getPuntosPorFaena(faenaId!)
+      if (error) throw error
+      return data
+    },
+    enabled: !!faenaId,
   })
 }
 

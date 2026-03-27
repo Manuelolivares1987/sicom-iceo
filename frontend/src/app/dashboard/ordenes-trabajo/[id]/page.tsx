@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { useAuth } from '@/contexts/auth-context'
@@ -22,6 +22,7 @@ import {
   Plus,
   Search,
   Loader2,
+  Pencil,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -49,6 +50,7 @@ import {
   useCerrarOTSupervisor,
   useUpdateChecklistItem,
   useAddEvidencia,
+  useUpdateOT,
 } from '@/hooks/use-ordenes-trabajo'
 import { useStockBodega, useBodegas, useRegistrarSalida } from '@/hooks/use-inventario'
 import { supabase } from '@/lib/supabase'
@@ -980,6 +982,131 @@ function HistorialTab({ otId }: { otId: string }) {
 }
 
 // ---------------------------------------------------------------------------
+// Editar OT Card
+// ---------------------------------------------------------------------------
+function EditarOTCard({ otData, otId }: { otData: any; otId: string }) {
+  const updateOT = useUpdateOT()
+  const [prioridad, setPrioridad] = useState(otData.prioridad || 'normal')
+  const [fechaProgramada, setFechaProgramada] = useState(otData.fecha_programada || '')
+  const [responsableId, setResponsableId] = useState(otData.responsable_id || '')
+  const [observaciones, setObservaciones] = useState(otData.observaciones || '')
+  const [responsables, setResponsables] = useState<{id: string; nombre: string}[]>([])
+  const [editSuccess, setEditSuccess] = useState(false)
+  const [editError, setEditError] = useState<string | null>(null)
+
+  useEffect(() => {
+    supabase.from('usuarios_perfil').select('id, nombre_completo').eq('activo', true).order('nombre_completo')
+      .then(({ data }) => {
+        if (data) setResponsables(data.map(r => ({ id: r.id, nombre: r.nombre_completo })))
+      })
+  }, [])
+
+  function handleGuardar() {
+    setEditError(null)
+    setEditSuccess(false)
+    updateOT.mutate(
+      {
+        id: otId,
+        data: {
+          prioridad,
+          fecha_programada: fechaProgramada || null,
+          responsable_id: responsableId || null,
+          observaciones: observaciones || null,
+        },
+      },
+      {
+        onSuccess: () => {
+          setEditSuccess(true)
+          setTimeout(() => setEditSuccess(false), 4000)
+        },
+        onError: (err: any) => {
+          setEditError(err?.message || 'Error al guardar cambios')
+        },
+      }
+    )
+  }
+
+  return (
+    <Card className="mb-4 mt-4">
+      <CardContent className="p-4 sm:p-6">
+        <div className="mb-4 flex items-center gap-2">
+          <Pencil className="h-4 w-4 text-pillado-green-600" />
+          <h3 className="text-sm font-bold text-gray-900">Editar Orden</h3>
+        </div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div>
+            <label className="mb-1 block text-xs font-medium text-gray-500">Prioridad</label>
+            <select
+              value={prioridad}
+              onChange={(e) => setPrioridad(e.target.value)}
+              className="h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm text-gray-700 focus:border-pillado-green-500 focus:outline-none focus:ring-2 focus:ring-pillado-green-500/20"
+            >
+              <option value="emergencia">Emergencia</option>
+              <option value="urgente">Urgente</option>
+              <option value="alta">Alta</option>
+              <option value="normal">Normal</option>
+              <option value="baja">Baja</option>
+            </select>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-gray-500">Fecha Programada</label>
+            <input
+              type="date"
+              value={fechaProgramada}
+              onChange={(e) => setFechaProgramada(e.target.value)}
+              className="h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm text-gray-700 focus:border-pillado-green-500 focus:outline-none focus:ring-2 focus:ring-pillado-green-500/20"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-gray-500">Responsable</label>
+            <select
+              value={responsableId}
+              onChange={(e) => setResponsableId(e.target.value)}
+              className="h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm text-gray-700 focus:border-pillado-green-500 focus:outline-none focus:ring-2 focus:ring-pillado-green-500/20"
+            >
+              <option value="">Sin asignar</option>
+              {responsables.map((r) => (
+                <option key={r.id} value={r.id}>{r.nombre}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-gray-500">Observaciones</label>
+            <textarea
+              value={observaciones}
+              onChange={(e) => setObservaciones(e.target.value)}
+              placeholder="Observaciones..."
+              rows={2}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700 focus:border-pillado-green-500 focus:outline-none focus:ring-2 focus:ring-pillado-green-500/20"
+            />
+          </div>
+        </div>
+        <div className="mt-4 flex items-center gap-3">
+          <Button
+            variant="primary"
+            onClick={handleGuardar}
+            disabled={updateOT.isPending}
+          >
+            {updateOT.isPending ? <Spinner size="sm" className="mr-1" /> : <Pencil className="h-4 w-4 mr-1" />}
+            Guardar Cambios
+          </Button>
+          {editSuccess && (
+            <span className="flex items-center gap-1 text-xs text-green-600">
+              <CheckCircle2 className="h-3.5 w-3.5" /> Cambios guardados
+            </span>
+          )}
+          {editError && (
+            <span className="flex items-center gap-1 text-xs text-red-600">
+              <XCircle className="h-3.5 w-3.5" /> {editError}
+            </span>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Main page
 // ---------------------------------------------------------------------------
 export default function OrdenTrabajoDetailPage() {
@@ -1068,6 +1195,11 @@ export default function OrdenTrabajoDetailPage() {
 
       {/* Header + Info grid */}
       <OTInfoHeader ot={otData} />
+
+      {/* Editar OT — only visible for creada/asignada */}
+      {(otData.estado === 'creada' || otData.estado === 'asignada') && id && (
+        <EditarOTCard otData={otData} otId={id} />
+      )}
 
       {/* Feedback */}
       {actionError && (

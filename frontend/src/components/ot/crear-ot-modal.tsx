@@ -65,6 +65,7 @@ export interface CrearOTModalProps {
   onCreated: (ot: any) => void
   contratoId: string
   faenaId?: string
+  defaultFechaProgramada?: string
 }
 
 // ---------------------------------------------------------------------------
@@ -76,6 +77,7 @@ export function CrearOTModal({
   onCreated,
   contratoId,
   faenaId,
+  defaultFechaProgramada,
 }: CrearOTModalProps) {
   const { user } = useAuth()
   const createOT = useCreateOT()
@@ -97,11 +99,25 @@ export function CrearOTModal({
       tipo: 'preventivo',
       prioridad: 'normal',
       activo_id: '',
-      fecha_programada: '',
+      fecha_programada: defaultFechaProgramada || '',
       responsable_id: '',
       observaciones: '',
     },
   })
+
+  // Reset form with default date when modal opens
+  useEffect(() => {
+    if (open) {
+      reset({
+        tipo: 'preventivo',
+        prioridad: 'normal',
+        activo_id: '',
+        fecha_programada: defaultFechaProgramada || '',
+        responsable_id: '',
+        observaciones: '',
+      })
+    }
+  }, [open, defaultFechaProgramada, reset])
 
   // Load activos and responsables when modal opens
   useEffect(() => {

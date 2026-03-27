@@ -110,6 +110,45 @@ export async function createAbastecimiento(data: {
   return { data: result, error }
 }
 
+export async function getPuntosPorFaena(faenaId: string) {
+  // 1. Get activos that are service points in this faena
+  const { data: activos, error: activosError } = await supabase
+    .from('activos')
+    .select('id, codigo, nombre, tipo, modelo:modelos(nombre, especificaciones)')
+    .in('tipo', ['punto_fijo', 'surtidor', 'estanque', 'bomba', 'dispensador', 'manguera'])
+    .eq('faena_id', faenaId)
+    .eq('estado', 'operativo')
+    .order('nombre')
+
+  if (activosError || !activos) return { data: null, error: activosError }
+
+  // 2. For each activo, get the last abastecimiento
+  const puntosConStock = await Promise.all(
+    activos.map(async (activo: any) => {
+      const { data: ultimoAbast } = await supabase
+        .from('abastecimientos')
+        .select('cantidad_real, fecha_hora, producto:productos(nombre)')
+        .eq('activo_destino_id', activo.id)
+        .order('fecha_hora', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      const capacidad = activo.modelo?.especificaciones?.capacidad_litros ?? null
+
+      return {
+        ...activo,
+        capacidad_litros: capacidad,
+        ultimo_abastecimiento: ultimoAbast,
+        cantidad_sugerida: capacidad && ultimoAbast?.cantidad_real
+          ? Math.max(0, capacidad - (ultimoAbast.cantidad_real * 0.3)) // Estimate ~70% consumed
+          : capacidad ?? null,
+      }
+    })
+  )
+
+  return { data: puntosConStock, error: null }
+}
+
 export async function getRutaStats(faenaId?: string) {
   let query = supabase
     .from('rutas_despacho')

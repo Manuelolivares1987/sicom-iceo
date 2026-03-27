@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useEffect, useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { useRouter } from 'next/navigation'
 import {
   Wrench,
   Calendar,
@@ -11,8 +12,12 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronUp,
+  ChevronLeft,
+  ChevronRight,
   Play,
   Package,
+  Plus,
+  X,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -39,6 +44,8 @@ import {
   useProximasMantenimientos,
   useGenerarOTDesdePlan,
 } from '@/hooks/use-mantenimiento'
+import { useOrdenesTrabajo } from '@/hooks/use-ordenes-trabajo'
+import { CrearOTModal } from '@/components/ot/crear-ot-modal'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -108,6 +115,69 @@ function getNext7Days(): { date: string; dayName: string; dayShort: string; date
     })
   }
   return days
+}
+
+// Week range helper for the new PlanSemanalTab
+function getWeekRange(offset: number) {
+  const now = new Date()
+  const dayOfWeek = now.getDay() // 0=Sunday
+  const monday = new Date(now)
+  // getDay() returns 0 for Sunday, so adjust: if Sunday (0), go back 6 days
+  monday.setDate(now.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1) + offset * 7)
+  monday.setHours(0, 0, 0, 0)
+  const sunday = new Date(monday)
+  sunday.setDate(monday.getDate() + 6)
+  sunday.setHours(23, 59, 59, 999)
+
+  const days: Date[] = []
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(monday)
+    d.setDate(monday.getDate() + i)
+    days.push(d)
+  }
+  return { monday, sunday, days }
+}
+
+const dayNames = ['Lunes', 'Martes', 'Miercoles', 'Jueves', 'Viernes', 'Sabado', 'Domingo']
+
+const tipoBadgeColor: Record<string, string> = {
+  preventivo: 'bg-green-100 text-green-700',
+  correctivo: 'bg-red-100 text-red-700',
+  inspeccion: 'bg-blue-100 text-blue-700',
+  abastecimiento: 'bg-amber-100 text-amber-700',
+  lubricacion: 'bg-purple-100 text-purple-700',
+  inventario: 'bg-cyan-100 text-cyan-700',
+  regularizacion: 'bg-gray-100 text-gray-700',
+}
+
+const estadoBadgeColor: Record<string, string> = {
+  creada: 'bg-violet-100 text-violet-700',
+  asignada: 'bg-blue-100 text-blue-700',
+  en_ejecucion: 'bg-amber-100 text-amber-700',
+  pausada: 'bg-orange-100 text-orange-700',
+  ejecutada_ok: 'bg-green-100 text-green-700',
+  ejecutada_con_observaciones: 'bg-emerald-100 text-emerald-700',
+  no_ejecutada: 'bg-red-100 text-red-700',
+  cancelada: 'bg-gray-100 text-gray-700',
+}
+
+const prioridadBadgeColor: Record<string, string> = {
+  emergencia: 'bg-red-100 text-red-700',
+  urgente: 'bg-orange-100 text-orange-700',
+  alta: 'bg-amber-100 text-amber-700',
+  normal: 'bg-blue-100 text-blue-700',
+  baja: 'bg-gray-100 text-gray-600',
+}
+
+function formatDateShort(d: Date): string {
+  return d.toLocaleDateString('es-CL', { day: '2-digit', month: 'short' })
+}
+
+function toISODate(d: Date): string {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
 }
 
 // ---------------------------------------------------------------------------
@@ -451,25 +521,30 @@ export default function MantenimientoPage() {
 }
 
 // ---------------------------------------------------------------------------
-// Tab: Plan Semanal
+// Tab: Plan Semanal (Full Weekly Planner)
 // ---------------------------------------------------------------------------
 function PlanSemanalTab() {
-  const { data: proximos, isLoading } = useProximasMantenimientos(7)
-  const generarOT = useGenerarOTDesdePlan()
+  const router = useRouter()
+  const [weekOffset, setWeekOffset] = useState(0)
 
-  // Track which plans have had OTs generated (by plan id)
-  const [generados, setGenerados] = useState<Record<string, boolean>>({})
-  const [generandoId, setGenerandoId] = useState<string | null>(null)
-  const [generandoTodos, setGenerandoTodos] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [successMsg, setSuccessMsg] = useState<string | null>(null)
+  // Week range
+  const { monday, sunday, days } = useMemo(() => getWeekRange(weekOffset), [weekOffset])
+  const mondayISO = toISODate(monday)
+  const sundayISO = toISODate(sunday)
 
-  // Cache contract id so we only fetch it once
+  // Discarded PM suggestions (local state, not persisted)
+  const [discarded, setDiscarded] = useState<Set<string>>(new Set())
+
+  // Modal state for creating OT
+  const [crearOTModalOpen, setCrearOTModalOpen] = useState(false)
+  const [crearOTFechaPre, setCrearOTFechaPre] = useState<string>('')
+
+  // Cache contract id
   const [contratoId, setContratoId] = useState<string | null>(null)
   const [contratoError, setContratoError] = useState(false)
 
   useEffect(() => {
-    getContratoParaFaena('').then(({ data, error }) => {
+    getContratoParaFaena('').then(({ data }) => {
       if (data?.id) {
         setContratoId(data.id)
       } else {
@@ -478,50 +553,90 @@ function PlanSemanalTab() {
     })
   }, [])
 
-  const next7 = useMemo(() => getNext7Days(), [])
+  // PM suggestions: fetch proximas mantenimientos covering the week range
+  // Use a generous dias window to cover future weeks
+  const diasParaFetch = useMemo(() => {
+    const hoy = new Date()
+    hoy.setHours(0, 0, 0, 0)
+    const diffMs = sunday.getTime() - hoy.getTime()
+    const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24))
+    return Math.max(diffDays + 1, 7)
+  }, [sunday])
 
-  // Group plans by date
-  const plansByDate = useMemo(() => {
-    const map: Record<string, any[]> = {}
-    for (const day of next7) {
-      map[day.date] = []
+  const { data: proximos, isLoading: loadingPM } = useProximasMantenimientos(
+    diasParaFetch > 0 ? diasParaFetch : 7
+  )
+
+  // OTs for the week
+  const otFilters = useMemo(
+    () => ({ fecha_desde: mondayISO, fecha_hasta: sundayISO }),
+    [mondayISO, sundayISO]
+  )
+  const { data: weekOTs, isLoading: loadingOTs } = useOrdenesTrabajo(otFilters)
+
+  // Generar OT mutation
+  const generarOT = useGenerarOTDesdePlan()
+  const [generandoId, setGenerandoId] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [successMsg, setSuccessMsg] = useState<string | null>(null)
+
+  // Filter PM suggestions to the selected week
+  const weekPM = useMemo(() => {
+    if (!proximos) return []
+    return proximos.filter((plan: any) => {
+      const fecha = plan.proxima_ejecucion_fecha?.slice(0, 10)
+      if (!fecha) return false
+      return fecha >= mondayISO && fecha <= sundayISO
+    })
+  }, [proximos, mondayISO, sundayISO])
+
+  // Set of plan_mantenimiento_ids that already have OTs (accepted suggestions)
+  const acceptedPlanIds = useMemo(() => {
+    const ids = new Set<string>()
+    if (weekOTs) {
+      for (const ot of weekOTs) {
+        if ((ot as any).plan_mantenimiento_id) {
+          ids.add((ot as any).plan_mantenimiento_id)
+        }
+      }
     }
-    if (proximos) {
-      for (const plan of proximos) {
-        const fecha = plan.proxima_ejecucion_fecha?.slice(0, 10)
+    return ids
+  }, [weekOTs])
+
+  // Group PM suggestions by date
+  const pmByDate = useMemo(() => {
+    const map: Record<string, any[]> = {}
+    for (const day of days) {
+      map[toISODate(day)] = []
+    }
+    for (const plan of weekPM) {
+      const fecha = plan.proxima_ejecucion_fecha?.slice(0, 10)
+      if (fecha && map[fecha]) {
+        map[fecha].push(plan)
+      }
+    }
+    return map
+  }, [weekPM, days])
+
+  // Group OTs by date
+  const otsByDate = useMemo(() => {
+    const map: Record<string, any[]> = {}
+    for (const day of days) {
+      map[toISODate(day)] = []
+    }
+    if (weekOTs) {
+      for (const ot of weekOTs) {
+        const fecha = (ot as any).fecha_programada?.slice(0, 10)
         if (fecha && map[fecha]) {
-          map[fecha].push(plan)
+          map[fecha].push(ot)
         }
       }
     }
     return map
-  }, [proximos, next7])
+  }, [weekOTs, days])
 
-  const totalPlanes = proximos?.length ?? 0
-
-  // Consolidated materials
-  const materialesConsolidados = useMemo(() => {
-    if (!proximos) return []
-    const agg: Record<string, { nombre: string; cantidad: number; unidad?: string }> = {}
-    for (const plan of proximos) {
-      const materiales = plan.pauta?.materiales_estimados
-      if (Array.isArray(materiales)) {
-        for (const mat of materiales) {
-          const nombre = typeof mat === 'string' ? mat : (mat.nombre ?? JSON.stringify(mat))
-          const cantidad = typeof mat === 'object' ? (mat.cantidad ?? 1) : 1
-          const unidad = typeof mat === 'object' ? mat.unidad : undefined
-          if (agg[nombre]) {
-            agg[nombre].cantidad += cantidad
-          } else {
-            agg[nombre] = { nombre, cantidad, unidad }
-          }
-        }
-      }
-    }
-    return Object.values(agg).sort((a, b) => a.nombre.localeCompare(b.nombre))
-  }, [proximos])
-
-  const handleGenerarOT = useCallback(
+  // Accept PM suggestion -> create OT
+  const handleAceptar = useCallback(
     async (plan: any) => {
       if (!contratoId) {
         setError('No se encontro un contrato activo. No se puede generar la OT.')
@@ -541,7 +656,6 @@ function PlanSemanalTab() {
           fecha_programada: plan.proxima_ejecucion_fecha,
           prioridad: 'normal',
         })
-        setGenerados((prev) => ({ ...prev, [plan.id]: true }))
         setSuccessMsg(`OT generada para ${plan.activo?.codigo ?? 'activo'} - ${plan.pauta?.nombre ?? 'plan'}`)
       } catch (err: any) {
         setError(err?.message ?? 'Error al generar la OT')
@@ -552,87 +666,104 @@ function PlanSemanalTab() {
     [contratoId, generarOT]
   )
 
-  const handleGenerarTodas = useCallback(async () => {
-    if (!contratoId) {
-      setError('No se encontro un contrato activo. No se pueden generar las OTs.')
-      return
-    }
-    if (!proximos || proximos.length === 0) return
+  // Discard PM suggestion
+  const handleDescartar = useCallback((planId: string) => {
+    setDiscarded((prev) => {
+      const next = new Set(prev)
+      next.add(planId)
+      return next
+    })
+  }, [])
 
-    setError(null)
-    setSuccessMsg(null)
-    setGenerandoTodos(true)
+  // Open CrearOTModal with a pre-set date
+  const handleAgregarOT = useCallback((fecha: string) => {
+    setCrearOTFechaPre(fecha)
+    setCrearOTModalOpen(true)
+  }, [])
 
-    let exitos = 0
-    let errores = 0
+  // Today ISO
+  const todayISO = useMemo(() => toISODate(new Date()), [])
 
-    for (const plan of proximos) {
-      if (generados[plan.id]) continue
-      try {
-        await generarOT.mutateAsync({
-          tipo: 'preventivo',
-          contrato_id: contratoId,
-          faena_id: plan.activo?.faena_id ?? plan.activo?.faena?.id ?? '',
-          activo_id: plan.activo?.id ?? '',
-          plan_mantenimiento_id: plan.id,
-          fecha_programada: plan.proxima_ejecucion_fecha,
-          prioridad: 'normal',
-        })
-        setGenerados((prev) => ({ ...prev, [plan.id]: true }))
-        exitos++
-      } catch {
-        errores++
+  // Consolidated materials from PM pautas for the week
+  const materialesConsolidados = useMemo(() => {
+    const agg: Record<string, { nombre: string; cantidad: number; unidad?: string }> = {}
+    for (const plan of weekPM) {
+      if (discarded.has(plan.id) || acceptedPlanIds.has(plan.id)) continue
+      const materiales = plan.pauta?.materiales_estimados
+      if (Array.isArray(materiales)) {
+        for (const mat of materiales) {
+          const nombre = typeof mat === 'string' ? mat : (mat.nombre ?? JSON.stringify(mat))
+          const cantidad = typeof mat === 'object' ? (mat.cantidad ?? 1) : 1
+          const unidad = typeof mat === 'object' ? mat.unidad : undefined
+          if (agg[nombre]) {
+            agg[nombre].cantidad += cantidad
+          } else {
+            agg[nombre] = { nombre, cantidad, unidad }
+          }
+        }
       }
     }
+    return Object.values(agg).sort((a, b) => a.nombre.localeCompare(b.nombre))
+  }, [weekPM, discarded, acceptedPlanIds])
 
-    setGenerandoTodos(false)
-    if (errores > 0) {
-      setError(`Se generaron ${exitos} OTs correctamente, pero ${errores} fallaron.`)
-    } else {
-      setSuccessMsg(`Se generaron ${exitos} OTs correctamente.`)
+  // Week summary counts
+  const weekSummary = useMemo(() => {
+    const byTipo: Record<string, number> = {}
+    let total = 0
+    let completed = 0
+    if (weekOTs) {
+      for (const ot of weekOTs) {
+        const tipo = (ot as any).tipo || 'otro'
+        byTipo[tipo] = (byTipo[tipo] || 0) + 1
+        total++
+        const estado = (ot as any).estado
+        if (estado === 'ejecutada_ok' || estado === 'ejecutada_con_observaciones') {
+          completed++
+        }
+      }
     }
-  }, [contratoId, proximos, generados, generarOT])
+    return { byTipo, total, completed }
+  }, [weekOTs])
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-16">
-        <Spinner size="lg" />
-      </div>
-    )
-  }
-
-  if (!proximos || proximos.length === 0) {
-    return (
-      <EmptyState
-        icon={CalendarDays}
-        title="Sin mantenimientos programados"
-        description="No hay planes de mantenimiento programados para los proximos 7 dias."
-      />
-    )
-  }
+  const isLoading = loadingPM || loadingOTs
 
   return (
     <div className="space-y-6">
-      {/* Header with generate all button */}
+      {/* Week Selector */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold text-gray-900">
-            Plan Semanal de Mantenimiento
+            Planificador Semanal
           </h2>
           <p className="text-sm text-gray-500">
-            {totalPlanes} mantenimiento{totalPlanes !== 1 ? 's' : ''} programado{totalPlanes !== 1 ? 's' : ''} para los proximos 7 dias
+            Semana del {formatDateShort(monday)} al {formatDateShort(sunday)}
           </p>
         </div>
-        <Button
-          variant="primary"
-          size="md"
-          onClick={handleGenerarTodas}
-          loading={generandoTodos}
-          disabled={contratoError || totalPlanes === 0}
-        >
-          <Play className="h-4 w-4" />
-          Generar Todas las OTs
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setWeekOffset((o) => o - 1)}
+          >
+            <ChevronLeft className="h-4 w-4" />
+            Anterior
+          </Button>
+          <Button
+            variant={weekOffset === 0 ? 'primary' : 'outline'}
+            size="sm"
+            onClick={() => setWeekOffset(0)}
+          >
+            Hoy
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setWeekOffset((o) => o + 1)}
+          >
+            Siguiente
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
 
       {/* Messages */}
@@ -654,171 +785,297 @@ function PlanSemanalTab() {
         </div>
       )}
 
-      {/* Days */}
-      <div className="space-y-4">
-        {next7.map((day) => {
-          const dayPlans = plansByDate[day.date] ?? []
-          if (dayPlans.length === 0) return null
+      {isLoading ? (
+        <div className="flex items-center justify-center py-16">
+          <Spinner size="lg" />
+        </div>
+      ) : (
+        <>
+          {/* Days of the week */}
+          <div className="space-y-4">
+            {days.map((dayDate, dayIdx) => {
+              const dateISO = toISODate(dayDate)
+              const isToday = dateISO === todayISO
+              const dayPM = (pmByDate[dateISO] ?? []).filter(
+                (p: any) => !discarded.has(p.id)
+              )
+              const dayOTs = otsByDate[dateISO] ?? []
+              const hasPM = dayPM.length > 0
+              const hasOTs = dayOTs.length > 0
 
-          const isToday = day.date === new Date().toISOString().slice(0, 10)
+              return (
+                <Card key={dateISO} className={isToday ? 'ring-2 ring-pillado-green-500/50' : ''}>
+                  <CardContent className="p-4">
+                    {/* Day header */}
+                    <div className="flex items-center justify-between mb-3">
+                      <div className={`flex items-center gap-2 ${isToday ? 'text-pillado-green-600' : 'text-gray-700'}`}>
+                        <CalendarDays className="h-4 w-4" />
+                        <span className="font-semibold text-base">
+                          {dayNames[dayIdx]}
+                        </span>
+                        <span className="text-sm text-gray-400">
+                          {formatDateShort(dayDate)}
+                        </span>
+                        {isToday && (
+                          <Badge variant="default" className="text-[10px]">
+                            Hoy
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 text-xs text-gray-400">
+                        {hasPM && (
+                          <span>{dayPM.length} sugerencia{dayPM.length !== 1 ? 's' : ''} PM</span>
+                        )}
+                        {hasOTs && (
+                          <span>{dayOTs.length} OT{dayOTs.length !== 1 ? 's' : ''}</span>
+                        )}
+                      </div>
+                    </div>
 
-          return (
-            <div key={day.date}>
-              {/* Day header */}
-              <div className={`flex items-center gap-2 mb-2 px-1 ${isToday ? 'text-pillado-green-600' : 'text-gray-700'}`}>
-                <CalendarDays className="h-4 w-4" />
-                <span className="font-semibold">
-                  {day.dayName}
-                </span>
-                <span className="text-sm text-gray-400">
-                  {formatDate(day.date)}
-                </span>
-                <Badge variant={isToday ? 'default' : 'secondary'} className="text-[10px] ml-1">
-                  {dayPlans.length} plan{dayPlans.length !== 1 ? 'es' : ''}
-                </Badge>
-              </div>
+                    {/* Section A: PM Suggestions */}
+                    {hasPM && (
+                      <div className="mb-3">
+                        <p className="text-xs font-semibold text-gray-500 uppercase mb-2">
+                          Sugerencias de Mantenimiento Preventivo
+                        </p>
+                        <div className="space-y-2">
+                          {dayPM.map((plan: any) => {
+                            const activo = plan.activo
+                            const pauta = plan.pauta
+                            const isAccepted = acceptedPlanIds.has(plan.id)
+                            const isGenerating = generandoId === plan.id
 
-              {/* Plan cards for this day */}
-              <div className="space-y-2 ml-6">
-                {dayPlans.map((plan: any) => {
-                  const activo = plan.activo
-                  const pauta = plan.pauta
-                  const marcaModelo = activo?.modelo
-                    ? `${activo.modelo.marca?.nombre ?? ''} - ${activo.modelo.nombre}`
-                    : '-'
-                  const isGenerated = generados[plan.id]
-                  const isGenerating = generandoId === plan.id
+                            return (
+                              <div
+                                key={plan.id}
+                                className={`flex items-start justify-between gap-3 rounded-lg border p-3 ${
+                                  isAccepted
+                                    ? 'border-green-300 bg-green-50/50'
+                                    : 'border-amber-200 bg-amber-50/30'
+                                }`}
+                              >
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <span className="font-medium text-sm text-gray-900">
+                                      {activo?.codigo ?? '-'}
+                                    </span>
+                                    <span className="text-sm text-gray-600 truncate">
+                                      {activo?.nombre ?? ''}
+                                    </span>
+                                  </div>
+                                  <div className="flex flex-wrap items-center gap-2 mt-1">
+                                    <Wrench className="h-3 w-3 text-gray-400" />
+                                    <span className="text-xs text-gray-700">
+                                      {pauta?.nombre ?? '-'}
+                                    </span>
+                                    {pauta?.tipo_plan && (
+                                      <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium bg-amber-100 text-amber-700">
+                                        {tipoPlanLabel(pauta.tipo_plan)}
+                                      </span>
+                                    )}
+                                  </div>
+                                  {/* Materials */}
+                                  {pauta?.materiales_estimados && Array.isArray(pauta.materiales_estimados) && pauta.materiales_estimados.length > 0 && (
+                                    <div className="flex flex-wrap items-center gap-1 mt-1.5">
+                                      <Package className="h-3 w-3 text-gray-400" />
+                                      {(pauta.materiales_estimados as any[]).slice(0, 3).map((mat: any, i: number) => (
+                                        <span key={i} className="text-[10px] text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">
+                                          {typeof mat === 'string' ? mat : mat.nombre ?? '?'}
+                                          {mat.cantidad ? ` x${mat.cantidad}` : ''}
+                                        </span>
+                                      ))}
+                                      {pauta.materiales_estimados.length > 3 && (
+                                        <span className="text-[10px] text-gray-400">
+                                          +{pauta.materiales_estimados.length - 3} mas
+                                        </span>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="shrink-0 flex items-center gap-1.5">
+                                  {isAccepted ? (
+                                    <div className="flex items-center gap-1 text-green-600 text-xs font-medium">
+                                      <CheckCircle2 className="h-4 w-4" />
+                                      Aceptada
+                                    </div>
+                                  ) : (
+                                    <>
+                                      <Button
+                                        variant="primary"
+                                        size="sm"
+                                        onClick={() => handleAceptar(plan)}
+                                        loading={isGenerating}
+                                        disabled={contratoError}
+                                      >
+                                        <CheckCircle2 className="h-3.5 w-3.5" />
+                                        Aceptar
+                                      </Button>
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => handleDescartar(plan.id)}
+                                      >
+                                        <X className="h-3.5 w-3.5" />
+                                      </Button>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )}
 
-                  return (
-                    <Card key={plan.id} className={`overflow-hidden ${isGenerated ? 'border-green-300 bg-green-50/30' : ''}`}>
-                      <CardContent className="p-4">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="flex-1 min-w-0">
-                            {/* Activo info */}
-                            <div className="flex flex-wrap items-center gap-2">
-                              <span className="font-semibold text-gray-900">
-                                {activo?.codigo ?? '-'}
-                              </span>
-                              <span className="text-gray-600 truncate">
-                                {activo?.nombre ?? ''}
-                              </span>
-                              {activo?.tipo && (
-                                <Badge variant="default" className="text-[10px]">
-                                  {activo.tipo.replace(/_/g, ' ')}
-                                </Badge>
-                              )}
-                            </div>
-
-                            {/* Marca - Modelo */}
-                            <p className="text-sm text-gray-500 mt-0.5">{marcaModelo}</p>
-
-                            {/* Pauta */}
-                            <div className="flex flex-wrap items-center gap-2 mt-1">
-                              <Wrench className="h-3.5 w-3.5 text-gray-400" />
-                              <span className="text-sm font-medium text-gray-700">
-                                {pauta?.nombre ?? '-'}
-                              </span>
-                              {pauta?.tipo_plan && (
-                                <Badge variant="secondary" className="text-[10px]">
-                                  {tipoPlanLabel(pauta.tipo_plan)}
-                                </Badge>
-                              )}
-                              {pauta?.duracion_estimada_hrs && (
-                                <span className="text-xs text-gray-400">
-                                  ~{pauta.duracion_estimada_hrs} hrs
+                    {/* Section B: Planned OTs */}
+                    {hasOTs && (
+                      <div className="mb-3">
+                        <p className="text-xs font-semibold text-gray-500 uppercase mb-2">
+                          Ordenes de Trabajo Planificadas
+                        </p>
+                        <div className="space-y-1.5">
+                          {dayOTs.map((ot: any) => (
+                            <div
+                              key={ot.id}
+                              onClick={() => router.push(`/dashboard/ordenes-trabajo/${ot.id}`)}
+                              className="flex items-center gap-3 rounded-lg border border-gray-200 bg-white p-3 cursor-pointer hover:bg-gray-50 transition-colors"
+                            >
+                              <div className="flex-1 min-w-0 flex flex-wrap items-center gap-2">
+                                <span className="font-mono text-xs text-gray-500">
+                                  {ot.folio ?? '-'}
                                 </span>
-                              )}
-                            </div>
-
-                            {/* Materiales estimados inline */}
-                            {pauta?.materiales_estimados && Array.isArray(pauta.materiales_estimados) && pauta.materiales_estimados.length > 0 && (
-                              <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
-                                <Package className="h-3 w-3 text-gray-400" />
-                                {(pauta.materiales_estimados as any[]).slice(0, 3).map((mat: any, i: number) => (
-                                  <span key={i} className="text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">
-                                    {typeof mat === 'string' ? mat : mat.nombre ?? '?'}
-                                    {mat.cantidad ? ` x${mat.cantidad}` : ''}
-                                  </span>
-                                ))}
-                                {pauta.materiales_estimados.length > 3 && (
-                                  <span className="text-xs text-gray-400">
-                                    +{pauta.materiales_estimados.length - 3} mas
+                                <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium ${tipoBadgeColor[ot.tipo] ?? 'bg-gray-100 text-gray-700'}`}>
+                                  {ot.tipo?.replace(/_/g, ' ') ?? '-'}
+                                </span>
+                                <span className="text-sm text-gray-900 truncate">
+                                  {ot.activo?.nombre ?? ot.activo?.codigo ?? '-'}
+                                </span>
+                                <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium ${prioridadBadgeColor[ot.prioridad] ?? 'bg-gray-100 text-gray-600'}`}>
+                                  {ot.prioridad ?? '-'}
+                                </span>
+                              </div>
+                              <div className="shrink-0 flex items-center gap-2">
+                                {ot.responsable?.nombre_completo && (
+                                  <span className="text-xs text-gray-500 hidden sm:inline">
+                                    {ot.responsable.nombre_completo}
                                   </span>
                                 )}
+                                <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium ${estadoBadgeColor[ot.estado] ?? 'bg-gray-100 text-gray-600'}`}>
+                                  {ot.estado?.replace(/_/g, ' ') ?? '-'}
+                                </span>
                               </div>
-                            )}
-
-                            {/* Faena */}
-                            {activo?.faena?.nombre && (
-                              <p className="text-xs text-gray-400 mt-1">
-                                Faena: {activo.faena.nombre}
-                              </p>
-                            )}
-                          </div>
-
-                          {/* Generate OT button */}
-                          <div className="shrink-0">
-                            {isGenerated ? (
-                              <div className="flex items-center gap-1 text-green-600 text-sm font-medium">
-                                <CheckCircle2 className="h-4 w-4" />
-                                OT Generada
-                              </div>
-                            ) : (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleGenerarOT(plan)}
-                                loading={isGenerating}
-                                disabled={contratoError || generandoTodos}
-                              >
-                                <Play className="h-3.5 w-3.5" />
-                                Generar OT
-                              </Button>
-                            )}
-                          </div>
+                            </div>
+                          ))}
                         </div>
-                      </CardContent>
-                    </Card>
-                  )
-                })}
-              </div>
-            </div>
-          )
-        })}
-      </div>
+                      </div>
+                    )}
 
-      {/* Consolidated Repuestos */}
-      {materialesConsolidados.length > 0 && (
-        <Card>
-          <CardContent className="p-5">
-            <div className="flex items-center gap-2 mb-4">
-              <Package className="h-5 w-5 text-pillado-green-600" />
-              <h3 className="text-base font-semibold text-gray-900">
-                Repuestos Necesarios (Semana)
+                    {/* Empty state for the day */}
+                    {!hasPM && !hasOTs && (
+                      <p className="text-sm text-gray-400 italic mb-3">
+                        Sin actividades programadas para este dia.
+                      </p>
+                    )}
+
+                    {/* Section C: Add OT button */}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleAgregarOT(dateISO)}
+                      disabled={contratoError}
+                      className="w-full border-dashed"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      Agregar OT
+                    </Button>
+                  </CardContent>
+                </Card>
+              )
+            })}
+          </div>
+
+          {/* Week Summary */}
+          <Card>
+            <CardContent className="p-5">
+              <h3 className="text-base font-semibold text-gray-900 mb-4">
+                Resumen de la Semana
               </h3>
-            </div>
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Material / Repuesto</TableHead>
-                    <TableHead className="text-center w-32">Cantidad Total</TableHead>
-                    <TableHead className="w-32">Unidad</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {materialesConsolidados.map((mat, i) => (
-                    <TableRow key={i}>
-                      <TableCell className="font-medium">{mat.nombre}</TableCell>
-                      <TableCell className="text-center">{mat.cantidad}</TableCell>
-                      <TableCell className="text-gray-500">{mat.unidad ?? '-'}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          </CardContent>
-        </Card>
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                {/* Count by tipo */}
+                {Object.entries(weekSummary.byTipo).map(([tipo, count]) => (
+                  <div key={tipo} className="text-center">
+                    <span className={`inline-flex items-center rounded px-2 py-1 text-xs font-medium ${tipoBadgeColor[tipo] ?? 'bg-gray-100 text-gray-700'}`}>
+                      {tipo.replace(/_/g, ' ')}
+                    </span>
+                    <p className="mt-1 text-2xl font-bold text-gray-900">{count}</p>
+                  </div>
+                ))}
+                {/* Total */}
+                <div className="text-center">
+                  <span className="inline-flex items-center rounded px-2 py-1 text-xs font-medium bg-gray-100 text-gray-700">
+                    Total OTs
+                  </span>
+                  <p className="mt-1 text-2xl font-bold text-gray-900">{weekSummary.total}</p>
+                </div>
+                {/* Completed */}
+                <div className="text-center">
+                  <span className="inline-flex items-center rounded px-2 py-1 text-xs font-medium bg-green-100 text-green-700">
+                    Completadas
+                  </span>
+                  <p className="mt-1 text-2xl font-bold text-green-700">{weekSummary.completed}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Consolidated Materials */}
+          {materialesConsolidados.length > 0 && (
+            <Card>
+              <CardContent className="p-5">
+                <div className="flex items-center gap-2 mb-4">
+                  <Package className="h-5 w-5 text-pillado-green-600" />
+                  <h3 className="text-base font-semibold text-gray-900">
+                    Materiales Necesarios (Semana)
+                  </h3>
+                </div>
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Material / Repuesto</TableHead>
+                        <TableHead className="text-center w-32">Cantidad Total</TableHead>
+                        <TableHead className="w-32">Unidad</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {materialesConsolidados.map((mat, i) => (
+                        <TableRow key={i}>
+                          <TableCell className="font-medium">{mat.nombre}</TableCell>
+                          <TableCell className="text-center">{mat.cantidad}</TableCell>
+                          <TableCell className="text-gray-500">{mat.unidad ?? '-'}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </>
+      )}
+
+      {/* CrearOTModal */}
+      {contratoId && (
+        <CrearOTModal
+          open={crearOTModalOpen}
+          onClose={() => setCrearOTModalOpen(false)}
+          onCreated={() => {
+            setCrearOTModalOpen(false)
+            setSuccessMsg('Orden de trabajo creada exitosamente.')
+          }}
+          contratoId={contratoId}
+          defaultFechaProgramada={crearOTFechaPre}
+        />
       )}
     </div>
   )

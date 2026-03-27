@@ -29,6 +29,7 @@ import {
   useCreateRuta,
   useUpdateRutaEstado,
   useCreateAbastecimiento,
+  usePuntosPorFaena,
 } from '@/hooks/use-abastecimiento'
 
 // ---------------------------------------------------------------------------
@@ -509,7 +510,8 @@ function NuevoAbastecimientoModal({
 // Main page
 // ---------------------------------------------------------------------------
 export default function AbastecimientoPage() {
-  const [activeTab, setActiveTab] = useState<'rutas' | 'abastecimientos'>('rutas')
+  const [activeTab, setActiveTab] = useState<'rutas' | 'abastecimientos' | 'puntos'>('rutas')
+  const [puntosFaenaId, setPuntosFaenaId] = useState('')
   const [faenaFilter, setFaenaFilter] = useState('')
   const [estadoFilter, setEstadoFilter] = useState('')
   const [fechaDesde, setFechaDesde] = useState('')
@@ -548,13 +550,16 @@ export default function AbastecimientoPage() {
   const { data: abastecimientos, isLoading: loadingAbast, error: errorAbast } = useAbastecimientos()
   const { data: stats } = useRutaStats(faenaFilter || undefined)
 
+  // Puntos por faena
+  const { data: puntosFaena, isLoading: loadingPuntos } = usePuntosPorFaena(puntosFaenaId || undefined)
+
   // Mutations
   const createRuta = useCreateRuta()
   const updateEstado = useUpdateRutaEstado()
   const createAbast = useCreateAbastecimiento()
 
-  const isLoading = activeTab === 'rutas' ? loadingRutas : loadingAbast
-  const error = activeTab === 'rutas' ? errorRutas : errorAbast
+  const isLoading = activeTab === 'rutas' ? loadingRutas : activeTab === 'abastecimientos' ? loadingAbast : false
+  const error = activeTab === 'rutas' ? errorRutas : activeTab === 'abastecimientos' ? errorAbast : null
 
   const handleCreateRuta = (data: {
     faena_id: string
@@ -658,6 +663,17 @@ export default function AbastecimientoPage() {
           }`}
         >
           Abastecimientos
+        </button>
+        <button
+          onClick={() => setActiveTab('puntos')}
+          className={`flex-1 rounded-md px-4 py-2 text-sm font-medium transition-colors flex items-center justify-center gap-1.5 ${
+            activeTab === 'puntos'
+              ? 'bg-white text-gray-900 shadow-sm'
+              : 'text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          <MapPin className="h-4 w-4" />
+          Puntos
         </button>
       </div>
 
@@ -908,6 +924,145 @@ export default function AbastecimientoPage() {
             </>
           )}
         </>
+      )}
+
+      {/* Puntos Tab */}
+      {activeTab === 'puntos' && (
+        <div className="space-y-4">
+          {/* Faena Selector */}
+          <Card>
+            <CardContent className="p-4">
+              <Select
+                label="Faena"
+                value={puntosFaenaId}
+                onChange={setPuntosFaenaId}
+                options={faenaOptions.filter(f => f.value !== '').length > 0
+                  ? [{ value: '', label: 'Seleccionar faena...' }, ...faenaOptions.filter(f => f.value !== '')]
+                  : [{ value: '', label: 'Cargando faenas...' }]}
+              />
+            </CardContent>
+          </Card>
+
+          {!puntosFaenaId && (
+            <Card>
+              <div className="flex flex-col items-center justify-center py-12 text-center">
+                <MapPin className="h-10 w-10 text-gray-300 mb-2" />
+                <p className="text-gray-400 text-sm">Seleccione una faena para ver sus puntos de abastecimiento</p>
+              </div>
+            </Card>
+          )}
+
+          {puntosFaenaId && loadingPuntos && (
+            <div className="flex items-center justify-center py-12">
+              <Spinner size="lg" className="text-pillado-green-500" />
+            </div>
+          )}
+
+          {puntosFaenaId && !loadingPuntos && (!puntosFaena || puntosFaena.length === 0) && (
+            <Card>
+              <div className="flex flex-col items-center justify-center py-12 text-center">
+                <MapPin className="h-10 w-10 text-gray-300 mb-2" />
+                <p className="text-gray-500 font-medium">Sin puntos de abastecimiento</p>
+                <p className="text-gray-400 text-sm mt-1">No se encontraron activos de tipo punto fijo, surtidor, estanque, bomba, dispensador o manguera operativos en esta faena.</p>
+              </div>
+            </Card>
+          )}
+
+          {puntosFaenaId && !loadingPuntos && puntosFaena && puntosFaena.length > 0 && (
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {puntosFaena.map((punto: any) => {
+                const capacidad = punto.capacidad_litros
+                const ultimoAbast = punto.ultimo_abastecimiento
+                const cantSugerida = punto.cantidad_sugerida
+
+                // Estimate level percentage
+                let levelPct: number | null = null
+                if (capacidad && ultimoAbast?.cantidad_real) {
+                  levelPct = Math.max(0, Math.min(100, Math.round((ultimoAbast.cantidad_real * 0.3 / capacidad) * 100)))
+                }
+
+                const levelColor = levelPct !== null
+                  ? levelPct > 50 ? 'bg-green-500' : levelPct > 20 ? 'bg-yellow-500' : 'bg-red-500'
+                  : 'bg-gray-300'
+
+                const tipoBadgeConfig: Record<string, string> = {
+                  punto_fijo: 'bg-blue-100 text-blue-700',
+                  surtidor: 'bg-purple-100 text-purple-700',
+                  estanque: 'bg-cyan-100 text-cyan-700',
+                  bomba: 'bg-orange-100 text-orange-700',
+                  dispensador: 'bg-green-100 text-green-700',
+                  manguera: 'bg-yellow-100 text-yellow-700',
+                }
+
+                return (
+                  <Card key={punto.id}>
+                    <CardContent className="p-4">
+                      {/* Header */}
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="text-sm font-bold text-gray-900 truncate">
+                            {punto.codigo} — {punto.nombre}
+                          </p>
+                        </div>
+                        <Badge className={tipoBadgeConfig[punto.tipo] || 'bg-gray-100 text-gray-700'}>
+                          {punto.tipo?.replace('_', ' ')}
+                        </Badge>
+                      </div>
+
+                      {/* Capacity */}
+                      <div className="mt-3">
+                        {capacidad ? (
+                          <p className="text-sm text-gray-600">
+                            Capacidad: <span className="font-semibold">{Number(capacidad).toLocaleString('es-CL')} L</span>
+                          </p>
+                        ) : (
+                          <p className="text-sm text-gray-400 italic">Capacidad no registrada en modelo</p>
+                        )}
+                      </div>
+
+                      {/* Last supply */}
+                      <div className="mt-2">
+                        {ultimoAbast ? (
+                          <p className="text-xs text-gray-500">
+                            Ultimo abastecimiento: {ultimoAbast.fecha_hora ? formatDate(ultimoAbast.fecha_hora) : '—'} — {ultimoAbast.cantidad_real ?? '—'} L
+                            {ultimoAbast.producto?.nombre ? ` (${ultimoAbast.producto.nombre})` : ''}
+                          </p>
+                        ) : (
+                          <p className="text-xs text-gray-400">Sin registros de abastecimiento</p>
+                        )}
+                      </div>
+
+                      {/* Visual bar */}
+                      {capacidad && (
+                        <div className="mt-3">
+                          <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
+                            <span>Nivel estimado</span>
+                            <span>{levelPct !== null ? `${levelPct}%` : '—'}</span>
+                          </div>
+                          <div className="h-3 w-full rounded-full bg-gray-200 overflow-hidden">
+                            <div
+                              className={`h-3 rounded-full transition-all ${levelColor}`}
+                              style={{ width: `${levelPct ?? 0}%` }}
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Suggested refill */}
+                      {cantSugerida !== null && cantSugerida > 0 && (
+                        <div className="mt-3 rounded-lg bg-blue-50 border border-blue-200 px-3 py-2">
+                          <p className="text-sm text-blue-700 font-medium">
+                            Rellenar: ~{Number(Math.round(cantSugerida)).toLocaleString('es-CL')} L
+                          </p>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                )
+              })}
+            </div>
+          )}
+        </div>
       )}
 
       {/* Modals */}

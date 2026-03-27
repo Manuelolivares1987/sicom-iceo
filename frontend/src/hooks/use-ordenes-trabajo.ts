@@ -4,6 +4,7 @@ import {
   getOrdenTrabajoById,
   getOTsStats,
   createOrdenTrabajo,
+  updateOrdenTrabajo,
   iniciarOT,
   pausarOT,
   finalizarOT,
@@ -104,6 +105,22 @@ export function useHistorialOT(otId: string | undefined) {
 }
 
 // ── Mutations ────────────────────────────────────────────
+
+export function useUpdateOT() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: Record<string, unknown> }) => {
+      const { data: updated, error } = await updateOrdenTrabajo(id, data)
+      if (error) throw error
+      return updated
+    },
+    onSuccess: (_data, { id }) => {
+      queryClient.invalidateQueries({ queryKey: ['orden-trabajo', id] })
+      queryClient.invalidateQueries({ queryKey: ['ordenes-trabajo'] })
+    },
+  })
+}
 
 export function useCreateOT() {
   const queryClient = useQueryClient()
