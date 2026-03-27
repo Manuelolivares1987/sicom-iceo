@@ -1,10 +1,12 @@
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   getPlanesMantenmiento,
   getPautasFabricante,
   getProximasMantenimientos,
   getMantenimientosVencidos,
 } from '@/lib/services/mantenimiento'
+import { createOrdenTrabajo } from '@/lib/services/ordenes-trabajo'
+import type { CreateOTParams } from '@/lib/services/ordenes-trabajo'
 
 export function usePlanes(filters?: { faena_id?: string; tipo_plan?: string }) {
   return useQuery({
@@ -46,6 +48,23 @@ export function usePautasFabricante(modeloId?: string) {
       const { data, error } = await getPautasFabricante(modeloId)
       if (error) throw error
       return data
+    },
+  })
+}
+
+export function useGenerarOTDesdePlan() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (params: CreateOTParams) => {
+      const { data, error } = await createOrdenTrabajo(params)
+      if (error) throw error
+      return data
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['planes-mantenimiento'] })
+      queryClient.invalidateQueries({ queryKey: ['ordenes-trabajo'] })
+      queryClient.invalidateQueries({ queryKey: ['proximas-mantenimientos'] })
     },
   })
 }

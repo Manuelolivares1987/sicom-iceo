@@ -51,16 +51,27 @@ export async function getProximasMantenimientos(dias: number = 30) {
     .from('planes_mantenimiento')
     .select(`
       *,
-      activo:activos(id, codigo, nombre, tipo,
-        faena:faenas(nombre),
+      activo:activos(id, codigo, nombre, tipo, faena_id,
+        faena:faenas(id, nombre),
         modelo:modelos(nombre, marca:marcas(nombre))
       ),
-      pauta:pautas_fabricante(nombre, tipo_plan)
+      pauta:pautas_fabricante(id, nombre, tipo_plan, materiales_estimados, duracion_estimada_hrs)
     `)
     .eq('activo_plan', true)
+    .gte('proxima_ejecucion_fecha', hoy)
     .lte('proxima_ejecucion_fecha', limite)
     .order('proxima_ejecucion_fecha', { ascending: true })
 
+  return { data, error }
+}
+
+// Get first available active contract
+export async function getContratoParaFaena(faenaId: string) {
+  const { data, error } = await supabase
+    .from('contratos')
+    .select('id')
+    .limit(1)
+    .single()
   return { data, error }
 }
 

@@ -1,18 +1,22 @@
 'use client'
 
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
   Wrench,
   Calendar,
+  CalendarDays,
   AlertTriangle,
   Clock,
   CheckCircle2,
   ChevronDown,
   ChevronUp,
+  Play,
+  Package,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { StatCard } from '@/components/ui/stat-card'
 import { Spinner } from '@/components/ui/spinner'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -27,10 +31,13 @@ import {
 } from '@/components/ui/table'
 import { formatDate } from '@/lib/utils'
 import { getFaenas } from '@/lib/services/faenas'
+import { getContratoParaFaena } from '@/lib/services/mantenimiento'
 import {
   usePlanes,
   useMantenimientosVencidos,
   usePautasFabricante,
+  useProximasMantenimientos,
+  useGenerarOTDesdePlan,
 } from '@/hooks/use-mantenimiento'
 
 // ---------------------------------------------------------------------------
@@ -83,10 +90,31 @@ function frecuenciaLabel(pauta: any): string {
   return '-'
 }
 
+const DIAS_SEMANA = ['Domingo', 'Lunes', 'Martes', 'Miercoles', 'Jueves', 'Viernes', 'Sabado']
+const DIAS_CORTO = ['Dom', 'Lun', 'Mar', 'Mie', 'Jue', 'Vie', 'Sab']
+
+function getNext7Days(): { date: string; dayName: string; dayShort: string; dateObj: Date }[] {
+  const days = []
+  const hoy = new Date()
+  hoy.setHours(0, 0, 0, 0)
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(hoy.getTime() + i * 24 * 60 * 60 * 1000)
+    const iso = d.toISOString().slice(0, 10)
+    days.push({
+      date: iso,
+      dayName: DIAS_SEMANA[d.getDay()],
+      dayShort: DIAS_CORTO[d.getDay()],
+      dateObj: d,
+    })
+  }
+  return days
+}
+
 // ---------------------------------------------------------------------------
 // Tabs definition
 // ---------------------------------------------------------------------------
 const tabs = [
+  { id: 'semanal', label: 'Plan Semanal', icon: CalendarDays },
   { id: 'calendario', label: 'Calendario PM', icon: Calendar },
   { id: 'vencidos', label: 'Vencidos', icon: AlertTriangle },
   { id: 'pautas', label: 'Pautas del Fabricante', icon: Wrench },
@@ -285,7 +313,7 @@ function PautaRow({ pauta }: { pauta: any }) {
 // Main Page
 // ---------------------------------------------------------------------------
 export default function MantenimientoPage() {
-  const [activeTab, setActiveTab] = useState('calendario')
+  const [activeTab, setActiveTab] = useState('semanal')
   const [faenaFilter, setFaenaFilter] = useState('')
 
   // Data
@@ -402,6 +430,7 @@ export default function MantenimientoPage() {
       </div>
 
       {/* Tab content */}
+      {activeTab === 'semanal' && <PlanSemanalTab />}
       {activeTab === 'calendario' && (
         <CalendarioTab
           planes={planes}
@@ -416,6 +445,380 @@ export default function MantenimientoPage() {
       )}
       {activeTab === 'pautas' && (
         <PautasTab pautas={pautas} isLoading={loadingPautas} />
+      )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Tab: Plan Semanal
+// ---------------------------------------------------------------------------
+function PlanSemanalTab() {
+  const { data: proximos, isLoading } = useProximasMantenimientos(7)
+  const generarOT = useGenerarOTDesdePlan()
+
+  // Track which plans have had OTs generated (by plan id)
+  const [generados, setGenerados] = useState<Record<string, boolean>>({})
+  const [generandoId, setGenerandoId] = useState<string | null>(null)
+  const [generandoTodos, setGenerandoTodos] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [successMsg, setSuccessMsg] = useState<string | null>(null)
+
+  // Cache contract id so we only fetch it once
+  const [contratoId, setContratoId] = useState<string | null>(null)
+  const [contratoError, setContratoError] = useState(false)
+
+  useEffect(() => {
+    getContratoParaFaena('').then(({ data, error }) => {
+      if (data?.id) {
+        setContratoId(data.id)
+      } else {
+        setContratoError(true)
+      }
+    })
+  }, [])
+
+  const next7 = useMemo(() => getNext7Days(), [])
+
+  // Group plans by date
+  const plansByDate = useMemo(() => {
+    const map: Record<string, any[]> = {}
+    for (const day of next7) {
+      map[day.date] = []
+    }
+    if (proximos) {
+      for (const plan of proximos) {
+        const fecha = plan.proxima_ejecucion_fecha?.slice(0, 10)
+        if (fecha && map[fecha]) {
+          map[fecha].push(plan)
+        }
+      }
+    }
+    return map
+  }, [proximos, next7])
+
+  const totalPlanes = proximos?.length ?? 0
+
+  // Consolidated materials
+  const materialesConsolidados = useMemo(() => {
+    if (!proximos) return []
+    const agg: Record<string, { nombre: string; cantidad: number; unidad?: string }> = {}
+    for (const plan of proximos) {
+      const materiales = plan.pauta?.materiales_estimados
+      if (Array.isArray(materiales)) {
+        for (const mat of materiales) {
+          const nombre = typeof mat === 'string' ? mat : (mat.nombre ?? JSON.stringify(mat))
+          const cantidad = typeof mat === 'object' ? (mat.cantidad ?? 1) : 1
+          const unidad = typeof mat === 'object' ? mat.unidad : undefined
+          if (agg[nombre]) {
+            agg[nombre].cantidad += cantidad
+          } else {
+            agg[nombre] = { nombre, cantidad, unidad }
+          }
+        }
+      }
+    }
+    return Object.values(agg).sort((a, b) => a.nombre.localeCompare(b.nombre))
+  }, [proximos])
+
+  const handleGenerarOT = useCallback(
+    async (plan: any) => {
+      if (!contratoId) {
+        setError('No se encontro un contrato activo. No se puede generar la OT.')
+        return
+      }
+      setError(null)
+      setSuccessMsg(null)
+      setGenerandoId(plan.id)
+
+      try {
+        await generarOT.mutateAsync({
+          tipo: 'preventivo',
+          contrato_id: contratoId,
+          faena_id: plan.activo?.faena_id ?? plan.activo?.faena?.id ?? '',
+          activo_id: plan.activo?.id ?? '',
+          plan_mantenimiento_id: plan.id,
+          fecha_programada: plan.proxima_ejecucion_fecha,
+          prioridad: 'normal',
+        })
+        setGenerados((prev) => ({ ...prev, [plan.id]: true }))
+        setSuccessMsg(`OT generada para ${plan.activo?.codigo ?? 'activo'} - ${plan.pauta?.nombre ?? 'plan'}`)
+      } catch (err: any) {
+        setError(err?.message ?? 'Error al generar la OT')
+      } finally {
+        setGenerandoId(null)
+      }
+    },
+    [contratoId, generarOT]
+  )
+
+  const handleGenerarTodas = useCallback(async () => {
+    if (!contratoId) {
+      setError('No se encontro un contrato activo. No se pueden generar las OTs.')
+      return
+    }
+    if (!proximos || proximos.length === 0) return
+
+    setError(null)
+    setSuccessMsg(null)
+    setGenerandoTodos(true)
+
+    let exitos = 0
+    let errores = 0
+
+    for (const plan of proximos) {
+      if (generados[plan.id]) continue
+      try {
+        await generarOT.mutateAsync({
+          tipo: 'preventivo',
+          contrato_id: contratoId,
+          faena_id: plan.activo?.faena_id ?? plan.activo?.faena?.id ?? '',
+          activo_id: plan.activo?.id ?? '',
+          plan_mantenimiento_id: plan.id,
+          fecha_programada: plan.proxima_ejecucion_fecha,
+          prioridad: 'normal',
+        })
+        setGenerados((prev) => ({ ...prev, [plan.id]: true }))
+        exitos++
+      } catch {
+        errores++
+      }
+    }
+
+    setGenerandoTodos(false)
+    if (errores > 0) {
+      setError(`Se generaron ${exitos} OTs correctamente, pero ${errores} fallaron.`)
+    } else {
+      setSuccessMsg(`Se generaron ${exitos} OTs correctamente.`)
+    }
+  }, [contratoId, proximos, generados, generarOT])
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <Spinner size="lg" />
+      </div>
+    )
+  }
+
+  if (!proximos || proximos.length === 0) {
+    return (
+      <EmptyState
+        icon={CalendarDays}
+        title="Sin mantenimientos programados"
+        description="No hay planes de mantenimiento programados para los proximos 7 dias."
+      />
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Header with generate all button */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-semibold text-gray-900">
+            Plan Semanal de Mantenimiento
+          </h2>
+          <p className="text-sm text-gray-500">
+            {totalPlanes} mantenimiento{totalPlanes !== 1 ? 's' : ''} programado{totalPlanes !== 1 ? 's' : ''} para los proximos 7 dias
+          </p>
+        </div>
+        <Button
+          variant="primary"
+          size="md"
+          onClick={handleGenerarTodas}
+          loading={generandoTodos}
+          disabled={contratoError || totalPlanes === 0}
+        >
+          <Play className="h-4 w-4" />
+          Generar Todas las OTs
+        </Button>
+      </div>
+
+      {/* Messages */}
+      {contratoError && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3">
+          <p className="text-sm text-red-700">
+            No se encontro un contrato activo. La generacion de OTs no esta disponible.
+          </p>
+        </div>
+      )}
+      {error && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3">
+          <p className="text-sm text-red-700">{error}</p>
+        </div>
+      )}
+      {successMsg && (
+        <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3">
+          <p className="text-sm text-green-700">{successMsg}</p>
+        </div>
+      )}
+
+      {/* Days */}
+      <div className="space-y-4">
+        {next7.map((day) => {
+          const dayPlans = plansByDate[day.date] ?? []
+          if (dayPlans.length === 0) return null
+
+          const isToday = day.date === new Date().toISOString().slice(0, 10)
+
+          return (
+            <div key={day.date}>
+              {/* Day header */}
+              <div className={`flex items-center gap-2 mb-2 px-1 ${isToday ? 'text-pillado-green-600' : 'text-gray-700'}`}>
+                <CalendarDays className="h-4 w-4" />
+                <span className="font-semibold">
+                  {day.dayName}
+                </span>
+                <span className="text-sm text-gray-400">
+                  {formatDate(day.date)}
+                </span>
+                <Badge variant={isToday ? 'default' : 'secondary'} className="text-[10px] ml-1">
+                  {dayPlans.length} plan{dayPlans.length !== 1 ? 'es' : ''}
+                </Badge>
+              </div>
+
+              {/* Plan cards for this day */}
+              <div className="space-y-2 ml-6">
+                {dayPlans.map((plan: any) => {
+                  const activo = plan.activo
+                  const pauta = plan.pauta
+                  const marcaModelo = activo?.modelo
+                    ? `${activo.modelo.marca?.nombre ?? ''} - ${activo.modelo.nombre}`
+                    : '-'
+                  const isGenerated = generados[plan.id]
+                  const isGenerating = generandoId === plan.id
+
+                  return (
+                    <Card key={plan.id} className={`overflow-hidden ${isGenerated ? 'border-green-300 bg-green-50/30' : ''}`}>
+                      <CardContent className="p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex-1 min-w-0">
+                            {/* Activo info */}
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="font-semibold text-gray-900">
+                                {activo?.codigo ?? '-'}
+                              </span>
+                              <span className="text-gray-600 truncate">
+                                {activo?.nombre ?? ''}
+                              </span>
+                              {activo?.tipo && (
+                                <Badge variant="default" className="text-[10px]">
+                                  {activo.tipo.replace(/_/g, ' ')}
+                                </Badge>
+                              )}
+                            </div>
+
+                            {/* Marca - Modelo */}
+                            <p className="text-sm text-gray-500 mt-0.5">{marcaModelo}</p>
+
+                            {/* Pauta */}
+                            <div className="flex flex-wrap items-center gap-2 mt-1">
+                              <Wrench className="h-3.5 w-3.5 text-gray-400" />
+                              <span className="text-sm font-medium text-gray-700">
+                                {pauta?.nombre ?? '-'}
+                              </span>
+                              {pauta?.tipo_plan && (
+                                <Badge variant="secondary" className="text-[10px]">
+                                  {tipoPlanLabel(pauta.tipo_plan)}
+                                </Badge>
+                              )}
+                              {pauta?.duracion_estimada_hrs && (
+                                <span className="text-xs text-gray-400">
+                                  ~{pauta.duracion_estimada_hrs} hrs
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Materiales estimados inline */}
+                            {pauta?.materiales_estimados && Array.isArray(pauta.materiales_estimados) && pauta.materiales_estimados.length > 0 && (
+                              <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                                <Package className="h-3 w-3 text-gray-400" />
+                                {(pauta.materiales_estimados as any[]).slice(0, 3).map((mat: any, i: number) => (
+                                  <span key={i} className="text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">
+                                    {typeof mat === 'string' ? mat : mat.nombre ?? '?'}
+                                    {mat.cantidad ? ` x${mat.cantidad}` : ''}
+                                  </span>
+                                ))}
+                                {pauta.materiales_estimados.length > 3 && (
+                                  <span className="text-xs text-gray-400">
+                                    +{pauta.materiales_estimados.length - 3} mas
+                                  </span>
+                                )}
+                              </div>
+                            )}
+
+                            {/* Faena */}
+                            {activo?.faena?.nombre && (
+                              <p className="text-xs text-gray-400 mt-1">
+                                Faena: {activo.faena.nombre}
+                              </p>
+                            )}
+                          </div>
+
+                          {/* Generate OT button */}
+                          <div className="shrink-0">
+                            {isGenerated ? (
+                              <div className="flex items-center gap-1 text-green-600 text-sm font-medium">
+                                <CheckCircle2 className="h-4 w-4" />
+                                OT Generada
+                              </div>
+                            ) : (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleGenerarOT(plan)}
+                                loading={isGenerating}
+                                disabled={contratoError || generandoTodos}
+                              >
+                                <Play className="h-3.5 w-3.5" />
+                                Generar OT
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )
+                })}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Consolidated Repuestos */}
+      {materialesConsolidados.length > 0 && (
+        <Card>
+          <CardContent className="p-5">
+            <div className="flex items-center gap-2 mb-4">
+              <Package className="h-5 w-5 text-pillado-green-600" />
+              <h3 className="text-base font-semibold text-gray-900">
+                Repuestos Necesarios (Semana)
+              </h3>
+            </div>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Material / Repuesto</TableHead>
+                    <TableHead className="text-center w-32">Cantidad Total</TableHead>
+                    <TableHead className="w-32">Unidad</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {materialesConsolidados.map((mat, i) => (
+                    <TableRow key={i}>
+                      <TableCell className="font-medium">{mat.nombre}</TableCell>
+                      <TableCell className="text-center">{mat.cantidad}</TableCell>
+                      <TableCell className="text-gray-500">{mat.unidad ?? '-'}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
       )}
     </div>
   )

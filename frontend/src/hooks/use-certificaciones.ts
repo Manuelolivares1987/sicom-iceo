@@ -50,7 +50,7 @@ export function useAllCertificaciones(filters?: {
   faena_id?: string
 }) {
   return useQuery({
-    queryKey: ['all-certificaciones', filters],
+    queryKey: ['certificaciones', filters],
     queryFn: async () => {
       const { data, error } = await getAllCertificaciones(filters)
       if (error) throw error
@@ -76,18 +76,22 @@ export function useCreateCertificacion() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async (
-      payload: Omit<Certificacion, 'id' | 'created_at' | 'updated_at'>
-    ) => {
-      const { data, error } = await createCertificacion(payload)
+    mutationFn: async ({
+      data,
+      file,
+    }: {
+      data: Omit<Certificacion, 'id' | 'created_at' | 'updated_at' | 'archivo_url'> & {
+        archivo_url?: string | null
+      }
+      file?: File
+    }) => {
+      const { data: created, error } = await createCertificacion(data, file)
       if (error) throw error
-      return data
+      return created
     },
-    onSuccess: (_data, variables) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['certificaciones'] })
-      queryClient.invalidateQueries({
-        queryKey: ['certificaciones', variables.activo_id],
-      })
+      queryClient.invalidateQueries({ queryKey: ['certificacion-stats'] })
       queryClient.invalidateQueries({ queryKey: ['certificaciones-vencidas'] })
       queryClient.invalidateQueries({ queryKey: ['proximos-vencimientos'] })
     },

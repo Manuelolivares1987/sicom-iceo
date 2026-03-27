@@ -12,6 +12,8 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   ArrowLeftRight,
+  Download,
+  CheckCircle2,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -83,11 +85,44 @@ function getMovimientoBadge(tipo: string) {
 }
 
 // ---------------------------------------------------------------------------
+// CSV export helper
+// ---------------------------------------------------------------------------
+function exportAlertasCSV(data: any[]) {
+  const headers = ['Codigo', 'Producto', 'Stock Actual', 'Stock Min', 'Stock Max', 'Cantidad a Comprar', 'Costo Unit.', 'Costo Total Estimado'].join(',')
+  const rows = data.map((item) => {
+    const prod = item.producto
+    const cantidadComprar = Math.max(0, (prod?.stock_maximo ?? 0) - item.cantidad)
+    const costoUnit = item.costo_promedio ?? 0
+    const costoTotal = cantidadComprar * costoUnit
+    return [
+      prod?.codigo ?? '',
+      `"${(prod?.nombre ?? '').replace(/"/g, '""')}"`,
+      item.cantidad ?? 0,
+      prod?.stock_minimo ?? 0,
+      prod?.stock_maximo ?? 0,
+      cantidadComprar,
+      costoUnit,
+      costoTotal,
+    ].join(',')
+  }).join('\n')
+
+  const bom = '\uFEFF'
+  const blob = new Blob([bom + headers + '\n' + rows], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = 'lista-compra.csv'
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+// ---------------------------------------------------------------------------
 // Main tabs
 // ---------------------------------------------------------------------------
 const mainTabs = [
   { id: 'stock', label: 'Stock' },
   { id: 'movimientos', label: 'Movimientos' },
+  { id: 'alertas', label: 'Alertas', icon: AlertTriangle },
   { id: 'conteos', label: 'Conteos' },
   { id: 'kardex', label: 'Kardex' },
 ]
@@ -110,6 +145,9 @@ export default function InventarioPage() {
   const { data: stockData, isLoading: loadingStock } = useStockBodega(stockFilters)
   const { data: valorizacion, isLoading: loadingValorizacion } = useValorizacionTotal()
   const { data: bodegas } = useBodegas()
+
+  // Alertas: products below minimum stock
+  const { data: alertasData, isLoading: loadingAlertas } = useStockBodega({ below_minimum: true })
 
   const movFilters: Record<string, unknown> = {}
   if (bodegaFilter) movFilters.bodega_id = bodegaFilter
@@ -139,6 +177,15 @@ export default function InventarioPage() {
       (s) => s.cantidad < (s.producto?.stock_minimo ?? 0)
     ).length
   }, [stockData])
+
+  // Alertas computed values
+  const alertasList = useMemo(() => (alertasData ?? []) as any[], [alertasData])
+  const inversionEstimada = useMemo(() => {
+    return alertasList.reduce((sum, item) => {
+      const cantidadComprar = Math.max(0, (item.producto?.stock_maximo ?? 0) - item.cantidad)
+      return sum + cantidadComprar * (item.costo_promedio ?? 0)
+    }, 0)
+  }, [alertasList])
 
   const bodegaOptions = [
     { value: '', label: 'Todas' },
@@ -196,19 +243,23 @@ export default function InventarioPage() {
 
       {/* Tabs */}
       <div className="flex gap-1 overflow-x-auto rounded-xl bg-gray-100 p-1">
-        {mainTabs.map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`flex-1 whitespace-nowrap rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
-              activeTab === tab.id
-                ? 'bg-white text-pillado-green-600 shadow-sm'
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
+        {mainTabs.map((tab) => {
+          const TabIcon = tab.icon
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`flex flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+                activeTab === tab.id
+                  ? 'bg-white text-pillado-green-600 shadow-sm'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              {TabIcon && <TabIcon className="h-4 w-4" />}
+              {tab.label}
+            </button>
+          )
+        })}
       </div>
 
       {/* Stock Tab */}
@@ -289,14 +340,14 @@ export default function InventarioPage() {
                       const bajo = s.cantidad < (prod?.stock_minimo ?? 0)
                       return (
                         <TableRow key={s.id}>
-                          <TableCell className="font-mono text-xs font-semibold">{prod?.codigo ?? '—'}</TableCell>
-                          <TableCell className="font-medium">{prod?.nombre ?? '—'}</TableCell>
-                          <TableCell className="text-xs text-gray-500">{prod?.categoria ?? '—'}</TableCell>
-                          <TableCell className="text-xs text-gray-500">{bod?.nombre ?? '—'}</TableCell>
+                          <TableCell className="font-mono text-xs font-semibold">{prod?.codigo ?? '--'}</TableCell>
+                          <TableCell className="font-medium">{prod?.nombre ?? '--'}</TableCell>
+                          <TableCell className="text-xs text-gray-500">{prod?.categoria ?? '--'}</TableCell>
+                          <TableCell className="text-xs text-gray-500">{bod?.nombre ?? '--'}</TableCell>
                           <TableCell className={cn('text-right font-semibold', bajo && 'text-red-600')}>
                             {s.cantidad?.toLocaleString('es-CL') ?? 0}
                           </TableCell>
-                          <TableCell className="text-xs text-gray-500">{prod?.unidad_medida ?? '—'}</TableCell>
+                          <TableCell className="text-xs text-gray-500">{prod?.unidad_medida ?? '--'}</TableCell>
                           <TableCell className="text-right">{formatCLP(s.costo_promedio ?? 0)}</TableCell>
                           <TableCell className="text-right font-medium">
                             {formatCLP(s.valor_total ?? 0)}
@@ -331,8 +382,8 @@ export default function InventarioPage() {
                     <div key={s.id} className="rounded-lg border border-gray-100 p-3">
                       <div className="flex items-start justify-between">
                         <div>
-                          <p className="text-sm font-semibold text-gray-900">{prod?.nombre ?? '—'}</p>
-                          <p className="font-mono text-xs text-gray-400">{prod?.codigo ?? '—'}</p>
+                          <p className="text-sm font-semibold text-gray-900">{prod?.nombre ?? '--'}</p>
+                          <p className="font-mono text-xs text-gray-400">{prod?.codigo ?? '--'}</p>
                         </div>
                         {bajo ? (
                           <span className="inline-flex h-3 w-3 rounded-full bg-red-500" />
@@ -341,13 +392,13 @@ export default function InventarioPage() {
                         )}
                       </div>
                       <div className="mt-2 flex justify-between text-xs text-gray-500">
-                        <span>{s.bodega?.nombre ?? '—'}</span>
+                        <span>{s.bodega?.nombre ?? '--'}</span>
                         <span className={cn('font-semibold', bajo ? 'text-red-600' : 'text-gray-900')}>
                           {s.cantidad?.toLocaleString('es-CL') ?? 0} {prod?.unidad_medida ?? ''}
                         </span>
                       </div>
                       <div className="mt-1 flex justify-between text-xs text-gray-400">
-                        <span>{prod?.categoria ?? '—'}</span>
+                        <span>{prod?.categoria ?? '--'}</span>
                         <span>{formatCLP(s.valor_total ?? 0)}</span>
                       </div>
                     </div>
@@ -435,7 +486,7 @@ export default function InventarioPage() {
                       <TableRow key={m.id}>
                         <TableCell className="whitespace-nowrap text-xs">{formatDate(m.created_at)}</TableCell>
                         <TableCell>{getMovimientoBadge(m.tipo)}</TableCell>
-                        <TableCell className="font-medium">{m.producto?.nombre ?? '—'}</TableCell>
+                        <TableCell className="font-medium">{m.producto?.nombre ?? '--'}</TableCell>
                         <TableCell className="text-right">
                           {m.cantidad > 0 ? '+' : ''}{m.cantidad?.toLocaleString('es-CL') ?? 0} {m.producto?.unidad_medida ?? ''}
                         </TableCell>
@@ -452,7 +503,7 @@ export default function InventarioPage() {
                             <span className="text-xs text-gray-400">--</span>
                           )}
                         </TableCell>
-                        <TableCell className="text-xs text-gray-500">{m.bodega?.nombre ?? '—'}</TableCell>
+                        <TableCell className="text-xs text-gray-500">{m.bodega?.nombre ?? '--'}</TableCell>
                       </TableRow>
                     ))}
                     {(movimientosData ?? []).length === 0 && (
@@ -476,7 +527,7 @@ export default function InventarioPage() {
                       </div>
                       <span className="text-xs text-gray-400">{formatDate(m.created_at)}</span>
                     </div>
-                    <p className="mt-2 text-sm font-medium">{m.producto?.nombre ?? '—'}</p>
+                    <p className="mt-2 text-sm font-medium">{m.producto?.nombre ?? '--'}</p>
                     <div className="mt-1 flex justify-between text-xs text-gray-500">
                       <span>{m.cantidad > 0 ? '+' : ''}{m.cantidad ?? 0} {m.producto?.unidad_medida ?? ''}</span>
                       <span className="font-semibold text-gray-900">{formatCLP(Math.abs(m.costo_total ?? 0))}</span>
@@ -491,6 +542,172 @@ export default function InventarioPage() {
                     No hay movimientos registrados
                   </div>
                 )}
+              </div>
+            </Card>
+          )}
+        </>
+      )}
+
+      {/* Alertas Tab */}
+      {activeTab === 'alertas' && (
+        <>
+          {/* Summary card */}
+          <Card>
+            <CardContent className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center gap-4">
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-red-50">
+                  <AlertTriangle className="h-6 w-6 text-red-600" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-500">
+                    {alertasList.length} producto{alertasList.length !== 1 ? 's' : ''} bajo minimo
+                  </p>
+                  <p className="text-lg font-bold text-gray-900">
+                    Inversion estimada: {formatCLP(inversionEstimada)}
+                  </p>
+                </div>
+              </div>
+              {alertasList.length > 0 && (
+                <Button
+                  variant="outline"
+                  onClick={() => exportAlertasCSV(alertasList)}
+                >
+                  <Download className="mr-2 h-4 w-4" />
+                  Exportar Lista de Compra
+                </Button>
+              )}
+            </CardContent>
+          </Card>
+
+          {loadingAlertas && (
+            <div className="flex justify-center py-16">
+              <Spinner size="lg" className="text-pillado-green-600" />
+            </div>
+          )}
+
+          {!loadingAlertas && alertasList.length === 0 && (
+            <Card>
+              <CardContent className="flex flex-col items-center justify-center py-16 text-center">
+                <CheckCircle2 className="mb-4 h-12 w-12 text-green-300" />
+                <p className="text-lg font-medium text-gray-500">Todo en orden</p>
+                <p className="mt-1 text-sm text-gray-400">No hay productos bajo el stock minimo</p>
+              </CardContent>
+            </Card>
+          )}
+
+          {!loadingAlertas && alertasList.length > 0 && (
+            <Card>
+              {/* Desktop table */}
+              <div className="hidden md:block">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Codigo</TableHead>
+                      <TableHead>Producto</TableHead>
+                      <TableHead className="text-right">Stock Actual</TableHead>
+                      <TableHead className="text-right">Stock Min</TableHead>
+                      <TableHead className="text-right">Stock Max</TableHead>
+                      <TableHead className="text-right">Cant. a Comprar</TableHead>
+                      <TableHead className="text-right">Costo Unit.</TableHead>
+                      <TableHead className="text-right">Costo Total Est.</TableHead>
+                      <TableHead>Nivel</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {alertasList.map((item: any) => {
+                      const prod = item.producto
+                      const stockMin = prod?.stock_minimo ?? 0
+                      const stockMax = prod?.stock_maximo ?? 0
+                      const cantidadComprar = Math.max(0, stockMax - item.cantidad)
+                      const costoUnit = item.costo_promedio ?? 0
+                      const costoTotal = cantidadComprar * costoUnit
+                      // How far below minimum: 0 = at minimum, 1 = at zero
+                      const deficit = stockMin > 0 ? Math.min(1, Math.max(0, (stockMin - item.cantidad) / stockMin)) : 0
+
+                      return (
+                        <TableRow key={item.id}>
+                          <TableCell className="font-mono text-xs font-semibold">
+                            {prod?.codigo ?? '--'}
+                          </TableCell>
+                          <TableCell className="font-medium">{prod?.nombre ?? '--'}</TableCell>
+                          <TableCell className="text-right font-semibold text-red-600">
+                            {item.cantidad?.toLocaleString('es-CL') ?? 0}
+                          </TableCell>
+                          <TableCell className="text-right text-gray-500">
+                            {stockMin.toLocaleString('es-CL')}
+                          </TableCell>
+                          <TableCell className="text-right text-gray-500">
+                            {stockMax.toLocaleString('es-CL')}
+                          </TableCell>
+                          <TableCell className="text-right font-semibold text-amber-600">
+                            {cantidadComprar.toLocaleString('es-CL')}
+                          </TableCell>
+                          <TableCell className="text-right">{formatCLP(costoUnit)}</TableCell>
+                          <TableCell className="text-right font-medium">{formatCLP(costoTotal)}</TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <div className="h-2 w-16 overflow-hidden rounded-full bg-gray-200">
+                                <div
+                                  className={cn(
+                                    'h-full rounded-full transition-all',
+                                    deficit > 0.7 ? 'bg-red-500' : deficit > 0.4 ? 'bg-orange-400' : 'bg-yellow-400'
+                                  )}
+                                  style={{ width: `${deficit * 100}%` }}
+                                />
+                              </div>
+                              <span className="text-xs text-gray-400">
+                                {Math.round(deficit * 100)}%
+                              </span>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {/* Mobile alertas */}
+              <div className="space-y-2 p-4 md:hidden">
+                {alertasList.map((item: any) => {
+                  const prod = item.producto
+                  const stockMin = prod?.stock_minimo ?? 0
+                  const stockMax = prod?.stock_maximo ?? 0
+                  const cantidadComprar = Math.max(0, stockMax - item.cantidad)
+                  const costoUnit = item.costo_promedio ?? 0
+                  const costoTotal = cantidadComprar * costoUnit
+                  const deficit = stockMin > 0 ? Math.min(1, Math.max(0, (stockMin - item.cantidad) / stockMin)) : 0
+
+                  return (
+                    <div key={item.id} className="rounded-lg border border-red-100 bg-red-50/30 p-3">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <p className="text-sm font-semibold text-gray-900">{prod?.nombre ?? '--'}</p>
+                          <p className="font-mono text-xs text-gray-400">{prod?.codigo ?? '--'}</p>
+                        </div>
+                        <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700">
+                          {item.cantidad?.toLocaleString('es-CL') ?? 0} / {stockMin.toLocaleString('es-CL')}
+                        </span>
+                      </div>
+                      {/* Progress bar */}
+                      <div className="mt-2">
+                        <div className="h-2 w-full overflow-hidden rounded-full bg-gray-200">
+                          <div
+                            className={cn(
+                              'h-full rounded-full',
+                              deficit > 0.7 ? 'bg-red-500' : deficit > 0.4 ? 'bg-orange-400' : 'bg-yellow-400'
+                            )}
+                            style={{ width: `${deficit * 100}%` }}
+                          />
+                        </div>
+                      </div>
+                      <div className="mt-2 flex justify-between text-xs text-gray-500">
+                        <span>Comprar: <span className="font-semibold text-amber-600">{cantidadComprar.toLocaleString('es-CL')}</span></span>
+                        <span className="font-semibold text-gray-900">{formatCLP(costoTotal)}</span>
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
             </Card>
           )}
@@ -526,3 +743,4 @@ export default function InventarioPage() {
     </div>
   )
 }
+

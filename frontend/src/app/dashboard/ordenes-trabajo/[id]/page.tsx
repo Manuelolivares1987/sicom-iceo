@@ -18,6 +18,10 @@ import {
   Package,
   History,
   AlertTriangle,
+  DollarSign,
+  Plus,
+  Search,
+  Loader2,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -46,6 +50,8 @@ import {
   useUpdateChecklistItem,
   useAddEvidencia,
 } from '@/hooks/use-ordenes-trabajo'
+import { useStockBodega, useBodegas, useRegistrarSalida } from '@/hooks/use-inventario'
+import { supabase } from '@/lib/supabase'
 import { OTInfoHeader } from '@/components/ot/ot-info-header'
 import { OTActionBar } from '@/components/ot/ot-action-bar'
 import { isImmutableState, isAwaitingClosure } from '@/domain/ot/transitions'
@@ -57,6 +63,7 @@ const tabs = [
   { id: 'checklist', label: 'Checklist', icon: ClipboardList },
   { id: 'evidencias', label: 'Evidencias', icon: ImageIcon },
   { id: 'materiales', label: 'Materiales', icon: Package },
+  { id: 'valorizacion', label: 'Costos', icon: DollarSign },
   { id: 'historial', label: 'Historial', icon: History },
 ]
 
@@ -158,6 +165,35 @@ function ChecklistTab({ otId, disabled, userId }: { otId: string; disabled?: boo
   const { data: items, isLoading } = useChecklistOT(otId)
   const updateItem = useUpdateChecklistItem()
   const [observations, setObservations] = useState<Record<string, string>>({})
+  const [uploadingItemId, setUploadingItemId] = useState<string | null>(null)
+  const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({})
+
+  async function handleChecklistPhoto(itemId: string, file: File) {
+    setUploadingItemId(itemId)
+    try {
+      const fileExt = file.name.split('.').pop()
+      const filePath = `${otId}/checklist/${itemId}_${Date.now()}.${fileExt}`
+      const { error: uploadError } = await supabase.storage
+        .from('evidencias-ot')
+        .upload(filePath, file)
+      if (uploadError) throw uploadError
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('evidencias-ot')
+        .getPublicUrl(filePath)
+
+      updateItem.mutate({
+        otId,
+        itemId,
+        foto_url: publicUrl,
+        completado_por: userId || undefined,
+      })
+    } catch {
+      // silently fail — user can retry
+    } finally {
+      setUploadingItemId(null)
+    }
+  }
 
   if (isLoading) {
     return (
@@ -223,6 +259,19 @@ function ChecklistTab({ otId, disabled, userId }: { otId: string; disabled?: boo
                 }}
               />
             </div>
+
+            {/* Foto thumbnail */}
+            {item.foto_url && (
+              <div className="mt-2">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={item.foto_url}
+                  alt={`Foto checklist ${idx + 1}`}
+                  className="h-20 w-20 rounded-lg border border-gray-200 object-cover"
+                />
+              </div>
+            )}
+
             <div className="mt-3 flex gap-2">
               <input
                 type="text"
@@ -246,11 +295,32 @@ function ChecklistTab({ otId, disabled, userId }: { otId: string; disabled?: boo
               />
               <button
                 type="button"
-                disabled={disabled}
-                className="flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 text-gray-400 hover:bg-gray-50 disabled:opacity-50"
+                disabled={disabled || uploadingItemId === item.id}
+                onClick={() => fileInputRefs.current[item.id]?.click()}
+                className={`flex h-10 w-10 items-center justify-center rounded-lg border transition-colors disabled:opacity-50 ${
+                  item.foto_url
+                    ? 'border-green-300 bg-green-50 text-green-600'
+                    : 'border-gray-200 text-gray-500 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-300'
+                }`}
               >
-                <Camera className="h-4 w-4" />
+                {uploadingItemId === item.id ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Camera className="h-4 w-4" />
+                )}
               </button>
+              <input
+                ref={(el) => { fileInputRefs.current[item.id] = el }}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0]
+                  if (file) handleChecklistPhoto(item.id, file)
+                  e.target.value = ''
+                }}
+              />
             </div>
           </CardContent>
         </Card>
@@ -472,8 +542,66 @@ function EvidenciasTab({ otId, disabled }: { otId: string; disabled?: boolean })
   )
 }
 
-function MaterialesTab({ otId }: { otId: string }) {
+function MaterialesTab({ otId, faenaId, activoId, disabled, userId }: { otId: string; faenaId?: string; activoId?: string; disabled?: boolean; userId?: string }) {
   const { data: materiales, isLoading } = useMaterialesOT(otId)
+  const { data: bodegas } = useBodegas(faenaId)
+  const [selectedBodega, setSelectedBodega] = useState('')
+  const { data: stockData } = useStockBodega(selectedBodega ? { bodega_id: selectedBodega } : undefined)
+  const registrarSalida = useRegistrarSalida()
+
+  const [showForm, setShowForm] = useState(false)
+  const [selectedProducto, setSelectedProducto] = useState<any>(null)
+  const [cantidad, setCantidad] = useState('')
+  const [searchTerm, setSearchTerm] = useState('')
+  const [formError, setFormError] = useState<string | null>(null)
+  const [formSuccess, setFormSuccess] = useState(false)
+
+  // Auto-select first bodega
+  const bodegasList = (bodegas ?? []) as any[]
+  if (bodegasList.length > 0 && !selectedBodega) {
+    setSelectedBodega(bodegasList[0].id)
+  }
+
+  const stockItems = (stockData ?? []) as any[]
+  const filteredStock = searchTerm
+    ? stockItems.filter((s: any) =>
+        (s.producto?.nombre || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (s.producto?.codigo || '').toLowerCase().includes(searchTerm.toLowerCase())
+      )
+    : stockItems
+
+  function handleRegistrarConsumo() {
+    if (!selectedProducto) { setFormError('Seleccione un producto'); return }
+    const qty = parseFloat(cantidad)
+    if (!qty || qty <= 0) { setFormError('Ingrese una cantidad válida'); return }
+    if (qty > (selectedProducto.cantidad ?? 0)) { setFormError('Stock insuficiente'); return }
+    if (!userId) { setFormError('Usuario no identificado'); return }
+
+    setFormError(null)
+    registrarSalida.mutate(
+      {
+        bodega_id: selectedBodega,
+        producto_id: selectedProducto.producto_id || selectedProducto.producto?.id,
+        cantidad: qty,
+        ot_id: otId,
+        activo_id: activoId || null,
+        usuario_id: userId,
+        motivo: 'Consumo en OT',
+      },
+      {
+        onSuccess: () => {
+          setFormSuccess(true)
+          setSelectedProducto(null)
+          setCantidad('')
+          setSearchTerm('')
+          setTimeout(() => setFormSuccess(false), 3000)
+        },
+        onError: (err: any) => {
+          setFormError(err?.message || 'Error al registrar consumo')
+        },
+      }
+    )
+  }
 
   if (isLoading) {
     return (
@@ -484,87 +612,323 @@ function MaterialesTab({ otId }: { otId: string }) {
   }
 
   const items = (materiales ?? []) as any[]
-
-  if (items.length === 0) {
-    return (
-      <div className="py-8 text-center">
-        <Package className="mx-auto h-10 w-10 text-gray-300 mb-2" />
-        <p className="text-gray-400">No se han registrado materiales en esta OT</p>
-      </div>
-    )
-  }
-
   const total = items.reduce((s: number, m: any) => s + (m.costo_total ?? m.cantidad * m.costo_unitario), 0)
 
   return (
     <div>
+      {/* Formulario de registro de materiales */}
+      {!disabled && (
+        <div className="mb-6">
+          {!showForm ? (
+            <Button variant="primary" className="w-full sm:w-auto" onClick={() => setShowForm(true)}>
+              <Plus className="h-4 w-4" />
+              Registrar Consumo de Material
+            </Button>
+          ) : (
+            <Card>
+              <CardContent className="space-y-3 p-4">
+                <h4 className="text-sm font-semibold text-gray-700">Registrar Consumo</h4>
+                {bodegasList.length > 1 && (
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-gray-500">Bodega</label>
+                    <select
+                      value={selectedBodega}
+                      onChange={(e) => { setSelectedBodega(e.target.value); setSelectedProducto(null) }}
+                      className="h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm"
+                    >
+                      {bodegasList.map((b: any) => (
+                        <option key={b.id} value={b.id}>{b.nombre}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-gray-500">Producto</label>
+                  {selectedProducto ? (
+                    <div className="flex items-center justify-between rounded-lg border border-green-300 bg-green-50 px-3 py-2">
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">{selectedProducto.producto?.nombre}</p>
+                        <p className="text-xs text-gray-500">
+                          Stock: {selectedProducto.cantidad} {selectedProducto.producto?.unidad_medida} | Costo: {formatCLP(selectedProducto.costo_promedio ?? selectedProducto.producto?.costo_unitario_actual ?? 0)}
+                        </p>
+                      </div>
+                      <button onClick={() => { setSelectedProducto(null); setSearchTerm('') }} className="text-gray-400 hover:text-gray-600">
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                        <input
+                          type="text"
+                          value={searchTerm}
+                          onChange={(e) => setSearchTerm(e.target.value)}
+                          placeholder="Buscar por nombre o código..."
+                          className="h-10 w-full rounded-lg border border-gray-300 pl-10 pr-3 text-sm"
+                        />
+                      </div>
+                      {searchTerm && filteredStock.length > 0 && (
+                        <div className="max-h-40 overflow-y-auto rounded-lg border border-gray-200 bg-white">
+                          {filteredStock.slice(0, 8).map((s: any) => (
+                            <button
+                              key={s.id || `${s.producto_id}-${s.bodega_id}`}
+                              type="button"
+                              onClick={() => { setSelectedProducto(s); setSearchTerm('') }}
+                              className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-gray-50"
+                            >
+                              <span className="font-medium">{s.producto?.nombre}</span>
+                              <span className="text-xs text-gray-500">{s.cantidad} {s.producto?.unidad_medida}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      {searchTerm && filteredStock.length === 0 && (
+                        <p className="text-xs text-gray-400">Sin resultados</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-gray-500">Cantidad</label>
+                  <input
+                    type="number"
+                    value={cantidad}
+                    onChange={(e) => setCantidad(e.target.value)}
+                    min="0.01"
+                    step="0.01"
+                    max={selectedProducto?.cantidad ?? undefined}
+                    placeholder={selectedProducto ? `Máx: ${selectedProducto.cantidad}` : 'Cantidad'}
+                    className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm"
+                  />
+                </div>
+                {formError && (
+                  <div className="flex items-center gap-2 rounded-lg bg-red-50 p-2 text-xs text-red-700">
+                    <XCircle className="h-3.5 w-3.5" /> {formError}
+                  </div>
+                )}
+                {formSuccess && (
+                  <div className="flex items-center gap-2 rounded-lg bg-green-50 p-2 text-xs text-green-700">
+                    <CheckCircle2 className="h-3.5 w-3.5" /> Material registrado correctamente
+                  </div>
+                )}
+                <div className="flex gap-2">
+                  <Button
+                    variant="primary"
+                    onClick={handleRegistrarConsumo}
+                    disabled={registrarSalida.isPending || !selectedProducto || !cantidad}
+                  >
+                    {registrarSalida.isPending ? <Spinner size="sm" className="mr-1" /> : <Plus className="h-4 w-4 mr-1" />}
+                    Registrar
+                  </Button>
+                  <Button variant="secondary" onClick={() => { setShowForm(false); setFormError(null) }}>
+                    Cancelar
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
+
       {/* Resumen de Costos */}
-      <div className="mb-4 rounded-lg bg-gray-50 border border-gray-200 p-4 flex items-center justify-between">
-        <div>
-          <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Resumen de Costos</p>
-          <p className="text-sm text-gray-700 mt-1">{items.length} material{items.length !== 1 ? 'es' : ''} consumido{items.length !== 1 ? 's' : ''}</p>
-        </div>
-        <div className="text-right">
-          <p className="text-xs text-gray-500">Costo Total</p>
-          <p className="text-lg font-bold text-gray-900">{formatCLP(total)}</p>
-        </div>
-      </div>
+      {items.length > 0 && (
+        <>
+          <div className="mb-4 rounded-lg bg-gray-50 border border-gray-200 p-4 flex items-center justify-between">
+            <div>
+              <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Resumen de Costos</p>
+              <p className="text-sm text-gray-700 mt-1">{items.length} material{items.length !== 1 ? 'es' : ''} consumido{items.length !== 1 ? 's' : ''}</p>
+            </div>
+            <div className="text-right">
+              <p className="text-xs text-gray-500">Costo Total</p>
+              <p className="text-lg font-bold text-gray-900">{formatCLP(total)}</p>
+            </div>
+          </div>
 
-      {/* Desktop */}
-      <div className="hidden sm:block">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Producto</TableHead>
-              <TableHead className="text-center">Cantidad</TableHead>
-              <TableHead className="text-right">Costo Unit.</TableHead>
-              <TableHead className="text-right">Costo Total</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
+          {/* Desktop */}
+          <div className="hidden sm:block">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Producto</TableHead>
+                  <TableHead className="text-center">Cantidad</TableHead>
+                  <TableHead className="text-right">Costo Unit.</TableHead>
+                  <TableHead className="text-right">Costo Total</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {items.map((m: any) => (
+                  <TableRow key={m.id}>
+                    <TableCell className="font-medium">
+                      {m.producto?.nombre || m.producto_id}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      {m.cantidad} {m.producto?.unidad_medida || ''}
+                    </TableCell>
+                    <TableCell className="text-right">{formatCLP(m.costo_unitario)}</TableCell>
+                    <TableCell className="text-right font-medium">
+                      {formatCLP(m.costo_total ?? m.cantidad * m.costo_unitario)}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+
+          {/* Mobile */}
+          <div className="space-y-2 sm:hidden">
             {items.map((m: any) => (
-              <TableRow key={m.id}>
-                <TableCell className="font-medium">
-                  {m.producto?.nombre || m.producto_id}
-                </TableCell>
-                <TableCell className="text-center">
-                  {m.cantidad} {m.producto?.unidad_medida || ''}
-                </TableCell>
-                <TableCell className="text-right">{formatCLP(m.costo_unitario)}</TableCell>
-                <TableCell className="text-right font-medium">
-                  {formatCLP(m.costo_total ?? m.cantidad * m.costo_unitario)}
-                </TableCell>
-              </TableRow>
+              <Card key={m.id}>
+                <CardContent className="p-3">
+                  <p className="text-sm font-medium">{m.producto?.nombre || m.producto_id}</p>
+                  <div className="mt-1 flex justify-between text-xs text-gray-500">
+                    <span>
+                      {m.cantidad} {m.producto?.unidad_medida || ''} x {formatCLP(m.costo_unitario)}
+                    </span>
+                    <span className="font-semibold text-gray-900">
+                      {formatCLP(m.costo_total ?? m.cantidad * m.costo_unitario)}
+                    </span>
+                  </div>
+                </CardContent>
+              </Card>
             ))}
-          </TableBody>
-        </Table>
+          </div>
+
+          <div className="mt-4 flex justify-end border-t border-gray-200 pt-4">
+            <div className="text-right">
+              <p className="text-sm text-gray-500">Total Materiales</p>
+              <p className="text-xl font-bold text-gray-900">{formatCLP(total)}</p>
+            </div>
+          </div>
+        </>
+      )}
+
+      {items.length === 0 && !showForm && (
+        <div className="py-8 text-center">
+          <Package className="mx-auto h-10 w-10 text-gray-300 mb-2" />
+          <p className="text-gray-400">No se han registrado materiales en esta OT</p>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ValorizacionTab({ ot, otId, userId, disabled }: { ot: any; otId: string; userId: string; disabled?: boolean }) {
+  const { data: materialesData } = useMaterialesOT(otId)
+  const [horasHombre, setHorasHombre] = useState(String(ot.horas_hombre ?? ''))
+  const [tarifaHora, setTarifaHora] = useState(String(ot.tarifa_hora ?? ''))
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+
+  const materiales = (materialesData ?? []) as any[]
+  const costoMateriales = materiales.reduce((s: number, m: any) => s + (m.costo_total ?? m.cantidad * m.costo_unitario), 0)
+  const hh = parseFloat(horasHombre) || 0
+  const th = parseFloat(tarifaHora) || 0
+  const costoManoObra = hh * th
+  const costoTotal = costoMateriales + costoManoObra
+
+  async function handleSaveCostos() {
+    setSaving(true)
+    try {
+      await supabase
+        .from('ordenes_trabajo')
+        .update({
+          horas_hombre: hh,
+          tarifa_hora: th,
+          costo_mano_obra: costoManoObra,
+        })
+        .eq('id', otId)
+      setSaved(true)
+      setTimeout(() => setSaved(false), 3000)
+    } catch {
+      // silently fail
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Resumen general */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <div className="rounded-xl bg-blue-50 border border-blue-200 p-4 text-center">
+          <p className="text-xs font-medium text-blue-600 uppercase tracking-wider">Materiales</p>
+          <p className="mt-1 text-2xl font-bold text-blue-700">{formatCLP(costoMateriales)}</p>
+          <p className="text-xs text-blue-500">{materiales.length} item{materiales.length !== 1 ? 's' : ''}</p>
+        </div>
+        <div className="rounded-xl bg-purple-50 border border-purple-200 p-4 text-center">
+          <p className="text-xs font-medium text-purple-600 uppercase tracking-wider">Mano de Obra</p>
+          <p className="mt-1 text-2xl font-bold text-purple-700">{formatCLP(costoManoObra)}</p>
+          <p className="text-xs text-purple-500">{hh} hrs x {formatCLP(th)}/hr</p>
+        </div>
+        <div className="rounded-xl bg-green-50 border border-green-200 p-4 text-center">
+          <p className="text-xs font-medium text-green-600 uppercase tracking-wider">Costo Total</p>
+          <p className="mt-1 text-2xl font-bold text-green-700">{formatCLP(costoTotal)}</p>
+        </div>
       </div>
 
-      {/* Mobile */}
-      <div className="space-y-2 sm:hidden">
-        {items.map((m: any) => (
-          <Card key={m.id}>
-            <CardContent className="p-3">
-              <p className="text-sm font-medium">{m.producto?.nombre || m.producto_id}</p>
-              <div className="mt-1 flex justify-between text-xs text-gray-500">
-                <span>
-                  {m.cantidad} {m.producto?.unidad_medida || ''} x {formatCLP(m.costo_unitario)}
+      {/* Editar costos mano de obra */}
+      {!disabled && (
+        <Card>
+          <CardContent className="space-y-3 p-4">
+            <h4 className="text-sm font-semibold text-gray-700">Costos de Mano de Obra</h4>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-500">Horas Hombre</label>
+                <input
+                  type="number"
+                  value={horasHombre}
+                  onChange={(e) => setHorasHombre(e.target.value)}
+                  min="0"
+                  step="0.5"
+                  placeholder="0"
+                  className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-500">Tarifa/Hora (CLP)</label>
+                <input
+                  type="number"
+                  value={tarifaHora}
+                  onChange={(e) => setTarifaHora(e.target.value)}
+                  min="0"
+                  step="100"
+                  placeholder="0"
+                  className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm"
+                />
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <Button variant="primary" onClick={handleSaveCostos} disabled={saving}>
+                {saving ? <Spinner size="sm" className="mr-1" /> : <DollarSign className="h-4 w-4 mr-1" />}
+                Guardar Costos
+              </Button>
+              {saved && (
+                <span className="flex items-center gap-1 text-xs text-green-600">
+                  <CheckCircle2 className="h-3.5 w-3.5" /> Guardado
                 </span>
-                <span className="font-semibold text-gray-900">
-                  {formatCLP(m.costo_total ?? m.cantidad * m.costo_unitario)}
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Desglose de materiales */}
+      {materiales.length > 0 && (
+        <div>
+          <h4 className="mb-2 text-sm font-semibold text-gray-700">Desglose de Materiales</h4>
+          <div className="space-y-1">
+            {materiales.map((m: any) => (
+              <div key={m.id} className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2 text-sm">
+                <span>{m.producto?.nombre || m.producto_id}</span>
+                <span className="font-medium">
+                  {m.cantidad} {m.producto?.unidad_medida} x {formatCLP(m.costo_unitario)} = {formatCLP(m.costo_total ?? m.cantidad * m.costo_unitario)}
                 </span>
               </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      <div className="mt-4 flex justify-end border-t border-gray-200 pt-4">
-        <div className="text-right">
-          <p className="text-sm text-gray-500">Total Materiales</p>
-          <p className="text-xl font-bold text-gray-900">{formatCLP(total)}</p>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   )
 }
@@ -748,7 +1112,8 @@ export default function OrdenTrabajoDetailPage() {
         <CardContent className="p-4 sm:p-6">
           {activeTab === 'checklist' && id && <ChecklistTab otId={id} disabled={isOTClosed} userId={userId} />}
           {activeTab === 'evidencias' && id && <EvidenciasTab otId={id} disabled={isOTClosed} />}
-          {activeTab === 'materiales' && id && <MaterialesTab otId={id} />}
+          {activeTab === 'materiales' && id && <MaterialesTab otId={id} faenaId={otData.faena_id} activoId={otData.activo_id} disabled={isOTClosed || otData.estado !== 'en_ejecucion'} userId={userId} />}
+          {activeTab === 'valorizacion' && id && <ValorizacionTab ot={otData} otId={id} userId={userId} disabled={isOTClosed} />}
           {activeTab === 'historial' && id && <HistorialTab otId={id} />}
         </CardContent>
       </Card>

@@ -43,6 +43,73 @@ export async function getAbastecimientos(rutaId?: string) {
   return { data, error }
 }
 
+export async function createRutaDespacho(data: {
+  faena_id: string
+  fecha_programada: string
+  puntos_programados?: number
+  km_programados?: number
+}) {
+  const { data: result, error } = await supabase
+    .from('rutas_despacho')
+    .insert({
+      ...data,
+      estado: 'programada',
+      puntos_completados: 0,
+      km_reales: 0,
+      litros_despachados: 0,
+    })
+    .select(`
+      *,
+      faena:faenas(nombre),
+      activo:activos(codigo, nombre, tipo),
+      operador:usuarios_perfil(nombre_completo),
+      ot:ordenes_trabajo(folio)
+    `)
+    .single()
+
+  return { data: result, error }
+}
+
+export async function updateRutaEstado(id: string, estado: string) {
+  const { data, error } = await supabase
+    .from('rutas_despacho')
+    .update({ estado })
+    .eq('id', id)
+    .select(`
+      *,
+      faena:faenas(nombre),
+      activo:activos(codigo, nombre, tipo),
+      operador:usuarios_perfil(nombre_completo),
+      ot:ordenes_trabajo(folio)
+    `)
+    .single()
+
+  return { data, error }
+}
+
+export async function createAbastecimiento(data: {
+  ruta_despacho_id?: string
+  producto_id: string
+  cantidad_programada?: number
+  cantidad_real?: number
+}) {
+  const { data: result, error } = await supabase
+    .from('abastecimientos')
+    .insert({
+      ...data,
+      fecha_hora: new Date().toISOString(),
+    })
+    .select(`
+      *,
+      producto:productos(nombre, unidad_medida),
+      operador:usuarios_perfil(nombre_completo),
+      ot:ordenes_trabajo(folio)
+    `)
+    .single()
+
+  return { data: result, error }
+}
+
 export async function getRutaStats(faenaId?: string) {
   let query = supabase
     .from('rutas_despacho')

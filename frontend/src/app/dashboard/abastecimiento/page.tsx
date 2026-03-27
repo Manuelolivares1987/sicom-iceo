@@ -2,14 +2,15 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { useQuery } from '@tanstack/react-query'
-import { Fuel, Truck, MapPin, Calendar, ChevronDown } from 'lucide-react'
+import { Fuel, Truck, MapPin, Calendar, ChevronDown, Plus } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
 import { EmptyState } from '@/components/ui/empty-state'
 import { StatCard } from '@/components/ui/stat-card'
 import { Input } from '@/components/ui/input'
+import { Modal, ModalFooter } from '@/components/ui/modal'
 import {
   Table,
   TableHeader,
@@ -19,8 +20,16 @@ import {
   TableCell,
 } from '@/components/ui/table'
 import { formatDate, formatDateTime } from '@/lib/utils'
-import { getRutasDespacho, getAbastecimientos, getRutaStats } from '@/lib/services/abastecimiento'
 import { getFaenas } from '@/lib/services/faenas'
+import { getProductos } from '@/lib/services/inventario'
+import {
+  useRutasDespacho,
+  useAbastecimientos,
+  useRutaStats,
+  useCreateRuta,
+  useUpdateRutaEstado,
+  useCreateAbastecimiento,
+} from '@/hooks/use-abastecimiento'
 
 // ---------------------------------------------------------------------------
 // Filter options
@@ -28,9 +37,22 @@ import { getFaenas } from '@/lib/services/faenas'
 const estadoOptions = [
   { value: '', label: 'Todos' },
   { value: 'programada', label: 'Programada' },
+  { value: 'en_ejecucion', label: 'En Ejecucion' },
   { value: 'completada', label: 'Completada' },
   { value: 'incompleta', label: 'Incompleta' },
 ]
+
+const estadoTransitions: Record<string, { value: string; label: string }[]> = {
+  programada: [
+    { value: 'en_ejecucion', label: 'En Ejecucion' },
+  ],
+  en_ejecucion: [
+    { value: 'completada', label: 'Completada' },
+    { value: 'incompleta', label: 'Incompleta' },
+  ],
+  completada: [],
+  incompleta: [],
+}
 
 // ---------------------------------------------------------------------------
 // Select helper (inline, same pattern as OT page)
@@ -73,6 +95,7 @@ function Select({
 function getEstadoBadge(estado: string) {
   const config: Record<string, { variant: string; label: string }> = {
     programada: { variant: 'bg-blue-100 text-blue-700', label: 'Programada' },
+    en_ejecucion: { variant: 'bg-yellow-100 text-yellow-700', label: 'En Ejecucion' },
     completada: { variant: 'bg-green-100 text-green-700', label: 'Completada' },
     incompleta: { variant: 'bg-red-100 text-red-700', label: 'Incompleta' },
   }
@@ -81,9 +104,64 @@ function getEstadoBadge(estado: string) {
 }
 
 // ---------------------------------------------------------------------------
+// Estado change dropdown (inline)
+// ---------------------------------------------------------------------------
+function EstadoDropdown({
+  estado,
+  rutaId,
+  onUpdate,
+  loading,
+}: {
+  estado: string
+  rutaId: string
+  onUpdate: (id: string, estado: string) => void
+  loading: boolean
+}) {
+  const transitions = estadoTransitions[estado] || []
+
+  if (transitions.length === 0) {
+    return getEstadoBadge(estado)
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      {getEstadoBadge(estado)}
+      <div className="relative">
+        <select
+          disabled={loading}
+          value=""
+          onChange={(e) => {
+            if (e.target.value) onUpdate(rutaId, e.target.value)
+          }}
+          className="h-7 appearance-none rounded border border-gray-300 bg-white px-2 pr-6 text-xs text-gray-600 focus:border-pillado-green-500 focus:outline-none disabled:opacity-50"
+        >
+          <option value="">Cambiar...</option>
+          {transitions.map((t) => (
+            <option key={t.value} value={t.value}>
+              {t.label}
+            </option>
+          ))}
+        </select>
+        <ChevronDown className="pointer-events-none absolute right-1 top-1/2 h-3 w-3 -translate-y-1/2 text-gray-400" />
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Ruta mobile card
 // ---------------------------------------------------------------------------
-function RutaMobileCard({ ruta }: { ruta: any }) {
+function RutaMobileCard({
+  ruta,
+  onUpdateEstado,
+  updatingEstado,
+  onAddAbastecimiento,
+}: {
+  ruta: any
+  onUpdateEstado: (id: string, estado: string) => void
+  updatingEstado: boolean
+  onAddAbastecimiento: (rutaId: string) => void
+}) {
   const progress = ruta.puntos_programados
     ? Math.round((ruta.puntos_completados || 0) / ruta.puntos_programados * 100)
     : 0
@@ -98,7 +176,12 @@ function RutaMobileCard({ ruta }: { ruta: any }) {
             </p>
             <p className="text-xs text-gray-500">{ruta.faena?.nombre || '—'}</p>
           </div>
-          {getEstadoBadge(ruta.estado)}
+          <EstadoDropdown
+            estado={ruta.estado}
+            rutaId={ruta.id}
+            onUpdate={onUpdateEstado}
+            loading={updatingEstado}
+          />
         </div>
         <div className="mt-3 grid grid-cols-2 gap-y-1 text-xs text-gray-600">
           <span>Activo: {ruta.activo?.nombre || ruta.activo?.codigo || '—'}</span>
@@ -111,6 +194,16 @@ function RutaMobileCard({ ruta }: { ruta: any }) {
               OT: {ruta.ot.folio}
             </Link>
           )}
+        </div>
+        <div className="mt-3 flex justify-end">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onAddAbastecimiento(ruta.id)}
+          >
+            <Plus className="h-3 w-3" />
+            Abastecimiento
+          </Button>
         </div>
       </CardContent>
     </Card>
@@ -154,6 +247,265 @@ function AbastecimientoMobileCard({ item }: { item: any }) {
 }
 
 // ---------------------------------------------------------------------------
+// Nueva Ruta Modal
+// ---------------------------------------------------------------------------
+function NuevaRutaModal({
+  open,
+  onClose,
+  faenaOptions,
+  onSubmit,
+  loading,
+}: {
+  open: boolean
+  onClose: () => void
+  faenaOptions: { value: string; label: string }[]
+  onSubmit: (data: {
+    faena_id: string
+    fecha_programada: string
+    puntos_programados?: number
+    km_programados?: number
+  }) => void
+  loading: boolean
+}) {
+  const [faenaId, setFaenaId] = useState('')
+  const [fechaProgramada, setFechaProgramada] = useState('')
+  const [puntosProgramados, setPuntosProgramados] = useState('')
+  const [kmProgramados, setKmProgramados] = useState('')
+
+  const handleSubmit = () => {
+    if (!faenaId || !fechaProgramada) return
+    onSubmit({
+      faena_id: faenaId,
+      fecha_programada: fechaProgramada,
+      puntos_programados: puntosProgramados ? Number(puntosProgramados) : undefined,
+      km_programados: kmProgramados ? Number(kmProgramados) : undefined,
+    })
+  }
+
+  // Reset form on close
+  useEffect(() => {
+    if (!open) {
+      setFaenaId('')
+      setFechaProgramada('')
+      setPuntosProgramados('')
+      setKmProgramados('')
+    }
+  }, [open])
+
+  const faenasFiltered = faenaOptions.filter((f) => f.value !== '')
+
+  return (
+    <Modal open={open} onClose={onClose} title="Nueva Ruta de Despacho">
+      <div className="space-y-4">
+        <div>
+          <label className="mb-1.5 block text-sm font-medium text-gray-700">
+            Faena *
+          </label>
+          <div className="relative">
+            <select
+              value={faenaId}
+              onChange={(e) => setFaenaId(e.target.value)}
+              className="h-11 w-full appearance-none rounded-lg border border-gray-300 bg-white px-3 pr-8 text-sm text-gray-700 focus:border-pillado-green-500 focus:outline-none focus:ring-2 focus:ring-pillado-green-500/20"
+            >
+              <option value="">Seleccionar faena...</option>
+              {faenasFiltered.map((f) => (
+                <option key={f.value} value={f.value}>
+                  {f.label}
+                </option>
+              ))}
+            </select>
+            <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          </div>
+        </div>
+
+        <Input
+          label="Fecha Programada *"
+          type="date"
+          value={fechaProgramada}
+          onChange={(e) => setFechaProgramada(e.target.value)}
+        />
+
+        <Input
+          label="Puntos Programados"
+          type="number"
+          min={0}
+          value={puntosProgramados}
+          onChange={(e) => setPuntosProgramados(e.target.value)}
+          placeholder="0"
+        />
+
+        <Input
+          label="Km Programados"
+          type="number"
+          min={0}
+          value={kmProgramados}
+          onChange={(e) => setKmProgramados(e.target.value)}
+          placeholder="0"
+        />
+      </div>
+
+      <ModalFooter className="-mx-6 -mb-6 mt-6">
+        <Button variant="ghost" onClick={onClose} disabled={loading}>
+          Cancelar
+        </Button>
+        <Button
+          variant="primary"
+          onClick={handleSubmit}
+          loading={loading}
+          disabled={!faenaId || !fechaProgramada}
+        >
+          Crear Ruta
+        </Button>
+      </ModalFooter>
+    </Modal>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Agregar Abastecimiento Modal
+// ---------------------------------------------------------------------------
+function NuevoAbastecimientoModal({
+  open,
+  onClose,
+  rutaId,
+  onSubmit,
+  loading,
+}: {
+  open: boolean
+  onClose: () => void
+  rutaId: string | null
+  onSubmit: (data: {
+    ruta_despacho_id?: string
+    producto_id: string
+    cantidad_programada?: number
+    cantidad_real?: number
+  }) => void
+  loading: boolean
+}) {
+  const [productoId, setProductoId] = useState('')
+  const [productoSearch, setProductoSearch] = useState('')
+  const [cantidadProgramada, setCantidadProgramada] = useState('')
+  const [cantidadReal, setCantidadReal] = useState('')
+  const [productos, setProductos] = useState<{ id: string; nombre: string }[]>([])
+  const [loadingProductos, setLoadingProductos] = useState(false)
+
+  // Search productos
+  useEffect(() => {
+    if (!open) return
+    setLoadingProductos(true)
+    getProductos(productoSearch ? { search: productoSearch } : undefined).then(
+      ({ data }) => {
+        setProductos(data || [])
+        setLoadingProductos(false)
+      }
+    )
+  }, [productoSearch, open])
+
+  // Reset on close
+  useEffect(() => {
+    if (!open) {
+      setProductoId('')
+      setProductoSearch('')
+      setCantidadProgramada('')
+      setCantidadReal('')
+    }
+  }, [open])
+
+  const handleSubmit = () => {
+    if (!productoId) return
+    onSubmit({
+      ruta_despacho_id: rutaId || undefined,
+      producto_id: productoId,
+      cantidad_programada: cantidadProgramada ? Number(cantidadProgramada) : undefined,
+      cantidad_real: cantidadReal ? Number(cantidadReal) : undefined,
+    })
+  }
+
+  return (
+    <Modal open={open} onClose={onClose} title="Agregar Abastecimiento">
+      <div className="space-y-4">
+        <div>
+          <label className="mb-1.5 block text-sm font-medium text-gray-700">
+            Producto *
+          </label>
+          <input
+            type="text"
+            placeholder="Buscar producto..."
+            value={productoSearch}
+            onChange={(e) => {
+              setProductoSearch(e.target.value)
+              setProductoId('')
+            }}
+            className="mb-2 flex h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-pillado-green-500 focus:outline-none focus:ring-2 focus:ring-pillado-green-500/20"
+          />
+          <div className="max-h-40 overflow-y-auto rounded-lg border border-gray-200 bg-white">
+            {loadingProductos ? (
+              <div className="flex items-center justify-center py-4">
+                <Spinner size="sm" />
+              </div>
+            ) : productos.length === 0 ? (
+              <p className="px-3 py-3 text-xs text-gray-500">Sin resultados</p>
+            ) : (
+              productos.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => {
+                    setProductoId(p.id)
+                    setProductoSearch(p.nombre)
+                  }}
+                  className={`w-full px-3 py-2 text-left text-sm transition-colors hover:bg-pillado-green-50 ${
+                    productoId === p.id
+                      ? 'bg-pillado-green-50 font-medium text-pillado-green-700'
+                      : 'text-gray-700'
+                  }`}
+                >
+                  {p.nombre}
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+
+        <Input
+          label="Cantidad Programada"
+          type="number"
+          min={0}
+          step="0.01"
+          value={cantidadProgramada}
+          onChange={(e) => setCantidadProgramada(e.target.value)}
+          placeholder="0"
+        />
+
+        <Input
+          label="Cantidad Real"
+          type="number"
+          min={0}
+          step="0.01"
+          value={cantidadReal}
+          onChange={(e) => setCantidadReal(e.target.value)}
+          placeholder="0"
+        />
+      </div>
+
+      <ModalFooter className="-mx-6 -mb-6 mt-6">
+        <Button variant="ghost" onClick={onClose} disabled={loading}>
+          Cancelar
+        </Button>
+        <Button
+          variant="primary"
+          onClick={handleSubmit}
+          loading={loading}
+          disabled={!productoId}
+        >
+          Agregar
+        </Button>
+      </ModalFooter>
+    </Modal>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Main page
 // ---------------------------------------------------------------------------
 export default function AbastecimientoPage() {
@@ -162,6 +514,11 @@ export default function AbastecimientoPage() {
   const [estadoFilter, setEstadoFilter] = useState('')
   const [fechaDesde, setFechaDesde] = useState('')
   const [fechaHasta, setFechaHasta] = useState('')
+
+  // Modal state
+  const [showNuevaRuta, setShowNuevaRuta] = useState(false)
+  const [showNuevoAbastecimiento, setShowNuevoAbastecimiento] = useState(false)
+  const [abastecimientoRutaId, setAbastecimientoRutaId] = useState<string | null>(null)
 
   // Faenas for filter dropdown
   const [faenaOptions, setFaenaOptions] = useState<{ value: string; label: string }[]>([
@@ -186,45 +543,70 @@ export default function AbastecimientoPage() {
   if (fechaDesde) rutaFilters.fecha_desde = fechaDesde
   if (fechaHasta) rutaFilters.fecha_hasta = fechaHasta
 
-  // Queries
-  const { data: rutas, isLoading: loadingRutas, error: errorRutas } = useQuery({
-    queryKey: ['rutas-despacho', rutaFilters],
-    queryFn: async () => {
-      const { data, error } = await getRutasDespacho(rutaFilters)
-      if (error) throw error
-      return data
-    },
-  })
+  // Queries (using hooks)
+  const { data: rutas, isLoading: loadingRutas, error: errorRutas } = useRutasDespacho(rutaFilters)
+  const { data: abastecimientos, isLoading: loadingAbast, error: errorAbast } = useAbastecimientos()
+  const { data: stats } = useRutaStats(faenaFilter || undefined)
 
-  const { data: abastecimientos, isLoading: loadingAbast, error: errorAbast } = useQuery({
-    queryKey: ['abastecimientos'],
-    queryFn: async () => {
-      const { data, error } = await getAbastecimientos()
-      if (error) throw error
-      return data
-    },
-  })
-
-  const { data: stats } = useQuery({
-    queryKey: ['ruta-stats', faenaFilter],
-    queryFn: async () => {
-      const { data, error } = await getRutaStats(faenaFilter || undefined)
-      if (error) throw error
-      return data
-    },
-  })
+  // Mutations
+  const createRuta = useCreateRuta()
+  const updateEstado = useUpdateRutaEstado()
+  const createAbast = useCreateAbastecimiento()
 
   const isLoading = activeTab === 'rutas' ? loadingRutas : loadingAbast
   const error = activeTab === 'rutas' ? errorRutas : errorAbast
 
+  const handleCreateRuta = (data: {
+    faena_id: string
+    fecha_programada: string
+    puntos_programados?: number
+    km_programados?: number
+  }) => {
+    createRuta.mutate(data, {
+      onSuccess: () => setShowNuevaRuta(false),
+    })
+  }
+
+  const handleUpdateEstado = (id: string, estado: string) => {
+    updateEstado.mutate({ id, estado })
+  }
+
+  const handleCreateAbastecimiento = (data: {
+    ruta_despacho_id?: string
+    producto_id: string
+    cantidad_programada?: number
+    cantidad_real?: number
+  }) => {
+    createAbast.mutate(data, {
+      onSuccess: () => {
+        setShowNuevoAbastecimiento(false)
+        setAbastecimientoRutaId(null)
+      },
+    })
+  }
+
+  const openAbastecimientoModal = (rutaId: string) => {
+    setAbastecimientoRutaId(rutaId)
+    setShowNuevoAbastecimiento(true)
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Abastecimiento y Lubricacion</h1>
-        <p className="mt-1 text-sm text-gray-500">
-          Programacion de abastecimientos, rutas de despacho, control de volumen y cumplimiento.
-        </p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Abastecimiento y Lubricacion</h1>
+          <p className="mt-1 text-sm text-gray-500">
+            Programacion de abastecimientos, rutas de despacho, control de volumen y cumplimiento.
+          </p>
+        </div>
+        <Button
+          variant="primary"
+          onClick={() => setShowNuevaRuta(true)}
+        >
+          <Plus className="h-4 w-4" />
+          Nueva Ruta
+        </Button>
       </div>
 
       {/* Stats */}
@@ -358,6 +740,7 @@ export default function AbastecimientoPage() {
                       <TableHead>Estado</TableHead>
                       <TableHead>Operador</TableHead>
                       <TableHead>OT</TableHead>
+                      <TableHead></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -393,7 +776,14 @@ export default function AbastecimientoPage() {
                           <TableCell className="font-medium">
                             {ruta.litros_despachados ?? '—'}
                           </TableCell>
-                          <TableCell>{getEstadoBadge(ruta.estado)}</TableCell>
+                          <TableCell>
+                            <EstadoDropdown
+                              estado={ruta.estado}
+                              rutaId={ruta.id}
+                              onUpdate={handleUpdateEstado}
+                              loading={updateEstado.isPending}
+                            />
+                          </TableCell>
                           <TableCell className="text-xs">
                             {ruta.operador?.nombre_completo || '—'}
                           </TableCell>
@@ -409,6 +799,16 @@ export default function AbastecimientoPage() {
                               '—'
                             )}
                           </TableCell>
+                          <TableCell>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => openAbastecimientoModal(ruta.id)}
+                            >
+                              <Plus className="h-3 w-3" />
+                              Abast.
+                            </Button>
+                          </TableCell>
                         </TableRow>
                       )
                     })}
@@ -419,7 +819,13 @@ export default function AbastecimientoPage() {
               {/* Mobile cards */}
               <div className="md:hidden">
                 {rutas.map((ruta: any) => (
-                  <RutaMobileCard key={ruta.id} ruta={ruta} />
+                  <RutaMobileCard
+                    key={ruta.id}
+                    ruta={ruta}
+                    onUpdateEstado={handleUpdateEstado}
+                    updatingEstado={updateEstado.isPending}
+                    onAddAbastecimiento={openAbastecimientoModal}
+                  />
                 ))}
               </div>
             </>
@@ -503,6 +909,26 @@ export default function AbastecimientoPage() {
           )}
         </>
       )}
+
+      {/* Modals */}
+      <NuevaRutaModal
+        open={showNuevaRuta}
+        onClose={() => setShowNuevaRuta(false)}
+        faenaOptions={faenaOptions}
+        onSubmit={handleCreateRuta}
+        loading={createRuta.isPending}
+      />
+
+      <NuevoAbastecimientoModal
+        open={showNuevoAbastecimiento}
+        onClose={() => {
+          setShowNuevoAbastecimiento(false)
+          setAbastecimientoRutaId(null)
+        }}
+        rutaId={abastecimientoRutaId}
+        onSubmit={handleCreateAbastecimiento}
+        loading={createAbast.isPending}
+      />
     </div>
   )
 }
