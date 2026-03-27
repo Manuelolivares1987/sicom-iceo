@@ -561,9 +561,11 @@ function MaterialesTab({ otId, faenaId, activoId, disabled, userId }: { otId: st
 
   // Auto-select first bodega
   const bodegasList = (bodegas ?? []) as any[]
-  if (bodegasList.length > 0 && !selectedBodega) {
-    setSelectedBodega(bodegasList[0].id)
-  }
+  useEffect(() => {
+    if (bodegasList.length > 0 && !selectedBodega) {
+      setSelectedBodega(bodegasList[0].id)
+    }
+  }, [bodegasList.length]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const stockItems = (stockData ?? []) as any[]
   const filteredStock = searchTerm
@@ -1245,7 +1247,7 @@ export default function OrdenTrabajoDetailPage() {
         <CardContent className="p-4 sm:p-6">
           {activeTab === 'checklist' && id && <ChecklistTab otId={id} disabled={isOTClosed} userId={userId} />}
           {activeTab === 'evidencias' && id && <EvidenciasTab otId={id} disabled={isOTClosed} />}
-          {activeTab === 'materiales' && id && <MaterialesTab otId={id} faenaId={otData.faena_id} activoId={otData.activo_id} disabled={isOTClosed || otData.estado !== 'en_ejecucion'} userId={userId} />}
+          {activeTab === 'materiales' && id && <MaterialesTab otId={id} faenaId={otData.faena_id} activoId={otData.activo_id} disabled={isOTClosed} userId={userId} />}
           {activeTab === 'valorizacion' && id && <ValorizacionTab ot={otData} otId={id} userId={userId} disabled={isOTClosed} />}
           {activeTab === 'historial' && id && <HistorialTab otId={id} />}
         </CardContent>
