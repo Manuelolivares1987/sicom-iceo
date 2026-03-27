@@ -54,6 +54,7 @@ import {
 } from '@/hooks/use-ordenes-trabajo'
 import { useStockBodega, useBodegas, useRegistrarSalida } from '@/hooks/use-inventario'
 import { supabase } from '@/lib/supabase'
+import { calcularKPIs } from '@/lib/services/kpi-iceo'
 import { OTInfoHeader } from '@/components/ot/ot-info-header'
 import { OTActionBar } from '@/components/ot/ot-action-bar'
 import { isImmutableState, isAwaitingClosure } from '@/domain/ot/transitions'
@@ -1352,6 +1353,14 @@ export default function OrdenTrabajoDetailPage() {
                 setShowFinalizar(false)
                 setFinalizarObs('')
                 showSuccess('OT finalizada correctamente')
+                // Auto-recalculate KPIs/ICEO after OT finalization
+                if (otData.contrato_id) {
+                  const now = new Date()
+                  const periodoInicio = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
+                  const periodoFin = now.toISOString().slice(0, 10)
+                  calcularKPIs(otData.contrato_id, otData.faena_id, periodoInicio, periodoFin)
+                    .catch(() => { /* KPI calc failure is non-blocking */ })
+                }
               },
               onError: (err: any) => {
                 setShowFinalizar(false)
@@ -1464,7 +1473,16 @@ export default function OrdenTrabajoDetailPage() {
               onSuccess: () => {
                 setShowCerrar(false)
                 setCerrarObs('')
-                showSuccess('OT cerrada definitivamente por supervisor')
+                showSuccess('OT cerrada definitivamente por supervisor. Recalculando KPIs...')
+                // Auto-recalculate KPIs/ICEO after OT closure
+                if (otData.contrato_id) {
+                  const now = new Date()
+                  const periodoInicio = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
+                  const periodoFin = now.toISOString().slice(0, 10)
+                  calcularKPIs(otData.contrato_id, otData.faena_id, periodoInicio, periodoFin)
+                    .then(() => showSuccess('OT cerrada y KPIs actualizados'))
+                    .catch(() => { /* KPI calc failure is non-blocking */ })
+                }
               },
               onError: (err: any) => {
                 setShowCerrar(false)
