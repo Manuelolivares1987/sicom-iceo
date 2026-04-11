@@ -90,7 +90,11 @@ CREATE INDEX idx_act_inicio ON actividades_conductor (inicio);
 CREATE INDEX idx_act_actividad ON actividades_conductor (actividad);
 CREATE INDEX idx_act_abierta ON actividades_conductor (conductor_id, fin)
     WHERE fin IS NULL;  -- Actividades en curso
-CREATE INDEX idx_act_fecha ON actividades_conductor (conductor_id, (inicio::DATE));
+-- Índice compuesto para filtros por conductor + rango temporal.
+-- Nota: no usamos (inicio::DATE) porque el cast TIMESTAMPTZ→DATE no es IMMUTABLE
+-- (depende del timezone de sesión). Indexar sobre `inicio` permite los mismos
+-- filtros por rango de fecha vía `inicio >= :d AND inicio < :d + 1`.
+CREATE INDEX idx_act_fecha ON actividades_conductor (conductor_id, inicio);
 
 -- ============================================================================
 -- 3. CONFIGURACIÓN GPS / TELEMETRÍA POR PROVEEDOR

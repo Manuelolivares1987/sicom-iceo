@@ -14,6 +14,7 @@
 DO $$
 DECLARE
     v_activo_id UUID;
+    v_rec       RECORD;
 BEGIN
     -- Función helper para insertar certificación
     -- Rev. Técnica para CADA equipo con fecha real del Excel
@@ -73,7 +74,7 @@ BEGIN
                     (v_rec.fecha_venc::DATE - INTERVAL '180 days')::DATE, v_rec.fecha_venc::DATE,
                     CASE WHEN v_rec.fecha_venc::DATE < CURRENT_DATE THEN 'vencido'
                          WHEN v_rec.fecha_venc::DATE < CURRENT_DATE + INTERVAL '45 days' THEN 'por_vencer'
-                         ELSE 'vigente' END,
+                         ELSE 'vigente' END::estado_documento_enum,
                     true)
             ON CONFLICT DO NOTHING;
         END IF;
@@ -106,7 +107,7 @@ BEGIN
                     (v_rec.fecha_venc::DATE - INTERVAL '365 days')::DATE, v_rec.fecha_venc::DATE,
                     CASE WHEN v_rec.fecha_venc::DATE < CURRENT_DATE THEN 'vencido'
                          WHEN v_rec.fecha_venc::DATE < CURRENT_DATE + INTERVAL '45 days' THEN 'por_vencer'
-                         ELSE 'vigente' END,
+                         ELSE 'vigente' END::estado_documento_enum,
                     true)
             ON CONFLICT DO NOTHING;
         END IF;
@@ -130,6 +131,7 @@ END $$;
 DO $$
 DECLARE
     v_activo_id UUID;
+    v_rec       RECORD;
 BEGIN
     FOR v_rec IN
         SELECT * FROM (VALUES
@@ -159,7 +161,7 @@ BEGIN
                     (v_rec.fecha_venc::DATE - INTERVAL '5 years')::DATE, v_rec.fecha_venc::DATE,
                     CASE WHEN v_rec.fecha_venc::DATE < CURRENT_DATE THEN 'vencido'
                          WHEN v_rec.fecha_venc::DATE < CURRENT_DATE + INTERVAL '45 days' THEN 'por_vencer'
-                         ELSE 'vigente' END,
+                         ELSE 'vigente' END::estado_documento_enum,
                     true)
             ON CONFLICT DO NOTHING;
         END IF;
@@ -173,6 +175,7 @@ END $$;
 DO $$
 DECLARE
     v_activo_id UUID;
+    v_rec       RECORD;
 BEGIN
     FOR v_rec IN
         SELECT * FROM (VALUES
@@ -200,7 +203,7 @@ BEGIN
             VALUES (v_activo_id, 'tc8_sec',
                     v_rec.patente || '-TC8', 'SEC',
                     (v_rec.fecha_venc::DATE - INTERVAL '5 years')::DATE, v_rec.fecha_venc::DATE,
-                    CASE WHEN v_rec.fecha_venc::DATE < CURRENT_DATE THEN 'vencido' ELSE 'vigente' END,
+                    CASE WHEN v_rec.fecha_venc::DATE < CURRENT_DATE THEN 'vencido' ELSE 'vigente' END::estado_documento_enum,
                     true)
             ON CONFLICT DO NOTHING;
         END IF;
@@ -214,6 +217,7 @@ END $$;
 DO $$
 DECLARE
     v_activo_id UUID;
+    v_rec       RECORD;
 BEGIN
     FOR v_rec IN
         SELECT * FROM (VALUES
@@ -232,7 +236,7 @@ BEGIN
                     (v_rec.fecha_venc::DATE - INTERVAL '1 year')::DATE, v_rec.fecha_venc::DATE,
                     CASE WHEN v_rec.fecha_venc::DATE < CURRENT_DATE THEN 'vencido'
                          WHEN v_rec.fecha_venc::DATE < CURRENT_DATE + INTERVAL '45 days' THEN 'por_vencer'
-                         ELSE 'vigente' END,
+                         ELSE 'vigente' END::estado_documento_enum,
                     true)
             ON CONFLICT DO NOTHING;
         END IF;
@@ -278,10 +282,12 @@ END $$;
 
 DO $$
 DECLARE
-    v_activo_id UUID;
+    v_activo_id   UUID;
     v_contrato_id UUID;
+    v_rec         RECORD;
+    dia           INTEGER;
 BEGIN
-    SELECT id INTO v_contrato_id FROM contratos WHERE activo = true LIMIT 1;
+    SELECT id INTO v_contrato_id FROM contratos WHERE estado = 'activo' LIMIT 1;
 
     FOR v_rec IN
         SELECT * FROM (VALUES

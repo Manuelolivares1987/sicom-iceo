@@ -107,7 +107,7 @@ DECLARE
     v_contrato_id UUID;
 BEGIN
     -- Obtener un contrato existente (o NULL si no hay)
-    SELECT id INTO v_contrato_id FROM contratos WHERE activo = true LIMIT 1;
+    SELECT id INTO v_contrato_id FROM contratos WHERE estado = 'activo' LIMIT 1;
 
     -- ====================================================================
     -- CAMIONES DE RIEGO (Agua Industrial) — 15 unidades
