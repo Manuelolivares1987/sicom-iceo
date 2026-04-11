@@ -24,6 +24,8 @@ import {
   LogOut,
   ChevronLeft,
   ChevronRight,
+  Truck,
+  Timer,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -32,6 +34,8 @@ const navItems: Array<{ label: string; href: string; icon: any; module?: Module 
   { label: 'Mis OTs', href: '/dashboard/mis-ots', icon: ClipboardCheck, module: 'ordenes_trabajo' as Module },
   { label: 'Contratos', href: '/dashboard/contratos', icon: FileText, module: 'contratos' },
   { label: 'Activos', href: '/dashboard/activos', icon: Cog, module: 'activos' },
+  { label: 'Flota', href: '/dashboard/flota', icon: Truck, module: 'activos' },
+  { label: 'Jornada', href: '/dashboard/flota/jornada', icon: Timer, module: 'activos' },
   { label: 'Órdenes de Trabajo', href: '/dashboard/ordenes-trabajo', icon: ClipboardList, module: 'ordenes_trabajo' },
   { label: 'Mantenimiento', href: '/dashboard/mantenimiento', icon: Wrench, module: 'mantenimiento' },
   { label: 'Inventario', href: '/dashboard/inventario', icon: Package, module: 'inventario' },

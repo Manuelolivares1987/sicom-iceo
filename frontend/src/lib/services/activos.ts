@@ -140,6 +140,85 @@ export async function getFichaActivo(activoId: string) {
   return { data, error }
 }
 
+// Create or update certification
+export async function upsertCertificacion(data: {
+  id?: string
+  activo_id: string
+  tipo: string
+  numero_certificado?: string
+  entidad_certificadora?: string
+  fecha_emision: string
+  fecha_vencimiento: string
+  estado?: string
+  bloqueante?: boolean
+  archivo_url?: string
+  notas?: string
+}) {
+  // Calculate estado automatically
+  const venc = new Date(data.fecha_vencimiento)
+  const now = new Date()
+  const diff = (venc.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
+  const estado = diff < 0 ? 'vencido' : diff < 45 ? 'por_vencer' : 'vigente'
+
+  const payload = { ...data, estado: data.estado || estado }
+
+  if (data.id) {
+    const { data: updated, error } = await supabase
+      .from('certificaciones')
+      .update(payload)
+      .eq('id', data.id)
+      .select()
+      .single()
+    return { data: updated, error }
+  }
+
+  const { data: created, error } = await supabase
+    .from('certificaciones')
+    .insert(payload)
+    .select()
+    .single()
+  return { data: created, error }
+}
+
+// Upload certificate document
+export async function uploadCertificadoArchivo(
+  activoId: string,
+  certId: string,
+  file: File
+) {
+  const ext = file.name.split('.').pop()
+  const path = `certificaciones/${activoId}/${certId}_${Date.now()}.${ext}`
+
+  const { data: upload, error: uploadError } = await supabase.storage
+    .from('documentos')
+    .upload(path, file, { upsert: true })
+
+  if (uploadError) return { data: null, error: uploadError }
+
+  const { data: { publicUrl } } = supabase.storage
+    .from('documentos')
+    .getPublicUrl(path)
+
+  // Update certification with file URL
+  const { data: updated, error } = await supabase
+    .from('certificaciones')
+    .update({ archivo_url: publicUrl })
+    .eq('id', certId)
+    .select()
+    .single()
+
+  return { data: updated, error }
+}
+
+// Delete certification
+export async function deleteCertificacion(certId: string) {
+  const { error } = await supabase
+    .from('certificaciones')
+    .delete()
+    .eq('id', certId)
+  return { error }
+}
+
 // Generate QR code for asset
 export async function generarQRActivo(activoId: string) {
   const { data, error } = await supabase.rpc('rpc_generar_qr_activo', {
