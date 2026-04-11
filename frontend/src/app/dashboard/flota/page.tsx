@@ -6,39 +6,34 @@ import {
   Activity,
   AlertTriangle,
   CheckCircle2,
-  Clock,
   BarChart3,
-  Calendar,
   Shield,
-  ChevronDown,
-  Filter,
+  RefreshCw,
 } from 'lucide-react'
 import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
   Tooltip,
   ResponsiveContainer,
   PieChart,
   Pie,
   Cell,
-  Legend,
-  LineChart,
-  Line,
 } from 'recharts'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Spinner } from '@/components/ui/spinner'
 import { cn } from '@/lib/utils'
 import { useRequireAuth } from '@/hooks/use-require-auth'
-import { useFlotaVehicular, useResumenDiario, useOEEFlota, useEjecutarVerificaciones } from '@/hooks/use-flota'
+import {
+  useFlotaVehicular,
+  useResumenDiario,
+  useOEEFlota,
+  useEjecutarVerificaciones,
+  useAplicarEstadosAutomaticos,
+} from '@/hooks/use-flota'
 import { useAlertasNoLeidas } from '@/hooks/use-alertas'
 import {
-  ESTADO_DIARIO_LABELS,
   ESTADO_DIARIO_COLORS,
   OEE_CLASSIFICATION_COLORS,
 } from '@/lib/services/flota'
+import { CambiarEstadoModal } from '@/components/flota/cambiar-estado-modal'
 
 /* ─── Helpers ─────────────────────────────────────────── */
 
@@ -79,12 +74,38 @@ export default function FlotaPage() {
   const [operacionFilter, setOperacionFilter] = useState<string>('')
 
   const { data: flota, isLoading: loadingFlota } = useFlotaVehicular()
-  const { data: resumen, isLoading: loadingResumen } = useResumenDiario(fechaInicio, fechaFin, operacionFilter || undefined)
+  const { isLoading: loadingResumen } = useResumenDiario(fechaInicio, fechaFin, operacionFilter || undefined)
   const { data: oeeTotal } = useOEEFlota(fechaInicio, fechaFin, undefined, undefined)
   const { data: oeeCoquimbo } = useOEEFlota(fechaInicio, fechaFin, undefined, 'Coquimbo')
   const { data: oeeCalama } = useOEEFlota(fechaInicio, fechaFin, undefined, 'Calama')
   const { data: alertas } = useAlertasNoLeidas()
   const ejecutarVerif = useEjecutarVerificaciones()
+  const aplicarAuto = useAplicarEstadosAutomaticos()
+
+  // ── Modal Cambiar Estado ──
+  const [activoSeleccionado, setActivoSeleccionado] = useState<{
+    id: string
+    patente?: string | null
+    codigo?: string | null
+    nombre?: string | null
+    estado_comercial?: string | null
+    operacion?: string | null
+    cliente_actual?: string | null
+  } | null>(null)
+  const [modalOpen, setModalOpen] = useState(false)
+
+  const handleRowClick = (activo: Record<string, unknown>) => {
+    setActivoSeleccionado({
+      id: activo.id as string,
+      patente: (activo.patente as string) ?? null,
+      codigo: (activo.codigo as string) ?? null,
+      nombre: (activo.nombre as string) ?? null,
+      estado_comercial: (activo.estado_comercial as string) ?? null,
+      operacion: (activo.operacion as string) ?? null,
+      cliente_actual: (activo.cliente_actual as string) ?? null,
+    })
+    setModalOpen(true)
+  }
 
   // ── Derived data ──
 
@@ -166,6 +187,15 @@ export default function FlotaPage() {
             <option value="Coquimbo">Coquimbo</option>
             <option value="Calama">Calama</option>
           </select>
+          <button
+            className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 flex items-center gap-1"
+            onClick={() => aplicarAuto.mutate(undefined)}
+            disabled={aplicarAuto.isPending}
+            title="Aplica la cascada de fuentes automáticas (OTs, certificaciones, contratos) a los activos sin override manual"
+          >
+            <RefreshCw className={cn('h-4 w-4', aplicarAuto.isPending && 'animate-spin')} />
+            {aplicarAuto.isPending ? 'Recalculando...' : 'Recalcular Estados'}
+          </button>
           <button
             className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 flex items-center gap-1"
             onClick={() => ejecutarVerif.mutate()}
@@ -389,7 +419,12 @@ export default function FlotaPage() {
                 const ecColor = ec ? (ESTADO_DIARIO_COLORS[ec.charAt(0).toUpperCase()] || 'bg-gray-200 text-gray-700') : 'bg-gray-200 text-gray-700'
 
                 return (
-                  <tr key={activo.id as string} className="border-b hover:bg-gray-50">
+                  <tr
+                    key={activo.id as string}
+                    className="border-b hover:bg-blue-50 cursor-pointer transition-colors"
+                    onClick={() => handleRowClick(activo)}
+                    title="Click para cambiar estado del equipo"
+                  >
                     <td className="px-2 py-2 font-mono font-semibold">{activo.patente as string || activo.codigo as string}</td>
                     <td className="px-2 py-2 text-gray-500">{activo.centro_costo as string}</td>
                     <td className="px-2 py-2">{activo.nombre as string}</td>
@@ -463,6 +498,13 @@ export default function FlotaPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* ── Modal Cambiar Estado del Equipo ── */}
+      <CambiarEstadoModal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        activo={activoSeleccionado}
+      />
     </div>
   )
 }

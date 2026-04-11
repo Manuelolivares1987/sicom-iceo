@@ -13,7 +13,11 @@ import {
   getConductores,
   ejecutarVerificacionesNormativas,
   getFlotaVehicular,
+  actualizarEstadoDiarioManual,
+  aplicarEstadosAutomaticos,
+  getEstadoDiarioActivoHoy,
   type EstadoDiarioFilters,
+  type ActualizarEstadoManualParams,
 } from '@/lib/services/flota'
 
 // ── Estado Diario ──────────────────────────────────────
@@ -194,5 +198,58 @@ export function useFlotaVehicular() {
       if (error) throw error
       return data
     },
+  })
+}
+
+// ── Estados Diarios Automáticos (Migración 30) ─────────
+
+export function useActualizarEstadoManual() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (params: ActualizarEstadoManualParams) => {
+      const { data, error } = await actualizarEstadoDiarioManual(params)
+      if (error) throw error
+      return data
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['estado-diario'] })
+      qc.invalidateQueries({ queryKey: ['estado-diario-hoy'] })
+      qc.invalidateQueries({ queryKey: ['resumen-diario'] })
+      qc.invalidateQueries({ queryKey: ['oee-flota'] })
+      qc.invalidateQueries({ queryKey: ['oee-activo'] })
+      qc.invalidateQueries({ queryKey: ['flota-vehicular'] })
+      qc.invalidateQueries({ queryKey: ['ots'] })
+      qc.invalidateQueries({ queryKey: ['no-conformidades'] })
+    },
+  })
+}
+
+export function useAplicarEstadosAutomaticos() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (fecha?: string) => {
+      const { data, error } = await aplicarEstadosAutomaticos(fecha)
+      if (error) throw error
+      return data
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['estado-diario'] })
+      qc.invalidateQueries({ queryKey: ['estado-diario-hoy'] })
+      qc.invalidateQueries({ queryKey: ['resumen-diario'] })
+      qc.invalidateQueries({ queryKey: ['oee-flota'] })
+      qc.invalidateQueries({ queryKey: ['flota-vehicular'] })
+    },
+  })
+}
+
+export function useEstadoDiarioActivoHoy(activoId: string | undefined) {
+  return useQuery({
+    queryKey: ['estado-diario-hoy', activoId],
+    queryFn: async () => {
+      const { data, error } = await getEstadoDiarioActivoHoy(activoId!)
+      if (error) throw error
+      return data
+    },
+    enabled: !!activoId,
   })
 }

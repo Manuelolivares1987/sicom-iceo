@@ -364,3 +364,60 @@ export const OEE_CLASSIFICATION_COLORS: Record<string, string> = {
   'Aceptable': 'text-amber-600',
   'Deficiente': 'text-red-600',
 }
+
+// ── Estados Diarios Automáticos (Migración 30) ─────────
+
+export interface ActualizarEstadoManualParams {
+  activo_id: string
+  fecha: string
+  nuevo_estado: string
+  motivo: string
+  crear_ot?: boolean
+  ot_tipo?: 'preventivo' | 'correctivo' | 'inspeccion' | 'lubricacion'
+  ot_prioridad?: 'emergencia' | 'alta' | 'normal' | 'baja'
+  ot_responsable_id?: string
+  ot_descripcion?: string
+}
+
+export interface ActualizarEstadoManualResult {
+  success: boolean
+  estado_aplicado: string
+  ot_creada: boolean
+  ot_id?: string
+  ot_folio?: string
+}
+
+export async function actualizarEstadoDiarioManual(
+  params: ActualizarEstadoManualParams,
+) {
+  const { data, error } = await supabase.rpc('rpc_actualizar_estado_diario_manual', {
+    p_activo_id: params.activo_id,
+    p_fecha: params.fecha,
+    p_nuevo_estado: params.nuevo_estado,
+    p_motivo: params.motivo,
+    p_crear_ot: params.crear_ot ?? false,
+    p_ot_tipo: params.ot_tipo ?? null,
+    p_ot_prioridad: params.ot_prioridad ?? 'normal',
+    p_ot_responsable_id: params.ot_responsable_id ?? null,
+    p_ot_descripcion: params.ot_descripcion ?? null,
+  })
+  return { data: data as ActualizarEstadoManualResult | null, error }
+}
+
+export async function aplicarEstadosAutomaticos(fecha?: string) {
+  const { data, error } = await supabase.rpc('fn_aplicar_estados_diarios_automaticos', {
+    p_fecha: fecha ?? new Date().toISOString().split('T')[0],
+  })
+  return { data, error }
+}
+
+export async function getEstadoDiarioActivoHoy(activoId: string) {
+  const today = new Date().toISOString().split('T')[0]
+  const { data, error } = await supabase
+    .from('estado_diario_flota')
+    .select('*')
+    .eq('activo_id', activoId)
+    .eq('fecha', today)
+    .maybeSingle()
+  return { data, error }
+}
