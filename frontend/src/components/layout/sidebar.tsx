@@ -26,18 +26,24 @@ import {
   ChevronRight,
   Truck,
   Timer,
+  HardHat,
+  Briefcase,
+  CalendarClock,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const navItems: Array<{ label: string; href: string; icon: any; module?: Module }> = [
   { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+  { label: 'Reporte Diario', href: '/dashboard/reporte-diario', icon: CalendarClock, module: 'reporte_diario' },
   { label: 'Mis OTs', href: '/dashboard/mis-ots', icon: ClipboardCheck, module: 'ordenes_trabajo' as Module },
   { label: 'Contratos', href: '/dashboard/contratos', icon: FileText, module: 'contratos' },
   { label: 'Activos', href: '/dashboard/activos', icon: Cog, module: 'activos' },
-  { label: 'Flota', href: '/dashboard/flota', icon: Truck, module: 'activos' },
-  { label: 'Jornada', href: '/dashboard/flota/jornada', icon: Timer, module: 'activos' },
+  { label: 'Flota', href: '/dashboard/flota', icon: Truck, module: 'flota' },
+  { label: 'Jornada', href: '/dashboard/flota/jornada', icon: Timer, module: 'flota' },
   { label: 'Órdenes de Trabajo', href: '/dashboard/ordenes-trabajo', icon: ClipboardList, module: 'ordenes_trabajo' },
   { label: 'Mantenimiento', href: '/dashboard/mantenimiento', icon: Wrench, module: 'mantenimiento' },
+  { label: 'Comercial', href: '/dashboard/comercial', icon: Briefcase, module: 'comercial' },
+  { label: 'Prevención', href: '/dashboard/prevencion', icon: HardHat, module: 'prevencion' },
   { label: 'Inventario', href: '/dashboard/inventario', icon: Package, module: 'inventario' },
   { label: 'Abastecimiento', href: '/dashboard/abastecimiento', icon: Fuel, module: 'abastecimiento' },
   { label: 'Cumplimiento', href: '/dashboard/cumplimiento', icon: ShieldCheck, module: 'cumplimiento' },

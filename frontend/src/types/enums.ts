@@ -7,6 +7,6 @@ export type TipoOT = 'inspeccion' | 'preventivo' | 'correctivo' | 'abastecimient
 export type EstadoOT = 'creada' | 'asignada' | 'en_ejecucion' | 'pausada' | 'ejecutada_ok' | 'ejecutada_con_observaciones' | 'no_ejecutada' | 'cancelada' | 'cerrada'
 export type Prioridad = 'emergencia' | 'urgente' | 'alta' | 'normal' | 'baja'
 export type TipoMovimiento = 'entrada' | 'salida' | 'ajuste_positivo' | 'ajuste_negativo' | 'transferencia_entrada' | 'transferencia_salida' | 'merma' | 'devolucion'
-export type RolUsuario = 'administrador' | 'gerencia' | 'subgerente_operaciones' | 'supervisor' | 'planificador' | 'tecnico_mantenimiento' | 'bodeguero' | 'operador_abastecimiento' | 'auditor' | 'rrhh_incentivos'
+export type RolUsuario = 'administrador' | 'gerencia' | 'subgerente_operaciones' | 'supervisor' | 'planificador' | 'tecnico_mantenimiento' | 'bodeguero' | 'operador_abastecimiento' | 'auditor' | 'rrhh_incentivos' | 'jefe_operaciones' | 'jefe_mantenimiento' | 'comercial' | 'prevencionista' | 'colaborador'
 export type AreaKPI = 'administracion_combustibles' | 'mantenimiento_fijos' | 'mantenimiento_moviles'
 export type ClasificacionICEO = 'deficiente' | 'aceptable' | 'bueno' | 'excelencia'
