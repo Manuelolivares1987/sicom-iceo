@@ -125,19 +125,22 @@ export default function FlotaPage() {
     if (!flota) return null
     const total = flota.length
     const porEstado: Record<string, number> = {}
+    const porEstadoOp: Record<string, number> = {}
     const porOperacion: Record<string, number> = {}
     const porTipo: Record<string, number> = {}
 
     flota.forEach((a: Record<string, unknown>) => {
       const ec = (a.estado_comercial as string) || 'sin_estado'
       porEstado[ec] = (porEstado[ec] || 0) + 1
+      const eo = (a.estado as string) || 'sin_estado'
+      porEstadoOp[eo] = (porEstadoOp[eo] || 0) + 1
       const op = (a.operacion as string) || 'Sin asignar'
       porOperacion[op] = (porOperacion[op] || 0) + 1
       const tipo = (a.tipo as string) || 'otro'
       porTipo[tipo] = (porTipo[tipo] || 0) + 1
     })
 
-    return { total, porEstado, porOperacion, porTipo }
+    return { total, porEstado, porEstadoOp, porOperacion, porTipo }
   }, [flota])
 
   const alertasNormativas = useMemo(() => {
@@ -164,6 +167,25 @@ export default function FlotaPage() {
       key,
       name: labels[key] || key,
       value,
+    }))
+  }, [flotaStats])
+
+  const estadoOperativoPie = useMemo(() => {
+    if (!flotaStats) return []
+    const labels: Record<string, string> = {
+      operativo: 'Operativo',
+      en_mantenimiento: 'En Mantención',
+      fuera_servicio: 'Fuera de Servicio',
+      dado_baja: 'Dado de Baja',
+      en_transito: 'En Tránsito',
+      sin_estado: 'Sin Estado',
+    }
+    const opColors = ['#16A34A', '#F59E0B', '#DC2626', '#6B7280', '#2563EB', '#9CA3AF']
+    return Object.entries(flotaStats.porEstadoOp).map(([key, value], i) => ({
+      key,
+      name: labels[key] || key,
+      value,
+      color: opColors[i % opColors.length],
     }))
   }, [flotaStats])
 
@@ -298,8 +320,8 @@ export default function FlotaPage() {
         ))}
       </div>
 
-      {/* ── Estado de Flota (Pie + Stats) ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      {/* ── Estado de Flota (Pie Comercial + Pie Operativo + Stats) ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Pie Chart Estado Comercial */}
         <Card>
           <CardHeader>
@@ -421,6 +443,43 @@ export default function FlotaPage() {
                 </>
               )}
             </div>
+          </CardContent>
+        </Card>
+
+        {/* Pie Chart Estado Operativo */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Activity className="h-5 w-5 text-gray-600" />
+              Estado Operativo
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {estadoOperativoPie.length > 0 ? (
+              <div className="h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={estadoOperativoPie}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={50}
+                      outerRadius={90}
+                      paddingAngle={2}
+                      dataKey="value"
+                      label={({ name, value }) => `${name}: ${value}`}
+                    >
+                      {estadoOperativoPie.map((entry, index) => (
+                        <Cell key={index} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            ) : (
+              <p className="text-sm text-gray-400">Sin datos</p>
+            )}
           </CardContent>
         </Card>
       </div>

@@ -16,6 +16,7 @@ import { Spinner } from '@/components/ui/spinner'
 import { cn } from '@/lib/utils'
 import { useRequireAuth } from '@/hooks/use-require-auth'
 import { useReporteDiario, useReportesHistoricos, useRegenerarReporteDiario } from '@/hooks/use-reporte-diario'
+import { ESTADO_DIARIO_LABELS, ESTADO_DIARIO_COLORS } from '@/lib/services/flota'
 
 function Section({
   icon: Icon,
@@ -158,11 +159,21 @@ export default function ReporteDiarioPage() {
           <Section icon={Truck} title="Flota — Estado del Día" color="text-blue-600">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <h4 className="text-xs font-semibold text-gray-500 uppercase mb-2">Por estado</h4>
-                <div className="space-y-1 text-sm">
-                  {payload.flota?.por_estado_hoy ? Object.entries(payload.flota.por_estado_hoy).map(([k, v]) => (
-                    <div key={k} className="flex justify-between">
-                      <span className="text-gray-600">{k}</span>
+                <h4 className="text-xs font-semibold text-gray-500 uppercase mb-2">Por estado del día</h4>
+                <div className="space-y-1.5 text-sm">
+                  {payload.flota?.por_estado_hoy ? Object.entries(payload.flota.por_estado_hoy)
+                    .sort(([, a], [, b]) => (b as number) - (a as number))
+                    .map(([k, v]) => (
+                    <div key={k} className="flex items-center justify-between">
+                      <span className="flex items-center gap-2">
+                        <span className={cn(
+                          'inline-block w-6 text-center rounded px-1 py-0.5 text-xs font-bold',
+                          ESTADO_DIARIO_COLORS[k] || 'bg-gray-200 text-gray-700'
+                        )}>
+                          {k}
+                        </span>
+                        <span className="text-gray-600">{ESTADO_DIARIO_LABELS[k] || k}</span>
+                      </span>
                       <span className="font-mono font-semibold">{v}</span>
                     </div>
                   )) : <p className="text-xs text-gray-400">Sin datos</p>}

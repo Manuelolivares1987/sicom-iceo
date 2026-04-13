@@ -205,3 +205,12 @@ export async function getCertificacionesProximasVencer(diasAdelante = 60) {
     .order('fecha_vencimiento', { ascending: true })
   return { data, error }
 }
+
+export async function getCertificacionesBloqueantes() {
+  const { data, error } = await supabase
+    .from('certificaciones')
+    .select('*, activo:activos(patente, codigo, nombre)')
+    .eq('bloqueante', true)
+    .order('fecha_vencimiento', { ascending: true })
+  return { data, error }
+}

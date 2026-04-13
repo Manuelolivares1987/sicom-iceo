@@ -8,6 +8,7 @@ import {
   getRespelEmpresas,
   createRespelMovimiento,
   getCertificacionesProximasVencer,
+  getCertificacionesBloqueantes,
 } from '@/lib/services/prevencion'
 
 export function usePrevencionResumen() {
@@ -96,6 +97,17 @@ export function useCertificacionesProximasVencer(dias = 60) {
     queryKey: ['cert-proximas-vencer', dias],
     queryFn: async () => {
       const { data, error } = await getCertificacionesProximasVencer(dias)
+      if (error) throw error
+      return data
+    },
+  })
+}
+
+export function useCertificacionesBloqueantes() {
+  return useQuery({
+    queryKey: ['cert-bloqueantes'],
+    queryFn: async () => {
+      const { data, error } = await getCertificacionesBloqueantes()
       if (error) throw error
       return data
     },

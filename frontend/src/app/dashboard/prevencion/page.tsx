@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import {
   HardHat,
   AlertTriangle,
@@ -22,7 +22,7 @@ import {
   useSuspelProductos,
   useSuspelBodegas,
   useRespelMovimientos,
-  useCertificacionesProximasVencer,
+  useCertificacionesBloqueantes,
 } from '@/hooks/use-prevencion'
 
 function StatCard({
@@ -31,12 +31,16 @@ function StatCard({
   icon: Icon,
   variant = 'default',
   sublabel,
+  onClick,
+  active,
 }: {
   label: string
   value: number | string
   icon: any
   variant?: 'default' | 'danger' | 'warning' | 'success'
   sublabel?: string
+  onClick?: () => void
+  active?: boolean
 }) {
   const colors = {
     default: 'bg-gray-50 border-gray-200 text-gray-900',
@@ -51,7 +55,15 @@ function StatCard({
     success: 'text-green-500',
   }
   return (
-    <div className={cn('rounded-lg border p-4', colors[variant])}>
+    <div
+      className={cn(
+        'rounded-lg border p-4 transition-all',
+        colors[variant],
+        onClick && 'cursor-pointer hover:shadow-md hover:scale-[1.02]',
+        active && 'ring-2 ring-blue-500 ring-offset-1',
+      )}
+      onClick={onClick}
+    >
       <div className="flex items-center justify-between">
         <span className="text-xs font-medium opacity-70">{label}</span>
         <Icon className={cn('h-4 w-4', iconColors[variant])} />
@@ -69,7 +81,32 @@ export default function PrevencionPage() {
   const { data: productos } = useSuspelProductos()
   const { data: bodegas } = useSuspelBodegas()
   const { data: movimientos } = useRespelMovimientos(20)
-  const { data: certs } = useCertificacionesProximasVencer(60)
+  const { data: allCerts } = useCertificacionesBloqueantes()
+
+  // ── Filtro interactivo desde tarjetas ──
+  type CertFiltro = 'vencidas' | 'por_vencer_30d' | 'por_vencer_60d' | null
+  const [certFiltro, setCertFiltro] = useState<CertFiltro>(null)
+
+  const toggleFiltro = (f: CertFiltro) => {
+    setCertFiltro(certFiltro === f ? null : f)
+  }
+
+  const certsFiltradas = useMemo(() => {
+    if (!allCerts) return []
+    const now = Date.now()
+    const d30 = 30 * 86400000
+    const d60 = 60 * 86400000
+
+    return allCerts.filter((c: any) => {
+      const venc = new Date(c.fecha_vencimiento).getTime()
+      const diff = venc - now
+
+      if (certFiltro === 'vencidas') return diff < 0
+      if (certFiltro === 'por_vencer_30d') return diff >= 0 && diff <= d30
+      if (certFiltro === 'por_vencer_60d') return diff >= 0 && diff <= d60
+      return true // sin filtro, mostrar todas
+    })
+  }, [allCerts, certFiltro])
 
   const balanceRespel = useMemo(() => {
     if (!resumen) return 0
@@ -131,19 +168,25 @@ export default function PrevencionPage() {
             value={resumen?.certificaciones_vencidas ?? 0}
             icon={AlertTriangle}
             variant={(resumen?.certificaciones_vencidas ?? 0) > 0 ? 'danger' : 'success'}
-            sublabel="Bloqueantes — DS 298"
+            sublabel="Click para filtrar"
+            onClick={() => toggleFiltro('vencidas')}
+            active={certFiltro === 'vencidas'}
           />
           <StatCard
             label="Por vencer 30d"
             value={resumen?.certificaciones_por_vencer_30d ?? 0}
             icon={Clock}
             variant={(resumen?.certificaciones_por_vencer_30d ?? 0) > 0 ? 'warning' : 'default'}
+            onClick={() => toggleFiltro('por_vencer_30d')}
+            active={certFiltro === 'por_vencer_30d'}
           />
           <StatCard
             label="Por vencer 60d"
             value={resumen?.certificaciones_por_vencer_60d ?? 0}
             icon={Clock}
             variant="default"
+            onClick={() => toggleFiltro('por_vencer_60d')}
+            active={certFiltro === 'por_vencer_60d'}
           />
           <StatCard
             label="Conductores SEMEP vencido"
@@ -224,11 +267,16 @@ export default function PrevencionPage() {
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
             <FileCheck className="h-5 w-5 text-gray-600" />
-            Próximas Certificaciones por Vencer (60 días)
+            Certificaciones Bloqueantes
+            {certFiltro && (
+              <button className="ml-2 text-xs font-medium text-blue-600 hover:underline" onClick={() => setCertFiltro(null)}>
+                Limpiar filtro
+              </button>
+            )}
           </CardTitle>
         </CardHeader>
         <CardContent className="overflow-x-auto">
-          {certs && certs.length > 0 ? (
+          {certsFiltradas.length > 0 ? (
             <table className="w-full text-xs">
               <thead>
                 <tr className="border-b text-left text-gray-500 uppercase">
@@ -240,7 +288,7 @@ export default function PrevencionPage() {
                 </tr>
               </thead>
               <tbody>
-                {certs.map((c: any) => {
+                {certsFiltradas.map((c: any) => {
                   const dias = Math.floor((new Date(c.fecha_vencimiento).getTime() - Date.now()) / 86400000)
                   return (
                     <tr key={c.id} className="border-b hover:bg-gray-50">
