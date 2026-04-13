@@ -30,35 +30,35 @@ BEGIN
     FOR v_rec IN
         SELECT * FROM (VALUES
             -- (nombre_modelo, pauta_nombre, tipo_plan, freq_km, freq_hrs, freq_dias, descripcion, items_checklist)
-            ('Actros 3336 K',   'Cambio de aceite motor',         'por_km', 10000, 250, 90,  'Cambio de aceite motor + filtro', '["Drenar aceite usado","Reemplazar filtro aceite","Llenar aceite nuevo 15W40","Verificar nivel","Registrar km"]'),
-            ('Actros 3336 K',   'Filtros de aire y combustible',  'por_km', 20000, 500, 180, 'Reemplazo filtros aire primario/secundario + combustible', '["Reemplazar filtro aire primario","Reemplazar filtro aire secundario","Reemplazar filtro combustible","Inspeccionar ductos"]'),
-            ('Actros 3336 K',   'Frenos y sistema hidráulico',    'por_km', 40000, 1000, 365, 'Inspección de frenos, pastillas, líquido y mangueras', '["Medir espesor pastillas","Verificar discos/tambores","Nivel líquido frenos","Inspeccionar mangueras hidráulicas","Verificar acumulador presión"]'),
-            ('Actros 3336 K',   'Engrase general',                'por_km', 5000,  125, 30,   'Engrase de puntos según carta de lubricación', '["Engrase crucetas cardan","Engrase pivotes dirección","Engrase quinta rueda","Engrase muñones"]'),
-            ('Actros 3341',     'Cambio de aceite motor',         'por_km', 10000, 250, 90,  'Cambio de aceite motor + filtro', '["Drenar aceite usado","Reemplazar filtro aceite","Llenar aceite nuevo 15W40","Verificar nivel","Registrar km"]'),
-            ('Actros 3341',     'Filtros de aire y combustible',  'por_km', 20000, 500, 180, 'Reemplazo filtros', '["Reemplazar filtro aire primario","Reemplazar filtro aire secundario","Reemplazar filtro combustible"]'),
-            ('Actros 3341',     'Engrase general',                'por_km', 5000,  125, 30,   'Engrase de puntos', '["Engrase crucetas cardan","Engrase pivotes","Engrase quinta rueda"]'),
-            ('Axor 2633',       'Cambio de aceite motor',         'por_km', 10000, 250, 90,  'Cambio aceite motor + filtro', '["Drenar aceite","Reemplazar filtro","Llenar 15W40","Verificar nivel"]'),
-            ('Axor 2633',       'Filtros de aire y combustible',  'por_km', 20000, 500, 180, 'Filtros aire y combustible', '["Filtro aire primario","Filtro aire secundario","Filtro combustible"]'),
-            ('Axor 2633',       'Engrase general',                'por_km', 5000,  125, 30,   'Engrase según carta', '["Crucetas","Pivotes","Quinta rueda"]'),
-            ('Axor 2633/45',    'Cambio de aceite motor',         'por_km', 10000, 250, 90,  'Cambio aceite motor', '["Drenar aceite","Filtro aceite","Llenar 15W40"]'),
-            ('Axor 2633/45',    'Engrase general',                'por_km', 5000,  125, 30,   'Engrase', '["Crucetas","Pivotes","Quinta rueda"]'),
+            ('Actros 3336 K',   'Cambio de aceite motor',         'por_kilometraje', 10000, 250, 90,  'Cambio de aceite motor + filtro', '["Drenar aceite usado","Reemplazar filtro aceite","Llenar aceite nuevo 15W40","Verificar nivel","Registrar km"]'),
+            ('Actros 3336 K',   'Filtros de aire y combustible',  'por_kilometraje', 20000, 500, 180, 'Reemplazo filtros aire primario/secundario + combustible', '["Reemplazar filtro aire primario","Reemplazar filtro aire secundario","Reemplazar filtro combustible","Inspeccionar ductos"]'),
+            ('Actros 3336 K',   'Frenos y sistema hidráulico',    'por_kilometraje', 40000, 1000, 365, 'Inspección de frenos, pastillas, líquido y mangueras', '["Medir espesor pastillas","Verificar discos/tambores","Nivel líquido frenos","Inspeccionar mangueras hidráulicas","Verificar acumulador presión"]'),
+            ('Actros 3336 K',   'Engrase general',                'por_kilometraje', 5000,  125, 30,   'Engrase de puntos según carta de lubricación', '["Engrase crucetas cardan","Engrase pivotes dirección","Engrase quinta rueda","Engrase muñones"]'),
+            ('Actros 3341',     'Cambio de aceite motor',         'por_kilometraje', 10000, 250, 90,  'Cambio de aceite motor + filtro', '["Drenar aceite usado","Reemplazar filtro aceite","Llenar aceite nuevo 15W40","Verificar nivel","Registrar km"]'),
+            ('Actros 3341',     'Filtros de aire y combustible',  'por_kilometraje', 20000, 500, 180, 'Reemplazo filtros', '["Reemplazar filtro aire primario","Reemplazar filtro aire secundario","Reemplazar filtro combustible"]'),
+            ('Actros 3341',     'Engrase general',                'por_kilometraje', 5000,  125, 30,   'Engrase de puntos', '["Engrase crucetas cardan","Engrase pivotes","Engrase quinta rueda"]'),
+            ('Axor 2633',       'Cambio de aceite motor',         'por_kilometraje', 10000, 250, 90,  'Cambio aceite motor + filtro', '["Drenar aceite","Reemplazar filtro","Llenar 15W40","Verificar nivel"]'),
+            ('Axor 2633',       'Filtros de aire y combustible',  'por_kilometraje', 20000, 500, 180, 'Filtros aire y combustible', '["Filtro aire primario","Filtro aire secundario","Filtro combustible"]'),
+            ('Axor 2633',       'Engrase general',                'por_kilometraje', 5000,  125, 30,   'Engrase según carta', '["Crucetas","Pivotes","Quinta rueda"]'),
+            ('Axor 2633/45',    'Cambio de aceite motor',         'por_kilometraje', 10000, 250, 90,  'Cambio aceite motor', '["Drenar aceite","Filtro aceite","Llenar 15W40"]'),
+            ('Axor 2633/45',    'Engrase general',                'por_kilometraje', 5000,  125, 30,   'Engrase', '["Crucetas","Pivotes","Quinta rueda"]'),
             -- Scania
-            ('R500',            'Cambio de aceite motor',         'por_km', 15000, 350, 120, 'Cambio aceite motor Scania', '["Drenar aceite","Filtro aceite","Llenar aceite aprobado Scania","Verificar nivel"]'),
-            ('R500',            'Filtros de aire y combustible',  'por_km', 30000, 700, 240, 'Filtros', '["Filtro aire","Filtro combustible primario","Filtro combustible secundario"]'),
-            ('R500',            'Engrase general',                'por_km', 10000, 250, 60,  'Engrase Scania', '["Engrase puntos carta Scania"]'),
+            ('R500',            'Cambio de aceite motor',         'por_kilometraje', 15000, 350, 120, 'Cambio aceite motor Scania', '["Drenar aceite","Filtro aceite","Llenar aceite aprobado Scania","Verificar nivel"]'),
+            ('R500',            'Filtros de aire y combustible',  'por_kilometraje', 30000, 700, 240, 'Filtros', '["Filtro aire","Filtro combustible primario","Filtro combustible secundario"]'),
+            ('R500',            'Engrase general',                'por_kilometraje', 10000, 250, 60,  'Engrase Scania', '["Engrase puntos carta Scania"]'),
             -- Mack
-            ('Granite GU813E',  'Cambio de aceite motor',         'por_km', 12000, 300, 90,  'Cambio aceite motor Mack', '["Drenar aceite","Filtro aceite","Llenar aceite","Verificar nivel"]'),
-            ('Granite GU813E',  'Filtros',                        'por_km', 24000, 600, 180, 'Filtros aire y combustible', '["Filtro aire","Filtro combustible"]'),
-            ('Granite GU813E',  'Engrase general',                'por_km', 6000,  150, 30,   'Engrase', '["Engrase general según carta"]'),
+            ('Granite GU813E',  'Cambio de aceite motor',         'por_kilometraje', 12000, 300, 90,  'Cambio aceite motor Mack', '["Drenar aceite","Filtro aceite","Llenar aceite","Verificar nivel"]'),
+            ('Granite GU813E',  'Filtros',                        'por_kilometraje', 24000, 600, 180, 'Filtros aire y combustible', '["Filtro aire","Filtro combustible"]'),
+            ('Granite GU813E',  'Engrase general',                'por_kilometraje', 6000,  150, 30,   'Engrase', '["Engrase general según carta"]'),
             -- Volvo
-            ('VM330 8x4',       'Cambio de aceite motor',         'por_km', 12000, 300, 90,  'Cambio aceite Volvo', '["Drenar aceite","Filtro aceite","Llenar aceite aprobado Volvo"]'),
-            ('VM330 8x4',       'Filtros',                        'por_km', 24000, 600, 180, 'Filtros aire/comb Volvo', '["Filtro aire","Filtro combustible"]'),
-            ('VM330 8x4',       'Engrase general',                'por_km', 6000,  150, 30,   'Engrase Volvo', '["Engrase general"]'),
+            ('VM330 8x4',       'Cambio de aceite motor',         'por_kilometraje', 12000, 300, 90,  'Cambio aceite Volvo', '["Drenar aceite","Filtro aceite","Llenar aceite aprobado Volvo"]'),
+            ('VM330 8x4',       'Filtros',                        'por_kilometraje', 24000, 600, 180, 'Filtros aire/comb Volvo', '["Filtro aire","Filtro combustible"]'),
+            ('VM330 8x4',       'Engrase general',                'por_kilometraje', 6000,  150, 30,   'Engrase Volvo', '["Engrase general"]'),
             -- Camionetas genéricas
-            ('Hilux 4x4',       'Cambio de aceite motor',         'por_km', 10000, NULL, 180, 'Cambio aceite camioneta', '["Drenar aceite","Filtro aceite","Llenar 5W30"]'),
-            ('Hilux 4x4',       'Filtros de aire',                'por_km', 40000, NULL, 365, 'Filtro aire', '["Reemplazar filtro aire"]'),
-            ('NP300',           'Cambio de aceite motor',         'por_km', 10000, NULL, 180, 'Cambio aceite', '["Drenar aceite","Filtro aceite","Llenar aceite"]'),
-            ('Berlingo',        'Cambio de aceite motor',         'por_km', 15000, NULL, 365, 'Cambio aceite', '["Drenar aceite","Filtro aceite","Llenar aceite"]')
+            ('Hilux 4x4',       'Cambio de aceite motor',         'por_kilometraje', 10000, NULL, 180, 'Cambio aceite camioneta', '["Drenar aceite","Filtro aceite","Llenar 5W30"]'),
+            ('Hilux 4x4',       'Filtros de aire',                'por_kilometraje', 40000, NULL, 365, 'Filtro aire', '["Reemplazar filtro aire"]'),
+            ('NP300',           'Cambio de aceite motor',         'por_kilometraje', 10000, NULL, 180, 'Cambio aceite', '["Drenar aceite","Filtro aceite","Llenar aceite"]'),
+            ('Berlingo',        'Cambio de aceite motor',         'por_kilometraje', 15000, NULL, 365, 'Cambio aceite', '["Drenar aceite","Filtro aceite","Llenar aceite"]')
         ) AS t(modelo_nombre, pauta_nombre, tipo_plan, freq_km, freq_hrs, freq_dias, descripcion, items_json)
     LOOP
         SELECT id INTO v_modelo_id FROM modelos WHERE nombre = v_rec.modelo_nombre LIMIT 1;
