@@ -210,9 +210,17 @@ export default function ICEOPage() {
         return {
           mes: SHORT_MONTHS[d.getMonth()],
           iceo: h.iceo_final,
+          id: h.id,
+          periodo: h.periodo_inicio,
         }
       })
   }, [historico])
+
+  const [selectedPeriodo, setSelectedPeriodo] = useState<string | null>(null)
+  const selectedHistorico = useMemo(() => {
+    if (!selectedPeriodo || !historico) return null
+    return historico.find((h: any) => h.id === selectedPeriodo)
+  }, [selectedPeriodo, historico])
 
   // Bloqueantes list
   const bloqueantesFormatted: { codigo: string; nombre: string; cumple: boolean }[] = useMemo(() => {
@@ -518,6 +526,7 @@ export default function ICEOPage() {
                   <Spinner size="lg" className="text-pillado-green-600" />
                 </div>
               ) : trendData.length > 0 ? (
+                <>
                 <div className="h-64">
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={trendData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
@@ -535,12 +544,51 @@ export default function ICEOPage() {
                         dataKey="iceo"
                         stroke="#2D8B3D"
                         strokeWidth={3}
-                        dot={{ r: 5, fill: '#2D8B3D' }}
-                        activeDot={{ r: 7 }}
+                        dot={(props: any) => {
+                          const isSelected = selectedPeriodo === props.payload?.id
+                          return (
+                            <circle
+                              key={props.key}
+                              cx={props.cx}
+                              cy={props.cy}
+                              r={isSelected ? 8 : 5}
+                              fill={isSelected ? '#7C3AED' : '#2D8B3D'}
+                              stroke={isSelected ? '#fff' : 'none'}
+                              strokeWidth={isSelected ? 2 : 0}
+                              style={{ cursor: 'pointer' }}
+                            />
+                          )
+                        }}
+                        activeDot={{
+                          r: 7,
+                          onClick: (_: any, payload: any) => {
+                            const id = payload?.payload?.id
+                            if (id) setSelectedPeriodo(selectedPeriodo === id ? null : id)
+                          },
+                          style: { cursor: 'pointer' },
+                        }}
                       />
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
+                {selectedHistorico && (
+                  <div className="mt-3 rounded-lg border border-purple-200 bg-purple-50 p-3 text-sm">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="font-semibold text-purple-700">
+                        Periodo: {selectedHistorico.periodo_inicio} a {selectedHistorico.periodo_fin}
+                      </span>
+                      <button className="text-xs text-purple-600 hover:underline" onClick={() => setSelectedPeriodo(null)}>Cerrar</button>
+                    </div>
+                    <div className="grid grid-cols-4 gap-2 text-xs">
+                      <div><span className="text-gray-500">ICEO:</span> <strong>{selectedHistorico.iceo_final?.toFixed(1)}</strong></div>
+                      <div><span className="text-gray-500">Area A:</span> <strong>{selectedHistorico.puntaje_area_a?.toFixed(1)}</strong></div>
+                      <div><span className="text-gray-500">Area B:</span> <strong>{selectedHistorico.puntaje_area_b?.toFixed(1)}</strong></div>
+                      <div><span className="text-gray-500">Area C:</span> <strong>{selectedHistorico.puntaje_area_c?.toFixed(1)}</strong></div>
+                    </div>
+                  </div>
+                )}
+                <p className="mt-2 text-xs text-gray-500 text-center">Click en un punto para ver el detalle del periodo</p>
+                </>
               ) : (
                 <div className="flex h-64 items-center justify-center text-sm text-gray-400">
                   Sin datos historicos disponibles

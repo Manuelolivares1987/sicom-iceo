@@ -153,6 +153,7 @@ function KPIAreaSection({ area, definiciones, mediciones, onDrillDown }: KPIArea
 
   const chartData = rows.map((r) => ({
     name: r.codigo,
+    codigo: r.codigo,
     puntaje: r.puntaje,
     fill: getBarColor(r.porcentaje_cumplimiento ?? 0),
   }))
@@ -293,6 +294,12 @@ function KPIAreaSection({ area, definiciones, mediciones, onDrillDown }: KPIArea
                       dataKey="puntaje"
                       radius={[4, 4, 0, 0]}
                       fill="#16a34a"
+                      cursor="pointer"
+                      onClick={(data: any) => {
+                        if (data?.codigo && onDrillDown) {
+                          onDrillDown(data.codigo)
+                        }
+                      }}
                     />
                   </BarChart>
                 </ResponsiveContainer>

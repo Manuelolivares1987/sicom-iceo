@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import {
   Gauge,
   ClipboardList,
@@ -140,11 +141,16 @@ export default function DashboardPage() {
     ? Object.entries(statsData)
         .filter(([, v]) => v > 0)
         .map(([estado, value]) => ({
+          key: estado,
           name: estadoLabelMap[estado] ?? estado,
           value,
           color: estadoColorMap[estado] ?? '#6B7280',
         }))
     : []
+
+  // ── Filtro interactivo desde pie chart ──
+  const [filtroOtEstado, setFiltroOtEstado] = useState<string | null>(null)
+  const router = useRouter()
 
   // Inventory valuation
   const inventarioTotal = valorizacion.data as number | null | undefined
@@ -250,7 +256,7 @@ export default function DashboardPage() {
         </Card>
 
         {/* OTs Activas */}
-        <Card>
+        <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => router.push('/dashboard/ordenes-trabajo')}>
           <CardContent className="p-6">
             {otsStats.isLoading ? (
               <div className="flex h-20 items-center justify-center">
@@ -310,7 +316,7 @@ export default function DashboardPage() {
         </Card>
 
         {/* Inventario Valorizado */}
-        <Card>
+        <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => router.push('/dashboard/inventario')}>
           <CardContent className="p-6">
             {valorizacion.isLoading ? (
               <div className="flex h-20 items-center justify-center">
@@ -398,7 +404,14 @@ export default function DashboardPage() {
         {/* OTs por Estado */}
         <Card>
           <CardHeader>
-            <CardTitle>OTs por Estado</CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle>OTs por Estado</CardTitle>
+              {filtroOtEstado && (
+                <button className="text-xs font-medium text-blue-600 hover:underline" onClick={() => setFiltroOtEstado(null)}>
+                  Limpiar filtro
+                </button>
+              )}
+            </div>
           </CardHeader>
           <CardContent>
             <div className="flex h-[280px] items-center gap-4">
@@ -427,9 +440,19 @@ export default function DashboardPage() {
                           outerRadius={95}
                           paddingAngle={3}
                           dataKey="value"
+                          onClick={(data: any) => {
+                            if (data?.key) {
+                              setFiltroOtEstado(filtroOtEstado === data.key ? null : data.key)
+                            }
+                          }}
+                          cursor="pointer"
                         >
                           {otsPorEstado.map((entry, index) => (
-                            <Cell key={index} fill={entry.color} />
+                            <Cell
+                              key={index}
+                              fill={entry.color}
+                              opacity={filtroOtEstado && filtroOtEstado !== entry.key ? 0.3 : 1}
+                            />
                           ))}
                         </Pie>
                         <Tooltip
@@ -444,10 +467,17 @@ export default function DashboardPage() {
                   </div>
                   <div className="space-y-2">
                     {otsPorEstado.map((item) => (
-                      <div key={item.name} className="flex items-center gap-2 text-sm">
+                      <div
+                        key={item.name}
+                        className={cn(
+                          'flex items-center gap-2 text-sm cursor-pointer rounded px-2 py-1 transition-colors hover:bg-gray-100',
+                          filtroOtEstado === item.key && 'bg-gray-100 ring-1 ring-gray-300'
+                        )}
+                        onClick={() => setFiltroOtEstado(filtroOtEstado === item.key ? null : item.key)}
+                      >
                         <div
                           className="h-3 w-3 rounded-full"
-                          style={{ backgroundColor: item.color }}
+                          style={{ backgroundColor: item.color, opacity: filtroOtEstado && filtroOtEstado !== item.key ? 0.3 : 1 }}
                         />
                         <span className="text-gray-600">{item.name}</span>
                         <span className="font-semibold text-gray-900">
@@ -455,6 +485,7 @@ export default function DashboardPage() {
                         </span>
                       </div>
                     ))}
+                    <p className="text-xs text-gray-400 mt-1">Click para filtrar</p>
                   </div>
                 </>
               )}

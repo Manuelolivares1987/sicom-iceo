@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import {
   Briefcase,
   TrendingUp,
@@ -18,6 +18,7 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
+  Cell,
 } from 'recharts'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Spinner } from '@/components/ui/spinner'
@@ -78,10 +79,13 @@ export default function ComercialPage() {
     if (!stats) return []
     return Object.entries(stats.porCliente)
       .filter(([k]) => k !== 'Sin cliente')
-      .map(([cliente, cantidad]) => ({ cliente: cliente.slice(0, 20), cantidad }))
+      .map(([cliente, cantidad]) => ({ clienteFull: cliente, cliente: cliente.slice(0, 20), cantidad }))
       .sort((a, b) => b.cantidad - a.cantidad)
       .slice(0, 10)
   }, [stats])
+
+  // ── Filtro por cliente desde BarChart ──
+  const [filtroCliente, setFiltroCliente] = useState<string | null>(null)
 
   if (loadingFlota) {
     return (
@@ -163,24 +167,52 @@ export default function ComercialPage() {
       {/* ── Distribución por cliente ── */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <Users className="h-5 w-5 text-gray-600" />
-            Equipos por Cliente (Top 10)
+          <CardTitle className="text-base flex items-center gap-2 justify-between">
+            <span className="flex items-center gap-2">
+              <Users className="h-5 w-5 text-gray-600" />
+              Equipos por Cliente (Top 10)
+            </span>
+            {filtroCliente && (
+              <button className="text-xs font-medium text-blue-600 hover:underline" onClick={() => setFiltroCliente(null)}>
+                Limpiar filtro
+              </button>
+            )}
           </CardTitle>
         </CardHeader>
         <CardContent>
           {clientesData.length > 0 ? (
-            <div className="h-72">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={clientesData} layout="vertical" margin={{ left: 100 }}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis type="number" />
-                  <YAxis dataKey="cliente" type="category" width={100} tick={{ fontSize: 11 }} />
-                  <Tooltip />
-                  <Bar dataKey="cantidad" fill="#9333ea" radius={[0, 4, 4, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
+            <>
+              <div className="h-72">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={clientesData} layout="vertical" margin={{ left: 100 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis type="number" />
+                    <YAxis dataKey="cliente" type="category" width={100} tick={{ fontSize: 11 }} />
+                    <Tooltip />
+                    <Bar
+                      dataKey="cantidad"
+                      fill="#9333ea"
+                      radius={[0, 4, 4, 0]}
+                      cursor="pointer"
+                      onClick={(data: any) => {
+                        if (data?.clienteFull) {
+                          setFiltroCliente(filtroCliente === data.clienteFull ? null : data.clienteFull)
+                        }
+                      }}
+                    >
+                      {clientesData.map((entry, index) => (
+                        <Cell
+                          key={index}
+                          fill="#9333ea"
+                          opacity={filtroCliente && filtroCliente !== entry.clienteFull ? 0.3 : 1}
+                        />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+              <p className="mt-1 text-xs text-gray-500 text-center">Click en una barra para filtrar las tablas</p>
+            </>
           ) : (
             <p className="text-sm text-gray-400">Sin datos</p>
           )}
@@ -251,7 +283,7 @@ export default function ComercialPage() {
               </tr>
             </thead>
             <tbody>
-              {flota?.filter((a: any) => a.estado_comercial === 'arrendado').map((activo: any) => (
+              {flota?.filter((a: any) => a.estado_comercial === 'arrendado' && (!filtroCliente || a.cliente_actual === filtroCliente)).map((activo: any) => (
                 <tr key={activo.id} className="border-b hover:bg-gray-50">
                   <td className="px-2 py-2 font-mono font-semibold">{activo.patente || activo.codigo}</td>
                   <td className="px-2 py-2">{activo.nombre}</td>
@@ -289,7 +321,7 @@ export default function ComercialPage() {
               </tr>
             </thead>
             <tbody>
-              {flota?.filter((a: any) => a.estado_comercial === 'disponible').map((activo: any) => (
+              {flota?.filter((a: any) => a.estado_comercial === 'disponible' && (!filtroCliente || !a.cliente_actual)).map((activo: any) => (
                 <tr key={activo.id} className="border-b hover:bg-amber-50">
                   <td className="px-2 py-2 font-mono font-semibold">{activo.patente || activo.codigo}</td>
                   <td className="px-2 py-2">{activo.nombre}</td>
