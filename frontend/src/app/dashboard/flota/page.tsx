@@ -94,17 +94,24 @@ export default function FlotaPage() {
   } | null>(null)
   const [modalOpen, setModalOpen] = useState(false)
 
-  // ── Filtro por estado comercial (click en pie chart) ──
+  // ── Filtros por pie charts ──
   const [filtroEstado, setFiltroEstado] = useState<string | null>(null)
+  const [filtroEstadoOp, setFiltroEstadoOp] = useState<string | null>(null)
 
   const flotaFiltrada = useMemo(() => {
     if (!flota) return []
-    if (!filtroEstado) return flota
     return flota.filter((a: Record<string, unknown>) => {
-      const ec = (a.estado_comercial as string) || 'sin_estado'
-      return ec === filtroEstado
+      if (filtroEstado) {
+        const ec = (a.estado_comercial as string) || 'sin_estado'
+        if (ec !== filtroEstado) return false
+      }
+      if (filtroEstadoOp) {
+        const eo = (a.estado as string) || 'sin_estado'
+        if (eo !== filtroEstadoOp) return false
+      }
+      return true
     })
-  }, [flota, filtroEstado])
+  }, [flota, filtroEstado, filtroEstadoOp])
 
   const handleRowClick = (activo: Record<string, unknown>) => {
     setActivoSeleccionado({
@@ -449,34 +456,59 @@ export default function FlotaPage() {
         {/* Pie Chart Estado Operativo */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2">
-              <Activity className="h-5 w-5 text-gray-600" />
-              Estado Operativo
+            <CardTitle className="text-base flex items-center gap-2 justify-between">
+              <span className="flex items-center gap-2">
+                <Activity className="h-5 w-5 text-gray-600" />
+                Estado Operativo
+              </span>
+              {filtroEstadoOp && (
+                <button
+                  className="text-xs font-medium text-blue-600 hover:underline"
+                  onClick={() => setFiltroEstadoOp(null)}
+                >
+                  Limpiar filtro
+                </button>
+              )}
             </CardTitle>
           </CardHeader>
           <CardContent>
             {estadoOperativoPie.length > 0 ? (
-              <div className="h-64">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={estadoOperativoPie}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={50}
-                      outerRadius={90}
-                      paddingAngle={2}
-                      dataKey="value"
-                      label={({ name, value }) => `${name}: ${value}`}
-                    >
-                      {estadoOperativoPie.map((entry, index) => (
-                        <Cell key={index} fill={entry.color} />
-                      ))}
-                    </Pie>
-                    <Tooltip />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
+              <>
+                <div className="h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={estadoOperativoPie}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={50}
+                        outerRadius={90}
+                        paddingAngle={2}
+                        dataKey="value"
+                        label={({ name, value }) => `${name}: ${value}`}
+                        onClick={(data: any) => {
+                          if (data?.key) {
+                            setFiltroEstadoOp(filtroEstadoOp === data.key ? null : data.key)
+                          }
+                        }}
+                        cursor="pointer"
+                      >
+                        {estadoOperativoPie.map((entry, index) => (
+                          <Cell
+                            key={index}
+                            fill={entry.color}
+                            opacity={filtroEstadoOp && filtroEstadoOp !== entry.key ? 0.3 : 1}
+                          />
+                        ))}
+                      </Pie>
+                      <Tooltip />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+                <p className="mt-2 text-xs text-gray-500 text-center">
+                  Click en un segmento para filtrar la tabla
+                </p>
+              </>
             ) : (
               <p className="text-sm text-gray-400">Sin datos</p>
             )}
@@ -490,12 +522,12 @@ export default function FlotaPage() {
           <CardTitle className="text-base flex items-center gap-2 justify-between">
             <span className="flex items-center gap-2">
               <Truck className="h-5 w-5 text-gray-600" />
-              Maestro de Flota ({flotaFiltrada.length} {filtroEstado ? `de ${flotaStats?.total ?? 0}` : 'equipos'})
+              Maestro de Flota ({flotaFiltrada.length} {(filtroEstado || filtroEstadoOp) ? `de ${flotaStats?.total ?? 0}` : 'equipos'})
             </span>
-            {filtroEstado && (
+            {(filtroEstado || filtroEstadoOp) && (
               <button
                 className="text-xs font-medium text-blue-600 hover:underline"
-                onClick={() => setFiltroEstado(null)}
+                onClick={() => { setFiltroEstado(null); setFiltroEstadoOp(null) }}
               >
                 Ver todos
               </button>
