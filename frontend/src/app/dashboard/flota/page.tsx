@@ -72,6 +72,7 @@ export default function FlotaPage() {
   const [fechaInicio] = useState(firstOfMonth.toISOString().split('T')[0])
   const [fechaFin] = useState(today.toISOString().split('T')[0])
   const [operacionFilter, setOperacionFilter] = useState<string>('')
+  const [contratoFilter, setContratoFilter] = useState<string>('')
 
   const { data: flota, isLoading: loadingFlota } = useFlotaVehicular()
   const { isLoading: loadingResumen } = useResumenDiario(fechaInicio, fechaFin, operacionFilter || undefined)
@@ -98,6 +99,23 @@ export default function FlotaPage() {
   const [filtroEstado, setFiltroEstado] = useState<string | null>(null)
   const [filtroEstadoOp, setFiltroEstadoOp] = useState<string | null>(null)
 
+  const contratosDisponibles = useMemo(() => {
+    if (!flota) return []
+    const map = new Map<string, { id: string; codigo: string; nombre: string; cliente: string | null }>()
+    flota.forEach((a: Record<string, unknown>) => {
+      const c = a.contrato as { id?: string; codigo?: string; nombre?: string; cliente?: string } | null
+      if (c?.id && !map.has(c.id)) {
+        map.set(c.id, {
+          id: c.id,
+          codigo: c.codigo ?? '',
+          nombre: c.nombre ?? '',
+          cliente: c.cliente ?? null,
+        })
+      }
+    })
+    return Array.from(map.values()).sort((a, b) => a.codigo.localeCompare(b.codigo))
+  }, [flota])
+
   const flotaFiltrada = useMemo(() => {
     if (!flota) return []
     return flota.filter((a: Record<string, unknown>) => {
@@ -109,9 +127,17 @@ export default function FlotaPage() {
         const eo = (a.estado as string) || 'sin_estado'
         if (eo !== filtroEstadoOp) return false
       }
+      if (contratoFilter) {
+        const cid = (a.contrato as { id?: string } | null)?.id ?? (a.contrato_id as string) ?? ''
+        if (contratoFilter === '__sin_contrato__') {
+          if (cid) return false
+        } else if (cid !== contratoFilter) {
+          return false
+        }
+      }
       return true
     })
-  }, [flota, filtroEstado, filtroEstadoOp])
+  }, [flota, filtroEstado, filtroEstadoOp, contratoFilter])
 
   const handleRowClick = (activo: Record<string, unknown>) => {
     setActivoSeleccionado({
@@ -228,6 +254,20 @@ export default function FlotaPage() {
             <option value="">Todas las operaciones</option>
             <option value="Coquimbo">Coquimbo</option>
             <option value="Calama">Calama</option>
+          </select>
+          <select
+            className="rounded-md border border-gray-300 px-3 py-2 text-sm max-w-[240px]"
+            value={contratoFilter}
+            onChange={(e) => setContratoFilter(e.target.value)}
+            title="Filtrar equipos por contrato"
+          >
+            <option value="">Todos los contratos</option>
+            <option value="__sin_contrato__">Sin contrato</option>
+            {contratosDisponibles.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.codigo} — {c.cliente || c.nombre}
+              </option>
+            ))}
           </select>
           <button
             className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 flex items-center gap-1"
@@ -522,12 +562,12 @@ export default function FlotaPage() {
           <CardTitle className="text-base flex items-center gap-2 justify-between">
             <span className="flex items-center gap-2">
               <Truck className="h-5 w-5 text-gray-600" />
-              Maestro de Flota ({flotaFiltrada.length} {(filtroEstado || filtroEstadoOp) ? `de ${flotaStats?.total ?? 0}` : 'equipos'})
+              Maestro de Flota ({flotaFiltrada.length} {(filtroEstado || filtroEstadoOp || contratoFilter) ? `de ${flotaStats?.total ?? 0}` : 'equipos'})
             </span>
-            {(filtroEstado || filtroEstadoOp) && (
+            {(filtroEstado || filtroEstadoOp || contratoFilter) && (
               <button
                 className="text-xs font-medium text-blue-600 hover:underline"
-                onClick={() => { setFiltroEstado(null); setFiltroEstadoOp(null) }}
+                onClick={() => { setFiltroEstado(null); setFiltroEstadoOp(null); setContratoFilter('') }}
               >
                 Ver todos
               </button>
@@ -546,6 +586,7 @@ export default function FlotaPage() {
                 <th className="px-2 py-2">Estado</th>
                 <th className="px-2 py-2">Comercial</th>
                 <th className="px-2 py-2">Operacion</th>
+                <th className="px-2 py-2">Contrato</th>
                 <th className="px-2 py-2">Cliente</th>
                 <th className="px-2 py-2">Ubicacion</th>
               </tr>
@@ -590,6 +631,9 @@ export default function FlotaPage() {
                       )}
                     </td>
                     <td className="px-2 py-2">{activo.operacion as string}</td>
+                    <td className="px-2 py-2 text-gray-600 font-mono">
+                      {(activo.contrato as { codigo?: string } | null)?.codigo ?? '—'}
+                    </td>
                     <td className="px-2 py-2 text-gray-600">{activo.cliente_actual as string}</td>
                     <td className="px-2 py-2 text-gray-500 max-w-[150px] truncate">{activo.ubicacion_actual as string}</td>
                   </tr>

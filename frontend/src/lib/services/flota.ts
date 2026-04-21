@@ -317,7 +317,7 @@ export async function ejecutarVerificacionesNormativas() {
 export async function getFlotaVehicular() {
   const { data, error } = await supabase
     .from('activos')
-    .select('*, modelo:modelos(nombre, marca:marcas(nombre))')
+    .select('*, modelo:modelos(nombre, marca:marcas(nombre)), contrato:contratos(id, codigo, nombre, cliente)')
     .in('tipo', ['camion_cisterna', 'camion', 'camioneta', 'lubrimovil', 'equipo_menor'])
     .neq('estado', 'dado_baja')
     .order('codigo')

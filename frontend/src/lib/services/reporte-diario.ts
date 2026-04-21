@@ -101,3 +101,49 @@ export async function regenerarReporteDiario(fecha?: string) {
   })
   return { data, error }
 }
+
+export interface TendenciaDia {
+  fecha: string
+  oee_promedio: number | null
+  disponibilidad_promedio: number | null
+  utilizacion_promedio: number | null
+  calidad_promedio: number | null
+  total_arrendados: number
+  total_disponibles: number
+  total_mantencion: number
+  total_taller: number
+  total_fuera_servicio: number
+  total_uso_interno: number
+  total_leasing: number
+  cambios_24h: number
+  ots_abiertas: number
+  alertas_criticas: number
+}
+
+export async function getTendenciaReporte(dias = 30) {
+  const { data, error } = await supabase.rpc('fn_tendencia_reporte_diario', {
+    p_dias: dias,
+  })
+  return { data: data as TendenciaDia[] | null, error }
+}
+
+export interface CambioEstadoDia {
+  fecha_hora: string
+  activo_id: string
+  patente: string
+  equipo: string
+  estado_codigo: string
+  motivo: string | null
+  usuario_id: string | null
+  usuario_nombre: string
+  usuario_rol: string
+  ot_relacionada_id: string | null
+  ot_folio: string | null
+}
+
+export async function getCambiosEstadoDia(fecha?: string) {
+  const { data, error } = await supabase.rpc('fn_cambios_estado_dia', {
+    p_fecha: fecha ?? new Date().toISOString().split('T')[0],
+  })
+  return { data: data as CambioEstadoDia[] | null, error }
+}

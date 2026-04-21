@@ -10,13 +10,23 @@ import {
   HardHat,
   AlertTriangle,
   Activity,
+  Printer,
 } from 'lucide-react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Spinner } from '@/components/ui/spinner'
 import { cn } from '@/lib/utils'
 import { useRequireAuth } from '@/hooks/use-require-auth'
-import { useReporteDiario, useReportesHistoricos, useRegenerarReporteDiario } from '@/hooks/use-reporte-diario'
+import {
+  useReporteDiario,
+  useReportesHistoricos,
+  useRegenerarReporteDiario,
+  useTendenciaReporte,
+  useCambiosEstadoDia,
+} from '@/hooks/use-reporte-diario'
 import { ESTADO_DIARIO_LABELS, ESTADO_DIARIO_COLORS } from '@/lib/services/flota'
+import { TendenciaFlotaChart } from '@/components/flota/tendencia-flota-chart'
+import { DistribucionEstadosChart } from '@/components/flota/distribucion-estados-chart'
+import { CambiosEstadoDiaTimeline } from '@/components/flota/cambios-estado-dia-timeline'
 
 function Section({
   icon: Icon,
@@ -56,8 +66,11 @@ export default function ReporteDiarioPage() {
   useRequireAuth()
 
   const [fechaSeleccionada, setFechaSeleccionada] = useState<string | undefined>(undefined)
+  const [diasTendencia, setDiasTendencia] = useState(30)
   const { data: reporte, isLoading } = useReporteDiario(fechaSeleccionada)
   const { data: historicos } = useReportesHistoricos(7)
+  const { data: tendencia, isLoading: loadingTendencia } = useTendenciaReporte(diasTendencia)
+  const { data: cambios, isLoading: loadingCambios } = useCambiosEstadoDia(fechaSeleccionada)
   const regenerar = useRegenerarReporteDiario()
 
   const payload = reporte?.payload
@@ -85,7 +98,7 @@ export default function ReporteDiarioPage() {
               : '—'}
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 print:hidden">
           <select
             className="rounded-md border border-gray-300 px-3 py-2 text-sm"
             value={fechaSeleccionada ?? ''}
@@ -103,6 +116,14 @@ export default function ReporteDiarioPage() {
           >
             <RefreshCw className={cn('h-4 w-4', regenerar.isPending && 'animate-spin')} />
             {regenerar.isPending ? 'Regenerando...' : 'Regenerar ahora'}
+          </button>
+          <button
+            className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 flex items-center gap-1"
+            onClick={() => window.print()}
+            title="Imprimir / guardar como PDF"
+          >
+            <Printer className="h-4 w-4" />
+            Imprimir / PDF
           </button>
         </div>
       </div>
@@ -154,6 +175,27 @@ export default function ReporteDiarioPage() {
               </CardContent>
             </Card>
           </div>
+
+          {/* ── Tendencia + Distribución ── */}
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+            <TendenciaFlotaChart
+              data={tendencia ?? []}
+              isLoading={loadingTendencia}
+              dias={diasTendencia}
+              onChangeDias={setDiasTendencia}
+            />
+            <DistribucionEstadosChart
+              data={tendencia ?? []}
+              isLoading={loadingTendencia}
+            />
+          </div>
+
+          {/* ── Cambios del día ── */}
+          <CambiosEstadoDiaTimeline
+            data={cambios ?? []}
+            isLoading={loadingCambios}
+            fecha={fechaSeleccionada}
+          />
 
           {/* ── Flota ── */}
           <Section icon={Truck} title="Flota — Estado del Día" color="text-blue-600">
