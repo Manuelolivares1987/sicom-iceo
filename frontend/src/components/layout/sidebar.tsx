@@ -29,6 +29,7 @@ import {
   HardHat,
   Briefcase,
   CalendarClock,
+  Activity,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -39,6 +40,7 @@ const navItems: Array<{ label: string; href: string; icon: any; module?: Module 
   { label: 'Contratos', href: '/dashboard/contratos', icon: FileText, module: 'contratos' },
   { label: 'Activos', href: '/dashboard/activos', icon: Cog, module: 'activos' },
   { label: 'Flota', href: '/dashboard/flota', icon: Truck, module: 'flota' },
+  { label: 'Fiabilidad', href: '/dashboard/fiabilidad', icon: Activity, module: 'flota' },
   { label: 'Jornada', href: '/dashboard/flota/jornada', icon: Timer, module: 'flota' },
   { label: 'Órdenes de Trabajo', href: '/dashboard/ordenes-trabajo', icon: ClipboardList, module: 'ordenes_trabajo' },
   { label: 'Mantenimiento', href: '/dashboard/mantenimiento', icon: Wrench, module: 'mantenimiento' },
