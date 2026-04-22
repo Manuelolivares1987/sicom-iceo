@@ -224,6 +224,23 @@ export default function FiabilidadPage() {
         </div>
       )}
 
+      {!isLoading && !kpiGlobal && (
+        <Card>
+          <CardContent className="py-10 text-center space-y-2">
+            <AlertTriangle className="h-10 w-10 text-amber-500 mx-auto" />
+            <h3 className="text-lg font-semibold text-gray-800">Sin datos en el período</h3>
+            <p className="text-sm text-gray-500 max-w-lg mx-auto">
+              Revisa que (1) las migraciones 40-42 estén aplicadas en Supabase,
+              (2) el seed de categoría esté corrido y (3) haya filas en
+              <code className="mx-1 rounded bg-gray-100 px-1 text-xs">estado_diario_flota</code>
+              dentro del rango {fechaInicio} → {fechaFin}. Si todo está listo,
+              mira la consola del navegador (F12 → Network) por errores 400/500
+              en las llamadas <code className="text-xs">rpc/fn_calcular_fiabilidad_*</code>.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
       {!isLoading && kpiGlobal && (
         <>
           {/* ─── KPI Tiles ───────────────────────── */}
