@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase'
+import { todayISO } from '@/lib/utils'
 
 export interface ReporteDiarioSnapshot {
   id: string
@@ -97,7 +98,7 @@ export async function getReportesHistoricos(limit = 30) {
 
 export async function regenerarReporteDiario(fecha?: string) {
   const { data, error } = await supabase.rpc('fn_guardar_reporte_diario', {
-    p_fecha: fecha ?? new Date().toISOString().split('T')[0],
+    p_fecha: fecha ?? todayISO(),
   })
   return { data, error }
 }
@@ -143,7 +144,7 @@ export interface CambioEstadoDia {
 
 export async function getCambiosEstadoDia(fecha?: string) {
   const { data, error } = await supabase.rpc('fn_cambios_estado_dia', {
-    p_fecha: fecha ?? new Date().toISOString().split('T')[0],
+    p_fecha: fecha ?? todayISO(),
   })
   return { data: data as CambioEstadoDia[] | null, error }
 }

@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Select } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
 import { Spinner } from '@/components/ui/spinner'
-import { cn } from '@/lib/utils'
+import { cn, todayISO } from '@/lib/utils'
 import {
   useActualizarEstadoManual,
   useEstadoDiarioActivoHoy,
@@ -55,7 +55,7 @@ const ESTADO_OPTIONS: Array<{
 ]
 
 export function CambiarEstadoModal({ open, onClose, activo }: CambiarEstadoModalProps) {
-  const today = new Date().toISOString().split('T')[0]
+  const today = todayISO()
 
   // ── Cargar estado actual del día ──
   const { data: estadoHoy, isLoading: loadingEstadoHoy } = useEstadoDiarioActivoHoy(activo?.id)

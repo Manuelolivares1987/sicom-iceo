@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase'
+import { todayISO } from '@/lib/utils'
 
 // ── Types ────────────────────────────────────────────────
 
@@ -158,7 +159,7 @@ export async function getActividadActual(conductorId: string) {
 export async function getResumenDia(conductorId: string, fecha?: string) {
   const { data, error } = await supabase.rpc('fn_resumen_jornada_dia', {
     p_conductor_id: conductorId,
-    p_fecha: fecha ?? new Date().toISOString().split('T')[0],
+    p_fecha: fecha ?? todayISO(),
   })
   return { data: data as ResumenJornadaDia[] | null, error }
 }

@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase'
+import { todayISO } from '@/lib/utils'
 import type { Certificacion } from '@/types/database'
 
 export async function getCertificaciones(activoId?: string) {
@@ -98,7 +99,7 @@ export async function getCertificacionStats() {
 }
 
 export async function getProximosVencimientos(dias: number = 30) {
-  const hoy = new Date().toISOString().split('T')[0]
+  const hoy = todayISO()
   const limite = new Date()
   limite.setDate(limite.getDate() + dias)
   const limiteFecha = limite.toISOString().split('T')[0]

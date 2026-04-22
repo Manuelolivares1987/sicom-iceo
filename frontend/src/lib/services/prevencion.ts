@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase'
+import { todayISO } from '@/lib/utils'
 
 // ── Types ────────────────────────────────────────────────
 
@@ -192,7 +193,7 @@ export async function getRespelEmpresas() {
 }
 
 export async function getCertificacionesProximasVencer(diasAdelante = 60) {
-  const hoy = new Date().toISOString().split('T')[0]
+  const hoy = todayISO()
   const limite = new Date()
   limite.setDate(limite.getDate() + diasAdelante)
   const limiteStr = limite.toISOString().split('T')[0]

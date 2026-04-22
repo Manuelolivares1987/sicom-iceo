@@ -17,12 +17,23 @@ export function formatPercent(value: number, decimals = 1): string {
   return `${value.toFixed(decimals)}%`
 }
 
+// Parsea un string de fecha respetando la zona horaria local.
+// Para DATE de Postgres (YYYY-MM-DD), new Date(str) lo interpreta como
+// UTC-medianoche y al formatear a es-CL (UTC-4) retrocede un dia. Aqui
+// parseamos la fecha pura como medianoche LOCAL para evitar ese shift.
+function parseDateLocal(input: string | Date): Date {
+  if (input instanceof Date) return input
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(input)
+  if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
+  return new Date(input)
+}
+
 export function formatDate(date: string | Date): string {
   return new Intl.DateTimeFormat('es-CL', {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
-  }).format(new Date(date))
+  }).format(parseDateLocal(date))
 }
 
 export function formatDateTime(date: string | Date): string {
@@ -32,7 +43,19 @@ export function formatDateTime(date: string | Date): string {
     year: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
-  }).format(new Date(date))
+  }).format(parseDateLocal(date))
+}
+
+// Devuelve la fecha de HOY en zona horaria local como 'YYYY-MM-DD'.
+// Reemplaza el patron new Date().toISOString().split('T')[0], que
+// convierte a UTC antes de cortar y en Chile (UTC-4/-3) despues de
+// las 20:00 locales ya devuelve el dia siguiente.
+export function todayISO(): string {
+  const d = new Date()
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
 }
 
 // ICEO presentation functions — source of truth is domain/kpi/calculator

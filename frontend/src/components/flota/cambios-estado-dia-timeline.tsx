@@ -3,7 +3,7 @@
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Spinner } from '@/components/ui/spinner'
 import { Activity, FileText } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { cn, todayISO } from '@/lib/utils'
 import { ESTADO_DIARIO_LABELS, ESTADO_DIARIO_COLORS } from '@/lib/services/flota'
 import type { CambioEstadoDia } from '@/lib/services/reporte-diario'
 
@@ -19,7 +19,7 @@ function formatHora(iso: string) {
 }
 
 export function CambiosEstadoDiaTimeline({ data, isLoading, fecha }: Props) {
-  const fechaLabel = fecha ?? new Date().toISOString().split('T')[0]
+  const fechaLabel = fecha ?? todayISO()
 
   return (
     <Card>

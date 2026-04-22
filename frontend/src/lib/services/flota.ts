@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase'
+import { todayISO } from '@/lib/utils'
 
 // ── Types ────────────────────────────────────────────────
 
@@ -406,13 +407,13 @@ export async function actualizarEstadoDiarioManual(
 
 export async function aplicarEstadosAutomaticos(fecha?: string) {
   const { data, error } = await supabase.rpc('fn_aplicar_estados_diarios_automaticos', {
-    p_fecha: fecha ?? new Date().toISOString().split('T')[0],
+    p_fecha: fecha ?? todayISO(),
   })
   return { data, error }
 }
 
 export async function getEstadoDiarioActivoHoy(activoId: string) {
-  const today = new Date().toISOString().split('T')[0]
+  const today = todayISO()
   const { data, error } = await supabase
     .from('estado_diario_flota')
     .select('*')
