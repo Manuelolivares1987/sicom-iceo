@@ -134,6 +134,20 @@ export function CambiarEstadoModal({ open, onClose, activo }: CambiarEstadoModal
       })
 
       if (result?.success) {
+        // Si se pidió crear OT pero falló, avisamos sin cerrar el modal
+        const pedidoOT = crearOT && requiereOT
+        const r = result as unknown as {
+          success: boolean
+          ot_creada?: boolean
+          ot_folio?: string | null
+          ot_error?: string | null
+        }
+        if (pedidoOT && !r.ot_creada) {
+          setErrorMsg(
+            `Estado aplicado, pero la OT no se pudo crear: ${r.ot_error || 'error desconocido'}`
+          )
+          return
+        }
         onClose()
       }
     } catch (err) {
