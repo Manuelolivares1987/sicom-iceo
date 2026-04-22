@@ -87,20 +87,26 @@ export function CambiarEstadoModal({ open, onClose, activo }: CambiarEstadoModal
     }
   }, [open, activo?.id, estadoHoy?.estado_codigo])
 
-  // ── Pre-marcar Crear OT cuando se selecciona M o T ──
+  // ── Pre-marcar Crear OT cuando se selecciona M, T o F ──
   useEffect(() => {
     if (nuevoEstado === 'T') {
       setOtTipo('correctivo')
+      setOtPrioridad('normal')
       setCrearOT(true)
     } else if (nuevoEstado === 'M') {
       setOtTipo('preventivo')
+      setOtPrioridad('normal')
+      setCrearOT(true)
+    } else if (nuevoEstado === 'F') {
+      setOtTipo('correctivo')
+      setOtPrioridad('alta')
       setCrearOT(true)
     } else {
       setCrearOT(false)
     }
   }, [nuevoEstado])
 
-  const requiereOT = nuevoEstado === 'M' || nuevoEstado === 'T'
+  const requiereOT = nuevoEstado === 'M' || nuevoEstado === 'T' || nuevoEstado === 'F'
 
   const handleSubmit = async () => {
     setErrorMsg(null)

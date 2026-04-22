@@ -99,7 +99,7 @@ AS $$
         e.actualizado_at                               AS fecha_hora,
         e.activo_id,
         COALESCE(a.patente, a.codigo)::TEXT            AS patente,
-        COALESCE(a.nombre, m.descripcion, '—')::TEXT   AS equipo,
+        COALESCE(a.nombre, m.nombre, '—')::TEXT        AS equipo,
         e.estado_codigo,
         e.motivo_override                              AS motivo,
         e.actualizado_por                              AS usuario_id,

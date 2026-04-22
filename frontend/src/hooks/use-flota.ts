@@ -220,6 +220,9 @@ export function useActualizarEstadoManual() {
       qc.invalidateQueries({ queryKey: ['flota-vehicular'] })
       qc.invalidateQueries({ queryKey: ['ots'] })
       qc.invalidateQueries({ queryKey: ['no-conformidades'] })
+      qc.invalidateQueries({ queryKey: ['alertas'] })
+      qc.invalidateQueries({ queryKey: ['tendencia-reporte'] })
+      qc.invalidateQueries({ queryKey: ['cambios-estado-dia'] })
     },
   })
 }
