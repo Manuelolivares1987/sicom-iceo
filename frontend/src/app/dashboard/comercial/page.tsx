@@ -22,7 +22,7 @@ import {
 } from 'recharts'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Spinner } from '@/components/ui/spinner'
-import { cn } from '@/lib/utils'
+import { cn, todayISO } from '@/lib/utils'
 import { useRequireAuth } from '@/hooks/use-require-auth'
 import { useFlotaVehicular, useOEEFlota } from '@/hooks/use-flota'
 import { useReporteDiario } from '@/hooks/use-reporte-diario'
@@ -32,8 +32,8 @@ export default function ComercialPage() {
 
   const today = new Date()
   const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1)
-  const fechaInicio = firstOfMonth.toISOString().split('T')[0]
-  const fechaFin = today.toISOString().split('T')[0]
+  const fechaInicio = `${firstOfMonth.getFullYear()}-${String(firstOfMonth.getMonth() + 1).padStart(2, '0')}-01`
+  const fechaFin = todayISO()
 
   const { data: flota, isLoading: loadingFlota } = useFlotaVehicular()
   const { data: oeeTotal } = useOEEFlota(fechaInicio, fechaFin)

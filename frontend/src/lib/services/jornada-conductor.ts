@@ -165,11 +165,11 @@ export async function getResumenDia(conductorId: string, fecha?: string) {
 }
 
 export async function getResumenMes(conductorId: string) {
-  const firstOfMonth = new Date()
-  firstOfMonth.setDate(1)
+  const now = new Date()
+  const primerDiaMes = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
   const { data, error } = await supabase.rpc('fn_resumen_jornada_mes', {
     p_conductor_id: conductorId,
-    p_mes: firstOfMonth.toISOString().split('T')[0],
+    p_mes: primerDiaMes,
   })
   return { data: data as ResumenJornadaMes[] | null, error }
 }

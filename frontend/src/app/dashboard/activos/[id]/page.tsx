@@ -49,7 +49,7 @@ import {
   TableHead,
   TableCell,
 } from '@/components/ui/table'
-import { cn, formatCLP, formatDate, getEstadoOTColor, getEstadoOTLabel } from '@/lib/utils'
+import { cn, formatCLP, formatDate, getEstadoOTColor, getEstadoOTLabel, todayISO } from '@/lib/utils'
 import {
   getSemaforoDot,
   getCriticidadColor,
@@ -163,8 +163,8 @@ export default function ActivoDetailPage() {
 
   // OEE del mes actual
   const today = new Date()
-  const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0]
-  const todayStr = today.toISOString().split('T')[0]
+  const firstOfMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`
+  const todayStr = todayISO()
   const { data: oee } = useOEEActivo(id, firstOfMonth, todayStr)
 
   // Alertas de certificaciones
