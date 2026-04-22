@@ -72,11 +72,10 @@ export function CambiarEstadoModal({ open, onClose, activo }: CambiarEstadoModal
   const [otDescripcion, setOtDescripcion] = useState('')
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
 
-  // ── Reset al abrir ──
+  // ── Reset del formulario: SOLO al abrir o cambiar de activo.
+  //    Si dependiera de estadoHoy, el refetch post-mutación borraría el errorMsg.
   useEffect(() => {
     if (open && activo) {
-      const estadoActual = (estadoHoy?.estado_codigo as EstadoCodigo) || 'A'
-      setNuevoEstado(estadoActual)
       setMotivo('')
       setCrearOT(false)
       setOtTipo('correctivo')
@@ -84,6 +83,13 @@ export function CambiarEstadoModal({ open, onClose, activo }: CambiarEstadoModal
       setOtResponsableId('')
       setOtDescripcion('')
       setErrorMsg(null)
+    }
+  }, [open, activo?.id])
+
+  // ── Sincroniza el estado seleccionado con el estado del día cargado.
+  useEffect(() => {
+    if (open) {
+      setNuevoEstado((estadoHoy?.estado_codigo as EstadoCodigo) || 'A')
     }
   }, [open, activo?.id, estadoHoy?.estado_codigo])
 
