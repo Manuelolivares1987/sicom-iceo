@@ -11,12 +11,12 @@ import { cn } from '@/lib/utils'
 import {
   useActualizarEstadoManual,
   useEstadoDiarioActivoHoy,
-  useConductores,
 } from '@/hooks/use-flota'
 import {
   ESTADO_DIARIO_LABELS,
   ESTADO_DIARIO_COLORS,
 } from '@/lib/services/flota'
+import { supabase } from '@/lib/supabase'
 
 type EstadoCodigo = 'A' | 'D' | 'H' | 'R' | 'M' | 'T' | 'F' | 'V' | 'U' | 'L'
 type TipoOT = 'preventivo' | 'correctivo' | 'inspeccion' | 'lubricacion'
@@ -59,8 +59,24 @@ export function CambiarEstadoModal({ open, onClose, activo }: CambiarEstadoModal
 
   // ── Cargar estado actual del día ──
   const { data: estadoHoy, isLoading: loadingEstadoHoy } = useEstadoDiarioActivoHoy(activo?.id)
-  const { data: conductores } = useConductores(true)
   const mutation = useActualizarEstadoManual()
+
+  // ── Responsables (técnicos de mantenimiento de usuarios_perfil) ──
+  // Nota: el FK ordenes_trabajo.responsable_id apunta a usuarios_perfil,
+  // NO a conductores. Si pasamos un id de conductor → FK violada.
+  const [tecnicos, setTecnicos] = useState<Array<{ id: string; nombre_completo: string; cargo: string | null }>>([])
+  useEffect(() => {
+    if (!open) return
+    supabase
+      .from('usuarios_perfil')
+      .select('id, nombre_completo, cargo, rol')
+      .eq('activo', true)
+      .eq('rol', 'tecnico_mantenimiento')
+      .order('nombre_completo')
+      .then(({ data }) => {
+        if (data) setTecnicos(data as typeof tecnicos)
+      })
+  }, [open])
 
   // ── Form state ──
   const [nuevoEstado, setNuevoEstado] = useState<EstadoCodigo>('A')
@@ -298,14 +314,14 @@ export function CambiarEstadoModal({ open, onClose, activo }: CambiarEstadoModal
                 </div>
 
                 <Select
-                  label="Responsable (opcional)"
+                  label="Técnico responsable (opcional)"
                   value={otResponsableId}
                   onChange={(e) => setOtResponsableId(e.target.value)}
                 >
                   <option value="">Sin asignar</option>
-                  {conductores?.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.nombre_completo} ({c.tipo_licencia})
+                  {tecnicos.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.nombre_completo}{t.cargo ? ` — ${t.cargo}` : ''}
                     </option>
                   ))}
                 </Select>
