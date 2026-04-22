@@ -79,6 +79,7 @@ export default function FlotaPage() {
   const { data: flota, isLoading: loadingFlota } = useFlotaVehicular()
   const { isLoading: loadingResumen } = useResumenDiario(fechaInicio, fechaFin, operacionFilter || undefined)
   const { data: oeeTotal } = useOEEFlota(fechaInicio, fechaFin, undefined, undefined)
+  const { data: oeeHoy } = useOEEFlota(fechaFin, fechaFin, undefined, undefined)
   const { data: oeeCoquimbo } = useOEEFlota(fechaInicio, fechaFin, undefined, 'Coquimbo')
   const { data: oeeCalama } = useOEEFlota(fechaInicio, fechaFin, undefined, 'Calama')
   const { data: alertas } = useAlertasNoLeidas()
@@ -122,8 +123,15 @@ export default function FlotaPage() {
     if (!flota) return []
     return flota.filter((a: Record<string, unknown>) => {
       if (filtroEstado) {
-        const ec = (a.estado_comercial as string) || 'sin_estado'
-        if (ec !== filtroEstado) return false
+        const eo = (a.estado as string) || 'sin_estado'
+        if (filtroEstado === 'no_disponible') {
+          if (eo === 'operativo') return false
+        } else {
+          // Solo filtro por estado_comercial entre equipos operativos.
+          if (eo !== 'operativo') return false
+          const ec = (a.estado_comercial as string) || 'sin_estado'
+          if (ec !== filtroEstado) return false
+        }
       }
       if (filtroEstadoOp) {
         const eo = (a.estado as string) || 'sin_estado'
@@ -163,19 +171,28 @@ export default function FlotaPage() {
     const porEstadoOp: Record<string, number> = {}
     const porOperacion: Record<string, number> = {}
     const porTipo: Record<string, number> = {}
+    let noDisponibles = 0
 
     flota.forEach((a: Record<string, unknown>) => {
-      const ec = (a.estado_comercial as string) || 'sin_estado'
-      porEstado[ec] = (porEstado[ec] || 0) + 1
       const eo = (a.estado as string) || 'sin_estado'
       porEstadoOp[eo] = (porEstadoOp[eo] || 0) + 1
       const op = (a.operacion as string) || 'Sin asignar'
       porOperacion[op] = (porOperacion[op] || 0) + 1
       const tipo = (a.tipo as string) || 'otro'
       porTipo[tipo] = (porTipo[tipo] || 0) + 1
+
+      // El breakdown comercial se calcula SOLO sobre equipos operativos.
+      // Los que estan en taller/mantencion/fuera se agrupan en "No disponible"
+      // para que el cambio de estado se refleje visualmente en el pie.
+      if (eo === 'operativo') {
+        const ec = (a.estado_comercial as string) || 'sin_estado'
+        porEstado[ec] = (porEstado[ec] || 0) + 1
+      } else {
+        noDisponibles += 1
+      }
     })
 
-    return { total, porEstado, porEstadoOp, porOperacion, porTipo }
+    return { total, porEstado, porEstadoOp, porOperacion, porTipo, noDisponibles }
   }, [flota])
 
   const alertasNormativas = useMemo(() => {
@@ -198,11 +215,19 @@ export default function FlotaPage() {
       comprometido: 'Comprometido',
       sin_estado: 'Sin Estado',
     }
-    return Object.entries(flotaStats.porEstado).map(([key, value]) => ({
+    const base = Object.entries(flotaStats.porEstado).map(([key, value]) => ({
       key,
       name: labels[key] || key,
       value,
     }))
+    if (flotaStats.noDisponibles > 0) {
+      base.push({
+        key: 'no_disponible',
+        name: 'No disponible (taller/mantencion)',
+        value: flotaStats.noDisponibles,
+      })
+    }
+    return base
   }, [flotaStats])
 
   const estadoOperativoPie = useMemo(() => {
@@ -319,18 +344,20 @@ export default function FlotaPage() {
       )}
 
       {/* ── OEE Dashboard ── */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         {[
-          { label: 'OEE Total', data: oeeTotal },
-          { label: 'OEE Coquimbo', data: oeeCoquimbo },
-          { label: 'OEE Calama', data: oeeCalama },
-        ].map(({ label, data: oee }) => (
+          { label: 'OEE Hoy', data: oeeHoy, hint: 'Impacto en tiempo real' },
+          { label: 'OEE Mes', data: oeeTotal, hint: 'Rolling mensual' },
+          { label: 'OEE Coquimbo', data: oeeCoquimbo, hint: '' },
+          { label: 'OEE Calama', data: oeeCalama, hint: '' },
+        ].map(({ label, data: oee, hint }) => (
           <Card key={label} className={cn('border', oee ? getOEEBgColor(oee.oee_promedio) : 'bg-gray-50')}>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-gray-600 flex items-center gap-2">
                 <Activity className="h-4 w-4" />
                 {label}
               </CardTitle>
+              {hint && <p className="text-[10px] text-gray-400">{hint}</p>}
             </CardHeader>
             <CardContent>
               {oee ? (
@@ -414,7 +441,7 @@ export default function FlotaPage() {
                         {estadoComercialPie.map((entry, index) => (
                           <Cell
                             key={index}
-                            fill={PIE_COLORS[index % PIE_COLORS.length]}
+                            fill={entry.key === 'no_disponible' ? '#9CA3AF' : PIE_COLORS[index % PIE_COLORS.length]}
                             opacity={filtroEstado && filtroEstado !== entry.key ? 0.3 : 1}
                           />
                         ))}

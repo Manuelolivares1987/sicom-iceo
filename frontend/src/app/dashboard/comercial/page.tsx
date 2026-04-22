@@ -19,6 +19,8 @@ import {
   Tooltip,
   ResponsiveContainer,
   Cell,
+  PieChart,
+  Pie,
 } from 'recharts'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Spinner } from '@/components/ui/spinner'
@@ -37,23 +39,34 @@ export default function ComercialPage() {
 
   const { data: flota, isLoading: loadingFlota } = useFlotaVehicular()
   const { data: oeeTotal } = useOEEFlota(fechaInicio, fechaFin)
+  const { data: oeeHoy } = useOEEFlota(fechaFin, fechaFin)
   const { data: reporte } = useReporteDiario()
 
   // ── Agregaciones ──
+  // El breakdown comercial se calcula SOLO sobre equipos operativos; los
+  // que estan en taller/mantencion/fuera se agrupan en "No disponible"
+  // para reflejar la realidad de arriendo sin perder la verdad contractual.
   const stats = useMemo(() => {
     if (!flota) return null
     const total = flota.length
     const porEstadoComercial: Record<string, number> = {}
     const porCliente: Record<string, number> = {}
     const porOperacion: Record<string, number> = {}
+    let noDisponibles = 0
 
     flota.forEach((a: any) => {
-      const ec = a.estado_comercial || 'sin_estado'
-      porEstadoComercial[ec] = (porEstadoComercial[ec] || 0) + 1
+      const eo = a.estado || 'sin_estado'
       const cliente = a.cliente_actual || 'Sin cliente'
       porCliente[cliente] = (porCliente[cliente] || 0) + 1
       const op = a.operacion || 'Sin asignar'
       porOperacion[op] = (porOperacion[op] || 0) + 1
+
+      if (eo === 'operativo') {
+        const ec = a.estado_comercial || 'sin_estado'
+        porEstadoComercial[ec] = (porEstadoComercial[ec] || 0) + 1
+      } else {
+        noDisponibles += 1
+      }
     })
 
     const arrendados = porEstadoComercial['arrendado'] || 0
@@ -67,6 +80,8 @@ export default function ComercialPage() {
       disponibles,
       usoInterno,
       leasing,
+      noDisponibles,
+      porEstadoComercial,
       porCliente,
       porOperacion,
       tasaOcupacion: total > 0 ? ((arrendados + usoInterno + leasing) / total * 100) : 0,
@@ -74,6 +89,43 @@ export default function ComercialPage() {
       perdidaPct: total > 0 ? (disponibles / total * 100) : 0,
     }
   }, [flota])
+
+  const estadoPie = useMemo(() => {
+    if (!stats) return []
+    const labels: Record<string, string> = {
+      arrendado: 'Arrendado',
+      disponible: 'Disponible',
+      uso_interno: 'Uso Interno',
+      leasing: 'Leasing',
+      en_recepcion: 'En Recepcion',
+      en_venta: 'En Venta',
+      sin_estado: 'Sin Estado',
+    }
+    const colors: Record<string, string> = {
+      arrendado: '#16A34A',
+      disponible: '#F59E0B',
+      uso_interno: '#0891B2',
+      leasing: '#7C3AED',
+      en_recepcion: '#2563EB',
+      en_venta: '#DC2626',
+      no_disponible: '#9CA3AF',
+    }
+    const entries = Object.entries(stats.porEstadoComercial).map(([key, value]) => ({
+      key, name: labels[key] || key, value, color: colors[key] || '#6B7280',
+    }))
+    if (stats.noDisponibles > 0) {
+      entries.push({
+        key: 'no_disponible',
+        name: 'No disponible (taller)',
+        value: stats.noDisponibles,
+        color: colors.no_disponible,
+      })
+    }
+    return entries
+  }, [stats])
+
+  // ── Filtro por segmento del pie chart ──
+  const [filtroEstado, setFiltroEstado] = useState<string | null>(null)
 
   const clientesData = useMemo(() => {
     if (!stats) return []
@@ -164,6 +216,109 @@ export default function ComercialPage() {
         </Card>
       </div>
 
+      {/* ── Pie: Estado Comercial (clickable) ── */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2 justify-between">
+            <span className="flex items-center gap-2">
+              <Briefcase className="h-5 w-5 text-purple-600" />
+              Estado Comercial de la Flota
+            </span>
+            {filtroEstado && (
+              <button
+                className="text-xs font-medium text-blue-600 hover:underline"
+                onClick={() => setFiltroEstado(null)}
+              >
+                Limpiar filtro
+              </button>
+            )}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {estadoPie.length > 0 ? (
+            <>
+              <div className="h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={estadoPie}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={50}
+                      outerRadius={90}
+                      paddingAngle={2}
+                      dataKey="value"
+                      label={({ name, value }) => `${name}: ${value}`}
+                      onClick={(data: any) => {
+                        if (data?.key) {
+                          setFiltroEstado(filtroEstado === data.key ? null : data.key)
+                        }
+                      }}
+                      cursor="pointer"
+                    >
+                      {estadoPie.map((entry) => (
+                        <Cell
+                          key={entry.key}
+                          fill={entry.color}
+                          opacity={filtroEstado && filtroEstado !== entry.key ? 0.3 : 1}
+                        />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+              <p className="mt-2 text-xs text-gray-500 text-center">
+                Click en un segmento para ver abajo los equipos en ese estado
+              </p>
+            </>
+          ) : (
+            <p className="text-sm text-gray-400">Sin datos</p>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ── Tabla dinámica según filtro del pie ── */}
+      {filtroEstado && (
+        <Card className="border-blue-200">
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2 text-blue-700">
+              <MapPin className="h-5 w-5" />
+              Equipos filtrados: {estadoPie.find((e) => e.key === filtroEstado)?.name ?? filtroEstado}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b text-left text-gray-500 uppercase">
+                  <th className="px-2 py-2">PPU</th>
+                  <th className="px-2 py-2">Equipo</th>
+                  <th className="px-2 py-2">Cliente</th>
+                  <th className="px-2 py-2">Operación</th>
+                  <th className="px-2 py-2">Estado Op.</th>
+                  <th className="px-2 py-2">Ubicación</th>
+                </tr>
+              </thead>
+              <tbody>
+                {flota?.filter((a: any) => {
+                  if (filtroEstado === 'no_disponible') return a.estado !== 'operativo'
+                  return a.estado === 'operativo' && a.estado_comercial === filtroEstado
+                }).map((activo: any) => (
+                  <tr key={activo.id} className="border-b hover:bg-blue-50">
+                    <td className="px-2 py-2 font-mono font-semibold">{activo.patente || activo.codigo}</td>
+                    <td className="px-2 py-2">{activo.nombre}</td>
+                    <td className="px-2 py-2 text-gray-600">{activo.cliente_actual || '—'}</td>
+                    <td className="px-2 py-2">{activo.operacion}</td>
+                    <td className="px-2 py-2 text-gray-500">{activo.estado}</td>
+                    <td className="px-2 py-2 text-gray-500 max-w-[200px] truncate">{activo.ubicacion_actual || '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </CardContent>
+        </Card>
+      )}
+
       {/* ── Distribución por cliente ── */}
       <Card>
         <CardHeader>
@@ -219,48 +374,76 @@ export default function ComercialPage() {
         </CardContent>
       </Card>
 
-      {/* ── OEE comercial ── */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <TrendingUp className="h-5 w-5 text-gray-600" />
-            OEE de la Flota (Mes Corriente)
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {oeeTotal ? (
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div className="text-center">
-                <div className="text-xs text-gray-500">OEE Total</div>
-                <div className="text-3xl font-bold text-gray-900">
-                  {oeeTotal.oee_promedio?.toFixed(1) ?? 0}%
+      {/* ── OEE comercial (hoy vs mes) ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <TrendingUp className="h-5 w-5 text-emerald-600" />
+              OEE de Hoy
+            </CardTitle>
+            <p className="text-xs text-gray-400">Impacto en tiempo real del estado actual</p>
+          </CardHeader>
+          <CardContent>
+            {oeeHoy ? (
+              <div className="grid grid-cols-4 gap-2">
+                <div className="text-center">
+                  <div className="text-xs text-gray-500">OEE</div>
+                  <div className="text-2xl font-bold text-gray-900">{oeeHoy.oee_promedio?.toFixed(1) ?? 0}%</div>
                 </div>
-                <div className="text-xs text-gray-500">{oeeTotal.clasificacion}</div>
-              </div>
-              <div className="text-center">
-                <div className="text-xs text-gray-500">Disponibilidad</div>
-                <div className="text-3xl font-bold text-blue-700">
-                  {oeeTotal.disponibilidad_promedio?.toFixed(1) ?? 0}%
+                <div className="text-center">
+                  <div className="text-xs text-gray-500">Disp.</div>
+                  <div className="text-2xl font-bold text-blue-700">{oeeHoy.disponibilidad_promedio?.toFixed(1) ?? 0}%</div>
                 </div>
-              </div>
-              <div className="text-center">
-                <div className="text-xs text-gray-500">Utilización</div>
-                <div className="text-3xl font-bold text-green-700">
-                  {oeeTotal.utilizacion_promedio?.toFixed(1) ?? 0}%
+                <div className="text-center">
+                  <div className="text-xs text-gray-500">Utiliz.</div>
+                  <div className="text-2xl font-bold text-green-700">{oeeHoy.utilizacion_promedio?.toFixed(1) ?? 0}%</div>
                 </div>
-              </div>
-              <div className="text-center">
-                <div className="text-xs text-gray-500">Calidad Servicio</div>
-                <div className="text-3xl font-bold text-purple-700">
-                  {oeeTotal.calidad_promedio?.toFixed(1) ?? 0}%
+                <div className="text-center">
+                  <div className="text-xs text-gray-500">Calidad</div>
+                  <div className="text-2xl font-bold text-purple-700">{oeeHoy.calidad_promedio?.toFixed(1) ?? 0}%</div>
                 </div>
               </div>
-            </div>
-          ) : (
-            <p className="text-sm text-gray-400">Sin datos de OEE</p>
-          )}
-        </CardContent>
-      </Card>
+            ) : (
+              <p className="text-sm text-gray-400">Sin datos de hoy</p>
+            )}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <TrendingUp className="h-5 w-5 text-gray-600" />
+              OEE del Mes
+            </CardTitle>
+            <p className="text-xs text-gray-400">Rolling mes corriente</p>
+          </CardHeader>
+          <CardContent>
+            {oeeTotal ? (
+              <div className="grid grid-cols-4 gap-2">
+                <div className="text-center">
+                  <div className="text-xs text-gray-500">OEE</div>
+                  <div className="text-2xl font-bold text-gray-900">{oeeTotal.oee_promedio?.toFixed(1) ?? 0}%</div>
+                  <div className="text-[10px] text-gray-500">{oeeTotal.clasificacion}</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-xs text-gray-500">Disp.</div>
+                  <div className="text-2xl font-bold text-blue-700">{oeeTotal.disponibilidad_promedio?.toFixed(1) ?? 0}%</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-xs text-gray-500">Utiliz.</div>
+                  <div className="text-2xl font-bold text-green-700">{oeeTotal.utilizacion_promedio?.toFixed(1) ?? 0}%</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-xs text-gray-500">Calidad</div>
+                  <div className="text-2xl font-bold text-purple-700">{oeeTotal.calidad_promedio?.toFixed(1) ?? 0}%</div>
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-gray-400">Sin datos de OEE</p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
 
       {/* ── Detalle de equipos arrendados ── */}
       <Card>
