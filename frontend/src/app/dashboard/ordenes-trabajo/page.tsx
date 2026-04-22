@@ -201,6 +201,8 @@ export default function OrdenesTrabajoPage() {
   const [estadoFilter, setEstadoFilter] = useState('')
   const [faenaFilter, setFaenaFilter] = useState('')
   const [prioridadFilter, setPrioridadFilter] = useState('')
+  const [fechaDesde, setFechaDesde] = useState('')
+  const [fechaHasta, setFechaHasta] = useState('')
   const [search, setSearch] = useState('')
   const [showCrearModal, setShowCrearModal] = useState(false)
   const [contratoId, setContratoId] = useState('')
@@ -232,6 +234,8 @@ export default function OrdenesTrabajoPage() {
   if (estadoFilter) filters.estado = estadoFilter
   if (faenaFilter) filters.faena_id = faenaFilter
   if (prioridadFilter) filters.prioridad = prioridadFilter
+  if (fechaDesde) filters.fecha_desde = fechaDesde
+  if (fechaHasta) filters.fecha_hasta = fechaHasta
 
   const { data: ordenes, isLoading, error } = useOrdenesTrabajo(filters)
 
@@ -299,6 +303,36 @@ export default function OrdenesTrabajoPage() {
               onChange={setPrioridadFilter}
               options={prioridadOptions}
             />
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700">Desde</label>
+              <input
+                type="date"
+                className="h-10 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-pillado-green-500 focus:outline-none focus:ring-2 focus:ring-pillado-green-500/20"
+                value={fechaDesde}
+                onChange={(e) => setFechaDesde(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700">Hasta</label>
+              <input
+                type="date"
+                className="h-10 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-pillado-green-500 focus:outline-none focus:ring-2 focus:ring-pillado-green-500/20"
+                value={fechaHasta}
+                onChange={(e) => setFechaHasta(e.target.value)}
+              />
+            </div>
+            {(fechaDesde || fechaHasta || tipoFilter || estadoFilter || faenaFilter || prioridadFilter || search) && (
+              <button
+                className="h-10 rounded-lg border border-gray-300 bg-white px-3 text-sm text-gray-600 hover:bg-gray-50"
+                onClick={() => {
+                  setFechaDesde(''); setFechaHasta('')
+                  setTipoFilter(''); setEstadoFilter(''); setFaenaFilter(''); setPrioridadFilter('')
+                  setSearch('')
+                }}
+              >
+                Limpiar
+              </button>
+            )}
           </div>
         </CardContent>
       </Card>

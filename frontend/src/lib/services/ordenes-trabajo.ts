@@ -50,7 +50,11 @@ export async function getOrdenesTrabajo(filters?: OTFilters) {
   if (filters?.fecha_desde) query = query.gte('fecha_programada', filters.fecha_desde)
   if (filters?.fecha_hasta) query = query.lte('fecha_programada', filters.fecha_hasta)
 
-  const { data, error } = await query.order('fecha_programada', { ascending: false })
+  // Las más recientes primero (created_at es timestamp; fecha_programada es
+  // sólo fecha y no diferencia OTs creadas el mismo día).
+  const { data, error } = await query
+    .order('created_at', { ascending: false })
+    .order('fecha_programada', { ascending: false })
 
   return { data: data as OrdenTrabajo[] | null, error }
 }
