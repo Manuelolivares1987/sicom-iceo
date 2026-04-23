@@ -81,6 +81,8 @@ const navGroups: Array<{ label?: string; items: NavItem[] }> = [
     label: 'Inventario',
     items: [
       { label: 'Inventario', href: '/dashboard/inventario', icon: Package, module: 'inventario' },
+      { label: 'Pistola Scanner', href: '/dashboard/inventario/scanner', icon: BarChart3, module: 'inventario' },
+      { label: 'Cargar Maestro', href: '/dashboard/inventario/cargar-maestro', icon: FileSpreadsheet, module: 'inventario' },
       { label: 'Despachos OT', href: '/dashboard/abastecimiento/despachos', icon: ClipboardCheck, module: 'inventario' },
       { label: 'Abastecimiento', href: '/dashboard/abastecimiento', icon: Fuel, module: 'abastecimiento' },
     ],
