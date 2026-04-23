@@ -1,15 +1,18 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import Link from 'next/link'
-import { FileText, ExternalLink, FileCheck, Clock, CheckCircle2 } from 'lucide-react'
+import {
+  FileText, ExternalLink, FileCheck, Clock, CheckCircle2,
+  DollarSign, TrendingUp, AlertTriangle,
+} from 'lucide-react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Spinner } from '@/components/ui/spinner'
 import { useRequireAuth } from '@/hooks/use-require-auth'
 import { useInformesRecepcionLista } from '@/hooks/use-informe-recepcion'
 import type { EstadoInformeRecepcion } from '@/lib/services/informe-recepcion'
-import { cn } from '@/lib/utils'
+import { cn, todayISO } from '@/lib/utils'
 
 export default function ListaInformesRecepcionPage() {
   useRequireAuth()
@@ -27,6 +30,43 @@ export default function ListaInformesRecepcionPage() {
     emitido:       informes.filter((i) => i.estado === 'emitido').length,
   }
 
+  // ── KPIs de recuperaciones ──
+  const kpis = useMemo(() => {
+    const hoy = todayISO()
+    const year = hoy.slice(0, 4)
+    const mes  = hoy.slice(0, 7)
+
+    const emitidos = informes.filter((i) => i.estado === 'emitido' && i.emitido_en)
+    const emitidosMes = emitidos.filter((i) => (i.emitido_en ?? '').slice(0, 7) === mes)
+    const emitidosAnio = emitidos.filter((i) => (i.emitido_en ?? '').slice(0, 4) === year)
+    const borradores = informes.filter((i) => i.estado === 'borrador')
+
+    const totalCobradoMes = emitidosMes.reduce((s, i) => s + Number(i.total), 0)
+    const totalCobradoAnio = emitidosAnio.reduce((s, i) => s + Number(i.total), 0)
+    const totalPendiente = borradores.reduce((s, i) => s + Number(i.total), 0)
+    const totalAbsorbidoAnio = emitidosAnio.reduce((s, i) => s + Number(i.total_no_cobrable), 0)
+    const promedioPorInforme = emitidosAnio.length > 0
+      ? totalCobradoAnio / emitidosAnio.length : 0
+
+    // Tasa cobrable: cuánto del total detectado se le cobra al cliente
+    const totalDetectadoAnio = emitidosAnio.reduce(
+      (s, i) => s + Number(i.total_cobrable_cliente) + Number(i.total_no_cobrable), 0,
+    )
+    const tasaCobrable = totalDetectadoAnio > 0
+      ? (emitidosAnio.reduce((s, i) => s + Number(i.total_cobrable_cliente), 0) / totalDetectadoAnio) * 100
+      : 0
+
+    return {
+      totalCobradoMes, totalCobradoAnio, totalPendiente,
+      totalAbsorbidoAnio, promedioPorInforme, tasaCobrable,
+      nEmitidosMes: emitidosMes.length,
+      nEmitidosAnio: emitidosAnio.length,
+      nBorradores: borradores.length,
+    }
+  }, [informes])
+
+  const fmtCLP = (n: number) => `$${Math.round(n).toLocaleString('es-CL')}`
+
   return (
     <div className="space-y-4">
       <div className="rounded-xl bg-gradient-to-r from-slate-700 to-indigo-700 p-5 text-white">
@@ -37,6 +77,38 @@ export default function ListaInformesRecepcionPage() {
         <p className="text-xs text-white/80 mt-1">
           Devoluciones de arriendo con daños imputables al cliente.
         </p>
+      </div>
+
+      {/* ── KPIs de recuperación al cliente ── */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <KpiCard
+          icon={<DollarSign className="h-5 w-5" />}
+          label="Cobrado este mes"
+          value={fmtCLP(kpis.totalCobradoMes)}
+          hint={`${kpis.nEmitidosMes} informe${kpis.nEmitidosMes !== 1 ? 's' : ''} emitidos`}
+          color="emerald"
+        />
+        <KpiCard
+          icon={<TrendingUp className="h-5 w-5" />}
+          label="Cobrado en el año"
+          value={fmtCLP(kpis.totalCobradoAnio)}
+          hint={`Promedio ${fmtCLP(kpis.promedioPorInforme)} / informe`}
+          color="blue"
+        />
+        <KpiCard
+          icon={<Clock className="h-5 w-5" />}
+          label="Por emitir (borradores)"
+          value={fmtCLP(kpis.totalPendiente)}
+          hint={`${kpis.nBorradores} esperan firma de encargado`}
+          color="amber"
+        />
+        <KpiCard
+          icon={<AlertTriangle className="h-5 w-5" />}
+          label="Absorbido empresa (año)"
+          value={fmtCLP(kpis.totalAbsorbidoAnio)}
+          hint={`Tasa cobrable ${kpis.tasaCobrable.toFixed(1)}%`}
+          color="rose"
+        />
       </div>
 
       {/* Tabs por estado */}
@@ -105,6 +177,31 @@ export default function ListaInformesRecepcionPage() {
           )}
         </CardContent>
       </Card>
+    </div>
+  )
+}
+
+function KpiCard({
+  icon, label, value, hint, color,
+}: {
+  icon: React.ReactNode
+  label: string; value: string; hint?: string
+  color: 'emerald' | 'blue' | 'amber' | 'rose'
+}) {
+  const bg: Record<string, string> = {
+    emerald: 'from-emerald-50 to-white border-emerald-200 text-emerald-700',
+    blue: 'from-blue-50 to-white border-blue-200 text-blue-700',
+    amber: 'from-amber-50 to-white border-amber-200 text-amber-700',
+    rose: 'from-rose-50 to-white border-rose-200 text-rose-700',
+  }
+  return (
+    <div className={cn('rounded-xl border bg-gradient-to-br p-4 shadow-sm', bg[color])}>
+      <div className="flex items-center justify-between">
+        <span className="text-xs uppercase tracking-wide opacity-70">{label}</span>
+        {icon}
+      </div>
+      <div className="mt-2 text-2xl font-bold text-gray-900">{value}</div>
+      {hint && <div className="text-[11px] opacity-70 mt-1">{hint}</div>}
     </div>
   )
 }

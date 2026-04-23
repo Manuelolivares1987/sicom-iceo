@@ -16,6 +16,8 @@ import {
   useEquiposDisponiblesArriendo,
   useEquiposPendientesVerif,
 } from '@/hooks/use-verificacion'
+import { useInformesRecepcionLista } from '@/hooks/use-informe-recepcion'
+import { todayISO } from '@/lib/utils'
 
 // ────────────────────────────────────────────────────────────
 // Dashboard Comercial — rol 'comercial'
@@ -27,6 +29,22 @@ export function CommercialDashboard() {
   const { data: flota, isLoading: loadingFlota } = useFlotaVehicular()
   const { data: rentables = [], isLoading: loadingRent } = useEquiposDisponiblesArriendo()
   const { data: pendientes = [], isLoading: loadingPend } = useEquiposPendientesVerif()
+  const { data: informesRecepcion = [] } = useInformesRecepcionLista()
+
+  // Cobros al cliente por daños de recepcion
+  const recuperaciones = useMemo(() => {
+    const mes = todayISO().slice(0, 7)
+    const emitidosMes = informesRecepcion.filter(
+      (i) => i.estado === 'emitido' && (i.emitido_en ?? '').slice(0, 7) === mes,
+    )
+    const borradores = informesRecepcion.filter((i) => i.estado === 'borrador')
+    return {
+      cobradoMes: emitidosMes.reduce((s, i) => s + Number(i.total), 0),
+      nEmitidosMes: emitidosMes.length,
+      porEmitir: borradores.reduce((s, i) => s + Number(i.total), 0),
+      nBorradores: borradores.length,
+    }
+  }, [informesRecepcion])
 
   // ─── Agregaciones ───
   const stats = useMemo(() => {
@@ -317,6 +335,41 @@ export function CommercialDashboard() {
               </CardContent>
             </Card>
           </div>
+
+          {/* ─── Recuperaciones por daños (informes de recepción) ─── */}
+          <Card className="border-emerald-200">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base flex items-center justify-between text-emerald-800">
+                <span className="flex items-center gap-2">
+                  <ShieldAlert className="h-5 w-5" />
+                  Recuperación por daños al cliente
+                </span>
+                <Link href="/dashboard/flota/recepcion" className="text-xs text-blue-600 hover:underline">
+                  Ver detalle
+                </Link>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="grid grid-cols-2 gap-3">
+              <div className="rounded border p-3 text-center bg-emerald-50/50">
+                <div className="text-[10px] uppercase text-emerald-700">Cobrado este mes</div>
+                <div className="text-2xl font-bold text-emerald-700">
+                  ${Math.round(recuperaciones.cobradoMes).toLocaleString('es-CL')}
+                </div>
+                <div className="text-[11px] text-gray-500">
+                  {recuperaciones.nEmitidosMes} informe{recuperaciones.nEmitidosMes !== 1 ? 's' : ''} emitido{recuperaciones.nEmitidosMes !== 1 ? 's' : ''}
+                </div>
+              </div>
+              <div className="rounded border p-3 text-center bg-amber-50/50">
+                <div className="text-[10px] uppercase text-amber-700">Por emitir</div>
+                <div className="text-2xl font-bold text-amber-700">
+                  ${Math.round(recuperaciones.porEmitir).toLocaleString('es-CL')}
+                </div>
+                <div className="text-[11px] text-gray-500">
+                  {recuperaciones.nBorradores} borrador{recuperaciones.nBorradores !== 1 ? 'es' : ''} pendiente{recuperaciones.nBorradores !== 1 ? 's' : ''}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
 
           {/* ─── Atajos ─── */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
