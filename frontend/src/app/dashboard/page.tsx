@@ -32,6 +32,8 @@ import { Spinner } from '@/components/ui/spinner'
 import { cn } from '@/lib/utils'
 import { getICEOColor, getICEOLabel } from '@/lib/utils'
 import { useRequireAuth } from '@/hooks/use-require-auth'
+import { useAuth } from '@/contexts/auth-context'
+import { ExecutiveDashboard } from '@/components/dashboard/executive-dashboard'
 import { useOTsStats } from '@/hooks/use-ordenes-trabajo'
 import { useValorizacionTotal } from '@/hooks/use-inventario'
 import { useICEOHistorico, useICEOPeriodo } from '@/hooks/use-kpi-iceo'
@@ -82,8 +84,23 @@ function formatCurrency(value: number): string {
 }
 
 /* ─── Component ───────────────────────────────────────────────── */
+// Roles que ven el Dashboard Ejecutivo (Control Tower)
+const ROLES_EJECUTIVOS = new Set([
+  'administrador',
+  'gerencia',
+  'subgerente_operaciones',
+  'jefe_operaciones',
+])
+
 export default function DashboardPage() {
   const { loading: authLoading } = useRequireAuth()
+  const { perfil } = useAuth()
+
+  // Router por rol: ejecutivos ven el Control Tower.
+  // Otros roles siguen con el dashboard legacy (resto de este archivo).
+  if (!authLoading && perfil?.rol && ROLES_EJECUTIVOS.has(perfil.rol)) {
+    return <ExecutiveDashboard />
+  }
 
   // Fetch active contrato for ICEO hooks
   const { data: contrato } = useQuery({
