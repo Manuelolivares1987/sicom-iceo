@@ -109,6 +109,7 @@ const navGroups: Array<{ label?: string; items: NavItem[] }> = [
     items: [
       { label: 'Auditoría', href: '/dashboard/auditoria', icon: Eye, module: 'auditoria' },
       { label: 'Administración', href: '/dashboard/admin', icon: Settings, module: 'admin' },
+      { label: 'GPS', href: '/dashboard/admin/gps', icon: Truck, module: 'admin' },
     ],
   },
 ]
