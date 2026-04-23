@@ -35,6 +35,7 @@ import { useRequireAuth } from '@/hooks/use-require-auth'
 import { useAuth } from '@/contexts/auth-context'
 import { ExecutiveDashboard } from '@/components/dashboard/executive-dashboard'
 import { CommercialDashboard } from '@/components/dashboard/commercial-dashboard'
+import { OperationsDashboard } from '@/components/dashboard/operations-dashboard'
 import { useOTsStats } from '@/hooks/use-ordenes-trabajo'
 import { useValorizacionTotal } from '@/hooks/use-inventario'
 import { useICEOHistorico, useICEOPeriodo } from '@/hooks/use-kpi-iceo'
@@ -93,20 +94,31 @@ const ROLES_EJECUTIVOS = new Set([
   'jefe_operaciones',
 ])
 
+// Roles que ven el Dashboard de Operaciones
+const ROLES_OPERACIONES = new Set([
+  'supervisor',
+  'jefe_mantenimiento',
+  'planificador',
+])
+
 export default function DashboardPage() {
   const { loading: authLoading } = useRequireAuth()
   const { perfil } = useAuth()
 
   // Router por rol:
-  //   - Ejecutivos -> Control Tower.
-  //   - Comercial  -> Panel Comercial (equipos rentables, pendientes, clientes).
-  //   - Otros      -> dashboard legacy (resto de este archivo).
+  //   - Ejecutivos  -> Control Tower.
+  //   - Comercial   -> Panel Comercial (equipos rentables, pendientes, clientes).
+  //   - Operaciones -> Panel Operaciones (OTs, verificaciones, emergencias).
+  //   - Otros       -> dashboard legacy (resto de este archivo).
   if (!authLoading && perfil?.rol) {
     if (ROLES_EJECUTIVOS.has(perfil.rol)) {
       return <ExecutiveDashboard />
     }
     if (perfil.rol === 'comercial') {
       return <CommercialDashboard />
+    }
+    if (ROLES_OPERACIONES.has(perfil.rol)) {
+      return <OperationsDashboard />
     }
   }
 
