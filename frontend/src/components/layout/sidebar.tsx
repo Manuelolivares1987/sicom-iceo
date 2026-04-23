@@ -33,28 +33,85 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-const navItems: Array<{ label: string; href: string; icon: any; module?: Module }> = [
-  { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { label: 'Reporte Diario', href: '/dashboard/reporte-diario', icon: CalendarClock, module: 'reporte_diario' },
-  { label: 'Mis OTs', href: '/dashboard/mis-ots', icon: ClipboardCheck, module: 'ordenes_trabajo' as Module },
-  { label: 'Contratos', href: '/dashboard/contratos', icon: FileText, module: 'contratos' },
-  { label: 'Activos', href: '/dashboard/activos', icon: Cog, module: 'activos' },
-  { label: 'Flota', href: '/dashboard/flota', icon: Truck, module: 'flota' },
-  { label: 'Fiabilidad', href: '/dashboard/fiabilidad', icon: Activity, module: 'flota' },
-  { label: 'Jornada', href: '/dashboard/flota/jornada', icon: Timer, module: 'flota' },
-  { label: 'Órdenes de Trabajo', href: '/dashboard/ordenes-trabajo', icon: ClipboardList, module: 'ordenes_trabajo' },
-  { label: 'Mantenimiento', href: '/dashboard/mantenimiento', icon: Wrench, module: 'mantenimiento' },
-  { label: 'Comercial', href: '/dashboard/comercial', icon: Briefcase, module: 'comercial' },
-  { label: 'Prevención', href: '/dashboard/prevencion', icon: HardHat, module: 'prevencion' },
-  { label: 'Inventario', href: '/dashboard/inventario', icon: Package, module: 'inventario' },
-  { label: 'Abastecimiento', href: '/dashboard/abastecimiento', icon: Fuel, module: 'abastecimiento' },
-  { label: 'Cumplimiento', href: '/dashboard/cumplimiento', icon: ShieldCheck, module: 'cumplimiento' },
-  { label: 'KPI', href: '/dashboard/kpi', icon: BarChart3, module: 'kpi' },
-  { label: 'ICEO', href: '/dashboard/iceo', icon: Gauge, module: 'iceo' },
-  { label: 'Reportes', href: '/dashboard/reportes', icon: FileSpreadsheet, module: 'reportes' },
-  { label: 'Auditoría', href: '/dashboard/auditoria', icon: Eye, module: 'auditoria' },
-  { label: 'Administración', href: '/dashboard/admin', icon: Settings, module: 'admin' },
+type NavItem = {
+  label: string
+  href: string
+  icon: any
+  module?: Module
+}
+
+// Grupos lógicos en la sidebar. Separador visual entre cada grupo.
+const navGroups: Array<{ label?: string; items: NavItem[] }> = [
+  // Inicio
+  {
+    items: [
+      { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+      { label: 'Reporte Diario', href: '/dashboard/reporte-diario', icon: CalendarClock, module: 'reporte_diario' },
+    ],
+  },
+  // Trabajo diario
+  {
+    label: 'Operación',
+    items: [
+      { label: 'Mis OTs', href: '/dashboard/mis-ots', icon: ClipboardCheck, module: 'ordenes_trabajo' as Module },
+      { label: 'Órdenes de Trabajo', href: '/dashboard/ordenes-trabajo', icon: ClipboardList, module: 'ordenes_trabajo' },
+      { label: 'Mantenimiento', href: '/dashboard/mantenimiento', icon: Wrench, module: 'mantenimiento' },
+    ],
+  },
+  // Flota
+  {
+    label: 'Flota',
+    items: [
+      { label: 'Flota', href: '/dashboard/flota', icon: Truck, module: 'flota' },
+      { label: 'Fiabilidad', href: '/dashboard/fiabilidad', icon: Activity, module: 'flota' },
+      { label: 'Jornada', href: '/dashboard/flota/jornada', icon: Timer, module: 'flota' },
+      { label: 'Activos', href: '/dashboard/activos', icon: Cog, module: 'activos' },
+    ],
+  },
+  // Negocio
+  {
+    label: 'Negocio',
+    items: [
+      { label: 'Contratos', href: '/dashboard/contratos', icon: FileText, module: 'contratos' },
+      { label: 'Comercial', href: '/dashboard/comercial', icon: Briefcase, module: 'comercial' },
+    ],
+  },
+  // Inventario
+  {
+    label: 'Inventario',
+    items: [
+      { label: 'Inventario', href: '/dashboard/inventario', icon: Package, module: 'inventario' },
+      { label: 'Abastecimiento', href: '/dashboard/abastecimiento', icon: Fuel, module: 'abastecimiento' },
+    ],
+  },
+  // Compliance
+  {
+    label: 'Compliance',
+    items: [
+      { label: 'Prevención', href: '/dashboard/prevencion', icon: HardHat, module: 'prevencion' },
+      { label: 'Cumplimiento', href: '/dashboard/cumplimiento', icon: ShieldCheck, module: 'cumplimiento' },
+    ],
+  },
+  // KPIs
+  {
+    label: 'Indicadores',
+    items: [
+      { label: 'ICEO', href: '/dashboard/iceo', icon: Gauge, module: 'iceo' },
+      { label: 'Reportes', href: '/dashboard/reportes', icon: FileSpreadsheet, module: 'reportes' },
+    ],
+  },
+  // Admin
+  {
+    label: 'Administración',
+    items: [
+      { label: 'Auditoría', href: '/dashboard/auditoria', icon: Eye, module: 'auditoria' },
+      { label: 'Administración', href: '/dashboard/admin', icon: Settings, module: 'admin' },
+    ],
+  },
 ]
+
+// Flat list para filtrado por permisos y retrocompatibilidad interna
+const navItems: NavItem[] = navGroups.flatMap((g) => g.items)
 
 interface SidebarProps {
   collapsed: boolean
@@ -67,12 +124,9 @@ export default function Sidebar({ collapsed, onToggle, onClose }: SidebarProps) 
   const { perfil, signOut } = useAuth()
   const { canView } = usePermissions()
 
-  // Filter nav items based on role permissions (Dashboard is always visible)
-  const visibleNavItems = useMemo(
-    () => navItems.filter((item) => !item.module || canView(item.module)),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [perfil?.rol]
-  )
+  // Filtrado por permisos se hace dentro del render por grupo.
+  // navItems se mantiene exportado por compatibilidad interna.
+  void navItems
 
   const displayName = perfil?.nombre_completo ?? 'Usuario'
   const displayRole = perfil?.cargo ?? perfil?.rol ?? ''
@@ -127,27 +181,44 @@ export default function Sidebar({ collapsed, onToggle, onClose }: SidebarProps) 
         </button>
       </div>
 
-      {/* Navigation */}
-      <nav className="flex-1 space-y-0.5 overflow-y-auto px-2 py-3">
-        {visibleNavItems.map((item) => {
-          const Icon = item.icon
-          const active = isActive(item.href)
+      {/* Navigation agrupada */}
+      <nav className="flex-1 space-y-3 overflow-y-auto px-2 py-3">
+        {navGroups.map((group, idx) => {
+          const groupVisible = group.items.filter(
+            (item) => !item.module || canView(item.module),
+          )
+          if (groupVisible.length === 0) return null
           return (
-            <Link
-              key={item.href}
-              href={item.href}
-              onClick={onClose}
-              title={collapsed ? item.label : undefined}
-              className={cn(
-                'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
-                active
-                  ? 'bg-pillado-green-500 text-white'
-                  : 'text-gray-300 hover:bg-white/10 hover:text-white'
+            <div key={idx}>
+              {!collapsed && group.label && (
+                <div className="mb-1 px-3 text-[10px] font-semibold uppercase tracking-wider text-gray-500">
+                  {group.label}
+                </div>
               )}
-            >
-              <Icon className="h-5 w-5 shrink-0" />
-              {!collapsed && <span className="truncate">{item.label}</span>}
-            </Link>
+              <div className="space-y-0.5">
+                {groupVisible.map((item) => {
+                  const Icon = item.icon
+                  const active = isActive(item.href)
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      onClick={onClose}
+                      title={collapsed ? item.label : undefined}
+                      className={cn(
+                        'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                        active
+                          ? 'bg-pillado-green-500 text-white'
+                          : 'text-gray-300 hover:bg-white/10 hover:text-white',
+                      )}
+                    >
+                      <Icon className="h-5 w-5 shrink-0" />
+                      {!collapsed && <span className="truncate">{item.label}</span>}
+                    </Link>
+                  )
+                })}
+              </div>
+            </div>
           )
         })}
       </nav>
