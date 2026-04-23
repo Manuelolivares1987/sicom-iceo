@@ -64,6 +64,7 @@ const navGroups: Array<{ label?: string; items: NavItem[] }> = [
     items: [
       { label: 'Flota', href: '/dashboard/flota', icon: Truck, module: 'flota' },
       { label: 'Fiabilidad', href: '/dashboard/fiabilidad', icon: Activity, module: 'flota' },
+      { label: 'Informes Recepción', href: '/dashboard/flota/recepcion', icon: FileText, module: 'flota' },
       { label: 'Jornada', href: '/dashboard/flota/jornada', icon: Timer, module: 'flota' },
       { label: 'Activos', href: '/dashboard/activos', icon: Cog, module: 'activos' },
     ],
