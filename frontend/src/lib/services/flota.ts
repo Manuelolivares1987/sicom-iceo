@@ -412,6 +412,50 @@ export async function aplicarEstadosAutomaticos(fecha?: string) {
   return { data, error }
 }
 
+// ── Detalle de equipos en una fecha y estado ──────────────
+
+export interface EquipoEnEstado {
+  activo_id: string
+  patente: string | null
+  codigo: string | null
+  nombre: string | null
+  tipo: string
+  operacion: string | null
+  cliente: string | null
+  ubicacion: string | null
+  observacion: string | null
+}
+
+export async function getEquiposPorFechaEstado(
+  fecha: string,
+  estadoCodigo: string,
+) {
+  const { data, error } = await supabase
+    .from('estado_diario_flota')
+    .select(
+      `activo_id, cliente, ubicacion, operacion, observacion,
+       activo:activos(patente, codigo, nombre, tipo)`,
+    )
+    .eq('fecha', fecha)
+    .eq('estado_codigo', estadoCodigo)
+
+  if (error || !data) return { data: [] as EquipoEnEstado[], error }
+
+  const rows = (data as any[]).map((r) => ({
+    activo_id: r.activo_id,
+    patente: r.activo?.patente ?? null,
+    codigo: r.activo?.codigo ?? null,
+    nombre: r.activo?.nombre ?? null,
+    tipo: r.activo?.tipo ?? '',
+    operacion: r.operacion,
+    cliente: r.cliente,
+    ubicacion: r.ubicacion,
+    observacion: r.observacion,
+  })) as EquipoEnEstado[]
+
+  return { data: rows, error: null }
+}
+
 // ── Historial mensual de estados por activo (para gráfico apilado) ──
 
 export interface HistorialMesActivo {
