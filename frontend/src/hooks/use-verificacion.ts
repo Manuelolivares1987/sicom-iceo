@@ -7,6 +7,8 @@ import {
   updateChecklistItem,
   getVerificacionesPendientes,
   getVerificacionActivoVigente,
+  getEquiposDisponiblesArriendo,
+  getEquiposPendientesVerif,
   type AprobarVerificacionParams,
 } from '@/lib/services/verificacion'
 
@@ -105,6 +107,30 @@ export function useVerificacionesPendientes() {
       if (error) throw error
       return data ?? []
     },
+  })
+}
+
+export function useEquiposDisponiblesArriendo() {
+  return useQuery({
+    queryKey: ['equipos-disponibles-arriendo'],
+    queryFn: async () => {
+      const { data, error } = await getEquiposDisponiblesArriendo()
+      if (error) throw error
+      return data ?? []
+    },
+    staleTime: 30_000,
+  })
+}
+
+export function useEquiposPendientesVerif() {
+  return useQuery({
+    queryKey: ['equipos-pendientes-verif'],
+    queryFn: async () => {
+      const { data, error } = await getEquiposPendientesVerif()
+      if (error) throw error
+      return data ?? []
+    },
+    staleTime: 30_000,
   })
 }
 

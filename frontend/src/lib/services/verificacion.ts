@@ -172,6 +172,63 @@ export async function getVerificacionesPendientes() {
   return { data: data as VerificacionPendiente[] | null, error }
 }
 
+// ── Equipos rentables (vista mig 44) ─────────────────────
+
+export interface EquipoDisponibleArriendo {
+  id: string
+  patente: string | null
+  codigo: string | null
+  nombre: string | null
+  tipo: string
+  anio_fabricacion: number | null
+  operacion: string | null
+  ubicacion_actual: string | null
+  categoria_uso: string | null
+  contrato_id: string | null
+  faena_id: string | null
+  verificacion_id: string
+  verificacion_vigente_hasta: string
+  verificacion_aprobada_por: string | null
+  verificacion_aprobada_en: string | null
+  items_ok: number | null
+  items_total: number | null
+  horas_restantes: number
+}
+
+export async function getEquiposDisponiblesArriendo() {
+  const { data, error } = await supabase
+    .from('v_equipos_disponibles_para_arriendo')
+    .select('*')
+    .order('horas_restantes', { ascending: true })
+  return { data: data as EquipoDisponibleArriendo[] | null, error }
+}
+
+// Equipos marcados 'disponible' pero SIN verificacion vigente
+// (legacy o caducados) — no deberian arrendarse.
+export interface EquipoPendienteVerif {
+  id: string
+  patente: string | null
+  codigo: string | null
+  nombre: string | null
+  estado_comercial: string
+  estado: string
+  updated_at: string
+  ultima_verificacion: {
+    id?: string | null
+    resultado?: string | null
+    vigente_hasta?: string | null
+    fecha_verificacion?: string | null
+  } | null
+}
+
+export async function getEquiposPendientesVerif() {
+  const { data, error } = await supabase
+    .from('v_equipos_pendientes_verificacion')
+    .select('*')
+    .order('updated_at', { ascending: false })
+  return { data: data as EquipoPendienteVerif[] | null, error }
+}
+
 export async function getVerificacionActivoVigente(activoId: string) {
   const { data, error } = await supabase
     .from('verificaciones_disponibilidad')
