@@ -224,6 +224,11 @@ export function useActualizarEstadoManual() {
       qc.invalidateQueries({ queryKey: ['alertas'] })
       qc.invalidateQueries({ queryKey: ['tendencia-reporte'] })
       qc.invalidateQueries({ queryKey: ['cambios-estado-dia'] })
+      // Fiabilidad / OEE-Fiabilidad (mig 40-42) — para el dashboard /fiabilidad
+      qc.invalidateQueries({ queryKey: ['fiabilidad-flota'] })
+      qc.invalidateQueries({ queryKey: ['fiabilidad-activo'] })
+      qc.invalidateQueries({ queryKey: ['fiabilidad-detalle'] })
+      qc.invalidateQueries({ queryKey: ['oee-fiabilidad-activo'] })
     },
   })
 }
