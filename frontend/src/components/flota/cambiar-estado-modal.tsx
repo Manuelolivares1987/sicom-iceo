@@ -17,6 +17,7 @@ import {
   useVerificacionActivoVigente,
   useIniciarVerificacion,
 } from '@/hooks/use-verificacion'
+import { useIniciarInformeRecepcion } from '@/hooks/use-informe-recepcion'
 import {
   ESTADO_DIARIO_LABELS,
   ESTADO_DIARIO_COLORS,
@@ -68,6 +69,7 @@ export function CambiarEstadoModal({ open, onClose, activo }: CambiarEstadoModal
   const { data: estadoHoy, isLoading: loadingEstadoHoy } = useEstadoDiarioActivoHoy(activo?.id)
   const mutation = useActualizarEstadoManual()
   const iniciarVerif = useIniciarVerificacion()
+  const iniciarRecepcion = useIniciarInformeRecepcion()
 
   // ── Verificacion ready-to-rent vigente? ──
   const { data: verifVigente, isLoading: loadingVerif } = useVerificacionActivoVigente(activo?.id)
@@ -415,6 +417,43 @@ export function CambiarEstadoModal({ open, onClose, activo }: CambiarEstadoModal
               </div>
             )}
           </>
+        )}
+
+        {/* ── Recepción: cuando pasa a R, opción de iniciar informe ── */}
+        {nuevoEstado === 'R' && (
+          <div className="rounded-lg border border-orange-300 bg-orange-50 p-3 text-sm text-orange-900 space-y-2">
+            <div className="flex gap-2">
+              <ClipboardList className="h-5 w-5 shrink-0" />
+              <div>
+                <strong>Recepción de equipo.</strong> Si viene devuelto del cliente en mal estado,
+                genera un informe de recepción con checklist de condición + costos estimados.
+                El encargado de cobros luego lo emite con PDF para cobrarle al cliente.
+              </div>
+            </div>
+            <Button
+              variant="primary"
+              size="sm"
+              loading={iniciarRecepcion.isPending}
+              onClick={async () => {
+                if (!activo) return
+                try {
+                  const res = await iniciarRecepcion.mutateAsync({
+                    activoId: activo.id,
+                    motivo: motivo.trim() || undefined,
+                  })
+                  onClose()
+                  if (res?.informe_id) {
+                    router.push(`/dashboard/flota/inspeccion-recepcion/${res.informe_id}`)
+                  }
+                } catch (err: unknown) {
+                  setErrorMsg(err instanceof Error ? err.message : 'Error al iniciar informe')
+                }
+              }}
+            >
+              <ClipboardList className="h-4 w-4" />
+              Iniciar informe de recepción
+            </Button>
+          </div>
         )}
 
         {/* ── Aviso si pasa a F estando arrendado ── */}
