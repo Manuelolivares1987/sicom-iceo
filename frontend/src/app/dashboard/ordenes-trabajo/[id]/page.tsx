@@ -52,6 +52,7 @@ import {
   useAddEvidencia,
   useUpdateOT,
 } from '@/hooks/use-ordenes-trabajo'
+import { PanelMateriales } from '@/components/ot/panel-materiales'
 import { useStockBodega, useBodegas, useRegistrarSalida } from '@/hooks/use-inventario'
 import { supabase } from '@/lib/supabase'
 import { calcularKPIs } from '@/lib/services/kpi-iceo'
@@ -546,6 +547,15 @@ function EvidenciasTab({ otId, disabled }: { otId: string; disabled?: boolean })
 }
 
 function MaterialesTab({ otId, faenaId, activoId, disabled, userId }: { otId: string; faenaId?: string; activoId?: string; disabled?: boolean; userId?: string }) {
+  return (
+    <div className="space-y-4">
+      <PanelMateriales otId={otId} otCerrada={disabled} puedeDespachar />
+      <MaterialesMovimientos otId={otId} faenaId={faenaId} activoId={activoId} disabled={disabled} userId={userId} />
+    </div>
+  )
+}
+
+function MaterialesMovimientos({ otId, faenaId, activoId, disabled, userId }: { otId: string; faenaId?: string; activoId?: string; disabled?: boolean; userId?: string }) {
   const { data: materiales, isLoading } = useMaterialesOT(otId)
   const { data: bodegas } = useBodegas(faenaId)
   const [selectedBodega, setSelectedBodega] = useState('')
