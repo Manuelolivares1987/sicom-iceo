@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, Wrench, ClipboardList, Info } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { AlertTriangle, Wrench, ClipboardList, Info, ShieldCheck } from 'lucide-react'
 import { Modal, ModalFooter } from '@/components/ui/modal'
 import { Button } from '@/components/ui/button'
 import { Select } from '@/components/ui/select'
@@ -12,6 +13,10 @@ import {
   useActualizarEstadoManual,
   useEstadoDiarioActivoHoy,
 } from '@/hooks/use-flota'
+import {
+  useVerificacionActivoVigente,
+  useIniciarVerificacion,
+} from '@/hooks/use-verificacion'
 import {
   ESTADO_DIARIO_LABELS,
   ESTADO_DIARIO_COLORS,
@@ -57,9 +62,15 @@ const ESTADO_OPTIONS: Array<{
 export function CambiarEstadoModal({ open, onClose, activo }: CambiarEstadoModalProps) {
   const today = todayISO()
 
+  const router = useRouter()
+
   // ── Cargar estado actual del día ──
   const { data: estadoHoy, isLoading: loadingEstadoHoy } = useEstadoDiarioActivoHoy(activo?.id)
   const mutation = useActualizarEstadoManual()
+  const iniciarVerif = useIniciarVerificacion()
+
+  // ── Verificacion ready-to-rent vigente? ──
+  const { data: verifVigente, isLoading: loadingVerif } = useVerificacionActivoVigente(activo?.id)
 
   // ── Responsables (técnicos de mantenimiento de usuarios_perfil) ──
   // Nota: el FK ordenes_trabajo.responsable_id apunta a usuarios_perfil,
@@ -129,6 +140,9 @@ export function CambiarEstadoModal({ open, onClose, activo }: CambiarEstadoModal
   }, [nuevoEstado])
 
   const requiereOT = nuevoEstado === 'M' || nuevoEstado === 'T' || nuevoEstado === 'F'
+  const requiereVerificacion = nuevoEstado === 'D'
+  const bloqueadoPorVerificacion =
+    requiereVerificacion && !loadingVerif && !verifVigente
 
   const handleSubmit = async () => {
     setErrorMsg(null)
@@ -139,6 +153,13 @@ export function CambiarEstadoModal({ open, onClose, activo }: CambiarEstadoModal
     }
     if (requiereOT && crearOT && !otDescripcion.trim()) {
       setErrorMsg('Debe ingresar una descripción para la OT')
+      return
+    }
+    if (bloqueadoPorVerificacion) {
+      setErrorMsg(
+        'Para marcar "Disponible" se requiere una verificación ready-to-rent aprobada y vigente. ' +
+        'Usa el botón "Iniciar verificación" arriba.',
+      )
       return
     }
 
@@ -343,6 +364,59 @@ export function CambiarEstadoModal({ open, onClose, activo }: CambiarEstadoModal
           </div>
         )}
 
+        {/* ── Ready-to-rent: bloqueo si pasa a D sin verificación ── */}
+        {requiereVerificacion && !loadingVerif && (
+          <>
+            {verifVigente ? (
+              <div className="flex gap-2 rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-800">
+                <ShieldCheck className="h-5 w-5 shrink-0" />
+                <div>
+                  <strong>Verificación vigente</strong> hasta{' '}
+                  {new Date(verifVigente.vigente_hasta!).toLocaleString('es-CL')}.
+                  El equipo puede marcarse disponible.
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 space-y-2">
+                <div className="flex gap-2">
+                  <AlertTriangle className="h-5 w-5 shrink-0" />
+                  <div>
+                    <strong>Verificación ready-to-rent requerida.</strong> Antes de marcar
+                    este equipo como disponible para arriendo, debe ejecutarse el checklist
+                    de 55 ítems + road test + doble firma. Esto previene el incidente de
+                    arrendar un equipo sin validar.
+                  </div>
+                </div>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  loading={iniciarVerif.isPending}
+                  onClick={async () => {
+                    if (!activo) return
+                    try {
+                      const res = await iniciarVerif.mutateAsync({
+                        activoId: activo.id,
+                        motivo: motivo.trim() || undefined,
+                      })
+                      onClose()
+                      if (res?.ot_id) {
+                        router.push(`/dashboard/flota/verificar/${res.ot_id}`)
+                      }
+                    } catch (err: unknown) {
+                      setErrorMsg(
+                        err instanceof Error ? err.message : 'Error al iniciar verificación',
+                      )
+                    }
+                  }}
+                >
+                  <ShieldCheck className="h-4 w-4" />
+                  Iniciar verificación
+                </Button>
+              </div>
+            )}
+          </>
+        )}
+
         {/* ── Aviso si pasa a F estando arrendado ── */}
         {nuevoEstado === 'F' && activo.cliente_actual && (
           <div className="flex gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
@@ -381,6 +455,7 @@ export function CambiarEstadoModal({ open, onClose, activo }: CambiarEstadoModal
           variant="primary"
           onClick={handleSubmit}
           loading={mutation.isPending}
+          disabled={bloqueadoPorVerificacion}
         >
           Guardar cambio
         </Button>
