@@ -72,6 +72,7 @@ import {
   useUploadCertificado,
 } from '@/hooks/use-activos'
 import { useOEEActivo } from '@/hooks/use-flota'
+import { HistorialEstadosChart } from '@/components/flota/historial-estados-chart'
 
 // ---------------------------------------------------------------------------
 // Tabs
@@ -656,10 +657,18 @@ function TabCostos({ activoId }: { activoId: string }) {
 
 function TabHistorial({ activoId }: { activoId: string }) {
   const { data: historial, isLoading } = useHistorialMantenimiento(activoId)
-  if (isLoading) return <div className="flex justify-center py-12"><Spinner className="h-8 w-8" /></div>
-  if (!historial || historial.length === 0) return <EmptyState icon={History} title="Sin historial" description="Sin intervenciones registradas." />
 
   return (
+    <div className="space-y-4">
+      {/* Gráfico histórico anual de estados (barras apiladas) */}
+      <HistorialEstadosChart activoId={activoId} />
+
+      {/* Historial de intervenciones (OTs) */}
+      {isLoading && <div className="flex justify-center py-6"><Spinner className="h-8 w-8" /></div>}
+      {!isLoading && (!historial || historial.length === 0) && (
+        <EmptyState icon={History} title="Sin intervenciones" description="El equipo no registra OTs todavía." />
+      )}
+      {!isLoading && historial && historial.length > 0 && (
     <div className="space-y-2">
       {(historial as any[]).map((item: any, idx: number) => (
         <Card key={item.id ?? idx}>
@@ -679,6 +688,8 @@ function TabHistorial({ activoId }: { activoId: string }) {
           </CardContent>
         </Card>
       ))}
+    </div>
+      )}
     </div>
   )
 }

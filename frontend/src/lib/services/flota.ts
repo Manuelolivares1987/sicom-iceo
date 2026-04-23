@@ -412,6 +412,50 @@ export async function aplicarEstadosAutomaticos(fecha?: string) {
   return { data, error }
 }
 
+// ── Historial mensual de estados por activo (para gráfico apilado) ──
+
+export interface HistorialMesActivo {
+  mes: string  // YYYY-MM
+  A: number; D: number; H: number; R: number; V: number
+  U: number; L: number; M: number; T: number; F: number
+  total: number
+}
+
+export async function getHistorialEstadosActivo(
+  activoId: string,
+  fechaInicio: string,
+  fechaFin: string,
+): Promise<{ data: HistorialMesActivo[]; error: unknown }> {
+  const { data, error } = await supabase
+    .from('estado_diario_flota')
+    .select('fecha, estado_codigo')
+    .eq('activo_id', activoId)
+    .gte('fecha', fechaInicio)
+    .lte('fecha', fechaFin)
+    .order('fecha')
+
+  if (error || !data) return { data: [], error }
+
+  // Agrupar por mes YYYY-MM
+  const map = new Map<string, HistorialMesActivo>()
+  for (const row of data as Array<{ fecha: string; estado_codigo: string }>) {
+    const mes = row.fecha.slice(0, 7)
+    if (!map.has(mes)) {
+      map.set(mes, {
+        mes, A: 0, D: 0, H: 0, R: 0, V: 0,
+        U: 0, L: 0, M: 0, T: 0, F: 0, total: 0,
+      })
+    }
+    const b = map.get(mes)!
+    const code = row.estado_codigo as keyof HistorialMesActivo
+    if (code in b && typeof b[code] === 'number') {
+      ;(b[code] as number) += 1
+    }
+    b.total += 1
+  }
+  return { data: Array.from(map.values()), error: null }
+}
+
 export async function getEstadoDiarioActivoHoy(activoId: string) {
   const today = todayISO()
   const { data, error } = await supabase
