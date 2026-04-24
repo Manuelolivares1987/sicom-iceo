@@ -12,6 +12,7 @@ import {
   History,
   Truck,
   TrendingUp,
+  Gauge,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -133,6 +134,11 @@ export default function CombustiblePage() {
         <Link href="/dashboard/inventario/combustible/movimientos">
           <Button className="w-full gap-2" variant="outline">
             <History className="h-4 w-4" /> Historial
+          </Button>
+        </Link>
+        <Link href="/dashboard/inventario/combustible/medidores">
+          <Button className="w-full gap-2" variant="outline">
+            <Gauge className="h-4 w-4" /> Medidores
           </Button>
         </Link>
       </div>

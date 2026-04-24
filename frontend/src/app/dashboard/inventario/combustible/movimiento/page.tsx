@@ -343,8 +343,14 @@ export default function NuevoMovimientoPage() {
               <Spinner />
             ) : (medidores ?? []).length === 0 ? (
               <div className="rounded-lg bg-amber-50 p-3 text-xs text-amber-800">
-                Este estanque no tiene medidores registrados. Cree uno desde
-                administracion.
+                Este estanque no tiene medidores activos.{' '}
+                <Link
+                  href="/dashboard/inventario/combustible/medidores"
+                  className="font-semibold underline"
+                >
+                  Crear uno ahora
+                </Link>
+                .
               </div>
             ) : (
               <select

@@ -144,6 +144,60 @@ export async function getMedidoresByEstanque(estanqueId: string) {
   return { data: data as Medidor[] | null, error }
 }
 
+export interface MedidorConEstanque extends Medidor {
+  estanque_codigo: string
+  estanque_nombre: string
+}
+
+export async function getAllMedidores() {
+  const { data, error } = await supabase
+    .from('combustible_medidores')
+    .select('*, estanque:combustible_estanques(codigo, nombre)')
+    .order('created_at')
+  if (error || !data) return { data: null as MedidorConEstanque[] | null, error }
+  const mapped = (data as any[]).map((m) => ({
+    ...m,
+    estanque_codigo: m.estanque?.codigo ?? '',
+    estanque_nombre: m.estanque?.nombre ?? '',
+  })) as MedidorConEstanque[]
+  return { data: mapped, error: null }
+}
+
+export async function updateMedidor(
+  id: string,
+  patch: Partial<{
+    tipo: TipoMedidor
+    marca: string | null
+    modelo: string | null
+    numero_serie: string | null
+    activo: boolean
+    observaciones: string | null
+  }>
+) {
+  const { data, error } = await supabase
+    .from('combustible_medidores')
+    .update(patch)
+    .eq('id', id)
+    .select()
+    .single()
+  return { data: data as Medidor | null, error }
+}
+
+export async function deleteMedidor(id: string) {
+  const { count } = await supabase
+    .from('combustible_movimientos')
+    .select('id', { count: 'exact', head: true })
+    .eq('medidor_id', id)
+  if ((count ?? 0) > 0) {
+    return {
+      data: null,
+      error: new Error('No se puede eliminar: el medidor tiene movimientos registrados. Desactivalo en su lugar.'),
+    }
+  }
+  const { error } = await supabase.from('combustible_medidores').delete().eq('id', id)
+  return { data: !error, error }
+}
+
 export async function crearMedidor(payload: {
   estanque_id: string
   tipo?: TipoMedidor
