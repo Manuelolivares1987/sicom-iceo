@@ -48,6 +48,7 @@ export interface Medidor {
   numero_serie: string | null
   lectura_acumulada_actual: number
   fecha_ultima_lectura: string | null
+  foto_registro_url: string | null
   activo: boolean
   observaciones: string | null
   created_at: string
@@ -205,6 +206,7 @@ export async function crearMedidor(payload: {
   modelo?: string | null
   numero_serie?: string | null
   lectura_acumulada_actual: number
+  foto_registro_url: string
 }) {
   const { data, error } = await supabase
     .from('combustible_medidores')
@@ -215,6 +217,7 @@ export async function crearMedidor(payload: {
       modelo: payload.modelo ?? null,
       numero_serie: payload.numero_serie ?? null,
       lectura_acumulada_actual: payload.lectura_acumulada_actual,
+      foto_registro_url: payload.foto_registro_url,
     })
     .select()
     .single()

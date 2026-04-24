@@ -11,6 +11,8 @@ import {
   AlertCircle,
   CheckCircle2,
   Loader2,
+  Camera,
+  ImageIcon,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -25,7 +27,10 @@ import {
   useUpdateMedidor,
   useDeleteMedidor,
 } from '@/hooks/use-combustible'
-import type { TipoMedidor } from '@/lib/services/combustible'
+import {
+  uploadEvidenciaCombustible,
+  type TipoMedidor,
+} from '@/lib/services/combustible'
 
 export default function AdminMedidoresPage() {
   const { data: estanques } = useEstanques()
@@ -40,6 +45,9 @@ export default function AdminMedidoresPage() {
   const [modelo, setModelo] = useState('')
   const [numeroSerie, setNumeroSerie] = useState('')
   const [lectura, setLectura] = useState('')
+  const [fotoUrl, setFotoUrl] = useState<string | null>(null)
+  const [uploadingFoto, setUploadingFoto] = useState(false)
+  const [verFoto, setVerFoto] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [okMsg, setOkMsg] = useState<string | null>(null)
 
@@ -60,7 +68,27 @@ export default function AdminMedidoresPage() {
     setModelo('')
     setNumeroSerie('')
     setLectura('')
+    setFotoUrl(null)
     setError(null)
+  }
+
+  async function handleFoto(file: File) {
+    if (!formEstanqueId) {
+      setError('Seleccione un estanque primero.')
+      return
+    }
+    setUploadingFoto(true)
+    setError(null)
+    const { url, error: upErr } = await uploadEvidenciaCombustible(file, {
+      tipo: 'medidor',
+      estanqueId: formEstanqueId,
+    })
+    setUploadingFoto(false)
+    if (upErr || !url) {
+      setError(upErr?.message ?? 'No se pudo subir la foto.')
+      return
+    }
+    setFotoUrl(url)
   }
 
   async function handleCrear() {
@@ -69,6 +97,8 @@ export default function AdminMedidoresPage() {
     const lect = parseFloat(lectura)
     if (isNaN(lect) || lect < 0)
       return setError('Lectura acumulada actual invalida.')
+    if (!fotoUrl)
+      return setError('La foto del totalizador es obligatoria al registrar un medidor.')
 
     try {
       await crear.mutateAsync({
@@ -78,8 +108,9 @@ export default function AdminMedidoresPage() {
         modelo: modelo || null,
         numero_serie: numeroSerie || null,
         lectura_acumulada_actual: lect,
+        foto_registro_url: fotoUrl,
       })
-      setOkMsg('Medidor creado.')
+      setOkMsg('Medidor creado con evidencia fotografica.')
       setTimeout(() => setOkMsg(null), 3000)
       resetForm()
     } catch (err: any) {
@@ -127,6 +158,12 @@ export default function AdminMedidoresPage() {
           <span>{error}</span>
         </div>
       )}
+
+      <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+        <strong>Trazabilidad:</strong> al registrar cualquier medidor se exige una
+        foto del totalizador. Esto sella la lectura inicial declarada contra
+        adulteraciones posteriores.
+      </div>
 
       {isLoading ? (
         <div className="flex justify-center py-8">
@@ -234,10 +271,69 @@ export default function AdminMedidoresPage() {
                           (no el reseteable de abajo). De aqui arrancan las lecturas.
                         </p>
                       </div>
+
+                      {/* Foto obligatoria del totalizador */}
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600">
+                          Foto del totalizador *
+                        </label>
+                        <p className="mb-2 text-[11px] text-gray-500">
+                          Obligatoria: sella la lectura inicial declarada contra
+                          adulteraciones posteriores.
+                        </p>
+                        {fotoUrl ? (
+                          <div className="space-y-2">
+                            <img
+                              src={fotoUrl}
+                              alt="Totalizador"
+                              className="h-40 w-full rounded-lg border object-cover"
+                            />
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="w-full"
+                              onClick={() => setFotoUrl(null)}
+                            >
+                              Cambiar foto
+                            </Button>
+                          </div>
+                        ) : (
+                          <label
+                            className={cn(
+                              'flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-gray-300 p-5 text-center',
+                              uploadingFoto && 'opacity-60'
+                            )}
+                          >
+                            {uploadingFoto ? (
+                              <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+                            ) : (
+                              <Camera className="h-6 w-6 text-gray-400" />
+                            )}
+                            <span className="text-sm font-medium text-gray-700">
+                              {uploadingFoto ? 'Subiendo…' : 'Tomar foto'}
+                            </span>
+                            <span className="text-[11px] text-gray-500">
+                              Debe mostrar el totalizador con la lectura declarada
+                            </span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              capture="environment"
+                              className="hidden"
+                              disabled={uploadingFoto}
+                              onChange={(ev) => {
+                                const f = ev.target.files?.[0]
+                                if (f) handleFoto(f)
+                              }}
+                            />
+                          </label>
+                        )}
+                      </div>
+
                       <div className="flex gap-2 pt-1">
                         <Button
                           onClick={handleCrear}
-                          disabled={crear.isPending}
+                          disabled={crear.isPending || !fotoUrl}
                           className="flex-1"
                         >
                           {crear.isPending ? (
@@ -316,6 +412,15 @@ export default function AdminMedidoresPage() {
                               )}
                             </div>
                           </div>
+                          {m.foto_registro_url && (
+                            <button
+                              onClick={() => setVerFoto(m.foto_registro_url!)}
+                              className="rounded p-2 text-blue-500 hover:bg-blue-50"
+                              title="Ver foto de registro"
+                            >
+                              <ImageIcon className="h-4 w-4" />
+                            </button>
+                          )}
                           <button
                             onClick={() => toggleActivo(m.id, m.activo)}
                             className="rounded p-2 text-gray-500 hover:bg-gray-100"
@@ -338,6 +443,26 @@ export default function AdminMedidoresPage() {
               </div>
             )
           })}
+        </div>
+      )}
+
+      {/* Modal de visualizacion de foto */}
+      {verFoto && (
+        <div
+          onClick={() => setVerFoto(null)}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+        >
+          <img
+            src={verFoto}
+            alt="Foto de registro del medidor"
+            className="max-h-[90vh] max-w-full rounded-lg"
+          />
+          <button
+            onClick={() => setVerFoto(null)}
+            className="absolute right-4 top-4 rounded-full bg-white/90 px-3 py-1 text-sm font-medium"
+          >
+            Cerrar
+          </button>
         </div>
       )}
     </div>
