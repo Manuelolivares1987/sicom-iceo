@@ -14,6 +14,8 @@ import {
   ArrowLeftRight,
   Download,
   CheckCircle2,
+  Fuel,
+  ChevronRight,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -35,6 +37,7 @@ import {
   useMovimientos,
   useBodegas,
 } from '@/hooks/use-inventario'
+import { useEstanques } from '@/hooks/use-combustible'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -145,6 +148,13 @@ export default function InventarioPage() {
   const { data: stockData, isLoading: loadingStock } = useStockBodega(stockFilters)
   const { data: valorizacion, isLoading: loadingValorizacion } = useValorizacionTotal()
   const { data: bodegas } = useBodegas()
+  const { data: estanquesCombustible } = useEstanques()
+
+  const combustibleStockTotal = useMemo(
+    () => (estanquesCombustible ?? []).reduce((s, e) => s + Number(e.stock_teorico_lt ?? 0), 0),
+    [estanquesCombustible]
+  )
+  const combustibleAlertas = (estanquesCombustible ?? []).filter((e) => e.bajo_minimo).length
 
   // Alertas: products below minimum stock
   const { data: alertasData, isLoading: loadingAlertas } = useStockBodega({ below_minimum: true })
@@ -220,6 +230,33 @@ export default function InventarioPage() {
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold text-gray-900">Inventario</h1>
+
+      {/* Modulo combustible — acceso rapido */}
+      <Link href="/dashboard/inventario/combustible" className="block">
+        <Card className="border-blue-200 bg-gradient-to-r from-blue-50 to-white transition-shadow hover:shadow-md">
+          <CardContent className="flex items-center gap-4 p-4">
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-100">
+              <Fuel className="h-6 w-6 text-blue-600" />
+            </div>
+            <div className="flex-1">
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-semibold text-gray-900">Combustible (diesel)</p>
+                {combustibleAlertas > 0 && (
+                  <Badge className="bg-red-100 text-red-700 hover:bg-red-100">
+                    {combustibleAlertas} bajo minimo
+                  </Badge>
+                )}
+              </div>
+              <p className="text-xs text-gray-500">
+                {(estanquesCombustible ?? []).length} estanque
+                {(estanquesCombustible ?? []).length === 1 ? '' : 's'} ·{' '}
+                {combustibleStockTotal.toLocaleString('es-CL', { maximumFractionDigits: 0 })} lt en stock
+              </p>
+            </div>
+            <ChevronRight className="h-5 w-5 text-gray-400" />
+          </CardContent>
+        </Card>
+      </Link>
 
       {/* Stats */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
