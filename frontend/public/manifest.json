@@ -1,0 +1,47 @@
+{
+  "name": "SICOM-ICEO | Pillado Empresas",
+  "short_name": "SICOM",
+  "description": "Sistema Integral de Control Operacional - Pillado Empresas",
+  "start_url": "/dashboard/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#ffffff",
+  "theme_color": "#16a34a",
+  "lang": "es-CL",
+  "dir": "ltr",
+  "icons": [
+    {
+      "src": "/images/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/images/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/images/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Combustible",
+      "short_name": "Combustible",
+      "url": "/dashboard/inventario/combustible/",
+      "description": "Estanques, ingresos y despachos"
+    },
+    {
+      "name": "Flota",
+      "short_name": "Flota",
+      "url": "/dashboard/flota/",
+      "description": "Estado y jornada de equipos"
+    }
+  ]
+}

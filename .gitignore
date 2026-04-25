@@ -25,3 +25,11 @@ Thumbs.db
 
 # Trabajo local (audios, transcripciones, scripts temporales)
 .transcripciones/
+
+# Service Worker generado por next-pwa en build
+frontend/public/sw.js
+frontend/public/sw.js.map
+frontend/public/workbox-*.js
+frontend/public/workbox-*.js.map
+frontend/public/fallback-*.js
+frontend/public/swe-worker-*.js
