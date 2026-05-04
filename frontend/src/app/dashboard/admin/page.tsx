@@ -32,6 +32,7 @@ import { Button } from '@/components/ui/button'
 import { getUsuarios, getSystemStats } from '@/lib/services/admin'
 import { formatDate } from '@/lib/utils'
 import { useToast } from '@/hooks/use-toast'
+import { usePermissions } from '@/hooks/use-permissions'
 import { EditarUsuarioModal } from '@/components/admin/editar-usuario-modal'
 import type { RolUsuario } from '@/types/database'
 
@@ -488,6 +489,11 @@ export default function AdminPage() {
   const [showEditModal, setShowEditModal] = useState(false)
   const toast = useToast()
   const queryClient = useQueryClient()
+  const { isAdmin } = usePermissions()
+
+  // Gating UI: solo administrador puede ver/editar la pestaña Usuarios.
+  // RLS Supabase es la defensa real (FASE 5); este filtro reduce superficie.
+  const visibleTabs = tabs.filter((t) => t.id !== 'usuarios' || isAdmin())
 
   function handleEditUsuario(usuario: any) {
     setSelectedUsuario(usuario)
@@ -514,7 +520,7 @@ export default function AdminPage() {
       {/* Tabs */}
       <div className="border-b border-gray-200">
         <nav className="-mb-px flex gap-6" aria-label="Tabs">
-          {tabs.map((tab) => {
+          {visibleTabs.map((tab) => {
             const Icon = tab.icon
             const isActive = activeTab === tab.id
             return (
@@ -537,7 +543,7 @@ export default function AdminPage() {
 
       {/* Tab Content */}
       {activeTab === 'general' && <VistaGeneralTab />}
-      {activeTab === 'usuarios' && <UsuariosTab onEditUsuario={handleEditUsuario} />}
+      {activeTab === 'usuarios' && isAdmin() && <UsuariosTab onEditUsuario={handleEditUsuario} />}
       {activeTab === 'parametros' && <ParametrosTab />}
 
       {/* Edit User Modal */}

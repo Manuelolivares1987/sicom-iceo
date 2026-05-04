@@ -1,6 +1,28 @@
+# Dependencies
 node_modules/
+
+# Next.js build / dev artifacts
 .next/
 out/
-.env.local
-.env*.local
 *.tsbuildinfo
+
+# Environment variables — NEVER commit values
+.env
+.env.local
+.env.production
+.env.development
+.env*.local
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Service worker generado por next-pwa en build
+public/sw.js
+public/sw.js.map
+public/workbox-*.js
+public/workbox-*.js.map
+public/fallback-*.js
+public/swe-worker-*.js

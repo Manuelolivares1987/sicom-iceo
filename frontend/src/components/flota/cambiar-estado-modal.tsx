@@ -2,13 +2,14 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { AlertTriangle, Wrench, ClipboardList, Info, ShieldCheck } from 'lucide-react'
+import { AlertTriangle, Wrench, ClipboardList, Info, ShieldCheck, Calendar } from 'lucide-react'
 import { Modal, ModalFooter } from '@/components/ui/modal'
 import { Button } from '@/components/ui/button'
 import { Select } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
 import { Spinner } from '@/components/ui/spinner'
 import { cn, todayISO } from '@/lib/utils'
+import { usePermissions } from '@/hooks/use-permissions'
 import {
   useActualizarEstadoManual,
   useEstadoDiarioActivoHoy,
@@ -62,8 +63,16 @@ const ESTADO_OPTIONS: Array<{
 
 export function CambiarEstadoModal({ open, onClose, activo }: CambiarEstadoModalProps) {
   const today = todayISO()
+  const { isAdmin } = usePermissions()
 
   const router = useRouter()
+
+  // Fecha del cambio: por defecto hoy. Se permite programar a futuro.
+  // Solo administradores pueden corregir días pasados.
+  const [fechaCambio, setFechaCambio] = useState<string>(today)
+  const esFuturo = fechaCambio > today
+  const esPasado = fechaCambio < today
+  const fechaInvalida = esPasado && !isAdmin()
 
   // ── Cargar estado actual del día ──
   const { data: estadoHoy, isLoading: loadingEstadoHoy } = useEstadoDiarioActivoHoy(activo?.id)
@@ -105,6 +114,7 @@ export function CambiarEstadoModal({ open, onClose, activo }: CambiarEstadoModal
   //    Si dependiera de estadoHoy, el refetch post-mutación borraría el errorMsg.
   useEffect(() => {
     if (open && activo) {
+      setFechaCambio(today)
       setMotivo('')
       setCrearOT(false)
       setOtTipo('correctivo')
@@ -113,7 +123,7 @@ export function CambiarEstadoModal({ open, onClose, activo }: CambiarEstadoModal
       setOtDescripcion('')
       setErrorMsg(null)
     }
-  }, [open, activo?.id])
+  }, [open, activo?.id, today])
 
   // ── Sincroniza el estado seleccionado con el estado del día cargado.
   useEffect(() => {
@@ -149,6 +159,10 @@ export function CambiarEstadoModal({ open, onClose, activo }: CambiarEstadoModal
   const handleSubmit = async () => {
     setErrorMsg(null)
     if (!activo) return
+    if (fechaInvalida) {
+      setErrorMsg('Solo administradores pueden registrar cambios en fechas pasadas')
+      return
+    }
     if (!motivo.trim()) {
       setErrorMsg('Debe ingresar un motivo del cambio')
       return
@@ -168,7 +182,7 @@ export function CambiarEstadoModal({ open, onClose, activo }: CambiarEstadoModal
     try {
       const result = await mutation.mutateAsync({
         activo_id: activo.id,
-        fecha: today,
+        fecha: fechaCambio,
         nuevo_estado: nuevoEstado,
         motivo: motivo.trim(),
         crear_ot: crearOT && requiereOT,
@@ -253,6 +267,28 @@ export function CambiarEstadoModal({ open, onClose, activo }: CambiarEstadoModal
               <span className="text-gray-500">Operación:</span> {activo.operacion}
             </div>
           )}
+        </div>
+
+        {/* ── Fecha del cambio (permite programar a futuro) ── */}
+        <div>
+          <label className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-gray-700">
+            <Calendar className="h-4 w-4 text-gray-500" />
+            Fecha del cambio
+          </label>
+          <Input
+            type="date"
+            value={fechaCambio}
+            onChange={(e) => setFechaCambio(e.target.value)}
+            min={isAdmin() ? undefined : today}
+            error={fechaInvalida ? 'Solo administradores pueden corregir días pasados' : undefined}
+            helperText={
+              esFuturo
+                ? `Cambio programado para el ${new Date(fechaCambio + 'T12:00:00').toLocaleDateString('es-CL', { day: 'numeric', month: 'long', year: 'numeric' })}. Tomará efecto ese día.`
+                : esPasado
+                ? 'Está corrigiendo un día pasado. Esto sobrescribe el historial.'
+                : 'Hoy. El cambio aplica de inmediato.'
+            }
+          />
         </div>
 
         {/* ── Nuevo estado ── */}
@@ -473,9 +509,9 @@ export function CambiarEstadoModal({ open, onClose, activo }: CambiarEstadoModal
           <ClipboardList className="h-4 w-4 shrink-0" />
           <div>
             Este cambio se registra como <strong>override manual</strong> del día
-            de hoy. El sistema NO recalculará el estado automáticamente sobre
-            este día. Para volver al cálculo automático, edite y vuelva a marcar
-            el estado correcto.
+            seleccionado. El sistema NO recalculará el estado automáticamente
+            sobre ese día. Para volver al cálculo automático, edite y vuelva a
+            marcar el estado correcto.
           </div>
         </div>
 
@@ -494,9 +530,9 @@ export function CambiarEstadoModal({ open, onClose, activo }: CambiarEstadoModal
           variant="primary"
           onClick={handleSubmit}
           loading={mutation.isPending}
-          disabled={bloqueadoPorVerificacion}
+          disabled={bloqueadoPorVerificacion || fechaInvalida}
         >
-          Guardar cambio
+          {esFuturo ? 'Programar cambio' : 'Guardar cambio'}
         </Button>
       </ModalFooter>
     </Modal>

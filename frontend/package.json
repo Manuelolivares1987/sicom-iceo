@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@ducanh2912/next-pwa": "^10.2.9",
@@ -22,9 +23,11 @@
     "date-fns-tz": "^3.1.0",
     "exceljs": "^4.4.0",
     "html5-qrcode": "^2.3.8",
+    "idb": "^8.0.3",
     "lucide-react": "^0.400.0",
     "next": "^14.2.0",
     "qrcode": "^1.5.4",
+    "qrcode.react": "^4.2.0",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",
     "react-hook-form": "^7.52.0",

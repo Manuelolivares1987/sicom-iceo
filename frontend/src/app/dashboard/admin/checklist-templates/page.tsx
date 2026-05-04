@@ -217,6 +217,10 @@ function TemplateCard({
 export default function ChecklistTemplatesPage() {
   const [templates, setTemplates] = useState<ChecklistTemplate[]>([])
   const [loading, setLoading] = useState(true)
+  const [creandoNueva, setCreandoNueva] = useState(false)
+  const [nuevoTipo, setNuevoTipo] = useState<string>('preventivo')
+  const [nuevoNombre, setNuevoNombre] = useState<string>('')
+  const toast = useToast()
 
   const fetchTemplates = useCallback(async () => {
     setLoading(true)
@@ -235,6 +239,31 @@ export default function ChecklistTemplatesPage() {
   useEffect(() => {
     fetchTemplates()
   }, [fetchTemplates])
+
+  async function handleCrearNueva() {
+    if (!nuevoNombre.trim()) {
+      toast.error('Ingrese un nombre para la plantilla')
+      return
+    }
+    setCreandoNueva(true)
+    try {
+      const { error } = await supabase.from('checklist_templates').insert({
+        tipo_ot: nuevoTipo,
+        nombre: nuevoNombre.trim(),
+        descripcion: null,
+        items: [],
+        activo: true,
+      })
+      if (error) throw error
+      toast.success('Plantilla creada. Agregue ítems abajo.')
+      setNuevoNombre('')
+      fetchTemplates()
+    } catch (err: any) {
+      toast.error(err?.message || 'Error al crear plantilla')
+    } finally {
+      setCreandoNueva(false)
+    }
+  }
 
   if (loading) {
     return (
@@ -263,6 +292,51 @@ export default function ChecklistTemplatesPage() {
           Estos se asignan automaticamente al crear OTs manuales (sin plan PM).
         </p>
       </div>
+
+      {/* Crear nueva plantilla */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Plus className="h-4 w-4" />
+            Crear nueva plantilla
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-gray-500">Tipo OT</label>
+              <select
+                value={nuevoTipo}
+                onChange={(e) => setNuevoTipo(e.target.value)}
+                className="h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm"
+                disabled={creandoNueva}
+              >
+                {Object.entries(tipoLabels).map(([key, label]) => (
+                  <option key={key} value={key}>{label}</option>
+                ))}
+              </select>
+            </div>
+            <div className="sm:col-span-2">
+              <label className="mb-1 block text-xs font-medium text-gray-500">Nombre de la plantilla</label>
+              <Input
+                value={nuevoNombre}
+                onChange={(e) => setNuevoNombre(e.target.value)}
+                placeholder="Ej: Checklist Disponibilidad Camion Cisterna"
+                disabled={creandoNueva}
+              />
+            </div>
+          </div>
+          <div className="mt-3 flex justify-end">
+            <Button onClick={handleCrearNueva} disabled={creandoNueva || !nuevoNombre.trim()}>
+              {creandoNueva ? <Spinner size="sm" className="mr-1" /> : <Plus className="h-4 w-4 mr-1" />}
+              Crear plantilla vacía
+            </Button>
+          </div>
+          <p className="mt-2 text-xs text-gray-500">
+            La plantilla se crea sin ítems. Use el bloque correspondiente abajo para agregar los ítems.
+          </p>
+        </CardContent>
+      </Card>
 
       {/* Templates */}
       {templates.length === 0 ? (

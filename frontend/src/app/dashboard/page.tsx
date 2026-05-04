@@ -33,9 +33,7 @@ import { cn } from '@/lib/utils'
 import { getICEOColor, getICEOLabel } from '@/lib/utils'
 import { useRequireAuth } from '@/hooks/use-require-auth'
 import { useAuth } from '@/contexts/auth-context'
-import { ExecutiveDashboard } from '@/components/dashboard/executive-dashboard'
-import { CommercialDashboard } from '@/components/dashboard/commercial-dashboard'
-import { OperationsDashboard } from '@/components/dashboard/operations-dashboard'
+import { RoleDashboardRouter } from '@/components/dashboard/role-dashboard-router'
 import { useOTsStats } from '@/hooks/use-ordenes-trabajo'
 import { useValorizacionTotal } from '@/hooks/use-inventario'
 import { useICEOHistorico, useICEOPeriodo } from '@/hooks/use-kpi-iceo'
@@ -86,41 +84,26 @@ function formatCurrency(value: number): string {
 }
 
 /* ─── Component ───────────────────────────────────────────────── */
-// Roles que ven el Dashboard Ejecutivo (Control Tower)
-const ROLES_EJECUTIVOS = new Set([
-  'administrador',
-  'gerencia',
-  'subgerente_operaciones',
-  'jefe_operaciones',
-])
-
-// Roles que ven el Dashboard de Operaciones
-const ROLES_OPERACIONES = new Set([
-  'supervisor',
-  'jefe_mantenimiento',
-  'planificador',
-])
+// FASE 5.6: el routing por rol vive ahora en RoleDashboardRouter.
+// LegacyDashboard se mantiene como fallback para roles sin dashboard especifico.
 
 export default function DashboardPage() {
   const { loading: authLoading } = useRequireAuth()
   const { perfil } = useAuth()
 
-  // Router por rol:
-  //   - Ejecutivos  -> Control Tower.
-  //   - Comercial   -> Panel Comercial (equipos rentables, pendientes, clientes).
-  //   - Operaciones -> Panel Operaciones (OTs, verificaciones, emergencias).
-  //   - Otros       -> dashboard legacy (resto de este archivo).
-  if (!authLoading && perfil?.rol) {
-    if (ROLES_EJECUTIVOS.has(perfil.rol)) {
-      return <ExecutiveDashboard />
-    }
-    if (perfil.rol === 'comercial') {
-      return <CommercialDashboard />
-    }
-    if (ROLES_OPERACIONES.has(perfil.rol)) {
-      return <OperationsDashboard />
-    }
+  if (authLoading || !perfil) {
+    return (
+      <div className="flex h-96 items-center justify-center">
+        <Spinner size="lg" className="text-gray-400" />
+      </div>
+    )
   }
+
+  return <RoleDashboardRouter fallback={<LegacyDashboard />} />
+}
+
+function LegacyDashboard() {
+  const { loading: authLoading } = useRequireAuth()
 
   // Fetch active contrato for ICEO hooks
   const { data: contrato } = useQuery({

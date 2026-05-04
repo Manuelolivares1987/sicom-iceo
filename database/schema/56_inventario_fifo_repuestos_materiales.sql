@@ -1,0 +1,875 @@
+-- ============================================================================
+-- 56_inventario_fifo_repuestos_materiales.sql
+-- ----------------------------------------------------------------------------
+-- ARCHIVO DE PROPUESTA — NO DESTRUCTIVO. NO EJECUTAR AUTOMATICAMENTE.
+--
+-- Generado en FASE 5.4-A (2026-05-02).
+--
+-- PROPOSITO: implementar costeo FIFO por capas para repuestos, materiales e
+-- insumos. Cada recepcion contra una OC (mig 55) crea una capa valorizada;
+-- las salidas consumen las capas mas antiguas primero. La OT/CECO recibe el
+-- costo real consumido.
+--
+-- DEPENDENCIAS:
+--   - mig 03 (movimientos_inventario, kardex, stock_bodega, productos, bodegas)
+--   - mig 09 (rpc_registrar_entrada_inventario / salida / ajuste)
+--   - mig 48 (ot_materiales_planeados)
+--   - mig 55 (ordenes_compra, ordenes_compra_items, recepciones_bodega,
+--             salidas_bodega — propuesto, NO ejecutado)
+--
+-- IMPORTANTE: este archivo asume que mig 55 ya esta aplicada (al menos sus
+-- BLOCK A-F). Si mig 55 no esta aplicada, este archivo no funciona porque
+-- las FK apuntan a tablas que aun no existen.
+--
+-- TODO ESTA COMENTADO. Revisar bloque por bloque, descomentar en orden,
+-- probar en staging antes de aplicar a produccion.
+-- ============================================================================
+
+
+-- ============================================================================
+-- BLOCK 0  Verificaciones previas (SAFE — solo lectura)
+-- ============================================================================
+
+-- 0.1 Confirmar que mig 55 esta aplicada
+-- SELECT table_name FROM information_schema.tables
+--  WHERE table_schema = 'public'
+--    AND table_name IN ('ordenes_compra','ordenes_compra_items',
+--                       'recepciones_bodega','recepciones_bodega_items',
+--                       'salidas_bodega','salidas_bodega_items',
+--                       'centros_costo','proveedores');
+
+-- 0.2 Confirmar que ot_materiales_planeados existe (mig 48)
+-- SELECT column_name FROM information_schema.columns
+--  WHERE table_name = 'ot_materiales_planeados';
+
+-- 0.3 Verificar que las tablas FIFO no existan ya (idempotencia)
+-- SELECT table_name FROM information_schema.tables
+--  WHERE table_schema = 'public'
+--    AND table_name IN ('inventario_capas','inventario_consumos_capas');
+
+
+-- ============================================================================
+-- BLOCK A  Tabla inventario_capas
+-- ----------------------------------------------------------------------------
+-- Cada fila es una capa valorizada creada por una recepcion contra OC.
+-- ============================================================================
+
+-- CREATE TABLE IF NOT EXISTS inventario_capas (
+--     id                          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+--     producto_id                 UUID NOT NULL REFERENCES productos(id),
+--     bodega_id                   UUID NOT NULL REFERENCES bodegas(id),
+--
+--     -- Trazabilidad hacia origen
+--     recepcion_bodega_id         UUID REFERENCES recepciones_bodega(id),
+--     recepcion_bodega_item_id    UUID REFERENCES recepciones_bodega_items(id),
+--     orden_compra_id             UUID REFERENCES ordenes_compra(id),
+--     orden_compra_item_id        UUID REFERENCES ordenes_compra_items(id),
+--     proveedor_id                UUID REFERENCES proveedores(id),
+--
+--     -- Datos del documento
+--     fecha_recepcion             DATE NOT NULL,
+--     folio_recepcion             VARCHAR(30),
+--     numero_oc                   VARCHAR(40),
+--
+--     -- Stock y costeo
+--     cantidad_inicial            NUMERIC(12,3) NOT NULL CHECK (cantidad_inicial > 0),
+--     cantidad_disponible         NUMERIC(12,3) NOT NULL CHECK (cantidad_disponible >= 0),
+--     unidad                      VARCHAR(20) NOT NULL DEFAULT 'unidad',
+--     costo_unitario              NUMERIC(14,4) NOT NULL CHECK (costo_unitario >= 0),
+--     costo_total_inicial         NUMERIC(16,2) GENERATED ALWAYS AS
+--                                     (cantidad_inicial * costo_unitario) STORED,
+--     costo_total_disponible      NUMERIC(16,2) GENERATED ALWAYS AS
+--                                     (cantidad_disponible * costo_unitario) STORED,
+--
+--     -- Trazabilidad fisica
+--     lote                        VARCHAR(60),
+--     vencimiento                 DATE,
+--     numero_serie                VARCHAR(100),
+--
+--     estado                      VARCHAR(20) NOT NULL DEFAULT 'disponible'
+--         CHECK (estado IN ('disponible','agotada','bloqueada','ajustada')),
+--
+--     created_at                  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+--     created_by                  UUID REFERENCES auth.users(id),
+--     updated_at                  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+--
+--     CONSTRAINT chk_capa_disp_no_excede CHECK (cantidad_disponible <= cantidad_inicial)
+-- );
+--
+-- -- Indice clave: orden FIFO por (producto, bodega, fecha_recepcion ASC, created_at ASC, id ASC)
+-- CREATE INDEX IF NOT EXISTS idx_capa_fifo_disponibles
+--     ON inventario_capas (producto_id, bodega_id, fecha_recepcion ASC, created_at ASC, id ASC)
+--     WHERE estado = 'disponible';
+--
+-- CREATE INDEX IF NOT EXISTS idx_capa_recepcion_item ON inventario_capas (recepcion_bodega_item_id)
+--     WHERE recepcion_bodega_item_id IS NOT NULL;
+-- CREATE INDEX IF NOT EXISTS idx_capa_oc_item        ON inventario_capas (orden_compra_item_id)
+--     WHERE orden_compra_item_id IS NOT NULL;
+-- CREATE INDEX IF NOT EXISTS idx_capa_proveedor      ON inventario_capas (proveedor_id);
+-- CREATE INDEX IF NOT EXISTS idx_capa_estado         ON inventario_capas (producto_id, bodega_id, estado);
+--
+-- CREATE TRIGGER trg_capa_updated_at
+--     BEFORE UPDATE ON inventario_capas
+--     FOR EACH ROW EXECUTE FUNCTION fn_set_updated_at();
+--
+-- ALTER TABLE inventario_capas ENABLE ROW LEVEL SECURITY;
+-- CREATE POLICY pol_capa_select ON inventario_capas
+--     FOR SELECT TO authenticated USING (true);
+--
+-- COMMENT ON TABLE inventario_capas IS
+--     'Capas valorizadas FIFO. Una fila por recepcion. cantidad_disponible se '
+--     'descuenta segun consumos; cuando llega a 0 estado pasa a agotada.';
+
+
+-- ============================================================================
+-- BLOCK B  Tabla inventario_consumos_capas
+-- ----------------------------------------------------------------------------
+-- Detalle de cada consumo de capa por una salida. Permite rastrear que capas
+-- se usaron para una salida especifica y cuanto se cargo de cada una.
+-- ============================================================================
+
+-- CREATE TABLE IF NOT EXISTS inventario_consumos_capas (
+--     id                          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+--
+--     -- Origen del consumo
+--     salida_bodega_id            UUID REFERENCES salidas_bodega(id),
+--     salida_bodega_item_id       UUID REFERENCES salidas_bodega_items(id),
+--     movimiento_inventario_id    UUID REFERENCES movimientos_inventario(id),
+--     ot_id                       UUID REFERENCES ordenes_trabajo(id),
+--     ceco_id                     UUID REFERENCES centros_costo(id),
+--
+--     -- Producto y bodega (denormalizado para reporting rapido)
+--     producto_id                 UUID NOT NULL REFERENCES productos(id),
+--     bodega_id                   UUID NOT NULL REFERENCES bodegas(id),
+--
+--     -- Capa consumida
+--     capa_id                     UUID NOT NULL REFERENCES inventario_capas(id),
+--     cantidad_consumida          NUMERIC(12,3) NOT NULL CHECK (cantidad_consumida > 0),
+--     costo_unitario_capa         NUMERIC(14,4) NOT NULL CHECK (costo_unitario_capa >= 0),
+--     costo_total_consumido       NUMERIC(16,2) GENERATED ALWAYS AS
+--                                     (cantidad_consumida * costo_unitario_capa) STORED,
+--
+--     fecha_consumo               TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+--     consumido_por               UUID REFERENCES usuarios_perfil(id),
+--     created_at                  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+-- );
+--
+-- CREATE INDEX IF NOT EXISTS idx_consumo_salida_item ON inventario_consumos_capas (salida_bodega_item_id);
+-- CREATE INDEX IF NOT EXISTS idx_consumo_capa        ON inventario_consumos_capas (capa_id);
+-- CREATE INDEX IF NOT EXISTS idx_consumo_ot          ON inventario_consumos_capas (ot_id) WHERE ot_id IS NOT NULL;
+-- CREATE INDEX IF NOT EXISTS idx_consumo_ceco        ON inventario_consumos_capas (ceco_id) WHERE ceco_id IS NOT NULL;
+-- CREATE INDEX IF NOT EXISTS idx_consumo_producto    ON inventario_consumos_capas (producto_id, fecha_consumo DESC);
+--
+-- ALTER TABLE inventario_consumos_capas ENABLE ROW LEVEL SECURITY;
+-- CREATE POLICY pol_consumo_select ON inventario_consumos_capas
+--     FOR SELECT TO authenticated USING (true);
+--
+-- COMMENT ON TABLE inventario_consumos_capas IS
+--     'Detalle FIFO: que capas fueron consumidas por cada salida y a que costo.';
+
+
+-- ============================================================================
+-- BLOCK C  Extender ot_materiales_planeados con costo real
+-- ============================================================================
+
+-- ALTER TABLE ot_materiales_planeados
+--     ADD COLUMN IF NOT EXISTS costo_unitario_real  NUMERIC(14,4),
+--     ADD COLUMN IF NOT EXISTS costo_total_real     NUMERIC(16,2),
+--     ADD COLUMN IF NOT EXISTS metodo_costeo        VARCHAR(20) DEFAULT 'fifo'
+--         CHECK (metodo_costeo IN ('fifo','promedio_ponderado','manual_autorizado')),
+--     ADD COLUMN IF NOT EXISTS salida_bodega_id     UUID REFERENCES salidas_bodega(id),
+--     ADD COLUMN IF NOT EXISTS ceco_id              UUID REFERENCES centros_costo(id);
+--
+-- CREATE INDEX IF NOT EXISTS idx_ot_mat_salida_bodega
+--     ON ot_materiales_planeados (salida_bodega_id) WHERE salida_bodega_id IS NOT NULL;
+--
+-- COMMENT ON COLUMN ot_materiales_planeados.costo_unitario_real IS
+--     'Costo unitario REAL cargado a la OT (FIFO o promedio ponderado de capas consumidas).';
+-- COMMENT ON COLUMN ot_materiales_planeados.metodo_costeo IS
+--     'Metodo aplicado: fifo (default), promedio_ponderado, o manual_autorizado.';
+
+
+-- ============================================================================
+-- BLOCK D  Funcion fn_consumir_inventario_fifo (CORE TRANSACCIONAL)
+-- ----------------------------------------------------------------------------
+-- Reglas implementadas:
+--   1. p_cantidad > 0 (sino RAISE).
+--   2. Buscar capas disponibles ordenadas FIFO con SELECT ... FOR UPDATE.
+--   3. Consumir capa mas antigua primero; si no alcanza, varias capas.
+--   4. Insertar fila en inventario_consumos_capas por cada capa tocada.
+--   5. Decrementar cantidad_disponible; marcar agotada si llega a 0.
+--   6. Si stock total < cantidad → RAISE EXCEPTION con detalle.
+--   7. Devolver JSONB con totales y detalle.
+-- ============================================================================
+
+-- CREATE OR REPLACE FUNCTION fn_consumir_inventario_fifo(
+--     p_producto_id           UUID,
+--     p_bodega_id             UUID,
+--     p_cantidad              NUMERIC,
+--     p_salida_bodega_id      UUID DEFAULT NULL,
+--     p_salida_bodega_item_id UUID DEFAULT NULL,
+--     p_movimiento_id         UUID DEFAULT NULL,
+--     p_ot_id                 UUID DEFAULT NULL,
+--     p_ceco_id               UUID DEFAULT NULL,
+--     p_consumido_por         UUID DEFAULT NULL
+-- )
+-- RETURNS JSONB
+-- LANGUAGE plpgsql
+-- SECURITY DEFINER
+-- AS $$
+-- DECLARE
+--     v_pendiente             NUMERIC := p_cantidad;
+--     v_total_disponible      NUMERIC;
+--     v_capa                  RECORD;
+--     v_consumir              NUMERIC;
+--     v_costo_total           NUMERIC := 0;
+--     v_capas_detalle         JSONB := '[]'::JSONB;
+--     v_user                  UUID := COALESCE(p_consumido_por, auth.uid());
+-- BEGIN
+--     IF p_cantidad <= 0 THEN
+--         RAISE EXCEPTION 'Cantidad a consumir debe ser > 0 (recibido: %)', p_cantidad
+--             USING ERRCODE = '22023';
+--     END IF;
+--
+--     -- Pre-check de stock total disponible (defensa antes del lock)
+--     SELECT COALESCE(SUM(cantidad_disponible), 0) INTO v_total_disponible
+--       FROM inventario_capas
+--      WHERE producto_id = p_producto_id
+--        AND bodega_id = p_bodega_id
+--        AND estado = 'disponible';
+--
+--     IF v_total_disponible < p_cantidad THEN
+--         RAISE EXCEPTION 'Stock insuficiente para producto % en bodega %. Disponible: %, solicitado: %',
+--             p_producto_id, p_bodega_id, v_total_disponible, p_cantidad
+--             USING ERRCODE = 'P0001';
+--     END IF;
+--
+--     -- Bloquear capas en orden FIFO y consumir
+--     FOR v_capa IN
+--         SELECT id, cantidad_disponible, costo_unitario, fecha_recepcion, folio_recepcion
+--           FROM inventario_capas
+--          WHERE producto_id = p_producto_id
+--            AND bodega_id = p_bodega_id
+--            AND estado = 'disponible'
+--            AND cantidad_disponible > 0
+--          ORDER BY fecha_recepcion ASC, created_at ASC, id ASC
+--          FOR UPDATE
+--     LOOP
+--         EXIT WHEN v_pendiente <= 0;
+--
+--         v_consumir := LEAST(v_pendiente, v_capa.cantidad_disponible);
+--
+--         -- Registrar consumo
+--         INSERT INTO inventario_consumos_capas (
+--             salida_bodega_id, salida_bodega_item_id, movimiento_inventario_id,
+--             ot_id, ceco_id, producto_id, bodega_id, capa_id,
+--             cantidad_consumida, costo_unitario_capa, consumido_por
+--         ) VALUES (
+--             p_salida_bodega_id, p_salida_bodega_item_id, p_movimiento_id,
+--             p_ot_id, p_ceco_id, p_producto_id, p_bodega_id, v_capa.id,
+--             v_consumir, v_capa.costo_unitario, v_user
+--         );
+--
+--         -- Decrementar capa
+--         UPDATE inventario_capas
+--            SET cantidad_disponible = cantidad_disponible - v_consumir,
+--                estado = CASE
+--                    WHEN cantidad_disponible - v_consumir <= 0 THEN 'agotada'
+--                    ELSE 'disponible'
+--                END,
+--                updated_at = NOW()
+--          WHERE id = v_capa.id;
+--
+--         v_costo_total := v_costo_total + (v_consumir * v_capa.costo_unitario);
+--         v_pendiente   := v_pendiente   - v_consumir;
+--
+--         v_capas_detalle := v_capas_detalle || jsonb_build_object(
+--             'capa_id',         v_capa.id,
+--             'fecha_recepcion', v_capa.fecha_recepcion,
+--             'folio_recepcion', v_capa.folio_recepcion,
+--             'cantidad',        v_consumir,
+--             'costo_unitario',  v_capa.costo_unitario,
+--             'costo_total',     v_consumir * v_capa.costo_unitario
+--         );
+--     END LOOP;
+--
+--     -- Defensa: si quedo pendiente despues del loop (no deberia pasar gracias al pre-check)
+--     IF v_pendiente > 0 THEN
+--         RAISE EXCEPTION 'Inconsistencia FIFO: quedan % unidades sin consumir. Reintente.', v_pendiente
+--             USING ERRCODE = 'P0001';
+--     END IF;
+--
+--     RETURN jsonb_build_object(
+--         'cantidad_consumida',         p_cantidad,
+--         'costo_total',                v_costo_total,
+--         'costo_unitario_promedio',    ROUND(v_costo_total / p_cantidad, 4),
+--         'capas_consumidas',           v_capas_detalle,
+--         'metodo',                     'fifo'
+--     );
+-- END;
+-- $$;
+--
+-- COMMENT ON FUNCTION fn_consumir_inventario_fifo IS
+--     'Consume p_cantidad de p_producto en p_bodega siguiendo FIFO sobre '
+--     'inventario_capas. Devuelve costo total, costo unitario promedio y '
+--     'detalle de capas consumidas. RAISE si no hay stock suficiente.';
+
+
+-- ============================================================================
+-- BLOCK E  Reescribir rpc_registrar_recepcion_bodega para crear capas
+-- ----------------------------------------------------------------------------
+-- Esta es una EXTENSION de la RPC propuesta en mig 55 BLOCK K.
+-- Si se aplica este bloque, redefine la funcion para que cada recepcion cree
+-- la capa correspondiente en inventario_capas.
+-- ============================================================================
+
+-- CREATE OR REPLACE FUNCTION rpc_registrar_recepcion_bodega(
+--     p_orden_compra_id           UUID,
+--     p_proveedor_id              UUID,
+--     p_bodega_id                 UUID,
+--     p_doc_tipo                  tipo_documento_proveedor_enum,
+--     p_doc_numero                VARCHAR,
+--     p_items                     JSONB,
+--     p_evidencia_url             TEXT DEFAULT NULL,
+--     p_observacion               TEXT DEFAULT NULL,
+--     p_permite_sobrecantidad     BOOLEAN DEFAULT FALSE,
+--     p_permite_precio_distinto   BOOLEAN DEFAULT FALSE,
+--     p_justificacion_override    TEXT DEFAULT NULL
+-- )
+-- RETURNS JSONB
+-- LANGUAGE plpgsql
+-- SECURITY DEFINER
+-- AS $$
+-- DECLARE
+--     v_user_id UUID := auth.uid();
+--     v_rol     TEXT;
+--     v_folio   VARCHAR;
+--     v_recepcion_id UUID;
+--     v_oc_record RECORD;
+--     v_oc_item   RECORD;
+--     v_item      JSONB;
+--     v_costo_oc  NUMERIC;
+--     v_costo_real NUMERIC;
+--     v_capas_creadas JSONB := '[]'::JSONB;
+--     v_capa_id UUID;
+--     v_rec_item_id UUID;
+-- BEGIN
+--     IF v_user_id IS NULL THEN RAISE EXCEPTION 'No autenticado'; END IF;
+--     v_rol := fn_user_rol();
+--     IF v_rol NOT IN ('administrador','bodeguero','jefe_mantenimiento','supervisor','subgerente_operaciones') THEN
+--         RAISE EXCEPTION 'Rol % no autorizado para registrar recepciones', v_rol;
+--     END IF;
+--     IF (p_permite_sobrecantidad OR p_permite_precio_distinto) AND v_rol != 'administrador' THEN
+--         RAISE EXCEPTION 'Solo administrador puede recibir sobrecantidad o precio distinto';
+--     END IF;
+--     IF (p_permite_sobrecantidad OR p_permite_precio_distinto)
+--        AND (p_justificacion_override IS NULL OR LENGTH(TRIM(p_justificacion_override)) < 10) THEN
+--         RAISE EXCEPTION 'Override requiere justificacion (min 10 caracteres)';
+--     END IF;
+--
+--     -- Cargar OC para validar proveedor
+--     IF p_orden_compra_id IS NOT NULL THEN
+--         SELECT * INTO v_oc_record FROM ordenes_compra WHERE id = p_orden_compra_id FOR UPDATE;
+--         IF v_oc_record.proveedor_id != p_proveedor_id THEN
+--             RAISE EXCEPTION 'Proveedor de la recepcion (%) no coincide con OC (%)',
+--                 p_proveedor_id, v_oc_record.proveedor_id;
+--         END IF;
+--     END IF;
+--
+--     v_folio := fn_generar_folio_recepcion_bodega();
+--     v_recepcion_id := gen_random_uuid();
+--
+--     INSERT INTO recepciones_bodega (
+--         id, folio_recepcion, orden_compra_id, proveedor_id, bodega_id,
+--         documento_proveedor_tipo, documento_proveedor_numero,
+--         recibido_por, observacion, evidencia_url, created_by
+--     ) VALUES (
+--         v_recepcion_id, v_folio, p_orden_compra_id, p_proveedor_id, p_bodega_id,
+--         p_doc_tipo, p_doc_numero,
+--         v_user_id,
+--         CASE WHEN p_permite_sobrecantidad OR p_permite_precio_distinto
+--              THEN COALESCE(p_observacion, '') || E'\nOVERRIDE ADMIN: ' || p_justificacion_override
+--              ELSE p_observacion END,
+--         p_evidencia_url, v_user_id
+--     );
+--
+--     FOR v_item IN SELECT * FROM jsonb_array_elements(p_items)
+--     LOOP
+--         v_costo_real := COALESCE((v_item->>'costo_unitario')::NUMERIC, 0);
+--         v_costo_oc := NULL;
+--
+--         IF (v_item->>'oc_item_id') IS NOT NULL THEN
+--             SELECT * INTO v_oc_item FROM ordenes_compra_items
+--              WHERE id = (v_item->>'oc_item_id')::UUID FOR UPDATE;
+--
+--             v_costo_oc := v_oc_item.precio_unitario_clp;
+--
+--             IF v_oc_item.id IS NULL THEN
+--                 RAISE EXCEPTION 'OC item % no existe', v_item->>'oc_item_id';
+--             END IF;
+--             IF (v_item->>'cantidad')::NUMERIC > (v_oc_item.cantidad_comprada - v_oc_item.cantidad_recibida)
+--                AND NOT p_permite_sobrecantidad THEN
+--                 RAISE EXCEPTION 'Cantidad recibida (%) supera pendiente (%) item %',
+--                     v_item->>'cantidad',
+--                     (v_oc_item.cantidad_comprada - v_oc_item.cantidad_recibida),
+--                     v_oc_item.id;
+--             END IF;
+--             IF ABS(v_costo_real - v_costo_oc) > 0.01 AND NOT p_permite_precio_distinto THEN
+--                 RAISE EXCEPTION 'Precio recibido (%) difiere del precio OC (%) para item %. Use override admin con justificacion.',
+--                     v_costo_real, v_costo_oc, v_oc_item.id;
+--             END IF;
+--
+--             UPDATE ordenes_compra_items
+--                SET cantidad_recibida = cantidad_recibida + (v_item->>'cantidad')::NUMERIC,
+--                    estado = CASE
+--                        WHEN cantidad_recibida + (v_item->>'cantidad')::NUMERIC >= cantidad_comprada
+--                            THEN 'completo'::estado_oc_item_enum
+--                        ELSE 'parcial'::estado_oc_item_enum
+--                    END
+--              WHERE id = v_oc_item.id;
+--         END IF;
+--
+--         -- Insertar item de recepcion
+--         v_rec_item_id := gen_random_uuid();
+--         INSERT INTO recepciones_bodega_items (
+--             id, recepcion_id, orden_compra_item_id, producto_id, cantidad_recibida,
+--             unidad, costo_unitario_clp, lote, fecha_vencimiento, observacion
+--         ) VALUES (
+--             v_rec_item_id, v_recepcion_id,
+--             NULLIF((v_item->>'oc_item_id'), '')::UUID,
+--             (v_item->>'producto_id')::UUID,
+--             (v_item->>'cantidad')::NUMERIC,
+--             COALESCE(v_item->>'unidad','unidad'),
+--             v_costo_real,
+--             v_item->>'lote',
+--             NULLIF(v_item->>'vencimiento', '')::DATE,
+--             v_item->>'observacion'
+--         );
+--
+--         -- ── CREAR CAPA FIFO ──
+--         v_capa_id := gen_random_uuid();
+--         INSERT INTO inventario_capas (
+--             id, producto_id, bodega_id,
+--             recepcion_bodega_id, recepcion_bodega_item_id,
+--             orden_compra_id, orden_compra_item_id, proveedor_id,
+--             fecha_recepcion, folio_recepcion, numero_oc,
+--             cantidad_inicial, cantidad_disponible, unidad, costo_unitario,
+--             lote, vencimiento, numero_serie,
+--             estado, created_by
+--         ) VALUES (
+--             v_capa_id, (v_item->>'producto_id')::UUID, p_bodega_id,
+--             v_recepcion_id, v_rec_item_id,
+--             p_orden_compra_id, NULLIF((v_item->>'oc_item_id'), '')::UUID, p_proveedor_id,
+--             CURRENT_DATE, v_folio, COALESCE(v_oc_record.numero_oc, NULL),
+--             (v_item->>'cantidad')::NUMERIC, (v_item->>'cantidad')::NUMERIC,
+--             COALESCE(v_item->>'unidad','unidad'), v_costo_real,
+--             v_item->>'lote', NULLIF(v_item->>'vencimiento','')::DATE,
+--             v_item->>'numero_serie',
+--             'disponible', v_user_id
+--         );
+--
+--         -- Aumentar stock_bodega via RPC existente (mantiene CPP/kardex)
+--         PERFORM rpc_registrar_entrada_inventario(
+--             p_bodega_id           => p_bodega_id,
+--             p_producto_id         => (v_item->>'producto_id')::UUID,
+--             p_cantidad            => (v_item->>'cantidad')::NUMERIC,
+--             p_costo_unitario      => v_costo_real,
+--             p_documento_referencia => v_folio,
+--             p_usuario_id          => v_user_id,
+--             p_lote                => v_item->>'lote',
+--             p_fecha_vencimiento   => NULLIF(v_item->>'vencimiento','')::DATE
+--         );
+--
+--         v_capas_creadas := v_capas_creadas || jsonb_build_object(
+--             'capa_id', v_capa_id,
+--             'producto_id', v_item->>'producto_id',
+--             'cantidad', v_item->>'cantidad',
+--             'costo_unitario', v_costo_real
+--         );
+--     END LOOP;
+--
+--     -- Actualizar estado OC global
+--     IF p_orden_compra_id IS NOT NULL THEN
+--         UPDATE ordenes_compra
+--            SET estado = CASE
+--                  WHEN NOT EXISTS (SELECT 1 FROM ordenes_compra_items
+--                                    WHERE orden_compra_id = p_orden_compra_id
+--                                      AND estado != 'completo') THEN 'cerrada'::estado_oc_enum
+--                  WHEN EXISTS (SELECT 1 FROM ordenes_compra_items
+--                                WHERE orden_compra_id = p_orden_compra_id
+--                                  AND cantidad_recibida > 0) THEN 'parcial'::estado_oc_enum
+--                  ELSE 'abierta'::estado_oc_enum
+--                END,
+--                updated_at = NOW()
+--          WHERE id = p_orden_compra_id;
+--     END IF;
+--
+--     RETURN jsonb_build_object(
+--         'success', true,
+--         'folio', v_folio,
+--         'recepcion_id', v_recepcion_id,
+--         'capas_creadas', v_capas_creadas
+--     );
+-- END;
+-- $$;
+
+
+-- ============================================================================
+-- BLOCK F  Reescribir rpc_registrar_salida_bodega para consumir FIFO
+-- ============================================================================
+
+-- CREATE OR REPLACE FUNCTION rpc_registrar_salida_bodega(
+--     p_tipo_salida           tipo_salida_bodega_enum,
+--     p_bodega_id             UUID,
+--     p_ceco_id               UUID,
+--     p_ot_id                 UUID DEFAULT NULL,
+--     p_entregado_a           VARCHAR DEFAULT NULL,
+--     p_entregado_a_perfil_id UUID DEFAULT NULL,
+--     p_autorizado_por        UUID DEFAULT NULL,
+--     p_motivo                TEXT DEFAULT NULL,
+--     p_items                 JSONB DEFAULT '[]'::JSONB,
+--     p_evidencia_url         TEXT DEFAULT NULL,
+--     p_observacion           TEXT DEFAULT NULL
+-- )
+-- RETURNS JSONB
+-- LANGUAGE plpgsql
+-- SECURITY DEFINER
+-- AS $$
+-- DECLARE
+--     v_user_id UUID := auth.uid();
+--     v_rol     TEXT := fn_user_rol();
+--     v_folio   VARCHAR;
+--     v_salida_id UUID;
+--     v_item    JSONB;
+--     v_item_id UUID;
+--     v_fifo_result JSONB;
+--     v_costo_unit_prom NUMERIC;
+--     v_costo_total NUMERIC;
+--     v_mov_id UUID;
+--     v_resumen_items JSONB := '[]'::JSONB;
+-- BEGIN
+--     IF v_user_id IS NULL THEN RAISE EXCEPTION 'No autenticado'; END IF;
+--     IF v_rol NOT IN ('administrador','bodeguero','jefe_mantenimiento','supervisor','planificador','subgerente_operaciones') THEN
+--         RAISE EXCEPTION 'Rol % no autorizado para registrar salidas', v_rol;
+--     END IF;
+--     IF p_motivo IS NULL OR LENGTH(TRIM(p_motivo)) < 5 THEN
+--         RAISE EXCEPTION 'Motivo es obligatorio (min 5 caracteres)';
+--     END IF;
+--     IF p_ceco_id IS NULL THEN
+--         RAISE EXCEPTION 'CECO es obligatorio para toda salida';
+--     END IF;
+--     IF p_tipo_salida = 'ot' AND p_ot_id IS NULL THEN
+--         RAISE EXCEPTION 'Salida tipo OT requiere ot_id';
+--     END IF;
+--
+--     v_folio := fn_generar_folio_salida_bodega();
+--     v_salida_id := gen_random_uuid();
+--
+--     INSERT INTO salidas_bodega (
+--         id, folio_salida, tipo_salida, ot_id, ceco_id, bodega_id,
+--         solicitado_por, entregado_a, entregado_a_perfil_id, autorizado_por,
+--         motivo, observacion, evidencia_url, created_by
+--     ) VALUES (
+--         v_salida_id, v_folio, p_tipo_salida, p_ot_id, p_ceco_id, p_bodega_id,
+--         v_user_id, p_entregado_a, p_entregado_a_perfil_id, p_autorizado_por,
+--         p_motivo, p_observacion, p_evidencia_url, v_user_id
+--     );
+--
+--     FOR v_item IN SELECT * FROM jsonb_array_elements(p_items)
+--     LOOP
+--         v_item_id := gen_random_uuid();
+--         INSERT INTO salidas_bodega_items (
+--             id, salida_id, producto_id, cantidad, unidad
+--         ) VALUES (
+--             v_item_id, v_salida_id,
+--             (v_item->>'producto_id')::UUID,
+--             (v_item->>'cantidad')::NUMERIC,
+--             COALESCE(v_item->>'unidad','unidad')
+--         );
+--
+--         -- ── Consumir capas FIFO ──
+--         v_fifo_result := fn_consumir_inventario_fifo(
+--             p_producto_id           => (v_item->>'producto_id')::UUID,
+--             p_bodega_id             => p_bodega_id,
+--             p_cantidad              => (v_item->>'cantidad')::NUMERIC,
+--             p_salida_bodega_id      => v_salida_id,
+--             p_salida_bodega_item_id => v_item_id,
+--             p_movimiento_id         => NULL,
+--             p_ot_id                 => p_ot_id,
+--             p_ceco_id               => p_ceco_id,
+--             p_consumido_por         => v_user_id
+--         );
+--
+--         v_costo_unit_prom := (v_fifo_result->>'costo_unitario_promedio')::NUMERIC;
+--         v_costo_total     := (v_fifo_result->>'costo_total')::NUMERIC;
+--
+--         -- Actualizar item de salida con costo real
+--         UPDATE salidas_bodega_items
+--            SET costo_unitario_clp = v_costo_unit_prom
+--          WHERE id = v_item_id;
+--
+--         -- Crear movimiento_inventario via RPC existente (kardex valorizado)
+--         -- (la RPC ya descuenta stock; el costo unitario lo pasamos del FIFO)
+--         PERFORM rpc_registrar_salida_inventario(
+--             p_bodega_id    => p_bodega_id,
+--             p_producto_id  => (v_item->>'producto_id')::UUID,
+--             p_cantidad     => (v_item->>'cantidad')::NUMERIC,
+--             p_ot_id        => p_ot_id,
+--             p_usuario_id   => v_user_id,
+--             p_lote         => NULL,
+--             p_motivo       => p_motivo
+--         );
+--
+--         -- Si la salida es por OT, registrar costo real en ot_materiales_planeados
+--         IF p_tipo_salida = 'ot' AND p_ot_id IS NOT NULL THEN
+--             INSERT INTO ot_materiales_planeados (
+--                 ot_id, producto_id, cantidad_plan, cantidad_entregada,
+--                 estado, bodega_id, despachado_por, despachado_en,
+--                 costo_unitario_real, costo_total_real, metodo_costeo,
+--                 salida_bodega_id, ceco_id
+--             ) VALUES (
+--                 p_ot_id, (v_item->>'producto_id')::UUID,
+--                 (v_item->>'cantidad')::NUMERIC, (v_item->>'cantidad')::NUMERIC,
+--                 'despachado', p_bodega_id, v_user_id, NOW(),
+--                 v_costo_unit_prom, v_costo_total, 'fifo',
+--                 v_salida_id, p_ceco_id
+--             )
+--             ON CONFLICT DO NOTHING;
+--         END IF;
+--
+--         v_resumen_items := v_resumen_items || jsonb_build_object(
+--             'salida_item_id',           v_item_id,
+--             'producto_id',              v_item->>'producto_id',
+--             'cantidad',                 v_item->>'cantidad',
+--             'costo_unitario_promedio',  v_costo_unit_prom,
+--             'costo_total',              v_costo_total,
+--             'capas_consumidas',         v_fifo_result->'capas_consumidas'
+--         );
+--     END LOOP;
+--
+--     RETURN jsonb_build_object(
+--         'success', true,
+--         'folio', v_folio,
+--         'salida_id', v_salida_id,
+--         'metodo_costeo', 'fifo',
+--         'items', v_resumen_items
+--     );
+-- END;
+-- $$;
+
+
+-- ============================================================================
+-- BLOCK G  Vistas para Administracion y Finanzas
+-- ============================================================================
+
+-- ── G.1  v_trazabilidad_producto_fifo ─────────────────────────────────
+-- Trazabilidad completa: capa → recepcion → OC → proveedor → consumos.
+
+-- CREATE OR REPLACE VIEW v_trazabilidad_producto_fifo AS
+-- SELECT
+--     p.codigo                AS producto_codigo,
+--     p.nombre                AS producto_nombre,
+--     b.codigo                AS bodega,
+--     pr.nombre               AS proveedor,
+--     oc.numero_oc,
+--     ic.folio_recepcion,
+--     ic.fecha_recepcion,
+--     ic.id                   AS capa_id,
+--     ic.cantidad_inicial,
+--     ic.cantidad_disponible,
+--     ic.costo_unitario,
+--     ic.costo_total_inicial,
+--     ic.costo_total_disponible,
+--     ic.estado,
+--     ic.lote,
+--     ic.vencimiento,
+--     -- Salidas asociadas (resumido)
+--     COALESCE(
+--       (SELECT jsonb_agg(jsonb_build_object(
+--           'salida_id', sbi.salida_id,
+--           'cantidad', cc.cantidad_consumida,
+--           'costo_total', cc.costo_total_consumido,
+--           'ot_id', cc.ot_id,
+--           'ceco_id', cc.ceco_id,
+--           'fecha', cc.fecha_consumo))
+--          FROM inventario_consumos_capas cc
+--          LEFT JOIN salidas_bodega_items sbi ON sbi.id = cc.salida_bodega_item_id
+--         WHERE cc.capa_id = ic.id),
+--       '[]'::jsonb
+--     ) AS consumos
+-- FROM inventario_capas ic
+-- JOIN productos     p  ON p.id  = ic.producto_id
+-- JOIN bodegas       b  ON b.id  = ic.bodega_id
+-- LEFT JOIN proveedores pr ON pr.id = ic.proveedor_id
+-- LEFT JOIN ordenes_compra oc ON oc.id = ic.orden_compra_id;
+--
+-- COMMENT ON VIEW v_trazabilidad_producto_fifo IS
+--     'OC -> recepcion -> capa -> consumos. Para auditoria fin/com.';
+
+
+-- ── G.2  v_costo_ot_materiales_fifo ───────────────────────────────────
+-- Detalle del costo real cargado a cada OT por material.
+
+-- CREATE OR REPLACE VIEW v_costo_ot_materiales_fifo AS
+-- SELECT
+--     ot.id                   AS ot_id,
+--     ot.folio                AS ot_folio,
+--     p.codigo                AS producto_codigo,
+--     p.nombre                AS producto_nombre,
+--     SUM(cc.cantidad_consumida)         AS cantidad_consumida_total,
+--     SUM(cc.costo_total_consumido)      AS costo_total_real,
+--     ROUND(SUM(cc.costo_total_consumido) / NULLIF(SUM(cc.cantidad_consumida),0), 4)
+--                                        AS costo_unitario_real_prom,
+--     COALESCE((SELECT codigo FROM centros_costo WHERE id = MAX(cc.ceco_id)), '—')
+--                                        AS ceco_codigo,
+--     -- Capas consumidas (detalle JSON)
+--     jsonb_agg(jsonb_build_object(
+--         'capa_id',          cc.capa_id,
+--         'cantidad',         cc.cantidad_consumida,
+--         'costo_unitario',   cc.costo_unitario_capa,
+--         'costo_total',      cc.costo_total_consumido,
+--         'fecha_recepcion',  ic.fecha_recepcion,
+--         'numero_oc',        ic.numero_oc,
+--         'proveedor',        pr.nombre
+--     )) AS detalle_capas
+-- FROM inventario_consumos_capas cc
+-- JOIN productos     p  ON p.id = cc.producto_id
+-- JOIN ordenes_trabajo ot ON ot.id = cc.ot_id
+-- JOIN inventario_capas ic ON ic.id = cc.capa_id
+-- LEFT JOIN proveedores pr ON pr.id = ic.proveedor_id
+-- WHERE cc.ot_id IS NOT NULL
+-- GROUP BY ot.id, ot.folio, p.codigo, p.nombre;
+--
+-- COMMENT ON VIEW v_costo_ot_materiales_fifo IS
+--     'Costo real de materiales por OT, calculado por consumo FIFO.';
+
+
+-- ── G.3  v_stock_valorizado_fifo ──────────────────────────────────────
+-- Valor de inventario actual a costo real (FIFO) y CPP informativo.
+
+-- CREATE OR REPLACE VIEW v_stock_valorizado_fifo AS
+-- SELECT
+--     p.id                    AS producto_id,
+--     p.codigo                AS producto_codigo,
+--     p.nombre                AS producto_nombre,
+--     b.id                    AS bodega_id,
+--     b.codigo                AS bodega_codigo,
+--     SUM(ic.cantidad_disponible)              AS cantidad_total_disponible,
+--     SUM(ic.cantidad_disponible * ic.costo_unitario) AS valor_total_fifo,
+--     ROUND(
+--         SUM(ic.cantidad_disponible * ic.costo_unitario) /
+--         NULLIF(SUM(ic.cantidad_disponible), 0)
+--     , 4) AS costo_promedio_informativo,
+--     COUNT(*) FILTER (WHERE ic.cantidad_disponible > 0) AS capas_activas,
+--     MIN(ic.fecha_recepcion) FILTER (WHERE ic.cantidad_disponible > 0) AS capa_mas_antigua,
+--     MAX(ic.fecha_recepcion) FILTER (WHERE ic.cantidad_disponible > 0) AS capa_mas_nueva
+-- FROM inventario_capas ic
+-- JOIN productos p ON p.id = ic.producto_id
+-- JOIN bodegas   b ON b.id = ic.bodega_id
+-- WHERE ic.estado = 'disponible'
+-- GROUP BY p.id, p.codigo, p.nombre, b.id, b.codigo;
+
+
+-- ── G.4  v_kardex_valorizado_materiales ───────────────────────────────
+-- Kardex unificado: entradas (recepciones) + salidas (consumos) con valor.
+
+-- CREATE OR REPLACE VIEW v_kardex_valorizado_materiales AS
+-- WITH entradas AS (
+--   SELECT
+--       ic.fecha_recepcion::TIMESTAMPTZ            AS fecha,
+--       ic.producto_id, ic.bodega_id,
+--       'entrada'                                  AS tipo,
+--       ic.cantidad_inicial                        AS entrada_cantidad,
+--       ic.cantidad_inicial * ic.costo_unitario    AS entrada_valor,
+--       0::NUMERIC                                 AS salida_cantidad,
+--       0::NUMERIC                                 AS salida_valor,
+--       ic.folio_recepcion                         AS documento_origen,
+--       ic.created_by                              AS usuario_id
+--   FROM inventario_capas ic
+-- ),
+-- salidas AS (
+--   SELECT
+--       cc.fecha_consumo                           AS fecha,
+--       cc.producto_id, cc.bodega_id,
+--       'salida'                                   AS tipo,
+--       0::NUMERIC                                 AS entrada_cantidad,
+--       0::NUMERIC                                 AS entrada_valor,
+--       cc.cantidad_consumida                      AS salida_cantidad,
+--       cc.costo_total_consumido                   AS salida_valor,
+--       sb.folio_salida                            AS documento_origen,
+--       cc.consumido_por                           AS usuario_id
+--   FROM inventario_consumos_capas cc
+--   LEFT JOIN salidas_bodega sb ON sb.id = cc.salida_bodega_id
+-- ),
+-- kardex AS (
+--   SELECT * FROM entradas
+--   UNION ALL
+--   SELECT * FROM salidas
+-- )
+-- SELECT
+--     k.fecha,
+--     p.codigo  AS producto_codigo,
+--     p.nombre  AS producto_nombre,
+--     b.codigo  AS bodega_codigo,
+--     k.tipo,
+--     k.entrada_cantidad, k.entrada_valor,
+--     k.salida_cantidad,  k.salida_valor,
+--     -- Saldos acumulados por (producto, bodega) ordenado por fecha
+--     SUM(k.entrada_cantidad - k.salida_cantidad) OVER (
+--         PARTITION BY k.producto_id, k.bodega_id
+--         ORDER BY k.fecha, k.tipo DESC
+--         ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+--     ) AS saldo_cantidad,
+--     SUM(k.entrada_valor - k.salida_valor) OVER (
+--         PARTITION BY k.producto_id, k.bodega_id
+--         ORDER BY k.fecha, k.tipo DESC
+--         ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+--     ) AS saldo_valor,
+--     k.documento_origen,
+--     up.nombre_completo AS usuario
+-- FROM kardex k
+-- JOIN productos p ON p.id = k.producto_id
+-- JOIN bodegas   b ON b.id = k.bodega_id
+-- LEFT JOIN usuarios_perfil up ON up.id = k.usuario_id
+-- ORDER BY p.codigo, b.codigo, k.fecha, k.tipo DESC;
+
+
+-- ============================================================================
+-- BLOCK H  Verificaciones POST-aplicacion (SAFE)
+-- ============================================================================
+
+-- H.1  Capas activas y su valor
+-- SELECT * FROM v_stock_valorizado_fifo ORDER BY producto_codigo;
+
+-- H.2  Trazabilidad de un producto especifico
+-- SELECT * FROM v_trazabilidad_producto_fifo
+--  WHERE producto_codigo = 'XYZ' ORDER BY fecha_recepcion DESC;
+
+-- H.3  Costo real de OTs del mes
+-- SELECT ot_folio, SUM(costo_total_real) AS costo_materiales
+--   FROM v_costo_ot_materiales_fifo
+--  GROUP BY ot_folio
+--  ORDER BY costo_materiales DESC;
+
+-- H.4  Kardex valorizado de un producto
+-- SELECT * FROM v_kardex_valorizado_materiales
+--  WHERE producto_codigo = 'XYZ' ORDER BY fecha;
+
+-- H.5  Reconciliacion: capas_disponibles vs stock_bodega
+-- SELECT p.codigo, b.codigo,
+--        sb.cantidad   AS stock_bodega_cantidad,
+--        SUM(ic.cantidad_disponible) AS capas_disponible_total,
+--        sb.cantidad - SUM(ic.cantidad_disponible) AS diferencia
+--   FROM stock_bodega sb
+--   JOIN productos p ON p.id = sb.producto_id
+--   JOIN bodegas   b ON b.id = sb.bodega_id
+--   LEFT JOIN inventario_capas ic
+--     ON ic.producto_id = sb.producto_id AND ic.bodega_id = sb.bodega_id AND ic.estado = 'disponible'
+--  GROUP BY p.codigo, b.codigo, sb.cantidad
+-- HAVING ABS(sb.cantidad - COALESCE(SUM(ic.cantidad_disponible), 0)) > 0.001;
+-- (Si esta query devuelve filas, hay desincronizacion. Investigar.)
+
+
+-- ============================================================================
+-- FIN DEL ARCHIVO 56_inventario_fifo_repuestos_materiales.sql
+-- ============================================================================

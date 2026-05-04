@@ -1,0 +1,947 @@
+-- ============================================================================
+-- 55_bodega_combustible_oc_ceco_trazabilidad.sql
+-- ----------------------------------------------------------------------------
+-- ARCHIVO DE PROPUESTA — NO DESTRUCTIVO. NO EJECUTAR AUTOMATICAMENTE.
+--
+-- Generado en FASE 5.3 (2026-04-30).
+--
+-- INVENTARIO DE TABLAS PROPUESTAS (todas IF NOT EXISTS, idempotentes):
+--   1.  proveedores                    — ENEX, ESMAX, repuesteros, etc.
+--   2.  ordenes_compra                 — OC con estado abierta/parcial/cerrada
+--   3.  ordenes_compra_items
+--   4.  recepciones_bodega             — Recepcion parcial contra OC
+--   5.  recepciones_bodega_items
+--   6.  centros_costo                  — CECO (obligatorio en salidas)
+--   7.  salidas_bodega                 — Salida con CECO + persona + OT
+--   8.  salidas_bodega_items
+--   9.  ingresos_combustible           — Guia ENEX/ESMAX con datos formales
+--  10.  salidas_combustible            — Tipo: venta/carga_propio/despacho
+--  11.  despachos_combustible          — Con 3 sellos + fotos salida/entrega
+--
+-- RPCs TRANSACCIONALES PROPUESTAS:
+--  - rpc_registrar_recepcion_bodega
+--  - rpc_registrar_salida_bodega
+--  - rpc_registrar_ingreso_combustible
+--  - rpc_registrar_salida_combustible
+--  - rpc_registrar_despacho_combustible_sellos
+--  - rpc_confirmar_entrega_combustible
+--
+-- TODO ESTA COMENTADO. Revisar bloque por bloque, descomentar en orden,
+-- probar en staging antes de aplicar a produccion.
+-- ============================================================================
+
+
+-- ============================================================================
+-- BLOCK 0  Verificaciones previas (SAFE — solo lectura)
+-- ============================================================================
+
+-- 0.1 Tablas que ya existen y se REUSAN (no se duplican)
+-- SELECT table_name FROM information_schema.tables
+--  WHERE table_schema = 'public'
+--    AND table_name IN ('productos','bodegas','stock_bodega','movimientos_inventario',
+--                       'kardex','combustible_estanques','combustible_movimientos',
+--                       'combustible_medidores','combustible_varillaje');
+
+-- 0.2 Verificar si las tablas nuevas YA fueron creadas por error
+-- SELECT table_name FROM information_schema.tables
+--  WHERE table_schema = 'public'
+--    AND table_name IN ('proveedores','ordenes_compra','ordenes_compra_items',
+--                       'recepciones_bodega','recepciones_bodega_items',
+--                       'centros_costo','salidas_bodega','salidas_bodega_items',
+--                       'ingresos_combustible','salidas_combustible','despachos_combustible');
+
+
+-- ============================================================================
+-- BLOCK A  Enums nuevos (idempotente)
+-- ============================================================================
+
+-- DO $$ BEGIN
+--     CREATE TYPE estado_oc_enum AS ENUM ('abierta','parcial','cerrada','anulada');
+-- EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+--
+-- DO $$ BEGIN
+--     CREATE TYPE estado_oc_item_enum AS ENUM ('pendiente','parcial','completo');
+-- EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+--
+-- DO $$ BEGIN
+--     CREATE TYPE tipo_salida_bodega_enum AS ENUM (
+--         'ot','persona','ceco','venta','ajuste_autorizado'
+--     );
+-- EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+--
+-- DO $$ BEGIN
+--     CREATE TYPE tipo_proveedor_enum AS ENUM (
+--         'combustible','repuestos','servicios','lubricantes','filtros','otros'
+--     );
+-- EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+--
+-- DO $$ BEGIN
+--     CREATE TYPE tipo_documento_proveedor_enum AS ENUM (
+--         'guia','factura','vale','boleta','otro'
+--     );
+-- EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+--
+-- DO $$ BEGIN
+--     CREATE TYPE tipo_salida_combustible_enum AS ENUM (
+--         'venta_externa','carga_equipo_propio','despacho_cliente','ajuste'
+--     );
+-- EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+--
+-- DO $$ BEGIN
+--     CREATE TYPE estado_despacho_combustible_enum AS ENUM (
+--         'programado','en_ruta','entregado','observado','anulado'
+--     );
+-- EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+
+-- ============================================================================
+-- BLOCK B  Tabla proveedores (no hardcodear ENEX/ESMAX)
+-- ============================================================================
+
+-- CREATE TABLE IF NOT EXISTS proveedores (
+--     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+--     codigo          VARCHAR(30) UNIQUE NOT NULL,
+--     nombre          VARCHAR(200) NOT NULL,
+--     rut             VARCHAR(20),
+--     tipo            tipo_proveedor_enum NOT NULL DEFAULT 'otros',
+--     contacto        VARCHAR(200),
+--     telefono        VARCHAR(30),
+--     email           VARCHAR(200),
+--     activo          BOOLEAN NOT NULL DEFAULT true,
+--     observaciones   TEXT,
+--     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+--     updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+-- );
+--
+-- CREATE INDEX IF NOT EXISTS idx_proveedores_tipo   ON proveedores (tipo) WHERE activo = true;
+-- CREATE INDEX IF NOT EXISTS idx_proveedores_activo ON proveedores (activo);
+--
+-- ALTER TABLE proveedores ENABLE ROW LEVEL SECURITY;
+-- CREATE POLICY pol_proveedores_select ON proveedores
+--     FOR SELECT TO authenticated USING (true);
+
+-- Seed minimo de proveedores frecuentes (descomentar y ajustar):
+-- INSERT INTO proveedores (codigo, nombre, tipo, activo) VALUES
+--     ('ENEX',  'ENEX S.A.',                      'combustible', true),
+--     ('ESMAX', 'Esmax Distribucion S.A.',        'combustible', true),
+--     ('COPEC', 'Empresas Copec S.A.',            'combustible', true)
+-- ON CONFLICT (codigo) DO NOTHING;
+
+
+-- ============================================================================
+-- BLOCK C  Centros de Costo (CECO)
+-- ============================================================================
+
+-- CREATE TABLE IF NOT EXISTS centros_costo (
+--     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+--     codigo          VARCHAR(30) UNIQUE NOT NULL,
+--     nombre          VARCHAR(200) NOT NULL,
+--     area            VARCHAR(100),
+--     contrato_id     UUID REFERENCES contratos(id),
+--     faena_id        UUID REFERENCES faenas(id),
+--     activo          BOOLEAN NOT NULL DEFAULT true,
+--     observaciones   TEXT,
+--     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+--     updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+-- );
+--
+-- CREATE INDEX IF NOT EXISTS idx_ceco_activo  ON centros_costo (activo);
+-- CREATE INDEX IF NOT EXISTS idx_ceco_faena   ON centros_costo (faena_id);
+--
+-- ALTER TABLE centros_costo ENABLE ROW LEVEL SECURITY;
+-- CREATE POLICY pol_ceco_select ON centros_costo
+--     FOR SELECT TO authenticated USING (true);
+
+
+-- ============================================================================
+-- BLOCK D  Ordenes de Compra (OC)
+-- ============================================================================
+
+-- CREATE TABLE IF NOT EXISTS ordenes_compra (
+--     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+--     numero_oc       VARCHAR(40) UNIQUE NOT NULL,
+--     proveedor_id    UUID NOT NULL REFERENCES proveedores(id),
+--     fecha_oc        DATE NOT NULL DEFAULT CURRENT_DATE,
+--     estado          estado_oc_enum NOT NULL DEFAULT 'abierta',
+--     monto_total_clp NUMERIC(14,0) NOT NULL DEFAULT 0,
+--     observacion     TEXT,
+--     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+--     updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+--     created_by      UUID REFERENCES auth.users(id)
+-- );
+--
+-- CREATE INDEX IF NOT EXISTS idx_oc_proveedor ON ordenes_compra (proveedor_id);
+-- CREATE INDEX IF NOT EXISTS idx_oc_estado    ON ordenes_compra (estado);
+-- CREATE INDEX IF NOT EXISTS idx_oc_fecha     ON ordenes_compra (fecha_oc DESC);
+--
+-- CREATE TABLE IF NOT EXISTS ordenes_compra_items (
+--     id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+--     orden_compra_id       UUID NOT NULL REFERENCES ordenes_compra(id) ON DELETE CASCADE,
+--     producto_id           UUID REFERENCES productos(id),
+--     descripcion           VARCHAR(500) NOT NULL,
+--     unidad                VARCHAR(20) NOT NULL DEFAULT 'unidad',
+--     cantidad_comprada     NUMERIC(12,2) NOT NULL CHECK (cantidad_comprada > 0),
+--     cantidad_recibida     NUMERIC(12,2) NOT NULL DEFAULT 0 CHECK (cantidad_recibida >= 0),
+--     cantidad_pendiente    NUMERIC(12,2) GENERATED ALWAYS AS
+--                               (cantidad_comprada - cantidad_recibida) STORED,
+--     precio_unitario_clp   NUMERIC(12,2) NOT NULL DEFAULT 0,
+--     estado                estado_oc_item_enum NOT NULL DEFAULT 'pendiente',
+--     observacion           TEXT,
+--     created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+--
+--     CONSTRAINT chk_oc_item_recibida_no_excede
+--         CHECK (cantidad_recibida <= cantidad_comprada)
+-- );
+--
+-- CREATE INDEX IF NOT EXISTS idx_oc_items_oc        ON ordenes_compra_items (orden_compra_id);
+-- CREATE INDEX IF NOT EXISTS idx_oc_items_producto  ON ordenes_compra_items (producto_id);
+-- CREATE INDEX IF NOT EXISTS idx_oc_items_estado    ON ordenes_compra_items (estado);
+--
+-- ALTER TABLE ordenes_compra        ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE ordenes_compra_items  ENABLE ROW LEVEL SECURITY;
+-- CREATE POLICY pol_oc_select  ON ordenes_compra      FOR SELECT TO authenticated USING (true);
+-- CREATE POLICY pol_oci_select ON ordenes_compra_items FOR SELECT TO authenticated USING (true);
+
+
+-- ============================================================================
+-- BLOCK E  Recepciones de bodega (parcial contra OC)
+-- ============================================================================
+
+-- CREATE SEQUENCE IF NOT EXISTS seq_folio_recepcion_bodega START 1;
+--
+-- CREATE TABLE IF NOT EXISTS recepciones_bodega (
+--     id                              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+--     folio_recepcion                 VARCHAR(30) UNIQUE NOT NULL,
+--     orden_compra_id                 UUID REFERENCES ordenes_compra(id),
+--     proveedor_id                    UUID NOT NULL REFERENCES proveedores(id),
+--     bodega_id                       UUID NOT NULL REFERENCES bodegas(id),
+--     fecha_recepcion                 TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+--     documento_proveedor_tipo        tipo_documento_proveedor_enum NOT NULL,
+--     documento_proveedor_numero      VARCHAR(60) NOT NULL,
+--     recibido_por                    UUID REFERENCES usuarios_perfil(id),
+--     observacion                     TEXT,
+--     evidencia_url                   TEXT,
+--     estado                          VARCHAR(20) NOT NULL DEFAULT 'registrada'
+--         CHECK (estado IN ('registrada','anulada')),
+--     created_at                      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+--     created_by                      UUID REFERENCES auth.users(id),
+--
+--     CONSTRAINT uq_recepcion_doc_proveedor
+--         UNIQUE (proveedor_id, documento_proveedor_tipo, documento_proveedor_numero)
+-- );
+--
+-- CREATE INDEX IF NOT EXISTS idx_recb_oc          ON recepciones_bodega (orden_compra_id);
+-- CREATE INDEX IF NOT EXISTS idx_recb_proveedor   ON recepciones_bodega (proveedor_id);
+-- CREATE INDEX IF NOT EXISTS idx_recb_fecha       ON recepciones_bodega (fecha_recepcion DESC);
+--
+-- CREATE TABLE IF NOT EXISTS recepciones_bodega_items (
+--     id                          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+--     recepcion_id                UUID NOT NULL REFERENCES recepciones_bodega(id) ON DELETE CASCADE,
+--     orden_compra_item_id        UUID REFERENCES ordenes_compra_items(id),
+--     producto_id                 UUID NOT NULL REFERENCES productos(id),
+--     cantidad_recibida           NUMERIC(12,2) NOT NULL CHECK (cantidad_recibida > 0),
+--     unidad                      VARCHAR(20) NOT NULL DEFAULT 'unidad',
+--     costo_unitario_clp          NUMERIC(12,2) NOT NULL DEFAULT 0,
+--     lote                        VARCHAR(60),
+--     fecha_vencimiento           DATE,
+--     observacion                 TEXT,
+--     created_at                  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+-- );
+--
+-- CREATE INDEX IF NOT EXISTS idx_rbi_recepcion ON recepciones_bodega_items (recepcion_id);
+-- CREATE INDEX IF NOT EXISTS idx_rbi_producto  ON recepciones_bodega_items (producto_id);
+-- CREATE INDEX IF NOT EXISTS idx_rbi_oc_item   ON recepciones_bodega_items (orden_compra_item_id);
+--
+-- ALTER TABLE recepciones_bodega        ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE recepciones_bodega_items  ENABLE ROW LEVEL SECURITY;
+-- CREATE POLICY pol_recb_select  ON recepciones_bodega       FOR SELECT TO authenticated USING (true);
+-- CREATE POLICY pol_rbi_select   ON recepciones_bodega_items FOR SELECT TO authenticated USING (true);
+
+
+-- ============================================================================
+-- BLOCK F  Salidas de bodega (con CECO + persona + OT)
+-- ============================================================================
+
+-- CREATE SEQUENCE IF NOT EXISTS seq_folio_salida_bodega START 1;
+--
+-- CREATE TABLE IF NOT EXISTS salidas_bodega (
+--     id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+--     folio_salida        VARCHAR(30) UNIQUE NOT NULL,
+--     tipo_salida         tipo_salida_bodega_enum NOT NULL,
+--     ot_id               UUID REFERENCES ordenes_trabajo(id),
+--     ceco_id             UUID NOT NULL REFERENCES centros_costo(id),
+--     bodega_id           UUID NOT NULL REFERENCES bodegas(id),
+--     solicitado_por      UUID REFERENCES usuarios_perfil(id),
+--     entregado_a         VARCHAR(200),
+--     entregado_a_perfil_id UUID REFERENCES usuarios_perfil(id),
+--     autorizado_por      UUID REFERENCES usuarios_perfil(id),
+--     fecha_salida        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+--     motivo              TEXT NOT NULL,
+--     observacion         TEXT,
+--     evidencia_url       TEXT,
+--     estado              VARCHAR(20) NOT NULL DEFAULT 'registrada'
+--         CHECK (estado IN ('registrada','anulada')),
+--     created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+--     created_by          UUID REFERENCES auth.users(id),
+--
+--     -- Reglas de coherencia (defensa adicional sobre la RPC):
+--     CONSTRAINT chk_salb_ot_obligatoria CHECK (tipo_salida != 'ot' OR ot_id IS NOT NULL),
+--     CONSTRAINT chk_salb_persona       CHECK (tipo_salida != 'persona'
+--         OR (entregado_a IS NOT NULL OR entregado_a_perfil_id IS NOT NULL))
+-- );
+--
+-- CREATE INDEX IF NOT EXISTS idx_salb_ot      ON salidas_bodega (ot_id);
+-- CREATE INDEX IF NOT EXISTS idx_salb_ceco    ON salidas_bodega (ceco_id);
+-- CREATE INDEX IF NOT EXISTS idx_salb_bodega  ON salidas_bodega (bodega_id);
+-- CREATE INDEX IF NOT EXISTS idx_salb_fecha   ON salidas_bodega (fecha_salida DESC);
+--
+-- CREATE TABLE IF NOT EXISTS salidas_bodega_items (
+--     id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+--     salida_id           UUID NOT NULL REFERENCES salidas_bodega(id) ON DELETE CASCADE,
+--     producto_id         UUID NOT NULL REFERENCES productos(id),
+--     cantidad            NUMERIC(12,2) NOT NULL CHECK (cantidad > 0),
+--     unidad              VARCHAR(20) NOT NULL DEFAULT 'unidad',
+--     costo_unitario_clp  NUMERIC(12,2) NOT NULL DEFAULT 0,
+--     costo_total_clp     NUMERIC(14,2) GENERATED ALWAYS AS (cantidad * costo_unitario_clp) STORED,
+--     observacion         TEXT,
+--     created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+-- );
+--
+-- CREATE INDEX IF NOT EXISTS idx_sbi_salida   ON salidas_bodega_items (salida_id);
+-- CREATE INDEX IF NOT EXISTS idx_sbi_producto ON salidas_bodega_items (producto_id);
+--
+-- ALTER TABLE salidas_bodega       ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE salidas_bodega_items ENABLE ROW LEVEL SECURITY;
+-- CREATE POLICY pol_salb_select  ON salidas_bodega       FOR SELECT TO authenticated USING (true);
+-- CREATE POLICY pol_sbi_select   ON salidas_bodega_items FOR SELECT TO authenticated USING (true);
+
+
+-- ============================================================================
+-- BLOCK G  Ingresos de combustible (formales con OC y guia)
+-- ============================================================================
+
+-- CREATE SEQUENCE IF NOT EXISTS seq_folio_ingreso_combustible START 1;
+--
+-- CREATE TABLE IF NOT EXISTS ingresos_combustible (
+--     id                          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+--     folio_ingreso               VARCHAR(30) UNIQUE NOT NULL,
+--     proveedor_id                UUID NOT NULL REFERENCES proveedores(id),
+--     proveedor_nombre_snapshot   VARCHAR(200) NOT NULL,
+--     orden_compra_id             UUID REFERENCES ordenes_compra(id),
+--     numero_guia                 VARCHAR(60) NOT NULL,
+--     numero_pedido               VARCHAR(60),
+--     fecha_documento             DATE NOT NULL,
+--     fecha_recepcion             TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+--     estanque_id                 UUID NOT NULL REFERENCES combustible_estanques(id),
+--     producto_combustible        VARCHAR(40) NOT NULL DEFAULT 'diesel',
+--     volumen_carga_litros        NUMERIC(12,2),
+--     meter_inicial               NUMERIC(12,2),
+--     meter_final                 NUMERIC(12,2),
+--     litros_entregados           NUMERIC(12,2) NOT NULL CHECK (litros_entregados > 0),
+--     diferencia_litros           NUMERIC(12,2) GENERATED ALWAYS AS
+--                                     (COALESCE(litros_entregados,0) - COALESCE(volumen_carga_litros, litros_entregados)) STORED,
+--     conductor_nombre            VARCHAR(200),
+--     camion_patente              VARCHAR(20),
+--     cliente_nombre_documento    VARCHAR(200),
+--     recibido_por                UUID REFERENCES usuarios_perfil(id),
+--     evidencia_guia_url          TEXT,
+--     firma_conductor_url         TEXT,
+--     firma_receptor_url          TEXT,
+--     observacion                 TEXT,
+--     movimiento_combustible_id   UUID REFERENCES combustible_movimientos(id),
+--     estado                      VARCHAR(20) NOT NULL DEFAULT 'registrado'
+--         CHECK (estado IN ('registrado','anulado')),
+--     created_at                  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+--     created_by                  UUID REFERENCES auth.users(id),
+--
+--     CONSTRAINT uq_ingreso_combustible_guia
+--         UNIQUE (proveedor_id, numero_guia)
+-- );
+--
+-- CREATE INDEX IF NOT EXISTS idx_ic_proveedor ON ingresos_combustible (proveedor_id);
+-- CREATE INDEX IF NOT EXISTS idx_ic_estanque  ON ingresos_combustible (estanque_id);
+-- CREATE INDEX IF NOT EXISTS idx_ic_fecha     ON ingresos_combustible (fecha_recepcion DESC);
+-- CREATE INDEX IF NOT EXISTS idx_ic_oc        ON ingresos_combustible (orden_compra_id) WHERE orden_compra_id IS NOT NULL;
+--
+-- ALTER TABLE ingresos_combustible ENABLE ROW LEVEL SECURITY;
+-- CREATE POLICY pol_ic_select ON ingresos_combustible FOR SELECT TO authenticated USING (true);
+
+
+-- ============================================================================
+-- BLOCK H  Salidas de combustible (venta / carga propio / despacho cliente)
+-- ============================================================================
+
+-- CREATE SEQUENCE IF NOT EXISTS seq_folio_salida_combustible START 1;
+--
+-- CREATE TABLE IF NOT EXISTS salidas_combustible (
+--     id                          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+--     folio_salida                VARCHAR(30) UNIQUE NOT NULL,
+--     tipo_salida                 tipo_salida_combustible_enum NOT NULL,
+--     fecha_salida                TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+--     estanque_origen_id          UUID NOT NULL REFERENCES combustible_estanques(id),
+--     producto_combustible        VARCHAR(40) NOT NULL DEFAULT 'diesel',
+--     litros                      NUMERIC(12,2) NOT NULL CHECK (litros > 0),
+--     ceco_id                     UUID NOT NULL REFERENCES centros_costo(id),
+--     equipo_activo_id            UUID REFERENCES activos(id),
+--     unidad_equipo_descripcion   VARCHAR(200),
+--     cliente_id                  UUID,
+--     cliente_nombre_manual       VARCHAR(200),
+--     conductor_id                UUID REFERENCES usuarios_perfil(id),
+--     conductor_nombre_manual     VARCHAR(200),
+--     kilometraje                 NUMERIC(12,1),
+--     horometro                   NUMERIC(12,1),
+--     motivo                      TEXT NOT NULL,
+--     pedido_por                  VARCHAR(200),
+--     autorizado_por              UUID REFERENCES usuarios_perfil(id),
+--     retira_nombre               VARCHAR(200),
+--     observacion                 TEXT,
+--     evidencia_vale_url          TEXT,
+--     movimiento_combustible_id   UUID REFERENCES combustible_movimientos(id),
+--     estado                      VARCHAR(20) NOT NULL DEFAULT 'registrada'
+--         CHECK (estado IN ('registrada','anulada')),
+--     created_at                  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+--     created_by                  UUID REFERENCES auth.users(id),
+--
+--     CONSTRAINT chk_salc_carga_propio CHECK (
+--         tipo_salida != 'carga_equipo_propio'
+--         OR (equipo_activo_id IS NOT NULL OR unidad_equipo_descripcion IS NOT NULL)
+--     ),
+--     CONSTRAINT chk_salc_venta_externa CHECK (
+--         tipo_salida != 'venta_externa'
+--         OR (cliente_id IS NOT NULL OR cliente_nombre_manual IS NOT NULL)
+--     )
+-- );
+--
+-- CREATE INDEX IF NOT EXISTS idx_sc_estanque  ON salidas_combustible (estanque_origen_id);
+-- CREATE INDEX IF NOT EXISTS idx_sc_ceco      ON salidas_combustible (ceco_id);
+-- CREATE INDEX IF NOT EXISTS idx_sc_tipo      ON salidas_combustible (tipo_salida);
+-- CREATE INDEX IF NOT EXISTS idx_sc_fecha     ON salidas_combustible (fecha_salida DESC);
+-- CREATE INDEX IF NOT EXISTS idx_sc_equipo    ON salidas_combustible (equipo_activo_id) WHERE equipo_activo_id IS NOT NULL;
+--
+-- ALTER TABLE salidas_combustible ENABLE ROW LEVEL SECURITY;
+-- CREATE POLICY pol_sc_select ON salidas_combustible FOR SELECT TO authenticated USING (true);
+
+
+-- ============================================================================
+-- BLOCK I  Despachos de combustible con 3 sellos
+-- ============================================================================
+
+-- CREATE SEQUENCE IF NOT EXISTS seq_folio_despacho_combustible START 1;
+--
+-- CREATE TABLE IF NOT EXISTS despachos_combustible (
+--     id                          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+--     folio_despacho              VARCHAR(30) UNIQUE NOT NULL,
+--     salida_combustible_id       UUID NOT NULL REFERENCES salidas_combustible(id),
+--     camion_activo_id            UUID NOT NULL REFERENCES activos(id),
+--     conductor_id                UUID NOT NULL REFERENCES usuarios_perfil(id),
+--     destino_cliente             VARCHAR(200),
+--     destino_faena_id            UUID REFERENCES faenas(id),
+--
+--     fecha_salida                TIMESTAMPTZ,
+--     fecha_entrega               TIMESTAMPTZ,
+--
+--     -- 3 sellos obligatorios al salir
+--     sello_1_numero              VARCHAR(40),
+--     sello_2_numero              VARCHAR(40),
+--     sello_3_numero              VARCHAR(40),
+--     foto_sello_1_salida_url     TEXT,
+--     foto_sello_2_salida_url     TEXT,
+--     foto_sello_3_salida_url     TEXT,
+--
+--     -- 3 fotos al entregar
+--     foto_sello_1_entrega_url    TEXT,
+--     foto_sello_2_entrega_url    TEXT,
+--     foto_sello_3_entrega_url    TEXT,
+--     sellos_intactos             BOOLEAN,
+--
+--     receptor_nombre             VARCHAR(200),
+--     receptor_rut                VARCHAR(20),
+--     firma_receptor_url          TEXT,
+--
+--     litros_cargados             NUMERIC(12,2),
+--     litros_entregados           NUMERIC(12,2),
+--     diferencia_litros           NUMERIC(12,2) GENERATED ALWAYS AS
+--                                     (COALESCE(litros_entregados, 0) - COALESCE(litros_cargados, 0)) STORED,
+--
+--     observacion_entrega         TEXT,
+--     no_conformidad_id           UUID REFERENCES no_conformidades(id),
+--     estado                      estado_despacho_combustible_enum NOT NULL DEFAULT 'programado',
+--     created_at                  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+--     updated_at                  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+--     created_by                  UUID REFERENCES auth.users(id),
+--
+--     CONSTRAINT chk_despacho_sellos_salida CHECK (
+--         estado = 'programado'
+--         OR (sello_1_numero IS NOT NULL AND sello_2_numero IS NOT NULL AND sello_3_numero IS NOT NULL
+--             AND foto_sello_1_salida_url IS NOT NULL
+--             AND foto_sello_2_salida_url IS NOT NULL
+--             AND foto_sello_3_salida_url IS NOT NULL)
+--     ),
+--     CONSTRAINT chk_despacho_sellos_entrega CHECK (
+--         estado NOT IN ('entregado','observado')
+--         OR (foto_sello_1_entrega_url IS NOT NULL
+--             AND foto_sello_2_entrega_url IS NOT NULL
+--             AND foto_sello_3_entrega_url IS NOT NULL)
+--     )
+-- );
+--
+-- CREATE INDEX IF NOT EXISTS idx_dc_salida    ON despachos_combustible (salida_combustible_id);
+-- CREATE INDEX IF NOT EXISTS idx_dc_camion    ON despachos_combustible (camion_activo_id);
+-- CREATE INDEX IF NOT EXISTS idx_dc_conductor ON despachos_combustible (conductor_id);
+-- CREATE INDEX IF NOT EXISTS idx_dc_estado    ON despachos_combustible (estado);
+-- CREATE INDEX IF NOT EXISTS idx_dc_fecha     ON despachos_combustible (fecha_salida DESC);
+--
+-- ALTER TABLE despachos_combustible ENABLE ROW LEVEL SECURITY;
+-- CREATE POLICY pol_dc_select ON despachos_combustible FOR SELECT TO authenticated USING (true);
+
+
+-- ============================================================================
+-- BLOCK J  Funciones de folio (idempotentes)
+-- ============================================================================
+
+-- CREATE OR REPLACE FUNCTION fn_generar_folio_recepcion_bodega()
+-- RETURNS VARCHAR
+-- LANGUAGE plpgsql AS $$
+-- DECLARE v_seq INTEGER;
+-- BEGIN
+--     v_seq := nextval('seq_folio_recepcion_bodega');
+--     RETURN 'REC-' || TO_CHAR(NOW(), 'YYYYMM') || '-' || LPAD(v_seq::TEXT, 5, '0');
+-- END; $$;
+--
+-- CREATE OR REPLACE FUNCTION fn_generar_folio_salida_bodega()
+-- RETURNS VARCHAR
+-- LANGUAGE plpgsql AS $$
+-- DECLARE v_seq INTEGER;
+-- BEGIN
+--     v_seq := nextval('seq_folio_salida_bodega');
+--     RETURN 'SAL-' || TO_CHAR(NOW(), 'YYYYMM') || '-' || LPAD(v_seq::TEXT, 5, '0');
+-- END; $$;
+--
+-- CREATE OR REPLACE FUNCTION fn_generar_folio_ingreso_combustible()
+-- RETURNS VARCHAR
+-- LANGUAGE plpgsql AS $$
+-- DECLARE v_seq INTEGER;
+-- BEGIN
+--     v_seq := nextval('seq_folio_ingreso_combustible');
+--     RETURN 'ICB-' || TO_CHAR(NOW(), 'YYYYMM') || '-' || LPAD(v_seq::TEXT, 5, '0');
+-- END; $$;
+--
+-- CREATE OR REPLACE FUNCTION fn_generar_folio_salida_combustible()
+-- RETURNS VARCHAR
+-- LANGUAGE plpgsql AS $$
+-- DECLARE v_seq INTEGER;
+-- BEGIN
+--     v_seq := nextval('seq_folio_salida_combustible');
+--     RETURN 'SCB-' || TO_CHAR(NOW(), 'YYYYMM') || '-' || LPAD(v_seq::TEXT, 5, '0');
+-- END; $$;
+--
+-- CREATE OR REPLACE FUNCTION fn_generar_folio_despacho_combustible()
+-- RETURNS VARCHAR
+-- LANGUAGE plpgsql AS $$
+-- DECLARE v_seq INTEGER;
+-- BEGIN
+--     v_seq := nextval('seq_folio_despacho_combustible');
+--     RETURN 'DCB-' || TO_CHAR(NOW(), 'YYYYMM') || '-' || LPAD(v_seq::TEXT, 5, '0');
+-- END; $$;
+
+
+-- ============================================================================
+-- BLOCK K  RPC: rpc_registrar_recepcion_bodega (transaccional)
+-- ----------------------------------------------------------------------------
+-- Genera folio, inserta recepcion, items, aumenta stock, actualiza OC.
+-- Bloquea sobrecantidad salvo administrador con justificacion.
+-- ============================================================================
+
+-- CREATE OR REPLACE FUNCTION rpc_registrar_recepcion_bodega(
+--     p_orden_compra_id           UUID,
+--     p_proveedor_id              UUID,
+--     p_bodega_id                 UUID,
+--     p_doc_tipo                  tipo_documento_proveedor_enum,
+--     p_doc_numero                VARCHAR,
+--     p_items                     JSONB,         -- array de {oc_item_id, producto_id, cantidad, costo_unitario, lote, vencimiento, observacion}
+--     p_evidencia_url             TEXT DEFAULT NULL,
+--     p_observacion               TEXT DEFAULT NULL,
+--     p_permite_sobrecantidad     BOOLEAN DEFAULT FALSE
+-- )
+-- RETURNS JSONB
+-- LANGUAGE plpgsql
+-- SECURITY DEFINER
+-- AS $$
+-- DECLARE
+--     v_user_id UUID := auth.uid();
+--     v_folio VARCHAR;
+--     v_recepcion_id UUID;
+--     v_item JSONB;
+--     v_oc_item RECORD;
+--     v_total_pendiente NUMERIC;
+--     v_rol TEXT;
+-- BEGIN
+--     IF v_user_id IS NULL THEN
+--         RAISE EXCEPTION 'No autenticado';
+--     END IF;
+--
+--     v_rol := fn_user_rol();
+--     IF v_rol NOT IN ('administrador','bodeguero','jefe_mantenimiento','supervisor','subgerente_operaciones') THEN
+--         RAISE EXCEPTION 'Rol % no autorizado para registrar recepciones', v_rol;
+--     END IF;
+--
+--     IF p_permite_sobrecantidad AND v_rol != 'administrador' THEN
+--         RAISE EXCEPTION 'Solo administrador puede recibir mas que el pendiente';
+--     END IF;
+--
+--     v_folio := fn_generar_folio_recepcion_bodega();
+--     v_recepcion_id := gen_random_uuid();
+--
+--     INSERT INTO recepciones_bodega (
+--         id, folio_recepcion, orden_compra_id, proveedor_id, bodega_id,
+--         documento_proveedor_tipo, documento_proveedor_numero,
+--         recibido_por, observacion, evidencia_url, created_by
+--     ) VALUES (
+--         v_recepcion_id, v_folio, p_orden_compra_id, p_proveedor_id, p_bodega_id,
+--         p_doc_tipo, p_doc_numero,
+--         v_user_id, p_observacion, p_evidencia_url, v_user_id
+--     );
+--
+--     FOR v_item IN SELECT * FROM jsonb_array_elements(p_items)
+--     LOOP
+--         IF (v_item->>'oc_item_id') IS NOT NULL THEN
+--             SELECT * INTO v_oc_item FROM ordenes_compra_items
+--              WHERE id = (v_item->>'oc_item_id')::UUID FOR UPDATE;
+--             IF v_oc_item.id IS NULL THEN
+--                 RAISE EXCEPTION 'OC item % no existe', v_item->>'oc_item_id';
+--             END IF;
+--             v_total_pendiente := v_oc_item.cantidad_comprada - v_oc_item.cantidad_recibida;
+--             IF (v_item->>'cantidad')::NUMERIC > v_total_pendiente AND NOT p_permite_sobrecantidad THEN
+--                 RAISE EXCEPTION 'Cantidad recibida (%) supera pendiente (%) para item %',
+--                     v_item->>'cantidad', v_total_pendiente, v_oc_item.id;
+--             END IF;
+--             UPDATE ordenes_compra_items
+--                SET cantidad_recibida = cantidad_recibida + (v_item->>'cantidad')::NUMERIC,
+--                    estado = CASE
+--                        WHEN cantidad_recibida + (v_item->>'cantidad')::NUMERIC >= cantidad_comprada THEN 'completo'::estado_oc_item_enum
+--                        ELSE 'parcial'::estado_oc_item_enum
+--                    END
+--              WHERE id = v_oc_item.id;
+--         END IF;
+--
+--         INSERT INTO recepciones_bodega_items (
+--             recepcion_id, orden_compra_item_id, producto_id, cantidad_recibida,
+--             unidad, costo_unitario_clp, lote, fecha_vencimiento, observacion
+--         ) VALUES (
+--             v_recepcion_id,
+--             NULLIF((v_item->>'oc_item_id'), '')::UUID,
+--             (v_item->>'producto_id')::UUID,
+--             (v_item->>'cantidad')::NUMERIC,
+--             COALESCE(v_item->>'unidad','unidad'),
+--             COALESCE((v_item->>'costo_unitario')::NUMERIC, 0),
+--             v_item->>'lote',
+--             NULLIF(v_item->>'vencimiento', '')::DATE,
+--             v_item->>'observacion'
+--         );
+--
+--         -- Aumentar stock via la RPC existente para reusar logica de kardex/CPP
+--         PERFORM rpc_registrar_entrada_inventario(
+--             p_bodega_id           => p_bodega_id,
+--             p_producto_id         => (v_item->>'producto_id')::UUID,
+--             p_cantidad            => (v_item->>'cantidad')::NUMERIC,
+--             p_costo_unitario      => COALESCE((v_item->>'costo_unitario')::NUMERIC, 0),
+--             p_documento_referencia => v_folio,
+--             p_usuario_id          => v_user_id,
+--             p_lote                => v_item->>'lote',
+--             p_fecha_vencimiento   => NULLIF(v_item->>'vencimiento','')::DATE
+--         );
+--     END LOOP;
+--
+--     -- Actualizar estado OC global
+--     IF p_orden_compra_id IS NOT NULL THEN
+--         UPDATE ordenes_compra
+--            SET estado = CASE
+--                  WHEN NOT EXISTS (SELECT 1 FROM ordenes_compra_items
+--                                    WHERE orden_compra_id = p_orden_compra_id
+--                                      AND estado != 'completo') THEN 'cerrada'::estado_oc_enum
+--                  WHEN EXISTS (SELECT 1 FROM ordenes_compra_items
+--                                WHERE orden_compra_id = p_orden_compra_id
+--                                  AND cantidad_recibida > 0) THEN 'parcial'::estado_oc_enum
+--                  ELSE 'abierta'::estado_oc_enum
+--                END,
+--                updated_at = NOW()
+--          WHERE id = p_orden_compra_id;
+--     END IF;
+--
+--     RETURN jsonb_build_object('success', true, 'folio', v_folio, 'recepcion_id', v_recepcion_id);
+-- END;
+-- $$;
+
+
+-- ============================================================================
+-- BLOCK L  RPC: rpc_registrar_salida_bodega (transaccional con CECO + OT)
+-- ============================================================================
+
+-- CREATE OR REPLACE FUNCTION rpc_registrar_salida_bodega(
+--     p_tipo_salida           tipo_salida_bodega_enum,
+--     p_bodega_id             UUID,
+--     p_ceco_id               UUID,
+--     p_ot_id                 UUID DEFAULT NULL,
+--     p_entregado_a           VARCHAR DEFAULT NULL,
+--     p_entregado_a_perfil_id UUID DEFAULT NULL,
+--     p_autorizado_por        UUID DEFAULT NULL,
+--     p_motivo                TEXT DEFAULT NULL,
+--     p_items                 JSONB DEFAULT '[]'::JSONB,
+--     p_evidencia_url         TEXT DEFAULT NULL,
+--     p_observacion           TEXT DEFAULT NULL
+-- )
+-- RETURNS JSONB
+-- LANGUAGE plpgsql
+-- SECURITY DEFINER
+-- AS $$
+-- DECLARE
+--     v_user_id UUID := auth.uid();
+--     v_rol     TEXT := fn_user_rol();
+--     v_folio   VARCHAR;
+--     v_salida_id UUID;
+--     v_item JSONB;
+-- BEGIN
+--     IF v_user_id IS NULL THEN RAISE EXCEPTION 'No autenticado'; END IF;
+--     IF v_rol NOT IN ('administrador','bodeguero','jefe_mantenimiento','supervisor','planificador','subgerente_operaciones') THEN
+--         RAISE EXCEPTION 'Rol % no autorizado para registrar salidas', v_rol;
+--     END IF;
+--
+--     IF p_motivo IS NULL OR LENGTH(TRIM(p_motivo)) < 5 THEN
+--         RAISE EXCEPTION 'Motivo es obligatorio (min 5 caracteres)';
+--     END IF;
+--
+--     IF p_tipo_salida = 'ot' AND p_ot_id IS NULL THEN
+--         RAISE EXCEPTION 'Salida tipo OT requiere ot_id';
+--     END IF;
+--
+--     v_folio := fn_generar_folio_salida_bodega();
+--     v_salida_id := gen_random_uuid();
+--
+--     INSERT INTO salidas_bodega (
+--         id, folio_salida, tipo_salida, ot_id, ceco_id, bodega_id,
+--         solicitado_por, entregado_a, entregado_a_perfil_id, autorizado_por,
+--         motivo, observacion, evidencia_url, created_by
+--     ) VALUES (
+--         v_salida_id, v_folio, p_tipo_salida, p_ot_id, p_ceco_id, p_bodega_id,
+--         v_user_id, p_entregado_a, p_entregado_a_perfil_id, p_autorizado_por,
+--         p_motivo, p_observacion, p_evidencia_url, v_user_id
+--     );
+--
+--     FOR v_item IN SELECT * FROM jsonb_array_elements(p_items)
+--     LOOP
+--         INSERT INTO salidas_bodega_items (salida_id, producto_id, cantidad, unidad, costo_unitario_clp)
+--         VALUES (
+--             v_salida_id,
+--             (v_item->>'producto_id')::UUID,
+--             (v_item->>'cantidad')::NUMERIC,
+--             COALESCE(v_item->>'unidad','unidad'),
+--             COALESCE((v_item->>'costo_unitario')::NUMERIC, 0)
+--         );
+--
+--         -- Reusa la RPC existente para descontar stock + kardex (que ya valida stock>=0)
+--         PERFORM rpc_registrar_salida_inventario(
+--             p_bodega_id    => p_bodega_id,
+--             p_producto_id  => (v_item->>'producto_id')::UUID,
+--             p_cantidad     => (v_item->>'cantidad')::NUMERIC,
+--             p_ot_id        => p_ot_id,
+--             p_usuario_id   => v_user_id,
+--             p_lote         => v_item->>'lote',
+--             p_motivo       => COALESCE(v_item->>'observacion', p_motivo)
+--         );
+--     END LOOP;
+--
+--     RETURN jsonb_build_object('success', true, 'folio', v_folio, 'salida_id', v_salida_id);
+-- END;
+-- $$;
+
+
+-- ============================================================================
+-- BLOCK M  RPC: rpc_registrar_ingreso_combustible (transaccional)
+-- ============================================================================
+
+-- CREATE OR REPLACE FUNCTION rpc_registrar_ingreso_combustible(
+--     p_proveedor_id          UUID,
+--     p_orden_compra_id       UUID DEFAULT NULL,
+--     p_numero_guia           VARCHAR,
+--     p_numero_pedido         VARCHAR DEFAULT NULL,
+--     p_fecha_documento       DATE,
+--     p_estanque_id           UUID,
+--     p_producto_combustible  VARCHAR DEFAULT 'diesel',
+--     p_volumen_carga_litros  NUMERIC DEFAULT NULL,
+--     p_meter_inicial         NUMERIC DEFAULT NULL,
+--     p_meter_final           NUMERIC DEFAULT NULL,
+--     p_litros_entregados     NUMERIC,
+--     p_conductor_nombre      VARCHAR DEFAULT NULL,
+--     p_camion_patente        VARCHAR DEFAULT NULL,
+--     p_cliente_nombre_doc    VARCHAR DEFAULT NULL,
+--     p_evidencia_guia_url    TEXT,
+--     p_firma_conductor_url   TEXT DEFAULT NULL,
+--     p_firma_receptor_url    TEXT DEFAULT NULL,
+--     p_observacion           TEXT DEFAULT NULL
+-- )
+-- RETURNS JSONB
+-- LANGUAGE plpgsql
+-- SECURITY DEFINER
+-- AS $$
+-- DECLARE
+--     v_user_id UUID := auth.uid();
+--     v_rol     TEXT := fn_user_rol();
+--     v_folio   VARCHAR;
+--     v_ingreso_id UUID;
+--     v_proveedor_nombre VARCHAR;
+--     v_movimiento_id UUID;
+--     v_diferencia NUMERIC;
+-- BEGIN
+--     IF v_user_id IS NULL THEN RAISE EXCEPTION 'No autenticado'; END IF;
+--     IF v_rol NOT IN ('administrador','bodeguero','operador_abastecimiento','supervisor','jefe_mantenimiento','subgerente_operaciones') THEN
+--         RAISE EXCEPTION 'Rol % no autorizado', v_rol;
+--     END IF;
+--     IF p_evidencia_guia_url IS NULL THEN
+--         RAISE EXCEPTION 'Evidencia (foto guia) es obligatoria';
+--     END IF;
+--
+--     SELECT nombre INTO v_proveedor_nombre FROM proveedores WHERE id = p_proveedor_id AND activo = true;
+--     IF v_proveedor_nombre IS NULL THEN
+--         RAISE EXCEPTION 'Proveedor % no existe o esta inactivo', p_proveedor_id;
+--     END IF;
+--
+--     v_diferencia := COALESCE(p_litros_entregados,0) - COALESCE(p_volumen_carga_litros, p_litros_entregados);
+--     IF ABS(v_diferencia) > 0.01 AND (p_observacion IS NULL OR LENGTH(TRIM(p_observacion)) < 5) THEN
+--         RAISE EXCEPTION 'Diferencia de % lt entre carga y entrega exige observacion', v_diferencia;
+--     END IF;
+--
+--     v_folio := fn_generar_folio_ingreso_combustible();
+--     v_ingreso_id := gen_random_uuid();
+--
+--     -- Reusa el RPC existente para crear movimiento de combustible (aumenta stock estanque)
+--     SELECT (PUBLIC.fn_registrar_movimiento_combustible(
+--         p_tipo                  => 'ingreso',
+--         p_estanque_id           => p_estanque_id,
+--         p_medidor_id            => NULL,
+--         p_lectura_inicial_lt    => p_meter_inicial,
+--         p_lectura_final_lt      => p_meter_final,
+--         p_litros                => p_litros_entregados,
+--         p_foto_medidor_url      => p_evidencia_guia_url,
+--         p_proveedor             => v_proveedor_nombre,
+--         p_numero_factura        => p_numero_guia,
+--         p_costo_unitario_clp    => NULL,
+--         p_destino_tipo          => NULL,
+--         p_vehiculo_activo_id    => NULL,
+--         p_destino_descripcion   => NULL,
+--         p_horometro_vehiculo    => NULL,
+--         p_kilometraje_vehiculo  => NULL,
+--         p_observaciones         => p_observacion
+--     ))->>'movimiento_id' INTO v_movimiento_id;
+--
+--     INSERT INTO ingresos_combustible (
+--         id, folio_ingreso, proveedor_id, proveedor_nombre_snapshot,
+--         orden_compra_id, numero_guia, numero_pedido, fecha_documento, fecha_recepcion,
+--         estanque_id, producto_combustible,
+--         volumen_carga_litros, meter_inicial, meter_final, litros_entregados,
+--         conductor_nombre, camion_patente, cliente_nombre_documento,
+--         recibido_por, evidencia_guia_url, firma_conductor_url, firma_receptor_url,
+--         observacion, movimiento_combustible_id, created_by
+--     ) VALUES (
+--         v_ingreso_id, v_folio, p_proveedor_id, v_proveedor_nombre,
+--         p_orden_compra_id, p_numero_guia, p_numero_pedido, p_fecha_documento, NOW(),
+--         p_estanque_id, p_producto_combustible,
+--         p_volumen_carga_litros, p_meter_inicial, p_meter_final, p_litros_entregados,
+--         p_conductor_nombre, p_camion_patente, p_cliente_nombre_doc,
+--         v_user_id, p_evidencia_guia_url, p_firma_conductor_url, p_firma_receptor_url,
+--         p_observacion, v_movimiento_id, v_user_id
+--     );
+--
+--     RETURN jsonb_build_object('success', true, 'folio', v_folio, 'ingreso_id', v_ingreso_id);
+-- END;
+-- $$;
+
+
+-- ============================================================================
+-- BLOCK N  RPC: rpc_registrar_salida_combustible (con tipo + CECO)
+-- ============================================================================
+
+-- (firma similar al ingreso. Genera folio, descuenta stock estanque,
+-- valida CECO obligatorio, reusa fn_registrar_movimiento_combustible).
+-- Implementacion completa siguiendo el patron de BLOCK M.
+
+
+-- ============================================================================
+-- BLOCK O  RPCs de despacho con sellos
+-- ============================================================================
+
+-- rpc_registrar_despacho_combustible_sellos:
+--   - Toma una salida_combustible existente con tipo_salida='despacho_cliente'
+--   - Recibe los 3 numeros de sello + 3 fotos salida + camion + conductor
+--   - Valida que no falten sellos ni fotos (BD ya lo enforce con CHECK)
+--   - Marca estado='en_ruta'
+--   - Auditar
+--
+-- rpc_confirmar_entrega_combustible:
+--   - Toma despacho_id, recibe 3 fotos entrega + litros entregados + receptor + firma
+--   - Valida fotos (la BD lo enforce con CHECK)
+--   - Compara litros cargados vs entregados; si diferencia > 0.5%:
+--       - Estado = 'observado'
+--       - INSERT en no_conformidades con tipo='diferencia_litros' severidad='alta'
+--   - Si OK -> estado = 'entregado'
+--   - Auditar
+
+
+-- ============================================================================
+-- BLOCK P  Storage buckets para evidencias (recepcion, salida, ingresos, despacho)
+-- ----------------------------------------------------------------------------
+-- Conviene reusar buckets existentes:
+--   - evidencias-ot: para recepciones y salidas que tienen OT relacionada
+--   - evidencias-combustible: para ingresos, salidas y fotos de sellos
+-- Si se requieren buckets dedicados, ver Block D de 52_*.sql para plantilla.
+-- ============================================================================
+
+
+-- ============================================================================
+-- BLOCK Q  Verificaciones POST-aplicacion (SAFE)
+-- ============================================================================
+
+-- Q.1  Listar OCs abiertas con pendientes
+-- SELECT oc.numero_oc, oc.estado, COUNT(oci.id) AS items_pendientes,
+--        SUM(oci.cantidad_pendiente) AS total_pendiente
+--   FROM ordenes_compra oc
+--   JOIN ordenes_compra_items oci ON oci.orden_compra_id = oc.id
+--  WHERE oc.estado IN ('abierta','parcial')
+--  GROUP BY oc.id
+--  ORDER BY oc.fecha_oc DESC;
+
+-- Q.2  Recepciones del dia
+-- SELECT folio_recepcion, proveedor_id, documento_proveedor_numero,
+--        recibido_por, fecha_recepcion
+--   FROM recepciones_bodega
+--  WHERE fecha_recepcion::DATE = CURRENT_DATE
+--  ORDER BY fecha_recepcion DESC;
+
+-- Q.3  Salidas con CECO y OT
+-- SELECT sb.folio_salida, sb.tipo_salida, c.codigo AS ceco, ot.folio AS ot,
+--        sb.entregado_a, sb.fecha_salida
+--   FROM salidas_bodega sb
+--   JOIN centros_costo c ON c.id = sb.ceco_id
+--   LEFT JOIN ordenes_trabajo ot ON ot.id = sb.ot_id
+--  WHERE sb.fecha_salida >= CURRENT_DATE - 7
+--  ORDER BY sb.fecha_salida DESC;
+
+-- Q.4  Ingresos combustible recientes
+-- SELECT ic.folio_ingreso, p.nombre AS proveedor, ic.numero_guia,
+--        ic.litros_entregados, ic.diferencia_litros, e.codigo AS estanque
+--   FROM ingresos_combustible ic
+--   JOIN proveedores p ON p.id = ic.proveedor_id
+--   JOIN combustible_estanques e ON e.id = ic.estanque_id
+--  WHERE ic.fecha_recepcion >= CURRENT_DATE - 7
+--  ORDER BY ic.fecha_recepcion DESC;
+
+-- Q.5  Despachos con sellos no entregados
+-- SELECT folio_despacho, salida_combustible_id, estado, fecha_salida,
+--        sello_1_numero, sello_2_numero, sello_3_numero
+--   FROM despachos_combustible
+--  WHERE estado IN ('programado','en_ruta')
+--  ORDER BY fecha_salida ASC;
+
+
+-- ============================================================================
+-- FIN DEL ARCHIVO 55_bodega_combustible_oc_ceco_trazabilidad.sql
+-- ============================================================================

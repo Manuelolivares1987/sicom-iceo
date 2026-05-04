@@ -1,0 +1,901 @@
+-- ============================================================================
+-- 57_combustible_promedio_ponderado_trazabilidad.sql
+-- ----------------------------------------------------------------------------
+-- ARCHIVO DE PROPUESTA — NO DESTRUCTIVO. NO EJECUTAR AUTOMATICAMENTE.
+--
+-- Generado en FASE 5.4-B (2026-05-02).
+--
+-- DECISION DE COSTEO:
+--   Combustible = PROMEDIO PONDERADO MOVIL por estanque + trazabilidad
+--                 documental completa.
+--   (Repuestos/materiales = FIFO por capas; ver mig 56. NO se modifica aqui.)
+--
+-- RAZON DE LA DECISION:
+--   El combustible se mezcla fisicamente en el estanque. No es trazable
+--   afirmar que una salida proviene exactamente de una compra especifica.
+--   Pero la empresa SI necesita reconstruir:
+--     - costo de cada litro al momento de la salida (CPP vigente)
+--     - cliente/equipo/CECO destinatario
+--     - documento de respaldo (guia, vale, OC, sellos, fotos)
+--     - saldo fisico y valorizado posterior a cada movimiento.
+--
+-- DEPENDENCIAS:
+--   - mig 50 (combustible_estanques, combustible_movimientos, etc.)
+--   - mig 51 (foto_medidor_url obligatoria)
+--   - mig 55 (proveedores, ordenes_compra, ingresos_combustible,
+--             salidas_combustible, despachos_combustible — propuesto, NO aplicado)
+--
+-- TODO ESTA COMENTADO. Revisar bloque por bloque, descomentar en orden,
+-- probar en staging antes de aplicar a produccion.
+-- ============================================================================
+
+
+-- ============================================================================
+-- BLOCK 0  Verificaciones previas (SAFE — solo lectura)
+-- ============================================================================
+
+-- 0.1 Confirmar que mig 50 esta aplicada
+-- SELECT column_name FROM information_schema.columns
+--  WHERE table_name = 'combustible_estanques'
+--  ORDER BY ordinal_position;
+
+-- 0.2 Confirmar que mig 55 (combustible parte) esta aplicada
+-- SELECT table_name FROM information_schema.tables
+--  WHERE table_schema = 'public'
+--    AND table_name IN ('ingresos_combustible','salidas_combustible',
+--                       'despachos_combustible','proveedores','centros_costo');
+
+-- 0.3 Stock actual de los estanques (pre-aplicacion)
+-- SELECT codigo, stock_teorico_lt, capacidad_lt FROM combustible_estanques;
+
+-- 0.4 Movimientos historicos
+-- SELECT tipo, COUNT(*), SUM(litros) FROM combustible_movimientos GROUP BY tipo;
+
+
+-- ============================================================================
+-- BLOCK A  Extender combustible_estanques con campos de costeo CPP
+-- ============================================================================
+
+-- ALTER TABLE combustible_estanques
+--     ADD COLUMN IF NOT EXISTS costo_promedio_lt   NUMERIC(14,4) NOT NULL DEFAULT 0
+--         CHECK (costo_promedio_lt >= 0),
+--     ADD COLUMN IF NOT EXISTS valor_total_stock   NUMERIC(16,2) NOT NULL DEFAULT 0
+--         CHECK (valor_total_stock >= 0);
+--
+-- COMMENT ON COLUMN combustible_estanques.costo_promedio_lt IS
+--     'Costo promedio ponderado movil por litro. Se recalcula en cada ingreso. '
+--     'Las salidas se valorizan a este costo pero NO lo modifican.';
+--
+-- COMMENT ON COLUMN combustible_estanques.valor_total_stock IS
+--     'Valor monetario del stock actual = stock_teorico_lt * costo_promedio_lt. '
+--     'Mantenido por triggers/RPCs; no editar manualmente.';
+
+
+-- ============================================================================
+-- BLOCK B  Tabla combustible_stock_inicial
+-- ----------------------------------------------------------------------------
+-- Registro de la partida inicial controlada (al implementar el sistema o al
+-- abrir un estanque nuevo). Solo administrador/subgerente puede registrar.
+-- ============================================================================
+
+-- CREATE TABLE IF NOT EXISTS combustible_stock_inicial (
+--     id                          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+--     estanque_id                 UUID NOT NULL REFERENCES combustible_estanques(id),
+--     fecha                       DATE NOT NULL DEFAULT CURRENT_DATE,
+--     litros_iniciales            NUMERIC(12,2) NOT NULL CHECK (litros_iniciales > 0),
+--     costo_unitario_inicial      NUMERIC(14,4) NOT NULL CHECK (costo_unitario_inicial >= 0),
+--     valor_total_inicial         NUMERIC(16,2) GENERATED ALWAYS AS
+--                                     (litros_iniciales * costo_unitario_inicial) STORED,
+--     documento_respaldo_url      TEXT,
+--     registrado_por              UUID REFERENCES usuarios_perfil(id),
+--     observacion                 TEXT,
+--     anulado                     BOOLEAN NOT NULL DEFAULT false,
+--     anulado_por                 UUID REFERENCES usuarios_perfil(id),
+--     anulado_at                  TIMESTAMPTZ,
+--     motivo_anulacion            TEXT,
+--     created_at                  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+--     created_by                  UUID REFERENCES auth.users(id),
+--
+--     -- Solo un stock_inicial activo por estanque (el resto debe estar anulado).
+--     CONSTRAINT uq_stock_inicial_activo
+--         UNIQUE (estanque_id, anulado) DEFERRABLE INITIALLY DEFERRED
+-- );
+--
+-- CREATE INDEX IF NOT EXISTS idx_csi_estanque ON combustible_stock_inicial (estanque_id);
+-- CREATE INDEX IF NOT EXISTS idx_csi_activo   ON combustible_stock_inicial (estanque_id, anulado)
+--     WHERE anulado = false;
+--
+-- ALTER TABLE combustible_stock_inicial ENABLE ROW LEVEL SECURITY;
+-- CREATE POLICY pol_csi_select ON combustible_stock_inicial
+--     FOR SELECT TO authenticated USING (true);
+--
+-- COMMENT ON TABLE combustible_stock_inicial IS
+--     'Partida inicial controlada por estanque. Una sola activa por estanque. '
+--     'Para corregir, anular y crear nueva (con justificacion).';
+
+
+-- ============================================================================
+-- BLOCK C  Tabla combustible_kardex_valorizado
+-- ----------------------------------------------------------------------------
+-- Snapshot de cada movimiento con saldo fisico y valorizado POSTERIOR.
+-- Permite reconstruir el estado del estanque en cualquier momento del tiempo.
+-- ============================================================================
+
+-- CREATE TABLE IF NOT EXISTS combustible_kardex_valorizado (
+--     id                          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+--     estanque_id                 UUID NOT NULL REFERENCES combustible_estanques(id),
+--     fecha_movimiento            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+--     tipo_movimiento             VARCHAR(30) NOT NULL
+--         CHECK (tipo_movimiento IN (
+--             'stock_inicial','ingreso_compra','salida_venta','salida_equipo',
+--             'salida_despacho','ajuste','varillaje'
+--         )),
+--     folio_movimiento            VARCHAR(40),
+--
+--     -- Trazabilidad documental
+--     proveedor_id                UUID REFERENCES proveedores(id),
+--     cliente_id                  UUID,
+--     cliente_nombre_manual       VARCHAR(200),
+--     equipo_id                   UUID REFERENCES activos(id),
+--     ceco_id                     UUID REFERENCES centros_costo(id),
+--
+--     ingreso_combustible_id      UUID REFERENCES ingresos_combustible(id),
+--     salida_combustible_id       UUID REFERENCES salidas_combustible(id),
+--     despacho_combustible_id     UUID REFERENCES despachos_combustible(id),
+--     stock_inicial_id            UUID REFERENCES combustible_stock_inicial(id),
+--     movimiento_combustible_id   UUID REFERENCES combustible_movimientos(id),
+--     varillaje_id                UUID REFERENCES combustible_varillaje(id),
+--
+--     documento_numero            VARCHAR(60),
+--
+--     -- Cantidades del movimiento (una sola dimension por fila)
+--     litros_entrada              NUMERIC(12,2) NOT NULL DEFAULT 0
+--         CHECK (litros_entrada >= 0),
+--     litros_salida               NUMERIC(12,2) NOT NULL DEFAULT 0
+--         CHECK (litros_salida >= 0),
+--     costo_unitario_movimiento   NUMERIC(14,4) NOT NULL CHECK (costo_unitario_movimiento >= 0),
+--     valor_entrada               NUMERIC(16,2) GENERATED ALWAYS AS
+--                                     (litros_entrada * costo_unitario_movimiento) STORED,
+--     valor_salida                NUMERIC(16,2) GENERATED ALWAYS AS
+--                                     (litros_salida * costo_unitario_movimiento) STORED,
+--
+--     -- Saldo POSTERIOR al movimiento (snapshot)
+--     stock_lt_despues                NUMERIC(12,2) NOT NULL CHECK (stock_lt_despues >= 0),
+--     costo_promedio_lt_despues       NUMERIC(14,4) NOT NULL CHECK (costo_promedio_lt_despues >= 0),
+--     valor_stock_despues             NUMERIC(16,2) NOT NULL CHECK (valor_stock_despues >= 0),
+--
+--     evidencia_url               TEXT,
+--     observacion                 TEXT,
+--     created_by                  UUID REFERENCES auth.users(id),
+--     created_at                  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+--
+--     CONSTRAINT chk_kardex_una_dimension CHECK (
+--         (litros_entrada > 0 AND litros_salida = 0) OR
+--         (litros_entrada = 0 AND litros_salida > 0) OR
+--         (litros_entrada = 0 AND litros_salida = 0 AND tipo_movimiento IN ('varillaje','ajuste'))
+--     )
+-- );
+--
+-- CREATE INDEX IF NOT EXISTS idx_ckv_estanque_fecha
+--     ON combustible_kardex_valorizado (estanque_id, fecha_movimiento DESC);
+-- CREATE INDEX IF NOT EXISTS idx_ckv_tipo
+--     ON combustible_kardex_valorizado (tipo_movimiento);
+-- CREATE INDEX IF NOT EXISTS idx_ckv_proveedor
+--     ON combustible_kardex_valorizado (proveedor_id) WHERE proveedor_id IS NOT NULL;
+-- CREATE INDEX IF NOT EXISTS idx_ckv_cliente
+--     ON combustible_kardex_valorizado (cliente_id) WHERE cliente_id IS NOT NULL;
+-- CREATE INDEX IF NOT EXISTS idx_ckv_equipo
+--     ON combustible_kardex_valorizado (equipo_id) WHERE equipo_id IS NOT NULL;
+-- CREATE INDEX IF NOT EXISTS idx_ckv_ceco
+--     ON combustible_kardex_valorizado (ceco_id) WHERE ceco_id IS NOT NULL;
+--
+-- ALTER TABLE combustible_kardex_valorizado ENABLE ROW LEVEL SECURITY;
+-- CREATE POLICY pol_ckv_select ON combustible_kardex_valorizado
+--     FOR SELECT TO authenticated USING (true);
+--
+-- COMMENT ON TABLE combustible_kardex_valorizado IS
+--     'Kardex valorizado: una fila por movimiento con snapshot de stock fisico '
+--     'y valorizado posterior. Inmutable: no actualizar despues de insertar.';
+
+
+-- ============================================================================
+-- BLOCK D  Extender ingresos_combustible (mig 55 BLOCK G) con campos CPP
+-- ============================================================================
+
+-- ALTER TABLE ingresos_combustible
+--     ADD COLUMN IF NOT EXISTS costo_unitario_lt        NUMERIC(14,4)
+--         CHECK (costo_unitario_lt IS NULL OR costo_unitario_lt >= 0),
+--     ADD COLUMN IF NOT EXISTS valor_total_ingreso      NUMERIC(16,2),
+--     ADD COLUMN IF NOT EXISTS costo_promedio_anterior  NUMERIC(14,4),
+--     ADD COLUMN IF NOT EXISTS costo_promedio_nuevo     NUMERIC(14,4),
+--     ADD COLUMN IF NOT EXISTS stock_anterior_lt        NUMERIC(12,2),
+--     ADD COLUMN IF NOT EXISTS stock_nuevo_lt           NUMERIC(12,2),
+--     ADD COLUMN IF NOT EXISTS valor_stock_anterior     NUMERIC(16,2),
+--     ADD COLUMN IF NOT EXISTS valor_stock_nuevo        NUMERIC(16,2),
+--     ADD COLUMN IF NOT EXISTS kardex_valorizado_id     UUID REFERENCES combustible_kardex_valorizado(id);
+
+
+-- ============================================================================
+-- BLOCK E  Extender salidas_combustible (mig 55 BLOCK H) con campos CPP
+-- ============================================================================
+
+-- ALTER TABLE salidas_combustible
+--     ADD COLUMN IF NOT EXISTS costo_unitario_aplicado  NUMERIC(14,4),
+--     ADD COLUMN IF NOT EXISTS valor_total_salida       NUMERIC(16,2),
+--     ADD COLUMN IF NOT EXISTS costo_promedio_al_momento NUMERIC(14,4),
+--     ADD COLUMN IF NOT EXISTS stock_anterior_lt        NUMERIC(12,2),
+--     ADD COLUMN IF NOT EXISTS stock_nuevo_lt           NUMERIC(12,2),
+--     ADD COLUMN IF NOT EXISTS valor_stock_anterior     NUMERIC(16,2),
+--     ADD COLUMN IF NOT EXISTS valor_stock_nuevo        NUMERIC(16,2),
+--     ADD COLUMN IF NOT EXISTS kardex_valorizado_id     UUID REFERENCES combustible_kardex_valorizado(id);
+
+
+-- ============================================================================
+-- BLOCK F  RPC: rpc_registrar_stock_inicial_combustible
+-- ----------------------------------------------------------------------------
+-- Solo administrador/subgerente_operaciones. Una sola partida activa por
+-- estanque. Para reemplazar, anular la actual con motivo y crear nueva.
+-- ============================================================================
+
+-- CREATE OR REPLACE FUNCTION rpc_registrar_stock_inicial_combustible(
+--     p_estanque_id              UUID,
+--     p_fecha                    DATE,
+--     p_litros_iniciales         NUMERIC,
+--     p_costo_unitario_inicial   NUMERIC,
+--     p_documento_respaldo_url   TEXT DEFAULT NULL,
+--     p_observacion              TEXT DEFAULT NULL
+-- )
+-- RETURNS JSONB
+-- LANGUAGE plpgsql
+-- SECURITY DEFINER
+-- AS $$
+-- DECLARE
+--     v_user UUID := auth.uid();
+--     v_rol  TEXT := fn_user_rol();
+--     v_estanque combustible_estanques%ROWTYPE;
+--     v_activo_existente UUID;
+--     v_stock_inicial_id UUID;
+--     v_kardex_id UUID;
+--     v_valor_total NUMERIC;
+-- BEGIN
+--     IF v_user IS NULL THEN RAISE EXCEPTION 'No autenticado'; END IF;
+--     IF v_rol NOT IN ('administrador','subgerente_operaciones') THEN
+--         RAISE EXCEPTION 'Rol % no autorizado para registrar stock inicial', v_rol;
+--     END IF;
+--     IF p_litros_iniciales <= 0 THEN
+--         RAISE EXCEPTION 'litros_iniciales debe ser > 0';
+--     END IF;
+--     IF p_costo_unitario_inicial < 0 THEN
+--         RAISE EXCEPTION 'costo_unitario_inicial debe ser >= 0';
+--     END IF;
+--     IF p_observacion IS NULL OR LENGTH(TRIM(p_observacion)) < 5 THEN
+--         RAISE EXCEPTION 'Observacion del stock inicial es obligatoria (min 5 caracteres)';
+--     END IF;
+--
+--     -- Lock del estanque
+--     SELECT * INTO v_estanque FROM combustible_estanques
+--      WHERE id = p_estanque_id FOR UPDATE;
+--     IF v_estanque.id IS NULL THEN
+--         RAISE EXCEPTION 'Estanque % no existe', p_estanque_id;
+--     END IF;
+--
+--     -- Verificar que no haya stock_inicial activo
+--     SELECT id INTO v_activo_existente
+--       FROM combustible_stock_inicial
+--      WHERE estanque_id = p_estanque_id AND anulado = false;
+--     IF v_activo_existente IS NOT NULL THEN
+--         RAISE EXCEPTION 'Ya existe stock inicial activo para este estanque (id=%). Anule antes de crear nuevo.', v_activo_existente;
+--     END IF;
+--
+--     -- Defensa: si el estanque ya tiene stock_teorico > 0, exigir admin
+--     IF v_estanque.stock_teorico_lt > 0 AND v_rol != 'administrador' THEN
+--         RAISE EXCEPTION 'Estanque ya tiene stock fisico (% lt). Solo administrador puede sobreescribir', v_estanque.stock_teorico_lt;
+--     END IF;
+--
+--     v_valor_total := p_litros_iniciales * p_costo_unitario_inicial;
+--
+--     -- Insertar stock_inicial
+--     v_stock_inicial_id := gen_random_uuid();
+--     INSERT INTO combustible_stock_inicial (
+--         id, estanque_id, fecha, litros_iniciales, costo_unitario_inicial,
+--         documento_respaldo_url, registrado_por, observacion, created_by
+--     ) VALUES (
+--         v_stock_inicial_id, p_estanque_id, p_fecha, p_litros_iniciales, p_costo_unitario_inicial,
+--         p_documento_respaldo_url, v_user, p_observacion, v_user
+--     );
+--
+--     -- Actualizar estanque
+--     UPDATE combustible_estanques
+--        SET stock_teorico_lt   = p_litros_iniciales,
+--            costo_promedio_lt  = p_costo_unitario_inicial,
+--            valor_total_stock  = v_valor_total,
+--            updated_at         = NOW()
+--      WHERE id = p_estanque_id;
+--
+--     -- Insertar kardex valorizado
+--     v_kardex_id := gen_random_uuid();
+--     INSERT INTO combustible_kardex_valorizado (
+--         id, estanque_id, fecha_movimiento, tipo_movimiento, folio_movimiento,
+--         stock_inicial_id, documento_numero,
+--         litros_entrada, litros_salida, costo_unitario_movimiento,
+--         stock_lt_despues, costo_promedio_lt_despues, valor_stock_despues,
+--         evidencia_url, observacion, created_by
+--     ) VALUES (
+--         v_kardex_id, p_estanque_id, p_fecha::TIMESTAMPTZ, 'stock_inicial',
+--         'INI-' || TO_CHAR(p_fecha, 'YYYYMMDD') || '-' || SUBSTRING(p_estanque_id::TEXT,1,4),
+--         v_stock_inicial_id, NULL,
+--         p_litros_iniciales, 0, p_costo_unitario_inicial,
+--         p_litros_iniciales, p_costo_unitario_inicial, v_valor_total,
+--         p_documento_respaldo_url, p_observacion, v_user
+--     );
+--
+--     RETURN jsonb_build_object(
+--         'success', true,
+--         'stock_inicial_id', v_stock_inicial_id,
+--         'kardex_id', v_kardex_id,
+--         'litros', p_litros_iniciales,
+--         'costo_unitario', p_costo_unitario_inicial,
+--         'valor_total', v_valor_total
+--     );
+-- END;
+-- $$;
+
+
+-- ============================================================================
+-- BLOCK G  RPC: rpc_registrar_ingreso_combustible_valorizado (CPP movil)
+-- ----------------------------------------------------------------------------
+-- FORMULA CPP movil:
+--   valor_actual         = stock_actual_lt * costo_promedio_actual
+--   valor_ingreso        = litros_ingreso  * costo_unitario_ingreso
+--   stock_nuevo          = stock_actual_lt + litros_ingreso
+--   costo_promedio_nuevo = (valor_actual + valor_ingreso) / stock_nuevo
+--   valor_stock_nuevo    = valor_actual + valor_ingreso
+-- ============================================================================
+
+-- CREATE OR REPLACE FUNCTION rpc_registrar_ingreso_combustible_valorizado(
+--     p_proveedor_id          UUID,
+--     p_orden_compra_id       UUID DEFAULT NULL,
+--     p_numero_guia           VARCHAR DEFAULT NULL,
+--     p_numero_pedido         VARCHAR DEFAULT NULL,
+--     p_fecha_documento       DATE DEFAULT NULL,
+--     p_estanque_id           UUID DEFAULT NULL,
+--     p_producto_combustible  VARCHAR DEFAULT 'diesel',
+--     p_litros_ingreso        NUMERIC DEFAULT NULL,
+--     p_costo_unitario_lt     NUMERIC DEFAULT NULL,
+--     p_meter_inicial         NUMERIC DEFAULT NULL,
+--     p_meter_final           NUMERIC DEFAULT NULL,
+--     p_evidencia_guia_url    TEXT DEFAULT NULL,
+--     p_conductor_nombre      VARCHAR DEFAULT NULL,
+--     p_camion_patente        VARCHAR DEFAULT NULL,
+--     p_observacion           TEXT DEFAULT NULL
+-- )
+-- RETURNS JSONB
+-- LANGUAGE plpgsql
+-- SECURITY DEFINER
+-- AS $$
+-- DECLARE
+--     v_user UUID := auth.uid();
+--     v_rol  TEXT := fn_user_rol();
+--     v_estanque combustible_estanques%ROWTYPE;
+--     v_proveedor_nombre VARCHAR;
+--     v_folio VARCHAR;
+--     v_ingreso_id UUID;
+--     v_kardex_id UUID;
+--     v_valor_actual NUMERIC;
+--     v_valor_ingreso NUMERIC;
+--     v_stock_nuevo NUMERIC;
+--     v_cpp_nuevo NUMERIC;
+--     v_valor_stock_nuevo NUMERIC;
+--     v_meter_diff NUMERIC;
+-- BEGIN
+--     IF v_user IS NULL THEN RAISE EXCEPTION 'No autenticado'; END IF;
+--     IF v_rol NOT IN ('administrador','bodeguero','operador_abastecimiento','supervisor','jefe_mantenimiento','subgerente_operaciones') THEN
+--         RAISE EXCEPTION 'Rol % no autorizado', v_rol;
+--     END IF;
+--     IF p_litros_ingreso IS NULL OR p_litros_ingreso <= 0 THEN
+--         RAISE EXCEPTION 'litros_ingreso debe ser > 0';
+--     END IF;
+--     IF p_costo_unitario_lt IS NULL OR p_costo_unitario_lt < 0 THEN
+--         RAISE EXCEPTION 'costo_unitario_lt debe ser >= 0';
+--     END IF;
+--     IF p_evidencia_guia_url IS NULL THEN
+--         RAISE EXCEPTION 'Evidencia (foto guia) es obligatoria';
+--     END IF;
+--
+--     -- Validar proveedor
+--     SELECT nombre INTO v_proveedor_nombre FROM proveedores WHERE id = p_proveedor_id AND activo = true;
+--     IF v_proveedor_nombre IS NULL THEN
+--         RAISE EXCEPTION 'Proveedor % no existe o inactivo', p_proveedor_id;
+--     END IF;
+--
+--     -- Lock del estanque
+--     SELECT * INTO v_estanque FROM combustible_estanques
+--      WHERE id = p_estanque_id FOR UPDATE;
+--     IF v_estanque.id IS NULL THEN
+--         RAISE EXCEPTION 'Estanque % no existe', p_estanque_id;
+--     END IF;
+--
+--     -- Validar diferencia meter si hay lecturas
+--     IF p_meter_inicial IS NOT NULL AND p_meter_final IS NOT NULL THEN
+--         IF p_meter_final < p_meter_inicial THEN
+--             RAISE EXCEPTION 'meter_final debe ser >= meter_inicial';
+--         END IF;
+--         v_meter_diff := p_meter_final - p_meter_inicial;
+--         IF ABS(v_meter_diff - p_litros_ingreso) > 0.5 AND
+--            (p_observacion IS NULL OR LENGTH(TRIM(p_observacion)) < 5) THEN
+--             RAISE EXCEPTION 'Diferencia entre litros documentados (%) y litros medidos (%) supera tolerancia. Observacion obligatoria (>= 5 caracteres).',
+--                 p_litros_ingreso, v_meter_diff;
+--         END IF;
+--     END IF;
+--
+--     -- ── CALCULAR CPP MOVIL ──
+--     v_valor_actual := COALESCE(v_estanque.stock_teorico_lt, 0) * COALESCE(v_estanque.costo_promedio_lt, 0);
+--     v_valor_ingreso := p_litros_ingreso * p_costo_unitario_lt;
+--     v_stock_nuevo := COALESCE(v_estanque.stock_teorico_lt, 0) + p_litros_ingreso;
+--     v_valor_stock_nuevo := v_valor_actual + v_valor_ingreso;
+--     v_cpp_nuevo := CASE
+--         WHEN v_stock_nuevo > 0 THEN ROUND(v_valor_stock_nuevo / v_stock_nuevo, 4)
+--         ELSE p_costo_unitario_lt
+--     END;
+--
+--     -- Validar capacidad
+--     IF v_stock_nuevo > v_estanque.capacidad_lt THEN
+--         RAISE EXCEPTION 'Stock nuevo (% lt) supera capacidad del estanque (% lt)',
+--             v_stock_nuevo, v_estanque.capacidad_lt;
+--     END IF;
+--
+--     v_folio := fn_generar_folio_ingreso_combustible();
+--     v_ingreso_id := gen_random_uuid();
+--     v_kardex_id  := gen_random_uuid();
+--
+--     -- Insertar ingreso (con todos los campos CPP)
+--     INSERT INTO ingresos_combustible (
+--         id, folio_ingreso, proveedor_id, proveedor_nombre_snapshot,
+--         orden_compra_id, numero_guia, numero_pedido, fecha_documento, fecha_recepcion,
+--         estanque_id, producto_combustible,
+--         volumen_carga_litros, meter_inicial, meter_final, litros_entregados,
+--         conductor_nombre, camion_patente,
+--         recibido_por, evidencia_guia_url, observacion,
+--         costo_unitario_lt, valor_total_ingreso,
+--         costo_promedio_anterior, costo_promedio_nuevo,
+--         stock_anterior_lt, stock_nuevo_lt,
+--         valor_stock_anterior, valor_stock_nuevo,
+--         kardex_valorizado_id, created_by
+--     ) VALUES (
+--         v_ingreso_id, v_folio, p_proveedor_id, v_proveedor_nombre,
+--         p_orden_compra_id, p_numero_guia, p_numero_pedido, p_fecha_documento, NOW(),
+--         p_estanque_id, p_producto_combustible,
+--         p_litros_ingreso, p_meter_inicial, p_meter_final, p_litros_ingreso,
+--         p_conductor_nombre, p_camion_patente,
+--         v_user, p_evidencia_guia_url, p_observacion,
+--         p_costo_unitario_lt, v_valor_ingreso,
+--         v_estanque.costo_promedio_lt, v_cpp_nuevo,
+--         v_estanque.stock_teorico_lt, v_stock_nuevo,
+--         v_estanque.valor_total_stock, v_valor_stock_nuevo,
+--         v_kardex_id, v_user
+--     );
+--
+--     -- Actualizar estanque
+--     UPDATE combustible_estanques
+--        SET stock_teorico_lt  = v_stock_nuevo,
+--            costo_promedio_lt = v_cpp_nuevo,
+--            valor_total_stock = v_valor_stock_nuevo,
+--            updated_at        = NOW()
+--      WHERE id = p_estanque_id;
+--
+--     -- Insertar kardex valorizado
+--     INSERT INTO combustible_kardex_valorizado (
+--         id, estanque_id, fecha_movimiento, tipo_movimiento, folio_movimiento,
+--         proveedor_id, ingreso_combustible_id, documento_numero,
+--         litros_entrada, litros_salida, costo_unitario_movimiento,
+--         stock_lt_despues, costo_promedio_lt_despues, valor_stock_despues,
+--         evidencia_url, observacion, created_by
+--     ) VALUES (
+--         v_kardex_id, p_estanque_id, NOW(), 'ingreso_compra', v_folio,
+--         p_proveedor_id, v_ingreso_id, p_numero_guia,
+--         p_litros_ingreso, 0, p_costo_unitario_lt,
+--         v_stock_nuevo, v_cpp_nuevo, v_valor_stock_nuevo,
+--         p_evidencia_guia_url, p_observacion, v_user
+--     );
+--
+--     RETURN jsonb_build_object(
+--         'success', true,
+--         'folio', v_folio,
+--         'ingreso_id', v_ingreso_id,
+--         'kardex_id', v_kardex_id,
+--         'cpp_anterior', v_estanque.costo_promedio_lt,
+--         'cpp_nuevo', v_cpp_nuevo,
+--         'stock_anterior', v_estanque.stock_teorico_lt,
+--         'stock_nuevo', v_stock_nuevo,
+--         'valor_stock_anterior', v_estanque.valor_total_stock,
+--         'valor_stock_nuevo', v_valor_stock_nuevo
+--     );
+-- END;
+-- $$;
+
+
+-- ============================================================================
+-- BLOCK H  RPC: rpc_registrar_salida_combustible_valorizada
+-- ----------------------------------------------------------------------------
+-- Aplica el CPP vigente AL MOMENTO de la salida. NO modifica el CPP.
+-- ============================================================================
+
+-- CREATE OR REPLACE FUNCTION rpc_registrar_salida_combustible_valorizada(
+--     p_estanque_id              UUID,
+--     p_litros_salida            NUMERIC,
+--     p_tipo_salida              tipo_salida_combustible_enum,
+--     p_ceco_id                  UUID,
+--     p_cliente_id               UUID DEFAULT NULL,
+--     p_cliente_nombre_manual    VARCHAR DEFAULT NULL,
+--     p_equipo_activo_id         UUID DEFAULT NULL,
+--     p_unidad_equipo_descripcion VARCHAR DEFAULT NULL,
+--     p_documento_numero         VARCHAR DEFAULT NULL,
+--     p_evidencia_vale_url       TEXT DEFAULT NULL,
+--     p_kilometraje              NUMERIC DEFAULT NULL,
+--     p_horometro                NUMERIC DEFAULT NULL,
+--     p_pedido_por               VARCHAR DEFAULT NULL,
+--     p_autorizado_por           UUID DEFAULT NULL,
+--     p_retira_nombre            VARCHAR DEFAULT NULL,
+--     p_motivo                   TEXT DEFAULT NULL,
+--     p_observacion              TEXT DEFAULT NULL,
+--     p_conductor_id             UUID DEFAULT NULL,
+--     p_conductor_nombre_manual  VARCHAR DEFAULT NULL
+-- )
+-- RETURNS JSONB
+-- LANGUAGE plpgsql
+-- SECURITY DEFINER
+-- AS $$
+-- DECLARE
+--     v_user UUID := auth.uid();
+--     v_rol  TEXT := fn_user_rol();
+--     v_estanque combustible_estanques%ROWTYPE;
+--     v_folio VARCHAR;
+--     v_salida_id UUID;
+--     v_kardex_id UUID;
+--     v_cpp_actual NUMERIC;
+--     v_valor_salida NUMERIC;
+--     v_stock_nuevo NUMERIC;
+--     v_valor_stock_nuevo NUMERIC;
+--     v_tipo_kardex VARCHAR;
+-- BEGIN
+--     IF v_user IS NULL THEN RAISE EXCEPTION 'No autenticado'; END IF;
+--     IF v_rol NOT IN ('administrador','bodeguero','operador_abastecimiento','supervisor','jefe_mantenimiento','subgerente_operaciones') THEN
+--         RAISE EXCEPTION 'Rol % no autorizado para registrar salidas combustible', v_rol;
+--     END IF;
+--     IF p_litros_salida IS NULL OR p_litros_salida <= 0 THEN
+--         RAISE EXCEPTION 'litros_salida debe ser > 0';
+--     END IF;
+--     IF p_ceco_id IS NULL THEN
+--         RAISE EXCEPTION 'CECO es obligatorio para toda salida de combustible';
+--     END IF;
+--     IF p_motivo IS NULL OR LENGTH(TRIM(p_motivo)) < 5 THEN
+--         RAISE EXCEPTION 'Motivo es obligatorio (min 5 caracteres)';
+--     END IF;
+--     IF p_evidencia_vale_url IS NULL THEN
+--         RAISE EXCEPTION 'Evidencia (foto vale) es obligatoria';
+--     END IF;
+--
+--     -- Validaciones por tipo
+--     IF p_tipo_salida = 'venta_externa' AND
+--        p_cliente_id IS NULL AND p_cliente_nombre_manual IS NULL THEN
+--         RAISE EXCEPTION 'Venta externa requiere cliente_id o cliente_nombre_manual';
+--     END IF;
+--     IF p_tipo_salida = 'carga_equipo_propio' AND
+--        p_equipo_activo_id IS NULL AND p_unidad_equipo_descripcion IS NULL THEN
+--         RAISE EXCEPTION 'Carga equipo propio requiere equipo_activo_id o descripcion';
+--     END IF;
+--     IF p_tipo_salida = 'ajuste' AND v_rol != 'administrador' THEN
+--         RAISE EXCEPTION 'Solo administrador puede registrar ajuste de combustible';
+--     END IF;
+--
+--     -- Lock del estanque
+--     SELECT * INTO v_estanque FROM combustible_estanques
+--      WHERE id = p_estanque_id FOR UPDATE;
+--     IF v_estanque.id IS NULL THEN
+--         RAISE EXCEPTION 'Estanque % no existe', p_estanque_id;
+--     END IF;
+--
+--     -- Stock suficiente
+--     IF v_estanque.stock_teorico_lt < p_litros_salida THEN
+--         RAISE EXCEPTION 'Stock insuficiente en estanque %. Disponible: % lt, solicitado: % lt',
+--             p_estanque_id, v_estanque.stock_teorico_lt, p_litros_salida
+--             USING ERRCODE = 'P0001';
+--     END IF;
+--
+--     -- ── COSTEO AL CPP VIGENTE ──
+--     v_cpp_actual        := v_estanque.costo_promedio_lt;
+--     v_valor_salida      := p_litros_salida * v_cpp_actual;
+--     v_stock_nuevo       := v_estanque.stock_teorico_lt - p_litros_salida;
+--     v_valor_stock_nuevo := v_estanque.valor_total_stock - v_valor_salida;
+--
+--     -- Si el stock queda en 0, valor a 0; CPP se mantiene como referencia informativa
+--     IF v_stock_nuevo = 0 THEN
+--         v_valor_stock_nuevo := 0;
+--     END IF;
+--
+--     v_folio := fn_generar_folio_salida_combustible();
+--     v_salida_id := gen_random_uuid();
+--     v_kardex_id := gen_random_uuid();
+--
+--     -- Insertar salida
+--     INSERT INTO salidas_combustible (
+--         id, folio_salida, tipo_salida, fecha_salida,
+--         estanque_origen_id, producto_combustible, litros, ceco_id,
+--         equipo_activo_id, unidad_equipo_descripcion,
+--         cliente_id, cliente_nombre_manual,
+--         conductor_id, conductor_nombre_manual,
+--         kilometraje, horometro,
+--         motivo, pedido_por, autorizado_por, retira_nombre,
+--         observacion, evidencia_vale_url,
+--         costo_unitario_aplicado, valor_total_salida,
+--         costo_promedio_al_momento,
+--         stock_anterior_lt, stock_nuevo_lt,
+--         valor_stock_anterior, valor_stock_nuevo,
+--         kardex_valorizado_id, created_by
+--     ) VALUES (
+--         v_salida_id, v_folio, p_tipo_salida, NOW(),
+--         p_estanque_id, 'diesel', p_litros_salida, p_ceco_id,
+--         p_equipo_activo_id, p_unidad_equipo_descripcion,
+--         p_cliente_id, p_cliente_nombre_manual,
+--         p_conductor_id, p_conductor_nombre_manual,
+--         p_kilometraje, p_horometro,
+--         p_motivo, p_pedido_por, p_autorizado_por, p_retira_nombre,
+--         p_observacion, p_evidencia_vale_url,
+--         v_cpp_actual, v_valor_salida,
+--         v_cpp_actual,
+--         v_estanque.stock_teorico_lt, v_stock_nuevo,
+--         v_estanque.valor_total_stock, v_valor_stock_nuevo,
+--         v_kardex_id, v_user
+--     );
+--
+--     -- Actualizar estanque (CPP NO cambia en salidas)
+--     UPDATE combustible_estanques
+--        SET stock_teorico_lt  = v_stock_nuevo,
+--            valor_total_stock = v_valor_stock_nuevo,
+--            updated_at        = NOW()
+--      WHERE id = p_estanque_id;
+--
+--     -- Tipo de kardex segun tipo_salida
+--     v_tipo_kardex := CASE p_tipo_salida
+--         WHEN 'venta_externa' THEN 'salida_venta'
+--         WHEN 'carga_equipo_propio' THEN 'salida_equipo'
+--         WHEN 'despacho_cliente' THEN 'salida_despacho'
+--         WHEN 'ajuste' THEN 'ajuste'
+--     END;
+--
+--     INSERT INTO combustible_kardex_valorizado (
+--         id, estanque_id, fecha_movimiento, tipo_movimiento, folio_movimiento,
+--         cliente_id, cliente_nombre_manual, equipo_id, ceco_id,
+--         salida_combustible_id, documento_numero,
+--         litros_entrada, litros_salida, costo_unitario_movimiento,
+--         stock_lt_despues, costo_promedio_lt_despues, valor_stock_despues,
+--         evidencia_url, observacion, created_by
+--     ) VALUES (
+--         v_kardex_id, p_estanque_id, NOW(), v_tipo_kardex, v_folio,
+--         p_cliente_id, p_cliente_nombre_manual, p_equipo_activo_id, p_ceco_id,
+--         v_salida_id, p_documento_numero,
+--         0, p_litros_salida, v_cpp_actual,
+--         v_stock_nuevo, v_cpp_actual, v_valor_stock_nuevo,
+--         p_evidencia_vale_url, COALESCE(p_observacion, p_motivo), v_user
+--     );
+--
+--     RETURN jsonb_build_object(
+--         'success', true,
+--         'folio', v_folio,
+--         'salida_id', v_salida_id,
+--         'kardex_id', v_kardex_id,
+--         'litros_salida', p_litros_salida,
+--         'costo_unitario_aplicado', v_cpp_actual,
+--         'valor_total_salida', v_valor_salida,
+--         'stock_anterior', v_estanque.stock_teorico_lt,
+--         'stock_nuevo', v_stock_nuevo,
+--         'valor_stock_anterior', v_estanque.valor_total_stock,
+--         'valor_stock_nuevo', v_valor_stock_nuevo
+--     );
+-- END;
+-- $$;
+
+
+-- ============================================================================
+-- BLOCK I  Despacho con sellos (mantiene mig 55 BLOCK I)
+-- ----------------------------------------------------------------------------
+-- El despacho con sellos se mantiene en `despachos_combustible` (mig 55).
+-- Esta migracion NO duplica esa logica. Solo agrega una columna que linkea
+-- al kardex valorizado para tener trazabilidad cruzada.
+-- ============================================================================
+
+-- ALTER TABLE despachos_combustible
+--     ADD COLUMN IF NOT EXISTS kardex_valorizado_id UUID
+--         REFERENCES combustible_kardex_valorizado(id);
+--
+-- -- (rpc_registrar_despacho_combustible_sellos y rpc_confirmar_entrega_combustible
+-- --  permanecen como en mig 55 BLOCK O. Se actualizaran para escribir
+-- --  kardex_valorizado_id cuando se aplique mig 55+57.)
+
+
+-- ============================================================================
+-- BLOCK J  Vistas para Administracion y Finanzas
+-- ============================================================================
+
+-- ── J.1  v_combustible_kardex_valorizado ───────────────────────────────
+-- Vista enriquecida del kardex con joins a proveedor/cliente/equipo/CECO/estanque.
+
+-- CREATE OR REPLACE VIEW v_combustible_kardex_valorizado AS
+-- SELECT
+--     k.id,
+--     k.fecha_movimiento,
+--     e.codigo                        AS estanque_codigo,
+--     e.nombre                        AS estanque_nombre,
+--     k.tipo_movimiento,
+--     k.folio_movimiento,
+--     pr.nombre                       AS proveedor,
+--     k.documento_numero,
+--     COALESCE(cl.nombre_completo, k.cliente_nombre_manual) AS cliente,
+--     a.codigo                        AS equipo_codigo,
+--     a.patente                       AS equipo_patente,
+--     cc.codigo                       AS ceco_codigo,
+--     k.litros_entrada,
+--     k.litros_salida,
+--     k.costo_unitario_movimiento,
+--     k.valor_entrada,
+--     k.valor_salida,
+--     k.stock_lt_despues,
+--     k.costo_promedio_lt_despues,
+--     k.valor_stock_despues,
+--     k.evidencia_url,
+--     up.nombre_completo              AS usuario,
+--     k.observacion
+-- FROM combustible_kardex_valorizado k
+-- JOIN combustible_estanques e ON e.id = k.estanque_id
+-- LEFT JOIN proveedores pr     ON pr.id = k.proveedor_id
+-- LEFT JOIN usuarios_perfil cl ON cl.id = k.cliente_id
+-- LEFT JOIN activos a          ON a.id = k.equipo_id
+-- LEFT JOIN centros_costo cc   ON cc.id = k.ceco_id
+-- LEFT JOIN auth.users au      ON au.id = k.created_by
+-- LEFT JOIN usuarios_perfil up ON up.id = au.id
+-- ORDER BY k.fecha_movimiento DESC;
+--
+-- COMMENT ON VIEW v_combustible_kardex_valorizado IS
+--     'Kardex valorizado con joins a proveedor, cliente, equipo, CECO y usuario. '
+--     'Para Administracion y Finanzas.';
+
+
+-- ── J.2  v_combustible_trazabilidad_salida ─────────────────────────────
+-- Por cada salida: detalle CPP aplicado + ingresos previos que formaron ese CPP.
+
+-- CREATE OR REPLACE VIEW v_combustible_trazabilidad_salida AS
+-- SELECT
+--     sc.id                           AS salida_id,
+--     sc.folio_salida,
+--     sc.fecha_salida,
+--     sc.tipo_salida,
+--     COALESCE(cl.nombre_completo, sc.cliente_nombre_manual) AS cliente,
+--     a.codigo                        AS equipo_codigo,
+--     a.patente                       AS equipo_patente,
+--     cc.codigo                       AS ceco_codigo,
+--     sc.litros,
+--     sc.costo_unitario_aplicado,
+--     sc.valor_total_salida,
+--     sc.stock_anterior_lt,
+--     sc.stock_nuevo_lt,
+--     sc.costo_promedio_al_momento,
+--     sc.valor_stock_anterior,
+--     sc.valor_stock_nuevo,
+--     sc.evidencia_vale_url,
+--     -- Despacho asociado si existe
+--     (SELECT jsonb_build_object(
+--         'folio', dc.folio_despacho,
+--         'estado', dc.estado,
+--         'sellos_intactos', dc.sellos_intactos,
+--         'litros_entregados', dc.litros_entregados
+--     ) FROM despachos_combustible dc WHERE dc.salida_combustible_id = sc.id) AS despacho,
+--     -- Ingresos previos que construyeron el CPP (informativo, no asignacion fisica)
+--     (SELECT jsonb_agg(jsonb_build_object(
+--         'folio_ingreso', ic.folio_ingreso,
+--         'fecha', ic.fecha_recepcion,
+--         'proveedor_id', ic.proveedor_id,
+--         'litros', ic.litros_entregados,
+--         'costo_unitario', ic.costo_unitario_lt,
+--         'cpp_resultante', ic.costo_promedio_nuevo
+--     ) ORDER BY ic.fecha_recepcion DESC)
+--      FROM ingresos_combustible ic
+--       WHERE ic.estanque_id = sc.estanque_origen_id
+--         AND ic.fecha_recepcion <= sc.fecha_salida
+--         AND ic.estado = 'registrado'
+--      LIMIT 10
+--     ) AS ingresos_previos_referencia
+-- FROM salidas_combustible sc
+-- LEFT JOIN usuarios_perfil cl ON cl.id = sc.cliente_id
+-- LEFT JOIN activos a          ON a.id = sc.equipo_activo_id
+-- LEFT JOIN centros_costo cc   ON cc.id = sc.ceco_id
+-- ORDER BY sc.fecha_salida DESC;
+--
+-- COMMENT ON VIEW v_combustible_trazabilidad_salida IS
+--     'NOTA: las salidas NO se asignan fisicamente a una compra (combustible '
+--     'mezclado). El campo ingresos_previos_referencia es solo informativo: '
+--     'muestra que ingresos formaron el CPP vigente al momento de la salida.';
+
+
+-- ── J.3  v_combustible_stock_valorizado_actual ─────────────────────────
+-- Estado actual de cada estanque con valor + ultimo ingreso/salida/varillaje.
+
+-- CREATE OR REPLACE VIEW v_combustible_stock_valorizado_actual AS
+-- SELECT
+--     e.id                            AS estanque_id,
+--     e.codigo                        AS estanque_codigo,
+--     e.nombre                        AS estanque_nombre,
+--     e.capacidad_lt,
+--     e.stock_teorico_lt,
+--     e.costo_promedio_lt,
+--     e.valor_total_stock,
+--     ROUND(e.stock_teorico_lt / NULLIF(e.capacidad_lt, 0) * 100, 1) AS pct_llenado,
+--     -- Ultimo ingreso
+--     (SELECT jsonb_build_object(
+--         'fecha', ic.fecha_recepcion,
+--         'folio', ic.folio_ingreso,
+--         'litros', ic.litros_entregados,
+--         'costo_unitario', ic.costo_unitario_lt,
+--         'proveedor_id', ic.proveedor_id
+--     ) FROM ingresos_combustible ic
+--       WHERE ic.estanque_id = e.id AND ic.estado = 'registrado'
+--       ORDER BY ic.fecha_recepcion DESC LIMIT 1) AS ultimo_ingreso,
+--     -- Ultima salida
+--     (SELECT jsonb_build_object(
+--         'fecha', sc.fecha_salida,
+--         'folio', sc.folio_salida,
+--         'litros', sc.litros,
+--         'costo_unitario_aplicado', sc.costo_unitario_aplicado,
+--         'tipo_salida', sc.tipo_salida
+--     ) FROM salidas_combustible sc
+--       WHERE sc.estanque_origen_id = e.id AND sc.estado = 'registrada'
+--       ORDER BY sc.fecha_salida DESC LIMIT 1) AS ultima_salida,
+--     -- Ultimo varillaje
+--     (SELECT jsonb_build_object(
+--         'fecha', cv.fecha,
+--         'medicion_fisica_lt', cv.medicion_fisica_lt,
+--         'stock_teorico_snapshot_lt', cv.stock_teorico_snapshot_lt,
+--         'diferencia_lt', cv.diferencia_lt
+--     ) FROM combustible_varillaje cv
+--       WHERE cv.estanque_id = e.id
+--       ORDER BY cv.fecha DESC, cv.created_at DESC LIMIT 1) AS ultimo_varillaje
+-- FROM combustible_estanques e
+-- WHERE e.activo = true
+-- ORDER BY e.codigo;
+
+
+-- ============================================================================
+-- BLOCK K  Verificaciones POST-aplicacion (SAFE)
+-- ============================================================================
+
+-- K.1  Estado actual de los estanques
+-- SELECT * FROM v_combustible_stock_valorizado_actual;
+
+-- K.2  Kardex de los ultimos 30 dias
+-- SELECT * FROM v_combustible_kardex_valorizado
+--  WHERE fecha_movimiento >= NOW() - INTERVAL '30 days'
+--  ORDER BY fecha_movimiento DESC LIMIT 100;
+
+-- K.3  Trazabilidad de salidas a un cliente especifico
+-- SELECT * FROM v_combustible_trazabilidad_salida
+--  WHERE cliente ILIKE '%CMP%'
+--  ORDER BY fecha_salida DESC;
+
+-- K.4  Reconciliacion: stock_teorico (estanque) vs ultimo kardex
+-- SELECT
+--     e.codigo,
+--     e.stock_teorico_lt                                AS estanque_stock,
+--     (SELECT stock_lt_despues FROM combustible_kardex_valorizado
+--       WHERE estanque_id = e.id
+--       ORDER BY fecha_movimiento DESC LIMIT 1)         AS kardex_stock,
+--     e.valor_total_stock                               AS estanque_valor,
+--     (SELECT valor_stock_despues FROM combustible_kardex_valorizado
+--       WHERE estanque_id = e.id
+--       ORDER BY fecha_movimiento DESC LIMIT 1)         AS kardex_valor
+-- FROM combustible_estanques e
+-- WHERE e.activo = true;
+-- (los pares deben coincidir exactamente. Si no, hay desincronizacion.)
+
+
+-- ============================================================================
+-- FIN DEL ARCHIVO 57_combustible_promedio_ponderado_trazabilidad.sql
+-- ============================================================================
