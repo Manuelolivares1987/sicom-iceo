@@ -69,6 +69,7 @@ const navGroups: Array<{ label?: string; items: NavItem[] }> = [
       { label: 'Panel Calama',     href: '/dashboard/operacion-calama',                 icon: Activity,        extendedModule: 'operacion_calama' },
       { label: 'Plan semanal',     href: '/dashboard/operacion-calama/plan-semanal',    icon: CalendarClock,   extendedModule: 'operacion_calama' },
       { label: 'Mis OTs Calama',   href: '/dashboard/operacion-calama/mis-ots',         icon: ClipboardCheck,  extendedModule: 'operacion_calama' },
+      { label: 'Vista movil',      href: '/m/calama',                                   icon: ClipboardCheck,  extendedModule: 'operacion_calama' },
       { label: 'Órdenes Calama',   href: '/dashboard/operacion-calama/ots',             icon: ClipboardList,   extendedModule: 'operacion_calama' },
       { label: 'Planificaciones',  href: '/dashboard/operacion-calama/planificaciones', icon: Layers,          extendedModule: 'operacion_calama' },
       { label: 'Importar Excel',   href: '/dashboard/operacion-calama/importar',        icon: FileSpreadsheet, extendedModule: 'operacion_calama' },
