@@ -5,7 +5,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useAuth } from '@/contexts/auth-context'
-import { usePermissions, type Module } from '@/hooks/use-permissions'
+import { usePermissions, type Module, type ExtendedModule } from '@/hooks/use-permissions'
 import {
   LayoutDashboard,
   FileText,
@@ -30,6 +30,9 @@ import {
   Briefcase,
   CalendarClock,
   Activity,
+  Layers,
+  QrCode,
+  AlertTriangle,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -38,6 +41,7 @@ type NavItem = {
   href: string
   icon: any
   module?: Module
+  extendedModule?: ExtendedModule
 }
 
 // Grupos lógicos en la sidebar. Separador visual entre cada grupo.
@@ -56,6 +60,26 @@ const navGroups: Array<{ label?: string; items: NavItem[] }> = [
       { label: 'Mis OTs', href: '/dashboard/mis-ots', icon: ClipboardCheck, module: 'ordenes_trabajo' as Module },
       { label: 'Órdenes de Trabajo', href: '/dashboard/ordenes-trabajo', icon: ClipboardList, module: 'ordenes_trabajo' },
       { label: 'Mantenimiento', href: '/dashboard/mantenimiento', icon: Wrench, module: 'mantenimiento' },
+    ],
+  },
+  // Operación Calama (planificación + ejecución para faenas Calama)
+  {
+    label: 'Operación Calama',
+    items: [
+      { label: 'Panel Calama',     href: '/dashboard/operacion-calama',                 icon: Activity,        extendedModule: 'operacion_calama' },
+      { label: 'Órdenes Calama',   href: '/dashboard/operacion-calama/ots',             icon: ClipboardList,   extendedModule: 'operacion_calama' },
+      { label: 'Planificaciones',  href: '/dashboard/operacion-calama/planificaciones', icon: Layers,          extendedModule: 'operacion_calama' },
+      { label: 'Importar Excel',   href: '/dashboard/operacion-calama/importar',        icon: FileSpreadsheet, extendedModule: 'operacion_calama' },
+    ],
+  },
+  // Mantención QR (checklist preoperacional de equipos / flota Pillado)
+  {
+    label: 'Mantención QR',
+    items: [
+      { label: 'Mantención',         href: '/dashboard/mantencion',         icon: Wrench,        extendedModule: 'mantencion_qr' },
+      { label: 'Alertas tempranas',  href: '/dashboard/mantencion/alertas', icon: AlertTriangle, extendedModule: 'mantencion_qr' },
+      { label: 'Equipos / QR',       href: '/dashboard/activos',            icon: QrCode,        module: 'activos' },
+      { label: 'Plantillas QR',      href: '/dashboard/admin/checklist-templates', icon: ClipboardCheck, module: 'admin' },
     ],
   },
   // Flota
@@ -77,15 +101,17 @@ const navGroups: Array<{ label?: string; items: NavItem[] }> = [
       { label: 'Comercial', href: '/dashboard/comercial', icon: Briefcase, module: 'comercial' },
     ],
   },
-  // Inventario
+  // Bodega / Inventario (mismo dominio operativo)
   {
-    label: 'Inventario',
+    label: 'Bodega / Inventario',
     items: [
-      { label: 'Inventario', href: '/dashboard/inventario', icon: Package, module: 'inventario' },
-      { label: 'Pistola Scanner', href: '/dashboard/inventario/scanner', icon: BarChart3, module: 'inventario' },
-      { label: 'Cargar Maestro', href: '/dashboard/inventario/cargar-maestro', icon: FileSpreadsheet, module: 'inventario' },
-      { label: 'Despachos OT', href: '/dashboard/abastecimiento/despachos', icon: ClipboardCheck, module: 'inventario' },
-      { label: 'Abastecimiento', href: '/dashboard/abastecimiento', icon: Fuel, module: 'abastecimiento' },
+      { label: 'Bodega',             href: '/dashboard/inventario',                 icon: Package,         extendedModule: 'bodega' },
+      { label: 'Pistola Scanner',    href: '/dashboard/inventario/scanner',         icon: BarChart3,       module: 'inventario' },
+      { label: 'Cargar Maestro',     href: '/dashboard/inventario/cargar-maestro',  icon: FileSpreadsheet, module: 'inventario' },
+      { label: 'Salidas / Conteo',   href: '/dashboard/inventario/salida',          icon: ClipboardCheck,  module: 'inventario' },
+      { label: 'Despachos OT',       href: '/dashboard/abastecimiento/despachos',   icon: ClipboardCheck,  module: 'inventario' },
+      { label: 'Abastecimiento',     href: '/dashboard/abastecimiento',             icon: Fuel,            module: 'abastecimiento' },
+      { label: 'Combustible',        href: '/dashboard/inventario/combustible',     icon: Fuel,            module: 'inventario' },
     ],
   },
   // Compliance
@@ -127,7 +153,7 @@ interface SidebarProps {
 export default function Sidebar({ collapsed, onToggle, onClose }: SidebarProps) {
   const pathname = usePathname()
   const { perfil, signOut } = useAuth()
-  const { canView } = usePermissions()
+  const { canView, canViewExtended } = usePermissions()
 
   // Filtrado por permisos se hace dentro del render por grupo.
   // navItems se mantiene exportado por compatibilidad interna.
@@ -189,9 +215,11 @@ export default function Sidebar({ collapsed, onToggle, onClose }: SidebarProps) 
       {/* Navigation agrupada */}
       <nav className="flex-1 space-y-3 overflow-y-auto px-2 py-3">
         {navGroups.map((group, idx) => {
-          const groupVisible = group.items.filter(
-            (item) => !item.module || canView(item.module),
-          )
+          const groupVisible = group.items.filter((item) => {
+            if (item.module) return canView(item.module)
+            if (item.extendedModule) return canViewExtended(item.extendedModule)
+            return true
+          })
           if (groupVisible.length === 0) return null
           return (
             <div key={idx}>

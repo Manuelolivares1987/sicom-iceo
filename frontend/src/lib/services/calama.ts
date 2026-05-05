@@ -242,15 +242,65 @@ export type OTFilters = {
   busqueda?: string
 }
 
+/**
+ * NOTA FASE 0: Reemplazo de embedded joins de PostgREST por consultas separadas.
+ * Las RLS de calama_ordenes_trabajo y calama_ot_subtareas se referencian mutuamente,
+ * lo que con joins embebidos puede gatillar 500 en PostgREST. Mantener este patron
+ * (queries separadas + enrich client-side) hasta que se simplifique RLS.
+ */
+async function enriquecerOTs(ots: CalamaOT[]): Promise<CalamaOTConRelaciones[]> {
+  if (ots.length === 0) return []
+
+  const faenaIds = Array.from(new Set(ots.map((o) => o.faena_calama_id).filter(Boolean)))
+  const planIds = Array.from(new Set(ots.map((o) => o.planificacion_id).filter(Boolean)))
+  const tareaIds = Array.from(new Set(ots.map((o) => o.tarea_maestro_id).filter(Boolean) as string[]))
+
+  const [faenasRes, plansRes, tareasRes] = await Promise.all([
+    faenaIds.length > 0
+      ? supabase.from('calama_faenas').select('id, codigo, nombre').in('id', faenaIds)
+      : Promise.resolve({ data: [], error: null }),
+    planIds.length > 0
+      ? supabase.from('calama_planificaciones').select('id, codigo, nombre, linea_negocio, faena_calama_id').in('id', planIds)
+      : Promise.resolve({ data: [], error: null }),
+    tareaIds.length > 0
+      ? supabase.from('calama_tareas_maestro').select('id, codigo, nombre, sub_linea, descripcion').in('id', tareaIds)
+      : Promise.resolve({ data: [], error: null }),
+  ])
+
+  type FaenaRow = { id: string; codigo: string; nombre: string }
+  type PlanRow = { id: string; codigo: string; nombre: string; linea_negocio: string }
+  type TareaRow = { id: string; codigo: string; nombre: string; sub_linea: string }
+
+  const faenaById = new Map<string, FaenaRow>(((faenasRes.data ?? []) as FaenaRow[]).map((f) => [f.id, f]))
+  const planById = new Map<string, PlanRow>(((plansRes.data ?? []) as PlanRow[]).map((p) => [p.id, p]))
+  const tareaById = new Map<string, TareaRow>(((tareasRes.data ?? []) as TareaRow[]).map((t) => [t.id, t]))
+
+  return ots.map((o) => ({
+    ...o,
+    faena: faenaById.get(o.faena_calama_id)
+      ? { codigo: faenaById.get(o.faena_calama_id)!.codigo, nombre: faenaById.get(o.faena_calama_id)!.nombre }
+      : null,
+    planificacion: planById.get(o.planificacion_id)
+      ? {
+          codigo: planById.get(o.planificacion_id)!.codigo,
+          nombre: planById.get(o.planificacion_id)!.nombre,
+          linea_negocio: planById.get(o.planificacion_id)!.linea_negocio,
+        }
+      : null,
+    tarea_maestro: o.tarea_maestro_id && tareaById.get(o.tarea_maestro_id)
+      ? {
+          codigo: tareaById.get(o.tarea_maestro_id)!.codigo,
+          nombre: tareaById.get(o.tarea_maestro_id)!.nombre,
+          sub_linea: tareaById.get(o.tarea_maestro_id)!.sub_linea,
+        }
+      : null,
+  }))
+}
+
 export async function getOTs(filters?: OTFilters) {
   let query = supabase
     .from('calama_ordenes_trabajo')
-    .select(`
-      *,
-      faena:calama_faenas!faena_calama_id(codigo, nombre),
-      planificacion:calama_planificaciones!planificacion_id(codigo, nombre, linea_negocio),
-      tarea_maestro:calama_tareas_maestro!tarea_maestro_id(codigo, nombre, sub_linea)
-    `)
+    .select('*')
     .order('fecha_programada', { ascending: false })
     .order('folio', { ascending: true })
 
@@ -265,21 +315,20 @@ export async function getOTs(filters?: OTFilters) {
   }
 
   const { data, error } = await query
-  return { data: data as CalamaOTConRelaciones[] | null, error }
+  if (error) return { data: null, error }
+  const enriched = await enriquecerOTs((data ?? []) as CalamaOT[])
+  return { data: enriched, error: null }
 }
 
 export async function getOTById(id: string) {
   const { data, error } = await supabase
     .from('calama_ordenes_trabajo')
-    .select(`
-      *,
-      faena:calama_faenas!faena_calama_id(codigo, nombre),
-      planificacion:calama_planificaciones!planificacion_id(codigo, nombre, linea_negocio, faena_calama_id),
-      tarea_maestro:calama_tareas_maestro!tarea_maestro_id(codigo, nombre, sub_linea, descripcion)
-    `)
+    .select('*')
     .eq('id', id)
     .single()
-  return { data: data as CalamaOTConRelaciones | null, error }
+  if (error || !data) return { data: null, error }
+  const enriched = await enriquecerOTs([data as CalamaOT])
+  return { data: enriched[0] ?? null, error: null }
 }
 
 export async function getSubtareasPorOT(otId: string) {
@@ -533,20 +582,30 @@ export async function getDashboardKPIs(): Promise<{ data: DashboardKPIs | null; 
 export async function getResumenPlanificaciones() {
   const { data, error } = await supabase
     .from('calama_planificaciones')
-    .select(`
-      *,
-      faena:calama_faenas!faena_calama_id(codigo, nombre)
-    `)
+    .select('*')
     .order('created_at', { ascending: false })
   if (error) return { data: null, error }
 
+  const planes = (data ?? []) as CalamaPlanificacion[]
+  const faenaIds = Array.from(new Set(planes.map((p) => p.faena_calama_id)))
+  const { data: faenas } = faenaIds.length > 0
+    ? await supabase.from('calama_faenas').select('id, codigo, nombre').in('id', faenaIds)
+    : { data: [] }
+  type FaenaRow = { id: string; codigo: string; nombre: string }
+  const faenaById = new Map<string, FaenaRow>(((faenas ?? []) as FaenaRow[]).map((f) => [f.id, f]))
+
   const enriched = await Promise.all(
-    ((data ?? []) as Array<CalamaPlanificacion & { faena: { codigo: string; nombre: string } | null }>).map(async (p) => {
+    planes.map(async (p) => {
       const { count } = await supabase
         .from('calama_ordenes_trabajo')
         .select('id', { count: 'exact', head: true })
         .eq('planificacion_id', p.id)
-      return { ...p, total_ots: count ?? 0 }
+      const f = faenaById.get(p.faena_calama_id)
+      return {
+        ...p,
+        total_ots: count ?? 0,
+        faena: f ? { codigo: f.codigo, nombre: f.nombre } : null,
+      }
     }),
   )
   return { data: enriched, error: null }

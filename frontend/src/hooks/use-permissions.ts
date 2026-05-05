@@ -5,6 +5,25 @@ import type { RolUsuario } from '@/types/database'
 
 export type Module = 'contratos' | 'activos' | 'ordenes_trabajo' | 'inventario' | 'mantenimiento' | 'abastecimiento' | 'cumplimiento' | 'kpi' | 'iceo' | 'reportes' | 'auditoria' | 'admin' | 'flota' | 'prevencion' | 'comercial' | 'reporte_diario'
 
+// Modulos extendidos (overlay) que NO requieren todos los CRUD permissions.
+// Se mantienen separados de PERMISSIONS para no romper la matriz por-rol existente.
+export type ExtendedModule = 'operacion_calama' | 'bodega' | 'mantencion_qr'
+
+const EXTENDED_VIEW: Record<ExtendedModule, RolUsuario[]> = {
+  operacion_calama: [
+    'administrador', 'gerencia', 'subgerente_operaciones', 'jefe_operaciones',
+    'planificador', 'supervisor', 'auditor',
+  ],
+  bodega: [
+    'administrador', 'gerencia', 'subgerente_operaciones', 'jefe_operaciones',
+    'planificador', 'supervisor', 'bodeguero', 'operador_abastecimiento', 'auditor',
+  ],
+  mantencion_qr: [
+    'administrador', 'gerencia', 'subgerente_operaciones', 'jefe_operaciones',
+    'jefe_mantenimiento', 'planificador', 'supervisor', 'tecnico_mantenimiento', 'auditor',
+  ],
+}
+
 export type Permission = 'view' | 'create' | 'edit' | 'delete' | 'approve' | 'export'
 
 // Permission matrix by role
@@ -308,5 +327,10 @@ export function usePermissions() {
     return (Object.keys(PERMISSIONS[rol]) as Module[]).filter(m => PERMISSIONS[rol][m].includes('view'))
   }
 
-  return { can, canView, canCreate, canEdit, canDelete, canApprove, canExport, isAdmin, isSupervisor, isReadOnly, getVisibleModules, rol }
+  function canViewExtended(mod: ExtendedModule): boolean {
+    if (!rol) return false
+    return EXTENDED_VIEW[mod]?.includes(rol) ?? false
+  }
+
+  return { can, canView, canCreate, canEdit, canDelete, canApprove, canExport, canViewExtended, isAdmin, isSupervisor, isReadOnly, getVisibleModules, rol }
 }
