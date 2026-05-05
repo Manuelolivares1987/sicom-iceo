@@ -1,9 +1,9 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   Upload, FileSpreadsheet, AlertTriangle, CheckCircle2, Info, MapPin, Layers,
-  Hammer, Phone, Calendar, ListChecks, MessageSquare, Database, X,
+  Hammer, Phone, Calendar, ListChecks, MessageSquare, Database, X, RefreshCcw,
 } from 'lucide-react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -30,6 +30,17 @@ const LINEAS_OPCIONES: Array<{ value: LineaNegocioCalama; label: string }> = [
   { value: 'combustibles', label: 'Combustibles' },
   { value: 'lubricantes', label: 'Lubricantes' },
 ]
+
+type ConciliacionRow = {
+  codigo: string
+  nombre: string
+  avance_excel: number
+  avance_excel_bd: number | null
+  avance_real_bd: number | null
+  en_bd: boolean
+  diff: number
+  estado: 'OK' | 'NO_EXISTE_EN_BD' | 'DIFERENCIA_AVANCE_EXCEL' | 'DIFERENCIA_REAL_VS_EXCEL'
+}
 
 type ImportResult = {
   resultado: string
@@ -93,6 +104,118 @@ export default function ImportarCalamaPage() {
   const [importing, setImporting] = useState(false)
   const [importResult, setImportResult] = useState<ImportResult | null>(null)
 
+  // Conciliacion Excel vs BD
+  const [conciliacion, setConciliacion] = useState<ConciliacionRow[]>([])
+  const [conciliacionLoading, setConciliacionLoading] = useState(false)
+  const [forceSyncing, setForceSyncing] = useState(false)
+  const [forceSyncMsg, setForceSyncMsg] = useState<string | null>(null)
+
+  const planCodigo = useMemo(() => {
+    if (!preview || !faenaSel) return ''
+    return planCodigoFromFile(preview.archivo, faenaSel)
+  }, [preview, faenaSel])
+
+  // Cuando el preview se carga y tenemos planificación con datos en BD,
+  // calcular conciliación Excel <-> BD
+  useEffect(() => {
+    if (!preview || !planCodigo) {
+      setConciliacion([])
+      return
+    }
+    const codes = preview.tareas_detectadas
+      .filter((t) => t.avance_excel_pct != null)
+      .map((t) => t.codigo)
+    if (codes.length === 0) return
+    setConciliacionLoading(true)
+    ;(async () => {
+      try {
+        // Buscar OTs de la planificacion por codigos en folio
+        // Usamos LIKE con sufijo para evitar regex pesado
+        const folios = codes.map((c) => `OT_${planCodigo}_${c}`)
+        const { data, error } = await supabase
+          .from('calama_ordenes_trabajo')
+          .select('folio, avance_pct, avance_excel_pct')
+          .in('folio', folios)
+        if (error) throw error
+        const bdMap = new Map<string, { real: number; excel: number }>(
+          (data ?? []).map((r) => [
+            r.folio.replace(/^OT_[^_]+_(?:[^_]+_)*/, '').replace(`${planCodigo}_`, ''),
+            {
+              real: Number((r as { avance_pct: number }).avance_pct ?? 0),
+              excel: Number((r as { avance_excel_pct: number }).avance_excel_pct ?? 0),
+            },
+          ]),
+        )
+        const rows: ConciliacionRow[] = preview.tareas_detectadas
+          .filter((t) => t.avance_excel_pct != null)
+          .map((t) => {
+            const folioKey = t.codigo
+            const bdRow = bdMap.get(folioKey)
+            const enBd = !!bdRow
+            const excelImport = Number(t.avance_excel_pct ?? 0)
+            const excelBd = bdRow?.excel ?? null
+            const realBd = bdRow?.real ?? null
+            let estado: ConciliacionRow['estado'] = 'OK'
+            if (!enBd) estado = 'NO_EXISTE_EN_BD'
+            else if (excelBd !== null && Math.abs(excelImport - excelBd) > 0.5) estado = 'DIFERENCIA_AVANCE_EXCEL'
+            else if (realBd !== null && excelBd !== null && Math.abs(realBd - excelBd) > 0.5) estado = 'DIFERENCIA_REAL_VS_EXCEL'
+            return {
+              codigo: t.codigo,
+              nombre: t.nombre,
+              avance_excel: excelImport,
+              avance_excel_bd: excelBd,
+              avance_real_bd: realBd,
+              en_bd: enBd,
+              diff: excelBd !== null ? Math.round((excelImport - excelBd) * 10) / 10 : 0,
+              estado,
+            }
+          })
+        setConciliacion(rows)
+      } catch {
+        setConciliacion([])
+      } finally {
+        setConciliacionLoading(false)
+      }
+    })()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [preview, planCodigo])
+
+  const handleForceSync = async () => {
+    if (!planCodigo) return
+    if (!confirm(
+      'FORZAR sincronizacion: avance_pct = avance_excel_pct para TODAS las OTs del plan ' + planCodigo +
+      '. Esto SOBRESCRIBE el avance real con el del Excel. ¿Continuar?'
+    )) return
+    setForceSyncing(true); setForceSyncMsg(null)
+    try {
+      const { data, error } = await supabase.rpc('rpc_calama_forzar_sync_avance_excel', {
+        p_plan_codigo: planCodigo,
+      })
+      if (error) throw error
+      const r = data as {
+        total_ots_plan?: number
+        total_actualizadas?: number
+        mensaje?: string
+      }
+      setForceSyncMsg(r.mensaje ?? `${r.total_actualizadas}/${r.total_ots_plan} OTs sincronizadas`)
+    } catch (e) {
+      setForceSyncMsg(e instanceof Error ? `Error: ${e.message}` : 'Error al forzar sync')
+    } finally {
+      setForceSyncing(false)
+    }
+  }
+
+  const conciliacionResumen = useMemo(() => {
+    if (conciliacion.length === 0) return null
+    return {
+      total: conciliacion.length,
+      ok: conciliacion.filter((c) => c.estado === 'OK').length,
+      noExiste: conciliacion.filter((c) => c.estado === 'NO_EXISTE_EN_BD').length,
+      diffExcel: conciliacion.filter((c) => c.estado === 'DIFERENCIA_AVANCE_EXCEL').length,
+      diffReal: conciliacion.filter((c) => c.estado === 'DIFERENCIA_REAL_VS_EXCEL').length,
+    }
+  }, [conciliacion])
+
   const handleFile = async (file: File) => {
     setErrorMsg(null)
     setPreview(null)
@@ -122,11 +245,6 @@ export default function ImportarCalamaPage() {
   const tieneErroresMapeo = preview ? preview.errores_de_mapeo.length > 0 : false
   const tieneAdvertencias = preview ? preview.advertencias.length > 0 : false
   const seleccionCompleta = !!faenaSel && !!lineaSel
-
-  const planCodigo = useMemo(() => {
-    if (!preview || !faenaSel) return ''
-    return planCodigoFromFile(preview.archivo, faenaSel)
-  }, [preview, faenaSel])
 
   const handleImportar = async () => {
     if (!preview || !faenaSel || !lineaSel) return
@@ -398,6 +516,128 @@ export default function ImportarCalamaPage() {
                     Importar a Supabase
                   </Button>
                 </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Conciliacion Excel vs BD */}
+          {seleccionCompleta && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <RefreshCcw className="h-4 w-4" />
+                  Conciliacion Avance Excel vs Sistema
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {conciliacionLoading ? (
+                  <p className="text-sm text-gray-400">Calculando…</p>
+                ) : conciliacionResumen ? (
+                  <>
+                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mb-3 text-xs">
+                      <div className="rounded bg-gray-50 p-2 text-center">
+                        <div className="text-[10px] uppercase text-gray-500">Total</div>
+                        <div className="font-mono text-lg font-bold">{conciliacionResumen.total}</div>
+                      </div>
+                      <div className="rounded bg-green-50 border border-green-200 p-2 text-center">
+                        <div className="text-[10px] uppercase text-green-700">OK</div>
+                        <div className="font-mono text-lg font-bold text-green-800">{conciliacionResumen.ok}</div>
+                      </div>
+                      <div className="rounded bg-red-50 border border-red-200 p-2 text-center">
+                        <div className="text-[10px] uppercase text-red-700">No en BD</div>
+                        <div className="font-mono text-lg font-bold text-red-800">{conciliacionResumen.noExiste}</div>
+                      </div>
+                      <div className="rounded bg-amber-50 border border-amber-200 p-2 text-center">
+                        <div className="text-[10px] uppercase text-amber-700">Δ Excel</div>
+                        <div className="font-mono text-lg font-bold text-amber-800">{conciliacionResumen.diffExcel}</div>
+                      </div>
+                      <div className="rounded bg-blue-50 border border-blue-200 p-2 text-center">
+                        <div className="text-[10px] uppercase text-blue-700">Δ Real-Excel</div>
+                        <div className="font-mono text-lg font-bold text-blue-800">{conciliacionResumen.diffReal}</div>
+                      </div>
+                    </div>
+
+                    <div className="overflow-x-auto max-h-72 overflow-y-auto">
+                      <table className="w-full text-xs">
+                        <thead className="sticky top-0 bg-white">
+                          <tr className="border-b text-left uppercase text-gray-500">
+                            <th className="px-2 py-1.5">Codigo</th>
+                            <th className="px-2 py-1.5">Nombre</th>
+                            <th className="px-2 py-1.5 text-right">Excel (import)</th>
+                            <th className="px-2 py-1.5 text-right">Excel (BD)</th>
+                            <th className="px-2 py-1.5 text-right">Real (BD)</th>
+                            <th className="px-2 py-1.5 text-right">Δ</th>
+                            <th className="px-2 py-1.5">Estado</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {conciliacion.slice(0, 100).map((c) => (
+                            <tr key={c.codigo} className={`border-b ${
+                              c.estado === 'OK' ? '' :
+                              c.estado === 'NO_EXISTE_EN_BD' ? 'bg-red-50' :
+                              c.estado === 'DIFERENCIA_AVANCE_EXCEL' ? 'bg-amber-50' :
+                              'bg-blue-50'
+                            }`}>
+                              <td className="px-2 py-1 font-mono">{c.codigo}</td>
+                              <td className="px-2 py-1 max-w-xs truncate" title={c.nombre}>{c.nombre}</td>
+                              <td className="px-2 py-1 text-right font-mono">{c.avance_excel.toFixed(0)}%</td>
+                              <td className="px-2 py-1 text-right font-mono">
+                                {c.avance_excel_bd != null ? `${c.avance_excel_bd.toFixed(0)}%` : '—'}
+                              </td>
+                              <td className="px-2 py-1 text-right font-mono">
+                                {c.avance_real_bd != null ? `${c.avance_real_bd.toFixed(0)}%` : '—'}
+                              </td>
+                              <td className={`px-2 py-1 text-right font-mono ${
+                                c.diff === 0 ? '' : c.diff > 0 ? 'text-green-700' : 'text-red-700'
+                              }`}>
+                                {c.diff !== 0 ? `${c.diff > 0 ? '+' : ''}${c.diff.toFixed(0)}` : '—'}
+                              </td>
+                              <td className="px-2 py-1 text-[10px]">
+                                {c.estado.replaceAll('_', ' ')}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {conciliacion.length > 100 && (
+                      <p className="mt-2 text-xs text-gray-400 text-center">
+                        Mostrando 100 de {conciliacion.length} filas.
+                      </p>
+                    )}
+                  </>
+                ) : (
+                  <p className="text-sm text-gray-400">
+                    Aun no hay datos para conciliar (selecciona faena+linea para que se calcule el plan_codigo).
+                  </p>
+                )}
+              </CardContent>
+
+              {/* Forzar sincronizacion (admin only — la RPC valida server-side) */}
+              <CardContent className="border-t pt-3 space-y-2">
+                <div className="text-xs text-gray-600">
+                  <strong>Forzar sincronizacion inicial:</strong> copia
+                  <span className="font-mono"> avance_excel_pct → avance_pct</span> para TODAS las OTs del plan.
+                  Util cuando el Excel es la verdad y queremos resetear avances reales (ignorando eventos previos).
+                  Solo admin global puede ejecutarlo.
+                </div>
+                <div className="flex justify-end gap-2">
+                  <Button
+                    variant="secondary"
+                    onClick={handleForceSync}
+                    loading={forceSyncing}
+                    disabled={!planCodigo}
+                  >
+                    <RefreshCcw className="h-4 w-4" />
+                    Forzar sync inicial
+                  </Button>
+                </div>
+                {forceSyncMsg && (
+                  <div className="rounded border border-blue-200 bg-blue-50 p-2 text-xs text-blue-800">
+                    {forceSyncMsg}
+                  </div>
+                )}
               </CardContent>
             </Card>
           )}
