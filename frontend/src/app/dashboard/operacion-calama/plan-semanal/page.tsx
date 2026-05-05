@@ -640,7 +640,7 @@ function DraggableOTCard({
   compact?: boolean
   responsableId?: string | null
   comentario?: string | null
-  usuarios?: Array<{ id: string; nombre_completo: string | null }>
+  usuarios?: Array<{ id: string; nombre_completo: string | null; email?: string | null; cargo?: string | null }>
   disabled?: boolean
   onAsignar?: (uid: string) => void
   onQuitar?: () => void
@@ -671,7 +671,7 @@ function OTCardContent({
   compact?: boolean
   responsableId?: string | null
   comentario?: string | null
-  usuarios?: Array<{ id: string; nombre_completo: string | null }>
+  usuarios?: Array<{ id: string; nombre_completo: string | null; email?: string | null; cargo?: string | null }>
   onAsignar?: (uid: string) => void
   onQuitar?: () => void
   onComentar?: () => void
@@ -723,7 +723,10 @@ function OTCardContent({
             >
               <option value="">Asignar responsable…</option>
               {usuarios.map((u) => (
-                <option key={u.id} value={u.id}>{u.nombre_completo ?? '(sin nombre)'}</option>
+                <option key={u.id} value={u.id}>
+                  {u.nombre_completo || u.email || `(${u.id.slice(0, 6)})`}
+                  {u.cargo ? ` — ${u.cargo}` : ''}
+                </option>
               ))}
             </select>
           </div>
