@@ -109,6 +109,8 @@ export default function ImportarCalamaPage() {
   const [conciliacionLoading, setConciliacionLoading] = useState(false)
   const [forceSyncing, setForceSyncing] = useState(false)
   const [forceSyncMsg, setForceSyncMsg] = useState<string | null>(null)
+  const [aplicarAvanceExcelLoading, setAplicarAvanceExcelLoading] = useState(false)
+  const [aplicarAvanceExcelMsg, setAplicarAvanceExcelMsg] = useState<string | null>(null)
 
   const planCodigo = useMemo(() => {
     if (!preview || !faenaSel) return ''
@@ -179,6 +181,59 @@ export default function ImportarCalamaPage() {
     })()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [preview, planCodigo])
+
+  // Aplicar avances Excel directo desde preview, SIN reimportar todo.
+  // Util cuando la conciliacion muestra que avance_excel_pct en BD esta en 0
+  // pero el preview detecto avances correctos.
+  const handleAplicarAvanceExcel = async () => {
+    if (!preview || !planCodigo) return
+    setAplicarAvanceExcelLoading(true); setAplicarAvanceExcelMsg(null)
+    try {
+      const items = preview.tareas_detectadas
+        .filter((t) => t.avance_excel_pct != null)
+        .map((t) => ({
+          tarea_codigo_excel: t.codigo,
+          avance_excel_pct: t.avance_excel_pct,
+        }))
+      if (items.length === 0) {
+        setAplicarAvanceExcelMsg('Preview no tiene avances detectados — re-cargá el Excel.')
+        return
+      }
+      const { data, error } = await supabase.rpc('rpc_calama_set_avance_excel_lote', {
+        p_payload: { plan_codigo: planCodigo, items },
+      })
+      if (error) throw error
+      const r = data as {
+        total_recibidos?: number
+        total_matcheados?: number
+        total_no_matcheados?: number
+        total_actualizados_excel?: number
+        total_actualizados_real?: number
+        total_protegidos_por_evento_real?: number
+        ejemplos_no_matcheados?: string[]
+        ejemplos_diferencias_protegidas?: string[]
+      }
+      const lineas = [
+        `Recibidos: ${r.total_recibidos ?? 0}`,
+        `Matcheados: ${r.total_matcheados ?? 0}`,
+        `No matcheados: ${r.total_no_matcheados ?? 0}`,
+        `Excel actualizado: ${r.total_actualizados_excel ?? 0}`,
+        `Real actualizado: ${r.total_actualizados_real ?? 0}`,
+        `Protegidos por evento real: ${r.total_protegidos_por_evento_real ?? 0}`,
+      ]
+      if ((r.ejemplos_no_matcheados ?? []).length > 0) {
+        lineas.push(`Ej. no matcheados: ${(r.ejemplos_no_matcheados ?? []).join(', ')}`)
+      }
+      if ((r.ejemplos_diferencias_protegidas ?? []).length > 0) {
+        lineas.push(`Ej. protegidos: ${(r.ejemplos_diferencias_protegidas ?? []).join(' | ')}`)
+      }
+      setAplicarAvanceExcelMsg(lineas.join('  ·  '))
+    } catch (e) {
+      setAplicarAvanceExcelMsg(e instanceof Error ? `Error: ${e.message}` : 'Error al aplicar avances Excel')
+    } finally {
+      setAplicarAvanceExcelLoading(false)
+    }
+  }
 
   const handleForceSync = async () => {
     if (!planCodigo) return
@@ -614,13 +669,39 @@ export default function ImportarCalamaPage() {
                 )}
               </CardContent>
 
+              {/* Aplicar avances Excel SIN reimportar todo */}
+              <CardContent className="border-t pt-3 space-y-2">
+                <div className="text-xs text-gray-700">
+                  <strong>1. Aplicar avances Excel ahora:</strong> envia los avances detectados en el preview
+                  directo a <span className="font-mono">rpc_calama_set_avance_excel_lote</span>. Sin reimportar
+                  zonas/tareas/materiales. Solo actualiza <span className="font-mono">avance_excel_pct</span> y
+                  (si no hay evento real previo) tambien <span className="font-mono">avance_pct</span>.
+                </div>
+                <div className="flex justify-end gap-2">
+                  <Button
+                    variant="primary"
+                    onClick={handleAplicarAvanceExcel}
+                    loading={aplicarAvanceExcelLoading}
+                    disabled={!planCodigo || !preview}
+                  >
+                    <RefreshCcw className="h-4 w-4" />
+                    Aplicar avances Excel ahora
+                  </Button>
+                </div>
+                {aplicarAvanceExcelMsg && (
+                  <div className="rounded border border-indigo-200 bg-indigo-50 p-2 text-[11px] text-indigo-900 break-words">
+                    {aplicarAvanceExcelMsg}
+                  </div>
+                )}
+              </CardContent>
+
               {/* Forzar sincronizacion (admin only — la RPC valida server-side) */}
               <CardContent className="border-t pt-3 space-y-2">
                 <div className="text-xs text-gray-600">
-                  <strong>Forzar sincronizacion inicial:</strong> copia
+                  <strong>2. Forzar sincronizacion inicial:</strong> copia
                   <span className="font-mono"> avance_excel_pct → avance_pct</span> para TODAS las OTs del plan.
                   Util cuando el Excel es la verdad y queremos resetear avances reales (ignorando eventos previos).
-                  Solo admin global puede ejecutarlo.
+                  Solo admin global puede ejecutarlo. Hacer DESPUES del paso 1.
                 </div>
                 <div className="flex justify-end gap-2">
                   <Button
