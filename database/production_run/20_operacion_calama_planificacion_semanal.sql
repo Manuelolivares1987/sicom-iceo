@@ -828,66 +828,82 @@ END $$;
 -- ============================================================================
 -- ── 8. VERIFICACION FINAL ────────────────────────────────────────────────────
 -- ============================================================================
-WITH
-tablas_faltantes AS (
-    SELECT array_remove(ARRAY[
-        CASE WHEN NOT EXISTS (SELECT 1 FROM information_schema.tables
-                              WHERE table_schema='public' AND table_name=t)
-             THEN t END
-        FROM unnest(ARRAY[
-            'calama_planes_semanales','calama_plan_semanal_dias',
-            'calama_plan_semanal_ots','calama_plan_semanal_materiales',
-            'calama_ot_ejecuciones','calama_ot_ejecucion_eventos'
-        ]) t
-    ]::text[], NULL) AS faltan
+-- Patron defensivo: cada check es un EXISTS escalar dentro de un CTE plano,
+-- evitando el patron "ARRAY[CASE WHEN ... FROM unnest(...)]" que da error 42601.
+WITH checks AS (
+    SELECT
+        EXISTS (SELECT 1 FROM information_schema.tables
+                 WHERE table_schema='public' AND table_name='calama_planes_semanales')         AS tiene_planes,
+        EXISTS (SELECT 1 FROM information_schema.tables
+                 WHERE table_schema='public' AND table_name='calama_plan_semanal_dias')        AS tiene_dias,
+        EXISTS (SELECT 1 FROM information_schema.tables
+                 WHERE table_schema='public' AND table_name='calama_plan_semanal_ots')         AS tiene_ots,
+        EXISTS (SELECT 1 FROM information_schema.tables
+                 WHERE table_schema='public' AND table_name='calama_plan_semanal_materiales')  AS tiene_materiales,
+        EXISTS (SELECT 1 FROM information_schema.tables
+                 WHERE table_schema='public' AND table_name='calama_ot_ejecuciones')           AS tiene_ejecuciones,
+        EXISTS (SELECT 1 FROM information_schema.tables
+                 WHERE table_schema='public' AND table_name='calama_ot_ejecucion_eventos')     AS tiene_eventos,
+        (to_regprocedure('public.rpc_calama_get_or_create_plan_semanal(uuid,date)') IS NOT NULL)   AS rpc_get_create,
+        (to_regprocedure('public.rpc_calama_mover_ot_plan_semanal(uuid,uuid,date,uuid)') IS NOT NULL) AS rpc_mover,
+        (to_regprocedure('public.rpc_calama_quitar_ot_plan_semanal(uuid,uuid)') IS NOT NULL)       AS rpc_quitar,
+        (to_regprocedure('public.rpc_calama_asignar_responsable_ot_semana(uuid,uuid,uuid)') IS NOT NULL) AS rpc_asignar,
+        (to_regprocedure('public.rpc_calama_confirmar_plan_semanal(uuid)') IS NOT NULL)            AS rpc_confirmar,
+        (to_regprocedure('public.rpc_calama_iniciar_ejecucion_ot(uuid)') IS NOT NULL)              AS rpc_iniciar,
+        (to_regprocedure('public.rpc_calama_pausar_ejecucion_ot(uuid,text)') IS NOT NULL)          AS rpc_pausar,
+        (to_regprocedure('public.rpc_calama_reanudar_ejecucion_ot(uuid)') IS NOT NULL)             AS rpc_reanudar,
+        (to_regprocedure('public.rpc_calama_finalizar_ejecucion_ot(uuid,numeric,text)') IS NOT NULL) AS rpc_finalizar,
+        COALESCE((SELECT relrowsecurity FROM pg_class WHERE relname='calama_planes_semanales'), false) AS rls_planes,
+        COALESCE((SELECT relrowsecurity FROM pg_class WHERE relname='calama_plan_semanal_ots'), false) AS rls_planots,
+        COALESCE((SELECT relrowsecurity FROM pg_class WHERE relname='calama_ot_ejecuciones'), false)   AS rls_ejec
 ),
-rpcs_faltantes AS (
-    SELECT array_remove(ARRAY[
-        CASE WHEN to_regprocedure('public.rpc_calama_get_or_create_plan_semanal(uuid,date)') IS NULL
-             THEN 'rpc_calama_get_or_create_plan_semanal' END,
-        CASE WHEN to_regprocedure('public.rpc_calama_mover_ot_plan_semanal(uuid,uuid,date,uuid)') IS NULL
-             THEN 'rpc_calama_mover_ot_plan_semanal' END,
-        CASE WHEN to_regprocedure('public.rpc_calama_quitar_ot_plan_semanal(uuid,uuid)') IS NULL
-             THEN 'rpc_calama_quitar_ot_plan_semanal' END,
-        CASE WHEN to_regprocedure('public.rpc_calama_asignar_responsable_ot_semana(uuid,uuid,uuid)') IS NULL
-             THEN 'rpc_calama_asignar_responsable_ot_semana' END,
-        CASE WHEN to_regprocedure('public.rpc_calama_confirmar_plan_semanal(uuid)') IS NULL
-             THEN 'rpc_calama_confirmar_plan_semanal' END,
-        CASE WHEN to_regprocedure('public.rpc_calama_iniciar_ejecucion_ot(uuid)') IS NULL
-             THEN 'rpc_calama_iniciar_ejecucion_ot' END,
-        CASE WHEN to_regprocedure('public.rpc_calama_pausar_ejecucion_ot(uuid,text)') IS NULL
-             THEN 'rpc_calama_pausar_ejecucion_ot' END,
-        CASE WHEN to_regprocedure('public.rpc_calama_reanudar_ejecucion_ot(uuid)') IS NULL
-             THEN 'rpc_calama_reanudar_ejecucion_ot' END,
-        CASE WHEN to_regprocedure('public.rpc_calama_finalizar_ejecucion_ot(uuid,numeric,text)') IS NULL
-             THEN 'rpc_calama_finalizar_ejecucion_ot' END
-    ]::text[], NULL) AS faltan
-),
-rls_faltante AS (
-    SELECT array_remove(ARRAY[
-        CASE WHEN NOT (SELECT relrowsecurity FROM pg_class WHERE relname='calama_planes_semanales')
-             THEN 'calama_planes_semanales' END,
-        CASE WHEN NOT (SELECT relrowsecurity FROM pg_class WHERE relname='calama_plan_semanal_ots')
-             THEN 'calama_plan_semanal_ots' END,
-        CASE WHEN NOT (SELECT relrowsecurity FROM pg_class WHERE relname='calama_ot_ejecuciones')
-             THEN 'calama_ot_ejecuciones' END
-    ]::text[], NULL) AS sin_rls
+faltantes AS (
+    SELECT
+        array_remove(ARRAY[
+            CASE WHEN NOT tiene_planes        THEN 'calama_planes_semanales' END,
+            CASE WHEN NOT tiene_dias          THEN 'calama_plan_semanal_dias' END,
+            CASE WHEN NOT tiene_ots           THEN 'calama_plan_semanal_ots' END,
+            CASE WHEN NOT tiene_materiales    THEN 'calama_plan_semanal_materiales' END,
+            CASE WHEN NOT tiene_ejecuciones   THEN 'calama_ot_ejecuciones' END,
+            CASE WHEN NOT tiene_eventos       THEN 'calama_ot_ejecucion_eventos' END
+        ]::text[], NULL) AS tablas_faltantes,
+        array_remove(ARRAY[
+            CASE WHEN NOT rpc_get_create THEN 'rpc_calama_get_or_create_plan_semanal' END,
+            CASE WHEN NOT rpc_mover      THEN 'rpc_calama_mover_ot_plan_semanal' END,
+            CASE WHEN NOT rpc_quitar     THEN 'rpc_calama_quitar_ot_plan_semanal' END,
+            CASE WHEN NOT rpc_asignar    THEN 'rpc_calama_asignar_responsable_ot_semana' END,
+            CASE WHEN NOT rpc_confirmar  THEN 'rpc_calama_confirmar_plan_semanal' END,
+            CASE WHEN NOT rpc_iniciar    THEN 'rpc_calama_iniciar_ejecucion_ot' END,
+            CASE WHEN NOT rpc_pausar     THEN 'rpc_calama_pausar_ejecucion_ot' END,
+            CASE WHEN NOT rpc_reanudar   THEN 'rpc_calama_reanudar_ejecucion_ot' END,
+            CASE WHEN NOT rpc_finalizar  THEN 'rpc_calama_finalizar_ejecucion_ot' END
+        ]::text[], NULL) AS rpcs_faltantes,
+        array_remove(ARRAY[
+            CASE WHEN NOT rls_planes  THEN 'calama_planes_semanales' END,
+            CASE WHEN NOT rls_planots THEN 'calama_plan_semanal_ots' END,
+            CASE WHEN NOT rls_ejec    THEN 'calama_ot_ejecuciones' END
+        ]::text[], NULL) AS rls_desactivada
+    FROM checks
 )
 SELECT
     CASE
-        WHEN array_length((SELECT faltan FROM tablas_faltantes),1) > 0
-          OR array_length((SELECT faltan FROM rpcs_faltantes),1) > 0
-          OR array_length((SELECT sin_rls FROM rls_faltante),1) > 0
+        WHEN cardinality(tablas_faltantes) > 0
+          OR cardinality(rpcs_faltantes)   > 0
+          OR cardinality(rls_desactivada)  > 0
             THEN 'STOP_OPERACION_CALAMA_PLAN_SEMANAL'
         ELSE 'OK_OPERACION_CALAMA_PLAN_SEMANAL'
-    END AS resultado,
+    END                                                              AS resultado,
     COALESCE(NULLIF(array_to_string(array_remove(ARRAY[
-        CASE WHEN array_length((SELECT faltan FROM tablas_faltantes),1) > 0
-             THEN 'Tablas faltantes: ' || array_to_string((SELECT faltan FROM tablas_faltantes), ', ') END,
-        CASE WHEN array_length((SELECT faltan FROM rpcs_faltantes),1) > 0
-             THEN 'RPCs faltantes: ' || array_to_string((SELECT faltan FROM rpcs_faltantes), ', ') END,
-        CASE WHEN array_length((SELECT sin_rls FROM rls_faltante),1) > 0
-             THEN 'RLS DESACTIVADA en: ' || array_to_string((SELECT sin_rls FROM rls_faltante), ', ') END
+        CASE WHEN cardinality(tablas_faltantes) > 0
+             THEN 'Tablas faltantes: ' || array_to_string(tablas_faltantes, ', ') END,
+        CASE WHEN cardinality(rpcs_faltantes) > 0
+             THEN 'RPCs faltantes: ' || array_to_string(rpcs_faltantes, ', ') END,
+        CASE WHEN cardinality(rls_desactivada) > 0
+             THEN 'RLS DESACTIVADA en: ' || array_to_string(rls_desactivada, ', ') END
     ]::text[], NULL), ' | '), ''),
-    '6 tablas + 9 RPCs + RLS activa.') AS detalle,
-    NOW() AS chequeado_en;
+        '6 tablas + 9 RPCs + RLS activa.')                           AS detalle,
+    cardinality(tablas_faltantes)                                    AS tablas_faltantes_count,
+    cardinality(rpcs_faltantes)                                      AS rpcs_faltantes_count,
+    cardinality(rls_desactivada)                                     AS rls_desactivada_count,
+    NOW()                                                            AS chequeado_en
+FROM faltantes;
