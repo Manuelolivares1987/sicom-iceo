@@ -186,6 +186,31 @@ export function excelCodigoFromFolio(folio: string): string | null {
   return m ? m[1] : null
 }
 
+/**
+ * Formatea avance % asegurando rango 0-100 y redondeo a 0 decimales.
+ * - null/undefined -> "0%"
+ * - 0..1 (formato Excel decimal) -> NO se transforma (ya viene normalizado en DB)
+ * - 0..100 -> directo
+ */
+export function formatPct(value: number | null | undefined, decimals = 0): string {
+  if (value === null || value === undefined || !Number.isFinite(Number(value))) return '0%'
+  const n = Math.max(0, Math.min(100, Number(value)))
+  return `${n.toFixed(decimals)}%`
+}
+
+export function desviacionPp(real: number | null | undefined, excel: number | null | undefined): number {
+  const r = Number(real ?? 0)
+  const e = Number(excel ?? 0)
+  return Math.round((r - e) * 10) / 10
+}
+
+export function avanceTone(real: number, excel: number): 'green' | 'amber' | 'red' {
+  if (real >= 100) return 'green'
+  if (real >= excel) return 'green'
+  if (real >= excel * 0.7 || real >= 50) return 'amber'
+  return 'red'
+}
+
 // ============================================================================
 // Planificaciones
 // ============================================================================

@@ -18,8 +18,9 @@ import {
   useCalamaZonas, useIniciarEjecucionOT,
 } from '@/hooks/use-calama'
 import { PrecheckPanel } from '@/components/calama/precheck-panel'
-import { EstadoBadge } from '@/components/calama/gantt-table'
-import { zonaCodeFromFolio, excelCodigoFromFolio } from '@/lib/services/calama'
+import { EstadoBadge, BarraAvanceDual } from '@/components/calama/gantt-table'
+import { zonaCodeFromFolio, excelCodigoFromFolio, desviacionPp } from '@/lib/services/calama'
+import { useEventosAvanceOT } from '@/hooks/use-calama-avance'
 
 export default function OTDetallePage() {
   useRequireAuth()
@@ -71,6 +72,9 @@ export default function OTDetallePage() {
   const codigoTarea = excelCodigoFromFolio(ot.folio)
   const zonaCodigo = zonaCodigoFolio
   const matsZona = materiales ?? []
+  const avanceReal = Number(ot.avance_pct ?? 0)
+  const avanceExcel = Number((ot as { avance_excel_pct?: number }).avance_excel_pct ?? 0)
+  const delta = desviacionPp(avanceReal, avanceExcel)
 
   return (
     <div className="space-y-4">
@@ -98,6 +102,16 @@ export default function OTDetallePage() {
           </div>
         </div>
       </div>
+
+      {/* Avance de la OT — bloque prominente */}
+      <AvanceOTCard
+        otId={ot.id}
+        avanceReal={avanceReal}
+        avanceExcel={avanceExcel}
+        delta={delta}
+        horasReales={ot.horas_reales ?? null}
+        estado={ot.estado}
+      />
 
       {/* Info general */}
       <Card>
@@ -324,5 +338,119 @@ function Info({ label, value, mono }: { label: string; value: string; mono?: boo
       <div className="text-gray-500 uppercase text-[10px]">{label}</div>
       <div className={`text-gray-900 ${mono ? 'font-mono text-xs' : 'text-sm'}`}>{value}</div>
     </div>
+  )
+}
+
+function AvanceOTCard({
+  otId, avanceReal, avanceExcel, delta, horasReales, estado,
+}: {
+  otId: string
+  avanceReal: number
+  avanceExcel: number
+  delta: number
+  horasReales: number | null
+  estado: string
+}) {
+  const { data: eventos } = useEventosAvanceOT(otId)
+  const ultimoEvento = eventos?.[0]
+  const fuenteTxt = ultimoEvento?.fuente
+    ? ultimoEvento.fuente.charAt(0).toUpperCase() + ultimoEvento.fuente.slice(1)
+    : null
+  const fechaActualizacion = ultimoEvento?.created_at
+    ? new Date(ultimoEvento.created_at).toLocaleString('es-CL', {
+        day: '2-digit', month: '2-digit', year: '2-digit',
+        hour: '2-digit', minute: '2-digit',
+      })
+    : null
+
+  const tone = avanceReal >= 100 ? 'green'
+    : avanceReal >= avanceExcel ? 'green'
+    : avanceReal > 0 ? 'amber'
+    : 'red'
+  const toneText = tone === 'green' ? 'Al dia o sobre plan'
+    : tone === 'amber' ? 'Avance parcial'
+    : 'Sin avance'
+  const toneColor = tone === 'green' ? 'border-green-300 bg-green-50'
+    : tone === 'amber' ? 'border-amber-300 bg-amber-50'
+    : 'border-red-300 bg-red-50'
+
+  return (
+    <Card className={toneColor}>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base flex items-center justify-between">
+          <span>Avance de la OT</span>
+          <span className={`text-xs rounded-full px-2 py-0.5 font-semibold ${
+            tone === 'green' ? 'bg-green-200 text-green-900'
+            : tone === 'amber' ? 'bg-amber-200 text-amber-900'
+            : 'bg-red-200 text-red-900'
+          }`}>{toneText}</span>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {/* Cifras grandes */}
+        <div className="grid grid-cols-3 gap-2">
+          <div className="rounded-lg bg-white border border-gray-200 p-3 text-center">
+            <div className="text-[10px] uppercase text-gray-500">Avance Real</div>
+            <div className="font-mono text-3xl font-bold text-gray-900 mt-0.5">{avanceReal.toFixed(0)}<span className="text-base">%</span></div>
+          </div>
+          <div className="rounded-lg bg-white border border-gray-200 p-3 text-center">
+            <div className="text-[10px] uppercase text-gray-500">Avance Excel</div>
+            <div className="font-mono text-3xl font-semibold text-gray-600 mt-0.5">{avanceExcel.toFixed(0)}<span className="text-base">%</span></div>
+          </div>
+          <div className={`rounded-lg bg-white border p-3 text-center ${
+            delta >= 0 ? 'border-green-200' : 'border-red-200'
+          }`}>
+            <div className="text-[10px] uppercase text-gray-500">Desviacion</div>
+            <div className={`font-mono text-3xl font-semibold mt-0.5 ${
+              delta >= 0 ? 'text-green-700' : 'text-red-700'
+            }`}>
+              {delta >= 0 ? '+' : ''}{delta.toFixed(0)}<span className="text-base">pp</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Barra dual con marcador del Excel */}
+        <div className="space-y-1">
+          <div className="flex items-center justify-between text-[10px] uppercase text-gray-500">
+            <span>Progreso real vs plan</span>
+            <span className="text-indigo-600">- - - plan Excel</span>
+          </div>
+          <BarraAvanceDual real={avanceReal} excel={avanceExcel} />
+        </div>
+
+        {/* Metadata */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs text-gray-600">
+          <div>
+            <div className="text-[10px] uppercase text-gray-500">Estado</div>
+            <div className="font-medium">{estado}</div>
+          </div>
+          {horasReales != null && (
+            <div>
+              <div className="text-[10px] uppercase text-gray-500">Horas reales</div>
+              <div className="font-mono">{Number(horasReales).toFixed(2)}h</div>
+            </div>
+          )}
+          {fuenteTxt && (
+            <div>
+              <div className="text-[10px] uppercase text-gray-500">Ultima fuente</div>
+              <div className="font-medium">{fuenteTxt}</div>
+            </div>
+          )}
+          {fechaActualizacion && (
+            <div className="sm:col-span-3">
+              <div className="text-[10px] uppercase text-gray-500">Ultima actualizacion</div>
+              <div>{fechaActualizacion}</div>
+            </div>
+          )}
+        </div>
+
+        {ultimoEvento?.comentario && (
+          <div className="rounded border border-gray-200 bg-white px-3 py-2 text-xs">
+            <div className="text-[10px] uppercase text-gray-500 mb-0.5">Ultimo comentario</div>
+            <div className="text-gray-800">{ultimoEvento.comentario}</div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   )
 }
