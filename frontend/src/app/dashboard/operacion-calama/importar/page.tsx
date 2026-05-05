@@ -194,9 +194,10 @@ export default function ImportarCalamaPage() {
       setImportResult(data as ImportResult)
       setShowConfirm(false)
 
-      // Segunda llamada: poblar avance_excel_pct desde columna C de Carta Gantt.
-      // Idempotente: solo actualiza la columna; inicializa avance_pct real solo
-      // cuando la OT no tiene ejecucion previa.
+      // Segunda llamada: poblar avance_excel_pct desde columna C de
+      // "Analisi carta gantt" via rpc_calama_set_avance_excel_lote.
+      // El RPC sobreescribe avance_pct salvo que existan eventos reales
+      // (operador/supervisor/planificador) o ejecuciones.
       try {
         const items = preview.tareas_detectadas
           .filter((t) => t.avance_excel_pct != null)
@@ -205,13 +206,36 @@ export default function ImportarCalamaPage() {
             avance_excel_pct: t.avance_excel_pct,
           }))
         if (items.length > 0) {
-          await supabase.rpc('rpc_calama_set_avance_excel_lote', {
-            p_payload: { plan_codigo: planCodigo, items },
-          })
+          const { data: avanceResp, error: avanceErr } = await supabase.rpc(
+            'rpc_calama_set_avance_excel_lote',
+            { p_payload: { plan_codigo: planCodigo, items } },
+          )
+          if (avanceErr) {
+            setErrorMsg(`Avances Excel: ${avanceErr.message}`)
+          } else if (avanceResp) {
+            // Anexar al resultado del import principal el diagnostico de avance
+            const r = data as ImportResult
+            const av = avanceResp as {
+              total_recibidos?: number
+              total_matcheados?: number
+              total_no_matcheados?: number
+              total_actualizados_excel?: number
+              total_actualizados_real?: number
+              ejemplos_no_matcheados?: string[]
+            }
+            const detalleAvance =
+              `Avances Excel aplicados: ${av.total_actualizados_excel ?? 0}/${av.total_recibidos ?? 0} ` +
+              `| avance_pct refrescado: ${av.total_actualizados_real ?? 0} ` +
+              `| no matcheados: ${av.total_no_matcheados ?? 0}` +
+              ((av.ejemplos_no_matcheados ?? []).length
+                ? ` (ej: ${(av.ejemplos_no_matcheados ?? []).join(', ')})`
+                : '')
+            r.advertencias = [...(r.advertencias ?? []), detalleAvance]
+            setImportResult({ ...r })
+          }
         }
-      } catch {
-        // No bloqueamos el flujo si la 2da llamada falla — el usuario puede
-        // re-ejecutar el import. El error ya queda en logs de Supabase.
+      } catch (e) {
+        setErrorMsg(e instanceof Error ? `Avances Excel: ${e.message}` : 'Error al aplicar avances Excel')
       }
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : 'Error al importar')
