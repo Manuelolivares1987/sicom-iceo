@@ -45,6 +45,12 @@ export type CalamaPlanOT = {
   prioridad: number
   estado_plan: EstadoPlanOT
   observaciones: string | null
+  // Multidia (MIG28)
+  horas_planificadas: number | null
+  avance_objetivo_pct: number | null
+  secuencia_jornada: number | null
+  reprogramada_desde_id: string | null
+  motivo_reprogramacion: string | null
   created_by: string | null
   created_at: string
   updated_at: string
@@ -249,19 +255,50 @@ export async function confirmarPlanSemanal(planSemanalId: string) {
 // Mis OTs (asignadas al usuario actual)
 // ============================================================================
 
+export type CalamaJornadaAsignada = CalamaPlanOT & {
+  fecha_jornada: string | null
+  nombre_dia: string | null
+  orden_dia: number | null
+}
+
 export async function getMisOTsAsignadas() {
   const { data: user } = await supabase.auth.getUser()
   const uid = user.user?.id
   if (!uid) return { data: [], error: null }
 
-  // Plan-OTs donde el usuario es responsable
+  // 1) Plan-OTs (jornadas) donde el usuario es responsable
   const { data: planOts, error } = await supabase
     .from('calama_plan_semanal_ots')
     .select('*')
     .eq('responsable_id', uid)
     .order('updated_at', { ascending: false })
   if (error) return { data: null, error }
-  return { data: (planOts ?? []) as CalamaPlanOT[], error: null }
+
+  const jornadas = (planOts ?? []) as CalamaPlanOT[]
+  if (jornadas.length === 0) return { data: [] as CalamaJornadaAsignada[], error: null }
+
+  // 2) Resolver fechas/dias desde calama_plan_semanal_dias por plan_dia_id
+  const diaIds = Array.from(new Set(jornadas.map((j) => j.plan_dia_id).filter(Boolean)))
+  type DiaRow = { id: string; fecha: string; nombre_dia: string; orden: number }
+  const { data: dias } = diaIds.length > 0
+    ? await supabase.from('calama_plan_semanal_dias')
+        .select('id, fecha, nombre_dia, orden').in('id', diaIds)
+    : { data: [] as DiaRow[] }
+  const diaById = new Map<string, DiaRow>(((dias ?? []) as DiaRow[]).map((d) => [d.id, d]))
+
+  // 3) Enriquecer con fecha_jornada (importante para multidia: la fecha de la
+  //    jornada NO siempre coincide con ot.fecha_programada).
+  const enriched: CalamaJornadaAsignada[] = jornadas.map((j) => {
+    const d = diaById.get(j.plan_dia_id)
+    return {
+      ...j,
+      fecha_jornada: d?.fecha ?? null,
+      nombre_dia: d?.nombre_dia ?? null,
+      orden_dia: d?.orden ?? null,
+    }
+  })
+
+  return { data: enriched, error: null }
 }
 
 // ============================================================================

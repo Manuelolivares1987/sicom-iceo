@@ -15,7 +15,7 @@ import {
   excelCodigoFromFolio, zonaCodeFromFolio,
   type CalamaOTConRelaciones,
 } from '@/lib/services/calama'
-import type { CalamaPlanOT } from '@/lib/services/calama-plan-semanal'
+import type { CalamaJornadaAsignada } from '@/lib/services/calama-plan-semanal'
 
 type Grupo = 'atrasadas' | 'hoy' | 'manana' | 'semana' | 'completadas'
 
@@ -54,19 +54,43 @@ export default function MobileCalamaPage() {
     [ots],
   )
 
+  // Secuencia por OT: cuantas jornadas tiene + indice de cada jornada
+  const secuenciaByJornada = useMemo(() => {
+    const map = new Map<string, { idx: number; total: number }>()
+    if (!planOts) return map
+    const porOT = new Map<string, CalamaJornadaAsignada[]>()
+    for (const j of planOts) {
+      const arr = porOT.get(j.ot_id) ?? []
+      arr.push(j)
+      porOT.set(j.ot_id, arr)
+    }
+    Array.from(porOT.values()).forEach((arr: CalamaJornadaAsignada[]) => {
+      arr.sort((a, b) => (a.fecha_jornada ?? '').localeCompare(b.fecha_jornada ?? ''))
+      arr.forEach((j, i) => map.set(j.id, { idx: i + 1, total: arr.length }))
+    })
+    return map
+  }, [planOts])
+
   const grupos = useMemo(() => {
     const today = isoToday()
     const tomorrow = isoTomorrow()
     const weekStart = startOfWeekISO()
     const weekEnd = endOfWeekISO()
-    const result: Record<Grupo, Array<{ planOt: CalamaPlanOT; ot: CalamaOTConRelaciones }>> = {
+    const result: Record<Grupo, Array<{ planOt: CalamaJornadaAsignada; ot: CalamaOTConRelaciones }>> = {
       atrasadas: [], hoy: [], manana: [], semana: [], completadas: [],
     }
     for (const p of planOts ?? []) {
       const ot = otsById.get(p.ot_id)
       if (!ot) continue
-      const fecha = ot.fecha_programada ?? ''
-      if (ot.estado === 'finalizada' || ot.estado === 'cancelada') {
+      // Usar la fecha de la JORNADA (no la de la OT madre).
+      const fecha = p.fecha_jornada ?? ot.fecha_programada ?? ''
+
+      // Una jornada se considera completada cuando estado_plan = 'finalizada'.
+      // OTs con estado_ejecucion finalizada o cancelada tambien van al grupo.
+      if (
+        p.estado_plan === 'finalizada' ||
+        ot.estado === 'finalizada' || ot.estado === 'cancelada'
+      ) {
         result.completadas.push({ planOt: p, ot })
         continue
       }
@@ -167,10 +191,11 @@ export default function MobileCalamaPage() {
               <div className="space-y-2">
                 {items.map(({ planOt, ot }) => (
                   <OTCardMobile
-                    key={ot.id}
+                    key={planOt.id}
                     ot={ot}
                     planOt={planOt}
                     estilo={cfg.color}
+                    secuencia={secuenciaByJornada.get(planOt.id)}
                   />
                 ))}
               </div>
@@ -192,11 +217,12 @@ function Counter({ label, value, highlight }: { label: string; value: number; hi
 }
 
 function OTCardMobile({
-  ot, planOt, estilo,
+  ot, planOt, estilo, secuencia,
 }: {
   ot: CalamaOTConRelaciones
-  planOt: CalamaPlanOT
+  planOt: CalamaJornadaAsignada
   estilo: string
+  secuencia?: { idx: number; total: number }
 }) {
   const codigo = excelCodigoFromFolio(ot.folio)
   const lugar = zonaCodeFromFolio(ot.folio)
@@ -237,8 +263,15 @@ function OTCardMobile({
           <span className={`h-2 w-2 rounded-full ${colorEstado}`} />
           <span className="font-mono text-[11px] text-gray-600">{codigo}</span>
           <span className="text-[10px] uppercase font-medium text-gray-500">{estadoTxt}</span>
+          {secuencia && secuencia.total > 1 && (
+            <span className="text-[10px] rounded bg-amber-100 text-amber-800 px-1.5 py-0.5 font-mono">
+              J{secuencia.idx}/{secuencia.total}
+            </span>
+          )}
         </div>
-        <span className="text-[10px] text-gray-500">{ot.fecha_programada}</span>
+        <span className="text-[10px] text-gray-500">
+          {planOt.fecha_jornada ?? ot.fecha_programada ?? '—'}
+        </span>
       </div>
 
       <h3 className="font-medium text-gray-900 line-clamp-2 text-sm">{ot.titulo}</h3>
@@ -254,6 +287,14 @@ function OTCardMobile({
         </span>
         {avanceExcel > 0 && (
           <span className="text-[10px] text-gray-500">/ Excel {avanceExcel.toFixed(0)}%</span>
+        )}
+        {planOt.horas_planificadas != null && (
+          <span className="text-[10px] text-gray-500">· {Number(planOt.horas_planificadas).toFixed(1)}h</span>
+        )}
+        {planOt.avance_objetivo_pct != null && (
+          <span className="text-[10px] rounded bg-blue-100 text-blue-700 px-1 py-0.5">
+            objetivo {Number(planOt.avance_objetivo_pct).toFixed(0)}%
+          </span>
         )}
       </div>
 
