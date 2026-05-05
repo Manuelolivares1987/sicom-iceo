@@ -6,10 +6,11 @@ import { ArrowLeft, ClipboardCheck, Calendar, MapPin, ChevronRight } from 'lucid
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Spinner } from '@/components/ui/spinner'
 import { useRequireAuth } from '@/hooks/use-require-auth'
-import { useMisOTsAsignadas } from '@/hooks/use-calama-plan-semanal'
+import { useMisOTsAsignadas, useUsuariosAsignables } from '@/hooks/use-calama-plan-semanal'
 import { useCalamaOTs } from '@/hooks/use-calama'
 import { usePermissions } from '@/hooks/use-permissions'
 import { Info } from 'lucide-react'
+import { useEffect } from 'react'
 import { excelCodigoFromFolio, zonaCodeFromFolio } from '@/lib/services/calama'
 import { EstadoBadge } from '@/components/calama/gantt-table'
 
@@ -30,7 +31,13 @@ export default function MisOTsPage() {
 
   const { rol } = usePermissions()
   const esAdminOPlanificador = ['administrador', 'gerencia', 'subgerente_operaciones', 'supervisor', 'planificador', 'jefe_operaciones'].includes(rol ?? '')
-  const { data: planOts, isLoading } = useMisOTsAsignadas()
+  const [verTodas, setVerTodas] = useState<boolean>(esAdminOPlanificador)
+  useEffect(() => { setVerTodas(esAdminOPlanificador) }, [esAdminOPlanificador])
+  const { data: planOts, isLoading } = useMisOTsAsignadas({ todas: verTodas })
+  const { data: usuariosLista } = useUsuariosAsignables()
+  const usuariosById = useMemo(() =>
+    new Map((usuariosLista ?? []).map((u) => [u.id, u])),
+  [usuariosLista])
   // Cargar todas las OTs del usuario para tener metadata (titulo, fecha, etc).
   // El servicio filtra por responsable_id en plan_semanal_ots, pero la OT madre
   // puede no tener responsable directo. Buscamos por ids desde planOts.
@@ -117,19 +124,23 @@ export default function MisOTsPage() {
       )}
 
       {esAdminOPlanificador && (
-        <Card className="border-blue-200 bg-blue-50">
-          <CardContent className="p-3 text-sm text-blue-900 flex items-start gap-2">
-            <Info className="h-4 w-4 mt-0.5 shrink-0" />
-            <div>
-              Esta vista muestra solo OTs asignadas <strong>a vos</strong>. Como{' '}
-              <span className="font-mono">{rol}</span>, podes ver el listado completo en{' '}
-              <Link href="/dashboard/operacion-calama/ots" className="text-blue-700 underline font-medium">
-                Ordenes Calama
-              </Link>{' '}
-              o gestionar el plan en{' '}
-              <Link href="/dashboard/operacion-calama/plan-semanal" className="text-blue-700 underline font-medium">
-                Plan Semanal
-              </Link>.
+        <Card className="border-amber-200">
+          <CardContent className="p-2 flex items-center gap-2">
+            <Info className="h-4 w-4 text-amber-600 shrink-0" />
+            <span className="text-xs text-gray-600 flex-1">Vista:</span>
+            <div className="flex gap-1">
+              <button
+                onClick={() => setVerTodas(false)}
+                className={`rounded px-3 py-1 text-xs font-medium ${
+                  !verTodas ? 'bg-amber-600 text-white' : 'bg-gray-100 text-gray-700'
+                }`}
+              >Mis OTs</button>
+              <button
+                onClick={() => setVerTodas(true)}
+                className={`rounded px-3 py-1 text-xs font-medium ${
+                  verTodas ? 'bg-amber-600 text-white' : 'bg-gray-100 text-gray-700'
+                }`}
+              >Todas</button>
             </div>
           </CardContent>
         </Card>
@@ -182,6 +193,15 @@ export default function MisOTsPage() {
                       </span>
                       <span className="font-mono">avance {ot.avance_pct.toFixed(0)}%</span>
                       <span className="rounded bg-gray-100 px-1.5">{planOt.estado_plan}</span>
+                      {verTodas && (
+                        <span className="text-gray-700">
+                          Resp:{' '}
+                          {planOt.responsable_id
+                            ? <strong>{usuariosById.get(planOt.responsable_id)?.nombre_completo ?? usuariosById.get(planOt.responsable_id)?.email ?? '?'}</strong>
+                            : <span className="text-red-600">SIN ASIGNAR</span>
+                          }
+                        </span>
+                      )}
                     </div>
                   </div>
                   <ChevronRight className="h-5 w-5 text-gray-400 shrink-0 mt-1" />

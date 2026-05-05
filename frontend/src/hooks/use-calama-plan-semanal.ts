@@ -56,11 +56,12 @@ export function useOTsPlanSemanal(id: string | null | undefined) {
   })
 }
 
-export function useMisOTsAsignadas() {
+export function useMisOTsAsignadas(opts?: { todas?: boolean }) {
+  const todas = !!opts?.todas
   return useQuery({
-    queryKey: KEY.misOts,
+    queryKey: [...KEY.misOts, todas ? 'todas' : 'propias'] as const,
     queryFn: async () => {
-      const { data, error } = await getMisOTsAsignadas()
+      const { data, error } = await getMisOTsAsignadas({ todas })
       if (error) throw error
       return data ?? []
     },

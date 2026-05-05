@@ -261,17 +261,22 @@ export type CalamaJornadaAsignada = CalamaPlanOT & {
   orden_dia: number | null
 }
 
-export async function getMisOTsAsignadas() {
+export async function getMisOTsAsignadas(opts?: { todas?: boolean }) {
   const { data: user } = await supabase.auth.getUser()
   const uid = user.user?.id
   if (!uid) return { data: [], error: null }
 
-  // 1) Plan-OTs (jornadas) donde el usuario es responsable
-  const { data: planOts, error } = await supabase
+  // 1) Plan-OTs (jornadas).
+  //    - todas=false (default): solo donde el usuario es responsable
+  //    - todas=true (admins/planif): todas las jornadas del sistema
+  let query = supabase
     .from('calama_plan_semanal_ots')
     .select('*')
-    .eq('responsable_id', uid)
     .order('updated_at', { ascending: false })
+  if (!opts?.todas) {
+    query = query.eq('responsable_id', uid)
+  }
+  const { data: planOts, error } = await query
   if (error) return { data: null, error }
 
   const jornadas = (planOts ?? []) as CalamaPlanOT[]

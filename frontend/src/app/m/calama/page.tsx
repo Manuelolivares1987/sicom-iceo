@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import {
   RefreshCw, MapPin, MessageSquare, ChevronRight, AlertTriangle,
@@ -9,7 +9,7 @@ import {
 import { Spinner } from '@/components/ui/spinner'
 import { useAuth } from '@/contexts/auth-context'
 import { usePermissions } from '@/hooks/use-permissions'
-import { useMisOTsAsignadas } from '@/hooks/use-calama-plan-semanal'
+import { useMisOTsAsignadas, useUsuariosAsignables } from '@/hooks/use-calama-plan-semanal'
 import { useCalamaOTs } from '@/hooks/use-calama'
 import { useQueryClient } from '@tanstack/react-query'
 import {
@@ -49,8 +49,16 @@ export default function MobileCalamaPage() {
   const { rol } = usePermissions()
   const esAdminOPlanificador = ['administrador', 'gerencia', 'subgerente_operaciones', 'supervisor', 'planificador', 'jefe_operaciones'].includes(rol ?? '')
   const qc = useQueryClient()
-  const { data: planOts, isLoading } = useMisOTsAsignadas()
+  // Admin/planificador: por default ven TODAS las jornadas. Operador: solo las suyas.
+  const [verTodas, setVerTodas] = useState<boolean>(esAdminOPlanificador)
+  // Sincronizar default cuando se carga el rol
+  useEffect(() => { setVerTodas(esAdminOPlanificador) }, [esAdminOPlanificador])
+  const { data: planOts, isLoading } = useMisOTsAsignadas({ todas: verTodas })
   const { data: ots } = useCalamaOTs()
+  const { data: usuariosLista } = useUsuariosAsignables()
+  const usuariosById = useMemo(() =>
+    new Map((usuariosLista ?? []).map((u) => [u.id, u])),
+  [usuariosLista])
 
   const otsById = useMemo(
     () => new Map((ots ?? []).map((o) => [o.id, o])),
@@ -154,12 +162,28 @@ export default function MobileCalamaPage() {
             </div>
           </div>
         </div>
-        <div className="grid grid-cols-4 gap-1 px-3 pb-3 text-[10px]">
+        <div className="grid grid-cols-4 gap-1 px-3 pb-2 text-[10px]">
           <Counter label="Pend." value={counts.pendientes} />
           <Counter label="Ejec." value={counts.en_ejecucion} highlight={counts.en_ejecucion > 0} />
           <Counter label="Pausa" value={counts.pausadas} />
           <Counter label="OK" value={counts.completadas} />
         </div>
+        {esAdminOPlanificador && (
+          <div className="px-3 pb-3 flex items-center justify-center gap-1">
+            <button
+              onClick={() => setVerTodas(false)}
+              className={`flex-1 rounded px-2 py-1 text-[11px] font-medium ${
+                !verTodas ? 'bg-white text-amber-800' : 'bg-white/15 text-white'
+              }`}
+            >Mis OTs</button>
+            <button
+              onClick={() => setVerTodas(true)}
+              className={`flex-1 rounded px-2 py-1 text-[11px] font-medium ${
+                verTodas ? 'bg-white text-amber-800' : 'bg-white/15 text-white'
+              }`}
+            >Todas las OTs</button>
+          </div>
+        )}
       </header>
 
       <div className="px-3 space-y-3">
@@ -224,6 +248,14 @@ export default function MobileCalamaPage() {
                     planOt={planOt}
                     estilo={cfg.color}
                     secuencia={secuenciaByJornada.get(planOt.id)}
+                    responsableNombre={
+                      planOt.responsable_id
+                        ? (usuariosById.get(planOt.responsable_id)?.nombre_completo
+                          ?? usuariosById.get(planOt.responsable_id)?.email
+                          ?? null)
+                        : null
+                    }
+                    mostrarResponsable={verTodas}
                   />
                 ))}
               </div>
@@ -245,12 +277,14 @@ function Counter({ label, value, highlight }: { label: string; value: number; hi
 }
 
 function OTCardMobile({
-  ot, planOt, estilo, secuencia,
+  ot, planOt, estilo, secuencia, responsableNombre, mostrarResponsable,
 }: {
   ot: CalamaOTConRelaciones
   planOt: CalamaJornadaAsignada
   estilo: string
   secuencia?: { idx: number; total: number }
+  responsableNombre?: string | null
+  mostrarResponsable?: boolean
 }) {
   const codigo = excelCodigoFromFolio(ot.folio)
   const lugar = zonaCodeFromFolio(ot.folio)
@@ -325,6 +359,13 @@ function OTCardMobile({
           </span>
         )}
       </div>
+
+      {mostrarResponsable && (
+        <div className="mt-2 text-[11px] text-gray-700 flex items-center gap-1">
+          <span className="text-gray-500">Responsable:</span>
+          <span className="font-medium">{responsableNombre ?? <span className="text-red-600">SIN ASIGNAR</span>}</span>
+        </div>
+      )}
 
       {planOt.observaciones && (
         <div className="mt-2 rounded bg-amber-100/70 border border-amber-200 px-2 py-1.5 text-[11px] text-amber-900 flex items-start gap-1">
