@@ -53,6 +53,8 @@ END $$;
 -- ============================================================================
 -- ── 1. ALTER calama_ordenes_trabajo: avance_excel_pct ────────────────────────
 -- ============================================================================
+-- Idempotente: la columna y la constraint se agregan solo si no existen.
+-- Esto soporta re-ejecucion despues de un fallo parcial.
 DO $$ BEGIN
     IF NOT EXISTS (
         SELECT 1 FROM information_schema.columns
@@ -61,7 +63,13 @@ DO $$ BEGIN
     ) THEN
         ALTER TABLE calama_ordenes_trabajo
             ADD COLUMN avance_excel_pct NUMERIC(5,2) NOT NULL DEFAULT 0;
+    END IF;
 
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+         WHERE conname = 'chk_calama_ot_avance_excel'
+           AND conrelid = 'public.calama_ordenes_trabajo'::regclass
+    ) THEN
         ALTER TABLE calama_ordenes_trabajo
             ADD CONSTRAINT chk_calama_ot_avance_excel
             CHECK (avance_excel_pct BETWEEN 0 AND 100);
@@ -402,6 +410,17 @@ GRANT EXECUTE ON FUNCTION rpc_calama_set_avance_excel_lote(jsonb) TO authenticat
 -- ============================================================================
 -- ── 5. VISTAS ACTUALIZADAS (avance Excel + Real + desviacion) ────────────────
 -- ============================================================================
+-- IMPORTANTE: PostgreSQL NO permite cambiar nombre/orden de columnas via
+-- CREATE OR REPLACE VIEW (error 42P16). Las vistas creadas en MIG21 tenian
+-- una estructura distinta (sin avance_excel_promedio_pct, sin tareas_al_100,
+-- etc.). Por eso debemos DROP + CREATE.
+--
+-- Orden de drop: ninguna de estas vistas depende de la otra, asi que el orden
+-- entre ellas no importa. Usamos CASCADE como red de seguridad por si algun
+-- objeto externo (no creado por las MIGs Calama) las referenciara.
+
+DROP VIEW IF EXISTS public.v_calama_avance_por_area CASCADE;
+DROP VIEW IF EXISTS public.v_calama_resumen_general CASCADE;
 
 CREATE OR REPLACE VIEW v_calama_avance_por_area AS
 WITH ot_zona AS (
