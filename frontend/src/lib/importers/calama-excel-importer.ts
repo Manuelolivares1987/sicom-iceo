@@ -440,6 +440,8 @@ function parseHojaCartaGantt(
     const nombre = cellText(readCell(ws, r, 4) as CellLike)
     if (!codigo || !nombre) continue
     if (!/^\d+(\.\d+){2}$/.test(codigo)) continue
+    // Saltar estaciones (.0.0). Su avance se calcula desde tareas hijas.
+    if (codigo.endsWith('.0.0')) continue
 
     const duracionPlan = cellNum(readCell(ws, r, 5) as CellLike)
     const duracionReal = cellNum(readCell(ws, r, 6) as CellLike)
@@ -714,10 +716,15 @@ function parseHojaAnalisiAvance(ws: ExcelJS.Worksheet): Map<string, number> {
   }
   if (headerRow === 0) headerRow = 4 // fallback observado en archivo real
 
+  // SOLO COLUMNA C como avance real. NO se lee columna B.
+  // Las filas .0.0 son ESTACIONES/lugares fisicos — NO tienen avance oficial:
+  // el avance de estacion se calcula desde sus tareas hijas. Las saltamos
+  // explicitamente para no contaminar avance_excel_pct.
   for (let r = headerRow + 1; r <= lastRow; r++) {
     const codigo = cellText(readCell(ws, r, 1) as CellLike)
     if (!codigo) continue
     if (!/^\d+(\.\d+){2}$/.test(codigo)) continue
+    if (codigo.endsWith('.0.0')) continue // estacion: no se importa avance
     const avance = cellPct(readCell(ws, r, 3) as CellLike)
     if (avance == null) continue
     map.set(codigo, avance)

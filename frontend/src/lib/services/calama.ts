@@ -211,6 +211,71 @@ export function avanceTone(real: number, excel: number): 'green' | 'amber' | 're
   return 'red'
 }
 
+export function semaforoAvance(avancePct: number): 'verde' | 'amarillo' | 'rojo' {
+  if (avancePct >= 80) return 'verde'
+  if (avancePct >= 40) return 'amarillo'
+  return 'rojo'
+}
+
+export type ProyeccionTermino = {
+  diasTranscurridos: number
+  avancePorDia: number
+  diasRestantesEstimados: number | null
+  fechaEstimadaTermino: string | null
+  mensaje: string | null
+}
+
+/**
+ * Proyeccion lineal: dado avance real y fecha base, estima dias restantes
+ * y fecha estimada de termino.
+ *
+ * Casos limite:
+ *   - avance <= 0           -> "Sin avance registrado"
+ *   - dias <= 0             -> "Aun no hay base suficiente"
+ *   - avance >= 100         -> 0 dias restantes, fecha = hoy
+ *   - tasa muy lenta (>>365 dias) -> Numero pero con advertencia
+ */
+export function proyectarTermino(
+  avanceRealPct: number,
+  fechaInicio: string | Date | null | undefined,
+  hoy: Date = new Date(),
+): ProyeccionTermino {
+  if (!fechaInicio) {
+    return { diasTranscurridos: 0, avancePorDia: 0, diasRestantesEstimados: null, fechaEstimadaTermino: null, mensaje: 'Sin fecha de inicio' }
+  }
+  const inicio = typeof fechaInicio === 'string' ? new Date(fechaInicio) : fechaInicio
+  const diasTrans = Math.floor((hoy.getTime() - inicio.getTime()) / 86400000)
+  if (diasTrans <= 0) {
+    return { diasTranscurridos: 0, avancePorDia: 0, diasRestantesEstimados: null, fechaEstimadaTermino: null, mensaje: 'Aun no hay base suficiente' }
+  }
+  const real = Math.max(0, Math.min(100, Number(avanceRealPct)))
+  if (real <= 0) {
+    return { diasTranscurridos: diasTrans, avancePorDia: 0, diasRestantesEstimados: null, fechaEstimadaTermino: null, mensaje: 'Sin avance registrado' }
+  }
+  if (real >= 100) {
+    return {
+      diasTranscurridos: diasTrans, avancePorDia: real / diasTrans,
+      diasRestantesEstimados: 0,
+      fechaEstimadaTermino: hoy.toISOString().slice(0, 10),
+      mensaje: 'Completado',
+    }
+  }
+  const tasa = real / diasTrans
+  if (tasa <= 0) {
+    return { diasTranscurridos: diasTrans, avancePorDia: 0, diasRestantesEstimados: null, fechaEstimadaTermino: null, mensaje: 'Sin ritmo suficiente para proyectar' }
+  }
+  const restantes = Math.ceil((100 - real) / tasa)
+  const fecha = new Date(hoy)
+  fecha.setDate(fecha.getDate() + restantes)
+  return {
+    diasTranscurridos: diasTrans,
+    avancePorDia: Math.round(tasa * 100) / 100,
+    diasRestantesEstimados: restantes,
+    fechaEstimadaTermino: fecha.toISOString().slice(0, 10),
+    mensaje: null,
+  }
+}
+
 // ============================================================================
 // Planificaciones
 // ============================================================================
