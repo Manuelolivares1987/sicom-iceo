@@ -28,8 +28,15 @@ async function main() {
 
   printSamples('ZONAS (primeras 5)', preview.zonas_detectadas.slice(0, 5),
     (z) => `${z.codigo}  ${z.nombre}`)
-  printSamples('TAREAS (primeras 8)', preview.tareas_detectadas.slice(0, 8),
-    (t) => `${t.codigo}  ${(t.nombre ?? '').slice(0, 50).padEnd(50)} dur ${t.duracion_plan_dias ?? '—'}/${t.duracion_real_dias ?? '—'}d  inicio ${t.fecha_inicio_plan ?? '—'}`)
+  printSamples('TAREAS (primeras 12)', preview.tareas_detectadas.slice(0, 12),
+    (t) => `${t.codigo}  ${(t.nombre ?? '').slice(0, 40).padEnd(40)} dur ${t.duracion_plan_dias ?? '—'}/${t.duracion_real_dias ?? '—'}d  avance ${t.avance_excel_pct != null ? t.avance_excel_pct + '%' : '—'}  inicio ${t.fecha_inicio_plan ?? '—'}`)
+  // Cobertura de avance
+  const conAv = preview.tareas_detectadas.filter((t) => t.avance_excel_pct != null && t.avance_excel_pct > 0).length
+  const con0 = preview.tareas_detectadas.filter((t) => t.avance_excel_pct === 0).length
+  console.log(`\n=== AVANCE EXCEL EN TAREAS ===`)
+  console.log(`  Tareas con avance > 0: ${conAv} / ${preview.tareas_detectadas.length}`)
+  console.log(`  Tareas con avance = 0: ${con0}`)
+  console.log(`  Tareas sin avance (null): ${preview.tareas_detectadas.length - conAv - con0}`)
   printSamples('SUBTAREAS (primeras 8)', preview.subtareas_detectadas.slice(0, 8),
     (s) => `${s.codigo.padEnd(10)} ${(s.descripcion ?? '').slice(0, 50).padEnd(50)} estado: ${s.estado ?? '—'}  fecha: ${s.fecha_real ?? '—'}`)
   printSamples('MATERIALES (primeros 8)', preview.materiales_detectados.slice(0, 8),

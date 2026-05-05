@@ -683,6 +683,49 @@ function parseHojaObs(ws: ExcelJS.Worksheet): {
 }
 
 /**
+ * Hoja "Analisi carta gantt": idem layout que Carta Gantt pero con la columna C
+ * actualizada con el % de avance/cumplimiento real.
+ *
+ * Mapping requerido:
+ *   - col 1 (A) = codigo (1.1.0, 0.0.1, etc.)
+ *   - col 3 (C) = avance %
+ *   - col 4 (D) = nombre (informativo)
+ *
+ * Devuelve un Map { codigo -> avance_pct (0..100) } que el caller usa para
+ * sobreescribir avance_excel_pct de las tareas detectadas.
+ */
+function parseHojaAnalisiAvance(ws: ExcelJS.Worksheet): Map<string, number> {
+  const lastRow = ws.actualRowCount
+  const lastCol = ws.actualColumnCount
+  const map = new Map<string, number>()
+
+  // Detectar fila header (la que tiene "Cumplimiento" o "Duración")
+  let headerRow = 0
+  for (let r = 1; r <= Math.min(8, lastRow); r++) {
+    const flat: string[] = []
+    for (let c = 1; c <= Math.min(10, lastCol); c++) {
+      flat.push((cellText(readCell(ws, r, c) as CellLike) ?? '').toLowerCase())
+    }
+    const blob = flat.join(' | ')
+    if (blob.includes('cumplimiento') || blob.includes('duración') || blob.includes('duracion')) {
+      headerRow = r
+      break
+    }
+  }
+  if (headerRow === 0) headerRow = 4 // fallback observado en archivo real
+
+  for (let r = headerRow + 1; r <= lastRow; r++) {
+    const codigo = cellText(readCell(ws, r, 1) as CellLike)
+    if (!codigo) continue
+    if (!/^\d+(\.\d+){2}$/.test(codigo)) continue
+    const avance = cellPct(readCell(ws, r, 3) as CellLike)
+    if (avance == null) continue
+    map.set(codigo, avance)
+  }
+  return map
+}
+
+/**
  * Hoja "Hoja1": contactos por codigo. Sin header.
  * Cols: codigo | descripcion | telefono | rol
  */
@@ -745,6 +788,7 @@ export async function parseCalamaExcel(input: File | ArrayBuffer, archivoNombre?
 
   const hojaDetalle = findSheet([/^detalle$/i])
   const hojaCarta = findSheet([/^carta\s*gantt$/i])
+  const hojaAnalisi = findSheet([/^analisi.*carta\s*gantt$/i, /analisi/i])
   const hojaItem = findSheet([/^itemizado/i])
   const hojaObs = findSheet([/^obs\.?$/i])
   const hojaContactos = findSheet([/^hoja1$/i, /contactos?/i])
@@ -761,10 +805,11 @@ export async function parseCalamaExcel(input: File | ArrayBuffer, archivoNombre?
   }
 
   const hojasReconocidas = new Set([
-    hojaDetalle?.name, hojaCarta?.name, hojaItem?.name, hojaObs?.name, hojaContactos?.name,
+    hojaDetalle?.name, hojaCarta?.name, hojaAnalisi?.name,
+    hojaItem?.name, hojaObs?.name, hojaContactos?.name,
   ].filter(Boolean) as string[])
   for (const h of hojas) {
-    if (!hojasReconocidas.has(h) && !/analisi/i.test(h)) {
+    if (!hojasReconocidas.has(h)) {
       advertencias.push({ hoja: h, detalle: `Hoja desconocida no mapeada: "${h}". Su contenido no se importa.` })
     }
   }
@@ -802,8 +847,39 @@ export async function parseCalamaExcel(input: File | ArrayBuffer, archivoNombre?
     }
   }
 
+  // ── PRIORIDAD para avance_excel_pct: hoja "Analisi carta gantt" ────────────
+  // Carta Gantt suele traer el plan original (todo en 0 o 1 segun planificacion
+  // inicial). "Analisi carta gantt" trae el % de cumplimiento real actualizado.
+  // Si existe Analisi, sus valores SOBREESCRIBEN avance_excel_pct.
+  let avanceAnalisiCount = 0
+  if (hojaAnalisi) {
+    const mapAvance = parseHojaAnalisiAvance(hojaAnalisi)
+    if (mapAvance.size === 0) {
+      advertencias.push({
+        hoja: hojaAnalisi.name,
+        detalle: 'Hoja "Analisi carta gantt" detectada pero sin codigos validos en col A o sin avance en col C.',
+      })
+    } else {
+      for (const t of tareas) {
+        const av = mapAvance.get(t.codigo)
+        if (av != null) {
+          t.avance_excel_pct = av
+          avanceAnalisiCount++
+        }
+      }
+    }
+  } else {
+    advertencias.push({
+      hoja: null,
+      detalle: 'Hoja "Analisi carta gantt" no encontrada. El % de avance puede quedar en cero — esa es la hoja con el cumplimiento real.',
+    })
+  }
+
   let materiales: CalamaPreviewMaterial[] = []
   if (hojaItem) materiales = parseHojaItemizado(hojaItem, errores, zonas).materiales
+
+  // Variable expuesta a logs / preview (lint-clean)
+  void avanceAnalisiCount
 
   // Backfill: para materiales sin zona detectada por section-header,
   // intentar via match unico de actividad_relacionada con nombre de tarea.
