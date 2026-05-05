@@ -193,6 +193,26 @@ export default function ImportarCalamaPage() {
       if (error) throw new Error(error.message)
       setImportResult(data as ImportResult)
       setShowConfirm(false)
+
+      // Segunda llamada: poblar avance_excel_pct desde columna C de Carta Gantt.
+      // Idempotente: solo actualiza la columna; inicializa avance_pct real solo
+      // cuando la OT no tiene ejecucion previa.
+      try {
+        const items = preview.tareas_detectadas
+          .filter((t) => t.avance_excel_pct != null)
+          .map((t) => ({
+            tarea_codigo_excel: t.codigo,
+            avance_excel_pct: t.avance_excel_pct,
+          }))
+        if (items.length > 0) {
+          await supabase.rpc('rpc_calama_set_avance_excel_lote', {
+            p_payload: { plan_codigo: planCodigo, items },
+          })
+        }
+      } catch {
+        // No bloqueamos el flujo si la 2da llamada falla — el usuario puede
+        // re-ejecutar el import. El error ya queda en logs de Supabase.
+      }
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : 'Error al importar')
       setShowConfirm(false)
@@ -554,6 +574,7 @@ function TareasCard({ preview }: { preview: CalamaImportPreview }) {
               <th className="px-2 py-2">Zona</th>
               <th className="px-2 py-2 text-right">Dur. plan</th>
               <th className="px-2 py-2 text-right">Dur. real</th>
+              <th className="px-2 py-2 text-right">% Excel</th>
               <th className="px-2 py-2">Inicio plan</th>
               <th className="px-2 py-2">Fin plan</th>
               <th className="px-2 py-2">Inicio real</th>
@@ -568,6 +589,7 @@ function TareasCard({ preview }: { preview: CalamaImportPreview }) {
                 <td className="px-2 py-1.5 font-mono text-gray-500">{t.zona_codigo ?? '—'}</td>
                 <td className="px-2 py-1.5 text-right">{t.duracion_plan_dias ?? '—'}</td>
                 <td className="px-2 py-1.5 text-right">{t.duracion_real_dias ?? '—'}</td>
+                <td className="px-2 py-1.5 text-right">{t.avance_excel_pct != null ? `${t.avance_excel_pct.toFixed(0)}%` : '—'}</td>
                 <td className="px-2 py-1.5">{t.fecha_inicio_plan ?? '—'}</td>
                 <td className="px-2 py-1.5">{t.fecha_fin_plan ?? '—'}</td>
                 <td className="px-2 py-1.5">{t.fecha_inicio_real ?? '—'}</td>

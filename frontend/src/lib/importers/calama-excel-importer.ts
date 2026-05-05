@@ -39,6 +39,7 @@ export type CalamaPreviewTarea = {
   fecha_fin_real: string | null
   ot_referencia: string | null
   verif: string | null
+  avance_excel_pct: number | null
   origen_hoja: string
 }
 
@@ -196,6 +197,29 @@ function cellDate(v: CellLike): string | null {
   return null
 }
 
+/**
+ * Normaliza un porcentaje: acepta 0..1 (decimal), 0..100 (entero/decimal) o
+ * string "50%". Devuelve numero entre 0 y 100, o null si no se puede.
+ */
+function cellPct(v: CellLike): number | null {
+  const u = unwrapCell(v)
+  if (u === null || u === undefined || u === '') return null
+  let n: number
+  if (typeof u === 'number') {
+    n = u
+  } else {
+    const s = String(u).replace(/%/g, '').trim()
+    if (!s) return null
+    n = Number(s.replace(',', '.'))
+  }
+  if (!Number.isFinite(n)) return null
+  // 0..1 -> escalar a 0..100
+  if (n >= 0 && n <= 1) n = n * 100
+  if (n < 0) n = 0
+  if (n > 100) n = 100
+  return Math.round(n * 10) / 10
+}
+
 function normTel(v: CellLike): string | null {
   const u = unwrapCell(v)
   if (u === null || u === undefined) return null
@@ -307,6 +331,7 @@ function parseHojaDetalle(
           fecha_fin_real: null,
           ot_referencia: null,
           verif: null,
+          avance_excel_pct: null,
           origen_hoja: hoja,
         })
       }
@@ -420,6 +445,8 @@ function parseHojaCartaGantt(
     const duracionReal = cellNum(readCell(ws, r, 6) as CellLike)
     const ot = cellText(readCell(ws, r, 7) as CellLike)
     const verif = cellText(readCell(ws, r, 8) as CellLike)
+    // Columna C (col 3): % Cumplimiento. 1 -> 100, 0.5 -> 50, "50%" -> 50.
+    const avanceExcel = cellPct(readCell(ws, r, 3) as CellLike)
 
     let firstPlan: number | null = null
     let lastPlan: number | null = null
@@ -456,6 +483,7 @@ function parseHojaCartaGantt(
       fecha_fin_real: fFinReal,
       ot_referencia: ot,
       verif,
+      avance_excel_pct: avanceExcel,
       origen_hoja: hoja,
     })
 
@@ -767,6 +795,7 @@ export async function parseCalamaExcel(input: File | ArrayBuffer, archivoNombre?
         existente.fecha_fin_real = tg.fecha_fin_real
         existente.ot_referencia = tg.ot_referencia
         existente.verif = tg.verif
+        existente.avance_excel_pct = tg.avance_excel_pct
       } else {
         tareas.push(tg)
       }

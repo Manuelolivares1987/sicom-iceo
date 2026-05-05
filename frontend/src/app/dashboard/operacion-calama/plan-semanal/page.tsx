@@ -24,6 +24,7 @@ import {
   useUsuariosAsignables, useAsignarResponsable,
   useActualizarComentarioPlanOT, useAvancePorArea, useResumenGeneral,
 } from '@/hooks/use-calama-plan-semanal'
+import { useActualizarAvanceManual } from '@/hooks/use-calama-avance'
 import { lunesDe } from '@/lib/services/calama-plan-semanal'
 import { zonaCodeFromFolio, excelCodigoFromFolio, type CalamaOTConRelaciones } from '@/lib/services/calama'
 import { EstadoBadge } from '@/components/calama/gantt-table'
@@ -61,6 +62,13 @@ export default function PlanSemanalPage() {
   // Modal comentario
   const [comentarioOpen, setComentarioOpen] = useState<string | null>(null) // ot_id
   const [comentarioTexto, setComentarioTexto] = useState('')
+
+  // Modal actualizar avance
+  const updateAvance = useActualizarAvanceManual()
+  const [avanceOpen, setAvanceOpen] = useState<string | null>(null) // ot_id
+  const [avanceValor, setAvanceValor] = useState<number>(0)
+  const [avanceMotivo, setAvanceMotivo] = useState<string>('ajuste_manual')
+  const [avanceComentario, setAvanceComentario] = useState<string>('')
 
   useEffect(() => {
     if (planificaciones && planificaciones.length > 0 && !planificacionId) {
@@ -167,6 +175,36 @@ export default function PlanSemanalPage() {
       setComentarioOpen(null)
     } catch (e) {
       setErrorMsg(e instanceof Error ? e.message : 'Error al guardar comentario')
+    }
+  }
+
+  const abrirAvance = (otId: string) => {
+    const ot = otsById.get(otId)
+    setAvanceValor(ot ? Number(ot.avance_pct ?? 0) : 0)
+    setAvanceMotivo('ajuste_manual')
+    setAvanceComentario('')
+    setAvanceOpen(otId)
+  }
+  const guardarAvance = async () => {
+    if (!avanceOpen) return
+    if (avanceValor >= 100 && !avanceComentario.trim()) {
+      setErrorMsg('Comentario obligatorio para marcar 100%')
+      return
+    }
+    if (avanceValor >= 100) {
+      if (!confirm('Esto marcara la OT como finalizada. ¿Confirmar?')) return
+    }
+    try {
+      await updateAvance.mutateAsync({
+        ot_id: avanceOpen,
+        avance_nuevo: avanceValor,
+        fuente: 'planificador',
+        motivo: avanceMotivo,
+        comentario: avanceComentario || undefined,
+      })
+      setAvanceOpen(null)
+    } catch (e) {
+      setErrorMsg(e instanceof Error ? e.message : 'Error al guardar avance')
     }
   }
 
@@ -351,6 +389,7 @@ export default function PlanSemanalPage() {
                                 })
                               }}
                               onComentar={() => abrirComentario(ot.id)}
+                              onActualizarAvance={() => abrirAvance(ot.id)}
                             />
                           )
                         })}
@@ -493,6 +532,89 @@ export default function PlanSemanalPage() {
           </Button>
         </ModalFooter>
       </Modal>
+
+      {/* Modal actualizar avance manual */}
+      <Modal
+        open={!!avanceOpen}
+        onClose={() => !updateAvance.isPending && setAvanceOpen(null)}
+        title="Actualizar avance manual"
+      >
+        <div className="space-y-3 text-sm">
+          {(() => {
+            const ot = avanceOpen ? otsById.get(avanceOpen) : null
+            const avanceExcel = ot ? Number((ot as { avance_excel_pct?: number }).avance_excel_pct ?? 0) : 0
+            const avanceReal = ot ? Number(ot.avance_pct ?? 0) : 0
+            return ot ? (
+              <div className="rounded border bg-gray-50 p-2 text-xs">
+                <div className="font-mono text-gray-500">{excelCodigoFromFolio(ot.folio)}</div>
+                <div className="text-gray-900 mt-0.5">{ot.titulo}</div>
+                <div className="mt-1 flex gap-3 text-gray-600">
+                  <span>Excel: <strong>{avanceExcel.toFixed(0)}%</strong></span>
+                  <span>Real actual: <strong>{avanceReal.toFixed(0)}%</strong></span>
+                </div>
+              </div>
+            ) : null
+          })()}
+
+          <div>
+            <label className="text-xs text-gray-500">Nuevo avance %</label>
+            <input
+              type="number" min={0} max={100}
+              value={avanceValor}
+              onChange={(e) => setAvanceValor(Math.min(100, Math.max(0, Number(e.target.value))))}
+              className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm font-mono text-lg"
+            />
+            <input
+              type="range" min={0} max={100} step={5}
+              value={avanceValor}
+              onChange={(e) => setAvanceValor(Number(e.target.value))}
+              className="mt-1 w-full"
+            />
+          </div>
+
+          <div>
+            <label className="text-xs text-gray-500">Motivo</label>
+            <Select
+              value={avanceMotivo}
+              onChange={(e) => setAvanceMotivo(e.target.value)}
+              options={[
+                { value: 'ajuste_manual',          label: 'Ajuste manual' },
+                { value: 'validado_en_terreno',    label: 'Validado en terreno' },
+                { value: 'actualizacion_mandante', label: 'Actualizacion por mandante' },
+                { value: 'correccion_planificacion', label: 'Correccion de planificacion' },
+                { value: 'otro',                   label: 'Otro' },
+              ]}
+            />
+          </div>
+
+          <div>
+            <label className="text-xs text-gray-500">
+              Comentario {avanceValor >= 100 && <span className="text-red-600">(obligatorio para 100%)</span>}
+            </label>
+            <textarea
+              value={avanceComentario}
+              onChange={(e) => setAvanceComentario(e.target.value)}
+              rows={3}
+              className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm"
+              placeholder="Detalle del cambio…"
+            />
+          </div>
+
+          {avanceValor >= 100 && (
+            <div className="rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900">
+              Esto marcará la OT como <strong>finalizada</strong>.
+            </div>
+          )}
+        </div>
+        <ModalFooter className="-mx-6 -mb-6 mt-4 px-6 pb-6 pt-4 border-t border-gray-100">
+          <Button variant="secondary" onClick={() => setAvanceOpen(null)} disabled={updateAvance.isPending}>
+            <X className="h-4 w-4" /> Cancelar
+          </Button>
+          <Button variant="primary" onClick={guardarAvance} loading={updateAvance.isPending}>
+            <CheckCircle2 className="h-4 w-4" /> Guardar avance
+          </Button>
+        </ModalFooter>
+      </Modal>
     </div>
   )
 }
@@ -512,7 +634,7 @@ function DroppableContainer({
 
 function DraggableOTCard({
   ot, compact, responsableId, comentario, usuarios, disabled,
-  onAsignar, onQuitar, onComentar,
+  onAsignar, onQuitar, onComentar, onActualizarAvance,
 }: {
   ot: CalamaOTConRelaciones
   compact?: boolean
@@ -523,6 +645,7 @@ function DraggableOTCard({
   onAsignar?: (uid: string) => void
   onQuitar?: () => void
   onComentar?: () => void
+  onActualizarAvance?: () => void
 }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: ot.id, disabled })
   return (
@@ -534,6 +657,7 @@ function DraggableOTCard({
         responsableId={responsableId} comentario={comentario}
         usuarios={usuarios}
         onAsignar={onAsignar} onQuitar={onQuitar} onComentar={onComentar}
+        onActualizarAvance={onActualizarAvance}
         disabled={disabled}
       />
     </div>
@@ -541,7 +665,7 @@ function DraggableOTCard({
 }
 
 function OTCardContent({
-  ot, compact, responsableId, comentario, usuarios, onAsignar, onQuitar, onComentar, disabled,
+  ot, compact, responsableId, comentario, usuarios, onAsignar, onQuitar, onComentar, onActualizarAvance, disabled,
 }: {
   ot: CalamaOTConRelaciones
   compact?: boolean
@@ -551,10 +675,14 @@ function OTCardContent({
   onAsignar?: (uid: string) => void
   onQuitar?: () => void
   onComentar?: () => void
+  onActualizarAvance?: () => void
   disabled?: boolean
 }) {
   const codigo = excelCodigoFromFolio(ot.folio)
   const lugar = zonaCodeFromFolio(ot.folio)
+  const avanceExcel = Number((ot as { avance_excel_pct?: number }).avance_excel_pct ?? 0)
+  const avanceReal = Number(ot.avance_pct ?? 0)
+  const desv = avanceReal - avanceExcel
 
   if (compact) {
     return (
@@ -569,7 +697,14 @@ function OTCardContent({
           {ot.horas_estimadas != null && (
             <span className="inline-flex items-center gap-0.5"><Clock className="h-3 w-3" />{ot.horas_estimadas}h</span>
           )}
-          <span className="inline-flex items-center gap-0.5">{(ot.avance_pct).toFixed(0)}%</span>
+          <span className="inline-flex items-center gap-0.5" title="Avance Excel / Real">
+            E {avanceExcel.toFixed(0)}% · R <span className={avanceReal >= 100 ? 'text-green-700 font-medium' : 'text-gray-700 font-medium'}>{avanceReal.toFixed(0)}%</span>
+          </span>
+          {desv !== 0 && (
+            <span className={`text-[10px] ${desv > 0 ? 'text-green-700' : 'text-red-700'}`}>
+              {desv > 0 ? '+' : ''}{desv.toFixed(0)}pp
+            </span>
+          )}
           {comentario && (
             <span className="inline-flex items-center gap-0.5 text-amber-700" title={comentario}>
               <MessageSquare className="h-3 w-3" />
@@ -607,6 +742,16 @@ function OTCardContent({
             >
               <MessageSquare className="h-3 w-3" />
               {comentario ? 'Editar' : 'Comentar'}
+            </button>
+          )}
+          {onActualizarAvance && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onActualizarAvance() }}
+              onPointerDown={(e) => e.stopPropagation()}
+              className="inline-flex items-center justify-center gap-1 rounded border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-[10px] text-indigo-700 hover:bg-indigo-100"
+              title="Actualizar avance manual"
+            >
+              %
             </button>
           )}
           {onQuitar && (

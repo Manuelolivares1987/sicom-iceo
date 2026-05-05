@@ -16,6 +16,9 @@ import {
   useEjecucionActivaPorOT, useIniciarEjecucion, usePausarEjecucion,
   useReanudarEjecucion, useFinalizarEjecucion,
 } from '@/hooks/use-calama-plan-semanal'
+import {
+  useMarcarOTCompletadaOperador, useRegistrarAvanceParcialOperador,
+} from '@/hooks/use-calama-avance'
 import { excelCodigoFromFolio, zonaCodeFromFolio } from '@/lib/services/calama'
 import { EstadoBadge } from '@/components/calama/gantt-table'
 
@@ -32,11 +35,32 @@ export default function MiOTDetallePage() {
   const pausar = usePausarEjecucion()
   const reanudar = useReanudarEjecucion()
   const finalizar = useFinalizarEjecucion()
+  const marcarCompletada = useMarcarOTCompletadaOperador()
+  const guardarAvanceParcial = useRegistrarAvanceParcialOperador()
 
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  const [okMsg, setOkMsg] = useState<string | null>(null)
   const [tickElapsed, setTickElapsed] = useState(0)
   const [avance, setAvance] = useState(100)
   const [obsCierre, setObsCierre] = useState('')
+
+  // Avance parcial sin ejecucion activa
+  const [avanceParcialValor, setAvanceParcialValor] = useState<number>(0)
+  const [avanceParcialComentario, setAvanceParcialComentario] = useState<string>('')
+
+  // Pausa con motivos enriquecidos
+  const [pausaMotivoOpen, setPausaMotivoOpen] = useState(false)
+  const MOTIVOS_PAUSA = [
+    'colacion',
+    'espera_autorizacion',
+    'falta_material',
+    'falta_herramienta',
+    'interferencia_mandante',
+    'traslado',
+    'clima',
+    'condicion_insegura',
+    'otro',
+  ]
 
   // Tick para mostrar tiempo en vivo
   useEffect(() => {
@@ -46,6 +70,10 @@ export default function MiOTDetallePage() {
   }, [ejecucion])
 
   useEffect(() => { setTickElapsed(0) }, [ejecucion?.last_event_at])
+
+  useEffect(() => {
+    if (ot) setAvanceParcialValor(Math.round(Number(ot.avance_pct ?? 0)))
+  }, [ot])
 
   if (isLoading) {
     return <div className="flex items-center gap-2 text-sm text-gray-500"><Spinner className="h-4 w-4" /> Cargando…</div>
@@ -73,8 +101,42 @@ export default function MiOTDetallePage() {
   }
   const handleFinalizar = async () => {
     if (!ejecucion) return
-    setErrorMsg(null)
-    try { await finalizar.mutateAsync({ ejecucionId: ejecucion.id, otId: ot.id, avance, observacion: obsCierre || undefined }) } catch (e) { setErrorMsg(e instanceof Error ? e.message : 'Error') }
+    setErrorMsg(null); setOkMsg(null)
+    try { await finalizar.mutateAsync({ ejecucionId: ejecucion.id, otId: ot.id, avance, observacion: obsCierre || undefined }); setOkMsg('OT finalizada.') } catch (e) { setErrorMsg(e instanceof Error ? e.message : 'Error') }
+  }
+  const handleMarcarCompletada = async () => {
+    setErrorMsg(null); setOkMsg(null)
+    if (!confirm('Esto marcará la OT como completada al 100%. ¿Confirmar?')) return
+    try {
+      await marcarCompletada.mutateAsync({
+        ot_id: ot.id,
+        ejecucion_id: ejecucion?.id,
+        comentario: obsCierre || avanceParcialComentario || undefined,
+      })
+      setOkMsg('OT marcada como completada.')
+    } catch (e) {
+      setErrorMsg(e instanceof Error ? e.message : 'Error al marcar completada')
+    }
+  }
+  const handleGuardarAvanceParcial = async () => {
+    setErrorMsg(null); setOkMsg(null)
+    if (avanceParcialValor < 0 || avanceParcialValor > 100) {
+      setErrorMsg('Avance fuera de rango'); return
+    }
+    if (avanceParcialValor < 100 && !avanceParcialComentario.trim()) {
+      setErrorMsg('Comentario obligatorio para avance parcial'); return
+    }
+    try {
+      await guardarAvanceParcial.mutateAsync({
+        ot_id: ot.id,
+        avance_nuevo: avanceParcialValor,
+        comentario: avanceParcialComentario || undefined,
+      })
+      setOkMsg(`Avance actualizado a ${avanceParcialValor}%.`)
+      setAvanceParcialComentario('')
+    } catch (e) {
+      setErrorMsg(e instanceof Error ? e.message : 'Error al guardar avance')
+    }
   }
 
   const tiempoEfectivoActual = (ejecucion?.tiempo_efectivo_segundos ?? 0)
@@ -132,13 +194,29 @@ export default function MiOTDetallePage() {
               </div>
 
               {ejecucion.estado === 'en_ejecucion' && (
-                <div className="grid grid-cols-2 gap-2">
-                  <Button variant="secondary" onClick={() => handlePausar('pausa')} loading={pausar.isPending}>
-                    <Pause className="h-4 w-4" /> Pausar
-                  </Button>
-                  <Button variant="secondary" onClick={() => handlePausar('colacion')} loading={pausar.isPending}>
-                    <Coffee className="h-4 w-4" /> Colacion
-                  </Button>
+                <div className="space-y-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button variant="secondary" onClick={() => handlePausar('colacion')} loading={pausar.isPending}>
+                      <Coffee className="h-4 w-4" /> Colacion
+                    </Button>
+                    <Button variant="secondary" onClick={() => setPausaMotivoOpen((v) => !v)}>
+                      <Pause className="h-4 w-4" /> Pausar (motivo)
+                    </Button>
+                  </div>
+                  {pausaMotivoOpen && (
+                    <div className="grid grid-cols-2 gap-1 rounded border border-gray-200 bg-gray-50 p-2">
+                      {MOTIVOS_PAUSA.map((m) => (
+                        <button
+                          key={m}
+                          onClick={() => { handlePausar(m); setPausaMotivoOpen(false) }}
+                          disabled={pausar.isPending}
+                          className="rounded border border-gray-200 bg-white px-2 py-1 text-[11px] hover:bg-amber-50 hover:border-amber-300 disabled:opacity-50"
+                        >
+                          {m.replaceAll('_', ' ')}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
               {ejecucion.estado === 'pausada' && (
@@ -206,8 +284,66 @@ export default function MiOTDetallePage() {
               {errorMsg}
             </div>
           )}
+          {okMsg && (
+            <div className="rounded border border-green-200 bg-green-50 p-2 text-xs text-green-700">{okMsg}</div>
+          )}
         </CardContent>
       </Card>
+
+      {/* Avance parcial + completada (siempre visible cuando OT no esta finalizada/cancelada) */}
+      {!['finalizada','cancelada'].includes(ot.estado) && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Avance de la tarea</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <div className="rounded border border-gray-200 bg-gray-50 p-2">
+                <div className="text-[10px] uppercase text-gray-500">Avance Excel</div>
+                <div className="font-mono text-base text-gray-700">
+                  {Number((ot as { avance_excel_pct?: number }).avance_excel_pct ?? 0).toFixed(0)}%
+                </div>
+              </div>
+              <div className="rounded border border-amber-200 bg-amber-50 p-2">
+                <div className="text-[10px] uppercase text-amber-600">Avance Real</div>
+                <div className="font-mono text-base text-amber-800 font-bold">{ot.avance_pct.toFixed(0)}%</div>
+              </div>
+            </div>
+            <div>
+              <label className="text-xs text-gray-500">Avance parcial (%)</label>
+              <div className="flex gap-2 items-center">
+                <input
+                  type="number" min={0} max={100}
+                  value={avanceParcialValor}
+                  onChange={(e) => setAvanceParcialValor(Math.min(100, Math.max(0, Number(e.target.value))))}
+                  className="rounded border border-gray-300 px-3 py-2 text-sm w-24 font-mono"
+                />
+                <input
+                  type="range" min={0} max={100} step={5}
+                  value={avanceParcialValor}
+                  onChange={(e) => setAvanceParcialValor(Number(e.target.value))}
+                  className="flex-1"
+                />
+              </div>
+            </div>
+            <textarea
+              value={avanceParcialComentario}
+              onChange={(e) => setAvanceParcialComentario(e.target.value)}
+              rows={2}
+              placeholder="Comentario (obligatorio si <100%)"
+              className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+            />
+            <div className="grid grid-cols-2 gap-2">
+              <Button variant="secondary" onClick={handleGuardarAvanceParcial} loading={guardarAvanceParcial.isPending}>
+                Guardar avance
+              </Button>
+              <Button variant="primary" onClick={handleMarcarCompletada} loading={marcarCompletada.isPending}>
+                <CheckCircle2 className="h-4 w-4" /> Marcar completada 100%
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {subtareas && subtareas.length > 0 && (
         <Card>

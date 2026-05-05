@@ -64,6 +64,7 @@ export type CalamaOT = {
   horas_estimadas: number | null
   horas_reales: number | null
   avance_pct: number
+  avance_excel_pct: number
   estado: CalamaOTEstado
   prioridad: 'baja' | 'normal' | 'alta' | 'critica'
   responsable_id: string | null
