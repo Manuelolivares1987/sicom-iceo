@@ -6,26 +6,30 @@ import {
   PointerSensor, useDraggable, useDroppable, useSensor, useSensors,
 } from '@dnd-kit/core'
 import {
-  Calendar, Save, ArrowLeft, RefreshCw, ChevronLeft, ChevronRight,
-  Lock, AlertTriangle, Trash2, User, Clock, MapPin,
+  Calendar, Save, ArrowLeft, ChevronLeft, ChevronRight, Lock, AlertTriangle,
+  Trash2, User, Clock, MapPin, MessageSquare, BarChart3, Layers, X,
+  CheckCircle2,
 } from 'lucide-react'
 import Link from 'next/link'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
 import { Select } from '@/components/ui/select'
+import { Modal, ModalFooter } from '@/components/ui/modal'
 import { useRequireAuth } from '@/hooks/use-require-auth'
-import { useCalamaPlanificaciones, useCalamaOTs } from '@/hooks/use-calama'
+import { useCalamaPlanificaciones, useCalamaOTs, useCalamaZonas } from '@/hooks/use-calama'
 import {
   useGetOrCreatePlanSemanal, usePlanSemanal, useDiasPlanSemanal, useOTsPlanSemanal,
   useMoverOTplanSemanal, useQuitarOTplanSemanal, useConfirmarPlanSemanal,
   useUsuariosAsignables, useAsignarResponsable,
+  useActualizarComentarioPlanOT, useAvancePorArea, useResumenGeneral,
 } from '@/hooks/use-calama-plan-semanal'
 import { lunesDe } from '@/lib/services/calama-plan-semanal'
 import { zonaCodeFromFolio, excelCodigoFromFolio, type CalamaOTConRelaciones } from '@/lib/services/calama'
 import { EstadoBadge } from '@/components/calama/gantt-table'
 
 const BACKLOG_ID = 'backlog'
+type Tab = 'planificacion' | 'general' | 'por_area'
 
 export default function PlanSemanalPage() {
   useRequireAuth()
@@ -35,27 +39,35 @@ export default function PlanSemanalPage() {
   const [semanaIso, setSemanaIso] = useState<string>(() => lunesDe(new Date()))
   const [planSemanalId, setPlanSemanalId] = useState<string>('')
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  const [tab, setTab] = useState<Tab>('planificacion')
+  const [lugarFisicoSel, setLugarFisicoSel] = useState<string>('') // codigo zona "1.0.0"
 
   const getOrCreate = useGetOrCreatePlanSemanal()
   const { data: planSem } = usePlanSemanal(planSemanalId || null)
   const { data: dias } = useDiasPlanSemanal(planSemanalId || null)
   const { data: planOts } = useOTsPlanSemanal(planSemanalId || null)
   const { data: ots } = useCalamaOTs(planificacionId ? { planificacionId } : undefined)
+  const { data: zonas } = useCalamaZonas(planificacionId)
   const { data: usuarios } = useUsuariosAsignables()
+  const { data: avancePorArea } = useAvancePorArea(planificacionId)
+  const { data: resumenGeneral } = useResumenGeneral(planificacionId)
 
   const moverOT = useMoverOTplanSemanal()
   const quitarOT = useQuitarOTplanSemanal()
   const confirmarPlan = useConfirmarPlanSemanal()
   const asignarResp = useAsignarResponsable()
+  const updateComentario = useActualizarComentarioPlanOT()
 
-  // Auto-seleccionar primera planificacion
+  // Modal comentario
+  const [comentarioOpen, setComentarioOpen] = useState<string | null>(null) // ot_id
+  const [comentarioTexto, setComentarioTexto] = useState('')
+
   useEffect(() => {
     if (planificaciones && planificaciones.length > 0 && !planificacionId) {
       setPlanificacionId(planificaciones[0].id)
     }
   }, [planificaciones, planificacionId])
 
-  // Auto-cargar plan semanal al elegir planificacion + semana
   useEffect(() => {
     if (!planificacionId || !semanaIso) return
     setErrorMsg(null)
@@ -72,26 +84,32 @@ export default function PlanSemanalPage() {
   const planOtsByOtId = useMemo(() => new Map((planOts ?? []).map((p) => [p.ot_id, p])), [planOts])
   const otsById = useMemo(() => new Map((ots ?? []).map((o) => [o.id, o])), [ots])
 
-  // Backlog = OTs no en plan
-  const backlog = useMemo(() => {
+  // OTs filtradas por lugar físico (cuando hay selección)
+  const otsLugar = useMemo(() => {
     if (!ots) return []
-    return ots.filter((o) => !planOtsByOtId.has(o.id) && o.estado !== 'finalizada' && o.estado !== 'cancelada')
-  }, [ots, planOtsByOtId])
+    if (!lugarFisicoSel) return ots
+    return ots.filter((o) => zonaCodeFromFolio(o.folio) === lugarFisicoSel)
+  }, [ots, lugarFisicoSel])
 
-  // OTs por dia
+  // Backlog = OTs del lugar (o todas) que NO están en plan
+  const backlog = useMemo(() => {
+    return otsLugar.filter((o) => !planOtsByOtId.has(o.id) && o.estado !== 'finalizada' && o.estado !== 'cancelada')
+  }, [otsLugar, planOtsByOtId])
+
   const otsByDia = useMemo(() => {
     const m = new Map<string, CalamaOTConRelaciones[]>()
     for (const dia of dias ?? []) m.set(dia.id, [])
     for (const p of planOts ?? []) {
       const ot = otsById.get(p.ot_id)
       if (!ot) continue
+      // Si hay filtro por lugar físico, mostrar solo las de ese lugar
+      if (lugarFisicoSel && zonaCodeFromFolio(ot.folio) !== lugarFisicoSel) continue
       const arr = m.get(p.plan_dia_id)
       if (arr) arr.push(ot)
     }
     return m
-  }, [dias, planOts, otsById])
+  }, [dias, planOts, otsById, lugarFisicoSel])
 
-  // Drag and drop state
   const [activeOTId, setActiveOTId] = useState<string | null>(null)
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
 
@@ -104,7 +122,6 @@ export default function PlanSemanalPage() {
     if (!overId || !planSemanalId) return
 
     if (overId === BACKLOG_ID) {
-      // Devolver al backlog (quitar del plan)
       if (!planOtsByOtId.has(otId)) return
       quitarOT.mutate({ planSemanalId, otId }, {
         onError: (err) => setErrorMsg(err instanceof Error ? err.message : 'Error al quitar OT'),
@@ -114,7 +131,6 @@ export default function PlanSemanalPage() {
 
     const dia = dias?.find((d) => d.id === overId)
     if (!dia) return
-
     moverOT.mutate({ planSemanalId, otId, fechaDestino: dia.fecha }, {
       onError: (err) => setErrorMsg(err instanceof Error ? err.message : 'Error al mover OT'),
     })
@@ -128,37 +144,48 @@ export default function PlanSemanalPage() {
     })
   }
 
-  const semanaPrev = () => {
-    const d = new Date(semanaIso); d.setDate(d.getDate() - 7); setSemanaIso(d.toISOString().slice(0, 10))
-  }
-  const semanaSig = () => {
-    const d = new Date(semanaIso); d.setDate(d.getDate() + 7); setSemanaIso(d.toISOString().slice(0, 10))
-  }
+  const semanaPrev = () => { const d = new Date(semanaIso); d.setDate(d.getDate() - 7); setSemanaIso(d.toISOString().slice(0, 10)) }
+  const semanaSig  = () => { const d = new Date(semanaIso); d.setDate(d.getDate() + 7); setSemanaIso(d.toISOString().slice(0, 10)) }
 
   const planBloqueado = planSem?.estado === 'cerrado' || planSem?.estado === 'cancelado'
   const activeOT = activeOTId ? (otsById.get(activeOTId) ?? null) : null
 
+  const lugarSelInfo = useMemo(() => {
+    if (!lugarFisicoSel || !avancePorArea) return null
+    return avancePorArea.find((a) => a.codigo_zona === lugarFisicoSel) ?? null
+  }, [lugarFisicoSel, avancePorArea])
+
+  const abrirComentario = (otId: string) => {
+    const planOt = planOtsByOtId.get(otId)
+    setComentarioTexto(planOt?.observaciones ?? '')
+    setComentarioOpen(otId)
+  }
+  const guardarComentario = async () => {
+    if (!comentarioOpen || !planSemanalId) return
+    try {
+      await updateComentario.mutateAsync({ planSemanalId, otId: comentarioOpen, observaciones: comentarioTexto })
+      setComentarioOpen(null)
+    } catch (e) {
+      setErrorMsg(e instanceof Error ? e.message : 'Error al guardar comentario')
+    }
+  }
+
   return (
     <div className="space-y-4">
-      <Link
-        href="/dashboard/operacion-calama"
-        className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700"
-      >
-        <ArrowLeft className="h-4 w-4" />
-        Volver al panel Calama
+      <Link href="/dashboard/operacion-calama" className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700">
+        <ArrowLeft className="h-4 w-4" /> Panel Calama
       </Link>
 
       <div className="rounded-2xl bg-gradient-to-r from-amber-700 to-orange-600 p-6 text-white shadow-lg">
         <h1 className="text-2xl font-bold flex items-center gap-2">
-          <Calendar className="h-6 w-6" />
-          Plan Semanal Calama
+          <Calendar className="h-6 w-6" /> Plan Semanal Calama
         </h1>
         <p className="text-sm text-white/90 mt-1">
-          Arrastra OTs desde el backlog (izquierda) hacia los dias de la semana.
+          Selecciona un lugar físico y arrastra sus tareas a los dias de la semana.
         </p>
       </div>
 
-      {/* Controles */}
+      {/* Controles globales */}
       <Card>
         <CardContent className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-end">
           <Select
@@ -173,17 +200,13 @@ export default function PlanSemanalPage() {
               <button onClick={semanaPrev} className="rounded border border-gray-300 p-2 hover:bg-gray-50">
                 <ChevronLeft className="h-4 w-4" />
               </button>
-              <input
-                type="date"
-                value={semanaIso}
-                onChange={(e) => setSemanaIso(lunesDe(e.target.value))}
-                className="min-h-[44px] flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm"
-              />
+              <input type="date" value={semanaIso} onChange={(e) => setSemanaIso(lunesDe(e.target.value))}
+                className="min-h-[44px] flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm" />
               <button onClick={semanaSig} className="rounded border border-gray-300 p-2 hover:bg-gray-50">
                 <ChevronRight className="h-4 w-4" />
               </button>
             </div>
-            <p className="mt-1 text-xs text-gray-500">Lunes de la semana ({semanaIso})</p>
+            <p className="mt-1 text-xs text-gray-500">Lunes ({semanaIso})</p>
           </div>
           <div>
             <div className="text-xs uppercase text-gray-500">Estado plan</div>
@@ -201,14 +224,9 @@ export default function PlanSemanalPage() {
           </div>
           <div className="flex gap-2 justify-end">
             {planSemanalId && planSem?.estado === 'borrador' && (
-              <Button
-                variant="primary"
-                onClick={handleConfirmar}
-                loading={confirmarPlan.isPending}
-                disabled={(planOts?.length ?? 0) === 0}
-              >
-                <Save className="h-4 w-4" />
-                Confirmar semana
+              <Button variant="primary" onClick={handleConfirmar} loading={confirmarPlan.isPending}
+                disabled={(planOts?.length ?? 0) === 0}>
+                <Save className="h-4 w-4" /> Confirmar
               </Button>
             )}
             {moverOT.isPending && <Spinner className="h-4 w-4" />}
@@ -220,76 +238,261 @@ export default function PlanSemanalPage() {
         <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 flex items-start gap-2">
           <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
           <span>{errorMsg}</span>
+          <button className="ml-auto text-red-700" onClick={() => setErrorMsg(null)}><X className="h-4 w-4" /></button>
         </div>
       )}
 
-      <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-        <div className="grid grid-cols-1 lg:grid-cols-[320px,1fr] gap-4">
-          {/* Backlog */}
-          <DroppableContainer id={BACKLOG_ID} className="bg-white rounded-xl border border-gray-200 p-3">
-            <h3 className="text-sm font-bold uppercase text-gray-700 mb-2 flex items-center gap-2">
-              Backlog ({backlog.length})
-            </h3>
-            <p className="text-xs text-gray-400 mb-3">OTs sin asignar — arrastra a un dia.</p>
-            <div className="space-y-2 max-h-[60vh] overflow-y-auto pr-1">
-              {backlog.length === 0 ? (
-                <p className="text-xs text-gray-400 italic text-center py-4">Todas las OTs estan en el plan.</p>
-              ) : backlog.map((ot) => (
-                <DraggableOTCard key={ot.id} ot={ot} disabled={planBloqueado} />
-              ))}
+      {/* Tabs */}
+      <div className="flex gap-1 border-b border-gray-200">
+        {([
+          ['planificacion', 'Planificacion semanal', <Calendar className="h-4 w-4" key="i1" />],
+          ['general',       'Vista general',          <BarChart3 className="h-4 w-4" key="i2" />],
+          ['por_area',      'Vista por area',         <Layers className="h-4 w-4" key="i3" />],
+        ] as Array<[Tab, string, React.ReactNode]>).map(([k, label, icon]) => (
+          <button
+            key={k} onClick={() => setTab(k)}
+            className={`flex items-center gap-2 px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+              tab === k ? 'border-amber-600 text-amber-700' : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            {icon}
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'planificacion' && (
+        <>
+          {/* Selector de lugar físico */}
+          <Card>
+            <CardContent className="p-3 flex flex-wrap gap-3 items-end">
+              <div className="flex-1 min-w-[260px]">
+                <Select
+                  label="Lugar físico (área / frente de trabajo)"
+                  value={lugarFisicoSel}
+                  onChange={(e) => setLugarFisicoSel(e.target.value)}
+                  options={[
+                    { value: '', label: 'Todos los lugares' },
+                    ...((zonas ?? []).map((z) => ({
+                      value: z.codigo_zona,
+                      label: `${z.codigo_zona}  ${z.nombre}`,
+                    }))),
+                  ]}
+                />
+              </div>
+              {lugarSelInfo && (
+                <div className="flex flex-wrap gap-3 text-xs">
+                  <Stat label="Tareas" value={lugarSelInfo.total_tareas} />
+                  <Stat label="Finalizadas" value={lugarSelInfo.tareas_finalizadas} tone="green" />
+                  <Stat label="Pendientes" value={lugarSelInfo.tareas_pendientes} tone="amber" />
+                  <Stat label="Plan. semana" value={lugarSelInfo.tareas_planificadas_semana} />
+                  <Stat label="Sin resp." value={lugarSelInfo.tareas_sin_responsable} tone={lugarSelInfo.tareas_sin_responsable > 0 ? 'red' : undefined} />
+                  <Stat label="Avance" value={`${lugarSelInfo.avance_promedio_pct.toFixed(1)}%`} />
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+            <div className="grid grid-cols-1 lg:grid-cols-[320px,1fr] gap-4">
+              {/* Backlog */}
+              <DroppableContainer id={BACKLOG_ID} className="bg-white rounded-xl border border-gray-200 p-3">
+                <h3 className="text-sm font-bold uppercase text-gray-700 mb-2 flex items-center gap-2">
+                  Backlog ({backlog.length})
+                </h3>
+                <p className="text-xs text-gray-400 mb-3">
+                  {lugarFisicoSel
+                    ? `Tareas de ${lugarFisicoSel} sin asignar.`
+                    : 'Todas las tareas sin asignar (selecciona un lugar para filtrar).'}
+                </p>
+                <div className="space-y-2 max-h-[60vh] overflow-y-auto pr-1">
+                  {backlog.length === 0 ? (
+                    <p className="text-xs text-gray-400 italic text-center py-4">
+                      {lugarFisicoSel ? 'No hay tareas pendientes en este lugar.' : 'No hay tareas en backlog.'}
+                    </p>
+                  ) : backlog.map((ot) => (
+                    <DraggableOTCard key={ot.id} ot={ot} disabled={planBloqueado} />
+                  ))}
+                </div>
+              </DroppableContainer>
+
+              {/* Días semana */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-2">
+                {(dias ?? []).map((dia) => {
+                  const otsDia = otsByDia.get(dia.id) ?? []
+                  return (
+                    <DroppableContainer
+                      key={dia.id} id={dia.id}
+                      className="bg-gray-50 rounded-xl border border-gray-200 p-2 min-h-[200px]"
+                    >
+                      <div className="mb-2 px-1">
+                        <div className="text-xs font-bold uppercase text-gray-700">{dia.nombre_dia}</div>
+                        <div className="text-[10px] text-gray-500">{dia.fecha}</div>
+                        <div className="text-[10px] text-amber-700 font-mono">{otsDia.length} OTs</div>
+                      </div>
+                      <div className="space-y-1.5 max-h-[55vh] overflow-y-auto pr-1">
+                        {otsDia.map((ot) => {
+                          const planOt = planOtsByOtId.get(ot.id)
+                          return (
+                            <DraggableOTCard
+                              key={ot.id} ot={ot} compact
+                              responsableId={planOt?.responsable_id ?? null}
+                              comentario={planOt?.observaciones ?? null}
+                              usuarios={usuarios ?? []}
+                              disabled={planBloqueado || planOt?.estado_plan === 'en_ejecucion' || planOt?.estado_plan === 'finalizada'}
+                              onAsignar={(uid) => {
+                                asignarResp.mutate({ planSemanalId, otId: ot.id, responsableId: uid }, {
+                                  onError: (e) => setErrorMsg(e instanceof Error ? e.message : 'Error'),
+                                })
+                              }}
+                              onQuitar={() => {
+                                quitarOT.mutate({ planSemanalId, otId: ot.id }, {
+                                  onError: (e) => setErrorMsg(e instanceof Error ? e.message : 'Error'),
+                                })
+                              }}
+                              onComentar={() => abrirComentario(ot.id)}
+                            />
+                          )
+                        })}
+                      </div>
+                    </DroppableContainer>
+                  )
+                })}
+              </div>
             </div>
-          </DroppableContainer>
 
-          {/* Dias semana */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-2">
-            {(dias ?? []).map((dia) => {
-              const otsDia = otsByDia.get(dia.id) ?? []
-              return (
-                <DroppableContainer
-                  key={dia.id}
-                  id={dia.id}
-                  className="bg-gray-50 rounded-xl border border-gray-200 p-2 min-h-[200px]"
-                >
-                  <div className="mb-2 px-1">
-                    <div className="text-xs font-bold uppercase text-gray-700">{dia.nombre_dia}</div>
-                    <div className="text-[10px] text-gray-500">{dia.fecha}</div>
-                    <div className="text-[10px] text-amber-700 font-mono">{otsDia.length} OTs</div>
-                  </div>
-                  <div className="space-y-1.5 max-h-[55vh] overflow-y-auto pr-1">
-                    {otsDia.map((ot) => {
-                      const planOt = planOtsByOtId.get(ot.id)
-                      return (
-                        <DraggableOTCard
-                          key={ot.id}
-                          ot={ot}
-                          compact
-                          responsableId={planOt?.responsable_id ?? null}
-                          usuarios={usuarios ?? []}
-                          disabled={planBloqueado || planOt?.estado_plan === 'en_ejecucion' || planOt?.estado_plan === 'finalizada'}
-                          onAsignar={(uid) => {
-                            asignarResp.mutate({ planSemanalId, otId: ot.id, responsableId: uid }, {
-                              onError: (e) => setErrorMsg(e instanceof Error ? e.message : 'Error'),
-                            })
-                          }}
-                          onQuitar={() => {
-                            quitarOT.mutate({ planSemanalId, otId: ot.id }, {
-                              onError: (e) => setErrorMsg(e instanceof Error ? e.message : 'Error'),
-                            })
-                          }}
-                        />
-                      )
-                    })}
-                  </div>
-                </DroppableContainer>
-              )
-            })}
-          </div>
+            <DragOverlay>
+              {activeOT ? <OTCardContent ot={activeOT} compact /> : null}
+            </DragOverlay>
+          </DndContext>
+        </>
+      )}
+
+      {tab === 'general' && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center gap-2">
+              <BarChart3 className="h-4 w-4" /> Vista general — {resumenGeneral?.planificacion_codigo ?? '—'}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {!resumenGeneral ? (
+              <p className="text-sm text-gray-400">Cargando…</p>
+            ) : (
+              <>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <KPI title="Lugares físicos"  value={resumenGeneral.total_lugares_fisicos} icon={<Layers className="h-4 w-4" />} />
+                  <KPI title="Total tareas"      value={resumenGeneral.total_tareas} />
+                  <KPI title="Avance promedio"   value={`${resumenGeneral.avance_promedio_pct.toFixed(1)}%`} tone="indigo" />
+                  <KPI title="Plan. esta semana" value={resumenGeneral.tareas_planificadas_semanas} />
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <KPI title="Finalizadas"       value={resumenGeneral.tareas_finalizadas} tone="green" />
+                  <KPI title="En ejecución"      value={resumenGeneral.tareas_en_ejecucion} tone="amber" />
+                  <KPI title="Pendientes"        value={resumenGeneral.tareas_pendientes} />
+                  <KPI title="No ejecutadas"     value={resumenGeneral.tareas_no_ejecutadas} tone={resumenGeneral.tareas_no_ejecutadas > 0 ? 'red' : undefined} />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <KPI title="Sin responsable"   value={resumenGeneral.tareas_sin_responsable} tone={resumenGeneral.tareas_sin_responsable > 0 ? 'amber' : undefined} icon={<User className="h-4 w-4" />} />
+                  <KPI title="Con comentarios"   value={resumenGeneral.tareas_con_comentario} icon={<MessageSquare className="h-4 w-4" />} />
+                </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {tab === 'por_area' && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Layers className="h-4 w-4" /> Vista por lugar físico
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="overflow-x-auto">
+            {!avancePorArea || avancePorArea.length === 0 ? (
+              <p className="text-sm text-gray-400">Sin datos.</p>
+            ) : (
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b bg-gray-50 text-left uppercase text-gray-500">
+                    <th className="px-2 py-2">Cod.</th>
+                    <th className="px-2 py-2">Lugar físico</th>
+                    <th className="px-2 py-2 text-right">Total</th>
+                    <th className="px-2 py-2 text-right">Final.</th>
+                    <th className="px-2 py-2 text-right">Ejec.</th>
+                    <th className="px-2 py-2 text-right">Pend.</th>
+                    <th className="px-2 py-2 text-right">Plan sem.</th>
+                    <th className="px-2 py-2 text-right">Sin resp.</th>
+                    <th className="px-2 py-2 text-right">Coment.</th>
+                    <th className="px-2 py-2 text-right">Avance</th>
+                    <th className="px-2 py-2 text-center">Estado</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {avancePorArea.map((a) => {
+                    const sem = a.tareas_no_ejecutadas > 0 || a.tareas_sin_responsable > 0
+                      ? 'rojo'
+                      : a.tareas_con_comentario > 0 || a.tareas_pendientes > a.tareas_finalizadas
+                      ? 'amarillo'
+                      : 'verde'
+                    return (
+                      <tr key={a.zona_proyecto_id}
+                          className="border-b cursor-pointer hover:bg-amber-50"
+                          onClick={() => { setLugarFisicoSel(a.codigo_zona); setTab('planificacion') }}
+                      >
+                        <td className="px-2 py-1.5 font-mono">{a.codigo_zona}</td>
+                        <td className="px-2 py-1.5">{a.lugar_fisico_nombre}</td>
+                        <td className="px-2 py-1.5 text-right">{a.total_tareas}</td>
+                        <td className="px-2 py-1.5 text-right text-green-700">{a.tareas_finalizadas}</td>
+                        <td className="px-2 py-1.5 text-right text-amber-700">{a.tareas_en_ejecucion}</td>
+                        <td className="px-2 py-1.5 text-right">{a.tareas_pendientes}</td>
+                        <td className="px-2 py-1.5 text-right">{a.tareas_planificadas_semana}</td>
+                        <td className="px-2 py-1.5 text-right">{a.tareas_sin_responsable}</td>
+                        <td className="px-2 py-1.5 text-right">{a.tareas_con_comentario}</td>
+                        <td className="px-2 py-1.5 text-right font-medium">{a.avance_promedio_pct.toFixed(1)}%</td>
+                        <td className="px-2 py-1.5 text-center">
+                          <span className={`inline-block w-3 h-3 rounded-full ${
+                            sem === 'verde' ? 'bg-green-500' : sem === 'amarillo' ? 'bg-amber-400' : 'bg-red-500'
+                          }`} />
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            )}
+          </CardContent>
+          <CardContent className="pt-0 text-xs text-gray-400">
+            Click en un lugar físico para filtrar el Kanban.
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Modal comentario */}
+      <Modal open={!!comentarioOpen} onClose={() => !updateComentario.isPending && setComentarioOpen(null)} title="Comentario de planificación">
+        <div className="space-y-3 text-sm">
+          <p className="text-gray-600">
+            Ej: "Planificada, pero falta material X" / "Falta autorización del mandante" /
+            "Esperando ingreso al área".
+          </p>
+          <textarea
+            value={comentarioTexto}
+            onChange={(e) => setComentarioTexto(e.target.value)}
+            rows={4}
+            className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+            placeholder="Escribe el comentario…"
+          />
         </div>
-
-        <DragOverlay>
-          {activeOT ? <OTCardContent ot={activeOT} compact /> : null}
-        </DragOverlay>
-      </DndContext>
+        <ModalFooter className="-mx-6 -mb-6 mt-4 px-6 pb-6 pt-4 border-t border-gray-100">
+          <Button variant="secondary" onClick={() => setComentarioOpen(null)} disabled={updateComentario.isPending}>
+            <X className="h-4 w-4" /> Cancelar
+          </Button>
+          <Button variant="primary" onClick={guardarComentario} loading={updateComentario.isPending}>
+            <CheckCircle2 className="h-4 w-4" /> Guardar
+          </Button>
+        </ModalFooter>
+      </Modal>
     </div>
   )
 }
@@ -298,9 +501,7 @@ export default function PlanSemanalPage() {
 
 function DroppableContainer({
   id, children, className,
-}: {
-  id: string; children: React.ReactNode; className?: string
-}) {
+}: { id: string; children: React.ReactNode; className?: string }) {
   const { setNodeRef, isOver } = useDroppable({ id })
   return (
     <div ref={setNodeRef} className={`${className ?? ''} ${isOver ? 'ring-2 ring-amber-400' : ''}`}>
@@ -310,31 +511,29 @@ function DroppableContainer({
 }
 
 function DraggableOTCard({
-  ot, compact, responsableId, usuarios, disabled, onAsignar, onQuitar,
+  ot, compact, responsableId, comentario, usuarios, disabled,
+  onAsignar, onQuitar, onComentar,
 }: {
   ot: CalamaOTConRelaciones
   compact?: boolean
   responsableId?: string | null
+  comentario?: string | null
   usuarios?: Array<{ id: string; nombre_completo: string | null }>
   disabled?: boolean
   onAsignar?: (uid: string) => void
   onQuitar?: () => void
+  onComentar?: () => void
 }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: ot.id, disabled })
   return (
-    <div
-      ref={setNodeRef}
-      {...attributes}
-      {...listeners}
+    <div ref={setNodeRef} {...attributes} {...listeners}
       className={`${isDragging ? 'opacity-30' : ''} ${disabled ? 'cursor-not-allowed' : 'cursor-grab active:cursor-grabbing'}`}
     >
       <OTCardContent
-        ot={ot}
-        compact={compact}
-        responsableId={responsableId}
+        ot={ot} compact={compact}
+        responsableId={responsableId} comentario={comentario}
         usuarios={usuarios}
-        onAsignar={onAsignar}
-        onQuitar={onQuitar}
+        onAsignar={onAsignar} onQuitar={onQuitar} onComentar={onComentar}
         disabled={disabled}
       />
     </div>
@@ -342,18 +541,20 @@ function DraggableOTCard({
 }
 
 function OTCardContent({
-  ot, compact, responsableId, usuarios, onAsignar, onQuitar, disabled,
+  ot, compact, responsableId, comentario, usuarios, onAsignar, onQuitar, onComentar, disabled,
 }: {
   ot: CalamaOTConRelaciones
   compact?: boolean
   responsableId?: string | null
+  comentario?: string | null
   usuarios?: Array<{ id: string; nombre_completo: string | null }>
   onAsignar?: (uid: string) => void
   onQuitar?: () => void
+  onComentar?: () => void
   disabled?: boolean
 }) {
   const codigo = excelCodigoFromFolio(ot.folio)
-  const zona = zonaCodeFromFolio(ot.folio)
+  const lugar = zonaCodeFromFolio(ot.folio)
 
   if (compact) {
     return (
@@ -363,10 +564,16 @@ function OTCardContent({
           <EstadoBadge estado={ot.estado} />
         </div>
         <div className="text-gray-900 truncate" title={ot.titulo}>{ot.titulo}</div>
-        <div className="mt-1 flex items-center gap-2 text-[10px] text-gray-500">
-          <span className="inline-flex items-center gap-0.5"><MapPin className="h-3 w-3" />{zona ?? '—'}</span>
+        <div className="mt-1 flex items-center gap-2 text-[10px] text-gray-500 flex-wrap">
+          <span className="inline-flex items-center gap-0.5"><MapPin className="h-3 w-3" />{lugar ?? '—'}</span>
           {ot.horas_estimadas != null && (
             <span className="inline-flex items-center gap-0.5"><Clock className="h-3 w-3" />{ot.horas_estimadas}h</span>
+          )}
+          <span className="inline-flex items-center gap-0.5">{(ot.avance_pct).toFixed(0)}%</span>
+          {comentario && (
+            <span className="inline-flex items-center gap-0.5 text-amber-700" title={comentario}>
+              <MessageSquare className="h-3 w-3" />
+            </span>
           )}
         </div>
         {usuarios && onAsignar && (
@@ -386,17 +593,33 @@ function OTCardContent({
             </select>
           </div>
         )}
-        {onQuitar && (
-          <button
-            onClick={(e) => { e.stopPropagation(); onQuitar() }}
-            onPointerDown={(e) => e.stopPropagation()}
-            disabled={disabled}
-            className="mt-1.5 w-full inline-flex items-center justify-center gap-1 rounded border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] text-red-700 hover:bg-red-100 disabled:opacity-40"
-          >
-            <Trash2 className="h-3 w-3" />
-            Quitar del dia
-          </button>
-        )}
+        <div className="mt-1.5 flex gap-1">
+          {onComentar && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onComentar() }}
+              onPointerDown={(e) => e.stopPropagation()}
+              disabled={disabled}
+              className={`flex-1 inline-flex items-center justify-center gap-1 rounded border px-2 py-0.5 text-[10px] disabled:opacity-40 ${
+                comentario
+                  ? 'border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100'
+                  : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
+              }`}
+            >
+              <MessageSquare className="h-3 w-3" />
+              {comentario ? 'Editar' : 'Comentar'}
+            </button>
+          )}
+          {onQuitar && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onQuitar() }}
+              onPointerDown={(e) => e.stopPropagation()}
+              disabled={disabled}
+              className="inline-flex items-center justify-center gap-1 rounded border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] text-red-700 hover:bg-red-100 disabled:opacity-40"
+            >
+              <Trash2 className="h-3 w-3" />
+            </button>
+          )}
+        </div>
       </div>
     )
   }
@@ -409,14 +632,48 @@ function OTCardContent({
       </div>
       <p className="mt-1 text-gray-900 line-clamp-2" title={ot.titulo}>{ot.titulo}</p>
       <div className="mt-2 flex flex-wrap gap-2 text-xs text-gray-500">
-        <span className="inline-flex items-center gap-1"><MapPin className="h-3 w-3" />Zona {zona ?? '—'}</span>
+        <span className="inline-flex items-center gap-1"><MapPin className="h-3 w-3" />Lugar {lugar ?? '—'}</span>
         {ot.horas_estimadas != null && (
           <span className="inline-flex items-center gap-1"><Clock className="h-3 w-3" />{ot.horas_estimadas}h</span>
         )}
-        {ot.responsable_id && (
-          <span className="inline-flex items-center gap-1"><User className="h-3 w-3" />Resp.</span>
-        )}
+        <span className="font-medium">{(ot.avance_pct).toFixed(0)}%</span>
       </div>
+    </div>
+  )
+}
+
+function Stat({ label, value, tone }: { label: string; value: string | number; tone?: 'green' | 'red' | 'amber' }) {
+  const tones: Record<string, string> = {
+    green: 'text-green-700',
+    red:   'text-red-700',
+    amber: 'text-amber-700',
+  }
+  return (
+    <div className="rounded border border-gray-200 bg-white px-2 py-1">
+      <div className="text-[10px] uppercase text-gray-500">{label}</div>
+      <div className={`text-sm font-semibold ${tone ? tones[tone] : 'text-gray-900'}`}>{value}</div>
+    </div>
+  )
+}
+
+function KPI({
+  title, value, tone = 'gray', icon,
+}: {
+  title: string; value: string | number
+  tone?: 'gray' | 'green' | 'red' | 'amber' | 'indigo'
+  icon?: React.ReactNode
+}) {
+  const colors: Record<string, string> = {
+    gray: 'border-gray-200 text-gray-900',
+    green: 'border-green-200 text-green-700 bg-green-50',
+    red: 'border-red-200 text-red-700 bg-red-50',
+    amber: 'border-amber-200 text-amber-700 bg-amber-50',
+    indigo: 'border-indigo-200 text-indigo-700 bg-indigo-50',
+  }
+  return (
+    <div className={`rounded-xl border bg-white p-3 ${colors[tone]}`}>
+      <div className="flex items-center gap-1.5 text-xs font-medium uppercase opacity-80">{icon}{title}</div>
+      <div className="text-2xl font-bold mt-1">{value}</div>
     </div>
   )
 }

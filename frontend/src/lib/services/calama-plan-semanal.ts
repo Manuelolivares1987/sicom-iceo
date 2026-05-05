@@ -166,6 +166,78 @@ export async function asignarResponsable(planSemanalId: string, otId: string, re
   return { data, error }
 }
 
+export async function actualizarComentarioPlanOT(payload: {
+  planSemanalId: string
+  otId: string
+  observaciones: string
+}) {
+  const { data, error } = await supabase.rpc('rpc_calama_actualizar_comentario_plan_ot', {
+    p_payload: {
+      plan_semanal_id: payload.planSemanalId,
+      ot_id: payload.otId,
+      observaciones: payload.observaciones,
+    },
+  })
+  return { data, error }
+}
+
+// ============================================================================
+// Reportes (vistas SQL — heredan RLS de las tablas base)
+// ============================================================================
+
+export type AvancePorArea = {
+  planificacion_id: string
+  planificacion_codigo: string
+  codigo_zona: string
+  lugar_fisico_nombre: string
+  zona_proyecto_id: string
+  total_tareas: number
+  tareas_finalizadas: number
+  tareas_en_ejecucion: number
+  tareas_pendientes: number
+  tareas_no_ejecutadas: number
+  tareas_planificadas_semana: number
+  tareas_sin_responsable: number
+  tareas_con_comentario: number
+  avance_promedio_pct: number
+}
+
+export type ResumenGeneral = {
+  planificacion_id: string
+  planificacion_codigo: string
+  planificacion_nombre: string
+  linea_negocio: string
+  estado_planificacion: string
+  total_lugares_fisicos: number
+  total_tareas: number
+  tareas_finalizadas: number
+  tareas_en_ejecucion: number
+  tareas_pendientes: number
+  tareas_no_ejecutadas: number
+  tareas_planificadas_semanas: number
+  tareas_sin_responsable: number
+  tareas_con_comentario: number
+  avance_promedio_pct: number
+}
+
+export async function getAvancePorArea(planificacionId: string) {
+  const { data, error } = await supabase
+    .from('v_calama_avance_por_area')
+    .select('*')
+    .eq('planificacion_id', planificacionId)
+    .order('codigo_zona')
+  return { data: (data ?? []) as AvancePorArea[], error }
+}
+
+export async function getResumenGeneral(planificacionId: string) {
+  const { data, error } = await supabase
+    .from('v_calama_resumen_general')
+    .select('*')
+    .eq('planificacion_id', planificacionId)
+    .maybeSingle()
+  return { data: data as ResumenGeneral | null, error }
+}
+
 export async function confirmarPlanSemanal(planSemanalId: string) {
   const { data, error } = await supabase.rpc('rpc_calama_confirmar_plan_semanal', {
     p_plan_semanal_id: planSemanalId,

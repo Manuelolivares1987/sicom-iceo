@@ -4,7 +4,8 @@ import {
   moverOTplanSemanal, quitarOTplanSemanal, asignarResponsable, confirmarPlanSemanal,
   getMisOTsAsignadas, getEjecucionActivaPorOT, getEjecucionesPorOT,
   iniciarEjecucion, pausarEjecucion, reanudarEjecucion, finalizarEjecucion,
-  getUsuariosAsignables,
+  getUsuariosAsignables, actualizarComentarioPlanOT,
+  getAvancePorArea, getResumenGeneral,
 } from '@/lib/services/calama-plan-semanal'
 
 const KEY = {
@@ -129,6 +130,44 @@ export function useAsignarResponsable() {
       qc.invalidateQueries({ queryKey: KEY.otsPlan(vars.planSemanalId) })
       qc.invalidateQueries({ queryKey: KEY.misOts })
     },
+  })
+}
+
+export function useActualizarComentarioPlanOT() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (params: { planSemanalId: string; otId: string; observaciones: string }) => {
+      const { data, error } = await actualizarComentarioPlanOT(params)
+      if (error) throw error
+      return data
+    },
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: KEY.otsPlan(vars.planSemanalId) })
+    },
+  })
+}
+
+export function useAvancePorArea(planificacionId: string | null | undefined) {
+  return useQuery({
+    queryKey: ['calama-avance-area', planificacionId ?? ''],
+    queryFn: async () => {
+      const { data, error } = await getAvancePorArea(planificacionId!)
+      if (error) throw error
+      return data
+    },
+    enabled: !!planificacionId,
+  })
+}
+
+export function useResumenGeneral(planificacionId: string | null | undefined) {
+  return useQuery({
+    queryKey: ['calama-resumen-general', planificacionId ?? ''],
+    queryFn: async () => {
+      const { data, error } = await getResumenGeneral(planificacionId!)
+      if (error) throw error
+      return data
+    },
+    enabled: !!planificacionId,
   })
 }
 
