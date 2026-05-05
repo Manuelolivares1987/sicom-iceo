@@ -17,6 +17,7 @@ import { Spinner } from '@/components/ui/spinner'
 import { Select } from '@/components/ui/select'
 import { Modal, ModalFooter } from '@/components/ui/modal'
 import { useRequireAuth } from '@/hooks/use-require-auth'
+import { useToast } from '@/contexts/toast-context'
 import { useCalamaPlanificaciones, useCalamaOTs, useCalamaZonas } from '@/hooks/use-calama'
 import {
   useGetOrCreatePlanSemanal, usePlanSemanal, useDiasPlanSemanal, useOTsPlanSemanal,
@@ -34,6 +35,7 @@ type Tab = 'planificacion' | 'general' | 'por_area'
 
 export default function PlanSemanalPage() {
   useRequireAuth()
+  const toast = useToast()
 
   const { data: planificaciones } = useCalamaPlanificaciones()
   const [planificacionId, setPlanificacionId] = useState<string>('')
@@ -132,7 +134,11 @@ export default function PlanSemanalPage() {
     if (overId === BACKLOG_ID) {
       if (!planOtsByOtId.has(otId)) return
       quitarOT.mutate({ planSemanalId, otId }, {
-        onError: (err) => setErrorMsg(err instanceof Error ? err.message : 'Error al quitar OT'),
+        onSuccess: () => toast.success('OT devuelta al backlog'),
+        onError: (err) => {
+          const msg = err instanceof Error ? err.message : 'Error al quitar OT'
+          setErrorMsg(msg); toast.error(msg)
+        },
       })
       return
     }
@@ -140,7 +146,11 @@ export default function PlanSemanalPage() {
     const dia = dias?.find((d) => d.id === overId)
     if (!dia) return
     moverOT.mutate({ planSemanalId, otId, fechaDestino: dia.fecha }, {
-      onError: (err) => setErrorMsg(err instanceof Error ? err.message : 'Error al mover OT'),
+      onSuccess: () => toast.success(`OT planificada para ${dia.nombre_dia} ${dia.fecha}`),
+      onError: (err) => {
+        const msg = err instanceof Error ? err.message : 'Error al mover OT'
+        setErrorMsg(msg); toast.error(msg)
+      },
     })
   }
 
@@ -148,7 +158,11 @@ export default function PlanSemanalPage() {
     if (!planSemanalId) return
     if (!confirm('¿Confirmar plan semanal? Las OTs quedaran disponibles para los responsables.')) return
     confirmarPlan.mutate(planSemanalId, {
-      onError: (e) => setErrorMsg(e instanceof Error ? e.message : 'Error al confirmar'),
+      onSuccess: () => toast.success('Plan semanal confirmado'),
+      onError: (e) => {
+        const msg = e instanceof Error ? e.message : 'Error al confirmar'
+        setErrorMsg(msg); toast.error(msg)
+      },
     })
   }
 
@@ -172,9 +186,11 @@ export default function PlanSemanalPage() {
     if (!comentarioOpen || !planSemanalId) return
     try {
       await updateComentario.mutateAsync({ planSemanalId, otId: comentarioOpen, observaciones: comentarioTexto })
+      toast.success('Comentario guardado')
       setComentarioOpen(null)
     } catch (e) {
-      setErrorMsg(e instanceof Error ? e.message : 'Error al guardar comentario')
+      const msg = e instanceof Error ? e.message : 'Error al guardar comentario'
+      setErrorMsg(msg); toast.error(msg)
     }
   }
 
@@ -202,9 +218,11 @@ export default function PlanSemanalPage() {
         motivo: avanceMotivo,
         comentario: avanceComentario || undefined,
       })
+      toast.success(`Avance actualizado a ${avanceValor}%`)
       setAvanceOpen(null)
     } catch (e) {
-      setErrorMsg(e instanceof Error ? e.message : 'Error al guardar avance')
+      const msg = e instanceof Error ? e.message : 'Error al guardar avance'
+      setErrorMsg(msg); toast.error(msg)
     }
   }
 
@@ -277,6 +295,33 @@ export default function PlanSemanalPage() {
           <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
           <span>{errorMsg}</span>
           <button className="ml-auto text-red-700" onClick={() => setErrorMsg(null)}><X className="h-4 w-4" /></button>
+        </div>
+      )}
+
+      {/* Banner de estado de guardado / plan confirmado */}
+      {planSem && (
+        <div className={`rounded-lg border p-2 text-xs flex items-center justify-between gap-2 ${
+          planSem.estado === 'borrador'
+            ? 'border-blue-200 bg-blue-50 text-blue-800'
+            : planSem.estado === 'confirmado'
+            ? 'border-green-200 bg-green-50 text-green-800'
+            : 'border-gray-200 bg-gray-50 text-gray-700'
+        }`}>
+          <span className="flex items-center gap-2">
+            {(asignarResp.isPending || moverOT.isPending || quitarOT.isPending || updateComentario.isPending) ? (
+              <>
+                <Spinner className="h-3 w-3" />
+                <span>Guardando…</span>
+              </>
+            ) : (
+              <>
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                <span>
+                  Plan {planSem.estado}. Los cambios (responsable, comentario, mover OT) se guardan automaticamente.
+                </span>
+              </>
+            )}
+          </span>
         </div>
       )}
 
@@ -379,13 +424,30 @@ export default function PlanSemanalPage() {
                               usuarios={usuarios ?? []}
                               disabled={planBloqueado || planOt?.estado_plan === 'en_ejecucion' || planOt?.estado_plan === 'finalizada'}
                               onAsignar={(uid) => {
-                                asignarResp.mutate({ planSemanalId, otId: ot.id, responsableId: uid }, {
-                                  onError: (e) => setErrorMsg(e instanceof Error ? e.message : 'Error'),
-                                })
+                                const u = (usuarios ?? []).find((x) => x.id === uid)
+                                const nombre = u?.nombre_completo || u?.email || 'usuario'
+                                asignarResp.mutate(
+                                  { planSemanalId, otId: ot.id, responsableId: uid },
+                                  {
+                                    onSuccess: () => {
+                                      toast.success(`Responsable actualizado: ${nombre}`)
+                                    },
+                                    onError: (e) => {
+                                      const msg = e instanceof Error ? e.message : 'Error al asignar responsable'
+                                      setErrorMsg(msg)
+                                      toast.error(msg)
+                                    },
+                                  },
+                                )
                               }}
                               onQuitar={() => {
                                 quitarOT.mutate({ planSemanalId, otId: ot.id }, {
-                                  onError: (e) => setErrorMsg(e instanceof Error ? e.message : 'Error'),
+                                  onSuccess: () => toast.success('OT quitada del dia'),
+                                  onError: (e) => {
+                                    const msg = e instanceof Error ? e.message : 'Error al quitar OT'
+                                    setErrorMsg(msg)
+                                    toast.error(msg)
+                                  },
                                 })
                               }}
                               onComentar={() => abrirComentario(ot.id)}
@@ -712,14 +774,17 @@ function OTCardContent({
           )}
         </div>
         {usuarios && onAsignar && (
-          <div className="mt-1.5">
+          <div className="mt-1.5 flex items-center gap-1">
             <select
               value={responsableId ?? ''}
               onChange={(e) => e.target.value && onAsignar(e.target.value)}
               onPointerDown={(e) => e.stopPropagation()}
               onPointerUp={(e) => e.stopPropagation()}
               disabled={disabled}
-              className="w-full rounded border border-gray-200 px-1.5 py-1 text-[10px] bg-white"
+              className={`flex-1 rounded border px-1.5 py-1 text-[10px] bg-white ${
+                responsableId ? 'border-green-300 ring-1 ring-green-100' : 'border-gray-200'
+              }`}
+              title={responsableId ? 'Responsable asignado (auto-guardado)' : 'Selecciona un responsable'}
             >
               <option value="">Asignar responsable…</option>
               {usuarios.map((u) => (
@@ -729,6 +794,9 @@ function OTCardContent({
                 </option>
               ))}
             </select>
+            {responsableId && (
+              <CheckCircle2 className="h-3 w-3 text-green-600 shrink-0" aria-label="guardado" />
+            )}
           </div>
         )}
         <div className="mt-1.5 flex gap-1">
