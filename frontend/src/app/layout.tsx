@@ -15,6 +15,12 @@ export const metadata: Metadata = {
     statusBarStyle: 'default',
     title: 'SICOM',
   },
+  // Meta moderno (no deprecated). Apple sigue requiriendo apple-mobile-web-app-capable
+  // que Next.js inyecta via appleWebApp arriba; mobile-web-app-capable es el equivalente
+  // estandar para Chrome/Edge y reemplaza al deprecated.
+  other: {
+    'mobile-web-app-capable': 'yes',
+  },
   formatDetection: {
     telephone: false,
   },
