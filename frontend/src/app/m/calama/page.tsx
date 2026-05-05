@@ -8,6 +8,7 @@ import {
 } from 'lucide-react'
 import { Spinner } from '@/components/ui/spinner'
 import { useAuth } from '@/contexts/auth-context'
+import { usePermissions } from '@/hooks/use-permissions'
 import { useMisOTsAsignadas } from '@/hooks/use-calama-plan-semanal'
 import { useCalamaOTs } from '@/hooks/use-calama'
 import { useQueryClient } from '@tanstack/react-query'
@@ -45,6 +46,8 @@ function endOfWeekISO(): string {
 
 export default function MobileCalamaPage() {
   const { perfil, signOut } = useAuth()
+  const { rol } = usePermissions()
+  const esAdminOPlanificador = ['administrador', 'gerencia', 'subgerente_operaciones', 'supervisor', 'planificador', 'jefe_operaciones'].includes(rol ?? '')
   const qc = useQueryClient()
   const { data: planOts, isLoading } = useMisOTsAsignadas()
   const { data: ots } = useCalamaOTs()
@@ -170,9 +173,34 @@ export default function MobileCalamaPage() {
           <div className="rounded-xl border border-gray-200 bg-white p-6 text-center">
             <ClipboardCheck className="mx-auto h-10 w-10 text-gray-300" />
             <p className="mt-3 font-medium text-gray-700">No tienes OTs asignadas</p>
-            <p className="mt-1 text-sm text-gray-500">
-              Contacta a tu supervisor o planificador para que te asigne tareas.
-            </p>
+            {esAdminOPlanificador ? (
+              <>
+                <p className="mt-1 text-sm text-gray-500">
+                  Esta vista muestra solo OTs asignadas a tu usuario.
+                </p>
+                <p className="mt-2 text-xs text-gray-400">
+                  Como <span className="font-mono">{rol}</span>, gestiona desde:
+                </p>
+                <div className="mt-2 flex flex-col gap-1.5 items-stretch">
+                  <Link
+                    href="/dashboard/operacion-calama/plan-semanal"
+                    className="rounded bg-amber-600 text-white px-3 py-2 text-sm font-medium"
+                  >
+                    Plan semanal
+                  </Link>
+                  <Link
+                    href="/dashboard/operacion-calama/ots"
+                    className="rounded border border-gray-300 px-3 py-2 text-sm text-gray-700"
+                  >
+                    Ordenes Calama (todas)
+                  </Link>
+                </div>
+              </>
+            ) : (
+              <p className="mt-1 text-sm text-gray-500">
+                Contacta a tu supervisor o planificador para que te asigne tareas.
+              </p>
+            )}
           </div>
         )}
 
