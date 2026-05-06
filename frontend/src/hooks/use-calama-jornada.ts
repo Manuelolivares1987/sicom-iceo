@@ -20,7 +20,16 @@ function invalidateOtAndPlanCaches(qc: ReturnType<typeof useQueryClient>, otId: 
   qc.invalidateQueries({ queryKey: ['calama-mis-ots'] })
   qc.invalidateQueries({ queryKey: ['calama-ejec-activa', otId] })
   qc.invalidateQueries({ queryKey: ['calama-ejec', otId] })
-  if (planSemanalId) qc.invalidateQueries({ queryKey: ['calama-plan-sem-ots', planSemanalId] })
+  // Invalidar TODAS las OTs Calama (lista) y queries de avance/reportes.
+  qc.invalidateQueries({ queryKey: ['calama-ots'] })
+  qc.invalidateQueries({ queryKey: ['calama-avance-area'] })
+  qc.invalidateQueries({ queryKey: ['calama-resumen-general'] })
+  if (planSemanalId) {
+    qc.invalidateQueries({ queryKey: ['calama-plan-sem-ots', planSemanalId] })
+    // Forzar refetch inmediato (no esperar a que un componente lo gatille).
+    qc.refetchQueries({ queryKey: ['calama-plan-sem-ots', planSemanalId], type: 'active' })
+  }
+  qc.refetchQueries({ queryKey: ['calama-mis-ots'], type: 'active' })
 }
 
 // ── Queries ──────────────────────────────────────────────────────────────────

@@ -146,6 +146,24 @@ export default function MobileOTDetallePage() {
       </div>
     )
   }
+  // Si misOts ya cargo y NO hay jornada activa para este ot_id (puede haber sido
+  // sacada del programa, anulada o cancelada por admin), bloquear ejecucion.
+  if (misOts !== undefined && planOt === null && !esMandante) {
+    return (
+      <div className="p-4 text-center space-y-3">
+        <AlertTriangle className="h-10 w-10 text-amber-500 mx-auto" />
+        <p className="text-sm text-gray-900">
+          Esta jornada fue <strong>sacada del programa</strong> y ya no esta disponible para ejecucion.
+        </p>
+        <p className="text-xs text-gray-500">
+          Habla con tu supervisor si crees que esto es un error.
+        </p>
+        <button onClick={() => router.push('/m/calama')} className="rounded bg-amber-600 px-4 py-2 text-white text-sm">
+          Volver a mis jornadas
+        </button>
+      </div>
+    )
+  }
 
   const codigo = excelCodigoFromFolio(ot.folio)
   const lugar = zonaCodeFromFolio(ot.folio)

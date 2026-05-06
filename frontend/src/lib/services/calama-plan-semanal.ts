@@ -37,6 +37,8 @@ export type EstadoPlanOT =
   // PRO terreno (MIG29)
   | 'descargada_offline' | 'finalizada_operador' | 'pendiente_aprobacion'
   | 'aceptada' | 'rechazada' | 'requiere_correccion' | 'reprogramada' | 'cerrada'
+  // Acciones admin (MIG32)
+  | 'desprogramada' | 'anulada_prueba' | 'cancelada_operacional'
 
 export type CalamaPlanOT = {
   id: string
@@ -54,9 +56,41 @@ export type CalamaPlanOT = {
   secuencia_jornada: number | null
   reprogramada_desde_id: string | null
   motivo_reprogramacion: string | null
+  // MIG32: acciones admin + llegada faena
+  visible_en_kanban: boolean | null
+  requiere_decision_programador: boolean | null
+  desprogramada_at: string | null
+  desprogramada_by: string | null
+  motivo_desprogramacion: string | null
+  observacion_desprogramacion: string | null
+  anulada_at: string | null
+  anulada_by: string | null
+  motivo_anulacion: string | null
+  es_prueba: boolean | null
+  llegada_faena_at: string | null
+  llegada_faena_usuario_id: string | null
+  llegada_faena_evidencia_id: string | null
+  llegada_faena_lat: number | null
+  llegada_faena_lng: number | null
+  llegada_faena_accuracy: number | null
+  llegada_faena_geo_status: string | null
   created_by: string | null
   created_at: string
   updated_at: string
+}
+
+// Estados de jornada que deben quedar OCULTOS en Kanban activo y en /m/calama.
+export const ESTADOS_JORNADA_OCULTAS: EstadoPlanOT[] = [
+  'desprogramada','anulada_prueba','cancelada_operacional','no_ejecutada','reprogramada',
+]
+
+// Predicado: ¿la jornada esta activa (visible en Kanban + mobile)?
+export function jornadaActiva(p: CalamaPlanOT | { estado_plan: EstadoPlanOT; visible_en_kanban?: boolean | null; desprogramada_at?: string | null; anulada_at?: string | null }): boolean {
+  if (p.visible_en_kanban === false) return false
+  if (p.desprogramada_at) return false
+  if (p.anulada_at) return false
+  if (ESTADOS_JORNADA_OCULTAS.includes(p.estado_plan)) return false
+  return true
 }
 
 export type CalamaEjecucion = {
@@ -305,7 +339,9 @@ export async function getMisOTsAsignadas(opts?: { todas?: boolean }) {
   const { data: planOts, error } = await query
   if (error) return { data: null, error }
 
-  const jornadas = (planOts ?? []) as CalamaPlanOT[]
+  // MIG32: nunca mostrar jornadas desprogramadas/anuladas/canceladas en mobile.
+  const jornadasRaw = (planOts ?? []) as CalamaPlanOT[]
+  const jornadas = jornadasRaw.filter(jornadaActiva)
   if (jornadas.length === 0) return { data: [] as CalamaJornadaAsignada[], error: null }
 
   // 2) Resolver fechas/dias desde calama_plan_semanal_dias por plan_dia_id

@@ -33,7 +33,7 @@ import {
   useResetearJornadaPrueba, useEliminarJornadaPrueba,
 } from '@/hooks/use-calama-jornada'
 import { usePermissions } from '@/hooks/use-permissions'
-import { lunesDe } from '@/lib/services/calama-plan-semanal'
+import { lunesDe, jornadaActiva } from '@/lib/services/calama-plan-semanal'
 import { zonaCodeFromFolio, excelCodigoFromFolio, type CalamaOTConRelaciones } from '@/lib/services/calama'
 import { EstadoBadge } from '@/components/calama/gantt-table'
 
@@ -145,29 +145,33 @@ export default function PlanSemanalPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [planificacionId, semanaIso])
 
-  const planOtsByOtId = useMemo(() => new Map((planOts ?? []).map((p) => [p.ot_id, p])), [planOts])
+  // Solo cuenta como "ya en plan" si la jornada esta ACTIVA. Una OT cuyas
+  // unicas jornadas estan desprogramadas/anuladas debe volver al backlog.
+  const planOtsActivasByOtId = useMemo(
+    () => new Map((planOts ?? []).filter(jornadaActiva).map((p) => [p.ot_id, p])),
+    [planOts],
+  )
+  const planOtsByOtId = planOtsActivasByOtId
   const otsById = useMemo(() => new Map((ots ?? []).map((o) => [o.id, o])), [ots])
 
-  // OTs filtradas por lugar físico (cuando hay selección)
   const otsLugar = useMemo(() => {
     if (!ots) return []
     if (!lugarFisicoSel) return ots
     return ots.filter((o) => zonaCodeFromFolio(o.folio) === lugarFisicoSel)
   }, [ots, lugarFisicoSel])
 
-  // Backlog = OTs del lugar (o todas) que NO están en plan
+  // Backlog = OTs del lugar (o todas) que NO tengan jornada ACTIVA en el plan.
   const backlog = useMemo(() => {
-    return otsLugar.filter((o) => !planOtsByOtId.has(o.id) && o.estado !== 'finalizada' && o.estado !== 'cancelada')
-  }, [otsLugar, planOtsByOtId])
+    return otsLugar.filter((o) => !planOtsActivasByOtId.has(o.id) && o.estado !== 'finalizada' && o.estado !== 'cancelada')
+  }, [otsLugar, planOtsActivasByOtId])
 
   const otsByDia = useMemo(() => {
     const m = new Map<string, CalamaOTConRelaciones[]>()
     for (const dia of dias ?? []) m.set(dia.id, [])
     for (const p of planOts ?? []) {
-      // MIG32: ocultar jornadas marcadas visible_en_kanban=false (anuladas, canceladas, desprogramadas
-      // a destino "desprogramada" sin requiere_decision).
-      const v = (p as { visible_en_kanban?: boolean | null }).visible_en_kanban
-      if (v === false) continue
+      // MIG32: defensa profunda - oculta desprogramadas / anuladas / canceladas /
+      // no_ejecutada / reprogramada / visible_en_kanban=false / desprogramada_at|anulada_at!=null.
+      if (!jornadaActiva(p)) continue
       const ot = otsById.get(p.ot_id)
       if (!ot) continue
       if (lugarFisicoSel && zonaCodeFromFolio(ot.folio) !== lugarFisicoSel) continue
