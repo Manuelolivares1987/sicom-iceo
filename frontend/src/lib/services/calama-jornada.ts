@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase'
 
 export type FirmanteTipo = 'operador' | 'mandante' | 'supervisor'
 export type FirmaContexto = 'inicio' | 'cierre_operador' | 'aceptacion' | 'rechazo'
-export type EvidenciaMomento = 'antes' | 'durante' | 'despues' | 'rechazo' | 'firma' | 'generico'
+export type EvidenciaMomento = 'antes' | 'durante' | 'despues' | 'rechazo' | 'firma' | 'generico' | 'interferencia'
 
 export type CalamaFirmaJornada = {
   id: string
@@ -60,22 +60,40 @@ export type CalamaEvidenciaPro = {
 // Helpers de geolocalizacion + uploads
 // ============================================================================
 
-export async function tryGeolocate(): Promise<{ lat: number | null; lng: number | null }> {
+export type GeoStatus = 'granted' | 'denied' | 'unavailable' | 'error'
+export type GeoFix = {
+  lat: number | null
+  lng: number | null
+  accuracy: number | null
+  status: GeoStatus
+}
+
+export async function tryGeolocate(): Promise<GeoFix> {
   if (typeof navigator === 'undefined' || !navigator.geolocation) {
-    return { lat: null, lng: null }
+    return { lat: null, lng: null, accuracy: null, status: 'unavailable' }
   }
   return new Promise((resolve) => {
-    const timeout = setTimeout(() => resolve({ lat: null, lng: null }), 4000)
+    const timeout = setTimeout(
+      () => resolve({ lat: null, lng: null, accuracy: null, status: 'error' }),
+      8000,
+    )
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         clearTimeout(timeout)
-        resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude })
+        resolve({
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+          accuracy: pos.coords.accuracy ?? null,
+          status: 'granted',
+        })
       },
-      () => {
+      (err) => {
         clearTimeout(timeout)
-        resolve({ lat: null, lng: null })
+        // GeolocationPositionError.PERMISSION_DENIED = 1
+        const status: GeoStatus = err && err.code === 1 ? 'denied' : 'error'
+        resolve({ lat: null, lng: null, accuracy: null, status })
       },
-      { enableHighAccuracy: false, timeout: 4000, maximumAge: 60_000 },
+      { enableHighAccuracy: true, timeout: 7000, maximumAge: 30_000 },
     )
   })
 }
@@ -132,32 +150,35 @@ export function genClientUuid(): string {
 
 type RpcResult<T = unknown> = { data: T | null; error: unknown }
 
+type GeoFields = {
+  gps_lat?: number | null
+  gps_lng?: number | null
+  gps_accuracy?: number | null
+  geolocation_status?: GeoStatus
+}
+
 export async function rpcIniciarJornada(payload: {
   plan_semanal_ot_id: string
   foto_antes_url: string
   foto_antes_storage_path: string
-  gps_lat?: number | null
-  gps_lng?: number | null
   observacion?: string
   client_uuid_evidencia?: string
   client_uuid_ejecucion?: string
-}): Promise<RpcResult> {
+} & GeoFields): Promise<RpcResult> {
   const { data, error } = await supabase.rpc('rpc_calama_iniciar_jornada', { p_payload: payload })
   return { data, error }
 }
 
 export async function rpcRegistrarEventoJornada(payload: {
   plan_semanal_ot_id: string
-  tipo: 'pause' | 'resume' | 'avance' | 'comentario' | 'foto_durante'
+  tipo: 'pause' | 'resume' | 'avance' | 'comentario' | 'foto_durante' | 'interferencia'
   motivo?: string
   comentario?: string
   avance?: number
   foto_url?: string
   foto_storage_path?: string
-  gps_lat?: number | null
-  gps_lng?: number | null
   client_uuid?: string
-}): Promise<RpcResult> {
+} & GeoFields): Promise<RpcResult> {
   const { data, error } = await supabase.rpc('rpc_calama_registrar_evento_jornada', { p_payload: payload })
   return { data, error }
 }
@@ -170,11 +191,9 @@ export async function rpcFinalizarJornada(payload: {
   firma_operador_url: string
   firma_operador_storage_path: string
   observacion?: string
-  gps_lat?: number | null
-  gps_lng?: number | null
   client_uuid_foto?: string
   client_uuid_firma?: string
-}): Promise<RpcResult> {
+} & GeoFields): Promise<RpcResult> {
   const { data, error } = await supabase.rpc('rpc_calama_finalizar_jornada', { p_payload: payload })
   return { data, error }
 }
@@ -186,10 +205,8 @@ export async function rpcRegistrarAceptacionJornada(payload: {
   firmante_nombre?: string
   firmante_rut?: string
   observacion?: string
-  gps_lat?: number | null
-  gps_lng?: number | null
   client_uuid?: string
-}): Promise<RpcResult> {
+} & GeoFields): Promise<RpcResult> {
   const { data, error } = await supabase.rpc('rpc_calama_registrar_aceptacion_jornada', { p_payload: payload })
   return { data, error }
 }
@@ -203,11 +220,9 @@ export async function rpcRegistrarRechazoJornada(payload: {
   firma_mandante_storage_path: string
   firmante_nombre?: string
   observacion?: string
-  gps_lat?: number | null
-  gps_lng?: number | null
   client_uuid_rechazo?: string
   client_uuid_firma?: string
-}): Promise<RpcResult> {
+} & GeoFields): Promise<RpcResult> {
   const { data, error } = await supabase.rpc('rpc_calama_registrar_rechazo_jornada', { p_payload: payload })
   return { data, error }
 }

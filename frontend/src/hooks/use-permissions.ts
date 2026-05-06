@@ -1,6 +1,6 @@
 'use client'
 
-import { useAuth } from '@/contexts/auth-context'
+import { useAuth, type RolCalama } from '@/contexts/auth-context'
 import type { RolUsuario } from '@/types/database'
 
 export type Module = 'contratos' | 'activos' | 'ordenes_trabajo' | 'inventario' | 'mantenimiento' | 'abastecimiento' | 'cumplimiento' | 'kpi' | 'iceo' | 'reportes' | 'auditoria' | 'admin' | 'flota' | 'prevencion' | 'comercial' | 'reporte_diario'
@@ -300,12 +300,37 @@ const PERMISSIONS: Record<RolUsuario, Record<Module, Permission[]>> = {
   },
 }
 
+// Roles Calama que dan acceso al modulo Operacion Calama (UI dashboard).
+const ROLES_CALAMA_DASHBOARD: RolCalama[] = [
+  'jefe_sucursal', 'planificador_calama', 'supervisor_calama', 'auditor_calama',
+]
+
 export function usePermissions() {
-  const { perfil } = useAuth()
+  const { perfil, rolCalama } = useAuth()
   const rol = perfil?.rol as RolUsuario | undefined
+
+  // Es operador Calama "puro": rol global no es admin/supervisor y rol Calama es operador_calama.
+  // Para este usuario el sistema bloquea TODO lo demas y lo deja solo en /m/calama.
+  function esOperadorCalamaSolo(): boolean {
+    if (rolCalama !== 'operador_calama') return false
+    if (!rol) return true
+    // Si tambien es administrador o supervisor global, no aplicamos el bloqueo.
+    const rolesQueRompenBloqueo: RolUsuario[] = [
+      'administrador','gerencia','subgerente_operaciones','supervisor','planificador',
+      'jefe_operaciones','jefe_mantenimiento',
+    ]
+    return !rolesQueRompenBloqueo.includes(rol)
+  }
+
+  function tieneRolCalama(): boolean { return rolCalama !== null }
+  function tieneAccesoDashboardCalama(): boolean {
+    return !!rolCalama && ROLES_CALAMA_DASHBOARD.includes(rolCalama)
+  }
 
   function can(module: Module, permission: Permission): boolean {
     if (!rol) return false
+    // Override duro: operador_calama puro NO tiene permisos de modulos generales.
+    if (esOperadorCalamaSolo()) return false
     const modulePerms = PERMISSIONS[rol]?.[module]
     return modulePerms?.includes(permission) ?? false
   }
@@ -321,16 +346,29 @@ export function usePermissions() {
   function isSupervisor(): boolean { return rol === 'supervisor' || rol === 'subgerente_operaciones' }
   function isReadOnly(): boolean { return rol === 'gerencia' || rol === 'auditor' || rol === 'rrhh_incentivos' }
 
-  // Get visible sidebar modules for current role
   function getVisibleModules(): Module[] {
     if (!rol) return []
+    if (esOperadorCalamaSolo()) return []
     return (Object.keys(PERMISSIONS[rol]) as Module[]).filter(m => PERMISSIONS[rol][m].includes('view'))
   }
 
   function canViewExtended(mod: ExtendedModule): boolean {
     if (!rol) return false
-    return EXTENDED_VIEW[mod]?.includes(rol) ?? false
+    // Operador Calama puro accede solo al modulo extendido operacion_calama.
+    if (esOperadorCalamaSolo()) return mod === 'operacion_calama'
+    // Acceso por rol global (matriz EXTENDED_VIEW).
+    if (EXTENDED_VIEW[mod]?.includes(rol)) return true
+    // Acceso por rol Calama del proyecto: cualquier rol_calama da acceso al dashboard Calama.
+    if (mod === 'operacion_calama' && tieneAccesoDashboardCalama()) return true
+    return false
   }
 
-  return { can, canView, canCreate, canEdit, canDelete, canApprove, canExport, canViewExtended, isAdmin, isSupervisor, isReadOnly, getVisibleModules, rol }
+  return {
+    can, canView, canCreate, canEdit, canDelete, canApprove, canExport,
+    canViewExtended,
+    isAdmin, isSupervisor, isReadOnly,
+    getVisibleModules,
+    rol, rolCalama,
+    esOperadorCalamaSolo, tieneRolCalama, tieneAccesoDashboardCalama,
+  }
 }

@@ -20,20 +20,30 @@ import {
 } from '@/hooks/use-calama-jornada'
 import { usePermissions } from '@/hooks/use-permissions'
 import { excelCodigoFromFolio, zonaCodeFromFolio } from '@/lib/services/calama'
-import { tryGeolocate, genClientUuid } from '@/lib/services/calama-jornada'
+import { tryGeolocate, genClientUuid, type GeoFix } from '@/lib/services/calama-jornada'
 import { PhotoCapture, type PhotoCaptureResult } from '@/components/calama/photo-capture'
 import { FirmaCapture, type FirmaCaptureResult } from '@/components/calama/firma-capture'
+import { GeoStatus } from '@/components/calama/geo-status'
 
 const MOTIVOS_PAUSA: Array<{ value: string; label: string }> = [
   { value: 'colacion',                label: 'Colacion' },
   { value: 'espera_autorizacion',     label: 'Espera autorizacion' },
   { value: 'falta_material',          label: 'Falta material' },
   { value: 'falta_herramienta',       label: 'Falta herramienta' },
-  { value: 'interferencia_mandante',  label: 'Interferencia mandante' },
   { value: 'traslado',                label: 'Traslado' },
   { value: 'clima',                   label: 'Clima' },
   { value: 'condicion_insegura',      label: 'Condicion insegura' },
   { value: 'otro',                    label: 'Otro' },
+]
+
+const TIPOS_INTERFERENCIA: Array<{ value: string; label: string }> = [
+  { value: 'area_no_liberada',           label: 'Area no liberada' },
+  { value: 'espera_autorizacion',        label: 'Espera autorizacion' },
+  { value: 'interferencia_operacional',  label: 'Interferencia operacional' },
+  { value: 'falta_permiso_ingreso',      label: 'Falta permiso ingreso' },
+  { value: 'area_ocupada_mandante',      label: 'Area ocupada por mandante' },
+  { value: 'cambio_prioridad_mandante',  label: 'Cambio de prioridad mandante' },
+  { value: 'otro_mandante',              label: 'Otro' },
 ]
 
 type Paso = 'preparar' | 'ejecutar' | 'cerrar' | 'aceptacion' | 'cerrada' | 'rechazada'
@@ -77,6 +87,14 @@ export default function MobileOTDetallePage() {
   const [showMotivos, setShowMotivos] = useState(false)
   const [obsCierre, setObsCierre] = useState('')
   const [pasoForzado, setPasoForzado] = useState<Paso | null>(null)
+  const [geoFix, setGeoFix] = useState<GeoFix>({ lat: null, lng: null, accuracy: null, status: 'unavailable' })
+
+  // Interferencia mandante
+  const [showInterferencia, setShowInterferencia] = useState(false)
+  const [interfTipo, setInterfTipo] = useState<string>('area_no_liberada')
+  const [interfObs, setInterfObs] = useState<string>('')
+  const [interfQuienInforma, setInterfQuienInforma] = useState<string>('')
+  const [interfFoto, setInterfFoto] = useState<PhotoCaptureResult | null>(null)
 
   // Capturas
   const [fotoAntes, setFotoAntes] = useState<PhotoCaptureResult | null>(null)
@@ -134,18 +152,27 @@ export default function MobileOTDetallePage() {
 
   // ── Handlers PRO terreno ──────────────────────────────────────────────────
 
+  const refreshGeo = async (): Promise<GeoFix> => {
+    const f = await tryGeolocate()
+    setGeoFix(f)
+    return f
+  }
+
   const handleIniciar = async () => {
     if (!planOtId) { toast.error('No hay jornada asignada a esta OT'); return }
     if (!fotoAntes) { toast.error('Foto ANTES obligatoria'); return }
     try {
+      const geo = await refreshGeo()
       await iniciar.mutateAsync({
         plan_semanal_ot_id: planOtId,
         ot_id: ot.id,
         plan_semanal_id: planSemanalId,
         foto_antes_url: fotoAntes.url,
         foto_antes_storage_path: fotoAntes.storage_path,
-        gps_lat: fotoAntes.lat,
-        gps_lng: fotoAntes.lng,
+        gps_lat: geo.lat ?? fotoAntes.lat,
+        gps_lng: geo.lng ?? fotoAntes.lng,
+        gps_accuracy: geo.accuracy,
+        geolocation_status: geo.status,
         client_uuid_evidencia: genClientUuid(),
         client_uuid_ejecucion: genClientUuid(),
       })
@@ -160,11 +187,13 @@ export default function MobileOTDetallePage() {
     if (!planOtId) return
     setShowMotivos(false)
     try {
+      const geo = await refreshGeo()
       await evento.mutateAsync({
         plan_semanal_ot_id: planOtId,
         ot_id: ot.id,
         plan_semanal_id: planSemanalId,
         tipo: 'pause', motivo,
+        gps_lat: geo.lat, gps_lng: geo.lng, gps_accuracy: geo.accuracy, geolocation_status: geo.status,
         client_uuid: genClientUuid(),
       })
       toast.info(`Pausada: ${motivo}`)
@@ -174,11 +203,13 @@ export default function MobileOTDetallePage() {
   const handleReanudar = async () => {
     if (!planOtId) return
     try {
+      const geo = await refreshGeo()
       await evento.mutateAsync({
         plan_semanal_ot_id: planOtId,
         ot_id: ot.id,
         plan_semanal_id: planSemanalId,
         tipo: 'resume',
+        gps_lat: geo.lat, gps_lng: geo.lng, gps_accuracy: geo.accuracy, geolocation_status: geo.status,
         client_uuid: genClientUuid(),
       })
       toast.success('Reanudada')
@@ -188,23 +219,57 @@ export default function MobileOTDetallePage() {
   const handleGuardarAvance = async () => {
     if (!planOtId) return
     try {
+      const geo = await refreshGeo()
       await evento.mutateAsync({
         plan_semanal_ot_id: planOtId,
         ot_id: ot.id,
         plan_semanal_id: planSemanalId,
         tipo: 'avance', avance: avanceValor,
+        gps_lat: geo.lat, gps_lng: geo.lng, gps_accuracy: geo.accuracy, geolocation_status: geo.status,
         client_uuid: genClientUuid(),
       })
       toast.success(`Avance: ${avanceValor}%`)
     } catch (e) { toast.error(e instanceof Error ? e.message : 'Error al guardar') }
   }
 
+  const handleRegistrarInterferencia = async () => {
+    if (!planOtId) return
+    if (!interfObs.trim()) { toast.error('Observacion obligatoria'); return }
+    try {
+      const geo = await refreshGeo()
+      const motivo = `interferencia_mandante:${interfTipo}`
+      const comentario = [
+        `Tipo: ${interfTipo}`,
+        interfQuienInforma ? `Informa: ${interfQuienInforma}` : null,
+        interfObs,
+      ].filter(Boolean).join(' | ')
+      await evento.mutateAsync({
+        plan_semanal_ot_id: planOtId,
+        ot_id: ot.id,
+        plan_semanal_id: planSemanalId,
+        tipo: 'interferencia', motivo, comentario,
+        foto_url: interfFoto?.url, foto_storage_path: interfFoto?.storage_path,
+        gps_lat: geo.lat, gps_lng: geo.lng, gps_accuracy: geo.accuracy, geolocation_status: geo.status,
+        client_uuid: genClientUuid(),
+      })
+      toast.warning('Interferencia mandante registrada')
+      setShowInterferencia(false)
+      setInterfObs(''); setInterfQuienInforma(''); setInterfFoto(null)
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Error al registrar interferencia')
+    }
+  }
+
   const handleCerrarJornada = async () => {
     if (!planOtId) return
     if (!fotoDespues) { toast.error('Foto DESPUES obligatoria'); return }
     if (!firmaOperador) { toast.error('Firma operador obligatoria'); return }
+    if (avanceValor < 100 && !obsCierre.trim()) {
+      toast.error('Comentario obligatorio para cierre parcial (<100%)')
+      return
+    }
     try {
-      const gps = await tryGeolocate()
+      const geo = await refreshGeo()
       await finalizar.mutateAsync({
         plan_semanal_ot_id: planOtId,
         ot_id: ot.id,
@@ -215,7 +280,7 @@ export default function MobileOTDetallePage() {
         firma_operador_url: firmaOperador.url,
         firma_operador_storage_path: firmaOperador.storage_path,
         observacion: obsCierre || undefined,
-        gps_lat: gps.lat, gps_lng: gps.lng,
+        gps_lat: geo.lat, gps_lng: geo.lng, gps_accuracy: geo.accuracy, geolocation_status: geo.status,
         client_uuid_foto: genClientUuid(),
         client_uuid_firma: genClientUuid(),
       })
@@ -229,18 +294,19 @@ export default function MobileOTDetallePage() {
   const handleAceptar = async () => {
     if (!planOtId) return
     if (!firmaMandante) { toast.error('Firma mandante obligatoria'); return }
+    if (!firmanteNombre.trim()) { toast.error('Nombre del firmante obligatorio'); return }
     try {
-      const gps = await tryGeolocate()
+      const geo = await refreshGeo()
       await aceptar.mutateAsync({
         plan_semanal_ot_id: planOtId,
         ot_id: ot.id,
         plan_semanal_id: planSemanalId,
         firma_mandante_url: firmaMandante.url,
         firma_mandante_storage_path: firmaMandante.storage_path,
-        firmante_nombre: firmanteNombre || undefined,
+        firmante_nombre: firmanteNombre,
         firmante_rut: firmanteRut || undefined,
         observacion: obsCierre || undefined,
-        gps_lat: gps.lat, gps_lng: gps.lng,
+        gps_lat: geo.lat, gps_lng: geo.lng, gps_accuracy: geo.accuracy, geolocation_status: geo.status,
         client_uuid: genClientUuid(),
       })
       toast.success('Jornada aceptada')
@@ -253,8 +319,9 @@ export default function MobileOTDetallePage() {
     if (!planOtId) return
     if (!motivoRechazo.trim()) { toast.error('Motivo obligatorio'); return }
     if (!firmaMandante) { toast.error('Firma mandante obligatoria'); return }
+    if (!firmanteNombre.trim()) { toast.error('Nombre del firmante obligatorio'); return }
     try {
-      const gps = await tryGeolocate()
+      const geo = await refreshGeo()
       await rechazar.mutateAsync({
         plan_semanal_ot_id: planOtId,
         ot_id: ot.id,
@@ -266,9 +333,9 @@ export default function MobileOTDetallePage() {
         })),
         firma_mandante_url: firmaMandante.url,
         firma_mandante_storage_path: firmaMandante.storage_path,
-        firmante_nombre: firmanteNombre || undefined,
+        firmante_nombre: firmanteNombre,
         observacion: obsCierre || undefined,
-        gps_lat: gps.lat, gps_lng: gps.lng,
+        gps_lat: geo.lat, gps_lng: geo.lng, gps_accuracy: geo.accuracy, geolocation_status: geo.status,
         client_uuid_rechazo: genClientUuid(),
         client_uuid_firma: genClientUuid(),
       })
@@ -310,11 +377,24 @@ export default function MobileOTDetallePage() {
             <EstadoChip estado={planOt?.estado_plan ?? ot.estado} />
           </div>
         </div>
-        {/* Stepper compacto */}
-        <div className="px-3 pb-2">
+        {/* Stepper compacto + GPS badge */}
+        <div className="px-3 pb-2 space-y-1">
           <Stepper paso={paso} />
+          <div className="flex justify-end">
+            <GeoStatus compact onChange={setGeoFix} />
+          </div>
         </div>
       </header>
+
+      {geoFix.status === 'denied' && (
+        <div className="mx-3 rounded-lg border border-red-300 bg-red-50 p-2 text-xs text-red-800 flex items-start gap-2">
+          <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+          <div>
+            GPS denegado. Los eventos quedaran sin ubicacion (auditoria reducida).
+            Activa el permiso de ubicacion en tu navegador para registrar lat/lng en cada evento.
+          </div>
+        </div>
+      )}
 
       <div className="px-3 space-y-3 pb-6">
         {/* Bloque comun: lugar */}
@@ -473,6 +553,52 @@ export default function MobileOTDetallePage() {
               </BotonGrande>
             </Card>
 
+            <Card extraClass="border-orange-200">
+              <SectionTitle icon={<ShieldAlert className="h-4 w-4 text-orange-700" />} title="Interferencia mandante" />
+              <p className="text-xs text-gray-600 mb-2">
+                Registra cualquier interferencia del mandante (área no liberada, espera autorizacion, cambio
+                de prioridad, etc). Pausa la jornada y queda como evento auditable.
+              </p>
+              {!showInterferencia ? (
+                <BotonGrande onClick={() => setShowInterferencia(true)} variant="amber">
+                  <ShieldAlert className="h-5 w-5" /> Registrar interferencia
+                </BotonGrande>
+              ) : (
+                <div className="space-y-2">
+                  <select value={interfTipo} onChange={(e) => setInterfTipo(e.target.value)}
+                    className="w-full rounded border border-gray-300 px-3 py-2 text-sm">
+                    {TIPOS_INTERFERENCIA.map((t) => (
+                      <option key={t.value} value={t.value}>{t.label}</option>
+                    ))}
+                  </select>
+                  <input value={interfQuienInforma} onChange={(e) => setInterfQuienInforma(e.target.value)}
+                    placeholder="Nombre quien informa/interfiere (opcional)"
+                    className="w-full rounded border border-gray-300 px-3 py-2 text-sm" />
+                  <textarea rows={2} value={interfObs} onChange={(e) => setInterfObs(e.target.value)}
+                    placeholder="Observacion (obligatoria)"
+                    className="w-full rounded border border-orange-300 px-3 py-2 text-sm" />
+                  {planOtId && (
+                    <PhotoCapture
+                      label="Foto evidencia (opcional)"
+                      momento="interferencia"
+                      otId={ot.id}
+                      planOtId={planOtId}
+                      onCapture={setInterfFoto}
+                    />
+                  )}
+                  <div className="flex gap-2">
+                    <button onClick={() => { setShowInterferencia(false); setInterfObs(''); setInterfQuienInforma(''); setInterfFoto(null) }}
+                      className="flex-1 rounded border border-gray-300 px-3 py-2 text-xs">Cancelar</button>
+                    <button onClick={handleRegistrarInterferencia}
+                      disabled={!interfObs.trim() || evento.isPending}
+                      className="flex-1 rounded bg-orange-600 text-white px-3 py-2 text-xs font-bold disabled:opacity-50">
+                      {evento.isPending ? 'Guardando...' : 'Registrar'}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </Card>
+
             <Card>
               <BotonGrande onClick={() => setPasoForzado('cerrar')} variant="green">
                 <CheckCircle2 className="h-5 w-5" /> Cerrar jornada
@@ -571,8 +697,9 @@ export default function MobileOTDetallePage() {
                 <div className="grid grid-cols-2 gap-2 mb-3">
                   <input
                     value={firmanteNombre} onChange={(e) => setFirmanteNombre(e.target.value)}
-                    placeholder="Nombre firmante"
+                    placeholder="Nombre firmante *"
                     className="rounded border border-gray-300 px-2 py-1.5 text-sm"
+                    required
                   />
                   <input
                     value={firmanteRut} onChange={(e) => setFirmanteRut(e.target.value)}
