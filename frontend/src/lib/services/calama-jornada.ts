@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase'
 
 export type FirmanteTipo = 'operador' | 'mandante' | 'supervisor'
 export type FirmaContexto = 'inicio' | 'cierre_operador' | 'aceptacion' | 'rechazo'
-export type EvidenciaMomento = 'antes' | 'durante' | 'despues' | 'rechazo' | 'firma' | 'generico' | 'interferencia'
+export type EvidenciaMomento = 'antes' | 'durante' | 'despues' | 'rechazo' | 'firma' | 'generico' | 'interferencia' | 'llegada'
 
 export type CalamaFirmaJornada = {
   id: string
@@ -252,6 +252,68 @@ export async function rpcAgregarJornadaOT(payload: {
   const { data, error } = await supabase.rpc('rpc_calama_agregar_jornada_ot', { p_payload: payload })
   return { data, error }
 }
+
+// ============================================================================
+// MIG32: acciones administrativas
+// ============================================================================
+
+export type DesprogramarDestino = 'backlog' | 'requiere_reprogramacion' | 'desprogramada'
+export type TipoCancelacion = 'operacional' | 'prueba' | 'mandante' | 'clima' | 'otro'
+export type ModoResetPrueba =
+  | 'mantener_programada' | 'devolver_backlog' | 'desprogramar' | 'eliminar_logico'
+
+export async function rpcDesprogramarJornada(payload: {
+  plan_semanal_ot_id: string
+  motivo: string
+  observacion?: string
+  destino?: DesprogramarDestino
+}): Promise<RpcResult> {
+  const { data, error } = await supabase.rpc('rpc_calama_desprogramar_jornada', { p_payload: payload })
+  return { data, error }
+}
+
+export async function rpcCancelarJornada(payload: {
+  plan_semanal_ot_id: string
+  motivo: string
+  observacion?: string
+  tipo_cancelacion?: TipoCancelacion
+}): Promise<RpcResult> {
+  const { data, error } = await supabase.rpc('rpc_calama_cancelar_jornada', { p_payload: payload })
+  return { data, error }
+}
+
+export async function rpcResetearJornadaPrueba(payload: {
+  plan_semanal_ot_id: string
+  motivo: string
+  modo: ModoResetPrueba
+  confirmacion_texto: string  // debe ser 'RESET'
+}): Promise<RpcResult> {
+  const { data, error } = await supabase.rpc('rpc_calama_resetear_jornada_prueba', { p_payload: payload })
+  return { data, error }
+}
+
+export async function rpcEliminarJornadaPrueba(payload: {
+  plan_semanal_ot_id: string
+  motivo: string
+  confirmacion_texto: string  // debe ser 'ELIMINAR'
+}): Promise<RpcResult> {
+  const { data, error } = await supabase.rpc('rpc_calama_eliminar_jornada_prueba', { p_payload: payload })
+  return { data, error }
+}
+
+export async function rpcRegistrarLlegadaFaena(payload: {
+  plan_semanal_ot_id: string
+  foto_llegada_url: string
+  foto_llegada_storage_path: string
+  observacion?: string
+  client_uuid?: string
+} & GeoFields): Promise<RpcResult> {
+  const { data, error } = await supabase.rpc('rpc_calama_registrar_llegada_faena', { p_payload: payload })
+  return { data, error }
+}
+
+// Ampliar uploadEvidenciaJornada para llegada (path ya soporta cualquier momento).
+// La firma es la misma; solo cambia el momento que el caller envia.
 
 // ============================================================================
 // Lectura: firmas + rechazos + evidencias por plan_semanal_ot

@@ -15,7 +15,7 @@ import {
 } from '@/hooks/use-calama-plan-semanal'
 import {
   useIniciarJornada, useRegistrarEventoJornada, useFinalizarJornada,
-  useAceptarJornada, useRechazarJornada,
+  useAceptarJornada, useRechazarJornada, useRegistrarLlegadaFaena,
   useFirmasJornada, useEvidenciasJornada, useRechazosJornada,
 } from '@/hooks/use-calama-jornada'
 import { usePermissions } from '@/hooks/use-permissions'
@@ -46,7 +46,7 @@ const TIPOS_INTERFERENCIA: Array<{ value: string; label: string }> = [
   { value: 'otro_mandante',              label: 'Otro' },
 ]
 
-type Paso = 'preparar' | 'ejecutar' | 'cerrar' | 'aceptacion' | 'cerrada' | 'rechazada'
+type Paso = 'llegada' | 'preparar' | 'ejecutar' | 'cerrar' | 'aceptacion' | 'cerrada' | 'rechazada'
 
 export default function MobileOTDetallePage() {
   const params = useParams<{ id: string }>()
@@ -80,6 +80,7 @@ export default function MobileOTDetallePage() {
   const finalizar = useFinalizarJornada()
   const aceptar  = useAceptarJornada()
   const rechazar = useRechazarJornada()
+  const llegada  = useRegistrarLlegadaFaena()
 
   // Estado UI
   const [tickElapsed, setTickElapsed] = useState(0)
@@ -97,6 +98,8 @@ export default function MobileOTDetallePage() {
   const [interfFoto, setInterfFoto] = useState<PhotoCaptureResult | null>(null)
 
   // Capturas
+  const [fotoLlegada, setFotoLlegada] = useState<PhotoCaptureResult | null>(null)
+  const [obsLlegada, setObsLlegada] = useState<string>('')
   const [fotoAntes, setFotoAntes] = useState<PhotoCaptureResult | null>(null)
   const [fotoDespues, setFotoDespues] = useState<PhotoCaptureResult | null>(null)
   const [firmaOperador, setFirmaOperador] = useState<FirmaCaptureResult | null>(null)
@@ -118,16 +121,19 @@ export default function MobileOTDetallePage() {
   }, [ot])
 
   // Determinar paso actual del wizard
+  const planOtLlegadaAt = (planOt as { llegada_faena_at?: string | null } | null)?.llegada_faena_at ?? null
   const paso: Paso = useMemo(() => {
     if (pasoForzado) return pasoForzado
-    if (!planOt) return 'preparar'
+    if (!planOt) return 'llegada'
     const ep = planOt.estado_plan
     if (ep === 'cerrada' || ep === 'aceptada') return 'cerrada'
     if (ep === 'rechazada') return 'rechazada'
     if (ep === 'finalizada_operador' || ep === 'pendiente_aprobacion') return 'aceptacion'
     if (ep === 'en_ejecucion' || ep === 'pausada') return 'ejecutar'
+    // Antes de preparar: si no hay llegada registrada, exigirla.
+    if (!planOtLlegadaAt) return 'llegada'
     return 'preparar'
-  }, [planOt, pasoForzado])
+  }, [planOt, pasoForzado, planOtLlegadaAt])
 
   if (isLoading) {
     return <div className="flex items-center justify-center h-screen text-gray-500"><Spinner className="h-6 w-6" /></div>
@@ -156,6 +162,30 @@ export default function MobileOTDetallePage() {
     const f = await tryGeolocate()
     setGeoFix(f)
     return f
+  }
+
+  const handleRegistrarLlegada = async () => {
+    if (!planOtId) { toast.error('No hay jornada asignada a esta OT'); return }
+    if (!fotoLlegada) { toast.error('Foto de llegada obligatoria'); return }
+    try {
+      const geo = await refreshGeo()
+      await llegada.mutateAsync({
+        plan_semanal_ot_id: planOtId,
+        ot_id: ot.id,
+        plan_semanal_id: planSemanalId,
+        foto_llegada_url: fotoLlegada.url,
+        foto_llegada_storage_path: fotoLlegada.storage_path,
+        gps_lat: geo.lat ?? fotoLlegada.lat,
+        gps_lng: geo.lng ?? fotoLlegada.lng,
+        gps_accuracy: geo.accuracy,
+        geolocation_status: geo.status,
+        observacion: obsLlegada || undefined,
+        client_uuid: genClientUuid(),
+      })
+      toast.success('Llegada registrada')
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Error al registrar llegada')
+    }
   }
 
   const handleIniciar = async () => {
@@ -440,6 +470,42 @@ export default function MobileOTDetallePage() {
                 )}
               </div>
             </div>
+          </Card>
+        )}
+
+        {/* ===== PASO 0: LLEGADA A FAENA ===== */}
+        {paso === 'llegada' && (
+          <Card>
+            <SectionTitle icon={<MapPin className="h-4 w-4 text-amber-700" />} title="0. Llegada a faena" />
+            <p className="text-xs text-gray-600 mb-3">
+              Antes de iniciar la jornada, registra tu llegada con foto y GPS. Esta foto demuestra
+              tu presencia en faena (no es la foto del estado del trabajo).
+            </p>
+            {planOtId ? (
+              <>
+                <PhotoCapture
+                  label="Foto LLEGADA (presencia en faena)"
+                  momento="llegada"
+                  otId={ot.id}
+                  planOtId={planOtId}
+                  onCapture={setFotoLlegada}
+                  required
+                />
+                <textarea
+                  value={obsLlegada} onChange={(e) => setObsLlegada(e.target.value)}
+                  rows={2} placeholder="Observación de llegada (opcional)"
+                  className="mt-3 w-full rounded border border-gray-300 px-3 py-2 text-sm"
+                />
+                <div className="mt-4">
+                  <BotonGrande onClick={handleRegistrarLlegada} loading={llegada.isPending}
+                    variant="amber" disabled={!fotoLlegada}>
+                    <MapPin className="h-5 w-5" /> Registrar llegada
+                  </BotonGrande>
+                </div>
+              </>
+            ) : (
+              <p className="text-xs text-amber-700">Esta OT no tiene jornada asignada en el plan semanal.</p>
+            )}
           </Card>
         )}
 
@@ -882,13 +948,14 @@ function EstadoChip({ estado }: { estado: string }) {
 
 function Stepper({ paso }: { paso: Paso }) {
   const steps: Array<{ key: Paso; label: string; icon: React.ReactNode }> = [
+    { key: 'llegada',   label: 'Llegada',   icon: <MapPin className="h-3 w-3" /> },
     { key: 'preparar',  label: 'Preparar',  icon: <Camera className="h-3 w-3" /> },
     { key: 'ejecutar',  label: 'Ejecutar',  icon: <Wrench className="h-3 w-3" /> },
     { key: 'cerrar',    label: 'Cerrar',    icon: <FileSignature className="h-3 w-3" /> },
     { key: 'aceptacion',label: 'Aceptacion',icon: <ShieldCheck className="h-3 w-3" /> },
   ]
-  const order: Paso[] = ['preparar','ejecutar','cerrar','aceptacion','cerrada']
-  const idx = paso === 'rechazada' ? 2 : Math.min(order.indexOf(paso), 4)
+  const order: Paso[] = ['llegada','preparar','ejecutar','cerrar','aceptacion','cerrada']
+  const idx = paso === 'rechazada' ? 3 : Math.min(order.indexOf(paso), 5)
   return (
     <div className="flex gap-1">
       {steps.map((s, i) => (

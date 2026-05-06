@@ -3,6 +3,9 @@ import {
   rpcIniciarJornada, rpcRegistrarEventoJornada, rpcFinalizarJornada,
   rpcRegistrarAceptacionJornada, rpcRegistrarRechazoJornada,
   rpcReprogramarSaldoOT, rpcAgregarJornadaOT,
+  rpcDesprogramarJornada, rpcCancelarJornada,
+  rpcResetearJornadaPrueba, rpcEliminarJornadaPrueba,
+  rpcRegistrarLlegadaFaena,
   getFirmasJornada, getRechazosJornada, getEvidenciasJornada,
 } from '@/lib/services/calama-jornada'
 
@@ -168,6 +171,84 @@ export function useAgregarJornadaOT() {
     },
     onSuccess: ({ ot_id, plan_semanal_id }) => {
       invalidateOtAndPlanCaches(qc, ot_id, plan_semanal_id)
+    },
+  })
+}
+
+// ── MIG32: acciones administrativas + llegada ──────────────────────────────
+
+export function useDesprogramarJornada() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (params: Parameters<typeof rpcDesprogramarJornada>[0] & { ot_id: string; plan_semanal_id?: string }) => {
+      const { ot_id, plan_semanal_id, ...payload } = params
+      const { data, error } = await rpcDesprogramarJornada(payload)
+      if (error) throw error
+      return { data, ot_id, plan_semanal_id }
+    },
+    onSuccess: ({ ot_id, plan_semanal_id }) => {
+      invalidateOtAndPlanCaches(qc, ot_id, plan_semanal_id)
+    },
+  })
+}
+
+export function useCancelarJornada() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (params: Parameters<typeof rpcCancelarJornada>[0] & { ot_id: string; plan_semanal_id?: string }) => {
+      const { ot_id, plan_semanal_id, ...payload } = params
+      const { data, error } = await rpcCancelarJornada(payload)
+      if (error) throw error
+      return { data, ot_id, plan_semanal_id }
+    },
+    onSuccess: ({ ot_id, plan_semanal_id }) => {
+      invalidateOtAndPlanCaches(qc, ot_id, plan_semanal_id)
+    },
+  })
+}
+
+export function useResetearJornadaPrueba() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (params: Parameters<typeof rpcResetearJornadaPrueba>[0] & { ot_id: string; plan_semanal_id?: string }) => {
+      const { ot_id, plan_semanal_id, ...payload } = params
+      const { data, error } = await rpcResetearJornadaPrueba(payload)
+      if (error) throw error
+      return { data, ot_id, plan_semanal_id }
+    },
+    onSuccess: ({ ot_id, plan_semanal_id }) => {
+      invalidateOtAndPlanCaches(qc, ot_id, plan_semanal_id)
+    },
+  })
+}
+
+export function useEliminarJornadaPrueba() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (params: Parameters<typeof rpcEliminarJornadaPrueba>[0] & { ot_id: string; plan_semanal_id?: string }) => {
+      const { ot_id, plan_semanal_id, ...payload } = params
+      const { data, error } = await rpcEliminarJornadaPrueba(payload)
+      if (error) throw error
+      return { data, ot_id, plan_semanal_id }
+    },
+    onSuccess: ({ ot_id, plan_semanal_id }) => {
+      invalidateOtAndPlanCaches(qc, ot_id, plan_semanal_id)
+    },
+  })
+}
+
+export function useRegistrarLlegadaFaena() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (params: Parameters<typeof rpcRegistrarLlegadaFaena>[0] & { ot_id: string; plan_semanal_id?: string }) => {
+      const { ot_id, plan_semanal_id, ...payload } = params
+      const { data, error } = await rpcRegistrarLlegadaFaena(payload)
+      if (error) throw error
+      return { data, ot_id, plan_semanal_id }
+    },
+    onSuccess: ({ ot_id, plan_semanal_id }, vars) => {
+      invalidateOtAndPlanCaches(qc, ot_id, plan_semanal_id)
+      qc.invalidateQueries({ queryKey: ['calama-evidencias', vars.plan_semanal_ot_id] })
     },
   })
 }

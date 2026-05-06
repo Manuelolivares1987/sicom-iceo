@@ -8,7 +8,7 @@ import {
 import {
   Calendar, Save, ArrowLeft, ChevronLeft, ChevronRight, Lock, AlertTriangle,
   Trash2, User, Clock, MapPin, MessageSquare, BarChart3, Layers, X,
-  CheckCircle2, CalendarPlus, Repeat,
+  CheckCircle2, CalendarPlus, Repeat, Ban, Eraser, ShieldAlert,
 } from 'lucide-react'
 import Link from 'next/link'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
@@ -27,7 +27,12 @@ import {
   useActualizarComentarioPlanOT, useAvancePorArea, useResumenGeneral,
 } from '@/hooks/use-calama-plan-semanal'
 import { useActualizarAvanceManual } from '@/hooks/use-calama-avance'
-import { useAgregarJornadaOT, useReprogramarSaldoOT } from '@/hooks/use-calama-jornada'
+import {
+  useAgregarJornadaOT, useReprogramarSaldoOT,
+  useDesprogramarJornada, useCancelarJornada,
+  useResetearJornadaPrueba, useEliminarJornadaPrueba,
+} from '@/hooks/use-calama-jornada'
+import { usePermissions } from '@/hooks/use-permissions'
 import { lunesDe } from '@/lib/services/calama-plan-semanal'
 import { zonaCodeFromFolio, excelCodigoFromFolio, type CalamaOTConRelaciones } from '@/lib/services/calama'
 import { EstadoBadge } from '@/components/calama/gantt-table'
@@ -38,6 +43,8 @@ type Tab = 'planificacion' | 'general' | 'por_area'
 export default function PlanSemanalPage() {
   useRequireAuth()
   const toast = useToast()
+  const { isAdminGlobal } = usePermissions()
+  const esAdmin = isAdminGlobal()
 
   const { data: planificaciones } = useCalamaPlanificaciones()
   const [planificacionId, setPlanificacionId] = useState<string>('')
@@ -94,6 +101,31 @@ export default function PlanSemanalPage() {
   const [reprogramarHoras, setReprogramarHoras] = useState<string>('')
   const [reprogramarAvance, setReprogramarAvance] = useState<string>('')
 
+  // MIG32: acciones administrativas
+  const desprogramar = useDesprogramarJornada()
+  const cancelar = useCancelarJornada()
+  const resetearPrueba = useResetearJornadaPrueba()
+  const eliminarPrueba = useEliminarJornadaPrueba()
+  // Modal "Sacar del programa" (desprogramar)
+  const [sacarOpen, setSacarOpen] = useState<string | null>(null) // plan_ot_id
+  const [sacarMotivo, setSacarMotivo] = useState('')
+  const [sacarObs, setSacarObs] = useState('')
+  const [sacarDestino, setSacarDestino] = useState<'backlog'|'requiere_reprogramacion'|'desprogramada'>('desprogramada')
+  // Modal Cancelar
+  const [cancelarOpen, setCancelarOpen] = useState<string | null>(null) // plan_ot_id
+  const [cancelarMotivo, setCancelarMotivo] = useState('')
+  const [cancelarObs, setCancelarObs] = useState('')
+  const [cancelarTipo, setCancelarTipo] = useState<'operacional'|'prueba'|'mandante'|'clima'|'otro'>('operacional')
+  // Modal Resetear prueba (admin)
+  const [resetearOpen, setResetearOpen] = useState<string | null>(null) // plan_ot_id
+  const [resetearMotivo, setResetearMotivo] = useState('')
+  const [resetearModo, setResetearModo] = useState<'mantener_programada'|'devolver_backlog'|'desprogramar'|'eliminar_logico'>('mantener_programada')
+  const [resetearConfirm, setResetearConfirm] = useState('')
+  // Modal Eliminar prueba (admin)
+  const [eliminarOpen, setEliminarOpen] = useState<string | null>(null) // plan_ot_id
+  const [eliminarMotivo, setEliminarMotivo] = useState('')
+  const [eliminarConfirm, setEliminarConfirm] = useState('')
+
   useEffect(() => {
     if (planificaciones && planificaciones.length > 0 && !planificacionId) {
       setPlanificacionId(planificaciones[0].id)
@@ -132,9 +164,12 @@ export default function PlanSemanalPage() {
     const m = new Map<string, CalamaOTConRelaciones[]>()
     for (const dia of dias ?? []) m.set(dia.id, [])
     for (const p of planOts ?? []) {
+      // MIG32: ocultar jornadas marcadas visible_en_kanban=false (anuladas, canceladas, desprogramadas
+      // a destino "desprogramada" sin requiere_decision).
+      const v = (p as { visible_en_kanban?: boolean | null }).visible_en_kanban
+      if (v === false) continue
       const ot = otsById.get(p.ot_id)
       if (!ot) continue
-      // Si hay filtro por lugar físico, mostrar solo las de ese lugar
       if (lugarFisicoSel && zonaCodeFromFolio(ot.folio) !== lugarFisicoSel) continue
       const arr = m.get(p.plan_dia_id)
       if (arr) arr.push(ot)
@@ -325,6 +360,97 @@ export default function PlanSemanalPage() {
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Error al reprogramar')
     }
+  }
+
+  // ── Acciones admin ─────────────────────────────────────────────────────────
+  const abrirSacar = (planOtId: string) => {
+    setSacarMotivo(''); setSacarObs(''); setSacarDestino('desprogramada')
+    setSacarOpen(planOtId)
+  }
+  const guardarSacar = async () => {
+    if (!sacarOpen) return
+    const planOt = (planOts ?? []).find((p) => p.id === sacarOpen)
+    if (!planOt) return
+    if (!sacarMotivo.trim()) { toast.error('Motivo obligatorio'); return }
+    try {
+      await desprogramar.mutateAsync({
+        plan_semanal_ot_id: sacarOpen,
+        ot_id: planOt.ot_id,
+        plan_semanal_id: planSemanalId,
+        motivo: sacarMotivo, observacion: sacarObs || undefined,
+        destino: sacarDestino,
+      })
+      toast.success(sacarDestino === 'backlog' ? 'OT devuelta al backlog' : 'Jornada desprogramada')
+      setSacarOpen(null)
+    } catch (e) { toast.error(e instanceof Error ? e.message : 'Error al desprogramar') }
+  }
+
+  const abrirCancelar = (planOtId: string) => {
+    setCancelarMotivo(''); setCancelarObs(''); setCancelarTipo('operacional')
+    setCancelarOpen(planOtId)
+  }
+  const guardarCancelar = async () => {
+    if (!cancelarOpen) return
+    const planOt = (planOts ?? []).find((p) => p.id === cancelarOpen)
+    if (!planOt) return
+    if (!cancelarMotivo.trim()) { toast.error('Motivo obligatorio'); return }
+    try {
+      await cancelar.mutateAsync({
+        plan_semanal_ot_id: cancelarOpen,
+        ot_id: planOt.ot_id,
+        plan_semanal_id: planSemanalId,
+        motivo: cancelarMotivo, observacion: cancelarObs || undefined,
+        tipo_cancelacion: cancelarTipo,
+      })
+      toast.success('Jornada cancelada')
+      setCancelarOpen(null)
+    } catch (e) { toast.error(e instanceof Error ? e.message : 'Error al cancelar') }
+  }
+
+  const abrirResetear = (planOtId: string) => {
+    setResetearMotivo(''); setResetearModo('mantener_programada'); setResetearConfirm('')
+    setResetearOpen(planOtId)
+  }
+  const guardarResetear = async () => {
+    if (!resetearOpen) return
+    const planOt = (planOts ?? []).find((p) => p.id === resetearOpen)
+    if (!planOt) return
+    if (!resetearMotivo.trim()) { toast.error('Motivo obligatorio'); return }
+    if (resetearConfirm !== 'RESET') { toast.error('Debes escribir RESET para confirmar'); return }
+    try {
+      await resetearPrueba.mutateAsync({
+        plan_semanal_ot_id: resetearOpen,
+        ot_id: planOt.ot_id,
+        plan_semanal_id: planSemanalId,
+        motivo: resetearMotivo, modo: resetearModo,
+        confirmacion_texto: resetearConfirm,
+      })
+      toast.success(`Reset de prueba: ${resetearModo}`)
+      setResetearOpen(null)
+    } catch (e) { toast.error(e instanceof Error ? e.message : 'Error al resetear') }
+  }
+
+  const abrirEliminar = (planOtId: string) => {
+    setEliminarMotivo(''); setEliminarConfirm('')
+    setEliminarOpen(planOtId)
+  }
+  const guardarEliminar = async () => {
+    if (!eliminarOpen) return
+    const planOt = (planOts ?? []).find((p) => p.id === eliminarOpen)
+    if (!planOt) return
+    if (!eliminarMotivo.trim()) { toast.error('Motivo obligatorio'); return }
+    if (eliminarConfirm !== 'ELIMINAR') { toast.error('Debes escribir ELIMINAR para confirmar'); return }
+    try {
+      await eliminarPrueba.mutateAsync({
+        plan_semanal_ot_id: eliminarOpen,
+        ot_id: planOt.ot_id,
+        plan_semanal_id: planSemanalId,
+        motivo: eliminarMotivo,
+        confirmacion_texto: eliminarConfirm,
+      })
+      toast.success('Jornada eliminada')
+      setEliminarOpen(null)
+    } catch (e) { toast.error(e instanceof Error ? e.message : 'Error al eliminar') }
   }
 
   const guardarAvance = async () => {
@@ -604,6 +730,12 @@ export default function PlanSemanalPage() {
                               onComentar={() => abrirComentario(ot.id)}
                               onActualizarAvance={() => abrirAvance(ot.id)}
                               onPlanificarVariosDias={() => abrirMultidia(ot.id)}
+                              estadoPlan={planOt?.estado_plan ?? null}
+                              requiereDecision={(planOt as { requiere_decision_programador?: boolean } | undefined)?.requiere_decision_programador ?? false}
+                              onSacar={planOt ? () => abrirSacar(planOt.id) : undefined}
+                              onCancelar={planOt ? () => abrirCancelar(planOt.id) : undefined}
+                              onResetearPrueba={esAdmin && planOt ? () => abrirResetear(planOt.id) : undefined}
+                              onEliminarPrueba={esAdmin && planOt ? () => abrirEliminar(planOt.id) : undefined}
                               onReprogramarSaldo={
                                 planOt && Number(ot.avance_pct ?? 0) < 100
                                   ? () => abrirReprogramar(planOt.id)
@@ -1003,6 +1135,152 @@ export default function PlanSemanalPage() {
           </Button>
         </ModalFooter>
       </Modal>
+
+      {/* Modal: Sacar del programa (desprogramar) */}
+      <Modal open={!!sacarOpen} onClose={() => !desprogramar.isPending && setSacarOpen(null)} title="Sacar jornada del programa">
+        <div className="space-y-3 text-sm">
+          <p className="text-xs text-gray-600">
+            Saca la jornada del Kanban activo. Elige si vuelve al backlog (eliminada del plan), si queda
+            en cola de reprogramación o simplemente desprogramada.
+          </p>
+          <div>
+            <label className="text-xs text-gray-600">Destino</label>
+            <select value={sacarDestino} onChange={(e) => setSacarDestino(e.target.value as typeof sacarDestino)}
+              className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm">
+              <option value="desprogramada">Desprogramada (oculta del Kanban)</option>
+              <option value="requiere_reprogramacion">Requiere reprogramación (visible con badge)</option>
+              <option value="backlog">Volver al backlog (elimina jornada)</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-xs text-gray-600">Motivo *</label>
+            <input value={sacarMotivo} onChange={(e) => setSacarMotivo(e.target.value)}
+              placeholder="Ej: cambio de prioridad, falta de material..."
+              className="mt-1 w-full rounded border border-orange-300 px-3 py-2 text-sm" />
+          </div>
+          <div>
+            <label className="text-xs text-gray-600">Observación</label>
+            <textarea rows={2} value={sacarObs} onChange={(e) => setSacarObs(e.target.value)}
+              className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm" />
+          </div>
+        </div>
+        <ModalFooter className="-mx-6 -mb-6 mt-4 px-6 pb-6 pt-4 border-t border-gray-100">
+          <Button variant="secondary" onClick={() => setSacarOpen(null)} disabled={desprogramar.isPending}>
+            <X className="h-4 w-4" /> Cancelar
+          </Button>
+          <Button variant="primary" onClick={guardarSacar} loading={desprogramar.isPending} disabled={!sacarMotivo.trim()}>
+            <Eraser className="h-4 w-4" /> Sacar del programa
+          </Button>
+        </ModalFooter>
+      </Modal>
+
+      {/* Modal: Cancelar jornada */}
+      <Modal open={!!cancelarOpen} onClose={() => !cancelar.isPending && setCancelarOpen(null)} title="Cancelar jornada">
+        <div className="space-y-3 text-sm">
+          <p className="text-xs text-gray-600">
+            Marca la jornada como cancelada. La OT no se elimina; queda registro auditable y la
+            ejecución activa se cierra.
+          </p>
+          <div>
+            <label className="text-xs text-gray-600">Tipo</label>
+            <select value={cancelarTipo} onChange={(e) => setCancelarTipo(e.target.value as typeof cancelarTipo)}
+              className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm">
+              <option value="operacional">Operacional</option>
+              <option value="prueba">Prueba</option>
+              <option value="mandante">Mandante</option>
+              <option value="clima">Clima</option>
+              <option value="otro">Otro</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-xs text-gray-600">Motivo *</label>
+            <input value={cancelarMotivo} onChange={(e) => setCancelarMotivo(e.target.value)}
+              className="mt-1 w-full rounded border border-orange-300 px-3 py-2 text-sm" />
+          </div>
+          <div>
+            <label className="text-xs text-gray-600">Observación</label>
+            <textarea rows={2} value={cancelarObs} onChange={(e) => setCancelarObs(e.target.value)}
+              className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm" />
+          </div>
+        </div>
+        <ModalFooter className="-mx-6 -mb-6 mt-4 px-6 pb-6 pt-4 border-t border-gray-100">
+          <Button variant="secondary" onClick={() => setCancelarOpen(null)} disabled={cancelar.isPending}>
+            <X className="h-4 w-4" /> Cancelar
+          </Button>
+          <Button variant="primary" onClick={guardarCancelar} loading={cancelar.isPending} disabled={!cancelarMotivo.trim()}>
+            <Ban className="h-4 w-4" /> Cancelar jornada
+          </Button>
+        </ModalFooter>
+      </Modal>
+
+      {/* Modal: Resetear prueba (admin) */}
+      <Modal open={!!resetearOpen} onClose={() => !resetearPrueba.isPending && setResetearOpen(null)} title="Resetear jornada de prueba">
+        <div className="space-y-3 text-sm">
+          <div className="rounded border border-yellow-300 bg-yellow-50 p-2 text-xs text-yellow-900">
+            <strong>⚠ Solo para datos de prueba.</strong> Esta acción detiene cualquier ejecución activa,
+            limpia llegada/foto antes y marca la jornada como prueba. NO afecta firmas reales del mandante.
+          </div>
+          <div>
+            <label className="text-xs text-gray-600">Modo</label>
+            <select value={resetearModo} onChange={(e) => setResetearModo(e.target.value as typeof resetearModo)}
+              className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm">
+              <option value="mantener_programada">Resetear y mantener programada</option>
+              <option value="devolver_backlog">Resetear y devolver al backlog</option>
+              <option value="desprogramar">Resetear y desprogramar (oculta)</option>
+              <option value="eliminar_logico">Eliminar lógicamente (anulada_prueba)</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-xs text-gray-600">Motivo *</label>
+            <input value={resetearMotivo} onChange={(e) => setResetearMotivo(e.target.value)}
+              placeholder="Ej: prueba terreno admin, datos de demo..."
+              className="mt-1 w-full rounded border border-yellow-300 px-3 py-2 text-sm" />
+          </div>
+          <div>
+            <label className="text-xs text-gray-600">Confirmación: escribe <strong>RESET</strong></label>
+            <input value={resetearConfirm} onChange={(e) => setResetearConfirm(e.target.value)}
+              className="mt-1 w-full rounded border border-yellow-400 px-3 py-2 text-sm font-mono" />
+          </div>
+        </div>
+        <ModalFooter className="-mx-6 -mb-6 mt-4 px-6 pb-6 pt-4 border-t border-gray-100">
+          <Button variant="secondary" onClick={() => setResetearOpen(null)} disabled={resetearPrueba.isPending}>
+            <X className="h-4 w-4" /> Cancelar
+          </Button>
+          <Button variant="primary" onClick={guardarResetear} loading={resetearPrueba.isPending}
+            disabled={!resetearMotivo.trim() || resetearConfirm !== 'RESET'}>
+            Resetear
+          </Button>
+        </ModalFooter>
+      </Modal>
+
+      {/* Modal: Eliminar prueba (admin, fuerte) */}
+      <Modal open={!!eliminarOpen} onClose={() => !eliminarPrueba.isPending && setEliminarOpen(null)} title="Eliminar jornada (irreversible)">
+        <div className="space-y-3 text-sm">
+          <div className="rounded border border-red-300 bg-red-50 p-2 text-xs text-red-900">
+            <strong>⚠ Acción irreversible.</strong> La jornada se borra fisicamente. Solo permitido si NO
+            tiene firma de mandante real. Usa Reset prueba si solo quieres limpiar datos.
+          </div>
+          <div>
+            <label className="text-xs text-gray-600">Motivo *</label>
+            <input value={eliminarMotivo} onChange={(e) => setEliminarMotivo(e.target.value)}
+              className="mt-1 w-full rounded border border-red-300 px-3 py-2 text-sm" />
+          </div>
+          <div>
+            <label className="text-xs text-gray-600">Confirmación: escribe <strong>ELIMINAR</strong></label>
+            <input value={eliminarConfirm} onChange={(e) => setEliminarConfirm(e.target.value)}
+              className="mt-1 w-full rounded border border-red-400 px-3 py-2 text-sm font-mono" />
+          </div>
+        </div>
+        <ModalFooter className="-mx-6 -mb-6 mt-4 px-6 pb-6 pt-4 border-t border-gray-100">
+          <Button variant="secondary" onClick={() => setEliminarOpen(null)} disabled={eliminarPrueba.isPending}>
+            <X className="h-4 w-4" /> Cancelar
+          </Button>
+          <Button variant="primary" onClick={guardarEliminar} loading={eliminarPrueba.isPending}
+            disabled={!eliminarMotivo.trim() || eliminarConfirm !== 'ELIMINAR'}>
+            <Trash2 className="h-4 w-4" /> Eliminar definitivamente
+          </Button>
+        </ModalFooter>
+      </Modal>
     </div>
   )
 }
@@ -1022,22 +1300,30 @@ function DroppableContainer({
 
 function DraggableOTCard({
   ot, dragId, compact, responsableId, comentario, usuarios, disabled,
+  estadoPlan, requiereDecision,
   onAsignar, onQuitar, onComentar, onActualizarAvance,
   onPlanificarVariosDias, onReprogramarSaldo,
+  onSacar, onCancelar, onResetearPrueba, onEliminarPrueba,
 }: {
   ot: CalamaOTConRelaciones
-  dragId: string  // "bl:<ot_id>" para backlog, "j:<plan_ot_id>" para jornadas existentes
+  dragId: string
   compact?: boolean
   responsableId?: string | null
   comentario?: string | null
   usuarios?: Array<{ id: string; nombre_completo: string | null; email?: string | null; cargo?: string | null }>
   disabled?: boolean
+  estadoPlan?: string | null
+  requiereDecision?: boolean
   onAsignar?: (uid: string) => void
   onQuitar?: () => void
   onComentar?: () => void
   onActualizarAvance?: () => void
   onPlanificarVariosDias?: () => void
   onReprogramarSaldo?: () => void
+  onSacar?: () => void
+  onCancelar?: () => void
+  onResetearPrueba?: () => void
+  onEliminarPrueba?: () => void
 }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: dragId, disabled })
   return (
@@ -1048,10 +1334,13 @@ function DraggableOTCard({
         ot={ot} compact={compact}
         responsableId={responsableId} comentario={comentario}
         usuarios={usuarios}
+        estadoPlan={estadoPlan} requiereDecision={requiereDecision}
         onAsignar={onAsignar} onQuitar={onQuitar} onComentar={onComentar}
         onActualizarAvance={onActualizarAvance}
         onPlanificarVariosDias={onPlanificarVariosDias}
         onReprogramarSaldo={onReprogramarSaldo}
+        onSacar={onSacar} onCancelar={onCancelar}
+        onResetearPrueba={onResetearPrueba} onEliminarPrueba={onEliminarPrueba}
         disabled={disabled}
       />
     </div>
@@ -1060,8 +1349,10 @@ function DraggableOTCard({
 
 function OTCardContent({
   ot, compact, responsableId, comentario, usuarios,
+  estadoPlan, requiereDecision,
   onAsignar, onQuitar, onComentar, onActualizarAvance,
   onPlanificarVariosDias, onReprogramarSaldo,
+  onSacar, onCancelar, onResetearPrueba, onEliminarPrueba,
   disabled,
 }: {
   ot: CalamaOTConRelaciones
@@ -1069,12 +1360,18 @@ function OTCardContent({
   responsableId?: string | null
   comentario?: string | null
   usuarios?: Array<{ id: string; nombre_completo: string | null; email?: string | null; cargo?: string | null }>
+  estadoPlan?: string | null
+  requiereDecision?: boolean
   onAsignar?: (uid: string) => void
   onQuitar?: () => void
   onComentar?: () => void
   onActualizarAvance?: () => void
   onPlanificarVariosDias?: () => void
   onReprogramarSaldo?: () => void
+  onSacar?: () => void
+  onCancelar?: () => void
+  onResetearPrueba?: () => void
+  onEliminarPrueba?: () => void
   disabled?: boolean
 }) {
   const codigo = excelCodigoFromFolio(ot.folio)
@@ -1195,6 +1492,63 @@ function OTCardContent({
             </button>
           )}
         </div>
+
+        {/* Badge "requiere decisión" cuando aplica */}
+        {(requiereDecision || estadoPlan === 'pausada' || estadoPlan === 'rechazada') && (
+          <div className="mt-1.5 rounded border border-orange-200 bg-orange-50 px-1.5 py-1 text-[10px] text-orange-800 inline-flex items-center gap-1">
+            <ShieldAlert className="h-3 w-3" />
+            Requiere decisión del programador
+          </div>
+        )}
+
+        {/* Acciones admin (sacar / cancelar / resetear / eliminar) */}
+        {(onSacar || onCancelar || onResetearPrueba || onEliminarPrueba) && (
+          <details className="mt-1.5">
+            <summary className="cursor-pointer text-[10px] font-medium text-gray-600 hover:text-gray-800">
+              Acciones
+            </summary>
+            <div className="mt-1 grid grid-cols-2 gap-1">
+              {onSacar && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); onSacar() }}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  className="rounded border border-orange-200 bg-orange-50 px-2 py-1 text-[10px] text-orange-800 hover:bg-orange-100 inline-flex items-center justify-center gap-1"
+                >
+                  <Eraser className="h-3 w-3" /> Sacar
+                </button>
+              )}
+              {onCancelar && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); onCancelar() }}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  className="rounded border border-gray-200 bg-gray-50 px-2 py-1 text-[10px] text-gray-800 hover:bg-gray-100 inline-flex items-center justify-center gap-1"
+                >
+                  <Ban className="h-3 w-3" /> Cancelar
+                </button>
+              )}
+              {onResetearPrueba && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); onResetearPrueba() }}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  className="rounded border border-yellow-300 bg-yellow-50 px-2 py-1 text-[10px] text-yellow-900 hover:bg-yellow-100 inline-flex items-center justify-center gap-1"
+                  title="Solo admin global"
+                >
+                  Reset prueba
+                </button>
+              )}
+              {onEliminarPrueba && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); onEliminarPrueba() }}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  className="rounded border border-red-300 bg-red-50 px-2 py-1 text-[10px] text-red-800 hover:bg-red-100 inline-flex items-center justify-center gap-1"
+                  title="Solo admin global - sin firma mandante"
+                >
+                  Eliminar
+                </button>
+              )}
+            </div>
+          </details>
+        )}
       </div>
     )
   }
