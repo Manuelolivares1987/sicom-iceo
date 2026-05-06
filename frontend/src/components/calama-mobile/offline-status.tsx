@@ -80,6 +80,11 @@ export function OfflineCountersCompact() {
           {counters.errores} con error
         </span>
       )}
+      {counters.conflictos > 0 && (
+        <span className="rounded bg-purple-50 border border-purple-200 px-2 py-0.5 text-purple-700">
+          {counters.conflictos} en conflicto
+        </span>
+      )}
     </div>
   )
 }

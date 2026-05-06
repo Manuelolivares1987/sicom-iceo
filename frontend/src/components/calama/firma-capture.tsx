@@ -6,8 +6,11 @@ import { SignaturePad } from '@/components/ui/signature-pad'
 import { uploadFirmaJornada, type FirmaContexto } from '@/lib/services/calama-jornada'
 
 export type FirmaCaptureResult = {
+  // Modo 'direct': url y storage_path llenos.
+  // Modo 'capture': url='' y storage_path='', blob no-null.
   url: string
   storage_path: string
+  blob: Blob | null
   dataUrl: string
 }
 
@@ -18,31 +21,41 @@ interface FirmaCaptureProps {
   planOtId: string
   onCapture: (result: FirmaCaptureResult) => void
   required?: boolean
+  mode?: 'direct' | 'capture'
 }
 
-// Captura firma a mano alzada via SignaturePad y la sube al bucket
-// calama-firmas. Devuelve {url, storage_path} para que el caller lo
-// envie al RPC.
+function dataUrlToBlob(dataUrl: string): Blob {
+  const base64 = dataUrl.split(',')[1] ?? ''
+  const bin = atob(base64)
+  const buf = new Uint8Array(bin.length)
+  for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i)
+  return new Blob([buf], { type: 'image/png' })
+}
+
 export function FirmaCapture({
-  label, contexto, otId, planOtId, onCapture, required,
+  label, contexto, otId, planOtId, onCapture, required, mode = 'direct',
 }: FirmaCaptureProps) {
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [result, setResult] = useState<FirmaCaptureResult | null>(null)
+  const [done, setDone] = useState(false)
 
   const handleSign = async (dataUrl: string) => {
     setError(null)
-    setUploading(true)
     try {
+      const blob = dataUrlToBlob(dataUrl)
+      if (mode === 'capture') {
+        onCapture({ url: '', storage_path: '', blob, dataUrl })
+        setDone(true)
+        return
+      }
+      setUploading(true)
       const { url, storage_path } = await uploadFirmaJornada({
         dataUrl, otId, planOtId, contexto,
       })
-      const r: FirmaCaptureResult = { url, storage_path, dataUrl }
-      setResult(r)
-      onCapture(r)
+      onCapture({ url, storage_path, blob, dataUrl })
+      setDone(true)
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : 'Error al subir firma'
-      setError(msg)
+      setError(e instanceof Error ? e.message : 'Error al procesar firma')
     } finally {
       setUploading(false)
     }
@@ -54,9 +67,9 @@ export function FirmaCapture({
         <span className="text-xs font-medium text-gray-700">
           {label}{required && <span className="ml-1 text-red-600">*</span>}
         </span>
-        {result && (
+        {done && (
           <span className="inline-flex items-center gap-1 text-xs text-green-700">
-            <Check className="h-3 w-3" /> Firma subida
+            <Check className="h-3 w-3" /> Firma {mode === 'capture' ? 'capturada' : 'subida'}
           </span>
         )}
       </div>

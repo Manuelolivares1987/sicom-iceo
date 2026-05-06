@@ -19,6 +19,8 @@ import {
 import type { CalamaJornadaAsignada } from '@/lib/services/calama-plan-semanal'
 import { OfflineStatusBanner, OfflineCountersCompact } from '@/components/calama-mobile/offline-status'
 import { OfflineActions } from '@/components/calama-mobile/offline-actions'
+import { calamaDB } from '@/lib/offline/calama-db'
+import { useNetworkStatus } from '@/hooks/use-calama-offline'
 
 type Grupo = 'atrasadas' | 'hoy' | 'manana' | 'semana' | 'completadas'
 
@@ -55,24 +57,91 @@ export default function MobileCalamaPage() {
   const [verTodas, setVerTodas] = useState<boolean>(esAdminOPlanificador)
   // Sincronizar default cuando se carga el rol
   useEffect(() => { setVerTodas(esAdminOPlanificador) }, [esAdminOPlanificador])
-  const { data: planOts, isLoading } = useMisOTsAsignadas({ todas: verTodas })
+  const { data: planOts, isLoading, isError } = useMisOTsAsignadas({ todas: verTodas })
   const { data: ots } = useCalamaOTs()
+  const online = useNetworkStatus()
+
+  // Fallback IndexedDB: cuando misOts no trae datos (offline o error de red)
+  // y hay jornadas descargadas localmente, las usamos en su lugar.
+  const [localJornadas, setLocalJornadas] = useState<CalamaJornadaAsignada[]>([])
+  const [localOts, setLocalOts] = useState<CalamaOTConRelaciones[]>([])
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      try {
+        const db = calamaDB()
+        const ljs = await db.jornadas.toArray()
+        if (cancelled) return
+        const mapped: CalamaJornadaAsignada[] = ljs.map((j) => ({
+          id: j.local_id,
+          plan_semanal_id: j.plan_semanal_id ?? '',
+          plan_dia_id: '',
+          ot_id: j.ot_id,
+          zona_proyecto_id: null,
+          responsable_id: j.responsable_id,
+          prioridad: 0,
+          estado_plan: j.estado_plan_local as CalamaJornadaAsignada['estado_plan'],
+          observaciones: j.observaciones,
+          horas_planificadas: null,
+          avance_objetivo_pct: null,
+          secuencia_jornada: null,
+          reprogramada_desde_id: null,
+          motivo_reprogramacion: null,
+          visible_en_kanban: j.visible_en_kanban,
+          requiere_decision_programador: false,
+          desprogramada_at: null, desprogramada_by: null,
+          motivo_desprogramacion: null, observacion_desprogramacion: null,
+          anulada_at: null, anulada_by: null, motivo_anulacion: null,
+          es_prueba: null,
+          llegada_faena_at: j.llegada_faena_at,
+          llegada_faena_usuario_id: null, llegada_faena_evidencia_id: null,
+          llegada_faena_lat: null, llegada_faena_lng: null,
+          llegada_faena_accuracy: null, llegada_faena_geo_status: null,
+          created_by: null, created_at: j.downloaded_at, updated_at: j.updated_local_at,
+          fecha_jornada: j.fecha_jornada,
+          nombre_dia: null, orden_dia: null,
+        }))
+        setLocalJornadas(mapped)
+
+        // Sintetizar OTs minimas para que el resto del page.tsx funcione.
+        const otsLocal: CalamaOTConRelaciones[] = ljs.map((j) => ({
+          id: j.ot_id, folio: j.folio, titulo: j.titulo,
+          fecha_programada: j.fecha_jornada ?? '',
+          avance_pct: j.avance_pct,
+          estado: j.estado_plan_local || 'planificada',
+          faena: { nombre: '—' } as { nombre: string },
+          responsable_id: j.responsable_id,
+        } as unknown as CalamaOTConRelaciones))
+        setLocalOts(otsLocal)
+      } catch {
+        if (!cancelled) { setLocalJornadas([]); setLocalOts([]) }
+      }
+    })()
+    return () => { cancelled = true }
+  }, [planOts, online])
+
+  // Si no llegaron jornadas del server (offline / error / aun cargando) y hay
+  // jornadas locales, usar las locales como fuente.
+  const usingLocal = (!planOts || planOts.length === 0) && localJornadas.length > 0
+  const planOtsEff = usingLocal ? localJornadas : (planOts ?? [])
+  const otsEff = usingLocal ? localOts : (ots ?? [])
+  void isError
   const { data: usuariosLista } = useUsuariosAsignables()
   const usuariosById = useMemo(() =>
     new Map((usuariosLista ?? []).map((u) => [u.id, u])),
   [usuariosLista])
 
   const otsById = useMemo(
-    () => new Map((ots ?? []).map((o) => [o.id, o])),
-    [ots],
+    () => new Map(otsEff.map((o) => [o.id, o])),
+    [otsEff],
   )
 
   // Secuencia por OT: cuantas jornadas tiene + indice de cada jornada
   const secuenciaByJornada = useMemo(() => {
     const map = new Map<string, { idx: number; total: number }>()
-    if (!planOts) return map
+    if (!planOtsEff) return map
     const porOT = new Map<string, CalamaJornadaAsignada[]>()
-    for (const j of planOts) {
+    for (const j of planOtsEff) {
       const arr = porOT.get(j.ot_id) ?? []
       arr.push(j)
       porOT.set(j.ot_id, arr)
@@ -82,7 +151,7 @@ export default function MobileCalamaPage() {
       arr.forEach((j, i) => map.set(j.id, { idx: i + 1, total: arr.length }))
     })
     return map
-  }, [planOts])
+  }, [planOtsEff])
 
   const grupos = useMemo(() => {
     const today = isoToday()
@@ -92,10 +161,9 @@ export default function MobileCalamaPage() {
     const result: Record<Grupo, Array<{ planOt: CalamaJornadaAsignada; ot: CalamaOTConRelaciones }>> = {
       atrasadas: [], hoy: [], manana: [], semana: [], completadas: [],
     }
-    for (const p of planOts ?? []) {
+    for (const p of planOtsEff) {
       const ot = otsById.get(p.ot_id)
       if (!ot) continue
-      // Usar la fecha de la JORNADA (no la de la OT madre).
       const fecha = p.fecha_jornada ?? ot.fecha_programada ?? ''
 
       // Una jornada se considera completada cuando estado_plan = 'finalizada'.
@@ -117,18 +185,18 @@ export default function MobileCalamaPage() {
       result.semana.push({ planOt: p, ot })
     }
     return result
-  }, [planOts, otsById])
+  }, [planOtsEff, otsById])
 
   const counts = useMemo(() => {
     let pendientes = 0, en_ejecucion = 0, pausadas = 0, completadas = 0
-    for (const p of planOts ?? []) {
+    for (const p of planOtsEff) {
       if (p.estado_plan === 'finalizada') completadas++
       else if (p.estado_plan === 'en_ejecucion') en_ejecucion++
       else if (p.estado_plan === 'pausada') pausadas++
       else pendientes++
     }
-    return { pendientes, en_ejecucion, pausadas, completadas, total: (planOts?.length ?? 0) }
-  }, [planOts])
+    return { pendientes, en_ejecucion, pausadas, completadas, total: planOtsEff.length }
+  }, [planOtsEff])
 
   const refresh = () => {
     qc.invalidateQueries({ queryKey: ['calama-mis-ots'] })
@@ -193,6 +261,11 @@ export default function MobileCalamaPage() {
         <OfflineStatusBanner />
         <OfflineActions />
         <OfflineCountersCompact />
+        {usingLocal && (
+          <div className="rounded-lg border border-blue-200 bg-blue-50 p-2 text-xs text-blue-800">
+            Mostrando jornadas descargadas (datos offline). Los cambios quedaran en cola hasta sincronizar.
+          </div>
+        )}
 
         {isLoading && (
           <div className="flex items-center justify-center gap-2 py-8 text-gray-500 text-sm">

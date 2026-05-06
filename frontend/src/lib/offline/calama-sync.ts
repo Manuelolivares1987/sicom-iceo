@@ -227,13 +227,14 @@ export async function saveFirma(fi: Omit<LocalFirma, 'local_id' | 'client_uuid' 
 
 export async function getOfflineCounters() {
   const db = calamaDB()
-  const [pendEv, pendFi, pendEvento, errEv, errFi, errEvento, jornadas] = await Promise.all([
+  const [pendEv, pendFi, pendEvento, errEv, errFi, errEvento, conflictEvento, jornadas] = await Promise.all([
     db.evidencias.where('sync_status').equals('pending').count(),
     db.firmas.where('sync_status').equals('pending').count(),
     db.eventos.where('sync_status').equals('pending').count(),
     db.evidencias.where('sync_status').equals('error').count(),
     db.firmas.where('sync_status').equals('error').count(),
     db.eventos.where('sync_status').equals('error').count(),
+    db.eventos.where('sync_status').equals('conflict').count(),
     db.jornadas.count(),
   ])
   const settings = await db.settings.get('state')
@@ -243,6 +244,7 @@ export async function getOfflineCounters() {
     pendientes_firmas: pendFi,
     pendientes_eventos: pendEvento,
     errores: errEv + errFi + errEvento,
+    conflictos: conflictEvento,
     jornadas_offline: jornadas,
     last_download_at: settings?.last_download_at ?? null,
   }
@@ -410,11 +412,16 @@ export async function syncCalamaPending(): Promise<SyncResult> {
       }
       const { error } = await supabase.rpc(rpcName, { p_payload: payload })
       if (error) {
+        // Detectar conflicto: el server rechaza por estado/permiso, no es
+        // problema de red. Marcar 'conflict' para que la UI lo distinga.
+        const isConflict = /no admite cambios|estado .* no|no encontrado|no autorizado|no se mueve|no se quita|no se cancela|no se desprograma|requiere correccion|aceptada|cerrada|llegada a faena no/i
+          .test(error.message)
+        const newStatus: SyncStatus = isConflict ? 'conflict' : 'error'
         await db.eventos.update(evento.local_id, {
-          sync_status: 'error', retries: evento.retries + 1, last_error: error.message,
+          sync_status: newStatus, retries: evento.retries + 1, last_error: error.message,
         })
         await db.sync_queue.update(it.id!, {
-          status: 'error', retries: it.retries + 1, last_error: error.message,
+          status: newStatus, retries: it.retries + 1, last_error: error.message,
           updated_at: new Date().toISOString(),
         })
         errors.push({ tipo: evento.rpc_tipo, local_id: evento.local_id, mensaje: error.message })

@@ -14,16 +14,23 @@ import {
   useEjecucionActivaPorOT, useMisOTsAsignadas,
 } from '@/hooks/use-calama-plan-semanal'
 import {
-  useIniciarJornada, useRegistrarEventoJornada, useFinalizarJornada,
-  useAceptarJornada, useRechazarJornada, useRegistrarLlegadaFaena,
   useFirmasJornada, useEvidenciasJornada, useRechazosJornada,
 } from '@/hooks/use-calama-jornada'
 import { usePermissions } from '@/hooks/use-permissions'
 import { excelCodigoFromFolio, zonaCodeFromFolio } from '@/lib/services/calama'
-import { tryGeolocate, genClientUuid, type GeoFix } from '@/lib/services/calama-jornada'
+import { tryGeolocate, type GeoFix } from '@/lib/services/calama-jornada'
 import { PhotoCapture, type PhotoCaptureResult } from '@/components/calama/photo-capture'
 import { FirmaCapture, type FirmaCaptureResult } from '@/components/calama/firma-capture'
 import { GeoStatus } from '@/components/calama/geo-status'
+import {
+  smartLlegadaFaena, smartIniciarJornada, smartRegistrarEvento,
+  smartFinalizarJornada, smartAceptarJornada, smartRechazarJornada,
+  type SmartResult,
+} from '@/lib/offline/calama-smart-handlers'
+import { useNetworkStatus } from '@/hooks/use-calama-offline'
+import { calamaDB } from '@/lib/offline/calama-db'
+import type { LocalJornada } from '@/lib/offline/calama-offline-types'
+import { useQueryClient } from '@tanstack/react-query'
 
 const MOTIVOS_PAUSA: Array<{ value: string; label: string }> = [
   { value: 'colacion',                label: 'Colacion' },
@@ -56,7 +63,7 @@ export default function MobileOTDetallePage() {
   const { rol } = usePermissions()
   const esMandante = ['administrador','gerencia','subgerente_operaciones','supervisor','jefe_operaciones','planificador'].includes(rol ?? '')
 
-  const { data: ot, isLoading } = useCalamaOT(otId)
+  const { data: otServer, isLoading } = useCalamaOT(otId)
   const { data: ejecucion } = useEjecucionActivaPorOT(otId)
   // Mostrar todas las jornadas: si soy admin/planificador veo todo; si soy operador solo las mias.
   const { data: misOts } = useMisOTsAsignadas({ todas: esMandante })
@@ -69,18 +76,50 @@ export default function MobileOTDetallePage() {
     return activa ?? todas[0]
   }, [misOts, otId])
 
-  const planOtId = planOt?.id ?? null
-  const planSemanalId = planOt?.plan_semanal_id ?? undefined
+  // Fallback: si misOts no tiene la jornada (offline o error de red),
+  // buscar en IndexedDB.
+  const [planOtLocal, setPlanOtLocal] = useState<LocalJornada | null>(null)
+
+  const planOtId = planOt?.id ?? planOtLocal?.local_id ?? null
+  const planSemanalId = planOt?.plan_semanal_id ?? planOtLocal?.plan_semanal_id ?? undefined
   const { data: firmas } = useFirmasJornada(planOtId)
   const { data: evidencias } = useEvidenciasJornada(planOtId)
   const { data: rechazos } = useRechazosJornada(planOtId)
 
-  const iniciar  = useIniciarJornada()
-  const evento   = useRegistrarEventoJornada()
-  const finalizar = useFinalizarJornada()
-  const aceptar  = useAceptarJornada()
-  const rechazar = useRechazarJornada()
-  const llegada  = useRegistrarLlegadaFaena()
+  const online = useNetworkStatus()
+  const qc = useQueryClient()
+  const [busy, setBusy] = useState(false)
+  useEffect(() => {
+    let cancelled = false
+    if (!otId) return
+    if (misOts && misOts.find((p) => p.ot_id === otId)) return  // ya tenemos del server
+    void (async () => {
+      try {
+        const db = calamaDB()
+        const all = await db.jornadas.where('ot_id').equals(otId).toArray()
+        if (cancelled) return
+        if (all.length === 0) { setPlanOtLocal(null); return }
+        const activa = all.find((p) => !['cerrada','aceptada','finalizada','no_ejecutada','reprogramada'].includes(p.estado_plan_local)) ?? all[0]
+        setPlanOtLocal(activa)
+      } catch {
+        if (!cancelled) setPlanOtLocal(null)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [misOts, otId])
+
+  const refreshAfterAction = () => {
+    qc.invalidateQueries({ queryKey: ['calama-mis-ots'] })
+    qc.invalidateQueries({ queryKey: ['calama', 'ot', otId] })
+    qc.invalidateQueries({ queryKey: ['calama-ejec-activa', otId] })
+    qc.invalidateQueries({ queryKey: ['calama-evidencias', planOtId ?? ''] })
+    qc.invalidateQueries({ queryKey: ['calama-firmas', planOtId ?? ''] })
+  }
+
+  const showSmart = (r: SmartResult) => {
+    if (r.mode === 'offline') toast.warning(r.message)
+    else toast.success(r.message)
+  }
 
   // Estado UI
   const [tickElapsed, setTickElapsed] = useState(0)
@@ -117,28 +156,44 @@ export default function MobileOTDetallePage() {
   }, [ejecucion])
   useEffect(() => { setTickElapsed(0) }, [ejecucion?.last_event_at])
   useEffect(() => {
-    if (ot) setAvanceValor(Math.round(Number(ot.avance_pct ?? 0)))
-  }, [ot])
+    if (otServer) setAvanceValor(Math.round(Number(otServer.avance_pct ?? 0)))
+  }, [otServer])
 
   // Determinar paso actual del wizard
-  const planOtLlegadaAt = (planOt as { llegada_faena_at?: string | null } | null)?.llegada_faena_at ?? null
+  const planOtLlegadaAt =
+    (planOt as { llegada_faena_at?: string | null } | null)?.llegada_faena_at
+    ?? planOtLocal?.llegada_faena_at
+    ?? null
+  const estadoPlanEffective: string = (planOt?.estado_plan as string | undefined) ?? planOtLocal?.estado_plan_local ?? ''
   const paso: Paso = useMemo(() => {
     if (pasoForzado) return pasoForzado
-    if (!planOt) return 'llegada'
-    const ep = planOt.estado_plan
+    if (!planOt && !planOtLocal) return 'llegada'
+    const ep = estadoPlanEffective
     if (ep === 'cerrada' || ep === 'aceptada') return 'cerrada'
     if (ep === 'rechazada') return 'rechazada'
     if (ep === 'finalizada_operador' || ep === 'pendiente_aprobacion') return 'aceptacion'
     if (ep === 'en_ejecucion' || ep === 'pausada') return 'ejecutar'
-    // Antes de preparar: si no hay llegada registrada, exigirla.
     if (!planOtLlegadaAt) return 'llegada'
     return 'preparar'
-  }, [planOt, pasoForzado, planOtLlegadaAt])
+  }, [planOt, planOtLocal, pasoForzado, planOtLlegadaAt, estadoPlanEffective])
 
-  if (isLoading) {
+  if (isLoading && !planOtLocal) {
     return <div className="flex items-center justify-center h-screen text-gray-500"><Spinner className="h-6 w-6" /></div>
   }
-  if (!ot) {
+  // Fallback offline: si no cargo el server pero tenemos jornada local, sintetizar OT.
+  const otEff = otServer ?? (planOtLocal ? ({
+    id: planOtLocal.ot_id,
+    folio: planOtLocal.folio,
+    titulo: planOtLocal.titulo,
+    fecha_programada: planOtLocal.fecha_jornada ?? '',
+    avance_pct: planOtLocal.avance_pct,
+    estado: planOtLocal.estado_plan_local || 'planificada',
+    faena: { nombre: '—' } as { nombre: string },
+    responsable_id: planOtLocal.responsable_id,
+    descripcion: null,
+  } as unknown as NonNullable<typeof otServer>) : null)
+
+  if (!otEff) {
     return (
       <div className="p-4 text-center">
         <p className="text-sm text-red-700">OT no encontrada o sin permisos.</p>
@@ -146,17 +201,19 @@ export default function MobileOTDetallePage() {
       </div>
     )
   }
-  // Si misOts ya cargo y NO hay jornada activa para este ot_id (puede haber sido
-  // sacada del programa, anulada o cancelada por admin), bloquear ejecucion.
-  if (misOts !== undefined && planOt === null && !esMandante) {
+  const ot = otEff
+  // Si misOts ya cargo y NO hay jornada activa para este ot_id ni en IndexedDB,
+  // bloquear ejecucion.
+  if (misOts !== undefined && planOt === null && planOtLocal === null && !esMandante) {
     return (
       <div className="p-4 text-center space-y-3">
         <AlertTriangle className="h-10 w-10 text-amber-500 mx-auto" />
         <p className="text-sm text-gray-900">
-          Esta jornada fue <strong>sacada del programa</strong> y ya no esta disponible para ejecucion.
-        </p>
-        <p className="text-xs text-gray-500">
-          Habla con tu supervisor si crees que esto es un error.
+          {online ? (
+            <>Esta jornada fue <strong>sacada del programa</strong> y ya no esta disponible para ejecucion.</>
+          ) : (
+            <>No tienes esta jornada descargada para trabajar sin conexion. Conectate a internet y presiona "Descargar jornadas".</>
+          )}
         </p>
         <button onClick={() => router.push('/m/calama')} className="rounded bg-amber-600 px-4 py-2 text-white text-sm">
           Volver a mis jornadas
@@ -184,105 +241,90 @@ export default function MobileOTDetallePage() {
 
   const handleRegistrarLlegada = async () => {
     if (!planOtId) { toast.error('No hay jornada asignada a esta OT'); return }
-    if (!fotoLlegada) { toast.error('Foto de llegada obligatoria'); return }
+    if (!fotoLlegada?.blob) { toast.error('Foto de llegada obligatoria'); return }
+    setBusy(true)
     try {
       const geo = await refreshGeo()
-      await llegada.mutateAsync({
-        plan_semanal_ot_id: planOtId,
-        ot_id: ot.id,
-        plan_semanal_id: planSemanalId,
-        foto_llegada_url: fotoLlegada.url,
-        foto_llegada_storage_path: fotoLlegada.storage_path,
+      const r = await smartLlegadaFaena({
+        jornada_id: planOtId, ot_id: ot.id, blob: fotoLlegada.blob,
         gps_lat: geo.lat ?? fotoLlegada.lat,
         gps_lng: geo.lng ?? fotoLlegada.lng,
-        gps_accuracy: geo.accuracy,
-        geolocation_status: geo.status,
+        gps_accuracy: geo.accuracy, geolocation_status: geo.status,
         observacion: obsLlegada || undefined,
-        client_uuid: genClientUuid(),
       })
-      toast.success('Llegada registrada')
+      showSmart(r)
+      refreshAfterAction()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Error al registrar llegada')
-    }
+    } finally { setBusy(false) }
   }
 
   const handleIniciar = async () => {
     if (!planOtId) { toast.error('No hay jornada asignada a esta OT'); return }
-    if (!fotoAntes) { toast.error('Foto ANTES obligatoria'); return }
+    if (!fotoAntes?.blob) { toast.error('Foto ANTES obligatoria'); return }
+    setBusy(true)
     try {
       const geo = await refreshGeo()
-      await iniciar.mutateAsync({
-        plan_semanal_ot_id: planOtId,
-        ot_id: ot.id,
-        plan_semanal_id: planSemanalId,
-        foto_antes_url: fotoAntes.url,
-        foto_antes_storage_path: fotoAntes.storage_path,
+      const r = await smartIniciarJornada({
+        jornada_id: planOtId, ot_id: ot.id, foto_antes: fotoAntes.blob,
         gps_lat: geo.lat ?? fotoAntes.lat,
         gps_lng: geo.lng ?? fotoAntes.lng,
-        gps_accuracy: geo.accuracy,
-        geolocation_status: geo.status,
-        client_uuid_evidencia: genClientUuid(),
-        client_uuid_ejecucion: genClientUuid(),
+        gps_accuracy: geo.accuracy, geolocation_status: geo.status,
       })
-      toast.success('Jornada iniciada')
+      showSmart(r)
       setPasoForzado(null)
+      refreshAfterAction()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Error al iniciar')
-    }
+    } finally { setBusy(false) }
   }
 
   const handlePausar = async (motivo: string) => {
     if (!planOtId) return
-    setShowMotivos(false)
+    setShowMotivos(false); setBusy(true)
     try {
       const geo = await refreshGeo()
-      await evento.mutateAsync({
-        plan_semanal_ot_id: planOtId,
-        ot_id: ot.id,
-        plan_semanal_id: planSemanalId,
-        tipo: 'pause', motivo,
+      const r = await smartRegistrarEvento({
+        jornada_id: planOtId, ot_id: ot.id, tipo: 'pause', motivo,
         gps_lat: geo.lat, gps_lng: geo.lng, gps_accuracy: geo.accuracy, geolocation_status: geo.status,
-        client_uuid: genClientUuid(),
       })
-      toast.info(`Pausada: ${motivo}`)
+      showSmart(r); refreshAfterAction()
     } catch (e) { toast.error(e instanceof Error ? e.message : 'Error al pausar') }
+    finally { setBusy(false) }
   }
 
   const handleReanudar = async () => {
     if (!planOtId) return
+    setBusy(true)
     try {
       const geo = await refreshGeo()
-      await evento.mutateAsync({
-        plan_semanal_ot_id: planOtId,
-        ot_id: ot.id,
-        plan_semanal_id: planSemanalId,
-        tipo: 'resume',
+      const r = await smartRegistrarEvento({
+        jornada_id: planOtId, ot_id: ot.id, tipo: 'resume',
         gps_lat: geo.lat, gps_lng: geo.lng, gps_accuracy: geo.accuracy, geolocation_status: geo.status,
-        client_uuid: genClientUuid(),
       })
-      toast.success('Reanudada')
+      showSmart(r); refreshAfterAction()
     } catch (e) { toast.error(e instanceof Error ? e.message : 'Error al reanudar') }
+    finally { setBusy(false) }
   }
 
   const handleGuardarAvance = async () => {
     if (!planOtId) return
+    setBusy(true)
     try {
       const geo = await refreshGeo()
-      await evento.mutateAsync({
-        plan_semanal_ot_id: planOtId,
-        ot_id: ot.id,
-        plan_semanal_id: planSemanalId,
-        tipo: 'avance', avance: avanceValor,
+      const r = await smartRegistrarEvento({
+        jornada_id: planOtId, ot_id: ot.id, tipo: 'avance', avance: avanceValor,
         gps_lat: geo.lat, gps_lng: geo.lng, gps_accuracy: geo.accuracy, geolocation_status: geo.status,
-        client_uuid: genClientUuid(),
       })
-      toast.success(`Avance: ${avanceValor}%`)
+      showSmart(r); refreshAfterAction()
     } catch (e) { toast.error(e instanceof Error ? e.message : 'Error al guardar') }
+    finally { setBusy(false) }
   }
 
   const handleRegistrarInterferencia = async () => {
     if (!planOtId) return
     if (!interfObs.trim()) { toast.error('Observacion obligatoria'); return }
+    setBusy(true)
     try {
       const geo = await refreshGeo()
       const motivo = `interferencia_mandante:${interfTipo}`
@@ -291,106 +333,86 @@ export default function MobileOTDetallePage() {
         interfQuienInforma ? `Informa: ${interfQuienInforma}` : null,
         interfObs,
       ].filter(Boolean).join(' | ')
-      await evento.mutateAsync({
-        plan_semanal_ot_id: planOtId,
-        ot_id: ot.id,
-        plan_semanal_id: planSemanalId,
-        tipo: 'interferencia', motivo, comentario,
-        foto_url: interfFoto?.url, foto_storage_path: interfFoto?.storage_path,
+      const r = await smartRegistrarEvento({
+        jornada_id: planOtId, ot_id: ot.id, tipo: 'interferencia', motivo, comentario,
+        foto: interfFoto?.blob ?? undefined, momento: 'interferencia',
         gps_lat: geo.lat, gps_lng: geo.lng, gps_accuracy: geo.accuracy, geolocation_status: geo.status,
-        client_uuid: genClientUuid(),
       })
-      toast.warning('Interferencia mandante registrada')
+      showSmart(r); refreshAfterAction()
       setShowInterferencia(false)
       setInterfObs(''); setInterfQuienInforma(''); setInterfFoto(null)
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Error al registrar interferencia')
-    }
+    } finally { setBusy(false) }
   }
 
   const handleCerrarJornada = async () => {
     if (!planOtId) return
-    if (!fotoDespues) { toast.error('Foto DESPUES obligatoria'); return }
-    if (!firmaOperador) { toast.error('Firma operador obligatoria'); return }
+    if (!fotoDespues?.blob) { toast.error('Foto DESPUES obligatoria'); return }
+    if (!firmaOperador?.blob) { toast.error('Firma operador obligatoria'); return }
     if (avanceValor < 100 && !obsCierre.trim()) {
       toast.error('Comentario obligatorio para cierre parcial (<100%)')
       return
     }
+    setBusy(true)
     try {
       const geo = await refreshGeo()
-      await finalizar.mutateAsync({
-        plan_semanal_ot_id: planOtId,
-        ot_id: ot.id,
-        plan_semanal_id: planSemanalId,
+      const r = await smartFinalizarJornada({
+        jornada_id: planOtId, ot_id: ot.id,
         avance_final: avanceValor,
-        foto_despues_url: fotoDespues.url,
-        foto_despues_storage_path: fotoDespues.storage_path,
-        firma_operador_url: firmaOperador.url,
-        firma_operador_storage_path: firmaOperador.storage_path,
+        foto_despues: fotoDespues.blob, firma_operador: firmaOperador.blob,
         observacion: obsCierre || undefined,
         gps_lat: geo.lat, gps_lng: geo.lng, gps_accuracy: geo.accuracy, geolocation_status: geo.status,
-        client_uuid_foto: genClientUuid(),
-        client_uuid_firma: genClientUuid(),
       })
-      toast.success('Jornada cerrada — pendiente aprobacion mandante')
+      showSmart(r)
       setPasoForzado(null)
+      refreshAfterAction()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Error al cerrar')
-    }
+    } finally { setBusy(false) }
   }
 
   const handleAceptar = async () => {
     if (!planOtId) return
-    if (!firmaMandante) { toast.error('Firma mandante obligatoria'); return }
+    if (!firmaMandante?.blob) { toast.error('Firma mandante obligatoria'); return }
     if (!firmanteNombre.trim()) { toast.error('Nombre del firmante obligatorio'); return }
+    setBusy(true)
     try {
       const geo = await refreshGeo()
-      await aceptar.mutateAsync({
-        plan_semanal_ot_id: planOtId,
-        ot_id: ot.id,
-        plan_semanal_id: planSemanalId,
-        firma_mandante_url: firmaMandante.url,
-        firma_mandante_storage_path: firmaMandante.storage_path,
-        firmante_nombre: firmanteNombre,
-        firmante_rut: firmanteRut || undefined,
+      const r = await smartAceptarJornada({
+        jornada_id: planOtId, ot_id: ot.id,
+        firma_mandante: firmaMandante.blob,
+        firmante_nombre: firmanteNombre, firmante_rut: firmanteRut || undefined,
         observacion: obsCierre || undefined,
         gps_lat: geo.lat, gps_lng: geo.lng, gps_accuracy: geo.accuracy, geolocation_status: geo.status,
-        client_uuid: genClientUuid(),
       })
-      toast.success('Jornada aceptada')
+      showSmart(r); refreshAfterAction()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Error al aceptar')
-    }
+    } finally { setBusy(false) }
   }
 
   const handleRechazar = async () => {
     if (!planOtId) return
     if (!motivoRechazo.trim()) { toast.error('Motivo obligatorio'); return }
-    if (!firmaMandante) { toast.error('Firma mandante obligatoria'); return }
+    if (!firmaMandante?.blob) { toast.error('Firma mandante obligatoria'); return }
     if (!firmanteNombre.trim()) { toast.error('Nombre del firmante obligatorio'); return }
+    setBusy(true)
     try {
       const geo = await refreshGeo()
-      await rechazar.mutateAsync({
-        plan_semanal_ot_id: planOtId,
-        ot_id: ot.id,
-        plan_semanal_id: planSemanalId,
-        motivo: motivoRechazo,
-        requiere_rehacer: requiereRehacer,
-        fotos: fotosRechazo.map((f) => ({
-          url: f.url, storage_path: f.storage_path, client_uuid: genClientUuid(),
-        })),
-        firma_mandante_url: firmaMandante.url,
-        firma_mandante_storage_path: firmaMandante.storage_path,
+      const r = await smartRechazarJornada({
+        jornada_id: planOtId, ot_id: ot.id,
+        motivo: motivoRechazo, requiere_rehacer: requiereRehacer,
+        fotos_rechazo: fotosRechazo.map((f) => f.blob).filter((b): b is Blob => b != null),
+        firma_mandante: firmaMandante.blob,
         firmante_nombre: firmanteNombre,
         observacion: obsCierre || undefined,
         gps_lat: geo.lat, gps_lng: geo.lng, gps_accuracy: geo.accuracy, geolocation_status: geo.status,
-        client_uuid_rechazo: genClientUuid(),
-        client_uuid_firma: genClientUuid(),
       })
-      toast.warning('Jornada rechazada — requiere correccion')
+      showSmart(r); refreshAfterAction()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Error al rechazar')
-    }
+    } finally { setBusy(false) }
   }
 
   const handleVolverAEjecutar = () => {
@@ -508,6 +530,7 @@ export default function MobileOTDetallePage() {
                   planOtId={planOtId}
                   onCapture={setFotoLlegada}
                   required
+                  mode="capture"
                 />
                 <textarea
                   value={obsLlegada} onChange={(e) => setObsLlegada(e.target.value)}
@@ -515,8 +538,8 @@ export default function MobileOTDetallePage() {
                   className="mt-3 w-full rounded border border-gray-300 px-3 py-2 text-sm"
                 />
                 <div className="mt-4">
-                  <BotonGrande onClick={handleRegistrarLlegada} loading={llegada.isPending}
-                    variant="amber" disabled={!fotoLlegada}>
+                  <BotonGrande onClick={handleRegistrarLlegada} loading={busy}
+                    variant="amber" disabled={!fotoLlegada?.blob}>
                     <MapPin className="h-5 w-5" /> Registrar llegada
                   </BotonGrande>
                 </div>
@@ -544,9 +567,10 @@ export default function MobileOTDetallePage() {
                   planOtId={planOtId}
                   onCapture={setFotoAntes}
                   required
+                  mode="capture"
                 />
                 <div className="mt-4">
-                  <BotonGrande onClick={handleIniciar} loading={iniciar.isPending} variant="green" disabled={!fotoAntes}>
+                  <BotonGrande onClick={handleIniciar} loading={busy} variant="green" disabled={!fotoAntes?.blob}>
                     <Play className="h-5 w-5" /> Iniciar jornada
                   </BotonGrande>
                 </div>
@@ -591,12 +615,12 @@ export default function MobileOTDetallePage() {
                   </BotonGrande>
                   {showMotivos && (
                     <div className="grid grid-cols-2 gap-1.5 rounded-lg border bg-gray-50 p-2">
-                      <button onClick={() => handlePausar('colacion')} disabled={evento.isPending}
+                      <button onClick={() => handlePausar('colacion')} disabled={busy}
                         className="col-span-2 rounded bg-yellow-100 border border-yellow-300 py-2 text-sm font-medium text-yellow-900 inline-flex items-center justify-center gap-1.5">
                         <Coffee className="h-4 w-4" /> Colacion
                       </button>
                       {MOTIVOS_PAUSA.filter((m) => m.value !== 'colacion').map((m) => (
-                        <button key={m.value} onClick={() => handlePausar(m.value)} disabled={evento.isPending}
+                        <button key={m.value} onClick={() => handlePausar(m.value)} disabled={busy}
                           className="rounded border border-gray-200 bg-white py-2 px-2 text-xs">{m.label}</button>
                       ))}
                     </div>
@@ -605,7 +629,7 @@ export default function MobileOTDetallePage() {
               )}
 
               {ejecucion?.estado === 'pausada' && (
-                <BotonGrande onClick={handleReanudar} loading={evento.isPending} variant="green">
+                <BotonGrande onClick={handleReanudar} loading={busy} variant="green">
                   <RotateCcw className="h-5 w-5" /> Reanudar
                 </BotonGrande>
               )}
@@ -632,7 +656,7 @@ export default function MobileOTDetallePage() {
                   ))}
                 </div>
               </div>
-              <BotonGrande onClick={handleGuardarAvance} loading={evento.isPending} variant="amber">
+              <BotonGrande onClick={handleGuardarAvance} loading={busy} variant="amber">
                 Guardar avance ({avanceValor}%)
               </BotonGrande>
             </Card>
@@ -668,15 +692,16 @@ export default function MobileOTDetallePage() {
                       otId={ot.id}
                       planOtId={planOtId}
                       onCapture={setInterfFoto}
+                      mode="capture"
                     />
                   )}
                   <div className="flex gap-2">
                     <button onClick={() => { setShowInterferencia(false); setInterfObs(''); setInterfQuienInforma(''); setInterfFoto(null) }}
                       className="flex-1 rounded border border-gray-300 px-3 py-2 text-xs">Cancelar</button>
                     <button onClick={handleRegistrarInterferencia}
-                      disabled={!interfObs.trim() || evento.isPending}
+                      disabled={!interfObs.trim() || busy}
                       className="flex-1 rounded bg-orange-600 text-white px-3 py-2 text-xs font-bold disabled:opacity-50">
-                      {evento.isPending ? 'Guardando...' : 'Registrar'}
+                      {busy ? 'Guardando...' : 'Registrar'}
                     </button>
                   </div>
                 </div>
@@ -741,8 +766,8 @@ export default function MobileOTDetallePage() {
                   className="w-full rounded border border-gray-300 px-3 py-2 text-sm mb-3"
                 />
 
-                <BotonGrande onClick={handleCerrarJornada} loading={finalizar.isPending} variant="green"
-                  disabled={!fotoDespues || !firmaOperador}>
+                <BotonGrande onClick={handleCerrarJornada} loading={busy} variant="green"
+                  disabled={!fotoDespues?.blob || !firmaOperador?.blob}>
                   <ShieldCheck className="h-5 w-5" /> Cerrar jornada ({avanceValor}%)
                 </BotonGrande>
 
@@ -811,7 +836,7 @@ export default function MobileOTDetallePage() {
                   className="w-full rounded border border-gray-300 px-3 py-2 text-sm mb-3"
                 />
 
-                <BotonGrande onClick={handleAceptar} loading={aceptar.isPending} variant="green" disabled={!firmaMandante}>
+                <BotonGrande onClick={handleAceptar} loading={busy} variant="green" disabled={!firmaMandante?.blob}>
                   <ShieldCheck className="h-5 w-5" /> Aceptar jornada
                 </BotonGrande>
 
@@ -834,18 +859,19 @@ export default function MobileOTDetallePage() {
                         otId={ot.id}
                         planOtId={planOtId}
                         onCapture={(r) => setFotosRechazo((prev) => [...prev, r])}
+                        mode="capture"
                       />
                     )}
                     {fotosRechazo.length > 0 && (
                       <div className="grid grid-cols-3 gap-1">
                         {fotosRechazo.map((f, i) => (
                           // eslint-disable-next-line @next/next/no-img-element
-                          <img key={i} src={f.url} alt={`rechazo ${i+1}`} className="h-16 w-full object-cover rounded border" />
+                          <img key={i} src={f.blob ? URL.createObjectURL(f.blob) : f.url} alt={`rechazo ${i+1}`} className="h-16 w-full object-cover rounded border" />
                         ))}
                       </div>
                     )}
-                    <BotonGrande onClick={handleRechazar} loading={rechazar.isPending} variant="amber"
-                      disabled={!motivoRechazo.trim() || !firmaMandante}>
+                    <BotonGrande onClick={handleRechazar} loading={busy} variant="amber"
+                      disabled={!motivoRechazo.trim() || !firmaMandante?.blob}>
                       <ShieldAlert className="h-5 w-5" /> Rechazar jornada
                     </BotonGrande>
                   </div>

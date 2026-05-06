@@ -2,14 +2,19 @@
 
 import { useRef, useState } from 'react'
 import { Camera, RotateCcw, Check, AlertCircle, Loader2 } from 'lucide-react'
-import { Button } from '@/components/ui/button'
 import { uploadEvidenciaJornada, tryGeolocate, type EvidenciaMomento } from '@/lib/services/calama-jornada'
+import { Button } from '@/components/ui/button'
 
 export type PhotoCaptureResult = {
+  // Modo 'direct': url y storage_path llenos (subido a Storage).
+  // Modo 'capture': url='' y storage_path='', blob no-null.
   url: string
   storage_path: string
+  blob: Blob | null
   lat: number | null
   lng: number | null
+  accuracy?: number | null
+  geolocation_status?: string | null
 }
 
 interface PhotoCaptureProps {
@@ -20,39 +25,49 @@ interface PhotoCaptureProps {
   onCapture: (result: PhotoCaptureResult) => void
   required?: boolean
   initialUrl?: string | null
+  // 'direct' (default): sube a Storage al capturar; devuelve url+path. Compatible online.
+  // 'capture': solo captura Blob + GPS, NO sube; el consumer decide. Requerido para offline-first.
+  mode?: 'direct' | 'capture'
 }
 
-// Captura foto desde camara movil + sube a calama-evidencias + reporta
-// {url, storage_path, lat, lng} al consumidor. Online-first; en proxima
-// iteracion se enchufa cola IndexedDB para offline.
 export function PhotoCapture({
   label, momento, otId, planOtId, onCapture, required, initialUrl,
+  mode = 'direct',
 }: PhotoCaptureProps) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [preview, setPreview] = useState<string | null>(initialUrl ?? null)
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [result, setResult] = useState<PhotoCaptureResult | null>(
-    initialUrl ? { url: initialUrl, storage_path: '', lat: null, lng: null } : null,
-  )
+  const [captured, setCaptured] = useState<boolean>(!!initialUrl)
+  const [resultMode, setResultMode] = useState<'direct' | 'capture' | null>(initialUrl ? 'direct' : null)
 
   const handleFile = async (file: File) => {
     setError(null)
-    setUploading(true)
     setPreview(URL.createObjectURL(file))
     try {
-      const [{ url, storage_path }, gps] = await Promise.all([
-        uploadEvidenciaJornada({
+      const gps = await tryGeolocate()
+      if (mode === 'capture') {
+        const r: PhotoCaptureResult = {
+          url: '', storage_path: '', blob: file,
+          lat: gps.lat, lng: gps.lng, accuracy: gps.accuracy, geolocation_status: gps.status,
+        }
+        setCaptured(true); setResultMode('capture')
+        onCapture(r)
+      } else {
+        setUploading(true)
+        const { url, storage_path } = await uploadEvidenciaJornada({
           blob: file, otId, planOtId, momento,
           ext: (file.name.split('.').pop() || 'jpg').toLowerCase(),
-        }),
-        tryGeolocate(),
-      ])
-      const r: PhotoCaptureResult = { url, storage_path, lat: gps.lat, lng: gps.lng }
-      setResult(r)
-      onCapture(r)
+        })
+        const r: PhotoCaptureResult = {
+          url, storage_path, blob: file,
+          lat: gps.lat, lng: gps.lng, accuracy: gps.accuracy, geolocation_status: gps.status,
+        }
+        setCaptured(true); setResultMode('direct')
+        onCapture(r)
+      }
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : 'Error al subir foto'
+      const msg = e instanceof Error ? e.message : 'Error al procesar foto'
       setError(msg)
       setPreview(null)
     } finally {
@@ -61,7 +76,7 @@ export function PhotoCapture({
   }
 
   const reset = () => {
-    setPreview(null); setResult(null); setError(null)
+    setPreview(null); setCaptured(false); setResultMode(null); setError(null)
     if (inputRef.current) inputRef.current.value = ''
   }
 
@@ -71,9 +86,10 @@ export function PhotoCapture({
         <span className="text-xs font-medium text-gray-700">
           {label}{required && <span className="ml-1 text-red-600">*</span>}
         </span>
-        {result && (
+        {captured && (
           <span className="inline-flex items-center gap-1 text-xs text-green-700">
-            <Check className="h-3 w-3" /> Subida
+            <Check className="h-3 w-3" />
+            {resultMode === 'capture' ? 'Capturada' : 'Subida'}
           </span>
         )}
       </div>
@@ -82,11 +98,6 @@ export function PhotoCapture({
         <div className="space-y-2">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={preview} alt={label} className="w-full max-h-56 object-cover rounded border border-gray-300" />
-          {result?.lat && result?.lng && (
-            <div className="text-[10px] text-gray-500 font-mono">
-              GPS {result.lat.toFixed(5)}, {result.lng.toFixed(5)}
-            </div>
-          )}
           {!uploading && (
             <Button size="sm" variant="ghost" onClick={reset} className="gap-1">
               <RotateCcw className="h-3 w-3" /> Tomar otra
