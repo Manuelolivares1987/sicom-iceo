@@ -158,10 +158,33 @@ export async function moverOTplanSemanal(payload: {
   return { data, error }
 }
 
+// MIG31: mueve UNA jornada especifica (multidia-safe). Usa el id de
+// calama_plan_semanal_ots, no el ot_id. Permite editar plan confirmado.
+export async function moverJornada(payload: {
+  planOtId: string
+  fechaDestino: string
+  responsableId?: string | null
+}) {
+  const { data, error } = await supabase.rpc('rpc_calama_mover_jornada', {
+    p_plan_ot_id: payload.planOtId,
+    p_fecha_destino: payload.fechaDestino,
+    p_responsable_id: payload.responsableId ?? null,
+  })
+  return { data, error }
+}
+
 export async function quitarOTplanSemanal(planSemanalId: string, otId: string) {
   const { data, error } = await supabase.rpc('rpc_calama_quitar_ot_plan_semanal', {
     p_plan_semanal_id: planSemanalId,
     p_ot_id: otId,
+  })
+  return { data, error }
+}
+
+// MIG31: quita UNA jornada especifica.
+export async function quitarJornada(planOtId: string) {
+  const { data, error } = await supabase.rpc('rpc_calama_quitar_jornada', {
+    p_plan_ot_id: planOtId,
   })
   return { data, error }
 }

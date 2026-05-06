@@ -1,7 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   getOrCreatePlanSemanal, getPlanSemanalById, getDiasPlanSemanal, getOTsPlanSemanal,
-  moverOTplanSemanal, quitarOTplanSemanal, asignarResponsable, confirmarPlanSemanal,
+  moverOTplanSemanal, moverJornada, quitarOTplanSemanal, quitarJornada,
+  asignarResponsable, confirmarPlanSemanal,
   getMisOTsAsignadas, getEjecucionActivaPorOT, getEjecucionesPorOT,
   iniciarEjecucion, pausarEjecucion, reanudarEjecucion, finalizarEjecucion,
   getUsuariosAsignables, actualizarComentarioPlanOT,
@@ -105,6 +106,24 @@ export function useMoverOTplanSemanal() {
   })
 }
 
+// MIG31: mueve una jornada especifica (multidia-safe).
+export function useMoverJornada() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (payload: Parameters<typeof moverJornada>[0] & { planSemanalId: string }) => {
+      const { planSemanalId: _ps, ...rest } = payload
+      void _ps
+      const { data, error } = await moverJornada(rest)
+      if (error) throw error
+      return data
+    },
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: KEY.otsPlan(vars.planSemanalId) })
+      qc.invalidateQueries({ queryKey: KEY.misOts })
+    },
+  })
+}
+
 export function useQuitarOTplanSemanal() {
   const qc = useQueryClient()
   return useMutation({
@@ -115,6 +134,22 @@ export function useQuitarOTplanSemanal() {
     },
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: KEY.otsPlan(vars.planSemanalId) })
+    },
+  })
+}
+
+// MIG31: quita una jornada especifica.
+export function useQuitarJornada() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (params: { planSemanalId: string; planOtId: string }) => {
+      const { data, error } = await quitarJornada(params.planOtId)
+      if (error) throw error
+      return data
+    },
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: KEY.otsPlan(vars.planSemanalId) })
+      qc.invalidateQueries({ queryKey: KEY.misOts })
     },
   })
 }

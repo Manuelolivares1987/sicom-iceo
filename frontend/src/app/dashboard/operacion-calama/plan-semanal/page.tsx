@@ -21,7 +21,8 @@ import { useToast } from '@/contexts/toast-context'
 import { useCalamaPlanificaciones, useCalamaOTs, useCalamaZonas } from '@/hooks/use-calama'
 import {
   useGetOrCreatePlanSemanal, usePlanSemanal, useDiasPlanSemanal, useOTsPlanSemanal,
-  useMoverOTplanSemanal, useQuitarOTplanSemanal, useConfirmarPlanSemanal,
+  useMoverOTplanSemanal, useMoverJornada, useQuitarOTplanSemanal, useQuitarJornada,
+  useConfirmarPlanSemanal,
   useUsuariosAsignables, useAsignarResponsable,
   useActualizarComentarioPlanOT, useAvancePorArea, useResumenGeneral,
 } from '@/hooks/use-calama-plan-semanal'
@@ -57,7 +58,9 @@ export default function PlanSemanalPage() {
   const { data: resumenGeneral } = useResumenGeneral(planificacionId)
 
   const moverOT = useMoverOTplanSemanal()
+  const moverJornada = useMoverJornada()
   const quitarOT = useQuitarOTplanSemanal()
+  const quitarJornada = useQuitarJornada()
   const confirmarPlan = useConfirmarPlanSemanal()
   const asignarResp = useAsignarResponsable()
   const updateComentario = useActualizarComentarioPlanOT()
@@ -142,20 +145,37 @@ export default function PlanSemanalPage() {
   const [activeOTId, setActiveOTId] = useState<string | null>(null)
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
 
-  const handleDragStart = (e: DragStartEvent) => setActiveOTId(String(e.active.id))
+  // Identifier helpers: backlog = "bl:<ot_id>", jornada existente = "j:<plan_ot_id>".
+  const parseDragId = (raw: string): { kind: 'bl' | 'j' | 'unknown'; id: string } => {
+    if (raw.startsWith('bl:')) return { kind: 'bl', id: raw.slice(3) }
+    if (raw.startsWith('j:'))  return { kind: 'j',  id: raw.slice(2) }
+    return { kind: 'unknown', id: raw }
+  }
+
+  const handleDragStart = (e: DragStartEvent) => {
+    const parsed = parseDragId(String(e.active.id))
+    if (parsed.kind === 'bl') setActiveOTId(parsed.id)
+    else if (parsed.kind === 'j') {
+      const planOt = (planOts ?? []).find((p) => p.id === parsed.id)
+      setActiveOTId(planOt?.ot_id ?? null)
+    } else setActiveOTId(null)
+  }
 
   const handleDragEnd = (e: DragEndEvent) => {
     setActiveOTId(null)
-    const otId = String(e.active.id)
+    if (!planSemanalId) return
+    const parsed = parseDragId(String(e.active.id))
     const overId = e.over?.id ? String(e.over.id) : null
-    if (!overId || !planSemanalId) return
+    if (!overId) return
 
+    // Drop al BACKLOG: solo aplica si venia de una jornada existente.
     if (overId === BACKLOG_ID) {
-      if (!planOtsByOtId.has(otId)) return
-      quitarOT.mutate({ planSemanalId, otId }, {
-        onSuccess: () => toast.success('OT devuelta al backlog'),
+      if (parsed.kind !== 'j') return
+      if (!confirm('¿Quieres quitar esta jornada del plan? La OT volverá a quedar disponible para reprogramar.')) return
+      quitarJornada.mutate({ planSemanalId, planOtId: parsed.id }, {
+        onSuccess: () => toast.success('Jornada quitada del plan'),
         onError: (err) => {
-          const msg = err instanceof Error ? err.message : 'Error al quitar OT'
+          const msg = err instanceof Error ? err.message : 'Error al quitar jornada'
           setErrorMsg(msg); toast.error(msg)
         },
       })
@@ -164,13 +184,34 @@ export default function PlanSemanalPage() {
 
     const dia = dias?.find((d) => d.id === overId)
     if (!dia) return
-    moverOT.mutate({ planSemanalId, otId, fechaDestino: dia.fecha }, {
-      onSuccess: () => toast.success(`OT planificada para ${dia.nombre_dia} ${dia.fecha}`),
-      onError: (err) => {
-        const msg = err instanceof Error ? err.message : 'Error al mover OT'
-        setErrorMsg(msg); toast.error(msg)
-      },
-    })
+
+    if (parsed.kind === 'bl') {
+      // Desde backlog: insertar nueva jornada via RPC viejo (multidia-safe porque
+      // hace UPSERT por (plan_semanal_id, ot_id) y MIG28 ya admite multidia con
+      // este patron — nueva fila si no existe en ese dia).
+      moverOT.mutate(
+        { planSemanalId, otId: parsed.id, fechaDestino: dia.fecha },
+        {
+          onSuccess: () => toast.success(`OT planificada para ${dia.nombre_dia} ${dia.fecha}`),
+          onError: (err) => {
+            const msg = err instanceof Error ? err.message : 'Error al planificar OT'
+            setErrorMsg(msg); toast.error(msg)
+          },
+        },
+      )
+    } else if (parsed.kind === 'j') {
+      // Mover jornada concreta (multidia-safe).
+      moverJornada.mutate(
+        { planSemanalId, planOtId: parsed.id, fechaDestino: dia.fecha },
+        {
+          onSuccess: () => toast.success(`Jornada movida a ${dia.nombre_dia} ${dia.fecha}`),
+          onError: (err) => {
+            const msg = err instanceof Error ? err.message : 'Error al mover jornada'
+            setErrorMsg(msg); toast.error(msg)
+          },
+        },
+      )
+    }
   }
 
   const handleConfirmar = () => {
@@ -389,14 +430,27 @@ export default function PlanSemanalPage() {
           planSem.estado === 'borrador'
             ? 'border-blue-200 bg-blue-50 text-blue-800'
             : planSem.estado === 'confirmado'
-            ? 'border-green-200 bg-green-50 text-green-800'
+            ? 'border-amber-200 bg-amber-50 text-amber-800'
+            : planSem.estado === 'en_ejecucion'
+            ? 'border-amber-200 bg-amber-50 text-amber-800'
             : 'border-gray-200 bg-gray-50 text-gray-700'
         }`}>
           <span className="flex items-center gap-2">
-            {(asignarResp.isPending || moverOT.isPending || quitarOT.isPending || updateComentario.isPending) ? (
+            {(asignarResp.isPending || moverOT.isPending || moverJornada.isPending
+              || quitarOT.isPending || quitarJornada.isPending
+              || updateComentario.isPending || agregarJornada.isPending
+              || reprogramarSaldo.isPending) ? (
               <>
                 <Spinner className="h-3 w-3" />
                 <span>Guardando…</span>
+              </>
+            ) : planSem.estado === 'confirmado' || planSem.estado === 'en_ejecucion' ? (
+              <>
+                <AlertTriangle className="h-3.5 w-3.5" />
+                <span>
+                  Plan <strong>{planSem.estado}</strong>. Puedes modificarlo: los cambios quedaran registrados.
+                  Las jornadas en ejecucion / aceptadas / cerradas no se mueven directamente; usa "Reprogramar saldo".
+                </span>
               </>
             ) : (
               <>
@@ -480,7 +534,7 @@ export default function PlanSemanalPage() {
                     </p>
                   ) : backlog.map((ot) => (
                     <DraggableOTCard
-                      key={ot.id} ot={ot} disabled={planBloqueado}
+                      key={ot.id} ot={ot} dragId={`bl:${ot.id}`} disabled={planBloqueado}
                       onPlanificarVariosDias={() => abrirMultidia(ot.id)}
                     />
                   ))}
@@ -504,13 +558,20 @@ export default function PlanSemanalPage() {
                       <div className="space-y-1.5 max-h-[55vh] overflow-y-auto pr-1">
                         {otsDia.map((ot) => {
                           const planOt = planOtsByOtId.get(ot.id)
+                          // Estados de jornada que NO admiten mover/quitar libremente.
+                          const estadosBloqueoJornada: string[] = [
+                            'en_ejecucion','pausada','finalizada','finalizada_operador',
+                            'pendiente_aprobacion','aceptada','cerrada',
+                          ]
+                          const jornadaBloqueada = !!planOt && estadosBloqueoJornada.includes(planOt.estado_plan)
                           return (
                             <DraggableOTCard
-                              key={ot.id} ot={ot} compact
+                              key={planOt?.id ?? ot.id} ot={ot} compact
+                              dragId={planOt ? `j:${planOt.id}` : `bl:${ot.id}`}
                               responsableId={planOt?.responsable_id ?? null}
                               comentario={planOt?.observaciones ?? null}
                               usuarios={usuarios ?? []}
-                              disabled={planBloqueado || planOt?.estado_plan === 'en_ejecucion' || planOt?.estado_plan === 'finalizada'}
+                              disabled={planBloqueado || jornadaBloqueada}
                               onAsignar={(uid) => {
                                 const u = (usuarios ?? []).find((x) => x.id === uid)
                                 const nombre = u?.nombre_completo || u?.email || 'usuario'
@@ -529,10 +590,12 @@ export default function PlanSemanalPage() {
                                 )
                               }}
                               onQuitar={() => {
-                                quitarOT.mutate({ planSemanalId, otId: ot.id }, {
-                                  onSuccess: () => toast.success('OT quitada del dia'),
+                                if (!planOt) return
+                                if (!confirm('¿Quieres quitar esta jornada del plan? La OT volverá a quedar disponible para reprogramar.')) return
+                                quitarJornada.mutate({ planSemanalId, planOtId: planOt.id }, {
+                                  onSuccess: () => toast.success('Jornada quitada del plan'),
                                   onError: (e) => {
-                                    const msg = e instanceof Error ? e.message : 'Error al quitar OT'
+                                    const msg = e instanceof Error ? e.message : 'Error al quitar jornada'
                                     setErrorMsg(msg)
                                     toast.error(msg)
                                   },
@@ -958,11 +1021,12 @@ function DroppableContainer({
 }
 
 function DraggableOTCard({
-  ot, compact, responsableId, comentario, usuarios, disabled,
+  ot, dragId, compact, responsableId, comentario, usuarios, disabled,
   onAsignar, onQuitar, onComentar, onActualizarAvance,
   onPlanificarVariosDias, onReprogramarSaldo,
 }: {
   ot: CalamaOTConRelaciones
+  dragId: string  // "bl:<ot_id>" para backlog, "j:<plan_ot_id>" para jornadas existentes
   compact?: boolean
   responsableId?: string | null
   comentario?: string | null
@@ -975,7 +1039,7 @@ function DraggableOTCard({
   onPlanificarVariosDias?: () => void
   onReprogramarSaldo?: () => void
 }) {
-  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: ot.id, disabled })
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: dragId, disabled })
   return (
     <div ref={setNodeRef} {...attributes} {...listeners}
       className={`${isDragging ? 'opacity-30' : ''} ${disabled ? 'cursor-not-allowed' : 'cursor-grab active:cursor-grabbing'}`}
