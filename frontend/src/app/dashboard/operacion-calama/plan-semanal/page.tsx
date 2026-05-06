@@ -8,7 +8,7 @@ import {
 import {
   Calendar, Save, ArrowLeft, ChevronLeft, ChevronRight, Lock, AlertTriangle,
   Trash2, User, Clock, MapPin, MessageSquare, BarChart3, Layers, X,
-  CheckCircle2,
+  CheckCircle2, CalendarPlus, Repeat,
 } from 'lucide-react'
 import Link from 'next/link'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
@@ -26,6 +26,7 @@ import {
   useActualizarComentarioPlanOT, useAvancePorArea, useResumenGeneral,
 } from '@/hooks/use-calama-plan-semanal'
 import { useActualizarAvanceManual } from '@/hooks/use-calama-avance'
+import { useAgregarJornadaOT, useReprogramarSaldoOT } from '@/hooks/use-calama-jornada'
 import { lunesDe } from '@/lib/services/calama-plan-semanal'
 import { zonaCodeFromFolio, excelCodigoFromFolio, type CalamaOTConRelaciones } from '@/lib/services/calama'
 import { EstadoBadge } from '@/components/calama/gantt-table'
@@ -71,6 +72,24 @@ export default function PlanSemanalPage() {
   const [avanceValor, setAvanceValor] = useState<number>(0)
   const [avanceMotivo, setAvanceMotivo] = useState<string>('ajuste_manual')
   const [avanceComentario, setAvanceComentario] = useState<string>('')
+
+  // Modal planificar varios dias (multidia)
+  const agregarJornada = useAgregarJornadaOT()
+  const [multidiaOpen, setMultidiaOpen] = useState<string | null>(null) // ot_id
+  const [multidiaFechas, setMultidiaFechas] = useState<string[]>([])
+  const [multidiaResp, setMultidiaResp] = useState<string>('')
+  const [multidiaHoras, setMultidiaHoras] = useState<string>('')
+  const [multidiaAvance, setMultidiaAvance] = useState<string>('')
+  const [multidiaComentario, setMultidiaComentario] = useState<string>('')
+
+  // Modal reprogramar saldo
+  const reprogramarSaldo = useReprogramarSaldoOT()
+  const [reprogramarOpen, setReprogramarOpen] = useState<string | null>(null) // plan_ot_id origen
+  const [reprogramarFecha, setReprogramarFecha] = useState<string>('')
+  const [reprogramarResp, setReprogramarResp] = useState<string>('')
+  const [reprogramarMotivo, setReprogramarMotivo] = useState<string>('')
+  const [reprogramarHoras, setReprogramarHoras] = useState<string>('')
+  const [reprogramarAvance, setReprogramarAvance] = useState<string>('')
 
   useEffect(() => {
     if (planificaciones && planificaciones.length > 0 && !planificacionId) {
@@ -201,6 +220,72 @@ export default function PlanSemanalPage() {
     setAvanceComentario('')
     setAvanceOpen(otId)
   }
+  const abrirMultidia = (otId: string) => {
+    setMultidiaFechas([])
+    setMultidiaResp('')
+    setMultidiaHoras('')
+    setMultidiaAvance('')
+    setMultidiaComentario('')
+    setMultidiaOpen(otId)
+  }
+  const guardarMultidia = async () => {
+    if (!multidiaOpen || !planSemanalId) return
+    if (multidiaFechas.length === 0) { toast.error('Selecciona al menos una fecha'); return }
+    let okCount = 0
+    let errCount = 0
+    for (const fecha of multidiaFechas) {
+      try {
+        await agregarJornada.mutateAsync({
+          plan_semanal_id: planSemanalId,
+          ot_id: multidiaOpen,
+          fecha,
+          responsable_id: multidiaResp || undefined,
+          horas_planificadas: multidiaHoras ? Number(multidiaHoras) : undefined,
+          avance_objetivo_pct: multidiaAvance ? Number(multidiaAvance) : undefined,
+          comentario: multidiaComentario || undefined,
+        })
+        okCount++
+      } catch {
+        errCount++
+      }
+    }
+    if (okCount > 0) toast.success(`${okCount} jornada(s) creada(s)`)
+    if (errCount > 0) toast.error(`${errCount} fecha(s) fallaron (¿ya existen?)`)
+    setMultidiaOpen(null)
+  }
+
+  const abrirReprogramar = (planOtId: string) => {
+    setReprogramarFecha('')
+    setReprogramarResp('')
+    setReprogramarMotivo('')
+    setReprogramarHoras('')
+    setReprogramarAvance('')
+    setReprogramarOpen(planOtId)
+  }
+  const guardarReprogramar = async () => {
+    if (!reprogramarOpen || !planSemanalId) return
+    if (!reprogramarFecha) { toast.error('Fecha destino obligatoria'); return }
+    if (!reprogramarMotivo.trim()) { toast.error('Motivo obligatorio'); return }
+    const planOt = (planOts ?? []).find((p) => p.id === reprogramarOpen)
+    if (!planOt) { toast.error('Jornada origen no encontrada'); return }
+    try {
+      await reprogramarSaldo.mutateAsync({
+        plan_semanal_ot_origen_id: reprogramarOpen,
+        plan_semanal_id: planSemanalId,
+        fecha_destino: reprogramarFecha,
+        responsable_id: reprogramarResp || undefined,
+        avance_objetivo_pct: reprogramarAvance ? Number(reprogramarAvance) : undefined,
+        horas_planificadas: reprogramarHoras ? Number(reprogramarHoras) : undefined,
+        motivo: reprogramarMotivo,
+        ot_id: planOt.ot_id,
+      })
+      toast.success('Saldo reprogramado')
+      setReprogramarOpen(null)
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Error al reprogramar')
+    }
+  }
+
   const guardarAvance = async () => {
     if (!avanceOpen) return
     if (avanceValor >= 100 && !avanceComentario.trim()) {
@@ -394,7 +479,10 @@ export default function PlanSemanalPage() {
                       {lugarFisicoSel ? 'No hay tareas pendientes en este lugar.' : 'No hay tareas en backlog.'}
                     </p>
                   ) : backlog.map((ot) => (
-                    <DraggableOTCard key={ot.id} ot={ot} disabled={planBloqueado} />
+                    <DraggableOTCard
+                      key={ot.id} ot={ot} disabled={planBloqueado}
+                      onPlanificarVariosDias={() => abrirMultidia(ot.id)}
+                    />
                   ))}
                 </div>
               </DroppableContainer>
@@ -452,6 +540,12 @@ export default function PlanSemanalPage() {
                               }}
                               onComentar={() => abrirComentario(ot.id)}
                               onActualizarAvance={() => abrirAvance(ot.id)}
+                              onPlanificarVariosDias={() => abrirMultidia(ot.id)}
+                              onReprogramarSaldo={
+                                planOt && Number(ot.avance_pct ?? 0) < 100
+                                  ? () => abrirReprogramar(planOt.id)
+                                  : undefined
+                              }
                             />
                           )
                         })}
@@ -677,6 +771,175 @@ export default function PlanSemanalPage() {
           </Button>
         </ModalFooter>
       </Modal>
+
+      {/* Modal: planificar varios dias (multidia) */}
+      <Modal
+        open={!!multidiaOpen}
+        onClose={() => !agregarJornada.isPending && setMultidiaOpen(null)}
+        title="Planificar OT en varios dias"
+      >
+        <div className="space-y-3 text-sm">
+          {(() => {
+            const ot = multidiaOpen ? otsById.get(multidiaOpen) : null
+            return ot ? (
+              <div className="rounded border bg-gray-50 p-2 text-xs">
+                <div className="font-mono text-gray-500">{excelCodigoFromFolio(ot.folio)}</div>
+                <div className="text-gray-900 mt-0.5">{ot.titulo}</div>
+              </div>
+            ) : null
+          })()}
+
+          <div>
+            <label className="text-xs text-gray-600 mb-1 block">Selecciona los dias de la semana</label>
+            <div className="grid grid-cols-2 gap-1">
+              {(dias ?? []).map((d) => {
+                const checked = multidiaFechas.includes(d.fecha)
+                return (
+                  <label key={d.id}
+                    className={`flex items-center gap-2 rounded border px-2 py-1.5 cursor-pointer ${
+                      checked ? 'border-amber-400 bg-amber-50' : 'border-gray-200 bg-white'
+                    }`}>
+                    <input type="checkbox" checked={checked}
+                      onChange={(e) => {
+                        if (e.target.checked) setMultidiaFechas((prev) => [...prev, d.fecha])
+                        else setMultidiaFechas((prev) => prev.filter((f) => f !== d.fecha))
+                      }}
+                    />
+                    <span className="text-xs">
+                      <strong>{d.nombre_dia}</strong> <span className="text-gray-500 font-mono">{d.fecha}</span>
+                    </span>
+                  </label>
+                )
+              })}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-xs text-gray-600">Horas/jornada</label>
+              <input type="number" min={0} step={0.5} value={multidiaHoras}
+                onChange={(e) => setMultidiaHoras(e.target.value)}
+                className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm" />
+            </div>
+            <div>
+              <label className="text-xs text-gray-600">Avance objetivo %</label>
+              <input type="number" min={0} max={100} value={multidiaAvance}
+                onChange={(e) => setMultidiaAvance(e.target.value)}
+                className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm" />
+            </div>
+          </div>
+
+          <div>
+            <label className="text-xs text-gray-600">Responsable</label>
+            <select value={multidiaResp} onChange={(e) => setMultidiaResp(e.target.value)}
+              className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm">
+              <option value="">Sin asignar</option>
+              {(usuarios ?? []).map((u) => (
+                <option key={u.id} value={u.id}>{u.nombre_completo || u.email}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="text-xs text-gray-600">Comentario</label>
+            <textarea rows={2} value={multidiaComentario}
+              onChange={(e) => setMultidiaComentario(e.target.value)}
+              className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm"
+              placeholder="Ej: tarea continua, jornada matinal..." />
+          </div>
+
+          <p className="text-[11px] text-gray-500">
+            Se creara una jornada por cada dia seleccionado ({multidiaFechas.length} jornada{multidiaFechas.length === 1 ? '' : 's'}).
+          </p>
+        </div>
+        <ModalFooter className="-mx-6 -mb-6 mt-4 px-6 pb-6 pt-4 border-t border-gray-100">
+          <Button variant="secondary" onClick={() => setMultidiaOpen(null)} disabled={agregarJornada.isPending}>
+            <X className="h-4 w-4" /> Cancelar
+          </Button>
+          <Button variant="primary" onClick={guardarMultidia} loading={agregarJornada.isPending}
+            disabled={multidiaFechas.length === 0}>
+            <CalendarPlus className="h-4 w-4" /> Crear jornadas
+          </Button>
+        </ModalFooter>
+      </Modal>
+
+      {/* Modal: reprogramar saldo */}
+      <Modal
+        open={!!reprogramarOpen}
+        onClose={() => !reprogramarSaldo.isPending && setReprogramarOpen(null)}
+        title="Reprogramar saldo de OT"
+      >
+        <div className="space-y-3 text-sm">
+          {(() => {
+            const planOt = reprogramarOpen ? (planOts ?? []).find((p) => p.id === reprogramarOpen) : null
+            const ot = planOt ? otsById.get(planOt.ot_id) : null
+            const avanceReal = ot ? Number(ot.avance_pct ?? 0) : 0
+            return ot ? (
+              <div className="rounded border bg-gray-50 p-2 text-xs">
+                <div className="font-mono text-gray-500">{excelCodigoFromFolio(ot.folio)}</div>
+                <div className="text-gray-900 mt-0.5">{ot.titulo}</div>
+                <div className="mt-1 text-gray-600">
+                  Avance actual: <strong>{avanceReal.toFixed(0)}%</strong> · Saldo: <strong>{(100 - avanceReal).toFixed(0)}%</strong>
+                </div>
+              </div>
+            ) : null
+          })()}
+
+          <div>
+            <label className="text-xs text-gray-600">Fecha destino</label>
+            <select value={reprogramarFecha} onChange={(e) => setReprogramarFecha(e.target.value)}
+              className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm">
+              <option value="">— Selecciona dia —</option>
+              {(dias ?? []).map((d) => (
+                <option key={d.id} value={d.fecha}>{d.nombre_dia} {d.fecha}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="text-xs text-gray-600">Responsable</label>
+            <select value={reprogramarResp} onChange={(e) => setReprogramarResp(e.target.value)}
+              className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm">
+              <option value="">Sin asignar</option>
+              {(usuarios ?? []).map((u) => (
+                <option key={u.id} value={u.id}>{u.nombre_completo || u.email}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-xs text-gray-600">Horas planificadas</label>
+              <input type="number" min={0} step={0.5} value={reprogramarHoras}
+                onChange={(e) => setReprogramarHoras(e.target.value)}
+                className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm" />
+            </div>
+            <div>
+              <label className="text-xs text-gray-600">Avance objetivo %</label>
+              <input type="number" min={0} max={100} value={reprogramarAvance}
+                onChange={(e) => setReprogramarAvance(e.target.value)}
+                className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm" />
+            </div>
+          </div>
+
+          <div>
+            <label className="text-xs text-gray-600">Motivo (obligatorio)</label>
+            <textarea rows={2} value={reprogramarMotivo}
+              onChange={(e) => setReprogramarMotivo(e.target.value)}
+              className="mt-1 w-full rounded border border-purple-300 px-3 py-2 text-sm"
+              placeholder="Ej: avance parcial por falta de material, condicion climatica..." />
+          </div>
+        </div>
+        <ModalFooter className="-mx-6 -mb-6 mt-4 px-6 pb-6 pt-4 border-t border-gray-100">
+          <Button variant="secondary" onClick={() => setReprogramarOpen(null)} disabled={reprogramarSaldo.isPending}>
+            <X className="h-4 w-4" /> Cancelar
+          </Button>
+          <Button variant="primary" onClick={guardarReprogramar} loading={reprogramarSaldo.isPending}
+            disabled={!reprogramarFecha || !reprogramarMotivo.trim()}>
+            <Repeat className="h-4 w-4" /> Reprogramar
+          </Button>
+        </ModalFooter>
+      </Modal>
     </div>
   )
 }
@@ -697,6 +960,7 @@ function DroppableContainer({
 function DraggableOTCard({
   ot, compact, responsableId, comentario, usuarios, disabled,
   onAsignar, onQuitar, onComentar, onActualizarAvance,
+  onPlanificarVariosDias, onReprogramarSaldo,
 }: {
   ot: CalamaOTConRelaciones
   compact?: boolean
@@ -708,6 +972,8 @@ function DraggableOTCard({
   onQuitar?: () => void
   onComentar?: () => void
   onActualizarAvance?: () => void
+  onPlanificarVariosDias?: () => void
+  onReprogramarSaldo?: () => void
 }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: ot.id, disabled })
   return (
@@ -720,6 +986,8 @@ function DraggableOTCard({
         usuarios={usuarios}
         onAsignar={onAsignar} onQuitar={onQuitar} onComentar={onComentar}
         onActualizarAvance={onActualizarAvance}
+        onPlanificarVariosDias={onPlanificarVariosDias}
+        onReprogramarSaldo={onReprogramarSaldo}
         disabled={disabled}
       />
     </div>
@@ -727,7 +995,10 @@ function DraggableOTCard({
 }
 
 function OTCardContent({
-  ot, compact, responsableId, comentario, usuarios, onAsignar, onQuitar, onComentar, onActualizarAvance, disabled,
+  ot, compact, responsableId, comentario, usuarios,
+  onAsignar, onQuitar, onComentar, onActualizarAvance,
+  onPlanificarVariosDias, onReprogramarSaldo,
+  disabled,
 }: {
   ot: CalamaOTConRelaciones
   compact?: boolean
@@ -738,6 +1009,8 @@ function OTCardContent({
   onQuitar?: () => void
   onComentar?: () => void
   onActualizarAvance?: () => void
+  onPlanificarVariosDias?: () => void
+  onReprogramarSaldo?: () => void
   disabled?: boolean
 }) {
   const codigo = excelCodigoFromFolio(ot.folio)
@@ -823,6 +1096,28 @@ function OTCardContent({
               title="Actualizar avance manual"
             >
               %
+            </button>
+          )}
+          {onPlanificarVariosDias && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onPlanificarVariosDias() }}
+              onPointerDown={(e) => e.stopPropagation()}
+              disabled={disabled}
+              className="inline-flex items-center justify-center gap-1 rounded border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] text-blue-700 hover:bg-blue-100 disabled:opacity-40"
+              title="Planificar varios dias"
+            >
+              <CalendarPlus className="h-3 w-3" /> Dias
+            </button>
+          )}
+          {onReprogramarSaldo && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onReprogramarSaldo() }}
+              onPointerDown={(e) => e.stopPropagation()}
+              disabled={disabled}
+              className="inline-flex items-center justify-center gap-1 rounded border border-purple-200 bg-purple-50 px-2 py-0.5 text-[10px] text-purple-700 hover:bg-purple-100 disabled:opacity-40"
+              title="Reprogramar saldo"
+            >
+              <Repeat className="h-3 w-3" />
             </button>
           )}
           {onQuitar && (

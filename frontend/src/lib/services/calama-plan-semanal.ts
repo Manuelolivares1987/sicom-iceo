@@ -34,6 +34,9 @@ export type CalamaPlanDia = {
 export type EstadoPlanOT =
   | 'planificada' | 'asignada' | 'liberada' | 'en_ejecucion'
   | 'pausada' | 'finalizada' | 'no_ejecutada' | 'bloqueada'
+  // PRO terreno (MIG29)
+  | 'descargada_offline' | 'finalizada_operador' | 'pendiente_aprobacion'
+  | 'aceptada' | 'rechazada' | 'requiere_correccion' | 'reprogramada' | 'cerrada'
 
 export type CalamaPlanOT = {
   id: string

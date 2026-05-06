@@ -1,21 +1,28 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import {
   ArrowLeft, Play, Pause, RotateCcw, CheckCircle2, AlertTriangle,
-  MapPin, MessageSquare, User, Coffee, Wrench,
+  MapPin, MessageSquare, User, Coffee, Wrench, Camera, FileSignature,
+  ShieldCheck, ShieldAlert, ClipboardCheck,
 } from 'lucide-react'
 import { Spinner } from '@/components/ui/spinner'
+import { useToast } from '@/contexts/toast-context'
 import { useCalamaOT } from '@/hooks/use-calama'
 import {
-  useEjecucionActivaPorOT, useIniciarEjecucion, usePausarEjecucion,
-  useReanudarEjecucion, useFinalizarEjecucion, useMisOTsAsignadas,
+  useEjecucionActivaPorOT, useMisOTsAsignadas,
 } from '@/hooks/use-calama-plan-semanal'
 import {
-  useMarcarOTCompletadaOperador, useRegistrarAvanceParcialOperador,
-} from '@/hooks/use-calama-avance'
+  useIniciarJornada, useRegistrarEventoJornada, useFinalizarJornada,
+  useAceptarJornada, useRechazarJornada,
+  useFirmasJornada, useEvidenciasJornada, useRechazosJornada,
+} from '@/hooks/use-calama-jornada'
+import { usePermissions } from '@/hooks/use-permissions'
 import { excelCodigoFromFolio, zonaCodeFromFolio } from '@/lib/services/calama'
+import { tryGeolocate, genClientUuid } from '@/lib/services/calama-jornada'
+import { PhotoCapture, type PhotoCaptureResult } from '@/components/calama/photo-capture'
+import { FirmaCapture, type FirmaCaptureResult } from '@/components/calama/firma-capture'
 
 const MOTIVOS_PAUSA: Array<{ value: string; label: string }> = [
   { value: 'colacion',                label: 'Colacion' },
@@ -29,29 +36,58 @@ const MOTIVOS_PAUSA: Array<{ value: string; label: string }> = [
   { value: 'otro',                    label: 'Otro' },
 ]
 
+type Paso = 'preparar' | 'ejecutar' | 'cerrar' | 'aceptacion' | 'cerrada' | 'rechazada'
+
 export default function MobileOTDetallePage() {
   const params = useParams<{ id: string }>()
   const router = useRouter()
   const otId = params?.id as string | undefined
+  const toast = useToast()
+  const { rol } = usePermissions()
+  const esMandante = ['administrador','gerencia','subgerente_operaciones','supervisor','jefe_operaciones','planificador'].includes(rol ?? '')
 
   const { data: ot, isLoading } = useCalamaOT(otId)
   const { data: ejecucion } = useEjecucionActivaPorOT(otId)
-  const { data: misOts } = useMisOTsAsignadas()
+  // Mostrar todas las jornadas: si soy admin/planificador veo todo; si soy operador solo las mias.
+  const { data: misOts } = useMisOTsAsignadas({ todas: esMandante })
 
-  const iniciar = useIniciarEjecucion()
-  const pausar = usePausarEjecucion()
-  const reanudar = useReanudarEjecucion()
-  const finalizar = useFinalizarEjecucion()
-  const marcarCompletada = useMarcarOTCompletadaOperador()
-  const guardarParcial = useRegistrarAvanceParcialOperador()
+  // Plan-OT activo de esta OT: la primera jornada NO cerrada/aceptada (orden secuencia).
+  const planOt = useMemo(() => {
+    const todas = (misOts ?? []).filter((p) => p.ot_id === otId)
+    if (todas.length === 0) return null
+    const activa = todas.find((p) => !['cerrada','aceptada','finalizada','no_ejecutada','reprogramada'].includes(p.estado_plan))
+    return activa ?? todas[0]
+  }, [misOts, otId])
 
-  const [error, setError] = useState<string | null>(null)
-  const [okMsg, setOkMsg] = useState<string | null>(null)
-  const [showMotivos, setShowMotivos] = useState(false)
+  const planOtId = planOt?.id ?? null
+  const planSemanalId = planOt?.plan_semanal_id ?? undefined
+  const { data: firmas } = useFirmasJornada(planOtId)
+  const { data: evidencias } = useEvidenciasJornada(planOtId)
+  const { data: rechazos } = useRechazosJornada(planOtId)
+
+  const iniciar  = useIniciarJornada()
+  const evento   = useRegistrarEventoJornada()
+  const finalizar = useFinalizarJornada()
+  const aceptar  = useAceptarJornada()
+  const rechazar = useRechazarJornada()
+
+  // Estado UI
   const [tickElapsed, setTickElapsed] = useState(0)
   const [avanceValor, setAvanceValor] = useState<number>(0)
-  const [avanceComentario, setAvanceComentario] = useState<string>('')
-  const [comentarioCierre, setComentarioCierre] = useState<string>('')
+  const [showMotivos, setShowMotivos] = useState(false)
+  const [obsCierre, setObsCierre] = useState('')
+  const [pasoForzado, setPasoForzado] = useState<Paso | null>(null)
+
+  // Capturas
+  const [fotoAntes, setFotoAntes] = useState<PhotoCaptureResult | null>(null)
+  const [fotoDespues, setFotoDespues] = useState<PhotoCaptureResult | null>(null)
+  const [firmaOperador, setFirmaOperador] = useState<FirmaCaptureResult | null>(null)
+  const [firmaMandante, setFirmaMandante] = useState<FirmaCaptureResult | null>(null)
+  const [motivoRechazo, setMotivoRechazo] = useState('')
+  const [requiereRehacer, setRequiereRehacer] = useState(true)
+  const [fotosRechazo, setFotosRechazo] = useState<PhotoCaptureResult[]>([])
+  const [firmanteNombre, setFirmanteNombre] = useState('')
+  const [firmanteRut, setFirmanteRut] = useState('')
 
   useEffect(() => {
     if (!ejecucion || ejecucion.estado !== 'en_ejecucion') return
@@ -63,22 +99,26 @@ export default function MobileOTDetallePage() {
     if (ot) setAvanceValor(Math.round(Number(ot.avance_pct ?? 0)))
   }, [ot])
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-screen text-gray-500">
-        <Spinner className="h-6 w-6" />
-      </div>
-    )
-  }
+  // Determinar paso actual del wizard
+  const paso: Paso = useMemo(() => {
+    if (pasoForzado) return pasoForzado
+    if (!planOt) return 'preparar'
+    const ep = planOt.estado_plan
+    if (ep === 'cerrada' || ep === 'aceptada') return 'cerrada'
+    if (ep === 'rechazada') return 'rechazada'
+    if (ep === 'finalizada_operador' || ep === 'pendiente_aprobacion') return 'aceptacion'
+    if (ep === 'en_ejecucion' || ep === 'pausada') return 'ejecutar'
+    return 'preparar'
+  }, [planOt, pasoForzado])
 
+  if (isLoading) {
+    return <div className="flex items-center justify-center h-screen text-gray-500"><Spinner className="h-6 w-6" /></div>
+  }
   if (!ot) {
     return (
       <div className="p-4 text-center">
         <p className="text-sm text-red-700">OT no encontrada o sin permisos.</p>
-        <button onClick={() => router.push('/m/calama')}
-          className="mt-3 rounded bg-amber-600 px-4 py-2 text-white text-sm">
-          Volver
-        </button>
+        <button onClick={() => router.push('/m/calama')} className="mt-3 rounded bg-amber-600 px-4 py-2 text-white text-sm">Volver</button>
       </div>
     )
   }
@@ -86,78 +126,171 @@ export default function MobileOTDetallePage() {
   const codigo = excelCodigoFromFolio(ot.folio)
   const lugar = zonaCodeFromFolio(ot.folio)
   const avanceReal = Number(ot.avance_pct ?? 0)
-  const avanceExcel = Number((ot as { avance_excel_pct?: number }).avance_excel_pct ?? 0)
-  const planOt = (misOts ?? []).find((p) => p.ot_id === ot.id)
-  const otFinalizada = ot.estado === 'finalizada' || ot.estado === 'cancelada'
 
   const tEfectivo = (ejecucion?.tiempo_efectivo_segundos ?? 0)
     + (ejecucion?.estado === 'en_ejecucion' ? tickElapsed : 0)
   const tPausado = (ejecucion?.tiempo_pausado_segundos ?? 0)
     + (ejecucion?.estado === 'pausada' ? tickElapsed : 0)
 
+  // ── Handlers PRO terreno ──────────────────────────────────────────────────
+
   const handleIniciar = async () => {
-    setError(null); setOkMsg(null)
-    try { await iniciar.mutateAsync(ot.id); setOkMsg('Ejecucion iniciada') }
-    catch (e) { setError(e instanceof Error ? e.message : 'Error al iniciar') }
+    if (!planOtId) { toast.error('No hay jornada asignada a esta OT'); return }
+    if (!fotoAntes) { toast.error('Foto ANTES obligatoria'); return }
+    try {
+      await iniciar.mutateAsync({
+        plan_semanal_ot_id: planOtId,
+        ot_id: ot.id,
+        plan_semanal_id: planSemanalId,
+        foto_antes_url: fotoAntes.url,
+        foto_antes_storage_path: fotoAntes.storage_path,
+        gps_lat: fotoAntes.lat,
+        gps_lng: fotoAntes.lng,
+        client_uuid_evidencia: genClientUuid(),
+        client_uuid_ejecucion: genClientUuid(),
+      })
+      toast.success('Jornada iniciada')
+      setPasoForzado(null)
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Error al iniciar')
+    }
   }
+
   const handlePausar = async (motivo: string) => {
-    if (!ejecucion) return
-    setError(null); setShowMotivos(false)
-    try { await pausar.mutateAsync({ ejecucionId: ejecucion.id, motivo, otId: ot.id }) }
-    catch (e) { setError(e instanceof Error ? e.message : 'Error al pausar') }
+    if (!planOtId) return
+    setShowMotivos(false)
+    try {
+      await evento.mutateAsync({
+        plan_semanal_ot_id: planOtId,
+        ot_id: ot.id,
+        plan_semanal_id: planSemanalId,
+        tipo: 'pause', motivo,
+        client_uuid: genClientUuid(),
+      })
+      toast.info(`Pausada: ${motivo}`)
+    } catch (e) { toast.error(e instanceof Error ? e.message : 'Error al pausar') }
   }
+
   const handleReanudar = async () => {
-    if (!ejecucion) return
-    setError(null)
-    try { await reanudar.mutateAsync({ ejecucionId: ejecucion.id, otId: ot.id }) }
-    catch (e) { setError(e instanceof Error ? e.message : 'Error al reanudar') }
+    if (!planOtId) return
+    try {
+      await evento.mutateAsync({
+        plan_semanal_ot_id: planOtId,
+        ot_id: ot.id,
+        plan_semanal_id: planSemanalId,
+        tipo: 'resume',
+        client_uuid: genClientUuid(),
+      })
+      toast.success('Reanudada')
+    } catch (e) { toast.error(e instanceof Error ? e.message : 'Error al reanudar') }
   }
+
   const handleGuardarAvance = async () => {
-    setError(null); setOkMsg(null)
-    if (avanceValor < 100 && !avanceComentario.trim()) {
-      setError('Comentario obligatorio para avance parcial')
-      return
-    }
+    if (!planOtId) return
     try {
-      await guardarParcial.mutateAsync({
+      await evento.mutateAsync({
+        plan_semanal_ot_id: planOtId,
         ot_id: ot.id,
-        avance_nuevo: avanceValor,
-        comentario: avanceComentario || undefined,
+        plan_semanal_id: planSemanalId,
+        tipo: 'avance', avance: avanceValor,
+        client_uuid: genClientUuid(),
       })
-      setOkMsg(`Avance guardado: ${avanceValor}%`)
-      setAvanceComentario('')
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Error al guardar avance')
-    }
+      toast.success(`Avance: ${avanceValor}%`)
+    } catch (e) { toast.error(e instanceof Error ? e.message : 'Error al guardar') }
   }
-  const handleMarcarCompletada = async () => {
-    if (!confirm('Marcar la OT como completada al 100%?')) return
-    setError(null); setOkMsg(null)
+
+  const handleCerrarJornada = async () => {
+    if (!planOtId) return
+    if (!fotoDespues) { toast.error('Foto DESPUES obligatoria'); return }
+    if (!firmaOperador) { toast.error('Firma operador obligatoria'); return }
     try {
-      await marcarCompletada.mutateAsync({
-        ot_id: ot.id,
-        ejecucion_id: ejecucion?.id,
-        comentario: comentarioCierre || undefined,
-      })
-      setOkMsg('OT completada')
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Error al completar')
-    }
-  }
-  const handleFinalizar = async () => {
-    if (!ejecucion) return
-    if (!confirm('Finalizar la ejecucion ahora?')) return
-    setError(null)
-    try {
+      const gps = await tryGeolocate()
       await finalizar.mutateAsync({
-        ejecucionId: ejecucion.id, otId: ot.id,
-        avance: avanceValor, observacion: comentarioCierre || undefined,
+        plan_semanal_ot_id: planOtId,
+        ot_id: ot.id,
+        plan_semanal_id: planSemanalId,
+        avance_final: avanceValor,
+        foto_despues_url: fotoDespues.url,
+        foto_despues_storage_path: fotoDespues.storage_path,
+        firma_operador_url: firmaOperador.url,
+        firma_operador_storage_path: firmaOperador.storage_path,
+        observacion: obsCierre || undefined,
+        gps_lat: gps.lat, gps_lng: gps.lng,
+        client_uuid_foto: genClientUuid(),
+        client_uuid_firma: genClientUuid(),
       })
-      setOkMsg('OT finalizada')
+      toast.success('Jornada cerrada — pendiente aprobacion mandante')
+      setPasoForzado(null)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Error al finalizar')
+      toast.error(e instanceof Error ? e.message : 'Error al cerrar')
     }
   }
+
+  const handleAceptar = async () => {
+    if (!planOtId) return
+    if (!firmaMandante) { toast.error('Firma mandante obligatoria'); return }
+    try {
+      const gps = await tryGeolocate()
+      await aceptar.mutateAsync({
+        plan_semanal_ot_id: planOtId,
+        ot_id: ot.id,
+        plan_semanal_id: planSemanalId,
+        firma_mandante_url: firmaMandante.url,
+        firma_mandante_storage_path: firmaMandante.storage_path,
+        firmante_nombre: firmanteNombre || undefined,
+        firmante_rut: firmanteRut || undefined,
+        observacion: obsCierre || undefined,
+        gps_lat: gps.lat, gps_lng: gps.lng,
+        client_uuid: genClientUuid(),
+      })
+      toast.success('Jornada aceptada')
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Error al aceptar')
+    }
+  }
+
+  const handleRechazar = async () => {
+    if (!planOtId) return
+    if (!motivoRechazo.trim()) { toast.error('Motivo obligatorio'); return }
+    if (!firmaMandante) { toast.error('Firma mandante obligatoria'); return }
+    try {
+      const gps = await tryGeolocate()
+      await rechazar.mutateAsync({
+        plan_semanal_ot_id: planOtId,
+        ot_id: ot.id,
+        plan_semanal_id: planSemanalId,
+        motivo: motivoRechazo,
+        requiere_rehacer: requiereRehacer,
+        fotos: fotosRechazo.map((f) => ({
+          url: f.url, storage_path: f.storage_path, client_uuid: genClientUuid(),
+        })),
+        firma_mandante_url: firmaMandante.url,
+        firma_mandante_storage_path: firmaMandante.storage_path,
+        firmante_nombre: firmanteNombre || undefined,
+        observacion: obsCierre || undefined,
+        gps_lat: gps.lat, gps_lng: gps.lng,
+        client_uuid_rechazo: genClientUuid(),
+        client_uuid_firma: genClientUuid(),
+      })
+      toast.warning('Jornada rechazada — requiere correccion')
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Error al rechazar')
+    }
+  }
+
+  const handleVolverAEjecutar = () => {
+    // Permite al operador volver al paso 'cerrar' tras un rechazo, sin perder el ciclo.
+    setPasoForzado('cerrar')
+    setFotoDespues(null); setFirmaOperador(null); setObsCierre('')
+  }
+
+  // ── Render helpers ────────────────────────────────────────────────────────
+
+  const fotoAntesYaSubida = (evidencias ?? []).find((e) => e.momento === 'antes')
+  const fotoDespuesYaSubida = (evidencias ?? []).find((e) => e.momento === 'despues')
+  const firmaOperadorYaSubida = (firmas ?? []).find((f) => f.firmante_tipo === 'operador' && f.contexto === 'cierre_operador')
+  const firmaMandanteYaSubida = (firmas ?? []).find((f) => f.firmante_tipo === 'mandante')
+  const ultimoRechazo = (rechazos ?? [])[0]
 
   return (
     <div className="space-y-3">
@@ -174,34 +307,34 @@ export default function MobileOTDetallePage() {
           </div>
           <div className="text-right">
             <div className="font-mono text-base font-bold">{avanceReal.toFixed(0)}%</div>
-            <EstadoChip estado={ot.estado} />
+            <EstadoChip estado={planOt?.estado_plan ?? ot.estado} />
           </div>
+        </div>
+        {/* Stepper compacto */}
+        <div className="px-3 pb-2">
+          <Stepper paso={paso} />
         </div>
       </header>
 
-      <div className="px-3 space-y-3">
-        {/* Bloque 1: Lugar fisico */}
+      <div className="px-3 space-y-3 pb-6">
+        {/* Bloque comun: lugar */}
         <Card>
           <div className="flex items-start gap-2">
             <MapPin className="h-4 w-4 text-amber-700 mt-0.5 shrink-0" />
             <div className="text-sm flex-1">
               <div className="font-mono text-xs text-gray-500">{lugar ?? '—'}</div>
-              <div className="text-gray-900 font-medium">
-                {(ot.faena?.nombre ?? '—')}
-              </div>
+              <div className="text-gray-900 font-medium">{ot.faena?.nombre ?? '—'}</div>
               <div className="text-xs text-gray-500 mt-1 flex items-center gap-2 flex-wrap">
                 <span><strong>Programada:</strong> {ot.fecha_programada}</span>
-                {ot.responsable_id && (
-                  <span className="inline-flex items-center gap-1">
-                    <User className="h-3 w-3" /> Asignada
-                  </span>
+                {planOt?.responsable_id && (
+                  <span className="inline-flex items-center gap-1"><User className="h-3 w-3" /> Asignada</span>
                 )}
               </div>
             </div>
           </div>
         </Card>
 
-        {/* Bloque 2: Comentario planificador */}
+        {/* Nota planificador */}
         {planOt?.observaciones && (
           <Card extraClass="border-amber-300 bg-amber-50">
             <div className="flex items-start gap-2">
@@ -214,184 +347,348 @@ export default function MobileOTDetallePage() {
           </Card>
         )}
 
-        {ot.descripcion && (
-          <Card>
-            <div className="text-sm">
-              <div className="text-[10px] uppercase text-gray-500">Descripcion</div>
-              <p className="mt-0.5 text-gray-700 whitespace-pre-line">{ot.descripcion}</p>
+        {/* Si hay rechazo previo, mostrarlo */}
+        {ultimoRechazo && paso !== 'cerrada' && (
+          <Card extraClass="border-red-300 bg-red-50">
+            <div className="flex items-start gap-2">
+              <ShieldAlert className="h-4 w-4 text-red-700 mt-0.5 shrink-0" />
+              <div className="text-sm flex-1">
+                <div className="text-[10px] uppercase font-bold text-red-800">Ultimo rechazo</div>
+                <p className="text-red-900 mt-0.5">{ultimoRechazo.motivo}</p>
+                {ultimoRechazo.requiere_rehacer && (
+                  <p className="text-xs text-red-700 mt-1">Requiere rehacer trabajo.</p>
+                )}
+              </div>
             </div>
           </Card>
         )}
 
-        {/* Mensajes */}
-        {error && (
-          <div className="rounded-xl border border-red-300 bg-red-50 p-3 text-sm text-red-700 flex items-start gap-2">
-            <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" /> {error}
-          </div>
-        )}
-        {okMsg && (
-          <div className="rounded-xl border border-green-300 bg-green-50 p-3 text-sm text-green-700 flex items-center gap-2">
-            <CheckCircle2 className="h-4 w-4" /> {okMsg}
-          </div>
+        {/* ===== PASO 1: PREPARAR ===== */}
+        {paso === 'preparar' && (
+          <Card>
+            <SectionTitle icon={<ClipboardCheck className="h-4 w-4" />} title="1. Preparar jornada" />
+            <p className="text-xs text-gray-600 mb-3">
+              Toma una foto del area de trabajo ANTES de iniciar (estado inicial).
+              Debe tomarse en terreno con GPS habilitado.
+            </p>
+            {planOtId ? (
+              <>
+                <PhotoCapture
+                  label="Foto ANTES (estado inicial)"
+                  momento="antes"
+                  otId={ot.id}
+                  planOtId={planOtId}
+                  onCapture={setFotoAntes}
+                  required
+                />
+                <div className="mt-4">
+                  <BotonGrande onClick={handleIniciar} loading={iniciar.isPending} variant="green" disabled={!fotoAntes}>
+                    <Play className="h-5 w-5" /> Iniciar jornada
+                  </BotonGrande>
+                </div>
+              </>
+            ) : (
+              <p className="text-xs text-amber-700">Esta OT no tiene jornada asignada en el plan semanal.</p>
+            )}
+          </Card>
         )}
 
-        {/* Bloque 3: Ejecucion (solo si no esta finalizada) */}
-        {!otFinalizada && (
-          <Card extraClass={ejecucion ? 'border-amber-300' : ''}>
-            <div className="flex items-center gap-2 mb-2">
-              <Wrench className="h-4 w-4 text-gray-700" />
-              <h2 className="font-bold text-sm">Ejecucion</h2>
+        {/* ===== PASO 2: EJECUTAR ===== */}
+        {paso === 'ejecutar' && (
+          <>
+            <Card extraClass="border-amber-300">
+              <SectionTitle icon={<Wrench className="h-4 w-4" />} title="2. Ejecutar jornada" right={
+                ejecucion && (
+                  <span className={`text-[10px] rounded-full px-2 py-0.5 font-bold ${
+                    ejecucion.estado === 'en_ejecucion' ? 'bg-green-100 text-green-700'
+                    : ejecucion.estado === 'pausada' ? 'bg-yellow-100 text-yellow-800'
+                    : 'bg-gray-100 text-gray-700'
+                  }`}>{ejecucion.estado.replace('_', ' ')}</span>
+                )
+              } />
+
               {ejecucion && (
-                <span className={`ml-auto text-[10px] rounded-full px-2 py-0.5 font-bold ${
-                  ejecucion.estado === 'en_ejecucion' ? 'bg-green-100 text-green-700'
-                  : ejecucion.estado === 'pausada' ? 'bg-yellow-100 text-yellow-800'
-                  : 'bg-gray-100 text-gray-700'
-                }`}>{ejecucion.estado.replace('_', ' ')}</span>
+                <div className="grid grid-cols-3 gap-2 mb-3 text-xs">
+                  <Tiempo label="Efectivo" segundos={tEfectivo} highlight={ejecucion.estado === 'en_ejecucion'} />
+                  <Tiempo label="Pausado" segundos={tPausado} highlight={ejecucion.estado === 'pausada'} />
+                  <Tiempo label="Colacion" segundos={ejecucion.tiempo_colacion_segundos ?? 0} />
+                </div>
               )}
-            </div>
 
-            {ejecucion && (
-              <div className="grid grid-cols-3 gap-2 mb-3 text-xs">
-                <Tiempo label="Efectivo" segundos={tEfectivo} highlight={ejecucion.estado === 'en_ejecucion'} />
-                <Tiempo label="Pausado" segundos={tPausado} highlight={ejecucion.estado === 'pausada'} />
-                <Tiempo label="Colacion" segundos={ejecucion.tiempo_colacion_segundos ?? 0} />
-              </div>
-            )}
+              {fotoAntesYaSubida && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <div className="mb-3"><img src={fotoAntesYaSubida.archivo_url} alt="antes" className="h-20 rounded border" /></div>
+              )}
 
-            {!ejecucion && (
-              <BotonGrande onClick={handleIniciar} loading={iniciar.isPending} variant="green">
-                <Play className="h-5 w-5" /> Iniciar
-              </BotonGrande>
-            )}
-
-            {ejecucion?.estado === 'en_ejecucion' && (
-              <div className="space-y-2">
-                <BotonGrande onClick={() => setShowMotivos((v) => !v)} variant="amber">
-                  <Pause className="h-5 w-5" /> Pausar
-                </BotonGrande>
-                {showMotivos && (
-                  <div className="grid grid-cols-2 gap-1.5 rounded-lg border bg-gray-50 p-2">
-                    <button
-                      onClick={() => handlePausar('colacion')}
-                      disabled={pausar.isPending}
-                      className="col-span-2 rounded bg-yellow-100 border border-yellow-300 py-2 text-sm font-medium text-yellow-900 active:bg-yellow-200 disabled:opacity-50 inline-flex items-center justify-center gap-1.5"
-                    >
-                      <Coffee className="h-4 w-4" /> Colacion
-                    </button>
-                    {MOTIVOS_PAUSA.filter((m) => m.value !== 'colacion').map((m) => (
-                      <button
-                        key={m.value}
-                        onClick={() => handlePausar(m.value)}
-                        disabled={pausar.isPending}
-                        className="rounded border border-gray-200 bg-white py-2 px-2 text-xs active:bg-amber-50 active:border-amber-300 disabled:opacity-50"
-                      >
-                        {m.label}
+              {ejecucion?.estado === 'en_ejecucion' && (
+                <div className="space-y-2">
+                  <BotonGrande onClick={() => setShowMotivos((v) => !v)} variant="amber">
+                    <Pause className="h-5 w-5" /> Pausar
+                  </BotonGrande>
+                  {showMotivos && (
+                    <div className="grid grid-cols-2 gap-1.5 rounded-lg border bg-gray-50 p-2">
+                      <button onClick={() => handlePausar('colacion')} disabled={evento.isPending}
+                        className="col-span-2 rounded bg-yellow-100 border border-yellow-300 py-2 text-sm font-medium text-yellow-900 inline-flex items-center justify-center gap-1.5">
+                        <Coffee className="h-4 w-4" /> Colacion
                       </button>
+                      {MOTIVOS_PAUSA.filter((m) => m.value !== 'colacion').map((m) => (
+                        <button key={m.value} onClick={() => handlePausar(m.value)} disabled={evento.isPending}
+                          className="rounded border border-gray-200 bg-white py-2 px-2 text-xs">{m.label}</button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {ejecucion?.estado === 'pausada' && (
+                <BotonGrande onClick={handleReanudar} loading={evento.isPending} variant="green">
+                  <RotateCcw className="h-5 w-5" /> Reanudar
+                </BotonGrande>
+              )}
+            </Card>
+
+            <Card>
+              <SectionTitle title="Avance" />
+              <div className="mb-2">
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs text-gray-600">Avance actual</label>
+                  <span className="font-mono text-xl font-bold text-amber-700">{avanceValor}%</span>
+                </div>
+                <input
+                  type="range" min={0} max={100} step={5} value={avanceValor}
+                  onChange={(e) => setAvanceValor(Number(e.target.value))}
+                  className="w-full h-2 accent-amber-600"
+                />
+                <div className="flex gap-2 mt-2">
+                  {[25, 50, 75, 100].map((v) => (
+                    <button key={v} onClick={() => setAvanceValor(v)}
+                      className={`flex-1 rounded border py-1.5 text-xs font-medium ${
+                        avanceValor === v ? 'bg-amber-600 text-white border-amber-600' : 'bg-white border-gray-200 text-gray-700'
+                      }`}>{v}%</button>
+                  ))}
+                </div>
+              </div>
+              <BotonGrande onClick={handleGuardarAvance} loading={evento.isPending} variant="amber">
+                Guardar avance ({avanceValor}%)
+              </BotonGrande>
+            </Card>
+
+            <Card>
+              <BotonGrande onClick={() => setPasoForzado('cerrar')} variant="green">
+                <CheckCircle2 className="h-5 w-5" /> Cerrar jornada
+              </BotonGrande>
+            </Card>
+          </>
+        )}
+
+        {/* ===== PASO 3: CERRAR ===== */}
+        {paso === 'cerrar' && (
+          <Card>
+            <SectionTitle icon={<FileSignature className="h-4 w-4" />} title="3. Cerrar jornada" />
+            <p className="text-xs text-gray-600 mb-3">
+              Foto del estado FINAL + firma del operador. Avance final {'< 100%'} crea saldo reprogramable.
+            </p>
+
+            {planOtId && (
+              <>
+                <div className="mb-3">
+                  <label className="text-xs text-gray-600">Avance final</label>
+                  <div className="flex items-center gap-2 mt-1">
+                    <input
+                      type="range" min={0} max={100} step={5} value={avanceValor}
+                      onChange={(e) => setAvanceValor(Number(e.target.value))}
+                      className="flex-1 h-2 accent-green-600"
+                    />
+                    <span className="font-mono text-lg font-bold text-green-700 w-12 text-right">{avanceValor}%</span>
+                  </div>
+                </div>
+
+                <div className="mb-3">
+                  <PhotoCapture
+                    label="Foto DESPUES (estado final)"
+                    momento="despues"
+                    otId={ot.id}
+                    planOtId={planOtId}
+                    onCapture={setFotoDespues}
+                    required
+                  />
+                </div>
+
+                <div className="mb-3">
+                  <FirmaCapture
+                    label="Firma operador"
+                    contexto="cierre_operador"
+                    otId={ot.id}
+                    planOtId={planOtId}
+                    onCapture={setFirmaOperador}
+                    required
+                  />
+                </div>
+
+                <textarea
+                  value={obsCierre} onChange={(e) => setObsCierre(e.target.value)}
+                  rows={2} placeholder="Observacion de cierre (opcional)"
+                  className="w-full rounded border border-gray-300 px-3 py-2 text-sm mb-3"
+                />
+
+                <BotonGrande onClick={handleCerrarJornada} loading={finalizar.isPending} variant="green"
+                  disabled={!fotoDespues || !firmaOperador}>
+                  <ShieldCheck className="h-5 w-5" /> Cerrar jornada ({avanceValor}%)
+                </BotonGrande>
+
+                <button onClick={() => setPasoForzado('ejecutar')} className="mt-2 w-full text-xs text-gray-500 underline">
+                  Volver a ejecucion
+                </button>
+              </>
+            )}
+          </Card>
+        )}
+
+        {/* ===== PASO 4: ACEPTACION ===== */}
+        {paso === 'aceptacion' && (
+          <>
+            {/* Resumen para mostrar */}
+            <Card>
+              <SectionTitle icon={<ShieldCheck className="h-4 w-4 text-green-700" />} title="Operador finalizo — pendiente aprobacion" />
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                {fotoAntesYaSubida && <Thumb url={fotoAntesYaSubida.archivo_url} label="Antes" />}
+                {fotoDespuesYaSubida && <Thumb url={fotoDespuesYaSubida.archivo_url} label="Despues" />}
+              </div>
+              {firmaOperadorYaSubida && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <div className="mt-3">
+                  <div className="text-[10px] uppercase text-gray-500">Firma operador</div>
+                  <img src={firmaOperadorYaSubida.firma_url} alt="firma operador" className="h-16 bg-white border rounded mt-1" />
+                </div>
+              )}
+            </Card>
+
+            {esMandante ? (
+              <Card>
+                <SectionTitle icon={<FileSignature className="h-4 w-4" />} title="4. Aceptar / Rechazar" />
+                <p className="text-xs text-gray-600 mb-3">Como mandante, valida la jornada y firma.</p>
+
+                <div className="grid grid-cols-2 gap-2 mb-3">
+                  <input
+                    value={firmanteNombre} onChange={(e) => setFirmanteNombre(e.target.value)}
+                    placeholder="Nombre firmante"
+                    className="rounded border border-gray-300 px-2 py-1.5 text-sm"
+                  />
+                  <input
+                    value={firmanteRut} onChange={(e) => setFirmanteRut(e.target.value)}
+                    placeholder="RUT (opcional)"
+                    className="rounded border border-gray-300 px-2 py-1.5 text-sm"
+                  />
+                </div>
+
+                {planOtId && (
+                  <div className="mb-3">
+                    <FirmaCapture
+                      label="Firma mandante"
+                      contexto="aceptacion"
+                      otId={ot.id}
+                      planOtId={planOtId}
+                      onCapture={setFirmaMandante}
+                      required
+                    />
+                  </div>
+                )}
+
+                <textarea
+                  value={obsCierre} onChange={(e) => setObsCierre(e.target.value)}
+                  rows={2} placeholder="Observacion (opcional)"
+                  className="w-full rounded border border-gray-300 px-3 py-2 text-sm mb-3"
+                />
+
+                <BotonGrande onClick={handleAceptar} loading={aceptar.isPending} variant="green" disabled={!firmaMandante}>
+                  <ShieldCheck className="h-5 w-5" /> Aceptar jornada
+                </BotonGrande>
+
+                <details className="mt-4">
+                  <summary className="text-sm font-medium text-red-700 cursor-pointer">o rechazar jornada</summary>
+                  <div className="mt-3 space-y-3">
+                    <textarea
+                      value={motivoRechazo} onChange={(e) => setMotivoRechazo(e.target.value)}
+                      rows={2} placeholder="Motivo del rechazo (obligatorio)"
+                      className="w-full rounded border border-red-300 px-3 py-2 text-sm"
+                    />
+                    <label className="flex items-center gap-2 text-xs">
+                      <input type="checkbox" checked={requiereRehacer} onChange={(e) => setRequiereRehacer(e.target.checked)} />
+                      Requiere rehacer trabajo (cambia OT a "requiere correccion")
+                    </label>
+                    {planOtId && fotosRechazo.length < 3 && (
+                      <PhotoCapture
+                        label={`Foto evidencia rechazo (${fotosRechazo.length + 1}/3)`}
+                        momento="rechazo"
+                        otId={ot.id}
+                        planOtId={planOtId}
+                        onCapture={(r) => setFotosRechazo((prev) => [...prev, r])}
+                      />
+                    )}
+                    {fotosRechazo.length > 0 && (
+                      <div className="grid grid-cols-3 gap-1">
+                        {fotosRechazo.map((f, i) => (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img key={i} src={f.url} alt={`rechazo ${i+1}`} className="h-16 w-full object-cover rounded border" />
+                        ))}
+                      </div>
+                    )}
+                    <BotonGrande onClick={handleRechazar} loading={rechazar.isPending} variant="amber"
+                      disabled={!motivoRechazo.trim() || !firmaMandante}>
+                      <ShieldAlert className="h-5 w-5" /> Rechazar jornada
+                    </BotonGrande>
+                  </div>
+                </details>
+              </Card>
+            ) : (
+              <Card extraClass="border-amber-200 bg-amber-50">
+                <p className="text-sm text-amber-900">
+                  Esperando aprobacion del mandante. No se requieren mas acciones del operador.
+                </p>
+              </Card>
+            )}
+          </>
+        )}
+
+        {/* ===== ESTADO RECHAZADA ===== */}
+        {paso === 'rechazada' && (
+          <Card extraClass="border-red-300 bg-red-50">
+            <SectionTitle icon={<ShieldAlert className="h-4 w-4 text-red-700" />} title="Jornada rechazada" />
+            {ultimoRechazo && (
+              <div className="text-sm text-red-900 space-y-2">
+                <p><strong>Motivo:</strong> {ultimoRechazo.motivo}</p>
+                {ultimoRechazo.requiere_rehacer && <p>Requiere rehacer trabajo.</p>}
+                {ultimoRechazo.fotos_url?.length > 0 && (
+                  <div className="grid grid-cols-3 gap-1">
+                    {ultimoRechazo.fotos_url.map((u, i) => (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img key={i} src={u} alt={`rechazo ${i+1}`} className="h-16 w-full object-cover rounded border" />
                     ))}
                   </div>
                 )}
               </div>
             )}
-
-            {ejecucion?.estado === 'pausada' && (
-              <BotonGrande onClick={handleReanudar} loading={reanudar.isPending} variant="green">
-                <RotateCcw className="h-5 w-5" /> Reanudar
-              </BotonGrande>
-            )}
-          </Card>
-        )}
-
-        {/* Bloque 4: Avance */}
-        {!otFinalizada && (
-          <Card>
-            <h2 className="font-bold text-sm mb-2">Avance</h2>
-            <div className="grid grid-cols-2 gap-2 mb-3 text-xs">
-              <div className="rounded-lg border border-gray-200 bg-gray-50 p-2">
-                <div className="text-[10px] uppercase text-gray-500">Excel</div>
-                <div className="font-mono text-lg text-gray-700">{avanceExcel.toFixed(0)}%</div>
-              </div>
-              <div className="rounded-lg border border-amber-200 bg-amber-50 p-2">
-                <div className="text-[10px] uppercase text-amber-600">Real</div>
-                <div className="font-mono text-lg font-bold text-amber-800">{avanceReal.toFixed(0)}%</div>
-              </div>
-            </div>
-
-            <div className="mb-2">
-              <div className="flex items-center justify-between mb-1">
-                <label className="text-xs text-gray-600">Nuevo avance</label>
-                <span className="font-mono text-xl font-bold text-amber-700">{avanceValor}%</span>
-              </div>
-              <input
-                type="range" min={0} max={100} step={5}
-                value={avanceValor}
-                onChange={(e) => setAvanceValor(Number(e.target.value))}
-                className="w-full h-2 accent-amber-600"
-              />
-              <div className="flex gap-2 mt-2">
-                {[25, 50, 75, 100].map((v) => (
-                  <button
-                    key={v}
-                    onClick={() => setAvanceValor(v)}
-                    className={`flex-1 rounded border py-1.5 text-xs font-medium ${
-                      avanceValor === v
-                        ? 'bg-amber-600 text-white border-amber-600'
-                        : 'bg-white border-gray-200 text-gray-700 active:bg-gray-50'
-                    }`}
-                  >
-                    {v}%
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <textarea
-              value={avanceComentario}
-              onChange={(e) => setAvanceComentario(e.target.value)}
-              rows={2}
-              placeholder="Comentario (obligatorio si <100%)"
-              className="w-full rounded border border-gray-300 px-3 py-2 text-sm mb-2"
-            />
-
-            <div className="grid grid-cols-1 gap-2">
-              <BotonGrande onClick={handleGuardarAvance} loading={guardarParcial.isPending} variant="amber" disabled={avanceValor === avanceReal && !avanceComentario.trim()}>
-                Guardar avance ({avanceValor}%)
-              </BotonGrande>
-              <BotonGrande onClick={handleMarcarCompletada} loading={marcarCompletada.isPending} variant="green">
-                <CheckCircle2 className="h-5 w-5" /> Marcar completada 100%
+            <div className="mt-3">
+              <BotonGrande onClick={handleVolverAEjecutar} variant="amber">
+                <RotateCcw className="h-5 w-5" /> Corregir y volver a cerrar
               </BotonGrande>
             </div>
           </Card>
         )}
 
-        {/* Bloque 5: Cierre formal (con timer) */}
-        {!otFinalizada && ejecucion && (
-          <Card>
-            <h2 className="font-bold text-sm mb-2">Finalizar OT</h2>
-            <textarea
-              value={comentarioCierre}
-              onChange={(e) => setComentarioCierre(e.target.value)}
-              rows={2}
-              placeholder="Comentario de cierre (opcional)"
-              className="w-full rounded border border-gray-300 px-3 py-2 text-sm mb-2"
-            />
-            <BotonGrande onClick={handleFinalizar} loading={finalizar.isPending} variant="green">
-              <CheckCircle2 className="h-5 w-5" /> Finalizar ejecucion ({avanceValor}%)
-            </BotonGrande>
-          </Card>
-        )}
-
-        {/* Resumen si finalizada */}
-        {otFinalizada && (
+        {/* ===== ESTADO CERRADA / ACEPTADA ===== */}
+        {paso === 'cerrada' && (
           <Card extraClass="border-green-300 bg-green-50">
-            <div className="flex items-center gap-2 mb-2">
-              <CheckCircle2 className="h-5 w-5 text-green-700" />
-              <h2 className="font-bold text-sm text-green-800">OT {ot.estado}</h2>
-            </div>
+            <SectionTitle icon={<ShieldCheck className="h-4 w-4 text-green-700" />} title="Jornada cerrada y aceptada" />
             <div className="text-xs text-green-900 space-y-1">
-              {ot.fecha_termino_real && <div>Cerrada: {ot.fecha_termino_real.slice(0, 16).replace('T', ' ')}</div>}
-              {ot.horas_reales != null && <div>Horas reales: <strong>{Number(ot.horas_reales).toFixed(2)}h</strong></div>}
               <div>Avance final: <strong>{avanceReal.toFixed(0)}%</strong></div>
-              {ot.observaciones_cierre && <div className="mt-1 text-green-800">{ot.observaciones_cierre}</div>}
+              {firmaMandanteYaSubida && (
+                <div className="mt-2">
+                  <div className="text-[10px] uppercase text-gray-500">Firma mandante</div>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={firmaMandanteYaSubida.firma_url} alt="firma mandante" className="h-16 bg-white border rounded mt-1" />
+                </div>
+              )}
             </div>
           </Card>
         )}
@@ -400,17 +697,24 @@ export default function MobileOTDetallePage() {
   )
 }
 
+// ── UI helpers ──────────────────────────────────────────────────────────────
+
 function Card({ children, extraClass = '' }: { children: React.ReactNode; extraClass?: string }) {
   return <div className={`rounded-xl border bg-white p-3 shadow-sm ${extraClass}`}>{children}</div>
 }
 
-function BotonGrande({
-  children, onClick, loading, disabled, variant = 'amber',
-}: {
-  children: React.ReactNode
-  onClick?: () => void
-  loading?: boolean
-  disabled?: boolean
+function SectionTitle({ icon, title, right }: { icon?: React.ReactNode; title: string; right?: React.ReactNode }) {
+  return (
+    <div className="flex items-center gap-2 mb-2">
+      {icon}
+      <h2 className="font-bold text-sm">{title}</h2>
+      {right && <span className="ml-auto">{right}</span>}
+    </div>
+  )
+}
+
+function BotonGrande({ children, onClick, loading, disabled, variant = 'amber' }: {
+  children: React.ReactNode; onClick?: () => void; loading?: boolean; disabled?: boolean
   variant?: 'amber' | 'green' | 'gray'
 }) {
   const colors: Record<string, string> = {
@@ -419,11 +723,8 @@ function BotonGrande({
     gray:  'bg-gray-600 hover:bg-gray-700 active:bg-gray-800',
   }
   return (
-    <button
-      onClick={onClick}
-      disabled={loading || disabled}
-      className={`w-full rounded-xl ${colors[variant]} text-white font-bold py-3 px-4 text-base inline-flex items-center justify-center gap-2 shadow-md disabled:opacity-50 disabled:cursor-not-allowed`}
-    >
+    <button onClick={onClick} disabled={loading || disabled}
+      className={`w-full rounded-xl ${colors[variant]} text-white font-bold py-3 px-4 text-base inline-flex items-center justify-center gap-2 shadow-md disabled:opacity-50 disabled:cursor-not-allowed`}>
       {loading ? <Spinner className="h-4 w-4" /> : children}
     </button>
   )
@@ -431,16 +732,59 @@ function BotonGrande({
 
 function EstadoChip({ estado }: { estado: string }) {
   const map: Record<string, { bg: string; txt: string }> = {
-    planificada:   { bg: 'bg-white/20',   txt: 'Pendiente' },
-    liberada:      { bg: 'bg-blue-200/30', txt: 'Liberada' },
-    en_ejecucion:  { bg: 'bg-yellow-200/30', txt: 'En ejecucion' },
-    en_pausa:      { bg: 'bg-yellow-200/40', txt: 'Pausada' },
-    finalizada:    { bg: 'bg-green-200/40', txt: 'Completada' },
-    no_ejecutada:  { bg: 'bg-red-200/40', txt: 'No ejecutada' },
-    cancelada:     { bg: 'bg-gray-200/40', txt: 'Cancelada' },
+    planificada:           { bg: 'bg-white/20',         txt: 'Planificada' },
+    asignada:              { bg: 'bg-blue-200/30',      txt: 'Asignada' },
+    liberada:              { bg: 'bg-blue-200/30',      txt: 'Liberada' },
+    descargada_offline:    { bg: 'bg-blue-200/30',      txt: 'Descargada' },
+    en_ejecucion:          { bg: 'bg-yellow-200/30',    txt: 'En ejecucion' },
+    pausada:               { bg: 'bg-yellow-200/40',    txt: 'Pausada' },
+    finalizada_operador:   { bg: 'bg-blue-200/40',      txt: 'Por aprobar' },
+    pendiente_aprobacion:  { bg: 'bg-blue-200/40',      txt: 'Por aprobar' },
+    aceptada:              { bg: 'bg-green-200/40',     txt: 'Aceptada' },
+    cerrada:               { bg: 'bg-green-200/40',     txt: 'Cerrada' },
+    rechazada:             { bg: 'bg-red-200/40',       txt: 'Rechazada' },
+    requiere_correccion:   { bg: 'bg-red-200/40',       txt: 'Corregir' },
+    finalizada:            { bg: 'bg-green-200/40',     txt: 'Finalizada' },
+    no_ejecutada:          { bg: 'bg-red-200/40',       txt: 'No ejec.' },
+    cancelada:             { bg: 'bg-gray-200/40',      txt: 'Cancelada' },
+    reprogramada:          { bg: 'bg-purple-200/40',    txt: 'Reprogr.' },
   }
   const c = map[estado] ?? { bg: 'bg-white/20', txt: estado }
   return <span className={`inline-block text-[9px] uppercase font-bold rounded px-1.5 py-0.5 mt-0.5 ${c.bg}`}>{c.txt}</span>
+}
+
+function Stepper({ paso }: { paso: Paso }) {
+  const steps: Array<{ key: Paso; label: string; icon: React.ReactNode }> = [
+    { key: 'preparar',  label: 'Preparar',  icon: <Camera className="h-3 w-3" /> },
+    { key: 'ejecutar',  label: 'Ejecutar',  icon: <Wrench className="h-3 w-3" /> },
+    { key: 'cerrar',    label: 'Cerrar',    icon: <FileSignature className="h-3 w-3" /> },
+    { key: 'aceptacion',label: 'Aceptacion',icon: <ShieldCheck className="h-3 w-3" /> },
+  ]
+  const order: Paso[] = ['preparar','ejecutar','cerrar','aceptacion','cerrada']
+  const idx = paso === 'rechazada' ? 2 : Math.min(order.indexOf(paso), 4)
+  return (
+    <div className="flex gap-1">
+      {steps.map((s, i) => (
+        <div key={s.key} className={`flex-1 rounded px-1 py-0.5 text-[9px] font-bold inline-flex items-center justify-center gap-0.5 ${
+          i < idx ? 'bg-white/30 text-white' :
+          i === idx ? 'bg-white text-amber-800' :
+          'bg-white/10 text-white/50'
+        }`}>
+          {s.icon}<span className="hidden xs:inline">{s.label}</span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function Thumb({ url, label }: { url: string; label: string }) {
+  return (
+    <div>
+      <div className="text-[10px] uppercase text-gray-500 mb-0.5">{label}</div>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={url} alt={label} className="w-full h-20 object-cover rounded border" />
+    </div>
+  )
 }
 
 function Tiempo({ label, segundos, highlight }: { label: string; segundos: number; highlight?: boolean }) {
