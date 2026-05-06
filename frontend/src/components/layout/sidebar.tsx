@@ -157,8 +157,9 @@ interface SidebarProps {
 export default function Sidebar({ collapsed, onToggle, onClose }: SidebarProps) {
   const pathname = usePathname()
   const { perfil, signOut } = useAuth()
-  const { canView, canViewExtended, esOperadorCalamaSolo } = usePermissions()
+  const { canView, canViewExtended, esOperadorCalamaSolo, esSupervisorCalamaSolo } = usePermissions()
   const operadorCalamaSolo = esOperadorCalamaSolo()
+  const supervisorCalamaSolo = esSupervisorCalamaSolo()
 
   // Filtrado por permisos se hace dentro del render por grupo.
   // navItems se mantiene exportado por compatibilidad interna.
@@ -220,12 +221,16 @@ export default function Sidebar({ collapsed, onToggle, onClose }: SidebarProps) 
       {/* Navigation agrupada */}
       <nav className="flex-1 space-y-3 overflow-y-auto px-2 py-3">
         {navGroups.map((group, idx) => {
-          // Modo OOCC-solo: solo mostrar grupo Operacion Calama.
-          if (operadorCalamaSolo && group.label !== 'Operación Calama') return null
+          // Restringidos a Calama: solo mostrar grupo Operacion Calama.
+          if ((operadorCalamaSolo || supervisorCalamaSolo) && group.label !== 'Operación Calama') return null
           const groupVisible = group.items.filter((item) => {
             if (operadorCalamaSolo) {
-              // Solo ruta movil para OOCC.
+              // OOCC: solo ruta movil.
               return item.href === '/m/calama'
+            }
+            if (supervisorCalamaSolo) {
+              // Supervisor Calama: solo items dashboard Calama (no la vista movil).
+              return item.extendedModule === 'operacion_calama' && item.href !== '/m/calama'
             }
             if (item.module) return canView(item.module)
             if (item.extendedModule) return canViewExtended(item.extendedModule)

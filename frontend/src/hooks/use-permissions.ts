@@ -305,21 +305,38 @@ const ROLES_CALAMA_DASHBOARD: RolCalama[] = [
   'jefe_sucursal', 'planificador_calama', 'supervisor_calama', 'auditor_calama',
 ]
 
+// Roles globales que rompen el bloqueo Calama-solo (admins reales).
+// supervisor / planificador / jefe_operaciones NO rompen el bloqueo: si tienen
+// rol_calama dedicado se asume que su trabajo es solo Calama.
+const ADMIN_GLOBAL_ROLES: RolUsuario[] = [
+  'administrador', 'gerencia', 'subgerente_operaciones',
+]
+
 export function usePermissions() {
   const { perfil, rolCalama } = useAuth()
   const rol = perfil?.rol as RolUsuario | undefined
 
-  // Es operador Calama "puro": rol global no es admin/supervisor y rol Calama es operador_calama.
-  // Para este usuario el sistema bloquea TODO lo demas y lo deja solo en /m/calama.
+  function isAdminGlobal(): boolean {
+    return !!rol && ADMIN_GLOBAL_ROLES.includes(rol)
+  }
+
+  // Operador Calama "puro": rol_calama=operador_calama y NO admin global.
+  // Solo puede ver /m/calama.
   function esOperadorCalamaSolo(): boolean {
     if (rolCalama !== 'operador_calama') return false
-    if (!rol) return true
-    // Si tambien es administrador o supervisor global, no aplicamos el bloqueo.
-    const rolesQueRompenBloqueo: RolUsuario[] = [
-      'administrador','gerencia','subgerente_operaciones','supervisor','planificador',
-      'jefe_operaciones','jefe_mantenimiento',
-    ]
-    return !rolesQueRompenBloqueo.includes(rol)
+    return !isAdminGlobal()
+  }
+
+  // Supervisor Calama "puro": rol_calama=supervisor_calama y NO admin global.
+  // Solo puede ver /dashboard/operacion-calama/*.
+  function esSupervisorCalamaSolo(): boolean {
+    if (rolCalama !== 'supervisor_calama') return false
+    return !isAdminGlobal()
+  }
+
+  // Cualquier perfil restringido a Calama (operador o supervisor calama solos).
+  function esRestringidoCalama(): boolean {
+    return esOperadorCalamaSolo() || esSupervisorCalamaSolo()
   }
 
   function tieneRolCalama(): boolean { return rolCalama !== null }
@@ -329,8 +346,10 @@ export function usePermissions() {
 
   function can(module: Module, permission: Permission): boolean {
     if (!rol) return false
-    // Override duro: operador_calama puro NO tiene permisos de modulos generales.
-    if (esOperadorCalamaSolo()) return false
+    // Override duro: usuarios restringidos a Calama no tienen permisos en modulos
+    // generales. La excepcion para supervisor_calama es el modulo extendido,
+    // que se concede via canViewExtended('operacion_calama').
+    if (esRestringidoCalama()) return false
     const modulePerms = PERMISSIONS[rol]?.[module]
     return modulePerms?.includes(permission) ?? false
   }
@@ -348,14 +367,14 @@ export function usePermissions() {
 
   function getVisibleModules(): Module[] {
     if (!rol) return []
-    if (esOperadorCalamaSolo()) return []
+    if (esRestringidoCalama()) return []
     return (Object.keys(PERMISSIONS[rol]) as Module[]).filter(m => PERMISSIONS[rol][m].includes('view'))
   }
 
   function canViewExtended(mod: ExtendedModule): boolean {
     if (!rol) return false
-    // Operador Calama puro accede solo al modulo extendido operacion_calama.
-    if (esOperadorCalamaSolo()) return mod === 'operacion_calama'
+    // Restringidos: solo modulo Operacion Calama; nunca bodega ni mantencion_qr.
+    if (esRestringidoCalama()) return mod === 'operacion_calama'
     // Acceso por rol global (matriz EXTENDED_VIEW).
     if (EXTENDED_VIEW[mod]?.includes(rol)) return true
     // Acceso por rol Calama del proyecto: cualquier rol_calama da acceso al dashboard Calama.
@@ -366,9 +385,10 @@ export function usePermissions() {
   return {
     can, canView, canCreate, canEdit, canDelete, canApprove, canExport,
     canViewExtended,
-    isAdmin, isSupervisor, isReadOnly,
+    isAdmin, isSupervisor, isReadOnly, isAdminGlobal,
     getVisibleModules,
     rol, rolCalama,
-    esOperadorCalamaSolo, tieneRolCalama, tieneAccesoDashboardCalama,
+    esOperadorCalamaSolo, esSupervisorCalamaSolo, esRestringidoCalama,
+    tieneRolCalama, tieneAccesoDashboardCalama,
   }
 }
