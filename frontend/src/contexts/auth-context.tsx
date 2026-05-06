@@ -135,6 +135,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null)
     setPerfil(null)
     setRolCalama(null)
+
+    // Limpia BD offline de Calama: nunca dejar datos del operador en un
+    // dispositivo despues del logout.
+    try {
+      const { clearCalamaDB } = await import('@/lib/offline/calama-db')
+      await clearCalamaDB()
+    } catch { /* noop */ }
   }, [])
 
   return (

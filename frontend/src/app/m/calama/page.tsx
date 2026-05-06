@@ -17,6 +17,8 @@ import {
   type CalamaOTConRelaciones,
 } from '@/lib/services/calama'
 import type { CalamaJornadaAsignada } from '@/lib/services/calama-plan-semanal'
+import { OfflineStatusBanner, OfflineCountersCompact } from '@/components/calama-mobile/offline-status'
+import { OfflineActions } from '@/components/calama-mobile/offline-actions'
 
 type Grupo = 'atrasadas' | 'hoy' | 'manana' | 'semana' | 'completadas'
 
@@ -187,6 +189,11 @@ export default function MobileCalamaPage() {
       </header>
 
       <div className="px-3 space-y-3">
+        {/* Offline-first: estado conexion + acciones (preparar, sincronizar) */}
+        <OfflineStatusBanner />
+        <OfflineActions />
+        <OfflineCountersCompact />
+
         {isLoading && (
           <div className="flex items-center justify-center gap-2 py-8 text-gray-500 text-sm">
             <Spinner className="h-4 w-4" /> Cargando…
