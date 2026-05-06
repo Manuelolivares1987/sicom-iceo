@@ -57,7 +57,12 @@ export default function MobileCalamaPage() {
   const [verTodas, setVerTodas] = useState<boolean>(esAdminOPlanificador)
   // Sincronizar default cuando se carga el rol
   useEffect(() => { setVerTodas(esAdminOPlanificador) }, [esAdminOPlanificador])
-  const { data: planOts, isLoading, isError } = useMisOTsAsignadas({ todas: verTodas })
+  const misOtsQuery = useMisOTsAsignadas({ todas: verTodas })
+  const { data: planOts, isLoading, isError, isFetching } = misOtsQuery
+  // serverLoaded = la query del server YA respondio (con [] o filas).
+  // Distinto de undefined (loading): cuando es undefined NO usamos local
+  // todavia (para no parpadear con datos viejos).
+  const serverLoaded = planOts !== undefined && !isError
   const { data: ots } = useCalamaOTs()
   const online = useNetworkStatus()
 
@@ -120,12 +125,15 @@ export default function MobileCalamaPage() {
     return () => { cancelled = true }
   }, [planOts, online])
 
-  // Si no llegaron jornadas del server (offline / error / aun cargando) y hay
-  // jornadas locales, usar las locales como fuente.
-  const usingLocal = (!planOts || planOts.length === 0) && localJornadas.length > 0
+  // REGLA: cuando hay conexion Y el server respondio (incluso con []), USAMOS
+  // server. Nunca reemplazamos por IndexedDB porque eso ocultaria jornadas
+  // recien planificadas o, peor aun, mostraria jornadas viejas como vigentes.
+  // Solo usamos IndexedDB cuando:
+  //   - estamos offline; o
+  //   - estamos online pero el server fallo con error de red.
+  const usingLocal = (!online || (!serverLoaded && isError)) && localJornadas.length > 0
   const planOtsEff = usingLocal ? localJornadas : (planOts ?? [])
   const otsEff = usingLocal ? localOts : (ots ?? [])
-  void isError
   const { data: usuariosLista } = useUsuariosAsignables()
   const usuariosById = useMemo(() =>
     new Map((usuariosLista ?? []).map((u) => [u.id, u])),
@@ -261,9 +269,32 @@ export default function MobileCalamaPage() {
         <OfflineStatusBanner />
         <OfflineActions />
         <OfflineCountersCompact />
-        {usingLocal && (
+        {/* Banners contextuales:
+            - online + server cargo: si lista vacia mostramos pista para Actualizar.
+            - online + server fallo por red: aviso + uso local.
+            - offline: aviso + uso local. */}
+        {usingLocal && online && (
+          <div className="rounded-lg border border-orange-200 bg-orange-50 p-2 text-xs text-orange-800">
+            No se pudo conectar al servidor. Mostrando jornadas descargadas. Presiona Actualizar para reintentar.
+          </div>
+        )}
+        {usingLocal && !online && (
           <div className="rounded-lg border border-blue-200 bg-blue-50 p-2 text-xs text-blue-800">
-            Mostrando jornadas descargadas (datos offline). Los cambios quedaran en cola hasta sincronizar.
+            Sin conexion. Mostrando jornadas descargadas. Los cambios quedaran en cola hasta sincronizar.
+          </div>
+        )}
+        {!usingLocal && online && serverLoaded && planOts && planOts.length === 0 && (
+          <div className="rounded-lg border border-blue-200 bg-blue-50 p-2 text-xs text-blue-800 flex items-start gap-2">
+            <RefreshCw className="h-4 w-4 mt-0.5 shrink-0" />
+            <div className="flex-1">
+              <div className="font-medium">No tienes jornadas activas asignadas.</div>
+              <div className="text-[11px] opacity-80">
+                Si tu supervisor recien planifico algo, presiona Actualizar.
+              </div>
+            </div>
+            <button onClick={refresh} className="rounded bg-blue-600 text-white px-2 py-1 text-[11px] font-medium" disabled={isFetching}>
+              {isFetching ? '...' : 'Actualizar'}
+            </button>
           </div>
         )}
 

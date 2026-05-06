@@ -113,6 +113,16 @@ export async function prepareCalamaOffline(opts?: { fecha?: string }): Promise<{
     })
 
   await db.transaction('rw', db.jornadas, db.settings, async () => {
+    // Eliminar jornadas locales obsoletas (que el server ya no devuelve),
+    // preservando las que tengan acciones pendientes para no perder
+    // trabajo offline aun no sincronizado.
+    const newIds = new Set(localJornadas.map((j) => j.local_id))
+    const existing = await db.jornadas.toArray()
+    for (const j of existing) {
+      if (!newIds.has(j.local_id) && j.sync_status !== 'pending') {
+        await db.jornadas.delete(j.local_id)
+      }
+    }
     await db.jornadas.bulkPut(localJornadas)
     await db.settings.put({
       key: 'state',

@@ -66,6 +66,12 @@ export function useMisOTsAsignadas(opts?: { todas?: boolean }) {
       if (error) throw error
       return data ?? []
     },
+    // Mobile en faena: queremos siempre ver lo ultimo cuando hay red.
+    // Si el supervisor recien planifico, OOCC no debe ver cache vieja.
+    staleTime: 0,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
   })
 }
 
