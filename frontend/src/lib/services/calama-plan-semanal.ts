@@ -271,6 +271,7 @@ export type AvancePorArea = {
   tareas_con_comentario: number
   avance_promedio_pct: number
   avance_completitud_pct?: number
+  avance_real_pct?: number
   avance_proyectado_pct?: number
 }
 
@@ -296,6 +297,7 @@ export type ResumenGeneral = {
   tareas_con_comentario: number
   avance_promedio_pct: number
   avance_completitud_pct?: number
+  avance_real_pct?: number
   avance_proyectado_pct?: number
 }
 

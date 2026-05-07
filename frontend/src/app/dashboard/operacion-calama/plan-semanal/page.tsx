@@ -782,7 +782,7 @@ export default function PlanSemanalPage() {
                     tone="green"
                   />
                   <KPI title="Avance real"
-                    value={`${resumenGeneral.avance_promedio_pct.toFixed(1)}%`}
+                    value={`${(resumenGeneral.avance_real_pct ?? 0).toFixed(1)}%`}
                     tone="indigo"
                   />
                   <KPI title="Avance proyectado"
@@ -791,9 +791,9 @@ export default function PlanSemanalPage() {
                   />
                 </div>
                 <div className="text-[11px] text-gray-500 -mt-1 leading-relaxed">
-                  <strong>Avance terminado</strong> = OTs finalizadas / total ({resumenGeneral.tareas_finalizadas}/{resumenGeneral.total_tareas}).
-                  {' '}<strong>Avance real</strong> = AVG del avance % de cada OT (incluye OTs en ejecución/parciales con su % actual y no iniciadas con 0%).
-                  {' '}<strong>Avance proyectado</strong> = si las {resumenGeneral.tareas_planificadas_semanas} OT(s) planificadas esta semana se completaran, el avance sería este.
+                  <strong>Avance terminado</strong> = Finalizadas / Total ({resumenGeneral.tareas_finalizadas}/{resumenGeneral.total_tareas}).
+                  {' '}<strong>Avance real</strong> = (Finalizadas + En ejecución) / Total ({resumenGeneral.tareas_finalizadas + resumenGeneral.tareas_en_ejecucion}/{resumenGeneral.total_tareas}).
+                  {' '}<strong>Avance proyectado</strong> = (Finalizadas + En ejecución + Planificadas semana) / Total.
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   <KPI title="Finalizadas"       value={resumenGeneral.tareas_finalizadas} tone="green" />
