@@ -15,6 +15,7 @@ import {
 } from '@/hooks/use-calama-plan-semanal'
 import {
   useFirmasJornada, useEvidenciasJornada, useRechazosJornada,
+  useEstadoJornada, useRegularizarLlegadaFaena, useRegistrarFotoAntesRegularizada,
 } from '@/hooks/use-calama-jornada'
 import { usePermissions } from '@/hooks/use-permissions'
 import { excelCodigoFromFolio, zonaCodeFromFolio } from '@/lib/services/calama'
@@ -89,6 +90,11 @@ export default function MobileOTDetallePage() {
   const online = useNetworkStatus()
   const qc = useQueryClient()
   const [busy, setBusy] = useState(false)
+
+  // MIG33: estado completo desde server (multidispositivo).
+  const { data: estadoServer } = useEstadoJornada(planOtId)
+  const regulLlegada = useRegularizarLlegadaFaena()
+  const regulFotoAntes = useRegistrarFotoAntesRegularizada()
   useEffect(() => {
     let cancelled = false
     if (!otId) return
@@ -135,6 +141,19 @@ export default function MobileOTDetallePage() {
   const [interfObs, setInterfObs] = useState<string>('')
   const [interfQuienInforma, setInterfQuienInforma] = useState<string>('')
   const [interfFoto, setInterfFoto] = useState<PhotoCaptureResult | null>(null)
+
+  // MIG33: Modal Pausa con foto + motivo + GPS.
+  const [showPausa, setShowPausa] = useState(false)
+  const [pausaMotivo, setPausaMotivo] = useState<string>('colacion')
+  const [pausaFoto, setPausaFoto] = useState<PhotoCaptureResult | null>(null)
+  // Modal Reanudar con foto + GPS.
+  const [showReanudar, setShowReanudar] = useState(false)
+  const [reanudarFoto, setReanudarFoto] = useState<PhotoCaptureResult | null>(null)
+  // Modal Regularizar (llegada o foto antes) cuando jornada ya iniciada en otro dispositivo.
+  const [showRegulLlegada, setShowRegulLlegada] = useState(false)
+  const [showRegulAntes, setShowRegulAntes] = useState(false)
+  const [regulMotivo, setRegulMotivo] = useState('Inicio en otro dispositivo')
+  const [regulFoto, setRegulFoto] = useState<PhotoCaptureResult | null>(null)
 
   // Capturas
   const [fotoLlegada, setFotoLlegada] = useState<PhotoCaptureResult | null>(null)
@@ -279,31 +298,99 @@ export default function MobileOTDetallePage() {
     } finally { setBusy(false) }
   }
 
-  const handlePausar = async (motivo: string) => {
+  // Pausa abre modal: motivo + foto + GPS son obligatorios (MIG33).
+  const handleConfirmarPausa = async () => {
     if (!planOtId) return
-    setShowMotivos(false); setBusy(true)
+    if (!pausaMotivo) { toast.error('Motivo obligatorio'); return }
+    if (!pausaFoto?.blob) { toast.error('Foto de pausa obligatoria'); return }
+    setBusy(true)
     try {
       const geo = await refreshGeo()
       const r = await smartRegistrarEvento({
-        jornada_id: planOtId, ot_id: ot.id, tipo: 'pause', motivo,
+        jornada_id: planOtId, ot_id: ot.id, tipo: 'pause', motivo: pausaMotivo,
+        foto: pausaFoto.blob, momento: 'durante',
         gps_lat: geo.lat, gps_lng: geo.lng, gps_accuracy: geo.accuracy, geolocation_status: geo.status,
       })
       showSmart(r); refreshAfterAction()
+      setShowPausa(false); setPausaFoto(null)
     } catch (e) { toast.error(e instanceof Error ? e.message : 'Error al pausar') }
     finally { setBusy(false) }
   }
 
-  const handleReanudar = async () => {
+  const handleConfirmarReanudar = async () => {
     if (!planOtId) return
+    if (!reanudarFoto?.blob) { toast.error('Foto de reanudacion obligatoria'); return }
     setBusy(true)
     try {
       const geo = await refreshGeo()
       const r = await smartRegistrarEvento({
         jornada_id: planOtId, ot_id: ot.id, tipo: 'resume',
+        foto: reanudarFoto.blob, momento: 'durante',
         gps_lat: geo.lat, gps_lng: geo.lng, gps_accuracy: geo.accuracy, geolocation_status: geo.status,
       })
       showSmart(r); refreshAfterAction()
+      setShowReanudar(false); setReanudarFoto(null)
     } catch (e) { toast.error(e instanceof Error ? e.message : 'Error al reanudar') }
+    finally { setBusy(false) }
+  }
+
+  // MIG33: regularizar llegada / foto antes cuando la jornada se inicio en otro dispositivo.
+  const handleRegularizarLlegada = async () => {
+    if (!planOtId) return
+    if (!regulFoto?.blob) { toast.error('Foto obligatoria'); return }
+    if (!regulMotivo.trim()) { toast.error('Motivo obligatorio'); return }
+    setBusy(true)
+    try {
+      // Sube foto a Storage y llama RPC regularizacion (online-only por ahora).
+      const ext = (regulFoto.blob.type.split('/')[1] || 'jpg').toLowerCase()
+      const path = `ot-${ot.id}/jornada-${planOtId}/llegada-regul-${Date.now()}.${ext}`
+      const { error: errUp } = await (await import('@/lib/supabase')).supabase.storage
+        .from('calama-evidencias').upload(path, regulFoto.blob, { upsert: false, contentType: regulFoto.blob.type || 'image/jpeg' })
+      if (errUp) throw errUp
+      const supa = (await import('@/lib/supabase')).supabase
+      const { data: pub } = supa.storage.from('calama-evidencias').getPublicUrl(path)
+      const geo = await refreshGeo()
+      await regulLlegada.mutateAsync({
+        plan_semanal_ot_id: planOtId,
+        ot_id: ot.id,
+        plan_semanal_id: planSemanalId,
+        foto_llegada_url: pub.publicUrl,
+        foto_llegada_storage_path: path,
+        motivo: regulMotivo,
+        gps_lat: geo.lat, gps_lng: geo.lng, gps_accuracy: geo.accuracy, geolocation_status: geo.status,
+      })
+      toast.success('Llegada regularizada')
+      setShowRegulLlegada(false); setRegulFoto(null); refreshAfterAction()
+    } catch (e) { toast.error(e instanceof Error ? e.message : 'Error al regularizar llegada') }
+    finally { setBusy(false) }
+  }
+
+  const handleRegularizarFotoAntes = async () => {
+    if (!planOtId) return
+    if (!regulFoto?.blob) { toast.error('Foto obligatoria'); return }
+    if (!regulMotivo.trim()) { toast.error('Motivo obligatorio'); return }
+    setBusy(true)
+    try {
+      const ext = (regulFoto.blob.type.split('/')[1] || 'jpg').toLowerCase()
+      const path = `ot-${ot.id}/jornada-${planOtId}/antes-regul-${Date.now()}.${ext}`
+      const supa = (await import('@/lib/supabase')).supabase
+      const { error: errUp } = await supa.storage
+        .from('calama-evidencias').upload(path, regulFoto.blob, { upsert: false, contentType: regulFoto.blob.type || 'image/jpeg' })
+      if (errUp) throw errUp
+      const { data: pub } = supa.storage.from('calama-evidencias').getPublicUrl(path)
+      const geo = await refreshGeo()
+      await regulFotoAntes.mutateAsync({
+        plan_semanal_ot_id: planOtId,
+        ot_id: ot.id,
+        plan_semanal_id: planSemanalId,
+        foto_url: pub.publicUrl,
+        foto_storage_path: path,
+        motivo: regulMotivo,
+        gps_lat: geo.lat, gps_lng: geo.lng, gps_accuracy: geo.accuracy, geolocation_status: geo.status,
+      })
+      toast.success('Foto antes regularizada')
+      setShowRegulAntes(false); setRegulFoto(null); refreshAfterAction()
+    } catch (e) { toast.error(e instanceof Error ? e.message : 'Error al regularizar foto antes') }
     finally { setBusy(false) }
   }
 
@@ -513,6 +600,82 @@ export default function MobileOTDetallePage() {
           </Card>
         )}
 
+        {/* MIG33: banner multidispositivo */}
+        {estadoServer?.ejecucion_activa?.iniciada_por_otro_usuario && (
+          <Card extraClass="border-blue-300 bg-blue-50">
+            <div className="flex items-start gap-2">
+              <ShieldAlert className="h-4 w-4 text-blue-700 mt-0.5 shrink-0" />
+              <div className="text-sm flex-1">
+                <div className="text-[10px] uppercase font-bold text-blue-800">Esta jornada ya fue iniciada en otro dispositivo</div>
+                <p className="text-blue-900 mt-0.5">
+                  Iniciada por <strong>{estadoServer.ejecucion_activa.ejecutor_nombre || estadoServer.ejecucion_activa.ejecutor_email}</strong>
+                  {' '}el {new Date(estadoServer.ejecucion_activa.started_at).toLocaleString('es-CL')}
+                </p>
+                <p className="text-xs text-blue-700 mt-1">
+                  Estado actual: <strong>{estadoServer.ejecucion_activa.estado}</strong>.
+                  Puedes continuar desde este celular respetando las reglas de evidencia.
+                </p>
+              </div>
+            </div>
+          </Card>
+        )}
+
+        {/* MIG33: si jornada iniciada y faltan evidencias previas, pedir regularizar */}
+        {estadoServer?.ejecucion_activa && estadoServer.flags.falta_llegada_faena && (
+          <Card extraClass="border-orange-300 bg-orange-50">
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="h-4 w-4 text-orange-700 mt-0.5 shrink-0" />
+              <div className="text-sm flex-1">
+                <div className="text-[10px] uppercase font-bold text-orange-800">Falta registro de llegada a faena</div>
+                <p className="text-orange-900 text-xs mt-0.5">La jornada se inicio sin llegada formal. Regulariza con foto, GPS y motivo.</p>
+                <button onClick={() => { setRegulFoto(null); setRegulMotivo('Inicio en otro dispositivo'); setShowRegulLlegada(true) }}
+                  className="mt-2 rounded bg-orange-600 text-white px-3 py-1.5 text-xs font-medium">
+                  Regularizar llegada
+                </button>
+              </div>
+            </div>
+          </Card>
+        )}
+        {estadoServer?.ejecucion_activa && estadoServer.flags.falta_foto_antes && (
+          <Card extraClass="border-orange-300 bg-orange-50">
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="h-4 w-4 text-orange-700 mt-0.5 shrink-0" />
+              <div className="text-sm flex-1">
+                <div className="text-[10px] uppercase font-bold text-orange-800">Falta foto ANTES</div>
+                <p className="text-orange-900 text-xs mt-0.5">La jornada se inicio sin foto del estado inicial. Regulariza con foto, GPS y motivo.</p>
+                <button onClick={() => { setRegulFoto(null); setRegulMotivo('Inicio en otro dispositivo'); setShowRegulAntes(true) }}
+                  className="mt-2 rounded bg-orange-600 text-white px-3 py-1.5 text-xs font-medium">
+                  Regularizar foto antes
+                </button>
+              </div>
+            </div>
+          </Card>
+        )}
+
+        {/* MIG33: checklist antifraude pre-cierre */}
+        {estadoServer && (paso === 'ejecutar' || paso === 'cerrar') && (
+          <Card extraClass="border-purple-200 bg-purple-50">
+            <div className="text-[10px] uppercase font-bold text-purple-800 mb-1">Checklist antifraude</div>
+            <ul className="text-xs text-purple-900 space-y-0.5">
+              <li className={estadoServer.flags.falta_llegada_faena ? 'text-red-700' : 'text-green-700'}>
+                {estadoServer.flags.falta_llegada_faena ? '✗' : '✓'} Llegada a faena {estadoServer.llegada_tardia && '(regularizada)'}
+              </li>
+              <li className={estadoServer.flags.falta_foto_antes ? 'text-red-700' : 'text-green-700'}>
+                {estadoServer.flags.falta_foto_antes ? '✗' : '✓'} Foto antes {estadoServer.foto_antes_regularizada && '(regularizada)'}
+              </li>
+              {estadoServer.flags.pausas_sin_foto > 0 && (
+                <li className="text-amber-700">⚠ {estadoServer.flags.pausas_sin_foto} pausa(s) sin foto</li>
+              )}
+              <li className={estadoServer.flags.falta_foto_despues ? 'text-gray-500' : 'text-green-700'}>
+                {estadoServer.flags.falta_foto_despues ? '○' : '✓'} Foto despues
+              </li>
+              <li className={estadoServer.flags.falta_firma_operador ? 'text-gray-500' : 'text-green-700'}>
+                {estadoServer.flags.falta_firma_operador ? '○' : '✓'} Firma operador
+              </li>
+            </ul>
+          </Card>
+        )}
+
         {/* ===== PASO 0: LLEGADA A FAENA ===== */}
         {paso === 'llegada' && (
           <Card>
@@ -610,27 +773,15 @@ export default function MobileOTDetallePage() {
 
               {ejecucion?.estado === 'en_ejecucion' && (
                 <div className="space-y-2">
-                  <BotonGrande onClick={() => setShowMotivos((v) => !v)} variant="amber">
-                    <Pause className="h-5 w-5" /> Pausar
+                  <BotonGrande onClick={() => { setPausaMotivo('colacion'); setPausaFoto(null); setShowPausa(true) }} variant="amber">
+                    <Pause className="h-5 w-5" /> Pausar (foto + motivo)
                   </BotonGrande>
-                  {showMotivos && (
-                    <div className="grid grid-cols-2 gap-1.5 rounded-lg border bg-gray-50 p-2">
-                      <button onClick={() => handlePausar('colacion')} disabled={busy}
-                        className="col-span-2 rounded bg-yellow-100 border border-yellow-300 py-2 text-sm font-medium text-yellow-900 inline-flex items-center justify-center gap-1.5">
-                        <Coffee className="h-4 w-4" /> Colacion
-                      </button>
-                      {MOTIVOS_PAUSA.filter((m) => m.value !== 'colacion').map((m) => (
-                        <button key={m.value} onClick={() => handlePausar(m.value)} disabled={busy}
-                          className="rounded border border-gray-200 bg-white py-2 px-2 text-xs">{m.label}</button>
-                      ))}
-                    </div>
-                  )}
                 </div>
               )}
 
               {ejecucion?.estado === 'pausada' && (
-                <BotonGrande onClick={handleReanudar} loading={busy} variant="green">
-                  <RotateCcw className="h-5 w-5" /> Reanudar
+                <BotonGrande onClick={() => { setReanudarFoto(null); setShowReanudar(true) }} loading={busy} variant="green">
+                  <RotateCcw className="h-5 w-5" /> Reanudar (foto + GPS)
                 </BotonGrande>
               )}
             </Card>
@@ -928,6 +1079,96 @@ export default function MobileOTDetallePage() {
               )}
             </div>
           </Card>
+        )}
+
+        {/* MIG33: Modal Pausa con motivo + foto + GPS */}
+        {showPausa && planOtId && (
+          <div className="fixed inset-0 z-40 bg-black/50 flex items-end sm:items-center justify-center p-3">
+            <div className="bg-white rounded-xl w-full max-w-sm p-4 space-y-3 max-h-[90vh] overflow-y-auto">
+              <h3 className="font-bold text-sm">Pausar jornada</h3>
+              <p className="text-xs text-gray-600">Motivo y foto son obligatorios para auditoria.</p>
+              <select value={pausaMotivo} onChange={(e) => setPausaMotivo(e.target.value)}
+                className="w-full rounded border border-gray-300 px-3 py-2 text-sm">
+                {MOTIVOS_PAUSA.map((m) => (<option key={m.value} value={m.value}>{m.label}</option>))}
+              </select>
+              <PhotoCapture label="Foto de pausa" momento="durante" otId={ot.id} planOtId={planOtId}
+                onCapture={setPausaFoto} required mode="capture" />
+              <div className="flex gap-2">
+                <button onClick={() => { setShowPausa(false); setPausaFoto(null) }}
+                  className="flex-1 rounded border border-gray-300 px-3 py-2 text-sm">Cancelar</button>
+                <button onClick={handleConfirmarPausa} disabled={!pausaFoto?.blob || busy}
+                  className="flex-1 rounded bg-amber-600 text-white px-3 py-2 text-sm font-bold disabled:opacity-50">
+                  {busy ? 'Pausando...' : 'Confirmar pausa'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* MIG33: Modal Reanudar con foto + GPS */}
+        {showReanudar && planOtId && (
+          <div className="fixed inset-0 z-40 bg-black/50 flex items-end sm:items-center justify-center p-3">
+            <div className="bg-white rounded-xl w-full max-w-sm p-4 space-y-3 max-h-[90vh] overflow-y-auto">
+              <h3 className="font-bold text-sm">Reanudar jornada</h3>
+              <p className="text-xs text-gray-600">Foto + GPS obligatorios para reanudar.</p>
+              <PhotoCapture label="Foto de reanudacion" momento="durante" otId={ot.id} planOtId={planOtId}
+                onCapture={setReanudarFoto} required mode="capture" />
+              <div className="flex gap-2">
+                <button onClick={() => { setShowReanudar(false); setReanudarFoto(null) }}
+                  className="flex-1 rounded border border-gray-300 px-3 py-2 text-sm">Cancelar</button>
+                <button onClick={handleConfirmarReanudar} disabled={!reanudarFoto?.blob || busy}
+                  className="flex-1 rounded bg-green-600 text-white px-3 py-2 text-sm font-bold disabled:opacity-50">
+                  {busy ? 'Reanudando...' : 'Confirmar reanudacion'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* MIG33: Modal Regularizar Llegada (cuando jornada iniciada en otro device sin llegada) */}
+        {showRegulLlegada && planOtId && (
+          <div className="fixed inset-0 z-40 bg-black/50 flex items-end sm:items-center justify-center p-3">
+            <div className="bg-white rounded-xl w-full max-w-sm p-4 space-y-3 max-h-[90vh] overflow-y-auto">
+              <h3 className="font-bold text-sm">Regularizar llegada a faena</h3>
+              <p className="text-xs text-gray-600">Toma foto + GPS ahora. Quedara como llegada_tardia con motivo auditable.</p>
+              <input value={regulMotivo} onChange={(e) => setRegulMotivo(e.target.value)}
+                placeholder="Motivo (obligatorio)"
+                className="w-full rounded border border-orange-300 px-3 py-2 text-sm" />
+              <PhotoCapture label="Foto de llegada" momento="llegada" otId={ot.id} planOtId={planOtId}
+                onCapture={setRegulFoto} required mode="capture" />
+              <div className="flex gap-2">
+                <button onClick={() => { setShowRegulLlegada(false); setRegulFoto(null) }}
+                  className="flex-1 rounded border border-gray-300 px-3 py-2 text-sm">Cancelar</button>
+                <button onClick={handleRegularizarLlegada} disabled={!regulFoto?.blob || !regulMotivo.trim() || busy}
+                  className="flex-1 rounded bg-orange-600 text-white px-3 py-2 text-sm font-bold disabled:opacity-50">
+                  {busy ? '...' : 'Regularizar'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* MIG33: Modal Regularizar Foto Antes */}
+        {showRegulAntes && planOtId && (
+          <div className="fixed inset-0 z-40 bg-black/50 flex items-end sm:items-center justify-center p-3">
+            <div className="bg-white rounded-xl w-full max-w-sm p-4 space-y-3 max-h-[90vh] overflow-y-auto">
+              <h3 className="font-bold text-sm">Regularizar foto ANTES</h3>
+              <p className="text-xs text-gray-600">Toma foto + GPS ahora. Quedara como foto_antes_regularizada con motivo auditable.</p>
+              <input value={regulMotivo} onChange={(e) => setRegulMotivo(e.target.value)}
+                placeholder="Motivo (obligatorio)"
+                className="w-full rounded border border-orange-300 px-3 py-2 text-sm" />
+              <PhotoCapture label="Foto antes" momento="antes" otId={ot.id} planOtId={planOtId}
+                onCapture={setRegulFoto} required mode="capture" />
+              <div className="flex gap-2">
+                <button onClick={() => { setShowRegulAntes(false); setRegulFoto(null) }}
+                  className="flex-1 rounded border border-gray-300 px-3 py-2 text-sm">Cancelar</button>
+                <button onClick={handleRegularizarFotoAntes} disabled={!regulFoto?.blob || !regulMotivo.trim() || busy}
+                  className="flex-1 rounded bg-orange-600 text-white px-3 py-2 text-sm font-bold disabled:opacity-50">
+                  {busy ? '...' : 'Regularizar'}
+                </button>
+              </div>
+            </div>
+          </div>
         )}
       </div>
     </div>

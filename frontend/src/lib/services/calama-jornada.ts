@@ -315,6 +315,72 @@ export async function rpcRegistrarLlegadaFaena(payload: {
 // Ampliar uploadEvidenciaJornada para llegada (path ya soporta cualquier momento).
 // La firma es la misma; solo cambia el momento que el caller envia.
 
+// MIG33: estado completo de jornada para wizard movil multidispositivo.
+export type EstadoJornadaServer = {
+  plan_semanal_ot_id: string
+  ot_id: string
+  ot: { folio: string; titulo: string; avance_pct: number; estado: string; descripcion: string | null }
+  estado_plan: string
+  responsable_id: string | null
+  llegada_faena_at: string | null
+  llegada_tardia: boolean
+  foto_antes_regularizada: boolean
+  cierre_jornada_at: string | null
+  ejecucion_activa: null | {
+    id: string
+    estado: 'en_ejecucion' | 'pausada'
+    ejecutor_id: string
+    ejecutor_email: string | null
+    ejecutor_nombre: string | null
+    iniciada_por_otro_usuario: boolean
+    started_at: string
+    last_event_at: string
+    tiempo_total_segundos: number
+    tiempo_efectivo_segundos: number
+    tiempo_pausado_segundos: number
+    tiempo_colacion_segundos: number
+  }
+  flags: {
+    falta_llegada_faena: boolean
+    falta_foto_antes: boolean
+    falta_foto_despues: boolean
+    falta_firma_operador: boolean
+    pausa_activa: boolean
+    puede_iniciar: boolean
+    puede_reanudar: boolean
+    puede_pausar: boolean
+    puede_cerrar: boolean
+    pausas_sin_foto: number
+  }
+}
+
+export async function rpcObtenerEstadoJornada(planOtId: string): Promise<{ data: EstadoJornadaServer | null; error: unknown }> {
+  const { data, error } = await supabase.rpc('rpc_calama_obtener_estado_jornada', { p_plan_ot_id: planOtId })
+  return { data: (data as EstadoJornadaServer | null) ?? null, error }
+}
+
+export async function rpcRegularizarLlegadaFaena(payload: {
+  plan_semanal_ot_id: string
+  foto_llegada_url: string
+  foto_llegada_storage_path: string
+  motivo: string
+  client_uuid?: string
+} & GeoFields): Promise<RpcResult> {
+  const { data, error } = await supabase.rpc('rpc_calama_regularizar_llegada_faena', { p_payload: payload })
+  return { data, error }
+}
+
+export async function rpcRegistrarFotoAntesRegularizada(payload: {
+  plan_semanal_ot_id: string
+  foto_url: string
+  foto_storage_path: string
+  motivo: string
+  client_uuid?: string
+} & GeoFields): Promise<RpcResult> {
+  const { data, error } = await supabase.rpc('rpc_calama_registrar_foto_antes_regularizada', { p_payload: payload })
+  return { data, error }
+}
+
 // ============================================================================
 // Lectura: firmas + rechazos + evidencias por plan_semanal_ot
 // ============================================================================

@@ -5,7 +5,8 @@ import {
   rpcReprogramarSaldoOT, rpcAgregarJornadaOT,
   rpcDesprogramarJornada, rpcCancelarJornada,
   rpcResetearJornadaPrueba, rpcEliminarJornadaPrueba,
-  rpcRegistrarLlegadaFaena,
+  rpcRegistrarLlegadaFaena, rpcObtenerEstadoJornada,
+  rpcRegularizarLlegadaFaena, rpcRegistrarFotoAntesRegularizada,
   getFirmasJornada, getRechazosJornada, getEvidenciasJornada,
 } from '@/lib/services/calama-jornada'
 
@@ -55,6 +56,56 @@ export function useRechazosJornada(planOtId: string | null | undefined) {
       return data
     },
     enabled: !!planOtId,
+  })
+}
+
+// MIG33: estado completo desde server (multidispositivo).
+export function useEstadoJornada(planOtId: string | null | undefined) {
+  return useQuery({
+    queryKey: ['calama-estado-jornada', planOtId ?? ''],
+    queryFn: async () => {
+      const { data, error } = await rpcObtenerEstadoJornada(planOtId!)
+      if (error) throw error
+      return data
+    },
+    enabled: !!planOtId,
+    staleTime: 0,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
+    refetchInterval: 15000,  // refresca cada 15s para detectar cambios desde otro dispositivo
+  })
+}
+
+export function useRegularizarLlegadaFaena() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (params: Parameters<typeof rpcRegularizarLlegadaFaena>[0] & { ot_id: string; plan_semanal_id?: string }) => {
+      const { ot_id, plan_semanal_id, ...payload } = params
+      const { data, error } = await rpcRegularizarLlegadaFaena(payload)
+      if (error) throw error
+      return { data, ot_id, plan_semanal_id }
+    },
+    onSuccess: ({ ot_id, plan_semanal_id }, vars) => {
+      invalidateOtAndPlanCaches(qc, ot_id, plan_semanal_id)
+      qc.invalidateQueries({ queryKey: ['calama-estado-jornada', vars.plan_semanal_ot_id] })
+    },
+  })
+}
+
+export function useRegistrarFotoAntesRegularizada() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (params: Parameters<typeof rpcRegistrarFotoAntesRegularizada>[0] & { ot_id: string; plan_semanal_id?: string }) => {
+      const { ot_id, plan_semanal_id, ...payload } = params
+      const { data, error } = await rpcRegistrarFotoAntesRegularizada(payload)
+      if (error) throw error
+      return { data, ot_id, plan_semanal_id }
+    },
+    onSuccess: ({ ot_id, plan_semanal_id }, vars) => {
+      invalidateOtAndPlanCaches(qc, ot_id, plan_semanal_id)
+      qc.invalidateQueries({ queryKey: ['calama-estado-jornada', vars.plan_semanal_ot_id] })
+    },
   })
 }
 
