@@ -774,17 +774,47 @@ export default function PlanSemanalPage() {
               <p className="text-sm text-gray-400">Cargando…</p>
             ) : (
               <>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
                   <KPI title="Lugares físicos"  value={resumenGeneral.total_lugares_fisicos} icon={<Layers className="h-4 w-4" />} />
                   <KPI title="Total tareas"      value={resumenGeneral.total_tareas} />
-                  <KPI title="Avance promedio"   value={`${resumenGeneral.avance_promedio_pct.toFixed(1)}%`} tone="indigo" />
-                  <KPI title="Plan. esta semana" value={resumenGeneral.tareas_planificadas_semanas} />
+                  <KPI title="Avance terminado"
+                    value={`${(resumenGeneral.avance_completitud_pct ?? 0).toFixed(1)}%`}
+                    tone="green"
+                  />
+                  <KPI title="Avance real"
+                    value={`${resumenGeneral.avance_promedio_pct.toFixed(1)}%`}
+                    tone="indigo"
+                  />
+                  <KPI title="Avance proyectado"
+                    value={`${(resumenGeneral.avance_proyectado_pct ?? 0).toFixed(1)}%`}
+                    tone="amber"
+                  />
+                </div>
+                <div className="text-[11px] text-gray-500 -mt-1 leading-relaxed">
+                  <strong>Avance terminado</strong> = OTs finalizadas / total ({resumenGeneral.tareas_finalizadas}/{resumenGeneral.total_tareas}).
+                  {' '}<strong>Avance real</strong> = AVG del avance % de cada OT (incluye OTs en ejecución/parciales con su % actual y no iniciadas con 0%).
+                  {' '}<strong>Avance proyectado</strong> = si las {resumenGeneral.tareas_planificadas_semanas} OT(s) planificadas esta semana se completaran, el avance sería este.
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   <KPI title="Finalizadas"       value={resumenGeneral.tareas_finalizadas} tone="green" />
                   <KPI title="En ejecución"      value={resumenGeneral.tareas_en_ejecucion} tone="amber" />
                   <KPI title="Pendientes"        value={resumenGeneral.tareas_pendientes} />
                   <KPI title="No ejecutadas"     value={resumenGeneral.tareas_no_ejecutadas} tone={resumenGeneral.tareas_no_ejecutadas > 0 ? 'red' : undefined} />
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <KPI title="Por aprobar"
+                    value={resumenGeneral.tareas_pendiente_aprobacion ?? 0}
+                    tone={(resumenGeneral.tareas_pendiente_aprobacion ?? 0) > 0 ? 'amber' : undefined}
+                  />
+                  <KPI title="Parciales"
+                    value={resumenGeneral.tareas_parciales ?? 0}
+                    tone={(resumenGeneral.tareas_parciales ?? 0) > 0 ? 'amber' : undefined}
+                  />
+                  <KPI title="Requiere corrección"
+                    value={resumenGeneral.tareas_requiere_correccion ?? 0}
+                    tone={(resumenGeneral.tareas_requiere_correccion ?? 0) > 0 ? 'red' : undefined}
+                  />
+                  <KPI title="Plan. esta semana" value={resumenGeneral.tareas_planificadas_semanas} />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <KPI title="Sin responsable"   value={resumenGeneral.tareas_sin_responsable} tone={resumenGeneral.tareas_sin_responsable > 0 ? 'amber' : undefined} icon={<User className="h-4 w-4" />} />

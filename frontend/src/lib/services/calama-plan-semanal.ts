@@ -262,10 +262,16 @@ export type AvancePorArea = {
   tareas_en_ejecucion: number
   tareas_pendientes: number
   tareas_no_ejecutadas: number
+  // MIG34: nuevos KPIs PRO terreno
+  tareas_pendiente_aprobacion?: number
+  tareas_parciales?: number
+  tareas_requiere_correccion?: number
   tareas_planificadas_semana: number
   tareas_sin_responsable: number
   tareas_con_comentario: number
   avance_promedio_pct: number
+  avance_completitud_pct?: number
+  avance_proyectado_pct?: number
 }
 
 export type ResumenGeneral = {
@@ -276,14 +282,21 @@ export type ResumenGeneral = {
   estado_planificacion: string
   total_lugares_fisicos: number
   total_tareas: number
+  tareas_canceladas?: number
   tareas_finalizadas: number
   tareas_en_ejecucion: number
   tareas_pendientes: number
   tareas_no_ejecutadas: number
+  // MIG34: nuevos KPIs PRO terreno
+  tareas_pendiente_aprobacion?: number
+  tareas_parciales?: number
+  tareas_requiere_correccion?: number
   tareas_planificadas_semanas: number
   tareas_sin_responsable: number
   tareas_con_comentario: number
   avance_promedio_pct: number
+  avance_completitud_pct?: number
+  avance_proyectado_pct?: number
 }
 
 export async function getAvancePorArea(planificacionId: string) {
