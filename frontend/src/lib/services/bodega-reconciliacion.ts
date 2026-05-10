@@ -65,10 +65,12 @@ export interface ReconciliacionCombustibleRow {
   estado_reconciliacion: EstadoReconciliacionCombustible
 }
 
+export type TipoMovimientoExcepcional = 'ajuste_positivo' | 'ajuste_negativo' | 'merma'
+
 export interface MovimientoExcepcionalRow {
   movimiento_id: string
   fecha: string
-  tipo: 'ajuste' | 'merma'
+  tipo: TipoMovimientoExcepcional
   bodega_id: string
   bodega_codigo: string
   bodega_nombre: string
@@ -103,7 +105,7 @@ export interface FiltrosCombustible {
 }
 
 export interface FiltrosMovimientosExcepcionales {
-  tipo?: 'ajuste' | 'merma' | 'todos'
+  tipo?: TipoMovimientoExcepcional | 'todos'
   bodega_id?: string
 }
 

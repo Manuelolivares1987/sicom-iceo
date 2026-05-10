@@ -26,6 +26,7 @@ import type {
   ReconciliacionStockFifoRow,
   ReconciliacionCombustibleRow,
   MovimientoExcepcionalRow,
+  TipoMovimientoExcepcional,
 } from '@/lib/services/bodega-reconciliacion'
 import { useQueryClient } from '@tanstack/react-query'
 
@@ -517,8 +518,19 @@ function FiltroEstadoCombustible({
 
 // ── Tab Movimientos excepcionales ─────────────────────────────────────────
 
+const TIPO_MOV_LABEL: Record<TipoMovimientoExcepcional, string> = {
+  ajuste_positivo: 'ajuste +',
+  ajuste_negativo: 'ajuste −',
+  merma: 'merma',
+}
+const TIPO_MOV_COLOR: Record<TipoMovimientoExcepcional, string> = {
+  ajuste_positivo: 'bg-green-100 text-green-700',
+  ajuste_negativo: 'bg-orange-100 text-orange-700',
+  merma: 'bg-red-100 text-red-700',
+}
+
 function TabMovimientosExcepcionales() {
-  const [tipo, setTipo] = useState<'ajuste' | 'merma' | 'todos'>('todos')
+  const [tipo, setTipo] = useState<TipoMovimientoExcepcional | 'todos'>('todos')
   const { data, isLoading } = useMovimientosExcepcionales({ tipo })
   const rows = data ?? []
 
@@ -548,17 +560,17 @@ function TabMovimientosExcepcionales() {
           </Button>
         </div>
         <div className="flex items-center gap-2 flex-wrap mt-3">
-          {(['todos', 'ajuste', 'merma'] as const).map((t) => (
+          {(['todos', 'ajuste_positivo', 'ajuste_negativo', 'merma'] as const).map((t) => (
             <button
               key={t}
               onClick={() => setTipo(t)}
               className={cn(
-                'px-2.5 py-1 text-xs rounded-full border transition capitalize',
+                'px-2.5 py-1 text-xs rounded-full border transition',
                 tipo === t
                   ? 'bg-amber-700 text-white border-amber-700'
                   : 'bg-white text-gray-700 border-gray-300 hover:border-amber-400',
               )}
-            >{t}</button>
+            >{t === 'todos' ? 'Todos' : TIPO_MOV_LABEL[t]}</button>
           ))}
         </div>
       </CardHeader>
@@ -600,8 +612,8 @@ function FilaMov({ r }: { r: MovimientoExcepcionalRow }) {
     <TableRow>
       <TableCell className="text-xs whitespace-nowrap">{formatDateTime(r.fecha)}</TableCell>
       <TableCell>
-        <Badge className={r.tipo === 'merma' ? 'bg-red-100 text-red-700' : 'bg-orange-100 text-orange-700'}>
-          {r.tipo}
+        <Badge className={TIPO_MOV_COLOR[r.tipo]}>
+          {TIPO_MOV_LABEL[r.tipo]}
         </Badge>
       </TableCell>
       <TableCell>

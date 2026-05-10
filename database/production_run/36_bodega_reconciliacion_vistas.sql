@@ -232,7 +232,10 @@ JOIN productos p ON p.id = m.producto_id
 JOIN bodegas b ON b.id = m.bodega_id
 LEFT JOIN ordenes_trabajo ot ON ot.id = m.ot_id
 LEFT JOIN usuarios_perfil up ON up.id = m.usuario_id
-WHERE m.tipo IN ('ajuste','merma')
+-- tipo_movimiento_enum (mig 01): entrada, salida, ajuste_positivo,
+-- ajuste_negativo, transferencia_entrada, transferencia_salida, merma,
+-- devolucion. Filtramos los que requieren auditoria operativa.
+WHERE m.tipo IN ('ajuste_positivo','ajuste_negativo','merma')
   AND m.created_at >= NOW() - INTERVAL '60 days'
 ORDER BY m.created_at DESC;
 
@@ -265,6 +268,13 @@ BEGIN
     RAISE NOTICE 'v_bodega_reconciliacion_combustible ... % filas', n2;
     RAISE NOTICE 'v_bodega_movimientos_excepcionales .... % filas', n3;
 END $$;
+
+-- Resultsets visibles para verificacion manual:
+SELECT 'v_bodega_reconciliacion_stock_fifo'  AS vista, COUNT(*) AS filas FROM v_bodega_reconciliacion_stock_fifo
+UNION ALL
+SELECT 'v_bodega_reconciliacion_combustible', COUNT(*) FROM v_bodega_reconciliacion_combustible
+UNION ALL
+SELECT 'v_bodega_movimientos_excepcionales',  COUNT(*) FROM v_bodega_movimientos_excepcionales;
 
 
 -- ============================================================================
