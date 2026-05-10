@@ -37,23 +37,29 @@ const DIAS_CORTOS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
 const DIAS_INICIAL = ['L', 'M', 'X', 'J', 'V', 'S', 'D']
 const MESES_CORTOS = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']
 
-function isoToday(): string { return new Date().toISOString().slice(0, 10) }
+// Fechas en zona local (no UTC). toISOString() convierte a UTC, lo que rompe
+// el calculo de semana en horarios donde UTC ya esta en el dia siguiente.
+function pad2(n: number): string { return n < 10 ? `0${n}` : `${n}` }
+function localISO(d: Date): string {
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`
+}
+function isoToday(): string { return localISO(new Date()) }
 function startOfWeekISOOffset(weekOffset: number): string {
   const d = new Date(); const dow = d.getDay()
   const diff = (dow === 0 ? -6 : 1) - dow
   d.setDate(d.getDate() + diff + weekOffset * 7)
-  return d.toISOString().slice(0, 10)
+  return localISO(d)
 }
 function endOfWeekISOOffset(weekOffset: number): string {
   const d = new Date(startOfWeekISOOffset(weekOffset) + 'T00:00:00')
   d.setDate(d.getDate() + 6)
-  return d.toISOString().slice(0, 10)
+  return localISO(d)
 }
 function diasDeSemana(weekStart: string): string[] {
   const out: string[] = []
   const d = new Date(weekStart + 'T00:00:00')
   for (let i = 0; i < 7; i++) {
-    out.push(d.toISOString().slice(0, 10))
+    out.push(localISO(d))
     d.setDate(d.getDate() + 1)
   }
   return out
