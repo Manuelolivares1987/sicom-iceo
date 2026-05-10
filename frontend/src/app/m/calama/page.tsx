@@ -5,6 +5,7 @@ import Link from 'next/link'
 import {
   RefreshCw, MapPin, MessageSquare, ChevronRight, AlertTriangle,
   Calendar, LogOut, ClipboardCheck, CheckCircle2, Play, Pause,
+  ChevronDown, ChevronUp,
 } from 'lucide-react'
 import { Spinner } from '@/components/ui/spinner'
 import { useAuth } from '@/contexts/auth-context'
@@ -22,21 +23,20 @@ import { OfflineActions } from '@/components/calama-mobile/offline-actions'
 import { calamaDB } from '@/lib/offline/calama-db'
 import { useNetworkStatus } from '@/hooks/use-calama-offline'
 
-type Grupo = 'atrasadas' | 'hoy' | 'manana' | 'semana' | 'completadas'
+type SeccionTipo = 'atrasadas' | 'dia' | 'sin_fecha' | 'futuras' | 'completadas'
 
-const GRUPOS_CFG: Record<Grupo, { label: string; color: string; icon: React.ReactNode }> = {
-  atrasadas:    { label: 'Atrasadas',     color: 'border-red-200 bg-red-50',     icon: <AlertTriangle className="h-4 w-4 text-red-600" /> },
-  hoy:          { label: 'Hoy',           color: 'border-amber-200 bg-amber-50', icon: <Calendar className="h-4 w-4 text-amber-700" /> },
-  manana:       { label: 'Manana',        color: 'border-blue-200 bg-blue-50',   icon: <Calendar className="h-4 w-4 text-blue-700" /> },
-  semana:       { label: 'Esta semana',   color: 'border-gray-200 bg-white',     icon: <Calendar className="h-4 w-4 text-gray-600" /> },
-  completadas:  { label: 'Completadas',   color: 'border-green-200 bg-green-50', icon: <CheckCircle2 className="h-4 w-4 text-green-700" /> },
+interface SeccionVista {
+  tipo: SeccionTipo
+  key: string
+  label: string
+  esHoy?: boolean
+  items: Array<{ planOt: CalamaJornadaAsignada; ot: CalamaOTConRelaciones }>
 }
+
+const DIAS_CORTOS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
+const MESES_CORTOS = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']
 
 function isoToday(): string { return new Date().toISOString().slice(0, 10) }
-function isoTomorrow(): string {
-  const d = new Date(); d.setDate(d.getDate() + 1)
-  return d.toISOString().slice(0, 10)
-}
 function startOfWeekISO(): string {
   const d = new Date(); const dow = d.getDay()
   const diff = (dow === 0 ? -6 : 1) - dow
@@ -46,6 +46,10 @@ function startOfWeekISO(): string {
 function endOfWeekISO(): string {
   const d = new Date(startOfWeekISO()); d.setDate(d.getDate() + 6)
   return d.toISOString().slice(0, 10)
+}
+function formatDiaCorto(fechaISO: string): string {
+  const d = new Date(fechaISO + 'T00:00:00')
+  return `${DIAS_CORTOS[d.getDay()]} ${d.getDate()} ${MESES_CORTOS[d.getMonth()]}`
 }
 
 export default function MobileCalamaPage() {
@@ -161,39 +165,80 @@ export default function MobileCalamaPage() {
     return map
   }, [planOtsEff])
 
-  const grupos = useMemo(() => {
+  // Agrupa jornadas por dia de la semana en curso. Atrasadas y completadas son
+  // secciones especiales (no por dia). Sin fecha y futuras (otras semanas) van
+  // a su propia seccion al final.
+  const secciones = useMemo<SeccionVista[]>(() => {
     const today = isoToday()
-    const tomorrow = isoTomorrow()
     const weekStart = startOfWeekISO()
     const weekEnd = endOfWeekISO()
-    const result: Record<Grupo, Array<{ planOt: CalamaJornadaAsignada; ot: CalamaOTConRelaciones }>> = {
-      atrasadas: [], hoy: [], manana: [], semana: [], completadas: [],
-    }
+
+    const atrasadas: SeccionVista = { tipo: 'atrasadas', key: 'atrasadas', label: 'Atrasadas', items: [] }
+    const sinFecha: SeccionVista = { tipo: 'sin_fecha', key: 'sin_fecha', label: 'Sin fecha', items: [] }
+    const futuras: SeccionVista = { tipo: 'futuras', key: 'futuras', label: 'Próximas semanas', items: [] }
+    const completadas: SeccionVista = { tipo: 'completadas', key: 'completadas', label: 'Completadas', items: [] }
+    const porDia = new Map<string, SeccionVista>()
+
     for (const p of planOtsEff) {
       const ot = otsById.get(p.ot_id)
       if (!ot) continue
       const fecha = p.fecha_jornada ?? ot.fecha_programada ?? ''
 
-      // Una jornada se considera completada cuando estado_plan = 'finalizada'.
-      // OTs con estado_ejecucion finalizada o cancelada tambien van al grupo.
       if (
         p.estado_plan === 'finalizada' ||
         ot.estado === 'finalizada' || ot.estado === 'cancelada'
       ) {
-        result.completadas.push({ planOt: p, ot })
+        completadas.items.push({ planOt: p, ot })
         continue
       }
-      if (fecha && fecha < today) {
-        result.atrasadas.push({ planOt: p, ot })
+      if (!fecha) { sinFecha.items.push({ planOt: p, ot }); continue }
+      if (fecha < today) { atrasadas.items.push({ planOt: p, ot }); continue }
+      if (fecha >= weekStart && fecha <= weekEnd) {
+        let s = porDia.get(fecha)
+        if (!s) {
+          s = {
+            tipo: 'dia',
+            key: `dia:${fecha}`,
+            label: formatDiaCorto(fecha),
+            esHoy: fecha === today,
+            items: [],
+          }
+          porDia.set(fecha, s)
+        }
+        s.items.push({ planOt: p, ot })
         continue
       }
-      if (fecha === today) { result.hoy.push({ planOt: p, ot }); continue }
-      if (fecha === tomorrow) { result.manana.push({ planOt: p, ot }); continue }
-      if (fecha >= weekStart && fecha <= weekEnd) { result.semana.push({ planOt: p, ot }); continue }
-      result.semana.push({ planOt: p, ot })
+      futuras.items.push({ planOt: p, ot })
     }
+
+    // Dentro de cada seccion: en ejecucion / pausa primero, luego por prioridad.
+    const ordenarItems = (s: SeccionVista) => {
+      s.items.sort((a, b) => {
+        const order = (estado: string) =>
+          estado === 'en_ejecucion' ? 0
+          : estado === 'en_pausa' ? 1
+          : estado === 'liberada' ? 2 : 3
+        const oa = order(a.ot.estado as string)
+        const ob = order(b.ot.estado as string)
+        if (oa !== ob) return oa - ob
+        const pa = a.planOt.prioridad ?? 0
+        const pb = b.planOt.prioridad ?? 0
+        if (pa !== pb) return pb - pa
+        return (a.ot.folio ?? '').localeCompare(b.ot.folio ?? '')
+      })
+    }
+
+    const result: SeccionVista[] = []
+    if (atrasadas.items.length > 0) { ordenarItems(atrasadas); result.push(atrasadas) }
+    const diasOrdenados = Array.from(porDia.entries()).sort((a, b) => a[0].localeCompare(b[0]))
+    for (const [, s] of diasOrdenados) { ordenarItems(s); result.push(s) }
+    if (futuras.items.length > 0) { ordenarItems(futuras); result.push(futuras) }
+    if (sinFecha.items.length > 0) { ordenarItems(sinFecha); result.push(sinFecha) }
+    if (completadas.items.length > 0) result.push(completadas)
     return result
   }, [planOtsEff, otsById])
+
+  const [completadasOpen, setCompletadasOpen] = useState(false)
 
   const counts = useMemo(() => {
     let pendientes = 0, en_ejecucion = 0, pausadas = 0, completadas = 0
@@ -211,8 +256,7 @@ export default function MobileCalamaPage() {
     qc.invalidateQueries({ queryKey: ['calama', 'ots'] })
   }
 
-  const ordenGrupos: Grupo[] = ['atrasadas', 'hoy', 'manana', 'semana', 'completadas']
-  const totalVisibles = ordenGrupos.reduce((acc, g) => acc + grupos[g].length, 0)
+  const totalVisibles = secciones.reduce((acc, s) => acc + s.items.length, 0)
 
   return (
     <div className="space-y-3 pt-2">
@@ -339,37 +383,84 @@ export default function MobileCalamaPage() {
           </div>
         )}
 
-        {ordenGrupos.map((g) => {
-          const items = grupos[g]
-          if (items.length === 0) return null
-          const cfg = GRUPOS_CFG[g]
+        {secciones.map((s) => {
+          if (s.items.length === 0) return null
+          const colapsable = s.tipo === 'completadas'
+          const colapsada = colapsable && !completadasOpen
+
+          const headerColor =
+            s.tipo === 'atrasadas' ? 'bg-red-50 border-red-200 text-red-800'
+            : s.tipo === 'completadas' ? 'bg-green-50 border-green-200 text-green-800'
+            : s.tipo === 'sin_fecha' ? 'bg-gray-50 border-gray-200 text-gray-700'
+            : s.tipo === 'futuras' ? 'bg-slate-50 border-slate-200 text-slate-700'
+            : s.esHoy ? 'bg-amber-100 border-amber-300 text-amber-900'
+            : 'bg-white border-gray-200 text-gray-800'
+
+          const cardEstilo =
+            s.tipo === 'atrasadas' ? 'border-red-200 bg-red-50'
+            : s.tipo === 'completadas' ? 'border-green-200 bg-green-50'
+            : s.esHoy ? 'border-amber-200 bg-amber-50'
+            : 'border-gray-200 bg-white'
+
+          const icon =
+            s.tipo === 'atrasadas' ? <AlertTriangle className="h-4 w-4" />
+            : s.tipo === 'completadas' ? <CheckCircle2 className="h-4 w-4" />
+            : <Calendar className="h-4 w-4" />
+
+          const Header = (
+            <>
+              {icon}
+              <h2 className="flex-1 text-left text-xs font-bold uppercase tracking-wide flex items-center gap-2">
+                <span>{s.label}</span>
+                {s.esHoy && (
+                  <span className="rounded bg-amber-700 text-white px-1.5 py-0.5 text-[9px] tracking-wider">HOY</span>
+                )}
+              </h2>
+              <span className="text-xs font-semibold tabular-nums">({s.items.length})</span>
+              {colapsable && (
+                colapsada
+                  ? <ChevronDown className="h-4 w-4" />
+                  : <ChevronUp className="h-4 w-4" />
+              )}
+            </>
+          )
+
           return (
-            <section key={g}>
-              <div className="flex items-center gap-2 px-1 mb-2">
-                {cfg.icon}
-                <h2 className="text-xs font-bold uppercase tracking-wide text-gray-700">
-                  {cfg.label} ({items.length})
-                </h2>
-              </div>
-              <div className="space-y-2">
-                {items.map(({ planOt, ot }) => (
-                  <OTCardMobile
-                    key={planOt.id}
-                    ot={ot}
-                    planOt={planOt}
-                    estilo={cfg.color}
-                    secuencia={secuenciaByJornada.get(planOt.id)}
-                    responsableNombre={
-                      planOt.responsable_id
-                        ? (usuariosById.get(planOt.responsable_id)?.nombre_completo
-                          ?? usuariosById.get(planOt.responsable_id)?.email
-                          ?? null)
-                        : null
-                    }
-                    mostrarResponsable={verTodas}
-                  />
-                ))}
-              </div>
+            <section key={s.key}>
+              {colapsable ? (
+                <button
+                  type="button"
+                  onClick={() => setCompletadasOpen((v) => !v)}
+                  className={`w-full flex items-center gap-2 rounded-lg border px-3 py-2 mb-2 active:scale-[0.99] transition-transform ${headerColor}`}
+                >
+                  {Header}
+                </button>
+              ) : (
+                <div className={`flex items-center gap-2 rounded-lg border px-3 py-2 mb-2 ${headerColor}`}>
+                  {Header}
+                </div>
+              )}
+              {!colapsada && (
+                <div className="space-y-2">
+                  {s.items.map(({ planOt, ot }) => (
+                    <OTCardMobile
+                      key={planOt.id}
+                      ot={ot}
+                      planOt={planOt}
+                      estilo={cardEstilo}
+                      secuencia={secuenciaByJornada.get(planOt.id)}
+                      responsableNombre={
+                        planOt.responsable_id
+                          ? (usuariosById.get(planOt.responsable_id)?.nombre_completo
+                            ?? usuariosById.get(planOt.responsable_id)?.email
+                            ?? null)
+                          : null
+                      }
+                      mostrarResponsable={verTodas}
+                    />
+                  ))}
+                </div>
+              )}
             </section>
           )
         })}
