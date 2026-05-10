@@ -137,6 +137,7 @@ export function BodegueroDashboard() {
             <QuickLink href="/dashboard/inventario/salida" label="Registrar Salida" />
             <QuickLink href="/dashboard/inventario/conteo" label="Conteo" />
             <QuickLink href="/dashboard/inventario/scanner" label="Scanner" />
+            <QuickLink href="/dashboard/inventario/reconciliacion" label="Reconciliación" />
           </div>
         </CardContent>
       </Card>

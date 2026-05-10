@@ -33,6 +33,7 @@ import {
   Layers,
   QrCode,
   AlertTriangle,
+  Scale,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -113,6 +114,7 @@ const navGroups: Array<{ label?: string; items: NavItem[] }> = [
       { label: 'Pistola Scanner',    href: '/dashboard/inventario/scanner',         icon: BarChart3,       module: 'inventario' },
       { label: 'Cargar Maestro',     href: '/dashboard/inventario/cargar-maestro',  icon: FileSpreadsheet, module: 'inventario' },
       { label: 'Salidas / Conteo',   href: '/dashboard/inventario/salida',          icon: ClipboardCheck,  module: 'inventario' },
+      { label: 'Reconciliación',     href: '/dashboard/inventario/reconciliacion',  icon: Scale,           module: 'inventario' },
       { label: 'Despachos OT',       href: '/dashboard/abastecimiento/despachos',   icon: ClipboardCheck,  module: 'inventario' },
       { label: 'Abastecimiento',     href: '/dashboard/abastecimiento',             icon: Fuel,            module: 'abastecimiento' },
       { label: 'Combustible',        href: '/dashboard/inventario/combustible',     icon: Fuel,            module: 'inventario' },
