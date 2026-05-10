@@ -5,7 +5,7 @@ import Link from 'next/link'
 import {
   RefreshCw, MapPin, MessageSquare, ChevronRight, AlertTriangle,
   Calendar, LogOut, ClipboardCheck, CheckCircle2, Play, Pause,
-  ChevronDown, ChevronUp,
+  ChevronDown, ChevronUp, ChevronLeft,
 } from 'lucide-react'
 import { Spinner } from '@/components/ui/spinner'
 import { useAuth } from '@/contexts/auth-context'
@@ -34,18 +34,37 @@ interface SeccionVista {
 }
 
 const DIAS_CORTOS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
+const DIAS_INICIAL = ['L', 'M', 'X', 'J', 'V', 'S', 'D']
 const MESES_CORTOS = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']
 
 function isoToday(): string { return new Date().toISOString().slice(0, 10) }
-function startOfWeekISO(): string {
+function startOfWeekISOOffset(weekOffset: number): string {
   const d = new Date(); const dow = d.getDay()
   const diff = (dow === 0 ? -6 : 1) - dow
-  d.setDate(d.getDate() + diff)
+  d.setDate(d.getDate() + diff + weekOffset * 7)
   return d.toISOString().slice(0, 10)
 }
-function endOfWeekISO(): string {
-  const d = new Date(startOfWeekISO()); d.setDate(d.getDate() + 6)
+function endOfWeekISOOffset(weekOffset: number): string {
+  const d = new Date(startOfWeekISOOffset(weekOffset) + 'T00:00:00')
+  d.setDate(d.getDate() + 6)
   return d.toISOString().slice(0, 10)
+}
+function diasDeSemana(weekStart: string): string[] {
+  const out: string[] = []
+  const d = new Date(weekStart + 'T00:00:00')
+  for (let i = 0; i < 7; i++) {
+    out.push(d.toISOString().slice(0, 10))
+    d.setDate(d.getDate() + 1)
+  }
+  return out
+}
+function rangoSemanaLabel(weekStart: string, weekEnd: string): string {
+  const a = new Date(weekStart + 'T00:00:00')
+  const b = new Date(weekEnd + 'T00:00:00')
+  if (a.getMonth() === b.getMonth()) {
+    return `${a.getDate()}–${b.getDate()} ${MESES_CORTOS[a.getMonth()]}`
+  }
+  return `${a.getDate()} ${MESES_CORTOS[a.getMonth()]} – ${b.getDate()} ${MESES_CORTOS[b.getMonth()]}`
 }
 function formatDiaCorto(fechaISO: string): string {
   const d = new Date(fechaISO + 'T00:00:00')
@@ -165,13 +184,26 @@ export default function MobileCalamaPage() {
     return map
   }, [planOtsEff])
 
-  // Agrupa jornadas por dia de la semana en curso. Atrasadas y completadas son
-  // secciones especiales (no por dia). Sin fecha y futuras (otras semanas) van
-  // a su propia seccion al final.
+  // Navegacion de semana y filtro por dia (controles de la tira semanal).
+  const [weekOffset, setWeekOffset] = useState(0)
+  const [diaSeleccionado, setDiaSeleccionado] = useState<string | null>(null)
+  const weekStart = useMemo(() => startOfWeekISOOffset(weekOffset), [weekOffset])
+  const weekEnd = useMemo(() => endOfWeekISOOffset(weekOffset), [weekOffset])
+  const diasSemanaVisible = useMemo(() => diasDeSemana(weekStart), [weekStart])
+
+  // Si cambia la semana y el dia seleccionado quedo fuera del rango, lo limpio.
+  useEffect(() => {
+    if (diaSeleccionado && (diaSeleccionado < weekStart || diaSeleccionado > weekEnd)) {
+      setDiaSeleccionado(null)
+    }
+  }, [diaSeleccionado, weekStart, weekEnd])
+
+  // Agrupa jornadas por dia de la semana visible. Atrasadas/futuras/sinFecha
+  // solo aplican cuando se mira la semana actual; en semanas pasadas/futuras
+  // se muestran solo OTs cuya fecha cae en el rango visible.
   const secciones = useMemo<SeccionVista[]>(() => {
     const today = isoToday()
-    const weekStart = startOfWeekISO()
-    const weekEnd = endOfWeekISO()
+    const isCurrentWeek = weekOffset === 0
 
     const atrasadas: SeccionVista = { tipo: 'atrasadas', key: 'atrasadas', label: 'Atrasadas', items: [] }
     const sinFecha: SeccionVista = { tipo: 'sin_fecha', key: 'sin_fecha', label: 'Sin fecha', items: [] }
@@ -183,35 +215,36 @@ export default function MobileCalamaPage() {
       const ot = otsById.get(p.ot_id)
       if (!ot) continue
       const fecha = p.fecha_jornada ?? ot.fecha_programada ?? ''
-
-      if (
+      const enRango = !!fecha && fecha >= weekStart && fecha <= weekEnd
+      const completada = (
         p.estado_plan === 'finalizada' ||
         ot.estado === 'finalizada' || ot.estado === 'cancelada'
-      ) {
-        completadas.items.push({ planOt: p, ot })
+      )
+
+      if (completada) {
+        if (isCurrentWeek || enRango) completadas.items.push({ planOt: p, ot })
         continue
       }
-      if (!fecha) { sinFecha.items.push({ planOt: p, ot }); continue }
-      if (fecha < today) { atrasadas.items.push({ planOt: p, ot }); continue }
-      if (fecha >= weekStart && fecha <= weekEnd) {
+      if (!fecha) { if (isCurrentWeek) sinFecha.items.push({ planOt: p, ot }); continue }
+      if (enRango) {
         let s = porDia.get(fecha)
         if (!s) {
           s = {
-            tipo: 'dia',
-            key: `dia:${fecha}`,
+            tipo: 'dia', key: `dia:${fecha}`,
             label: formatDiaCorto(fecha),
-            esHoy: fecha === today,
-            items: [],
+            esHoy: fecha === today, items: [],
           }
           porDia.set(fecha, s)
         }
         s.items.push({ planOt: p, ot })
         continue
       }
-      futuras.items.push({ planOt: p, ot })
+      if (isCurrentWeek) {
+        if (fecha < today) atrasadas.items.push({ planOt: p, ot })
+        else futuras.items.push({ planOt: p, ot })
+      }
     }
 
-    // Dentro de cada seccion: en ejecucion / pausa primero, luego por prioridad.
     const ordenarItems = (s: SeccionVista) => {
       s.items.sort((a, b) => {
         const order = (estado: string) =>
@@ -236,7 +269,24 @@ export default function MobileCalamaPage() {
     if (sinFecha.items.length > 0) { ordenarItems(sinFecha); result.push(sinFecha) }
     if (completadas.items.length > 0) result.push(completadas)
     return result
-  }, [planOtsEff, otsById])
+  }, [planOtsEff, otsById, weekOffset, weekStart, weekEnd])
+
+  // Conteos por dia para la tira semanal (solo OTs activas, no completadas).
+  const conteosPorDia = useMemo(() => {
+    const map = new Map<string, number>()
+    for (const s of secciones) {
+      if (s.tipo === 'dia') {
+        map.set(s.key.replace('dia:', ''), s.items.length)
+      }
+    }
+    return map
+  }, [secciones])
+
+  // Filtrado por dia: si hay dia seleccionado, mostrar solo esa seccion.
+  const seccionesFiltradas = useMemo(() => {
+    if (!diaSeleccionado) return secciones
+    return secciones.filter((s) => s.tipo === 'dia' && s.key === `dia:${diaSeleccionado}`)
+  }, [secciones, diaSeleccionado])
 
   const [completadasOpen, setCompletadasOpen] = useState(false)
 
@@ -256,7 +306,11 @@ export default function MobileCalamaPage() {
     qc.invalidateQueries({ queryKey: ['calama', 'ots'] })
   }
 
-  const totalVisibles = secciones.reduce((acc, s) => acc + s.items.length, 0)
+  const totalVisibles = seccionesFiltradas.reduce((acc, s) => acc + s.items.length, 0)
+  const totalSemana = useMemo(
+    () => secciones.filter((s) => s.tipo === 'dia').reduce((acc, s) => acc + s.items.length, 0),
+    [secciones],
+  )
 
   return (
     <div className="space-y-3 pt-2">
@@ -383,7 +437,84 @@ export default function MobileCalamaPage() {
           </div>
         )}
 
-        {secciones.map((s) => {
+        {/* Tira semanal: navegacion de semana + 7 pildoras de dia + filtro */}
+        <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
+          <div className="flex items-center justify-between px-2 pt-2 pb-1">
+            <button
+              type="button"
+              onClick={() => setWeekOffset((o) => o - 1)}
+              className="p-1.5 -m-1 rounded text-gray-700 active:bg-gray-100"
+              aria-label="Semana anterior"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <div className="text-xs font-bold text-gray-800 flex items-center gap-2">
+              <Calendar className="h-3.5 w-3.5 text-gray-500" />
+              <span>{rangoSemanaLabel(weekStart, weekEnd)}</span>
+              <span className="text-[10px] font-mono text-gray-500">({totalSemana})</span>
+              {weekOffset !== 0 && (
+                <button
+                  type="button"
+                  onClick={() => { setWeekOffset(0); setDiaSeleccionado(null) }}
+                  className="rounded bg-amber-100 text-amber-800 px-1.5 py-0.5 text-[10px] font-semibold active:bg-amber-200"
+                >Hoy</button>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => setWeekOffset((o) => o + 1)}
+              className="p-1.5 -m-1 rounded text-gray-700 active:bg-gray-100"
+              aria-label="Semana siguiente"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
+          <div className="grid grid-cols-7 gap-1 px-2 pb-2">
+            {diasSemanaVisible.map((fechaISO, idx) => {
+              const conteo = conteosPorDia.get(fechaISO) ?? 0
+              const esHoy = fechaISO === isoToday()
+              const esSeleccionado = diaSeleccionado === fechaISO
+              const tieneOTs = conteo > 0
+              return (
+                <button
+                  key={fechaISO}
+                  type="button"
+                  onClick={() => setDiaSeleccionado(esSeleccionado ? null : fechaISO)}
+                  className={`flex flex-col items-center rounded-lg border py-1.5 transition-colors ${
+                    esSeleccionado ? 'bg-amber-700 text-white border-amber-700'
+                    : esHoy ? 'bg-amber-50 border-amber-300 text-amber-900'
+                    : tieneOTs ? 'bg-white border-gray-300 text-gray-800'
+                    : 'bg-gray-50 border-gray-200 text-gray-400'
+                  }`}
+                >
+                  <span className="text-[9px] uppercase font-semibold tracking-wide leading-none">
+                    {DIAS_INICIAL[idx]}
+                  </span>
+                  <span className="text-base font-bold leading-tight mt-0.5">
+                    {Number(fechaISO.slice(8, 10))}
+                  </span>
+                  <span className={`text-[9px] mt-0.5 font-mono leading-none ${
+                    esSeleccionado ? 'text-white/90'
+                    : tieneOTs ? 'text-gray-700' : 'text-gray-400'
+                  }`}>
+                    {tieneOTs ? conteo : '—'}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+          {diaSeleccionado && (
+            <button
+              type="button"
+              onClick={() => setDiaSeleccionado(null)}
+              className="w-full rounded-b-xl bg-gray-100 text-gray-700 text-xs font-medium py-2 active:bg-gray-200 border-t border-gray-200"
+            >
+              Toda la semana
+            </button>
+          )}
+        </div>
+
+        {seccionesFiltradas.map((s) => {
           if (s.items.length === 0) return null
           const colapsable = s.tipo === 'completadas'
           const colapsada = colapsable && !completadasOpen
