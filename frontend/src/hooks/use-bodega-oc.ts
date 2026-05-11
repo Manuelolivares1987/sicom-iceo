@@ -1,8 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   listarOC, getOCById, crearOC, listarProveedoresActivos,
-  importarOCExterna, subirDocumentoOC,
+  importarOCExterna, subirDocumentoOC, recepcionarOC,
   type FiltrosOC, type CrearOCPayload, type ImportarOCExternaPayload,
+  type RecepcionarOCPayload,
 } from '@/lib/services/bodega-oc'
 
 const STALE = 30_000
@@ -78,6 +79,25 @@ export function useSubirDocumentoOC() {
       const { data, error } = await subirDocumentoOC(file)
       if (error) throw error
       return data!
+    },
+  })
+}
+
+export function useRecepcionarOC() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (payload: RecepcionarOCPayload) => {
+      const { data, error } = await recepcionarOC(payload)
+      if (error) throw error
+      return data!
+    },
+    onSuccess: () => {
+      // Refrescar OC, reconciliacion, stock e inventario tras recepcion.
+      qc.invalidateQueries({ queryKey: ['bodega-oc'] })
+      qc.invalidateQueries({ queryKey: ['bodega-reconciliacion'] })
+      qc.invalidateQueries({ queryKey: ['stock-bodega'] })
+      qc.invalidateQueries({ queryKey: ['movimientos'] })
+      qc.invalidateQueries({ queryKey: ['kardex'] })
     },
   })
 }

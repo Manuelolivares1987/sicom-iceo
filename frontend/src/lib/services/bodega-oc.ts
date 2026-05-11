@@ -268,6 +268,80 @@ export async function importarOCExterna(payload: ImportarOCExternaPayload) {
   return { data: data as ImportarOCResult, error: null }
 }
 
+// ── Recepcion contra OC (MIG37 inventariable + MIG38 documental) ───────────
+
+export type DocTipoProveedor = 'factura' | 'guia' | 'vale' | 'boleta' | 'otro'
+
+export interface RecepcionarOCItemInput {
+  oc_item_id: string
+  // Si el item OC tiene producto_id, no se requiere mapear. Si es inventariable
+  // sin producto_id, pasar producto_id aqui para mapear en la recepcion.
+  producto_id?: string | null
+  cantidad: number
+  unidad?: string | null
+  costo_unitario?: number | null  // si no se pasa, la RPC usa precio OC
+  lote?: string | null
+  vencimiento?: string | null
+  observacion?: string | null
+}
+
+export interface RecepcionarOCPayload {
+  orden_compra_id: string
+  proveedor_id: string
+  bodega_id: string
+  doc_tipo: DocTipoProveedor
+  doc_numero: string
+  items: RecepcionarOCItemInput[]
+  evidencia_url?: string | null
+  observacion?: string | null
+  permite_sobrecantidad?: boolean
+  permite_precio_distinto?: boolean
+  justificacion_override?: string | null
+}
+
+export interface RecepcionarOCResult {
+  success: boolean
+  folio: string
+  recepcion_id: string
+  items_count: number
+  items_stock: number
+  items_documentales: number
+  capas_creadas: Array<{
+    capa_id: string
+    producto_id: string
+    cantidad: number | string
+    costo_unitario: number
+  }>
+}
+
+export async function recepcionarOC(payload: RecepcionarOCPayload) {
+  const items = payload.items.map((it) => ({
+    oc_item_id: it.oc_item_id,
+    producto_id: it.producto_id ?? null,
+    cantidad: it.cantidad,
+    unidad: it.unidad ?? null,
+    costo_unitario: it.costo_unitario,
+    lote: it.lote ?? null,
+    vencimiento: it.vencimiento ?? null,
+    observacion: it.observacion ?? null,
+  }))
+  const { data, error } = await supabase.rpc('rpc_registrar_recepcion_bodega', {
+    p_proveedor_id:            payload.proveedor_id,
+    p_bodega_id:               payload.bodega_id,
+    p_doc_tipo:                payload.doc_tipo,
+    p_doc_numero:              payload.doc_numero,
+    p_items:                   items,
+    p_orden_compra_id:         payload.orden_compra_id,
+    p_evidencia_url:           payload.evidencia_url ?? null,
+    p_observacion:             payload.observacion ?? null,
+    p_permite_sobrecantidad:   payload.permite_sobrecantidad ?? false,
+    p_permite_precio_distinto: payload.permite_precio_distinto ?? false,
+    p_justificacion_override:  payload.justificacion_override ?? null,
+  })
+  if (error) return { data: null, error }
+  return { data: data as RecepcionarOCResult, error: null }
+}
+
 // Subir documento OC al bucket 'documentos' con prefix bodega-oc/<tempId>/
 export interface SubirDocumentoOCResult {
   url: string

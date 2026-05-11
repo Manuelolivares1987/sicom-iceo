@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
-import { ArrowLeft, Package, AlertCircle, ExternalLink, FileText } from 'lucide-react'
+import { ArrowLeft, Package, AlertCircle, ExternalLink, FileText, Truck } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -66,6 +66,8 @@ export default function OCDetallePage() {
   }
 
   const itemsPendientesMapeo = oc.items.filter((i) => i.requiere_stock && !i.producto_id).length
+  const itemsPendientes = oc.items.filter((i) => Number(i.cantidad_pendiente) > 0 && i.estado !== 'completo').length
+  const puedeRecepcionar = itemsPendientes > 0 && oc.estado !== 'cerrada' && oc.estado !== 'anulada'
 
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-4">
@@ -96,21 +98,31 @@ export default function OCDetallePage() {
             <ExternalLink className="h-3 w-3" /> Ver documento original
           </a>
         )}
+        <div className="flex-1" />
+        {puedeRecepcionar && (
+          <Link href={`/dashboard/abastecimiento/oc/${oc.id}/recepcionar`}>
+            <Button size="sm">
+              <Truck className="h-4 w-4 mr-1" /> Recepcionar
+            </Button>
+          </Link>
+        )}
       </div>
 
-      <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 flex items-start gap-2">
-        <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
-        <div>
-          Recepción contra OC se habilitará en la próxima etapa del Frente #2.
-          Por ahora solo lectura del detalle.
-          {itemsPendientesMapeo > 0 && (
-            <div className="mt-1">
-              <strong>{itemsPendientesMapeo} ítem(s) inventariable(s)</strong> sin producto mapeado.
-              Cuando se habilite recepción, deberás mapearlos antes.
-            </div>
-          )}
+      {itemsPendientesMapeo > 0 && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 flex items-start gap-2">
+          <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+          <div>
+            <strong>{itemsPendientesMapeo} ítem(s) inventariable(s)</strong> sin producto mapeado.
+            En la pantalla de recepción podés mapearlos antes de recibir stock.
+          </div>
         </div>
-      </div>
+      )}
+      {!puedeRecepcionar && itemsPendientes === 0 && oc.estado !== 'anulada' && (
+        <div className="rounded-lg border border-green-200 bg-green-50 p-3 text-xs text-green-800 flex items-start gap-2">
+          <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+          <div>OC sin items pendientes. Todo recepcionado.</div>
+        </div>
+      )}
 
       <Card>
         <CardHeader>
