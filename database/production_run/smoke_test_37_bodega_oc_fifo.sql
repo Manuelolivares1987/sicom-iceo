@@ -69,10 +69,31 @@ prod AS (
      ORDER BY p.codigo LIMIT 5
 ),
 ot AS (
-    SELECT 'discovery_ot_abierta' AS dx, id::text AS uuid, folio AS codigo, estado::text AS nombre, 5 AS ord
+    -- rpc_registrar_salida_inventario legacy (mig 18) solo acepta OTs en
+    -- estado 'asignada' o 'en_ejecucion'.
+    SELECT 'discovery_ot_valida' AS dx, id::text AS uuid, folio AS codigo, estado::text AS nombre, 5 AS ord
       FROM ordenes_trabajo
-     WHERE estado NOT IN ('cancelada','cerrada')
+     WHERE estado IN ('asignada','en_ejecucion')
      ORDER BY created_at DESC LIMIT 3
+),
+tripleta AS (
+    -- Combinacion COHERENTE: OT valida + bodega de SU faena + producto con
+    -- stock en esa bodega. Sin esta, la salida falla por
+    -- "bodega no pertenece a la faena de la OT".
+    SELECT 'discovery_tripleta_valida' AS dx,
+           o.id::text AS uuid,
+           o.folio AS codigo,
+           ('OT=' || o.estado::text || ' bod=' || b.codigo || ' prod=' || p.codigo ||
+            ' stock=' || sb.cantidad) AS nombre,
+           6 AS ord
+      FROM ordenes_trabajo o
+      JOIN bodegas b ON b.faena_id = o.faena_id
+      JOIN stock_bodega sb ON sb.bodega_id = b.id
+      JOIN productos p ON p.id = sb.producto_id
+     WHERE o.estado IN ('asignada','en_ejecucion')
+       AND p.categoria IN ('repuesto','lubricante','filtro','consumible')
+       AND sb.cantidad >= 1
+     ORDER BY o.created_at DESC, p.codigo LIMIT 3
 ),
 adm AS (
     SELECT 'discovery_admin' AS dx,
@@ -91,6 +112,7 @@ UNION ALL SELECT dx, uuid, codigo, nombre FROM bod
 UNION ALL SELECT dx, uuid, codigo, nombre FROM ceco
 UNION ALL SELECT dx, uuid, codigo, nombre FROM prod
 UNION ALL SELECT dx, uuid, codigo, nombre FROM ot
+UNION ALL SELECT dx, uuid, codigo, nombre FROM tripleta
 UNION ALL SELECT dx, uuid, codigo, nombre FROM adm
 ORDER BY 1, 3;
 
@@ -164,26 +186,28 @@ BEGIN
       FROM proveedores WHERE activo=true ORDER BY codigo LIMIT 1;
     IF v_proveedor_id IS NULL THEN RAISE EXCEPTION 'STOP - no hay proveedor activo'; END IF;
 
-    SELECT p.id, p.codigo, sb.cantidad, sb.bodega_id
-      INTO v_producto_id, v_producto_cod, v_stock_inicial, v_bodega_id
-      FROM productos p
-      JOIN stock_bodega sb ON sb.producto_id = p.id
-     WHERE p.categoria IN ('repuesto','lubricante','filtro','consumible')
-       AND sb.cantidad >= 1
-     ORDER BY p.codigo LIMIT 1;
-    IF v_producto_id IS NULL THEN
-        RAISE EXCEPTION 'STOP - no hay producto repuesto/lubricante/filtro/consumible con stock >= 1';
-    END IF;
-
-    SELECT codigo INTO v_bodega_cod FROM bodegas WHERE id = v_bodega_id;
-
     SELECT id INTO v_ceco_id FROM centros_costo WHERE activo=true ORDER BY codigo LIMIT 1;
     IF v_ceco_id IS NULL THEN RAISE EXCEPTION 'STOP - no hay CECO activo'; END IF;
 
-    SELECT id, folio INTO v_ot_id, v_ot_folio
-      FROM ordenes_trabajo WHERE estado NOT IN ('cancelada','cerrada')
-      ORDER BY created_at DESC LIMIT 1;
-    IF v_ot_id IS NULL THEN RAISE EXCEPTION 'STOP - no hay OT abierta'; END IF;
+    -- Tripleta coherente: OT en estado asignada/en_ejecucion + bodega de
+    -- la misma faena + producto con stock. Restricciones cruzadas:
+    --   - rpc_registrar_salida_inventario (mig 18): rechaza estados <>
+    --     asignada/en_ejecucion y bodegas de faena distinta a la OT.
+    --   - producto debe tener stock >= 1 en esa bodega para la salida.
+    SELECT o.id, o.folio, p.id, p.codigo, sb.cantidad, sb.bodega_id, b.codigo
+      INTO v_ot_id, v_ot_folio, v_producto_id, v_producto_cod,
+           v_stock_inicial, v_bodega_id, v_bodega_cod
+      FROM ordenes_trabajo o
+      JOIN bodegas b ON b.faena_id = o.faena_id
+      JOIN stock_bodega sb ON sb.bodega_id = b.id
+      JOIN productos p ON p.id = sb.producto_id
+     WHERE o.estado IN ('asignada','en_ejecucion')
+       AND p.categoria IN ('repuesto','lubricante','filtro','consumible')
+       AND sb.cantidad >= 1
+     ORDER BY o.created_at DESC, p.codigo LIMIT 1;
+    IF v_ot_id IS NULL THEN
+        RAISE EXCEPTION 'STOP - no hay tripleta coherente (OT asignada/en_ejecucion + bodega de su faena + producto con stock >= 1). Ver Seccion 1 ''discovery_tripleta_valida''.';
+    END IF;
 
     SELECT COUNT(*) FILTER (WHERE estado='disponible'),
            COUNT(*)
