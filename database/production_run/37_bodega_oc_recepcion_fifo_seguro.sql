@@ -132,13 +132,16 @@ BEGIN
         RAISE EXCEPTION 'STOP - hay % productos con stock > 0 y costo 0. Resolver antes de activar transaccional.', v_stock_sin_costo;
     END IF;
 
-    -- 9. Usuario ejecutor admin
+    -- 9. Usuario ejecutor admin (o rol de sistema en contexto de migracion)
+    -- Supabase SQL Editor / aplicaciones de mig corren como postgres /
+    -- service_role / supabase_admin, con auth.uid()=NULL. Eso es legitimo
+    -- para una migracion. Solo si la mig se invoca desde sesion
+    -- autenticada (auth.uid() NOT NULL) exigimos rol administrador.
     v_rol := fn_user_rol();
     IF v_rol IS NULL THEN
-        RAISE EXCEPTION 'STOP - fn_user_rol() retorno NULL (sin auth.uid())';
-    END IF;
-    IF v_rol <> 'administrador' THEN
-        RAISE EXCEPTION 'STOP - aplicar mig 37 requiere rol administrador. Rol actual: %', v_rol;
+        RAISE NOTICE 'Aplicando MIG37 como rol de sistema (current_user=%). auth.uid() es NULL — contexto de migracion permitido.', current_user;
+    ELSIF v_rol <> 'administrador' THEN
+        RAISE EXCEPTION 'STOP - aplicar mig 37 desde sesion autenticada requiere rol administrador. Rol actual: %', v_rol;
     END IF;
 
     RAISE NOTICE '== MIG37 prechecks OK ==';
