@@ -109,18 +109,28 @@ q5 AS (
     SELECT
         'Q5_kardex_valorizado'::text        AS dx,
         e.codigo                            AS key,
-        COUNT(ckv.id)::text                 AS val,
+        (
+            SELECT COUNT(*)::text
+              FROM combustible_kardex_valorizado ckv
+             WHERE ckv.estanque_id = e.id
+        )                                   AS val,
         jsonb_build_object(
-            'total_kardex', COUNT(ckv.id),
-            'tipos', jsonb_object_agg(
-                COALESCE(ckv.tipo_movimiento, 'n/a'),
-                COUNT(*)
-            ) FILTER (WHERE ckv.tipo_movimiento IS NOT NULL),
-            'ultimo_kardex', MAX(ckv.fecha_movimiento)
+            'total_kardex',
+                (SELECT COUNT(*) FROM combustible_kardex_valorizado ckv
+                  WHERE ckv.estanque_id = e.id),
+            'tipos',
+                (SELECT jsonb_object_agg(tipo_movimiento, n)
+                   FROM (
+                     SELECT tipo_movimiento, COUNT(*) AS n
+                       FROM combustible_kardex_valorizado
+                      WHERE estanque_id = e.id
+                      GROUP BY tipo_movimiento
+                   ) sub),
+            'ultimo_kardex',
+                (SELECT MAX(fecha_movimiento) FROM combustible_kardex_valorizado
+                  WHERE estanque_id = e.id)
         )                                   AS extra
     FROM combustible_estanques e
-    LEFT JOIN combustible_kardex_valorizado ckv ON ckv.estanque_id = e.id
-    GROUP BY e.id, e.codigo
 ),
 
 -- ── Q6: RPCs combustible activas en pg_proc ────────────────────────────────
