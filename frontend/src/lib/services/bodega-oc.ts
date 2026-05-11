@@ -345,12 +345,13 @@ export interface ProveedorMini {
   codigo: string
   nombre: string
   tipo: string
+  rut: string | null
 }
 
 export async function listarProveedoresActivos() {
   const { data, error } = await supabase
     .from('proveedores')
-    .select('id, codigo, nombre, tipo')
+    .select('id, codigo, nombre, tipo, rut')
     .eq('activo', true)
     .order('nombre')
   return { data: data as ProveedorMini[] | null, error }

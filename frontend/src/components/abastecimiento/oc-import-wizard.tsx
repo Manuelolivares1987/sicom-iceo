@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   Upload, FileText, Check, ArrowLeft, ArrowRight, Save, Trash2, Plus,
-  AlertTriangle, AlertCircle, CheckCircle2, X,
+  AlertTriangle, AlertCircle, CheckCircle2, X, Sparkles, Loader2,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -21,6 +21,7 @@ import {
   TIPO_ITEM_OPCIONES, TIPO_ITEM_NO_INVENTARIABLE,
   type TipoItemOC, type ImportarOCExternaPayload,
 } from '@/lib/services/bodega-oc'
+import { parseOCFromPDF, type ParsedOC } from '@/lib/parsers/oc-pdf-parser'
 
 type StepNum = 1 | 2 | 3 | 4
 
@@ -56,6 +57,7 @@ interface ItemState {
   requiere_stock: boolean
   producto_id: string | null
   observacion: string
+  detectado_pdf?: boolean  // marca que vino del parser
 }
 
 const REGEX_SERVICIO = /SERVICIO|CERTIFICAC|OPERATIVIDAD|MANTENIMIENTO|CALIBRAC|REPARAC|TRANSPORT|TRASLADO|ARRIEND|ALQUILE/i
@@ -109,6 +111,9 @@ export function OCImportWizard() {
     observacion: '',
   })
   const [items, setItems] = useState<ItemState[]>([nuevoItem()])
+  const [parsed, setParsed] = useState<ParsedOC | null>(null)
+  const [parsing, setParsing] = useState<boolean>(false)
+  const [parseError, setParseError] = useState<string | null>(null)
 
   const { data: proveedores, isLoading: loadProv } = useProveedoresActivos()
   const { data: productosAll, isLoading: loadProd } = useProductos()
@@ -122,6 +127,72 @@ export function OCImportWizard() {
 
   const subir = useSubirDocumentoOC()
   const importar = useImportarOCExterna()
+
+  // ── Extracción del PDF ──────────────────────────────────────────────────
+  // Texto-first con pdfjs-dist. Prellenar cabecera + items. Intenta mapear
+  // proveedor por RUT contra el listado de proveedores activos.
+  const extraerDelPDF = async (file: File) => {
+    setParsing(true)
+    setParseError(null)
+    try {
+      const result = await parseOCFromPDF(file)
+      setParsed(result)
+
+      // Mapear proveedor por RUT si existe coincidencia
+      let provIdSugerido = ''
+      if (result.proveedor_rut && proveedores) {
+        const norm = (s: string) => s.replace(/[.\-/]/g, '').toUpperCase()
+        const target = norm(result.proveedor_rut)
+        const hit = proveedores.find((p) => p.rut && norm(p.rut) === target)
+        if (hit) provIdSugerido = hit.id
+      }
+
+      setCabecera((prev) => ({
+        ...prev,
+        numero_oc_externo: result.numero_oc_externo ?? prev.numero_oc_externo,
+        proveedor_id:      provIdSugerido || prev.proveedor_id,
+        proveedor_rut:     result.proveedor_rut ?? prev.proveedor_rut,
+        fecha_emision:     result.fecha_emision ?? prev.fecha_emision,
+        fecha_entrega:     result.fecha_entrega ?? prev.fecha_entrega,
+        neto_clp:          result.neto_clp ?? prev.neto_clp,
+        iva_clp:           result.iva_clp ?? prev.iva_clp,
+        total_clp:         result.total_clp ?? prev.total_clp,
+        forma_pago:        result.forma_pago ?? prev.forma_pago,
+      }))
+
+      if (result.items.length > 0) {
+        setItems(result.items.map((it): ItemState => ({
+          codigo_externo:               it.codigo_externo ?? '',
+          descripcion:                  it.descripcion,
+          cantidad_comprada:            it.cantidad,
+          unidad:                       'unidad',
+          unidad_externa:               it.unidad_externa ?? '',
+          centro_costo_codigo_externo:  it.centro_costo_codigo_externo ?? '',
+          precio_unitario_clp:          it.precio_unitario_clp ?? '',
+          tipo_item:                    it.tipo_item_sugerido,
+          requiere_stock:               it.requiere_stock_sugerido,
+          producto_id:                  null,
+          observacion:                  '',
+          detectado_pdf:                true,
+        })))
+      }
+
+      if (result.confidence < 0.3) {
+        toast.warning('Detección con baja confianza. Revisa los campos manualmente.')
+      } else {
+        toast.success(
+          `Detectado: ${result.items.length} item(s)` +
+          (result.numero_oc_externo ? `, OC ${result.numero_oc_externo}` : ''),
+        )
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      setParseError(msg)
+      toast.error('Error al extraer datos: ' + msg)
+    } finally {
+      setParsing(false)
+    }
+  }
 
   const subtotalItems = useMemo(
     () => items.reduce((acc, it) => {
@@ -232,7 +303,17 @@ export function OCImportWizard() {
               setDocumento({ file, url: res.url, path: res.path })
               toast.success('Documento subido')
             }
+            // Si es PDF, intentar extraer automaticamente
+            if (file.type === 'application/pdf' || /\.pdf$/i.test(file.name)) {
+              await extraerDelPDF(file)
+            }
           }}
+          onExtraerOtraVez={() => {
+            if (documento?.file) void extraerDelPDF(documento.file)
+          }}
+          parsed={parsed}
+          parsing={parsing}
+          parseError={parseError}
           subiendo={subir.isPending}
           onSkip={() => setStep(2)}
           onNext={() => setStep(2)}
@@ -272,6 +353,7 @@ export function OCImportWizard() {
           diffNetoIvaVsTotal={diffNetoIvaVsTotal}
           itemsPendientesMapeo={itemsPendientesMapeo}
           documento={documento}
+          extraidoPDF={!!parsed && parsed.confidence > 0}
           onPrev={() => setStep(3)}
           onSubmit={onSubmit}
           loading={importar.isPending}
@@ -318,34 +400,42 @@ function Stepper({ step }: { step: StepNum }) {
 // ── Step 1: Documento ────────────────────────────────────────────────────
 
 function Step1Documento({
-  documento, onUpload, subiendo, onSkip, onNext,
+  documento, onUpload, onExtraerOtraVez, parsed, parsing, parseError,
+  subiendo, onSkip, onNext,
 }: {
   documento: DocumentoState | null
   onUpload: (f: File) => void
+  onExtraerOtraVez: () => void
+  parsed: ParsedOC | null
+  parsing: boolean
+  parseError: string | null
   subiendo: boolean
   onSkip: () => void
   onNext: () => void
 }) {
+  const esPDF = documento?.file && (
+    documento.file.type === 'application/pdf' || /\.pdf$/i.test(documento.file.name)
+  )
   return (
     <Card>
       <CardHeader>
         <CardTitle className="text-base">Paso 1 · Documento original</CardTitle>
         <p className="text-xs text-gray-600">
-          Subí el PDF/imagen/Excel de la OC. Opcional — podés continuar con captura manual.
+          Subí el PDF/imagen/Excel de la OC. Si es PDF, intentamos extraer datos automáticamente.
         </p>
       </CardHeader>
       <CardContent className="space-y-3">
         <label className="flex flex-col items-center justify-center border-2 border-dashed border-gray-300 rounded-lg p-8 cursor-pointer hover:border-amber-400 transition-colors">
           <Upload className="h-8 w-8 text-gray-400 mb-2" />
           <span className="text-sm text-gray-700">
-            {subiendo ? 'Subiendo...' : 'Haz click o arrastra un archivo'}
+            {subiendo ? 'Subiendo...' : parsing ? 'Leyendo PDF...' : 'Haz click o arrastra un archivo'}
           </span>
           <span className="text-[11px] text-gray-500 mt-1">PDF, imagen o Excel</span>
           <input
             type="file"
             accept=".pdf,image/*,.xlsx,.xls,.csv"
             className="hidden"
-            disabled={subiendo}
+            disabled={subiendo || parsing}
             onChange={(e) => {
               const f = e.target.files?.[0]
               if (f) onUpload(f)
@@ -361,18 +451,65 @@ function Step1Documento({
               <div className="text-[11px] text-gray-500">
                 {(documento.file.size / 1024).toFixed(1)} KB
                 {documento.url && <span className="text-green-700 ml-2">· Subido OK</span>}
-                {documento.error && <span className="text-red-700 ml-2">· Error: {documento.error}</span>}
+                {documento.error && <span className="text-red-700 ml-2">· Error subida: {documento.error}</span>}
               </div>
             </div>
+            {esPDF && (
+              <Button
+                type="button" variant="outline" size="sm"
+                onClick={onExtraerOtraVez}
+                disabled={parsing}
+                title="Volver a intentar la extracción del PDF"
+              >
+                {parsing
+                  ? <Loader2 className="h-4 w-4 animate-spin" />
+                  : <Sparkles className="h-4 w-4 mr-1" />}
+                {parsing ? 'Leyendo...' : 'Re-extraer'}
+              </Button>
+            )}
+          </div>
+        )}
+
+        {parsing && (
+          <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-800 flex items-center gap-2">
+            <Loader2 className="h-4 w-4 animate-spin shrink-0" />
+            <div>Extrayendo datos del PDF...</div>
+          </div>
+        )}
+
+        {parsed && !parsing && (
+          <div className="rounded-lg border border-green-200 bg-green-50 p-3 text-xs text-green-900 space-y-1">
+            <div className="flex items-center gap-2 font-semibold">
+              <Sparkles className="h-4 w-4" />
+              Datos detectados (confianza {Math.round(parsed.confidence * 100)}%) — revisá antes de guardar
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-x-3 gap-y-1 text-[11px] mt-1">
+              {parsed.numero_oc_externo && <div><span className="text-gray-600">N° OC:</span> <strong>{parsed.numero_oc_externo}</strong></div>}
+              {parsed.proveedor_nombre && <div><span className="text-gray-600">Proveedor:</span> <strong>{parsed.proveedor_nombre}</strong></div>}
+              {parsed.proveedor_rut && <div><span className="text-gray-600">RUT:</span> <strong className="font-mono">{parsed.proveedor_rut}</strong></div>}
+              {parsed.fecha_emision && <div><span className="text-gray-600">Emisión:</span> <strong>{parsed.fecha_emision}</strong></div>}
+              {parsed.total_clp != null && <div><span className="text-gray-600">Total:</span> <strong className="font-mono">${parsed.total_clp.toLocaleString('es-CL')}</strong></div>}
+              <div><span className="text-gray-600">Items:</span> <strong>{parsed.items.length}</strong></div>
+            </div>
+            {parsed.warnings.length > 0 && (
+              <ul className="mt-2 list-disc list-inside text-amber-800 text-[11px]">
+                {parsed.warnings.map((w, i) => <li key={i}>{w}</li>)}
+              </ul>
+            )}
+          </div>
+        )}
+
+        {parseError && (
+          <div className="rounded-lg border border-red-200 bg-red-50 p-2 text-xs text-red-800 flex items-start gap-2">
+            <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+            <div>No se pudo extraer datos: {parseError}. Podés completar manualmente en el siguiente paso.</div>
           </div>
         )}
 
         {documento?.error && (
           <div className="rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800 flex items-start gap-2">
             <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
-            <div>
-              La subida falló pero podés continuar igual. El documento queda como pendiente.
-            </div>
+            <div>La subida falló pero podés continuar igual. El documento queda como pendiente.</div>
           </div>
         )}
 
@@ -380,7 +517,7 @@ function Step1Documento({
           <Button type="button" variant="outline" onClick={onSkip}>
             Continuar sin documento
           </Button>
-          <Button type="button" onClick={onNext} disabled={subiendo}>
+          <Button type="button" onClick={onNext} disabled={subiendo || parsing}>
             Siguiente <ArrowRight className="h-4 w-4 ml-1" />
           </Button>
         </div>
@@ -642,7 +779,12 @@ function Step3Items({
           <div key={idx} className="rounded-lg border border-gray-200 bg-white p-3 space-y-2">
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold text-gray-600">Item {idx + 1}</span>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                {it.detectado_pdf && (
+                  <Badge className="bg-emerald-100 text-emerald-700">
+                    <Sparkles className="inline h-3 w-3 mr-0.5" /> Detectado PDF
+                  </Badge>
+                )}
                 <Badge className={tipoBadgeColor(it.tipo_item)}>{it.tipo_item}</Badge>
                 {it.requiere_stock ? (
                   <Badge className="bg-blue-100 text-blue-700">requiere stock</Badge>
@@ -785,7 +927,7 @@ function Step3Items({
 
 function Step4Validar({
   cabecera, items, subtotal, diffSubtotalVsNeto, diffNetoIvaVsTotal,
-  itemsPendientesMapeo, documento, onPrev, onSubmit, loading,
+  itemsPendientesMapeo, documento, extraidoPDF, onPrev, onSubmit, loading,
 }: {
   cabecera: CabeceraState
   items: ItemState[]
@@ -794,6 +936,7 @@ function Step4Validar({
   diffNetoIvaVsTotal: number
   itemsPendientesMapeo: number
   documento: DocumentoState | null
+  extraidoPDF: boolean
   onPrev: () => void
   onSubmit: () => void
   loading: boolean
@@ -840,6 +983,14 @@ function Step4Validar({
         </p>
       </CardHeader>
       <CardContent className="space-y-3">
+        {extraidoPDF && (
+          <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-2 text-xs text-emerald-800 flex items-start gap-2">
+            <Sparkles className="h-4 w-4 mt-0.5 shrink-0" />
+            <div>
+              <strong>Datos extraídos automáticamente del PDF.</strong> Revisa antes de guardar — el sistema puede equivocarse, especialmente con tablas complejas o PDFs escaneados.
+            </div>
+          </div>
+        )}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
           <Resumen label="N° OC externo" value={cabecera.numero_oc_externo || '—'} />
           <Resumen label="Fecha emisión" value={cabecera.fecha_emision || '—'} />
