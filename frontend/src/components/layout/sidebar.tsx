@@ -115,6 +115,7 @@ const navGroups: Array<{ label?: string; items: NavItem[] }> = [
       { label: 'Cargar Maestro',     href: '/dashboard/inventario/cargar-maestro',  icon: FileSpreadsheet, module: 'inventario' },
       { label: 'Salidas / Conteo',   href: '/dashboard/inventario/salida',          icon: ClipboardCheck,  module: 'inventario' },
       { label: 'Reconciliación',     href: '/dashboard/inventario/reconciliacion',  icon: Scale,           module: 'inventario' },
+      { label: 'Órdenes de Compra',  href: '/dashboard/abastecimiento/oc',          icon: FileText,        module: 'inventario' },
       { label: 'Despachos OT',       href: '/dashboard/abastecimiento/despachos',   icon: ClipboardCheck,  module: 'inventario' },
       { label: 'Abastecimiento',     href: '/dashboard/abastecimiento',             icon: Fuel,            module: 'abastecimiento' },
       { label: 'Combustible',        href: '/dashboard/inventario/combustible',     icon: Fuel,            module: 'inventario' },
