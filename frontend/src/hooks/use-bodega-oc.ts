@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   listarOC, getOCById, crearOC, listarProveedoresActivos,
-  type FiltrosOC, type CrearOCPayload,
+  importarOCExterna, subirDocumentoOC,
+  type FiltrosOC, type CrearOCPayload, type ImportarOCExternaPayload,
 } from '@/lib/services/bodega-oc'
 
 const STALE = 30_000
@@ -54,5 +55,29 @@ export function useProveedoresActivos() {
       return data ?? []
     },
     staleTime: 5 * 60_000,
+  })
+}
+
+export function useImportarOCExterna() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (payload: ImportarOCExternaPayload) => {
+      const { data, error } = await importarOCExterna(payload)
+      if (error) throw error
+      return data!
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['bodega-oc'] })
+    },
+  })
+}
+
+export function useSubirDocumentoOC() {
+  return useMutation({
+    mutationFn: async (file: File) => {
+      const { data, error } = await subirDocumentoOC(file)
+      if (error) throw error
+      return data!
+    },
   })
 }

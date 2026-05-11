@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useState } from 'react'
-import { Search, Plus, FileText, RefreshCw } from 'lucide-react'
+import { Search, Plus, FileText, RefreshCw, Upload } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -51,15 +51,21 @@ export function OCList() {
             <FileText className="h-5 w-5 text-amber-700" />
             Órdenes de Compra
           </CardTitle>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <Button variant="outline" size="sm" onClick={refresh} disabled={isFetching}>
               <RefreshCw className={cn('h-4 w-4 mr-1', isFetching && 'animate-spin')} />
               Actualizar
             </Button>
             <Link href="/dashboard/abastecimiento/oc/nueva">
-              <Button size="sm">
+              <Button variant="outline" size="sm">
                 <Plus className="h-4 w-4 mr-1" />
-                Nueva OC
+                Crear manual
+              </Button>
+            </Link>
+            <Link href="/dashboard/abastecimiento/oc/importar">
+              <Button size="sm">
+                <Upload className="h-4 w-4 mr-1" />
+                Importar OC externa
               </Button>
             </Link>
           </div>
@@ -108,6 +114,7 @@ export function OCList() {
             <TableHeader>
               <TableRow>
                 <TableHead>N° OC</TableHead>
+                <TableHead>Origen</TableHead>
                 <TableHead>Proveedor</TableHead>
                 <TableHead>Fecha</TableHead>
                 <TableHead>Estado</TableHead>
@@ -120,7 +127,19 @@ export function OCList() {
             <TableBody>
               {(ocs ?? []).map((oc) => (
                 <TableRow key={oc.id}>
-                  <TableCell className="font-mono text-sm">{oc.numero_oc}</TableCell>
+                  <TableCell>
+                    <div className="font-mono text-sm">{oc.numero_oc}</div>
+                    {oc.numero_oc_externo && (
+                      <div className="text-[11px] text-gray-500 font-mono">ext: {oc.numero_oc_externo}</div>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <Badge className={oc.origen === 'externa'
+                      ? 'bg-purple-100 text-purple-700'
+                      : 'bg-gray-100 text-gray-700'}>
+                      {oc.origen}
+                    </Badge>
+                  </TableCell>
                   <TableCell>
                     {oc.proveedor ? (
                       <>
@@ -137,7 +156,14 @@ export function OCList() {
                       {ESTADO_LABEL[oc.estado]}
                     </Badge>
                   </TableCell>
-                  <TableCell className="text-right tabular-nums">{oc.items_count}</TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {oc.items_count}
+                    {(oc.items_servicios > 0 || oc.items_inventariables > 0) && (
+                      <div className="text-[10px] text-gray-500">
+                        {oc.items_inventariables}st · {oc.items_servicios}svc
+                      </div>
+                    )}
+                  </TableCell>
                   <TableCell className="text-right tabular-nums">
                     {oc.items_recibidos_pct}%
                   </TableCell>
