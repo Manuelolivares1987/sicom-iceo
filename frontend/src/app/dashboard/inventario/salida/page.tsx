@@ -176,6 +176,16 @@ export default function SalidaInventarioPage() {
 
       <h1 className="text-2xl font-bold text-gray-900">Salida de Inventario</h1>
 
+      <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 flex items-start gap-2">
+        <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+        <div>
+          <strong>Flujo legacy.</strong> Para nuevas salidas asociadas a OT con FIFO + CECO usá{' '}
+          <Link href="/dashboard/inventario/salida-ot/nueva" className="text-amber-700 underline font-semibold">
+            Salida con OT (FIFO)
+          </Link>.
+        </div>
+      </div>
+
       {/* Scanner button */}
       <button
         type="button"

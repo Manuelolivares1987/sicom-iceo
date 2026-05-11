@@ -114,6 +114,7 @@ const navGroups: Array<{ label?: string; items: NavItem[] }> = [
       { label: 'Pistola Scanner',    href: '/dashboard/inventario/scanner',         icon: BarChart3,       module: 'inventario' },
       { label: 'Cargar Maestro',     href: '/dashboard/inventario/cargar-maestro',  icon: FileSpreadsheet, module: 'inventario' },
       { label: 'Salidas / Conteo',   href: '/dashboard/inventario/salida',          icon: ClipboardCheck,  module: 'inventario' },
+      { label: 'Salida con OT (FIFO)', href: '/dashboard/inventario/salida-ot/nueva', icon: Truck,         module: 'inventario' },
       { label: 'Reconciliación',     href: '/dashboard/inventario/reconciliacion',  icon: Scale,           module: 'inventario' },
       { label: 'Órdenes de Compra',  href: '/dashboard/abastecimiento/oc',          icon: FileText,        module: 'inventario' },
       { label: 'Despachos OT',       href: '/dashboard/abastecimiento/despachos',   icon: ClipboardCheck,  module: 'inventario' },
