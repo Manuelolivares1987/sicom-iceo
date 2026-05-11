@@ -276,6 +276,126 @@ export interface SalidaCombustibleResult {
   tipo_movimiento_kardex: string
 }
 
+// ── Despacho con sellos (MIG41) ────────────────────────────────────────────
+
+export interface DespachoSellosPayload {
+  estanque_id: string
+  litros: number
+  destino_tipo: DestinoSalidaCombustible
+  sello_inicial: string
+  sello_final: string
+  motivo: string
+  equipo_id?: string | null
+  ot_id?: string | null
+  ceco_id?: string | null
+  faena_id?: string | null
+  cliente_nombre?: string | null
+  receptor_nombre?: string | null
+  receptor_rut?: string | null
+  foto_sello_inicial_url?: string | null
+  foto_sello_final_url?: string | null
+  foto_odometro_url?: string | null
+  foto_equipo_url?: string | null
+  firma_receptor_url?: string | null
+  lat?: number | null
+  lng?: number | null
+  accuracy?: number | null
+  geolocation_status?: string | null
+  fecha_movimiento?: string | null
+  observacion?: string | null
+  evidencia_url?: string | null
+}
+
+export interface DespachoSellosResult {
+  success: boolean
+  despacho_id: string
+  movimiento_id: string
+  folio_movimiento: string
+  stock_final: number
+  cpp_usado: number
+  costo_total: number
+  destino_tipo: string
+  litros: number
+}
+
+export interface DespachoSellosRow {
+  despacho_id: string
+  fecha: string
+  movimiento_combustible_id: string | null
+  folio_movimiento: string | null
+  fecha_movimiento: string | null
+  estanque_id: string
+  estanque_codigo: string
+  estanque_nombre: string
+  destino_tipo: string
+  litros: number
+  cpp_usado: number | null
+  costo_total: number
+  sello_inicial: string
+  sello_final: string
+  foto_sello_inicial_url: string | null
+  foto_sello_final_url: string | null
+  foto_odometro_url: string | null
+  foto_equipo_url: string | null
+  receptor_nombre: string | null
+  receptor_rut: string | null
+  firma_receptor_url: string | null
+  equipo_id: string | null
+  equipo_codigo: string | null
+  equipo_nombre: string | null
+  ot_id: string | null
+  ot_folio: string | null
+  ceco_id: string | null
+  ceco_codigo: string | null
+  ceco_nombre: string | null
+  faena_id: string | null
+  faena_nombre: string | null
+  operador_id: string | null
+  operador: string | null
+  observacion: string | null
+}
+
+export async function registrarDespachoConSellos(payload: DespachoSellosPayload) {
+  const { data, error } = await supabase.rpc('rpc_registrar_despacho_combustible_con_sellos', {
+    p_estanque_id:            payload.estanque_id,
+    p_litros:                 payload.litros,
+    p_destino_tipo:           payload.destino_tipo,
+    p_sello_inicial:          payload.sello_inicial,
+    p_sello_final:            payload.sello_final,
+    p_motivo:                 payload.motivo,
+    p_equipo_id:              payload.equipo_id ?? null,
+    p_ot_id:                  payload.ot_id ?? null,
+    p_ceco_id:                payload.ceco_id ?? null,
+    p_faena_id:               payload.faena_id ?? null,
+    p_cliente_nombre:         payload.cliente_nombre ?? null,
+    p_receptor_nombre:        payload.receptor_nombre ?? null,
+    p_receptor_rut:           payload.receptor_rut ?? null,
+    p_foto_sello_inicial_url: payload.foto_sello_inicial_url ?? null,
+    p_foto_sello_final_url:   payload.foto_sello_final_url ?? null,
+    p_foto_odometro_url:      payload.foto_odometro_url ?? null,
+    p_foto_equipo_url:        payload.foto_equipo_url ?? null,
+    p_firma_receptor_url:     payload.firma_receptor_url ?? null,
+    p_lat:                    payload.lat ?? null,
+    p_lng:                    payload.lng ?? null,
+    p_accuracy:               payload.accuracy ?? null,
+    p_geolocation_status:     payload.geolocation_status ?? null,
+    p_fecha_movimiento:       payload.fecha_movimiento ?? null,
+    p_observacion:            payload.observacion ?? null,
+    p_evidencia_url:          payload.evidencia_url ?? null,
+  })
+  if (error) return { data: null, error }
+  return { data: data as DespachoSellosResult, error: null }
+}
+
+export async function listarDespachosConSellos(limit = 50) {
+  const { data, error } = await supabase
+    .from('v_combustible_despachos_con_sellos')
+    .select('*')
+    .order('fecha', { ascending: false })
+    .limit(limit)
+  return { data: data as DespachoSellosRow[] | null, error }
+}
+
 export async function registrarSalidaCombustible(payload: SalidaCombustiblePayload) {
   const { data, error } = await supabase.rpc('rpc_registrar_salida_combustible_valorizada', {
     p_estanque_id:      payload.estanque_id,

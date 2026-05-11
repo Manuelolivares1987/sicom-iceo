@@ -3,7 +3,9 @@ import {
   getResumenCombustible, getControlEstanques, getMovimientosValorizados,
   listarEstanquesActivos, listarProveedoresCombustible, listarFaenas, listarActivos,
   registrarIngresoCombustible, registrarSalidaCombustible,
+  registrarDespachoConSellos, listarDespachosConSellos,
   type FiltrosMovimientos, type IngresoCombustiblePayload, type SalidaCombustiblePayload,
+  type DespachoSellosPayload,
 } from '@/lib/services/combustible-cpp'
 
 const STALE = 30_000
@@ -117,5 +119,31 @@ export function useRegistrarSalidaCombustible() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['combustible'] })
     },
+  })
+}
+
+export function useRegistrarDespachoConSellos() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (payload: DespachoSellosPayload) => {
+      const { data, error } = await registrarDespachoConSellos(payload)
+      if (error) throw error
+      return data!
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['combustible'] })
+    },
+  })
+}
+
+export function useDespachosConSellos(limit = 50) {
+  return useQuery({
+    queryKey: ['combustible', 'despachos-sellos', limit],
+    queryFn: async () => {
+      const { data, error } = await listarDespachosConSellos(limit)
+      if (error) throw error
+      return data ?? []
+    },
+    staleTime: 30_000,
   })
 }

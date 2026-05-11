@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import {
   Fuel, ArrowUpRight, ArrowDownRight, AlertTriangle, Layers, DollarSign,
-  RefreshCw, Scale,
+  RefreshCw, Scale, ShieldCheck,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -65,6 +65,11 @@ export default function CombustiblePage() {
           <Link href="/dashboard/combustible/salida">
             <Button variant="outline" size="sm">
               <ArrowDownRight className="h-4 w-4 mr-1" /> Salida
+            </Button>
+          </Link>
+          <Link href="/dashboard/combustible/despacho">
+            <Button variant="outline" size="sm">
+              <ShieldCheck className="h-4 w-4 mr-1" /> Despacho con sellos
             </Button>
           </Link>
           <Link href="/dashboard/combustible/ingreso">

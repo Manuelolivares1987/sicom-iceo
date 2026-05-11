@@ -122,6 +122,7 @@ const navGroups: Array<{ label?: string; items: NavItem[] }> = [
       { label: 'Abastecimiento',     href: '/dashboard/abastecimiento',             icon: Fuel,            module: 'abastecimiento' },
       { label: 'Combustible',        href: '/dashboard/inventario/combustible',     icon: Fuel,            module: 'inventario' },
       { label: 'Combustible CPP (nuevo)', href: '/dashboard/combustible',           icon: Fuel,            module: 'inventario' },
+      { label: 'Despacho con sellos',    href: '/dashboard/combustible/despacho',  icon: ShieldCheck,     module: 'inventario' },
     ],
   },
   // Compliance
