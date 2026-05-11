@@ -43,35 +43,56 @@
 -- Si alguno sale 0 filas, abortar y resolver.
 -- ============================================================================
 
-SELECT 'discovery_proveedor' AS dx, id::text AS uuid, codigo, nombre
-  FROM proveedores WHERE activo = true ORDER BY codigo LIMIT 3
-UNION ALL
-SELECT 'discovery_bodega',  id::text, codigo, nombre
-  FROM bodegas ORDER BY codigo LIMIT 3
-UNION ALL
-SELECT 'discovery_ceco',    id::text, codigo, nombre
-  FROM centros_costo WHERE activo = true ORDER BY codigo LIMIT 3
-UNION ALL
-SELECT 'discovery_producto_candidato',
-       p.id::text,
-       p.codigo,
-       p.nombre || ' [' || p.categoria || '] stock=' || sb.cantidad
-  FROM productos p
-  JOIN stock_bodega sb ON sb.producto_id = p.id
- WHERE p.categoria IN ('repuesto','lubricante','filtro','consumible')
-   AND sb.cantidad >= 1
- ORDER BY p.codigo
- LIMIT 5
-UNION ALL
-SELECT 'discovery_ot_abierta', id::text, folio, estado::text
-  FROM ordenes_trabajo
- WHERE estado NOT IN ('cancelada','cerrada')
- ORDER BY created_at DESC LIMIT 3
-UNION ALL
-SELECT 'discovery_admin', id::text, COALESCE(email, ''), COALESCE(nombre_completo, '')
-  FROM usuarios_perfil
- WHERE rol = 'administrador' AND activo = true
- LIMIT 3;
+WITH
+prov AS (
+    SELECT 'discovery_proveedor' AS dx, id::text AS uuid, codigo, nombre, 1 AS ord
+      FROM proveedores WHERE activo = true ORDER BY codigo LIMIT 3
+),
+bod AS (
+    SELECT 'discovery_bodega' AS dx, id::text AS uuid, codigo, nombre, 2 AS ord
+      FROM bodegas ORDER BY codigo LIMIT 3
+),
+ceco AS (
+    SELECT 'discovery_ceco' AS dx, id::text AS uuid, codigo, nombre, 3 AS ord
+      FROM centros_costo WHERE activo = true ORDER BY codigo LIMIT 3
+),
+prod AS (
+    SELECT 'discovery_producto_candidato' AS dx,
+           p.id::text AS uuid,
+           p.codigo,
+           p.nombre || ' [' || p.categoria || '] stock=' || sb.cantidad AS nombre,
+           4 AS ord
+      FROM productos p
+      JOIN stock_bodega sb ON sb.producto_id = p.id
+     WHERE p.categoria IN ('repuesto','lubricante','filtro','consumible')
+       AND sb.cantidad >= 1
+     ORDER BY p.codigo LIMIT 5
+),
+ot AS (
+    SELECT 'discovery_ot_abierta' AS dx, id::text AS uuid, folio AS codigo, estado::text AS nombre, 5 AS ord
+      FROM ordenes_trabajo
+     WHERE estado NOT IN ('cancelada','cerrada')
+     ORDER BY created_at DESC LIMIT 3
+),
+adm AS (
+    SELECT 'discovery_admin' AS dx,
+           up.id::text AS uuid,
+           COALESCE(up.email, '') AS codigo,
+           COALESCE(up.nombre_completo, '') ||
+              CASE WHEN au.id IS NULL THEN ' [SIN auth.users]' ELSE '' END AS nombre,
+           6 AS ord
+      FROM usuarios_perfil up
+      LEFT JOIN auth.users au ON au.id = up.id
+     WHERE up.rol = 'administrador' AND up.activo = true
+     LIMIT 3
+)
+SELECT dx, uuid, codigo, nombre FROM prov
+UNION ALL SELECT dx, uuid, codigo, nombre FROM bod
+UNION ALL SELECT dx, uuid, codigo, nombre FROM ceco
+UNION ALL SELECT dx, uuid, codigo, nombre FROM prod
+UNION ALL SELECT dx, uuid, codigo, nombre FROM ot
+UNION ALL SELECT dx, uuid, codigo, nombre FROM adm
+ORDER BY 1, 3;
 
 
 -- ============================================================================
