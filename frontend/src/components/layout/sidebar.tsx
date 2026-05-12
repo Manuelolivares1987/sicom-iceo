@@ -43,10 +43,23 @@ type NavItem = {
   icon: any
   module?: Module
   extendedModule?: ExtendedModule
+  badge?: string                  // 'Legacy' | 'Nuevo' | etc.
+  tooltip?: string                // texto descriptivo opcional
+}
+
+type NavSubsection = {
+  label: string                   // subheader pequeno dentro del grupo
+  items: NavItem[]
+}
+
+type NavGroup = {
+  label?: string
+  items?: NavItem[]               // grupo flat (compatibilidad)
+  subsections?: NavSubsection[]   // grupo con sub-secciones
 }
 
 // Grupos lógicos en la sidebar. Separador visual entre cada grupo.
-const navGroups: Array<{ label?: string; items: NavItem[] }> = [
+const navGroups: NavGroup[] = [
   // Inicio
   {
     items: [
@@ -106,23 +119,109 @@ const navGroups: Array<{ label?: string; items: NavItem[] }> = [
       { label: 'Comercial', href: '/dashboard/comercial', icon: Briefcase, module: 'comercial' },
     ],
   },
-  // Bodega / Inventario (mismo dominio operativo)
+  // Bodega / Insumos (proceso: OC -> recepcion FIFO -> salida con CECO)
   {
-    label: 'Bodega / Inventario',
-    items: [
-      { label: 'Bodega',             href: '/dashboard/inventario',                 icon: Package,         extendedModule: 'bodega' },
-      { label: 'Pistola Scanner',    href: '/dashboard/inventario/scanner',         icon: BarChart3,       module: 'inventario' },
-      { label: 'Cargar Maestro',     href: '/dashboard/inventario/cargar-maestro',  icon: FileSpreadsheet, module: 'inventario' },
-      { label: 'Salidas / Conteo',   href: '/dashboard/inventario/salida',          icon: ClipboardCheck,  module: 'inventario' },
-      { label: 'Salida con OT (FIFO)', href: '/dashboard/inventario/salida-ot/nueva', icon: Truck,         module: 'inventario' },
-      { label: 'Reconciliación',     href: '/dashboard/inventario/reconciliacion',  icon: Scale,           module: 'inventario' },
-      { label: 'Reportes financieros', href: '/dashboard/inventario/reportes',      icon: BarChart3,       module: 'inventario' },
-      { label: 'Órdenes de Compra',  href: '/dashboard/abastecimiento/oc',          icon: FileText,        module: 'inventario' },
-      { label: 'Despachos OT',       href: '/dashboard/abastecimiento/despachos',   icon: ClipboardCheck,  module: 'inventario' },
-      { label: 'Abastecimiento',     href: '/dashboard/abastecimiento',             icon: Fuel,            module: 'abastecimiento' },
-      { label: 'Combustible',        href: '/dashboard/inventario/combustible',     icon: Fuel,            module: 'inventario' },
-      { label: 'Combustible CPP (nuevo)', href: '/dashboard/combustible',           icon: Fuel,            module: 'inventario' },
-      { label: 'Despacho con sellos',    href: '/dashboard/combustible/despacho',  icon: ShieldCheck,     module: 'inventario' },
+    label: 'Bodega / Insumos',
+    subsections: [
+      {
+        label: 'Panel',
+        items: [
+          { label: 'Panel Bodega',          href: '/dashboard/inventario',                icon: Package,         extendedModule: 'bodega',
+            tooltip: 'Stock por bodega + valorización + alertas' },
+          { label: 'Abastecimiento',        href: '/dashboard/abastecimiento',            icon: Briefcase,       module: 'abastecimiento',
+            tooltip: 'Vista global abastecimiento' },
+        ],
+      },
+      {
+        label: 'Ingresos',
+        items: [
+          { label: 'Órdenes de Compra',     href: '/dashboard/abastecimiento/oc',         icon: FileText,        module: 'inventario',
+            tooltip: 'Listado OCs internas y externas' },
+          { label: 'Importar OC',           href: '/dashboard/abastecimiento/oc/importar', icon: FileSpreadsheet, module: 'inventario',
+            tooltip: 'Cargar PDF de OC externa (texto-first)' },
+          { label: 'Recepcionar OC',        href: '/dashboard/abastecimiento/oc',         icon: ClipboardCheck,  module: 'inventario',
+            tooltip: 'Abre el listado de OCs — desde el detalle recepcionás stock o servicios' },
+        ],
+      },
+      {
+        label: 'Egresos',
+        items: [
+          { label: 'Salida de insumos a OT', href: '/dashboard/inventario/salida-ot/nueva', icon: Truck,         module: 'inventario',
+            tooltip: 'FIFO + CECO obligatorio + OT' },
+          { label: 'Despachos OT',          href: '/dashboard/abastecimiento/despachos',  icon: ClipboardCheck,  module: 'inventario',
+            tooltip: 'Despachos directos a OT' },
+        ],
+      },
+      {
+        label: 'Control',
+        items: [
+          { label: 'Reconciliación Stock/FIFO', href: '/dashboard/inventario/reconciliacion', icon: Scale,       module: 'inventario',
+            tooltip: 'Cuadre stock legacy vs capas FIFO' },
+          { label: 'Kardex / Capas FIFO',   href: '/dashboard/inventario/reportes',       icon: Layers,          module: 'inventario',
+            tooltip: 'Tab Kardex dentro de Reportes' },
+          { label: 'Pistola Scanner',       href: '/dashboard/inventario/scanner',        icon: BarChart3,       module: 'inventario' },
+          { label: 'Cargar Maestro',        href: '/dashboard/inventario/cargar-maestro', icon: FileSpreadsheet, module: 'inventario' },
+        ],
+      },
+      {
+        label: 'Reportes',
+        items: [
+          { label: 'Reportes Bodega',       href: '/dashboard/inventario/reportes',       icon: BarChart3,       module: 'inventario',
+            tooltip: 'Stock valorizado, costos OT/CECO, kardex, mermas' },
+        ],
+      },
+      {
+        label: 'Legacy',
+        items: [
+          { label: 'Salidas / Conteo',      href: '/dashboard/inventario/salida',         icon: ClipboardCheck,  module: 'inventario',
+            badge: 'Legacy',
+            tooltip: 'Uso solo autorizado. Para nuevas salidas usar Salida de insumos a OT.' },
+        ],
+      },
+    ],
+  },
+  // Combustible (proceso: ingreso CPP -> salida / despacho con sellos)
+  {
+    label: 'Combustible',
+    subsections: [
+      {
+        label: 'Panel',
+        items: [
+          { label: 'Panel Combustible',     href: '/dashboard/combustible',               icon: Fuel,            module: 'inventario',
+            tooltip: 'Stock valorizado por CPP móvil' },
+        ],
+      },
+      {
+        label: 'Ingresos',
+        items: [
+          { label: 'Ingreso combustible',   href: '/dashboard/combustible/ingreso',       icon: Fuel,            module: 'inventario',
+            tooltip: 'Ingreso valorizado con CPP móvil' },
+        ],
+      },
+      {
+        label: 'Egresos',
+        items: [
+          { label: 'Salida combustible',    href: '/dashboard/combustible/salida',        icon: Fuel,            module: 'inventario',
+            tooltip: 'Salida al CPP vigente con destino (equipo/OT/CECO/faena/...)' },
+          { label: 'Despacho con sellos',   href: '/dashboard/combustible/despacho',      icon: ShieldCheck,     module: 'inventario',
+            tooltip: 'Salida valorizada + sellos antifraude (inicial y final)' },
+        ],
+      },
+      {
+        label: 'Control',
+        items: [
+          { label: 'Control kardex vs varillaje', href: '/dashboard/combustible/control', icon: Gauge,           module: 'inventario',
+            tooltip: 'Estado por estanque: teórico vs físico vs último kardex' },
+        ],
+      },
+      {
+        label: 'Legacy',
+        items: [
+          { label: 'Combustible (legacy)',  href: '/dashboard/inventario/combustible',    icon: Fuel,            module: 'inventario',
+            badge: 'Legacy',
+            tooltip: 'Flujo legacy sin CPP móvil. Para nuevos movimientos usar Panel Combustible.' },
+        ],
+      },
     ],
   },
   // Compliance
@@ -153,7 +252,10 @@ const navGroups: Array<{ label?: string; items: NavItem[] }> = [
 ]
 
 // Flat list para filtrado por permisos y retrocompatibilidad interna
-const navItems: NavItem[] = navGroups.flatMap((g) => g.items)
+const navItems: NavItem[] = navGroups.flatMap((g) => [
+  ...(g.items ?? []),
+  ...(g.subsections ?? []).flatMap((s) => s.items),
+])
 
 interface SidebarProps {
   collapsed: boolean
@@ -230,20 +332,26 @@ export default function Sidebar({ collapsed, onToggle, onClose }: SidebarProps) 
         {navGroups.map((group, idx) => {
           // Restringidos a Calama: solo mostrar grupo Operacion Calama.
           if ((operadorCalamaSolo || supervisorCalamaSolo) && group.label !== 'Operación Calama') return null
-          const groupVisible = group.items.filter((item) => {
-            if (operadorCalamaSolo) {
-              // OOCC: solo ruta movil.
-              return item.href === '/m/calama'
-            }
+
+          // Filtro de visibilidad: aplica las mismas reglas de permisos a items
+          // planos y a items dentro de subsections.
+          const filterItem = (item: NavItem) => {
+            if (operadorCalamaSolo) return item.href === '/m/calama'
             if (supervisorCalamaSolo) {
-              // Supervisor Calama: solo items dashboard Calama (no la vista movil).
               return item.extendedModule === 'operacion_calama' && item.href !== '/m/calama'
             }
             if (item.module) return canView(item.module)
             if (item.extendedModule) return canViewExtended(item.extendedModule)
             return true
-          })
-          if (groupVisible.length === 0) return null
+          }
+
+          const itemsVisibles = (group.items ?? []).filter(filterItem)
+          const subsectionsVisibles = (group.subsections ?? [])
+            .map((s) => ({ label: s.label, items: s.items.filter(filterItem) }))
+            .filter((s) => s.items.length > 0)
+
+          if (itemsVisibles.length === 0 && subsectionsVisibles.length === 0) return null
+
           return (
             <div key={idx}>
               {!collapsed && group.label && (
@@ -251,34 +359,47 @@ export default function Sidebar({ collapsed, onToggle, onClose }: SidebarProps) 
                   {group.label}
                 </div>
               )}
-              <div className="space-y-0.5">
-                {groupVisible.map((item) => {
-                  const Icon = item.icon
-                  const active = isActive(item.href)
-                  return (
-                    <Link
+              {/* Items planos del grupo (compat) */}
+              {itemsVisibles.length > 0 && (
+                <div className="space-y-0.5">
+                  {itemsVisibles.map((item) => (
+                    <SidebarLink
                       key={item.href}
-                      href={item.href}
+                      item={item}
+                      active={isActive(item.href)}
+                      collapsed={collapsed}
                       onClick={onClose}
-                      title={collapsed ? item.label : undefined}
-                      className={cn(
-                        'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
-                        active
-                          ? 'bg-pillado-green-500 text-white'
-                          : 'text-gray-300 hover:bg-white/10 hover:text-white',
-                      )}
-                    >
-                      <Icon className="h-5 w-5 shrink-0" />
-                      {!collapsed && <span className="truncate">{item.label}</span>}
-                    </Link>
-                  )
-                })}
-              </div>
+                    />
+                  ))}
+                </div>
+              )}
+              {/* Subsections con subheaders pequenos */}
+              {subsectionsVisibles.map((sub, si) => (
+                <div key={si} className={si > 0 || itemsVisibles.length > 0 ? 'mt-2' : ''}>
+                  {!collapsed && (
+                    <div className="mb-0.5 px-3 text-[9px] font-medium uppercase tracking-wider text-gray-600/80">
+                      {sub.label}
+                    </div>
+                  )}
+                  <div className="space-y-0.5">
+                    {sub.items.map((item) => (
+                      <SidebarLink
+                        key={item.href + ':' + item.label}
+                        item={item}
+                        active={isActive(item.href)}
+                        collapsed={collapsed}
+                        onClick={onClose}
+                      />
+                    ))}
+                  </div>
+                </div>
+              ))}
             </div>
           )
         })}
       </nav>
 
+      {/* (SidebarLink se define al final del archivo) */}
       {/* User area */}
       <div className="border-t border-white/10 p-3">
         <div className="flex items-center gap-3">
@@ -305,5 +426,51 @@ export default function Sidebar({ collapsed, onToggle, onClose }: SidebarProps) 
         </div>
       </div>
     </aside>
+  )
+}
+
+// ── SidebarLink: render unificado de un item con badge opcional ─────────────
+
+function SidebarLink({
+  item, active, collapsed, onClick,
+}: {
+  item: NavItem
+  active: boolean
+  collapsed: boolean
+  onClick?: () => void
+}) {
+  const Icon = item.icon
+  const title = item.tooltip ?? item.label
+  return (
+    <Link
+      href={item.href}
+      onClick={onClick}
+      title={collapsed ? item.label : title}
+      className={cn(
+        'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+        active
+          ? 'bg-pillado-green-500 text-white'
+          : item.badge === 'Legacy'
+            ? 'text-gray-400 hover:bg-white/10 hover:text-white'
+            : 'text-gray-300 hover:bg-white/10 hover:text-white',
+      )}
+    >
+      <Icon className="h-5 w-5 shrink-0" />
+      {!collapsed && (
+        <>
+          <span className="truncate flex-1">{item.label}</span>
+          {item.badge && (
+            <span className={cn(
+              'rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider',
+              item.badge === 'Legacy'
+                ? 'bg-gray-700 text-gray-300'
+                : 'bg-pillado-green-500/40 text-white',
+            )}>
+              {item.badge}
+            </span>
+          )}
+        </>
+      )}
+    </Link>
   )
 }
