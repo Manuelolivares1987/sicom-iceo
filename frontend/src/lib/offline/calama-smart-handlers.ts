@@ -291,6 +291,12 @@ export async function smartFinalizarJornada(args: {
   observacion?: string;
 }): Promise<SmartResult> {
   const cid = newCid()
+  // UUIDs separados para foto y firma: las RPC los castean a UUID y
+  // la concatenacion `${cid}-foto` produce un valor invalido (22P02).
+  // Generamos arriba del branch online/offline para que ambos usen los
+  // mismos valores y la sync offline no duplique tras un fallo post-RPC.
+  const cidFoto = newCid()
+  const cidFirma = newCid()
   if (isOnline()) {
     try {
       const upFoto  = await uploadEvidenciaToStorage({ blob: args.foto_despues, otId: args.ot_id, planOtId: args.jornada_id, momento: 'despues' })
@@ -304,7 +310,7 @@ export async function smartFinalizarJornada(args: {
           observacion: args.observacion,
           gps_lat: args.gps_lat, gps_lng: args.gps_lng,
           gps_accuracy: args.gps_accuracy, geolocation_status: args.geolocation_status,
-          client_uuid_foto: cid + '-foto', client_uuid_firma: cid + '-firma',
+          client_uuid_foto: cidFoto, client_uuid_firma: cidFirma,
         },
       })
       if (error) throw error
@@ -346,7 +352,7 @@ export async function smartFinalizarJornada(args: {
       observacion: args.observacion,
       gps_lat: args.gps_lat, gps_lng: args.gps_lng,
       gps_accuracy: args.gps_accuracy, geolocation_status: args.geolocation_status,
-      client_uuid_foto: cid + '-foto', client_uuid_firma: cid + '-firma',
+      client_uuid_foto: cidFoto, client_uuid_firma: cidFirma,
     },
     blob_refs: [
       { payload_url_key: 'foto_despues_url',    payload_path_key: 'foto_despues_storage_path',    evidencia_local_id: ev.local_id },
@@ -438,7 +444,9 @@ export async function smartRechazarJornada(args: {
     try {
       const fotosUploaded: Array<{ url: string; storage_path: string; client_uuid: string }> = []
       for (const f of args.fotos_rechazo ?? []) {
-        const cuid = cid + '-foto-' + fotosUploaded.length
+        // Cada foto necesita su propio UUID: la RPC casteia a UUID, asi
+        // que concatenar `${cid}-foto-N` produce 22P02. newCid() resuelve.
+        const cuid = newCid()
         const up = await uploadEvidenciaToStorage({ blob: f, otId: args.ot_id, planOtId: args.jornada_id, momento: 'rechazo' })
         fotosUploaded.push({ url: up.url, storage_path: up.storage_path, client_uuid: cuid })
       }
@@ -452,7 +460,7 @@ export async function smartRechazarJornada(args: {
           firmante_nombre: args.firmante_nombre, observacion: args.observacion,
           gps_lat: args.gps_lat, gps_lng: args.gps_lng,
           gps_accuracy: args.gps_accuracy, geolocation_status: args.geolocation_status,
-          client_uuid_rechazo: cid + '-rech', client_uuid_firma: cid + '-firma',
+          client_uuid_rechazo: newCid(), client_uuid_firma: newCid(),
         },
       })
       if (error) throw error
