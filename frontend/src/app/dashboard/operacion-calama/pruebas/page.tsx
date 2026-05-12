@@ -43,8 +43,23 @@ export default function PruebasTerrenoPage() {
           setOtDetalleId(data.ot_id)
         },
         onError: (err) => {
-          const msg = err instanceof Error ? err.message : 'Error al crear prueba'
-          toast.error(msg)
+          const raw = err instanceof Error ? err.message : String(err)
+          const low = raw.toLowerCase()
+          if (low.includes('no autenticado')) {
+            toast.error('Sesión expirada. Vuelve a iniciar sesión.')
+          } else if (low.includes('no autorizado') || low.includes('rol')) {
+            toast.error('No tienes permiso para crear jornadas de prueba.')
+          } else if (low.includes('planificacion')) {
+            toast.error('No hay planificación Calama disponible. Importa una primero.')
+          } else if (low.includes('faena')) {
+            toast.error('No hay faena Calama disponible.')
+          } else if (low.includes('responsable')) {
+            toast.error('Falta responsable. Elige uno del selector o crea oocc@pillado.cl.')
+          } else if (low.includes('schema cache') || low.includes('function') && low.includes('not found')) {
+            toast.error('La función RPC aún no está visible. Ejecuta NOTIFY pgrst, \'reload schema\'; en Supabase.')
+          } else {
+            toast.error(raw)
+          }
         },
       },
     )
