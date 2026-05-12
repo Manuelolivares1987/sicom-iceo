@@ -88,6 +88,7 @@ const navGroups: NavGroup[] = [
       { label: 'Planificaciones',  href: '/dashboard/operacion-calama/planificaciones', icon: Layers,          extendedModule: 'operacion_calama' },
       { label: 'Importar Excel',   href: '/dashboard/operacion-calama/importar',        icon: FileSpreadsheet, extendedModule: 'operacion_calama' },
       { label: 'Reportes',         href: '/dashboard/operacion-calama/reportes',        icon: BarChart3,       extendedModule: 'operacion_calama' },
+      { label: 'Pruebas terreno',  href: '/dashboard/operacion-calama/pruebas',         icon: Eye,             extendedModule: 'operacion_calama' },
     ],
   },
   // Mantención QR (checklist preoperacional de equipos / flota Pillado)
