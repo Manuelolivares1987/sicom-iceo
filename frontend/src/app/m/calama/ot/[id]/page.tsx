@@ -9,7 +9,7 @@ import {
 } from 'lucide-react'
 import { Spinner } from '@/components/ui/spinner'
 import { useToast } from '@/contexts/toast-context'
-import { useCalamaOT } from '@/hooks/use-calama'
+import { useCalamaOT, useCalamaOTs } from '@/hooks/use-calama'
 import {
   useEjecucionActivaPorOT, useMisOTsAsignadas,
 } from '@/hooks/use-calama-plan-semanal'
@@ -68,6 +68,13 @@ export default function MobileOTDetallePage() {
   const { data: ejecucion } = useEjecucionActivaPorOT(otId)
   // Mostrar todas las jornadas: si soy admin/planificador veo todo; si soy operador solo las mias.
   const { data: misOts } = useMisOTsAsignadas({ todas: esMandante })
+  // Fallback offline: lista cacheada de OTs desde /m/calama. Cuando el detalle
+  // singular falla por falta de conexion, esta lista suele tener la OT en cache.
+  const { data: otsList } = useCalamaOTs()
+  const otFromList = useMemo(
+    () => (otsList ?? []).find((o) => o.id === otId) ?? null,
+    [otsList, otId],
+  )
 
   // Plan-OT activo de esta OT: la primera jornada NO cerrada/aceptada (orden secuencia).
   const planOt = useMemo(() => {
@@ -95,10 +102,14 @@ export default function MobileOTDetallePage() {
   const { data: estadoServer } = useEstadoJornada(planOtId)
   const regulLlegada = useRegularizarLlegadaFaena()
   const regulFotoAntes = useRegistrarFotoAntesRegularizada()
+  // Siempre intentar poblar planOtLocal desde IndexedDB para que sirva como
+  // respaldo si el detalle de la OT (useCalamaOT) no tiene cache y el dispositivo
+  // pierde conexion. No depender de misOts: el cache de la lista puede contener
+  // la jornada y aun asi otServer ser undefined offline -> sin este fallback
+  // otEff queda en null y se renderiza "OT no encontrada".
   useEffect(() => {
     let cancelled = false
     if (!otId) return
-    if (misOts && misOts.find((p) => p.ot_id === otId)) return  // ya tenemos del server
     void (async () => {
       try {
         const db = calamaDB()
@@ -112,7 +123,7 @@ export default function MobileOTDetallePage() {
       }
     })()
     return () => { cancelled = true }
-  }, [misOts, otId])
+  }, [otId])
 
   const refreshAfterAction = () => {
     qc.invalidateQueries({ queryKey: ['calama-mis-ots'] })
@@ -196,21 +207,24 @@ export default function MobileOTDetallePage() {
     return 'preparar'
   }, [planOt, planOtLocal, pasoForzado, planOtLlegadaAt, estadoPlanEffective])
 
-  if (isLoading && !planOtLocal) {
+  if (isLoading && !planOtLocal && !otFromList) {
     return <div className="flex items-center justify-center h-screen text-gray-500"><Spinner className="h-6 w-6" /></div>
   }
-  // Fallback offline: si no cargo el server pero tenemos jornada local, sintetizar OT.
-  const otEff = otServer ?? (planOtLocal ? ({
-    id: planOtLocal.ot_id,
-    folio: planOtLocal.folio,
-    titulo: planOtLocal.titulo,
-    fecha_programada: planOtLocal.fecha_jornada ?? '',
-    avance_pct: planOtLocal.avance_pct,
-    estado: planOtLocal.estado_plan_local || 'planificada',
-    faena: { nombre: '—' } as { nombre: string },
-    responsable_id: planOtLocal.responsable_id,
-    descripcion: null,
-  } as unknown as NonNullable<typeof otServer>) : null)
+  // Fallback offline: el detalle singular (useCalamaOT) puede fallar sin red.
+  // Cadena de respaldo: cache de la lista (useCalamaOTs) -> IndexedDB local.
+  const otEff = otServer
+    ?? otFromList
+    ?? (planOtLocal ? ({
+        id: planOtLocal.ot_id,
+        folio: planOtLocal.folio,
+        titulo: planOtLocal.titulo,
+        fecha_programada: planOtLocal.fecha_jornada ?? '',
+        avance_pct: planOtLocal.avance_pct,
+        estado: planOtLocal.estado_plan_local || 'planificada',
+        faena: { nombre: '—' } as { nombre: string },
+        responsable_id: planOtLocal.responsable_id,
+        descripcion: null,
+      } as unknown as NonNullable<typeof otServer>) : null)
 
   if (!otEff) {
     return (
