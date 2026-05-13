@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import {
   RefreshCw, MapPin, MessageSquare, ChevronRight, AlertTriangle,
   Calendar, LogOut, ClipboardCheck, CheckCircle2, Play, Pause,
-  ChevronDown, ChevronUp, ChevronLeft,
+  ChevronDown, ChevronUp, ChevronLeft, HardDrive,
 } from 'lucide-react'
 import { Spinner } from '@/components/ui/spinner'
 import { useAuth } from '@/contexts/auth-context'
@@ -86,6 +86,10 @@ export default function MobileCalamaPage() {
   const router = useRouter()
   // Tracking de IDs ya prefetched para no repetir la misma red varias veces.
   const prefetchedRef = useRef<Set<string>>(new Set())
+  // Progreso visible del precache offline.
+  const [prefetchTotal, setPrefetchTotal] = useState(0)
+  const [prefetchDone, setPrefetchDone] = useState(0)
+  const [prefetchListoOcultar, setPrefetchListoOcultar] = useState(false)
   // Admin/planificador: por default ven TODAS las jornadas. Operador: solo las suyas.
   const [verTodas, setVerTodas] = useState<boolean>(esAdminOPlanificador)
   // Sincronizar default cuando se carga el rol
@@ -172,18 +176,32 @@ export default function MobileCalamaPage() {
   // offline despues. router.prefetch cachea el RSC payload; el fetch() crudo
   // dispara la regla 'pages' del SW y cachea el HTML del document. Solo se
   // hace estando online (sin red da error y no precachea nada util).
+  // Trackeamos total y done para mostrar barra de progreso al operador.
   useEffect(() => {
     if (!online) return
     if (planOtsEff.length === 0) return
     const otIds = Array.from(new Set(planOtsEff.map((p) => p.ot_id))).filter(Boolean)
-    for (const otId of otIds) {
-      if (prefetchedRef.current.has(otId)) continue
+    const nuevos = otIds.filter((id) => !prefetchedRef.current.has(id))
+    if (nuevos.length === 0) return
+    setPrefetchTotal((t) => t + nuevos.length)
+    setPrefetchListoOcultar(false)
+    for (const otId of nuevos) {
       prefetchedRef.current.add(otId)
       const url = `/m/calama/ot/${otId}/`
       try { router.prefetch(url) } catch { /* router puede no estar listo */ }
-      void fetch(url, { credentials: 'include' }).catch(() => { /* offline o 4xx, ignorar */ })
+      void fetch(url, { credentials: 'include' })
+        .catch(() => { /* offline o 4xx, ignorar */ })
+        .finally(() => setPrefetchDone((d) => d + 1))
     }
   }, [planOtsEff, online, router])
+
+  // Cuando termina el precache, mostrar el estado "Listo" 4s y luego ocultar.
+  useEffect(() => {
+    if (prefetchTotal === 0) return
+    if (prefetchDone < prefetchTotal) return
+    const t = setTimeout(() => setPrefetchListoOcultar(true), 4000)
+    return () => clearTimeout(t)
+  }, [prefetchDone, prefetchTotal])
 
   const { data: usuariosLista } = useUsuariosAsignables()
   const usuariosById = useMemo(() =>
@@ -395,6 +413,11 @@ export default function MobileCalamaPage() {
         <OfflineStatusBanner />
         <OfflineActions />
         <OfflineCountersCompact />
+        <PrefetchProgresoBanner
+          total={prefetchTotal}
+          done={prefetchDone}
+          oculto={prefetchListoOcultar}
+        />
         {/* Banners contextuales:
             - online + server cargo: si lista vacia mostramos pista para Actualizar.
             - online + server fallo por red: aviso + uso local.
@@ -633,6 +656,52 @@ function Counter({ label, value, highlight }: { label: string; value: number; hi
     <div className={`rounded-lg px-2 py-1 text-center ${highlight ? 'bg-white text-amber-700 font-bold' : 'bg-white/10'}`}>
       <div className="text-[9px] uppercase opacity-90">{label}</div>
       <div className="text-base font-bold leading-tight">{value}</div>
+    </div>
+  )
+}
+
+// Banner de progreso del precache offline. Mientras corre muestra una barra
+// con done/total; al terminar pasa a verde "Listo para offline" 4s y luego
+// se oculta (oculto=true) hasta que aparezcan jornadas nuevas que precachear.
+function PrefetchProgresoBanner({
+  total, done, oculto,
+}: { total: number; done: number; oculto: boolean }) {
+  if (total === 0) return null
+  const completo = done >= total
+  if (completo && oculto) return null
+  const pct = total > 0 ? Math.round((done / total) * 100) : 0
+
+  if (completo) {
+    return (
+      <div className="rounded-lg border border-green-200 bg-green-50 px-3 py-2 flex items-center gap-2">
+        <CheckCircle2 className="h-4 w-4 text-green-700 shrink-0" />
+        <div className="flex-1 text-xs text-green-900">
+          <div className="font-semibold">Listo para usar sin senal</div>
+          <div className="text-[11px] text-green-800/80">
+            {total} OT{total === 1 ? '' : 's'} precacheada{total === 1 ? '' : 's'} en el celular.
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 space-y-1.5">
+      <div className="flex items-center gap-2">
+        <HardDrive className="h-4 w-4 text-blue-700 shrink-0 animate-pulse" />
+        <div className="flex-1 text-xs">
+          <div className="font-semibold text-blue-900">Preparando para offline...</div>
+          <div className="text-[11px] text-blue-800/80">
+            No salgas de esta pantalla hasta que termine. {done}/{total} OTs ({pct}%).
+          </div>
+        </div>
+      </div>
+      <div className="h-1.5 w-full rounded-full bg-blue-100 overflow-hidden">
+        <div
+          className="h-full bg-blue-600 transition-all duration-300"
+          style={{ width: `${pct}%` }}
+        />
+      </div>
     </div>
   )
 }
