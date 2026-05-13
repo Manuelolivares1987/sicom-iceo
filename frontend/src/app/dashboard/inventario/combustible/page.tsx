@@ -131,9 +131,9 @@ export default function CombustiblePage() {
             <Ruler className="h-4 w-4" /> Varillaje diario
           </Button>
         </Link>
-        <Link href="/dashboard/inventario/combustible/movimientos">
+        <Link href="/dashboard/combustible">
           <Button className="w-full gap-2" variant="outline">
-            <History className="h-4 w-4" /> Historial
+            <History className="h-4 w-4" /> Historial (CPP móvil)
           </Button>
         </Link>
         <Link href="/dashboard/inventario/combustible/medidores">
