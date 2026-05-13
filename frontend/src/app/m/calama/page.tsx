@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import {
   RefreshCw, MapPin, MessageSquare, ChevronRight, AlertTriangle,
   Calendar, LogOut, ClipboardCheck, CheckCircle2, Play, Pause,
@@ -82,6 +83,9 @@ export default function MobileCalamaPage() {
   const { rol } = usePermissions()
   const esAdminOPlanificador = ['administrador', 'gerencia', 'subgerente_operaciones', 'supervisor', 'planificador', 'jefe_operaciones'].includes(rol ?? '')
   const qc = useQueryClient()
+  const router = useRouter()
+  // Tracking de IDs ya prefetched para no repetir la misma red varias veces.
+  const prefetchedRef = useRef<Set<string>>(new Set())
   // Admin/planificador: por default ven TODAS las jornadas. Operador: solo las suyas.
   const [verTodas, setVerTodas] = useState<boolean>(esAdminOPlanificador)
   // Sincronizar default cuando se carga el rol
@@ -163,6 +167,24 @@ export default function MobileCalamaPage() {
   const usingLocal = (!online || (!serverLoaded && isError)) && localJornadas.length > 0
   const planOtsEff = usingLocal ? localJornadas : (planOts ?? [])
   const otsEff = usingLocal ? localOts : (ots ?? [])
+
+  // Prefetch automatico del detalle de cada OT visible para que funcione
+  // offline despues. router.prefetch cachea el RSC payload; el fetch() crudo
+  // dispara la regla 'pages' del SW y cachea el HTML del document. Solo se
+  // hace estando online (sin red da error y no precachea nada util).
+  useEffect(() => {
+    if (!online) return
+    if (planOtsEff.length === 0) return
+    const otIds = Array.from(new Set(planOtsEff.map((p) => p.ot_id))).filter(Boolean)
+    for (const otId of otIds) {
+      if (prefetchedRef.current.has(otId)) continue
+      prefetchedRef.current.add(otId)
+      const url = `/m/calama/ot/${otId}/`
+      try { router.prefetch(url) } catch { /* router puede no estar listo */ }
+      void fetch(url, { credentials: 'include' }).catch(() => { /* offline o 4xx, ignorar */ })
+    }
+  }, [planOtsEff, online, router])
+
   const { data: usuariosLista } = useUsuariosAsignables()
   const usuariosById = useMemo(() =>
     new Map((usuariosLista ?? []).map((u) => [u.id, u])),
