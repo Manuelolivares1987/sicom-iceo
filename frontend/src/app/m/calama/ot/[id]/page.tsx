@@ -219,6 +219,14 @@ export default function MobileOTDetallePage() {
     : ((planOt?.estado_plan as string | undefined)
         ?? planOtLocal?.estado_plan_local
         ?? '')
+  // Estado para los botones Pausar/Reanudar dentro del paso "ejecutar".
+  // ejecucion viene del server (useEjecucionActivaPorOT) y es undefined sin red.
+  // Sin fallback, los botones quedan ocultos y el operador no puede pausar.
+  const estadoEjec: string | null =
+    (ejecucion?.estado as string | undefined)
+    ?? (estadoPlanEffective === 'en_ejecucion' ? 'en_ejecucion'
+        : estadoPlanEffective === 'pausada' ? 'pausada'
+        : null)
   const paso: Paso = useMemo(() => {
     if (pasoForzado) return pasoForzado
     if (!planOt && !planOtLocal) return 'llegada'
@@ -809,7 +817,7 @@ export default function MobileOTDetallePage() {
                 <div className="mb-3"><img src={fotoAntesYaSubida.archivo_url} alt="antes" className="h-20 rounded border" /></div>
               )}
 
-              {ejecucion?.estado === 'en_ejecucion' && (
+              {estadoEjec === 'en_ejecucion' && (
                 <div className="space-y-2">
                   <BotonGrande onClick={() => { setPausaMotivo('colacion'); setPausaFoto(null); setShowPausa(true) }} variant="amber">
                     <Pause className="h-5 w-5" /> Pausar (foto + motivo)
@@ -817,7 +825,7 @@ export default function MobileOTDetallePage() {
                 </div>
               )}
 
-              {ejecucion?.estado === 'pausada' && (
+              {estadoEjec === 'pausada' && (
                 <BotonGrande onClick={() => { setReanudarFoto(null); setShowReanudar(true) }} loading={busy} variant="green">
                   <RotateCcw className="h-5 w-5" /> Reanudar (foto + GPS)
                 </BotonGrande>
@@ -935,6 +943,7 @@ export default function MobileOTDetallePage() {
                     planOtId={planOtId}
                     onCapture={setFotoDespues}
                     required
+                    mode="capture"
                   />
                 </div>
 
@@ -946,6 +955,7 @@ export default function MobileOTDetallePage() {
                     planOtId={planOtId}
                     onCapture={setFirmaOperador}
                     required
+                    mode="capture"
                   />
                 </div>
 
@@ -1015,6 +1025,7 @@ export default function MobileOTDetallePage() {
                       planOtId={planOtId}
                       onCapture={setFirmaMandante}
                       required
+                      mode="capture"
                     />
                   </div>
                 )}
