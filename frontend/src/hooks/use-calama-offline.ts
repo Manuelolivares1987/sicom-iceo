@@ -92,14 +92,20 @@ export function useClearCalamaOfflineDB() {
   return { run, pending }
 }
 
-// Auto-sync on online: cuando el navegador vuelve a estar online, intenta
-// sincronizar pendientes (sin bloquear UI). Devuelve el ultimo resultado.
+// Auto-sync: dispara sincronizacion en dos casos
+//   1. Browser pasa de offline -> online (evento 'online').
+//   2. Componente que usa este hook se monta y ya estamos online con
+//      pendientes/errores acumulados. Cubre el caso "el operador volvio al
+//      campamento con WiFi y abrio /m/calama directamente, sin transicion
+//      offline->online detectable".
+// Sin bloquear UI. Devuelve el ultimo resultado.
 export function useAutoSyncOnOnline() {
   const [lastResult, setLastResult] = useState<SyncResult | null>(null)
   useEffect(() => {
     if (typeof window === 'undefined') return
     let cancelled = false
-    const handler = async () => {
+
+    const trySync = async () => {
       try {
         const r = await syncCalamaPending()
         if (!cancelled) setLastResult(r)
@@ -107,10 +113,27 @@ export function useAutoSyncOnOnline() {
         // silencioso, errores quedan en sync_queue
       }
     }
-    window.addEventListener('online', handler)
+
+    // Caso 2: si al montar ya hay pendientes y estamos online, disparar.
+    if (navigator.onLine) {
+      void (async () => {
+        try {
+          const c = await getOfflineCounters()
+          if (cancelled) return
+          if (c.pendientes > 0 || c.errores > 0) {
+            await trySync()
+          }
+        } catch {
+          // BD no inicializada todavia, no hacer nada
+        }
+      })()
+    }
+
+    // Caso 1: evento online.
+    window.addEventListener('online', trySync)
     return () => {
       cancelled = true
-      window.removeEventListener('online', handler)
+      window.removeEventListener('online', trySync)
     }
   }, [])
   return lastResult

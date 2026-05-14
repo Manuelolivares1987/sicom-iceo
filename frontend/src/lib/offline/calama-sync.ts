@@ -369,12 +369,22 @@ export async function syncCalamaPending(): Promise<SyncResult> {
   }
 
   // 2) Procesar cola de eventos en orden de creacion.
+  // jornadasFallidas: si un evento de una jornada falla, no se intentan los
+  // siguientes eventos de la MISMA jornada en este run de sync. El server
+  // los rechazaria con "estado no permite cambios" y se inflarian los errores.
+  // Como cada accion es idempotente via client_uuid, el proximo sync las
+  // reintentara en orden cuando el primero se resuelva.
   const items = await db.sync_queue.where('status').anyOf(['pending','error']).sortBy('created_at')
+  const jornadasFallidas = new Set<string>()
   for (const it of items) {
     try {
       const evento = await db.eventos.get(it.evento_local_id)
       if (!evento) {
         await db.sync_queue.update(it.id!, { status: 'synced', updated_at: new Date().toISOString() })
+        continue
+      }
+      if (jornadasFallidas.has(evento.jornada_id)) {
+        // Saltar: jornada con falla previa en este mismo run.
         continue
       }
       // Resolver blob_refs: poblar URLs en payload.
@@ -404,6 +414,7 @@ export async function syncCalamaPending(): Promise<SyncResult> {
           updated_at: new Date().toISOString(),
         })
         errors.push({ tipo: evento.rpc_tipo, local_id: evento.local_id, mensaje: 'Blob asociado no se subio' })
+        jornadasFallidas.add(evento.jornada_id)
         err++
         continue
       }
@@ -435,6 +446,7 @@ export async function syncCalamaPending(): Promise<SyncResult> {
           updated_at: new Date().toISOString(),
         })
         errors.push({ tipo: evento.rpc_tipo, local_id: evento.local_id, mensaje: error.message })
+        jornadasFallidas.add(evento.jornada_id)
         err++
         continue
       }
@@ -453,5 +465,51 @@ export async function syncCalamaPending(): Promise<SyncResult> {
     }
   }
 
+  // 3) Refrescar jornadas sin pendientes con el estado del server.
+  // Cubre multidispositivo: si otro celular cambio una OT mientras este
+  // estaba offline, al sincronizar traemos el nuevo estado. Solo aplica a
+  // jornadas SIN eventos pendientes; las otras conservan su estado_plan_local
+  // mutado por los smart handlers hasta que sus eventos se sincronicen.
+  if (ok > 0) {
+    try { await refreshSyncedJornadas() } catch { /* mejor esfuerzo */ }
+  }
+
   return { ok, err, errors }
+}
+
+async function refreshSyncedJornadas(): Promise<void> {
+  const db = calamaDB()
+  const todas = await db.jornadas.toArray()
+  if (todas.length === 0) return
+  const pendientes = await db.eventos.where('sync_status').anyOf(['pending','error']).toArray()
+  const conPendientes = new Set(pendientes.map((e) => e.jornada_id))
+  const limpias = todas.filter((j) => !conPendientes.has(j.local_id))
+  if (limpias.length === 0) return
+
+  const ids = limpias.map((j) => j.local_id)
+  const { data, error } = await supabase
+    .from('calama_plan_semanal_ots')
+    .select('id, estado_plan, llegada_faena_at, observaciones, visible_en_kanban, desprogramada_at, anulada_at')
+    .in('id', ids)
+  if (error || !data) return
+
+  const now = new Date().toISOString()
+  for (const p of data as Array<Record<string, unknown>>) {
+    const planOtId = String(p.id)
+    const local = await db.jornadas.get(planOtId)
+    if (!local) continue
+    // Si server la marca desprogramada/anulada, conservar local hasta que el
+    // operador la vea; el filtrado de visibilidad ocurre en la UI.
+    const ep = String(p.estado_plan ?? local.estado_plan_server)
+    await db.jornadas.update(planOtId, {
+      estado_plan_server: ep,
+      estado_plan_local: ep,
+      llegada_faena_at: (p.llegada_faena_at as string | null) ?? local.llegada_faena_at,
+      observaciones: (p.observaciones as string | null) ?? local.observaciones,
+      visible_en_kanban: ((p.visible_en_kanban as boolean | null) ?? local.visible_en_kanban),
+      desprogramada: !!p.desprogramada_at || !!p.anulada_at,
+      updated_local_at: now,
+      sync_status: 'synced',
+    })
+  }
 }
