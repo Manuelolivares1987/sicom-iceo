@@ -87,6 +87,11 @@ export default function MobileOTDetallePage() {
   // Fallback: si misOts no tiene la jornada (offline o error de red),
   // buscar en IndexedDB.
   const [planOtLocal, setPlanOtLocal] = useState<LocalJornada | null>(null)
+  // Tick para forzar relectura de IndexedDB tras cada accion offline. Los
+  // smart handlers mutan planOtLocal en IndexedDB (llegada_faena_at, inicio_at,
+  // estado_plan_local, avance_pct) pero React no se entera. Sin esto, el
+  // wizard nunca avanza de paso en modo offline.
+  const [localTick, setLocalTick] = useState(0)
 
   const planOtId = planOt?.id ?? planOtLocal?.local_id ?? null
   const planSemanalId = planOt?.plan_semanal_id ?? planOtLocal?.plan_semanal_id ?? undefined
@@ -123,7 +128,7 @@ export default function MobileOTDetallePage() {
       }
     })()
     return () => { cancelled = true }
-  }, [otId])
+  }, [otId, localTick])
 
   const refreshAfterAction = () => {
     qc.invalidateQueries({ queryKey: ['calama-mis-ots'] })
@@ -131,6 +136,9 @@ export default function MobileOTDetallePage() {
     qc.invalidateQueries({ queryKey: ['calama-ejec-activa', otId] })
     qc.invalidateQueries({ queryKey: ['calama-evidencias', planOtId ?? ''] })
     qc.invalidateQueries({ queryKey: ['calama-firmas', planOtId ?? ''] })
+    // Relectura de IndexedDB para reflejar mutaciones offline (llegada_faena_at,
+    // estado_plan_local, avance_pct, etc.) que los smart handlers ya escribieron.
+    setLocalTick((t) => t + 1)
   }
 
   const showSmart = (r: SmartResult) => {
