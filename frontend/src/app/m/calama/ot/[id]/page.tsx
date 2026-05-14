@@ -197,12 +197,28 @@ export default function MobileOTDetallePage() {
     if (otServer) setAvanceValor(Math.round(Number(otServer.avance_pct ?? 0)))
   }, [otServer])
 
-  // Determinar paso actual del wizard
-  const planOtLlegadaAt =
-    (planOt as { llegada_faena_at?: string | null } | null)?.llegada_faena_at
-    ?? planOtLocal?.llegada_faena_at
-    ?? null
-  const estadoPlanEffective: string = (planOt?.estado_plan as string | undefined) ?? planOtLocal?.estado_plan_local ?? ''
+  // Determinar paso actual del wizard.
+  //
+  // Prioridad: planOtLocal manda sobre planOt cuando el dispositivo ya ejecuto
+  // acciones (smart handlers escriben en IndexedDB antes que llegue al server).
+  // Sin esto, en modo avion el cache server stale dice "planificada" y el
+  // ?? devuelve la lectura vieja aunque el local ya tenga "en_ejecucion".
+  // Tras sincronizar, planOt se refresca y vuelve a ser la fuente principal.
+  const dispositivoEjecuto = !!(
+    planOtLocal?.llegada_faena_at ||
+    planOtLocal?.inicio_at ||
+    planOtLocal?.cierre_at
+  )
+  const planOtLlegadaAt = dispositivoEjecuto
+    ? (planOtLocal?.llegada_faena_at ?? null)
+    : ((planOt as { llegada_faena_at?: string | null } | null)?.llegada_faena_at
+        ?? planOtLocal?.llegada_faena_at
+        ?? null)
+  const estadoPlanEffective: string = dispositivoEjecuto
+    ? (planOtLocal?.estado_plan_local ?? '')
+    : ((planOt?.estado_plan as string | undefined)
+        ?? planOtLocal?.estado_plan_local
+        ?? '')
   const paso: Paso = useMemo(() => {
     if (pasoForzado) return pasoForzado
     if (!planOt && !planOtLocal) return 'llegada'
