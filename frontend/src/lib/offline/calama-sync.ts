@@ -232,6 +232,71 @@ export async function saveFirma(fi: Omit<LocalFirma, 'local_id' | 'client_uuid' 
 }
 
 // ============================================================================
+// DESCARTAR ITEMS CON ERROR/CONFLICT
+// ============================================================================
+
+export type DiscardResult = {
+  events: number
+  evidencias: number
+  firmas: number
+  blobs: number
+}
+
+// Borra eventos con sync_status 'error' o 'conflict' junto a sus evidencias,
+// firmas y blobs asociados. Tambien limpia evidencias/firmas huerfanas con
+// sync_status='error'. Pendientes y synced se preservan.
+//
+// Caso de uso: un evento viejo encolado falla con regla de negocio del server
+// (ej. "interferencia requiere foto") y bloquea o ensucia la cola. El usuario
+// puede limpiar con un click sin perder los eventos nuevos pendientes.
+export async function discardFailedItems(): Promise<DiscardResult> {
+  const db = calamaDB()
+  let evCount = 0, fiCount = 0, bCount = 0
+
+  const failedEvents = await db.eventos.where('sync_status').anyOf(['error','conflict']).toArray()
+  for (const ev of failedEvents) {
+    for (const ref of ev.blob_refs ?? []) {
+      if (ref.evidencia_local_id) {
+        const evd = await db.evidencias.get(ref.evidencia_local_id)
+        if (evd) {
+          if (evd.blob_id) { await db.blobs.delete(evd.blob_id); bCount++ }
+          await db.evidencias.delete(evd.local_id)
+          evCount++
+        }
+      }
+      if (ref.firma_local_id) {
+        const fi = await db.firmas.get(ref.firma_local_id)
+        if (fi) {
+          if (fi.blob_id) { await db.blobs.delete(fi.blob_id); bCount++ }
+          await db.firmas.delete(fi.local_id)
+          fiCount++
+        }
+      }
+    }
+    await db.eventos.delete(ev.local_id)
+    await db.sync_queue.where('evento_local_id').equals(ev.local_id).delete()
+  }
+
+  // Evidencias/firmas marcadas 'error' que no estaban referenciadas por un
+  // evento (uploads sueltos que fallaron). Cleanup adicional.
+  const orphanEv = await db.evidencias.where('sync_status').equals('error').toArray()
+  for (const ev of orphanEv) {
+    if (ev.blob_id) { await db.blobs.delete(ev.blob_id); bCount++ }
+    await db.evidencias.delete(ev.local_id)
+    evCount++
+  }
+  const orphanFi = await db.firmas.where('sync_status').equals('error').toArray()
+  for (const fi of orphanFi) {
+    if (fi.blob_id) { await db.blobs.delete(fi.blob_id); bCount++ }
+    await db.firmas.delete(fi.local_id)
+    fiCount++
+  }
+
+  return { events: failedEvents.length, evidencias: evCount, firmas: fiCount, blobs: bCount }
+}
+
+
+// ============================================================================
 // CONTADORES UI
 // ============================================================================
 
@@ -446,7 +511,15 @@ export async function syncCalamaPending(): Promise<SyncResult> {
           updated_at: new Date().toISOString(),
         })
         errors.push({ tipo: evento.rpc_tipo, local_id: evento.local_id, mensaje: error.message })
-        jornadasFallidas.add(evento.jornada_id)
+        // Bloqueo de jornada SOLO para errores transitorios (red/timeout).
+        // En 'conflict' el server rechaza por regla de negocio: NO se va a
+        // resolver con retry. Si bloqueamos, eventos nuevos posteriores de la
+        // misma jornada (ej. colacion despues de una interferencia vieja
+        // sin foto) quedan trabados. Que el usuario descarte el conflict
+        // manualmente con el boton "Descartar errores acumulados".
+        if (newStatus === 'error') {
+          jornadasFallidas.add(evento.jornada_id)
+        }
         err++
         continue
       }

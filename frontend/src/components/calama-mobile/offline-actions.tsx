@@ -1,8 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import { Download, RefreshCw, Trash2, CheckCircle2, AlertTriangle, Loader2 } from 'lucide-react'
-import { useDownloadJornadas, useSyncPending, useClearCalamaOfflineDB, useNetworkStatus, useCalamaOfflineCounters } from '@/hooks/use-calama-offline'
+import { Download, RefreshCw, Trash2, CheckCircle2, AlertTriangle, Loader2, Eraser } from 'lucide-react'
+import { useDownloadJornadas, useSyncPending, useClearCalamaOfflineDB, useDiscardFailedItems, useNetworkStatus, useCalamaOfflineCounters } from '@/hooks/use-calama-offline'
 import { useToast } from '@/contexts/toast-context'
 
 export function OfflineActions() {
@@ -11,6 +11,7 @@ export function OfflineActions() {
   const { run: download, pending: dlPending, lastError: dlError } = useDownloadJornadas()
   const { run: sync, pending: syncPending, lastResult: syncResult } = useSyncPending()
   const { run: clear, pending: clearPending } = useClearCalamaOfflineDB()
+  const { run: discard, pending: discardPending } = useDiscardFailedItems()
   const { counters, refresh } = useCalamaOfflineCounters(0)
   const [showAvanzado, setShowAvanzado] = useState(false)
 
@@ -42,6 +43,20 @@ export function OfflineActions() {
     if (!confirm('¿Borrar TODOS los datos offline de este telefono? Solo hazlo en dispositivos que ya no usaras.')) return
     await clear()
     toast.success('Datos offline borrados')
+    void refresh()
+  }
+
+  const totalErrConf = (counters?.errores ?? 0) + (counters?.conflictos ?? 0)
+  const handleDiscard = async () => {
+    if (totalErrConf === 0) { toast.info('No hay eventos con error o conflicto para descartar'); return }
+    if (!confirm(
+      `Vas a descartar ${totalErrConf} item(s) que el server rechazo o que tienen error. ` +
+      'Sus fotos/firmas locales asociadas tambien se borran. Los eventos pendientes (no enviados) se conservan. Continuar?'
+    )) return
+    const r = await discard()
+    toast.success(
+      `Descartado: ${r.events} eventos, ${r.evidencias} fotos, ${r.firmas} firmas, ${r.blobs} archivos locales.`,
+    )
     void refresh()
   }
 
@@ -91,13 +106,22 @@ export function OfflineActions() {
         {showAvanzado ? 'Ocultar' : 'Avanzado'}
       </button>
       {showAvanzado && (
-        <button
-          onClick={handleClear} disabled={clearPending}
-          className="w-full rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-xs font-medium text-red-800 hover:bg-red-100 disabled:opacity-50 inline-flex items-center justify-center gap-1.5"
-        >
-          {clearPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-          Borrar datos offline de este telefono
-        </button>
+        <div className="space-y-2">
+          <button
+            onClick={handleDiscard} disabled={discardPending || totalErrConf === 0}
+            className="w-full rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-900 hover:bg-amber-100 disabled:opacity-50 inline-flex items-center justify-center gap-1.5"
+          >
+            {discardPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Eraser className="h-4 w-4" />}
+            Descartar eventos con error/conflicto ({totalErrConf})
+          </button>
+          <button
+            onClick={handleClear} disabled={clearPending}
+            className="w-full rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-xs font-medium text-red-800 hover:bg-red-100 disabled:opacity-50 inline-flex items-center justify-center gap-1.5"
+          >
+            {clearPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+            Borrar datos offline de este telefono
+          </button>
+        </div>
       )}
     </div>
   )

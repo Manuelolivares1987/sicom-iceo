@@ -3,7 +3,8 @@
 import { useEffect, useState, useCallback } from 'react'
 import {
   prepareCalamaOffline, syncCalamaPending, getOfflineCounters,
-  type SyncResult,
+  discardFailedItems,
+  type SyncResult, type DiscardResult,
 } from '@/lib/offline/calama-sync'
 import { clearCalamaDB } from '@/lib/offline/calama-db'
 
@@ -90,6 +91,24 @@ export function useClearCalamaOfflineDB() {
     try { await clearCalamaDB() } finally { setPending(false) }
   }, [])
   return { run, pending }
+}
+
+// Descarta eventos con sync_status 'error' o 'conflict' (y sus blobs).
+// No toca pending ni synced.
+export function useDiscardFailedItems() {
+  const [pending, setPending] = useState(false)
+  const [lastResult, setLastResult] = useState<DiscardResult | null>(null)
+  const run = useCallback(async () => {
+    setPending(true)
+    try {
+      const r = await discardFailedItems()
+      setLastResult(r)
+      return r
+    } finally {
+      setPending(false)
+    }
+  }, [])
+  return { run, pending, lastResult }
 }
 
 // Auto-sync: dispara sincronizacion en dos casos
