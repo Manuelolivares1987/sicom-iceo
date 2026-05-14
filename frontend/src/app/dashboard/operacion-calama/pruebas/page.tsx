@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { useState } from 'react'
 import {
   FlaskConical, Plus, RefreshCw, ExternalLink, Smartphone, Camera,
-  Activity, FileSignature, AlertCircle, ArrowLeft,
+  Activity, FileSignature, AlertCircle, ArrowLeft, Trash2,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -19,6 +19,7 @@ import { useToast } from '@/contexts/toast-context'
 import {
   useListaPruebasTerreno, useCrearJornadaPrueba,
   useEvidenciasPrueba, useEventosPrueba,
+  useEliminarPruebaTerreno,
 } from '@/hooks/use-calama-pruebas'
 import { useUsuariosAsignables } from '@/hooks/use-calama-plan-semanal'
 import { useQueryClient } from '@tanstack/react-query'
@@ -33,6 +34,35 @@ export default function PruebasTerrenoPage() {
   const [responsableId, setResponsableId] = useState('')
   const [fechaJornada, setFechaJornada] = useState(todayISO())
   const [otDetalleId, setOtDetalleId] = useState<string | null>(null)
+  const [confirmEliminar, setConfirmEliminar] = useState<string | null>(null)
+  const eliminar = useEliminarPruebaTerreno()
+
+  const onEliminar = (otId: string, folio: string) => {
+    eliminar.mutate(otId, {
+      onSuccess: (r) => {
+        const e = r.eliminado
+        const totalDb = e.evidencias + e.firmas + e.eventos + e.ejecuciones + e.jornadas + e.precheck + e.audit
+        const sto = r.storage
+        const totalSto = sto.evidencias_borradas + sto.firmas_borradas
+        const erroresSto = sto.errores.length
+        toast.success(
+          `Prueba ${folio} eliminada. DB: ${totalDb} filas, Storage: ${totalSto} archivos${erroresSto > 0 ? `, ${erroresSto} errores Storage` : ''}.`,
+        )
+        if (otDetalleId === otId) setOtDetalleId(null)
+        setConfirmEliminar(null)
+      },
+      onError: (err) => {
+        const raw = err instanceof Error ? err.message : String(err)
+        if (raw.toLowerCase().includes('no es de prueba')) {
+          toast.error('Esta OT NO esta marcada como prueba. No se elimina.')
+        } else if (raw.toLowerCase().includes('no autorizado') || raw.toLowerCase().includes('rol')) {
+          toast.error('No tienes permiso para eliminar pruebas.')
+        } else {
+          toast.error(raw)
+        }
+      },
+    })
+  }
 
   const onCrear = () => {
     crear.mutate(
@@ -215,12 +245,43 @@ export default function PruebasTerrenoPage() {
                       </Link>
                     </TableCell>
                     <TableCell>
-                      <Button
-                        variant="outline" size="sm"
-                        onClick={() => setOtDetalleId(otDetalleId === p.ot_id ? null : p.ot_id)}
-                      >
-                        {otDetalleId === p.ot_id ? 'Cerrar' : 'Ver detalle'}
-                      </Button>
+                      <div className="flex items-center gap-1 flex-wrap">
+                        <Button
+                          variant="outline" size="sm"
+                          onClick={() => setOtDetalleId(otDetalleId === p.ot_id ? null : p.ot_id)}
+                        >
+                          {otDetalleId === p.ot_id ? 'Cerrar' : 'Ver detalle'}
+                        </Button>
+                        {confirmEliminar === p.ot_id ? (
+                          <div className="inline-flex items-center gap-1 rounded border border-red-300 bg-red-50 px-2 py-1">
+                            <span className="text-[10px] text-red-800 font-medium">Confirmar?</span>
+                            <Button
+                              variant="outline" size="sm"
+                              className="border-red-400 bg-white text-red-700 hover:bg-red-100"
+                              onClick={() => onEliminar(p.ot_id, p.folio)}
+                              disabled={eliminar.isPending}
+                            >
+                              {eliminar.isPending ? <Spinner className="h-3 w-3" /> : 'Si, borrar'}
+                            </Button>
+                            <Button
+                              variant="ghost" size="sm"
+                              onClick={() => setConfirmEliminar(null)}
+                              disabled={eliminar.isPending}
+                            >
+                              Cancelar
+                            </Button>
+                          </div>
+                        ) : (
+                          <Button
+                            variant="outline" size="sm"
+                            className="border-red-300 text-red-700 hover:bg-red-50"
+                            onClick={() => setConfirmEliminar(p.ot_id)}
+                            disabled={eliminar.isPending}
+                          >
+                            <Trash2 className="h-3 w-3 mr-1" /> Eliminar
+                          </Button>
+                        )}
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}

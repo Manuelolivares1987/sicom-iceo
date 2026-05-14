@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   listarPruebasTerreno, crearJornadaPrueba,
   listarEvidenciasPrueba, listarEventosPrueba,
+  eliminarPruebaTerreno,
   type CrearJornadaPruebaPayload,
 } from '@/lib/services/calama-pruebas'
 
@@ -55,5 +56,20 @@ export function useEventosPrueba(otId: string | null) {
     },
     enabled: !!otId,
     staleTime: 15_000,
+  })
+}
+
+export function useEliminarPruebaTerreno() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (otId: string) => {
+      const { data, error } = await eliminarPruebaTerreno(otId)
+      if (error) throw error
+      return data!
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['calama-pruebas'] })
+      qc.invalidateQueries({ queryKey: ['calama'] })
+    },
   })
 }
