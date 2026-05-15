@@ -124,3 +124,99 @@ export async function devolverJornadaCorreccion(payload: {
   })
   return { data, error }
 }
+
+// ── MIG50: tablero en vivo + cierre del dia ─────────────────────────────────
+
+export type CategoriaVivo =
+  | 'corriendo'
+  | 'pausada'
+  | 'cerrada_hoy'
+  | 'en_faena_sin_iniciar'
+  | 'pendiente_inicio'
+
+export type JornadaEnVivo = {
+  plan_semanal_ot_id: string
+  ot_id: string
+  folio: string
+  titulo: string | null
+  avance_pct: number | null
+  descripcion: string | null
+  estado_plan: string
+  fecha_jornada: string | null
+  nombre_dia: string | null
+  llegada_faena_at: string | null
+  cierre_jornada_at: string | null
+  responsable_id: string | null
+  responsable_nombre: string | null
+  responsable_email: string | null
+  // Ejecucion en vivo
+  ejecucion_id: string | null
+  ejecucion_estado: 'en_ejecucion' | 'pausada' | null
+  ejecucion_started_at: string | null
+  last_event_at: string | null
+  tiempo_total_segundos: number | null
+  tiempo_pausado_segundos: number | null
+  tiempo_efectivo_segundos: number | null
+  tiempo_colacion_segundos: number | null
+  ejecutor_nombre: string | null
+  ejecutor_email: string | null
+  // Tiempos finales (post cierre)
+  tiempo_en_faena_segundos: number | null
+  tiempo_operativo_bruto_segundos: number | null
+  tiempo_efectivo_trabajo_segundos: number | null
+  tiempo_interferencia_mandante_segundos: number | null
+  // Ultima evidencia / evento
+  ultima_evidencia_url: string | null
+  ultima_evidencia_contexto: string | null
+  ultima_evidencia_momento: string | null
+  ultima_evidencia_lat: number | null
+  ultima_evidencia_lng: number | null
+  ultima_evidencia_at: string | null
+  ultimo_evento_tipo: string | null
+  ultimo_evento_motivo: string | null
+  evento_at: string | null
+  // Conteos
+  evid_antes: number
+  evid_durante: number
+  evid_despues: number
+  evid_llegada: number
+  firmas_operador: number
+  // Clasificacion
+  categoria_vivo: CategoriaVivo
+  planificacion_codigo: string
+  planificacion_id: string
+}
+
+export type ResumenHoy = {
+  total_jornadas: number
+  corriendo: number
+  pausadas: number
+  en_faena_sin_iniciar: number
+  pendientes_inicio: number
+  cerradas_hoy: number
+  pendientes_supervision: number
+  aceptadas_hoy: number
+  requieren_correccion: number
+  total_seg_efectivo_cerradas: number
+  total_seg_efectivo_en_vivo: number
+  total_seg_interferencia: number
+}
+
+export async function getJornadasEnVivo(planificacionId?: string | null) {
+  let q = supabase
+    .from('v_calama_jornadas_en_vivo')
+    .select('*')
+    .order('categoria_vivo')
+    .order('last_event_at', { ascending: false, nullsFirst: false })
+  if (planificacionId) q = q.eq('planificacion_id', planificacionId)
+  const { data, error } = await q
+  return { data: (data ?? []) as unknown as JornadaEnVivo[], error }
+}
+
+export async function getResumenHoy() {
+  const { data, error } = await supabase
+    .from('v_calama_resumen_hoy')
+    .select('*')
+    .maybeSingle()
+  return { data: data as ResumenHoy | null, error }
+}

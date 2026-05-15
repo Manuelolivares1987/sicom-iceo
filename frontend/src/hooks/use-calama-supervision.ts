@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   getJornadasPendientesSupervision, getEvidenciasPorOT, getFirmasPorJornada,
   supervisarJornada, devolverJornadaCorreccion,
+  getJornadasEnVivo, getResumenHoy,
   type JornadasFiltro,
 } from '@/lib/services/calama-supervision'
 
@@ -9,6 +10,8 @@ const KEY = {
   pendientes: (f?: JornadasFiltro) => ['calama', 'supervision', 'pendientes', f ?? {}] as const,
   evidencias: (otId: string) => ['calama', 'supervision', 'evid', otId] as const,
   firmas:     (planOtId: string) => ['calama', 'supervision', 'firmas', planOtId] as const,
+  enVivo:     (planId?: string | null) => ['calama', 'supervision', 'en-vivo', planId ?? null] as const,
+  resumenHoy: ['calama', 'supervision', 'resumen-hoy'] as const,
 }
 
 export function useJornadasPendientesSupervision(filtro?: JornadasFiltro) {
@@ -75,5 +78,35 @@ export function useDevolverJornadaCorreccion() {
       qc.invalidateQueries({ queryKey: ['calama', 'ots'] })
       qc.invalidateQueries({ queryKey: ['calama', 'dashboard'] })
     },
+  })
+}
+
+// MIG50 - tablero en vivo + cierre del dia. Auto-refresh 30s.
+
+export function useJornadasEnVivo(planificacionId?: string | null) {
+  return useQuery({
+    queryKey: KEY.enVivo(planificacionId),
+    queryFn: async () => {
+      const { data, error } = await getJornadasEnVivo(planificacionId)
+      if (error) throw error
+      return data
+    },
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
+    staleTime: 25_000,
+  })
+}
+
+export function useResumenHoy() {
+  return useQuery({
+    queryKey: KEY.resumenHoy,
+    queryFn: async () => {
+      const { data, error } = await getResumenHoy()
+      if (error) throw error
+      return data
+    },
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
+    staleTime: 25_000,
   })
 }
