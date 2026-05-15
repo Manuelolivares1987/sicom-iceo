@@ -121,20 +121,15 @@ const navGroups: NavGroup[] = [
       { label: 'Comercial', href: '/dashboard/comercial', icon: Briefcase, module: 'comercial' },
     ],
   },
-  // Bodega — 4 entradas a paneles. Las acciones (Nueva OC, Salida a OT,
-  // Ingreso/Salida/Despacho combustible, etc.) viven como tiles dentro de
-  // cada panel via <QuickActionsGrid>.
+  // Bodega — UNA sola entrada. El Panel Bodega centraliza TODAS las acciones
+  // (compras, recepciones, salidas, combustible, control, admin) via
+  // <QuickActionsGrid> agrupados por seccion. El bodeguero no tiene que
+  // navegar entre multiples paneles.
   {
     label: 'Bodega',
     items: [
-      { label: 'Panel Bodega',         href: '/dashboard/inventario',          icon: Package,    extendedModule: 'bodega',
-        tooltip: 'Stock + salidas a OT + recepciones + kardex' },
-      { label: 'Panel Combustible',    href: '/dashboard/combustible',         icon: Fuel,       module: 'inventario',
-        tooltip: 'CPP móvil + ingreso/salida + despacho con sellos' },
-      { label: 'Panel Abastecimiento', href: '/dashboard/abastecimiento',      icon: Briefcase,  module: 'abastecimiento',
-        tooltip: 'OCs + importación + despachos a OT' },
-      { label: 'Reportes',             href: '/dashboard/inventario/reportes', icon: BarChart3,  module: 'inventario',
-        tooltip: 'Stock valorizado, costos OT/CECO, kardex, mermas' },
+      { label: 'Panel Bodega', href: '/dashboard/inventario', icon: Package, extendedModule: 'bodega',
+        tooltip: 'Stock, compras, salidas, combustible y reportes — todo en un solo panel' },
     ],
   },
   // Compliance

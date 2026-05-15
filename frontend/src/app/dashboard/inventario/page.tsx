@@ -22,6 +22,12 @@ import {
   FileSpreadsheet,
   ClipboardCheck,
   BarChart3,
+  FileText,
+  Plus,
+  ShieldCheck,
+  Gauge,
+  Ban,
+  Briefcase,
 } from 'lucide-react'
 import { QuickActionsGrid } from '@/components/ui/quick-actions-grid'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -241,21 +247,61 @@ export default function InventarioPage() {
           <Package className="h-6 w-6 text-blue-600" />
           Panel Bodega
         </h1>
-        <p className="text-sm text-gray-500 mt-1">Stock, salidas a OT, recepciones, kardex y reportes.</p>
+        <p className="text-sm text-gray-500 mt-1">
+          Todas las operaciones de bodega, combustible y abastecimiento en un solo lugar.
+        </p>
       </div>
 
       <QuickActionsGrid
-        title="Acciones rápidas"
+        title="Compras y recepciones"
         cols={4}
         actions={[
-          { label: 'Salida a OT',     description: 'FIFO + CECO obligatorio',          href: '/dashboard/inventario/salida-ot/nueva',  icon: Truck,         accent: 'red' },
-          { label: 'Recepciones',     description: 'OCs pendientes de recepción',      href: '/dashboard/abastecimiento/oc',           icon: ClipboardCheck, accent: 'green' },
-          { label: 'Despachos a OT',  description: 'Despachos directos a OT',           href: '/dashboard/abastecimiento/despachos',    icon: Truck,         accent: 'amber' },
-          { label: 'Kardex / FIFO',   description: 'Movimientos y capas FIFO',         href: '/dashboard/inventario/reportes',         icon: Layers,        accent: 'blue' },
-          { label: 'Reconciliación',  description: 'Stock legacy vs capas FIFO',       href: '/dashboard/inventario/reconciliacion',   icon: Scale,         accent: 'purple' },
-          { label: 'Reportes',        description: 'Stock valorizado, costos OT/CECO', href: '/dashboard/inventario/reportes',         icon: BarChart3,     accent: 'slate' },
-          { label: 'Cargar maestro',  description: 'Importar productos desde Excel',   href: '/dashboard/inventario/cargar-maestro',   icon: FileSpreadsheet, accent: 'slate' },
-          { label: 'Scanner',         description: 'Pistola lectora código de barras', href: '/dashboard/inventario/scanner',          icon: BarChart3,     accent: 'slate' },
+          { label: 'Nueva OC',           description: 'Crear orden de compra interna',  href: '/dashboard/abastecimiento/oc/nueva',      icon: Plus,            accent: 'green' },
+          { label: 'Importar OC (PDF)',  description: 'Cargar OC externa desde PDF',    href: '/dashboard/abastecimiento/oc/importar',   icon: FileSpreadsheet, accent: 'blue' },
+          { label: 'Listado OCs',        description: 'Ver y recepcionar OCs',          href: '/dashboard/abastecimiento/oc',            icon: FileText,        accent: 'amber' },
+          { label: 'Ingreso combustible', description: 'Ingreso valorizado CPP móvil',  href: '/dashboard/combustible/ingreso',          icon: Fuel,            accent: 'amber' },
+        ]}
+      />
+
+      <QuickActionsGrid
+        title="Salidas y consumo"
+        cols={4}
+        actions={[
+          { label: 'Salida a OT',         description: 'FIFO + CECO obligatorio',         href: '/dashboard/inventario/salida-ot/nueva', icon: Truck,          accent: 'red' },
+          { label: 'Despachos a OT',      description: 'Despachos directos a OT',         href: '/dashboard/abastecimiento/despachos',   icon: Truck,          accent: 'red' },
+          { label: 'Salida combustible',  description: 'Salida valorizada CPP vigente',   href: '/dashboard/combustible/salida',         icon: ArrowDownRight, accent: 'red' },
+          { label: 'Despacho con sellos', description: 'Salida + sellos antifraude',      href: '/dashboard/combustible/despacho',       icon: ShieldCheck,    accent: 'amber' },
+        ]}
+      />
+
+      <QuickActionsGrid
+        title="Control y reportes"
+        cols={4}
+        actions={[
+          { label: 'Control combustible', description: 'Kardex vs varillaje por estanque', href: '/dashboard/combustible/control',       icon: Gauge,    accent: 'blue' },
+          { label: 'Reconciliación FIFO', description: 'Stock legacy vs capas FIFO',        href: '/dashboard/inventario/reconciliacion', icon: Scale,    accent: 'purple' },
+          { label: 'Kardex / FIFO',       description: 'Movimientos y capas FIFO',          href: '/dashboard/inventario/reportes',       icon: Layers,   accent: 'blue' },
+          { label: 'Reportes',            description: 'Stock valorizado, costos OT/CECO',  href: '/dashboard/inventario/reportes',       icon: BarChart3, accent: 'slate' },
+        ]}
+      />
+
+      <QuickActionsGrid
+        title="Vistas detalladas"
+        cols={3}
+        actions={[
+          { label: 'Panel Combustible',   description: 'Kardex completo + alertas estanques', href: '/dashboard/combustible',   icon: Fuel,      accent: 'amber' },
+          { label: 'Panel Abastecimiento', description: 'Rutas, abastecimientos a faena',     href: '/dashboard/abastecimiento', icon: Briefcase, accent: 'blue' },
+          { label: 'Listado OCs',          description: 'Detalle completo de órdenes',        href: '/dashboard/abastecimiento/oc', icon: FileText, accent: 'slate' },
+        ]}
+      />
+
+      <QuickActionsGrid
+        title="Administración"
+        cols={3}
+        actions={[
+          { label: 'Corregir ingreso',  description: 'Anular ingreso combustible mal cargado', href: '/dashboard/combustible/corregir-ingreso', icon: Ban,            accent: 'red',   badge: 'Admin' },
+          { label: 'Cargar maestro',    description: 'Importar productos desde Excel',         href: '/dashboard/inventario/cargar-maestro',    icon: FileSpreadsheet, accent: 'slate', badge: 'Admin' },
+          { label: 'Scanner',           description: 'Pistola lectora código de barras',       href: '/dashboard/inventario/scanner',           icon: BarChart3,      accent: 'slate' },
         ]}
       />
 
