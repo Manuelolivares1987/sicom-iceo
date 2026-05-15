@@ -121,109 +121,20 @@ const navGroups: NavGroup[] = [
       { label: 'Comercial', href: '/dashboard/comercial', icon: Briefcase, module: 'comercial' },
     ],
   },
-  // Bodega / Insumos (proceso: OC -> recepcion FIFO -> salida con CECO)
+  // Bodega — 4 entradas a paneles. Las acciones (Nueva OC, Salida a OT,
+  // Ingreso/Salida/Despacho combustible, etc.) viven como tiles dentro de
+  // cada panel via <QuickActionsGrid>.
   {
-    label: 'Bodega / Insumos',
-    subsections: [
-      {
-        label: 'Panel',
-        items: [
-          { label: 'Panel Bodega',          href: '/dashboard/inventario',                icon: Package,         extendedModule: 'bodega',
-            tooltip: 'Stock por bodega + valorización + alertas' },
-          { label: 'Abastecimiento',        href: '/dashboard/abastecimiento',            icon: Briefcase,       module: 'abastecimiento',
-            tooltip: 'Vista global abastecimiento' },
-        ],
-      },
-      {
-        label: 'Ingresos',
-        items: [
-          { label: 'Órdenes de Compra',     href: '/dashboard/abastecimiento/oc',         icon: FileText,        module: 'inventario',
-            tooltip: 'Listado OCs internas y externas' },
-          { label: 'Importar OC',           href: '/dashboard/abastecimiento/oc/importar', icon: FileSpreadsheet, module: 'inventario',
-            tooltip: 'Cargar PDF de OC externa (texto-first)' },
-          { label: 'Recepcionar OC',        href: '/dashboard/abastecimiento/oc',         icon: ClipboardCheck,  module: 'inventario',
-            tooltip: 'Abre el listado de OCs — desde el detalle recepcionás stock o servicios' },
-        ],
-      },
-      {
-        label: 'Egresos',
-        items: [
-          { label: 'Salida de insumos a OT', href: '/dashboard/inventario/salida-ot/nueva', icon: Truck,         module: 'inventario',
-            tooltip: 'FIFO + CECO obligatorio + OT' },
-          { label: 'Despachos OT',          href: '/dashboard/abastecimiento/despachos',  icon: ClipboardCheck,  module: 'inventario',
-            tooltip: 'Despachos directos a OT' },
-        ],
-      },
-      {
-        label: 'Control',
-        items: [
-          { label: 'Reconciliación Stock/FIFO', href: '/dashboard/inventario/reconciliacion', icon: Scale,       module: 'inventario',
-            tooltip: 'Cuadre stock legacy vs capas FIFO' },
-          { label: 'Kardex / Capas FIFO',   href: '/dashboard/inventario/reportes',       icon: Layers,          module: 'inventario',
-            tooltip: 'Tab Kardex dentro de Reportes' },
-          { label: 'Pistola Scanner',       href: '/dashboard/inventario/scanner',        icon: BarChart3,       module: 'inventario' },
-          { label: 'Cargar Maestro',        href: '/dashboard/inventario/cargar-maestro', icon: FileSpreadsheet, module: 'inventario' },
-        ],
-      },
-      {
-        label: 'Reportes',
-        items: [
-          { label: 'Reportes Bodega',       href: '/dashboard/inventario/reportes',       icon: BarChart3,       module: 'inventario',
-            tooltip: 'Stock valorizado, costos OT/CECO, kardex, mermas' },
-        ],
-      },
-      {
-        label: 'Legacy',
-        items: [
-          { label: 'Salidas / Conteo',      href: '/dashboard/inventario/salida',         icon: ClipboardCheck,  module: 'inventario',
-            badge: 'Legacy',
-            tooltip: 'Uso solo autorizado. Para nuevas salidas usar Salida de insumos a OT.' },
-        ],
-      },
-    ],
-  },
-  // Combustible (proceso: ingreso CPP -> salida / despacho con sellos)
-  {
-    label: 'Combustible',
-    subsections: [
-      {
-        label: 'Panel',
-        items: [
-          { label: 'Panel Combustible',     href: '/dashboard/combustible',               icon: Fuel,            module: 'inventario',
-            tooltip: 'Stock valorizado por CPP móvil' },
-        ],
-      },
-      {
-        label: 'Ingresos',
-        items: [
-          { label: 'Ingreso combustible',   href: '/dashboard/combustible/ingreso',       icon: Fuel,            module: 'inventario',
-            tooltip: 'Ingreso valorizado con CPP móvil' },
-        ],
-      },
-      {
-        label: 'Egresos',
-        items: [
-          { label: 'Salida combustible',    href: '/dashboard/combustible/salida',        icon: Fuel,            module: 'inventario',
-            tooltip: 'Salida al CPP vigente con destino (equipo/OT/CECO/faena/...)' },
-          { label: 'Despacho con sellos',   href: '/dashboard/combustible/despacho',      icon: ShieldCheck,     module: 'inventario',
-            tooltip: 'Salida valorizada + sellos antifraude (inicial y final)' },
-        ],
-      },
-      {
-        label: 'Control',
-        items: [
-          { label: 'Control kardex vs varillaje', href: '/dashboard/combustible/control', icon: Gauge,           module: 'inventario',
-            tooltip: 'Estado por estanque: teórico vs físico vs último kardex' },
-        ],
-      },
-      {
-        label: 'Legacy',
-        items: [
-          { label: 'Combustible (legacy)',  href: '/dashboard/inventario/combustible',    icon: Fuel,            module: 'inventario',
-            badge: 'Legacy',
-            tooltip: 'Flujo legacy sin CPP móvil. Para nuevos movimientos usar Panel Combustible.' },
-        ],
-      },
+    label: 'Bodega',
+    items: [
+      { label: 'Panel Bodega',         href: '/dashboard/inventario',          icon: Package,    extendedModule: 'bodega',
+        tooltip: 'Stock + salidas a OT + recepciones + kardex' },
+      { label: 'Panel Combustible',    href: '/dashboard/combustible',         icon: Fuel,       module: 'inventario',
+        tooltip: 'CPP móvil + ingreso/salida + despacho con sellos' },
+      { label: 'Panel Abastecimiento', href: '/dashboard/abastecimiento',      icon: Briefcase,  module: 'abastecimiento',
+        tooltip: 'OCs + importación + despachos a OT' },
+      { label: 'Reportes',             href: '/dashboard/inventario/reportes', icon: BarChart3,  module: 'inventario',
+        tooltip: 'Stock valorizado, costos OT/CECO, kardex, mermas' },
     ],
   },
   // Compliance

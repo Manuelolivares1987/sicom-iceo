@@ -4,6 +4,7 @@ import {
   listarEstanquesActivos, listarProveedoresCombustible, listarFaenas, listarActivos,
   registrarIngresoCombustible, registrarSalidaCombustible,
   registrarDespachoConSellos, listarDespachosConSellos,
+  getIngresosAnulables, anularIngresoCombustible,
   type FiltrosMovimientos, type IngresoCombustiblePayload, type SalidaCombustiblePayload,
   type DespachoSellosPayload,
 } from '@/lib/services/combustible-cpp'
@@ -145,5 +146,33 @@ export function useDespachosConSellos(limit = 50) {
       return data ?? []
     },
     staleTime: 30_000,
+  })
+}
+
+// MIG49 - anulación de ingresos mal cargados
+
+export function useIngresosAnulables(estanqueId?: string | null) {
+  return useQuery({
+    queryKey: ['combustible', 'ingresos-anulables', estanqueId ?? null],
+    queryFn: async () => {
+      const { data, error } = await getIngresosAnulables(estanqueId)
+      if (error) throw error
+      return data
+    },
+    staleTime: STALE,
+  })
+}
+
+export function useAnularIngresoCombustible() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ kardexId, motivo }: { kardexId: string; motivo: string }) => {
+      const { data, error } = await anularIngresoCombustible(kardexId, motivo)
+      if (error) throw error
+      return data!
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['combustible'] })
+    },
   })
 }

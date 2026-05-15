@@ -414,3 +414,54 @@ export async function registrarSalidaCombustible(payload: SalidaCombustiblePaylo
   if (error) return { data: null, error }
   return { data: data as SalidaCombustibleResult, error: null }
 }
+
+// ── MIG49: anular ingreso de combustible (corregir precio mal cargado) ─────
+
+export interface IngresoAnulableRow {
+  kardex_id: string
+  estanque_id: string
+  estanque_codigo: string
+  estanque_nombre: string
+  fecha_movimiento: string
+  folio_movimiento: string | null
+  litros: number
+  precio_unitario: number
+  valor_ingreso: number
+  proveedor_id: string | null
+  proveedor_nombre: string | null
+  documento_numero: string | null
+  observacion: string | null
+  created_at: string
+  created_by: string | null
+  tiene_posteriores: boolean
+}
+
+export interface AnularIngresoResult {
+  success: boolean
+  kardex_id: string
+  estanque_id: string
+  litros_revertidos: number
+  cpp_restaurado: number
+  stock_restaurado: number
+  anulado_at: string
+  anulado_by: string
+}
+
+export async function getIngresosAnulables(estanqueId?: string | null) {
+  let q = supabase
+    .from('v_combustible_ingresos_anulables')
+    .select('*')
+    .order('fecha_movimiento', { ascending: false })
+  if (estanqueId) q = q.eq('estanque_id', estanqueId)
+  const { data, error } = await q
+  return { data: (data ?? []) as IngresoAnulableRow[], error }
+}
+
+export async function anularIngresoCombustible(kardexId: string, motivo: string) {
+  const { data, error } = await supabase.rpc('rpc_anular_ingreso_combustible', {
+    p_kardex_id: kardexId,
+    p_motivo:    motivo,
+  })
+  if (error) return { data: null, error }
+  return { data: data as AnularIngresoResult, error: null }
+}

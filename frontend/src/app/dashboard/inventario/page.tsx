@@ -16,7 +16,14 @@ import {
   CheckCircle2,
   Fuel,
   ChevronRight,
+  Truck,
+  Layers,
+  Scale,
+  FileSpreadsheet,
+  ClipboardCheck,
+  BarChart3,
 } from 'lucide-react'
+import { QuickActionsGrid } from '@/components/ui/quick-actions-grid'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -229,34 +236,28 @@ export default function InventarioPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-gray-900">Inventario</h1>
+      <div>
+        <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+          <Package className="h-6 w-6 text-blue-600" />
+          Panel Bodega
+        </h1>
+        <p className="text-sm text-gray-500 mt-1">Stock, salidas a OT, recepciones, kardex y reportes.</p>
+      </div>
 
-      {/* Modulo combustible — acceso rapido */}
-      <Link href="/dashboard/inventario/combustible" className="block">
-        <Card className="border-blue-200 bg-gradient-to-r from-blue-50 to-white transition-shadow hover:shadow-md">
-          <CardContent className="flex items-center gap-4 p-4">
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-100">
-              <Fuel className="h-6 w-6 text-blue-600" />
-            </div>
-            <div className="flex-1">
-              <div className="flex items-center gap-2">
-                <p className="text-sm font-semibold text-gray-900">Combustible (diesel)</p>
-                {combustibleAlertas > 0 && (
-                  <Badge className="bg-red-100 text-red-700 hover:bg-red-100">
-                    {combustibleAlertas} bajo minimo
-                  </Badge>
-                )}
-              </div>
-              <p className="text-xs text-gray-500">
-                {(estanquesCombustible ?? []).length} estanque
-                {(estanquesCombustible ?? []).length === 1 ? '' : 's'} ·{' '}
-                {combustibleStockTotal.toLocaleString('es-CL', { maximumFractionDigits: 0 })} lt en stock
-              </p>
-            </div>
-            <ChevronRight className="h-5 w-5 text-gray-400" />
-          </CardContent>
-        </Card>
-      </Link>
+      <QuickActionsGrid
+        title="Acciones rápidas"
+        cols={4}
+        actions={[
+          { label: 'Salida a OT',     description: 'FIFO + CECO obligatorio',          href: '/dashboard/inventario/salida-ot/nueva',  icon: Truck,         accent: 'red' },
+          { label: 'Recepciones',     description: 'OCs pendientes de recepción',      href: '/dashboard/abastecimiento/oc',           icon: ClipboardCheck, accent: 'green' },
+          { label: 'Despachos a OT',  description: 'Despachos directos a OT',           href: '/dashboard/abastecimiento/despachos',    icon: Truck,         accent: 'amber' },
+          { label: 'Kardex / FIFO',   description: 'Movimientos y capas FIFO',         href: '/dashboard/inventario/reportes',         icon: Layers,        accent: 'blue' },
+          { label: 'Reconciliación',  description: 'Stock legacy vs capas FIFO',       href: '/dashboard/inventario/reconciliacion',   icon: Scale,         accent: 'purple' },
+          { label: 'Reportes',        description: 'Stock valorizado, costos OT/CECO', href: '/dashboard/inventario/reportes',         icon: BarChart3,     accent: 'slate' },
+          { label: 'Cargar maestro',  description: 'Importar productos desde Excel',   href: '/dashboard/inventario/cargar-maestro',   icon: FileSpreadsheet, accent: 'slate' },
+          { label: 'Scanner',         description: 'Pistola lectora código de barras', href: '/dashboard/inventario/scanner',          icon: BarChart3,     accent: 'slate' },
+        ]}
+      />
 
       {/* Stats */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">

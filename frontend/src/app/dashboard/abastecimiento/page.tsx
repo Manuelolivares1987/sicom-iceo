@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { Fuel, Truck, MapPin, Calendar, ChevronDown, Plus } from 'lucide-react'
+import { Fuel, Truck, MapPin, Calendar, ChevronDown, Plus, FileText, FileSpreadsheet, ClipboardCheck, Briefcase } from 'lucide-react'
+import { QuickActionsGrid } from '@/components/ui/quick-actions-grid'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -600,9 +601,12 @@ export default function AbastecimientoPage() {
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Abastecimiento y Lubricacion</h1>
+          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+            <Briefcase className="h-6 w-6 text-pillado-green-600" />
+            Panel Abastecimiento
+          </h1>
           <p className="mt-1 text-sm text-gray-500">
-            Programacion de abastecimientos, rutas de despacho, control de volumen y cumplimiento.
+            Órdenes de Compra, recepciones, rutas de despacho y abastecimientos a faena.
           </p>
         </div>
         <Button
@@ -613,6 +617,17 @@ export default function AbastecimientoPage() {
           Nueva Ruta
         </Button>
       </div>
+
+      <QuickActionsGrid
+        title="Acciones rápidas"
+        cols={4}
+        actions={[
+          { label: 'Nueva OC',         description: 'Crear orden de compra interna',     href: '/dashboard/abastecimiento/oc/nueva',     icon: Plus,            accent: 'green' },
+          { label: 'Importar OC (PDF)', description: 'Cargar OC externa desde PDF',       href: '/dashboard/abastecimiento/oc/importar',  icon: FileSpreadsheet, accent: 'blue' },
+          { label: 'Órdenes de Compra', description: 'Listado OCs + recepciones',        href: '/dashboard/abastecimiento/oc',           icon: FileText,        accent: 'amber' },
+          { label: 'Despachos a OT',    description: 'Despachos directos a OT',           href: '/dashboard/abastecimiento/despachos',    icon: ClipboardCheck,  accent: 'purple' },
+        ]}
+      />
 
       {/* Stats */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">

@@ -3,8 +3,9 @@
 import Link from 'next/link'
 import {
   Fuel, ArrowUpRight, ArrowDownRight, AlertTriangle, Layers, DollarSign,
-  RefreshCw, Scale, ShieldCheck,
+  RefreshCw, Scale, ShieldCheck, Gauge, Ban,
 } from 'lucide-react'
+import { QuickActionsGrid } from '@/components/ui/quick-actions-grid'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -41,7 +42,7 @@ export default function CombustiblePage() {
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
             <Fuel className="h-6 w-6 text-amber-700" />
-            Combustible — CPP móvil
+            Panel Combustible — CPP móvil
           </h1>
           <p className="text-sm text-gray-600 mt-1">
             Stock valorizado, ingresos, salidas y control kardex vs varillaje.
@@ -52,33 +53,23 @@ export default function CombustiblePage() {
             )}
           </p>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          <Button variant="outline" size="sm" onClick={refresh} disabled={resumen.isFetching}>
-            <RefreshCw className={cn('h-4 w-4 mr-1', resumen.isFetching && 'animate-spin')} />
-            Actualizar
-          </Button>
-          <Link href="/dashboard/combustible/control">
-            <Button variant="outline" size="sm">
-              <Scale className="h-4 w-4 mr-1" /> Control
-            </Button>
-          </Link>
-          <Link href="/dashboard/combustible/salida">
-            <Button variant="outline" size="sm">
-              <ArrowDownRight className="h-4 w-4 mr-1" /> Salida
-            </Button>
-          </Link>
-          <Link href="/dashboard/combustible/despacho">
-            <Button variant="outline" size="sm">
-              <ShieldCheck className="h-4 w-4 mr-1" /> Despacho con sellos
-            </Button>
-          </Link>
-          <Link href="/dashboard/combustible/ingreso">
-            <Button size="sm">
-              <ArrowUpRight className="h-4 w-4 mr-1" /> Ingreso
-            </Button>
-          </Link>
-        </div>
+        <Button variant="outline" size="sm" onClick={refresh} disabled={resumen.isFetching}>
+          <RefreshCw className={cn('h-4 w-4 mr-1', resumen.isFetching && 'animate-spin')} />
+          Actualizar
+        </Button>
       </header>
+
+      <QuickActionsGrid
+        title="Acciones rápidas"
+        cols={4}
+        actions={[
+          { label: 'Ingreso combustible', description: 'Ingreso valorizado con CPP móvil',         href: '/dashboard/combustible/ingreso',           icon: ArrowUpRight,   accent: 'green' },
+          { label: 'Salida combustible',  description: 'Salida al CPP vigente con destino',        href: '/dashboard/combustible/salida',            icon: ArrowDownRight, accent: 'red' },
+          { label: 'Despacho con sellos', description: 'Salida valorizada + sellos antifraude',    href: '/dashboard/combustible/despacho',          icon: ShieldCheck,    accent: 'amber' },
+          { label: 'Control kardex',      description: 'Teórico vs físico vs último kardex',       href: '/dashboard/combustible/control',           icon: Gauge,          accent: 'blue' },
+          { label: 'Corregir ingreso',    description: 'Anular ingreso mal cargado (admin)',       href: '/dashboard/combustible/corregir-ingreso',  icon: Ban,            accent: 'red',  badge: 'Admin' },
+        ]}
+      />
 
       {/* KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
