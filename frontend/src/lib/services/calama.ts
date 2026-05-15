@@ -166,6 +166,20 @@ export type CalamaCurvaSPunto = {
   avance_real_pct: number
 }
 
+export type CalamaCurvaSConteoPunto = {
+  planificacion_id: string
+  codigo: string
+  fecha: string
+  total_ots: number
+  finalizadas_acum: number
+  en_ejecucion_acum: number
+  planificadas_acum: number
+  avance_plan_pct: number
+  completitud_pct: number
+  real_pct: number
+  proyectado_pct: number
+}
+
 // ============================================================================
 // Helpers
 // ============================================================================
@@ -573,6 +587,17 @@ export async function getCurvaS(planificacionId: string) {
   if (error) return { data: null, error }
   const serie = (data as { serie?: CalamaCurvaSPunto[] } | null)?.serie ?? []
   return { data: serie, error: null }
+}
+
+// MIG46 - curva S con 3 metricas oficiales (completitud / real / proyectado)
+// reconstruidas dia a dia desde conteo de OTs. Vista v_calama_curva_s_conteo.
+export async function getCurvaSConteo(planificacionId: string) {
+  const { data, error } = await supabase
+    .from('v_calama_curva_s_conteo')
+    .select('*')
+    .eq('planificacion_id', planificacionId)
+    .order('fecha', { ascending: true })
+  return { data: (data ?? []) as CalamaCurvaSConteoPunto[], error }
 }
 
 // ============================================================================

@@ -4,7 +4,7 @@ import {
   getFaenasCalama, getOTs, getOTById, getSubtareasPorOT, getObservacionesPorOT,
   getMaterialesPorPlan, getContactosPorFaena, getPrecheckPorOT,
   upsertPrecheck, liberarOT, iniciarEjecucionOT, finalizarOT,
-  registrarAvanceOT, reportarNoEjecucionOT, getCurvaS,
+  registrarAvanceOT, reportarNoEjecucionOT, getCurvaS, getCurvaSConteo,
   getDashboardKPIs, getResumenPlanificaciones,
   type OTFilters, type PrecheckUpdatePayload,
 } from '@/lib/services/calama'
@@ -24,6 +24,7 @@ const KEY = {
   materiales: (planId: string, zonaId?: string) => ['calama', 'materiales', planId, zonaId ?? null] as const,
   contactos: (faenaId: string, planId?: string) => ['calama', 'contactos', faenaId, planId ?? null] as const,
   curvaS: (planId: string) => ['calama', 'curva-s', planId] as const,
+  curvaSConteo: (planId: string) => ['calama', 'curva-s-conteo', planId] as const,
 }
 
 // ── Dashboard ─────────────────────────────────────────────────────────────────
@@ -291,6 +292,19 @@ export function useCalamaCurvaS(planificacionId: string | null | undefined) {
     queryKey: KEY.curvaS(planificacionId ?? ''),
     queryFn: async () => {
       const { data, error } = await getCurvaS(planificacionId!)
+      if (error) throw error
+      return data ?? []
+    },
+    enabled: !!planificacionId,
+  })
+}
+
+// MIG46 - curva S por conteo (3 metricas oficiales)
+export function useCalamaCurvaSConteo(planificacionId: string | null | undefined) {
+  return useQuery({
+    queryKey: KEY.curvaSConteo(planificacionId ?? ''),
+    queryFn: async () => {
+      const { data, error } = await getCurvaSConteo(planificacionId!)
       if (error) throw error
       return data ?? []
     },

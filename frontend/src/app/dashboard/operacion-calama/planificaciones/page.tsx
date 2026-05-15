@@ -5,8 +5,8 @@ import { ArrowLeft, ArrowRight, Calendar, Layers, MapPin } from 'lucide-react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Spinner } from '@/components/ui/spinner'
 import { useRequireAuth } from '@/hooks/use-require-auth'
-import { useCalamaResumenPlanificaciones, useCalamaCurvaS } from '@/hooks/use-calama'
-import { CurvaSChart } from '@/components/calama/curva-s-chart'
+import { useCalamaResumenPlanificaciones, useCalamaCurvaSConteo } from '@/hooks/use-calama'
+import { CurvaSConteoChart } from '@/components/calama/curva-s-chart'
 
 export default function PlanificacionesPage() {
   useRequireAuth()
@@ -65,7 +65,7 @@ export default function PlanificacionesPage() {
 type PlanWithFaena = NonNullable<ReturnType<typeof useCalamaResumenPlanificaciones>['data']>[number]
 
 function PlanificacionCard({ p }: { p: PlanWithFaena }) {
-  const { data: serie } = useCalamaCurvaS(p.id)
+  const { data: serie } = useCalamaCurvaSConteo(p.id)
   const desviacion = Number(p.avance_real) - Number(p.avance_planificado)
 
   return (
@@ -108,8 +108,16 @@ function PlanificacionCard({ p }: { p: PlanWithFaena }) {
 
         {serie && serie.length > 0 && (
           <div>
-            <div className="text-xs uppercase text-gray-500 mb-1">Curva S</div>
-            <CurvaSChart data={serie} height={200} />
+            <div className="flex items-center justify-between mb-1">
+              <div className="text-xs uppercase text-gray-500">Curva S — 3 métricas por conteo de OTs</div>
+              <div className="text-[10px] text-gray-400">MIG34/35 + 46</div>
+            </div>
+            <CurvaSConteoChart data={serie} height={240} />
+            <div className="mt-1 text-[10px] text-gray-500 leading-snug">
+              <strong>Completitud</strong> = Finalizadas / Total &nbsp;·&nbsp;
+              <strong>Real</strong> = (Finalizadas + En ejecución) / Total &nbsp;·&nbsp;
+              <strong>Proyectado</strong> = (Finalizadas + En ejecución + Planificadas) / Total
+            </div>
           </div>
         )}
 
