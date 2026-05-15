@@ -2,8 +2,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   getJornadasPendientesSupervision, getEvidenciasPorOT, getFirmasPorJornada,
   supervisarJornada, devolverJornadaCorreccion,
-  getJornadasEnVivo, getResumenHoy,
-  type JornadasFiltro,
+  getJornadasEnVivo, getResumenHoy, getJornadasPorPeriodo,
+  type JornadasFiltro, type PeriodoFiltro,
 } from '@/lib/services/calama-supervision'
 
 const KEY = {
@@ -12,6 +12,7 @@ const KEY = {
   firmas:     (planOtId: string) => ['calama', 'supervision', 'firmas', planOtId] as const,
   enVivo:     (planId?: string | null) => ['calama', 'supervision', 'en-vivo', planId ?? null] as const,
   resumenHoy: ['calama', 'supervision', 'resumen-hoy'] as const,
+  periodo:    (f: PeriodoFiltro) => ['calama', 'supervision', 'periodo', f] as const,
 }
 
 export function useJornadasPendientesSupervision(filtro?: JornadasFiltro) {
@@ -102,6 +103,21 @@ export function useResumenHoy() {
     queryKey: KEY.resumenHoy,
     queryFn: async () => {
       const { data, error } = await getResumenHoy()
+      if (error) throw error
+      return data
+    },
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
+    staleTime: 25_000,
+  })
+}
+
+// MIG51 - feed parametrizable por periodo
+export function useJornadasPorPeriodo(filtro: PeriodoFiltro) {
+  return useQuery({
+    queryKey: KEY.periodo(filtro),
+    queryFn: async () => {
+      const { data, error } = await getJornadasPorPeriodo(filtro)
       if (error) throw error
       return data
     },

@@ -213,6 +213,47 @@ export async function getJornadasEnVivo(planificacionId?: string | null) {
   return { data: (data ?? []) as unknown as JornadaEnVivo[], error }
 }
 
+// MIG51 - feed parametrizable por periodo
+export type PeriodoFiltro = {
+  desde: string  // YYYY-MM-DD
+  hasta: string  // YYYY-MM-DD
+  planificacionId?: string | null
+  incluirEjecucionesActivas?: boolean  // jornadas con ejecucion en_ejec/pausada aunque su fecha sea otra
+}
+
+export type JornadaPeriodo = JornadaEnVivo & { fecha_efectiva: string | null }
+
+export async function getJornadasPorPeriodo(filtro: PeriodoFiltro) {
+  let q = supabase
+    .from('v_calama_jornadas_todas')
+    .select('*')
+    .gte('fecha_efectiva', filtro.desde)
+    .lte('fecha_efectiva', filtro.hasta)
+    .order('fecha_efectiva', { ascending: false, nullsFirst: false })
+    .order('categoria_vivo')
+  if (filtro.planificacionId) q = q.eq('planificacion_id', filtro.planificacionId)
+  const { data, error } = await q
+  if (error) return { data: [] as JornadaPeriodo[], error }
+
+  let result = (data ?? []) as unknown as JornadaPeriodo[]
+
+  // Si se incluye ejecucion activa fuera del periodo, hacer query extra.
+  if (filtro.incluirEjecucionesActivas) {
+    let q2 = supabase
+      .from('v_calama_jornadas_todas')
+      .select('*')
+      .in('ejecucion_estado', ['en_ejecucion', 'pausada'])
+    if (filtro.planificacionId) q2 = q2.eq('planificacion_id', filtro.planificacionId)
+    const { data: activas } = await q2
+    const ids = new Set(result.map((r) => r.plan_semanal_ot_id))
+    for (const a of (activas ?? []) as unknown as JornadaPeriodo[]) {
+      if (!ids.has(a.plan_semanal_ot_id)) result.push(a)
+    }
+  }
+
+  return { data: result, error: null }
+}
+
 export async function getResumenHoy() {
   const { data, error } = await supabase
     .from('v_calama_resumen_hoy')

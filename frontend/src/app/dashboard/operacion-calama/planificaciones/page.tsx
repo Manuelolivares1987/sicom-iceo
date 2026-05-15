@@ -1,5 +1,6 @@
 'use client'
 
+import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, ArrowRight, Calendar, Layers, MapPin } from 'lucide-react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
@@ -7,6 +8,38 @@ import { Spinner } from '@/components/ui/spinner'
 import { useRequireAuth } from '@/hooks/use-require-auth'
 import { useCalamaResumenPlanificaciones, useCalamaCurvaSConteo } from '@/hooks/use-calama'
 import { CurvaSConteoChart } from '@/components/calama/curva-s-chart'
+
+type CurvaPreset = 'mes_actual' | 'mes_anterior' | 'trimestre' | 'acumulado' | 'personalizado'
+
+const isoDate = (d: Date) => {
+  const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, '0'), day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+function rangoCurva(preset: CurvaPreset, fechaIni: string, fechaFin: string, personalDesde: string, personalHasta: string): { desde: string; hasta: string; label: string } {
+  const hoy = new Date()
+  switch (preset) {
+    case 'mes_actual': {
+      const d1 = new Date(hoy.getFullYear(), hoy.getMonth(), 1)
+      const d2 = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0)
+      return { desde: isoDate(d1), hasta: isoDate(d2), label: 'Mes actual' }
+    }
+    case 'mes_anterior': {
+      const d1 = new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1)
+      const d2 = new Date(hoy.getFullYear(), hoy.getMonth(), 0)
+      return { desde: isoDate(d1), hasta: isoDate(d2), label: 'Mes anterior' }
+    }
+    case 'trimestre': {
+      const d2 = new Date(hoy)
+      const d1 = new Date(hoy.getFullYear(), hoy.getMonth() - 2, 1)
+      return { desde: isoDate(d1), hasta: isoDate(d2), label: 'Últ. 3 meses' }
+    }
+    case 'acumulado':
+      return { desde: fechaIni, hasta: fechaFin, label: 'Acumulado' }
+    case 'personalizado':
+      return { desde: personalDesde || fechaIni, hasta: personalHasta || fechaFin, label: 'Personalizado' }
+  }
+}
 
 export default function PlanificacionesPage() {
   useRequireAuth()
@@ -68,6 +101,20 @@ function PlanificacionCard({ p }: { p: PlanWithFaena }) {
   const { data: serie } = useCalamaCurvaSConteo(p.id)
   const desviacion = Number(p.avance_real) - Number(p.avance_planificado)
 
+  const [preset, setPreset] = useState<CurvaPreset>('acumulado')
+  const [personalDesde, setPersonalDesde] = useState('')
+  const [personalHasta, setPersonalHasta] = useState('')
+
+  const rango = useMemo(
+    () => rangoCurva(preset, p.fecha_inicio_plan, p.fecha_termino_plan, personalDesde, personalHasta),
+    [preset, p.fecha_inicio_plan, p.fecha_termino_plan, personalDesde, personalHasta],
+  )
+
+  const serieFiltrada = useMemo(() => {
+    if (!serie) return []
+    return serie.filter((s) => s.fecha >= rango.desde && s.fecha <= rango.hasta)
+  }, [serie, rango.desde, rango.hasta])
+
   return (
     <Card>
       <CardHeader className="pb-2">
@@ -108,11 +155,55 @@ function PlanificacionCard({ p }: { p: PlanWithFaena }) {
 
         {serie && serie.length > 0 && (
           <div>
-            <div className="flex items-center justify-between mb-1">
-              <div className="text-xs uppercase text-gray-500">Curva S — 3 métricas por conteo de OTs</div>
-              <div className="text-[10px] text-gray-400">MIG34/35 + 46</div>
+            <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
+              <div className="text-xs uppercase text-gray-500">
+                Curva S — {rango.label} ({rango.desde} → {rango.hasta})
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {([
+                  ['mes_actual',    'Mes actual'],
+                  ['mes_anterior',  'Mes anterior'],
+                  ['trimestre',     'Últ. 3 meses'],
+                  ['acumulado',     'Acumulado'],
+                  ['personalizado', 'Rango'],
+                ] as Array<[CurvaPreset, string]>).map(([k, label]) => (
+                  <button
+                    key={k}
+                    onClick={() => setPreset(k)}
+                    className={`rounded-full px-2 py-0.5 text-[10px] font-medium transition ${
+                      preset === k
+                        ? 'bg-amber-600 text-white'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
-            <CurvaSConteoChart data={serie} height={240} />
+            {preset === 'personalizado' && (
+              <div className="flex flex-wrap items-end gap-2 mb-2 text-[10px]">
+                <div>
+                  <label className="text-gray-500 block">Desde</label>
+                  <input type="date" value={personalDesde} onChange={(e) => setPersonalDesde(e.target.value)}
+                    min={p.fecha_inicio_plan} max={p.fecha_termino_plan}
+                    className="rounded border border-gray-300 px-2 py-1" />
+                </div>
+                <div>
+                  <label className="text-gray-500 block">Hasta</label>
+                  <input type="date" value={personalHasta} onChange={(e) => setPersonalHasta(e.target.value)}
+                    min={p.fecha_inicio_plan} max={p.fecha_termino_plan}
+                    className="rounded border border-gray-300 px-2 py-1" />
+                </div>
+              </div>
+            )}
+            {serieFiltrada.length > 0 ? (
+              <CurvaSConteoChart data={serieFiltrada} height={240} />
+            ) : (
+              <div className="rounded border border-dashed border-gray-200 p-4 text-center text-xs text-gray-400">
+                Sin datos en el rango seleccionado.
+              </div>
+            )}
             <div className="mt-1 text-[10px] text-gray-500 leading-snug">
               <strong>Completitud</strong> = Finalizadas / Total &nbsp;·&nbsp;
               <strong>Real</strong> = (Finalizadas + En ejecución) / Total &nbsp;·&nbsp;

@@ -17,10 +17,10 @@ import { useCalamaPlanificaciones } from '@/hooks/use-calama'
 import {
   useJornadasPendientesSupervision, useEvidenciasPorOT, useFirmasPorJornada,
   useSupervisarJornada, useDevolverJornadaCorreccion,
-  useJornadasEnVivo, useResumenHoy,
+  useJornadasPorPeriodo,
 } from '@/hooks/use-calama-supervision'
 import type {
-  JornadaPendienteSupervision, JornadaEnVivo, CategoriaVivo,
+  JornadaPendienteSupervision, JornadaEnVivo, CategoriaVivo, PeriodoFiltro,
 } from '@/lib/services/calama-supervision'
 
 const fmtHms = (s: number | null) => {
@@ -31,6 +31,37 @@ const fmtHms = (s: number | null) => {
 }
 
 type Tab = 'en_vivo' | 'pendientes' | 'hoy'
+
+type RangoPreset = 'hoy' | 'ayer' | 'manana' | 'esta_semana' | 'prox_7d' | 'mes_actual' | 'personalizado'
+
+const isoDate = (d: Date) => {
+  const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, '0'), day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+const addDays = (d: Date, n: number) => { const r = new Date(d); r.setDate(r.getDate() + n); return r }
+const startOfWeekMonday = (d: Date) => {
+  const r = new Date(d)
+  const dow = r.getDay() || 7  // 1..7, lunes=1
+  r.setDate(r.getDate() - (dow - 1))
+  return r
+}
+
+function rangoDePreset(preset: RangoPreset, personalDesde: string, personalHasta: string): { desde: string; hasta: string; label: string } {
+  const hoy = new Date()
+  switch (preset) {
+    case 'hoy':            return { desde: isoDate(hoy),                    hasta: isoDate(hoy),                    label: 'Hoy' }
+    case 'ayer':           return { desde: isoDate(addDays(hoy, -1)),       hasta: isoDate(addDays(hoy, -1)),       label: 'Ayer' }
+    case 'manana':         return { desde: isoDate(addDays(hoy, 1)),        hasta: isoDate(addDays(hoy, 1)),        label: 'Mañana' }
+    case 'esta_semana':    return { desde: isoDate(startOfWeekMonday(hoy)), hasta: isoDate(addDays(startOfWeekMonday(hoy), 6)), label: 'Esta semana' }
+    case 'prox_7d':        return { desde: isoDate(hoy),                    hasta: isoDate(addDays(hoy, 6)),        label: 'Próximos 7 días' }
+    case 'mes_actual': {
+      const d1 = new Date(hoy.getFullYear(), hoy.getMonth(), 1)
+      const d2 = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0)
+      return { desde: isoDate(d1), hasta: isoDate(d2), label: 'Mes actual' }
+    }
+    case 'personalizado':  return { desde: personalDesde || isoDate(hoy), hasta: personalHasta || isoDate(hoy), label: 'Personalizado' }
+  }
+}
 
 const CAT_LABEL: Record<CategoriaVivo, string> = {
   corriendo: 'En ejecución',
@@ -81,8 +112,46 @@ export default function AceptacionesPage() {
   const { data: jornadas, isLoading, error, refetch, isFetching } =
     useJornadasPendientesSupervision(filtro)
 
-  const enVivo = useJornadasEnVivo(planFiltro || null)
-  const resumenHoy = useResumenHoy()
+  // Selector de período
+  const [periodoPreset, setPeriodoPreset] = useState<RangoPreset>('hoy')
+  const [personalDesde, setPersonalDesde] = useState('')
+  const [personalHasta, setPersonalHasta] = useState('')
+  const rango = useMemo(
+    () => rangoDePreset(periodoPreset, personalDesde, personalHasta),
+    [periodoPreset, personalDesde, personalHasta],
+  )
+
+  const periodoFiltro: PeriodoFiltro = useMemo(() => ({
+    desde: rango.desde,
+    hasta: rango.hasta,
+    planificacionId: planFiltro || null,
+    // Si el rango incluye HOY, agregamos las ejecuciones activas aunque
+    // su fecha planificada sea otra (operador trabajando con jornada de
+    // otro dia).
+    incluirEjecucionesActivas:
+      rango.desde <= isoDate(new Date()) && rango.hasta >= isoDate(new Date()),
+  }), [rango, planFiltro])
+
+  const enVivo = useJornadasPorPeriodo(periodoFiltro)
+
+  // Resumen del periodo computado client-side desde el dataset
+  const resumenPeriodo = useMemo(() => {
+    const arr = enVivo.data ?? []
+    return {
+      total_jornadas: arr.length,
+      corriendo:             arr.filter((j) => j.categoria_vivo === 'corriendo').length,
+      pausadas:              arr.filter((j) => j.categoria_vivo === 'pausada').length,
+      en_faena_sin_iniciar:  arr.filter((j) => j.categoria_vivo === 'en_faena_sin_iniciar').length,
+      pendientes_inicio:     arr.filter((j) => j.categoria_vivo === 'pendiente_inicio').length,
+      cerradas_hoy:          arr.filter((j) => j.categoria_vivo === 'cerrada_hoy').length,
+      pendientes_supervision: arr.filter((j) => ['finalizada_operador','pendiente_aprobacion'].includes(j.estado_plan)).length,
+      aceptadas_hoy:         arr.filter((j) => ['aceptada','cerrada'].includes(j.estado_plan)).length,
+      requieren_correccion:  arr.filter((j) => j.estado_plan === 'requiere_correccion').length,
+      total_seg_efectivo_cerradas: arr.reduce((s, j) => s + Number(j.tiempo_efectivo_trabajo_segundos ?? 0), 0),
+      total_seg_efectivo_en_vivo:  arr.reduce((s, j) => s + Number(j.tiempo_efectivo_segundos ?? 0), 0),
+      total_seg_interferencia:     arr.reduce((s, j) => s + Number(j.tiempo_interferencia_mandante_segundos ?? 0), 0),
+    }
+  }, [enVivo.data])
 
   // tick para que los timers en vivo se refresquen cada 5s sin polling extra
   const [nowSeg, setNowSeg] = useState(() => Math.floor(Date.now() / 1000))
@@ -169,7 +238,7 @@ export default function AceptacionesPage() {
           ['en_vivo',    'EN VIVO',       <Radio key="iv" className="h-4 w-4" />,
             (enVivo.data ?? []).filter((j) => j.categoria_vivo === 'corriendo' || j.categoria_vivo === 'pausada').length],
           ['pendientes', 'Pendientes OK', <ClipboardCheck key="ip" className="h-4 w-4" />, (jornadas ?? []).length],
-          ['hoy',        'Hoy (cierre)',  <Calendar key="ih" className="h-4 w-4" />, resumenHoy.data?.total_jornadas ?? 0],
+          ['hoy',        `Resumen (${rango.label})`,  <Calendar key="ih" className="h-4 w-4" />, resumenPeriodo.total_jornadas],
         ] as Array<[Tab, string, React.ReactNode, number]>).map(([k, label, icon, badge]) => (
           <button
             key={k}
@@ -195,6 +264,55 @@ export default function AceptacionesPage() {
         ))}
       </div>
 
+      {/* Selector de período (aplica a EN VIVO y Resumen, no a Pendientes OK) */}
+      <Card>
+        <CardContent className="p-3 space-y-2">
+          <div className="text-xs uppercase tracking-wide text-gray-500">
+            Período {tab === 'pendientes' && <span className="text-gray-400 normal-case">(no aplica a Pendientes OK)</span>}
+          </div>
+          <div className="flex flex-wrap gap-1">
+            {([
+              ['hoy',         'Hoy'],
+              ['ayer',        'Ayer'],
+              ['manana',      'Mañana'],
+              ['esta_semana', 'Esta semana'],
+              ['prox_7d',     'Próx 7 días'],
+              ['mes_actual',  'Mes actual'],
+              ['personalizado', 'Personalizado'],
+            ] as Array<[RangoPreset, string]>).map(([k, label]) => (
+              <button
+                key={k}
+                onClick={() => setPeriodoPreset(k)}
+                className={`rounded-full px-3 py-1 text-xs font-medium transition ${
+                  periodoPreset === k
+                    ? 'bg-emerald-600 text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          {periodoPreset === 'personalizado' && (
+            <div className="flex flex-wrap items-end gap-2 pt-1">
+              <div>
+                <label className="text-[10px] text-gray-500 block">Desde</label>
+                <input type="date" value={personalDesde} onChange={(e) => setPersonalDesde(e.target.value)}
+                  className="rounded border border-gray-300 px-2 py-1 text-xs" />
+              </div>
+              <div>
+                <label className="text-[10px] text-gray-500 block">Hasta</label>
+                <input type="date" value={personalHasta} onChange={(e) => setPersonalHasta(e.target.value)}
+                  className="rounded border border-gray-300 px-2 py-1 text-xs" />
+              </div>
+            </div>
+          )}
+          <div className="text-[11px] text-gray-500 pt-1">
+            Rango activo: <strong>{rango.desde}</strong> → <strong>{rango.hasta}</strong>
+          </div>
+        </CardContent>
+      </Card>
+
       <Card>
         <CardContent className="p-3 flex flex-wrap gap-3 items-end">
           <div className="flex-1 min-w-[220px]">
@@ -217,7 +335,6 @@ export default function AceptacionesPage() {
             onClick={() => {
               refetch()
               enVivo.refetch()
-              resumenHoy.refetch()
             }}
             disabled={isFetching || enVivo.isFetching}
           >
@@ -256,7 +373,7 @@ export default function AceptacionesPage() {
 
       {/* TAB HOY */}
       {tab === 'hoy' && (
-        <HoyTabContent resumen={resumenHoy.data ?? null} jornadas={enVivo.data ?? []} />
+        <HoyTabContent resumen={resumenPeriodo} jornadas={enVivo.data ?? []} rangoLabel={rango.label} />
       )}
 
       {/* TAB PENDIENTES (lo original) */}
@@ -746,25 +863,14 @@ function EnVivoCard({
 // ─── TAB HOY ────────────────────────────────────────────────────────────────
 
 function HoyTabContent({
-  resumen, jornadas,
-}: { resumen: import('@/lib/services/calama-supervision').ResumenHoy | null; jornadas: JornadaEnVivo[] }) {
-  if (!resumen) {
-    return (
-      <Card>
-        <CardContent className="p-8 text-center text-sm text-gray-500">
-          <Calendar className="h-8 w-8 mx-auto text-gray-300 mb-2" />
-          Cargando resumen del día…
-        </CardContent>
-      </Card>
-    )
-  }
-
+  resumen, jornadas, rangoLabel,
+}: { resumen: import('@/lib/services/calama-supervision').ResumenHoy; jornadas: JornadaEnVivo[]; rangoLabel: string }) {
   const kpis = [
     { label: 'En ejecución',  value: resumen.corriendo,              tone: 'emerald', icon: Play },
     { label: 'En pausa',      value: resumen.pausadas,               tone: 'amber',   icon: Pause },
     { label: 'En faena',      value: resumen.en_faena_sin_iniciar,   tone: 'sky',     icon: AlertCircle },
     { label: 'Por iniciar',   value: resumen.pendientes_inicio,      tone: 'slate',   icon: CircleDashed },
-    { label: 'Cerradas hoy',  value: resumen.cerradas_hoy,           tone: 'purple',  icon: CheckCircle2 },
+    { label: 'Cerradas',      value: resumen.cerradas_hoy,           tone: 'purple',  icon: CheckCircle2 },
     { label: 'Esperan OK',    value: resumen.pendientes_supervision, tone: 'orange',  icon: ClipboardCheck },
     { label: 'Aceptadas',     value: resumen.aceptadas_hoy,          tone: 'green',   icon: CheckCircle2 },
     { label: 'Para corregir', value: resumen.requieren_correccion,   tone: 'red',     icon: AlertTriangle },
@@ -822,7 +928,7 @@ function HoyTabContent({
 
       <section>
         <h2 className="text-xs uppercase tracking-wide text-gray-500 mb-2">
-          Detalle del día ({jornadas.length} jornada{jornadas.length === 1 ? '' : 's'})
+          Detalle — {rangoLabel} ({jornadas.length} jornada{jornadas.length === 1 ? '' : 's'})
         </h2>
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
