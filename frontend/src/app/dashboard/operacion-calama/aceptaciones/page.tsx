@@ -5,7 +5,7 @@ import Link from 'next/link'
 import {
   ArrowLeft, CheckCircle2, X, Send, AlertTriangle, Camera, PenLine,
   Clock, MapPin, ClipboardCheck, RefreshCw, Eye, Radio, Calendar, Activity,
-  Pause, Play, AlertCircle, CircleDashed,
+  Pause, Play, AlertCircle, CircleDashed, ChevronDown, ChevronRight,
 } from 'lucide-react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -349,6 +349,7 @@ export default function AceptacionesPage() {
           jornadas={enVivo.data ?? []}
           isLoading={enVivo.isLoading}
           nowSeg={nowSeg}
+          rango={rango}
           onRevisar={(j) => setDetalleAbierto({
             // Adaptador: re-usa el mismo modal de detalle del tab Pendientes.
             plan_semanal_ot_id: j.plan_semanal_ot_id,
@@ -373,7 +374,31 @@ export default function AceptacionesPage() {
 
       {/* TAB HOY */}
       {tab === 'hoy' && (
-        <HoyTabContent resumen={resumenPeriodo} jornadas={enVivo.data ?? []} rangoLabel={rango.label} />
+        <HoyTabContent
+          resumen={resumenPeriodo}
+          jornadas={enVivo.data ?? []}
+          rangoLabel={rango.label}
+          rango={rango}
+          nowSeg={nowSeg}
+          onRevisar={(j) => setDetalleAbierto({
+            plan_semanal_ot_id: j.plan_semanal_ot_id,
+            ot_id: j.ot_id, folio: j.folio, titulo: j.titulo,
+            linea_negocio: '', avance_pct: j.avance_pct, estado_plan: j.estado_plan,
+            plan_dia_id: null, fecha_jornada: j.fecha_jornada, nombre_dia: j.nombre_dia,
+            llegada_faena_at: j.llegada_faena_at, cierre_jornada_at: j.cierre_jornada_at,
+            responsable_id: j.responsable_id, responsable_email: j.responsable_email,
+            tiempo_en_faena_segundos: j.tiempo_en_faena_segundos,
+            tiempo_operativo_bruto_segundos: j.tiempo_operativo_bruto_segundos,
+            tiempo_pausado_segundos: j.tiempo_pausado_segundos,
+            tiempo_colacion_segundos: j.tiempo_colacion_segundos,
+            tiempo_interferencia_mandante_segundos: j.tiempo_interferencia_mandante_segundos,
+            tiempo_efectivo_trabajo_segundos: j.tiempo_efectivo_trabajo_segundos,
+            evid_antes: j.evid_antes, evid_durante: j.evid_durante,
+            evid_despues: j.evid_despues, firmas_operador: j.firmas_operador,
+            planificacion_id: j.planificacion_id,
+            planificacion_codigo: j.planificacion_codigo,
+          } as JornadaPendienteSupervision)}
+        />
       )}
 
       {/* TAB PENDIENTES (lo original) */}
@@ -724,11 +749,12 @@ function DetalleJornadaModal({
 // ─── TAB EN VIVO ────────────────────────────────────────────────────────────
 
 function EnVivoTabContent({
-  jornadas, isLoading, nowSeg, onRevisar,
+  jornadas, isLoading, nowSeg, rango, onRevisar,
 }: {
   jornadas: JornadaEnVivo[]
   isLoading: boolean
   nowSeg: number
+  rango: { desde: string; hasta: string; label: string }
   onRevisar: (j: JornadaEnVivo) => void
 }) {
   // Agrupar por categoria_vivo
@@ -740,6 +766,8 @@ function EnVivoTabContent({
     for (const j of jornadas) g[j.categoria_vivo].push(j)
     return g
   }, [jornadas])
+
+  const esMultiDia = rango.desde !== rango.hasta
 
   if (isLoading) {
     return (
@@ -754,12 +782,18 @@ function EnVivoTabContent({
       <Card>
         <CardContent className="p-8 text-center text-sm text-gray-500">
           <Activity className="h-8 w-8 mx-auto text-gray-300 mb-2" />
-          No hay jornadas activas hoy.
+          No hay jornadas activas en el período seleccionado.
         </CardContent>
       </Card>
     )
   }
 
+  // MULTI-DIA: render calendario (stack vertical por día)
+  if (esMultiDia) {
+    return <CalendarioPorDia jornadas={jornadas} rango={rango} nowSeg={nowSeg} onRevisar={onRevisar} />
+  }
+
+  // 1 DIA: agrupado por categoría (comportamiento anterior)
   const orden: CategoriaVivo[] = [
     'corriendo', 'pausada', 'en_faena_sin_iniciar', 'pendiente_inicio', 'cerrada_hoy',
   ]
@@ -863,8 +897,16 @@ function EnVivoCard({
 // ─── TAB HOY ────────────────────────────────────────────────────────────────
 
 function HoyTabContent({
-  resumen, jornadas, rangoLabel,
-}: { resumen: import('@/lib/services/calama-supervision').ResumenHoy; jornadas: JornadaEnVivo[]; rangoLabel: string }) {
+  resumen, jornadas, rangoLabel, rango, nowSeg, onRevisar,
+}: {
+  resumen: import('@/lib/services/calama-supervision').ResumenHoy
+  jornadas: JornadaEnVivo[]
+  rangoLabel: string
+  rango: { desde: string; hasta: string; label: string }
+  nowSeg: number
+  onRevisar: (j: JornadaEnVivo) => void
+}) {
+  const esMultiDia = rango.desde !== rango.hasta
   const kpis = [
     { label: 'En ejecución',  value: resumen.corriendo,              tone: 'emerald', icon: Play },
     { label: 'En pausa',      value: resumen.pausadas,               tone: 'amber',   icon: Pause },
@@ -930,50 +972,205 @@ function HoyTabContent({
         <h2 className="text-xs uppercase tracking-wide text-gray-500 mb-2">
           Detalle — {rangoLabel} ({jornadas.length} jornada{jornadas.length === 1 ? '' : 's'})
         </h2>
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs">
-            <thead className="text-left text-gray-500">
-              <tr className="border-b">
-                <th className="py-1.5 px-2">Estado</th>
-                <th className="py-1.5 px-2">Folio</th>
-                <th className="py-1.5 px-2">Operador</th>
-                <th className="py-1.5 px-2 text-right">Avance</th>
-                <th className="py-1.5 px-2 text-right">Efectivo</th>
-                <th className="py-1.5 px-2 text-right">Interf.</th>
-                <th className="py-1.5 px-2">Llegada</th>
-                <th className="py-1.5 px-2">Cierre</th>
-              </tr>
-            </thead>
-            <tbody>
-              {jornadas.map((j) => (
-                <tr key={j.plan_semanal_ot_id} className="border-b hover:bg-gray-50">
-                  <td className="py-1 px-2">
-                    <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-semibold border ${CAT_COLOR[j.categoria_vivo]}`}>
-                      {CAT_LABEL[j.categoria_vivo]}
-                    </span>
-                  </td>
-                  <td className="py-1 px-2 font-mono text-[10px]">{j.folio.slice(-16)}</td>
-                  <td className="py-1 px-2 truncate max-w-[140px]">{j.ejecutor_nombre || j.responsable_nombre || '—'}</td>
-                  <td className="py-1 px-2 text-right">{Number(j.avance_pct ?? 0).toFixed(0)}%</td>
-                  <td className="py-1 px-2 text-right">
-                    {fmtHms(j.tiempo_efectivo_trabajo_segundos ?? j.tiempo_efectivo_segundos)}
-                  </td>
-                  <td className="py-1 px-2 text-right text-amber-700">
-                    {fmtHms(j.tiempo_interferencia_mandante_segundos)}
-                  </td>
-                  <td className="py-1 px-2 text-[10px]">
-                    {j.llegada_faena_at ? new Date(j.llegada_faena_at).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' }) : '—'}
-                  </td>
-                  <td className="py-1 px-2 text-[10px]">
-                    {j.cierre_jornada_at ? new Date(j.cierre_jornada_at).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' }) : '—'}
-                  </td>
+        {esMultiDia ? (
+          <CalendarioPorDia jornadas={jornadas} rango={rango} nowSeg={nowSeg} onRevisar={onRevisar} />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="text-left text-gray-500">
+                <tr className="border-b">
+                  <th className="py-1.5 px-2">Estado</th>
+                  <th className="py-1.5 px-2">Folio</th>
+                  <th className="py-1.5 px-2">Operador</th>
+                  <th className="py-1.5 px-2 text-right">Avance</th>
+                  <th className="py-1.5 px-2 text-right">Efectivo</th>
+                  <th className="py-1.5 px-2 text-right">Interf.</th>
+                  <th className="py-1.5 px-2">Llegada</th>
+                  <th className="py-1.5 px-2">Cierre</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {jornadas.map((j) => (
+                  <tr key={j.plan_semanal_ot_id} className="border-b hover:bg-gray-50 cursor-pointer" onClick={() => onRevisar(j)}>
+                    <td className="py-1 px-2">
+                      <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-semibold border ${CAT_COLOR[j.categoria_vivo]}`}>
+                        {CAT_LABEL[j.categoria_vivo]}
+                      </span>
+                    </td>
+                    <td className="py-1 px-2 font-mono text-[10px]">{j.folio.slice(-16)}</td>
+                    <td className="py-1 px-2 truncate max-w-[140px]">{j.ejecutor_nombre || j.responsable_nombre || '—'}</td>
+                    <td className="py-1 px-2 text-right">{Number(j.avance_pct ?? 0).toFixed(0)}%</td>
+                    <td className="py-1 px-2 text-right">
+                      {fmtHms(j.tiempo_efectivo_trabajo_segundos ?? j.tiempo_efectivo_segundos)}
+                    </td>
+                    <td className="py-1 px-2 text-right text-amber-700">
+                      {fmtHms(j.tiempo_interferencia_mandante_segundos)}
+                    </td>
+                    <td className="py-1 px-2 text-[10px]">
+                      {j.llegada_faena_at ? new Date(j.llegada_faena_at).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' }) : '—'}
+                    </td>
+                    <td className="py-1 px-2 text-[10px]">
+                      {j.cierre_jornada_at ? new Date(j.cierre_jornada_at).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' }) : '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
     </div>
+  )
+}
+
+// ─── CALENDARIO POR DIA ─────────────────────────────────────────────────────
+
+function CalendarioPorDia({
+  jornadas, rango, nowSeg, onRevisar,
+}: {
+  jornadas: JornadaEnVivo[]
+  rango: { desde: string; hasta: string }
+  nowSeg: number
+  onRevisar: (j: JornadaEnVivo) => void
+}) {
+  // Generar lista de dias entre desde y hasta (inclusive)
+  const dias = useMemo(() => {
+    const out: string[] = []
+    const [yd, md, dd] = rango.desde.split('-').map(Number)
+    const [yh, mh, dh] = rango.hasta.split('-').map(Number)
+    const d1 = new Date(yd, md - 1, dd)
+    const d2 = new Date(yh, mh - 1, dh)
+    const cur = new Date(d1)
+    while (cur <= d2) {
+      out.push(isoDate(cur))
+      cur.setDate(cur.getDate() + 1)
+    }
+    return out
+  }, [rango.desde, rango.hasta])
+
+  // Agrupar jornadas por fecha_efectiva
+  const porDia = useMemo(() => {
+    const map = new Map<string, JornadaEnVivo[]>()
+    for (const j of jornadas) {
+      if (!j.fecha_jornada && !j.llegada_faena_at && !j.cierre_jornada_at) continue
+      // Usar la mejor fecha disponible (alineado con vista BD)
+      const fe = j.fecha_jornada
+        ?? (j.llegada_faena_at?.slice(0, 10))
+        ?? (j.cierre_jornada_at?.slice(0, 10))
+        ?? null
+      if (!fe) continue
+      const arr = map.get(fe) ?? []
+      arr.push(j)
+      map.set(fe, arr)
+    }
+    return map
+  }, [jornadas])
+
+  const hoy = isoDate(new Date())
+
+  return (
+    <div className="space-y-2">
+      {dias.map((dia) => (
+        <DiaSection
+          key={dia}
+          dia={dia}
+          jornadas={porDia.get(dia) ?? []}
+          esHoy={dia === hoy}
+          nowSeg={nowSeg}
+          onRevisar={onRevisar}
+        />
+      ))}
+    </div>
+  )
+}
+
+const DIAS_SEMANA = ['DOM', 'LUN', 'MAR', 'MIE', 'JUE', 'VIE', 'SAB']
+const MESES_CORTOS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
+
+function DiaSection({
+  dia, jornadas, esHoy, nowSeg, onRevisar,
+}: {
+  dia: string
+  jornadas: JornadaEnVivo[]
+  esHoy: boolean
+  nowSeg: number
+  onRevisar: (j: JornadaEnVivo) => void
+}) {
+  const [open, setOpen] = useState(esHoy || jornadas.length > 0)
+
+  const [y, m, d] = dia.split('-').map(Number)
+  const fechaObj = new Date(y, m - 1, d)
+  const nombreDia = DIAS_SEMANA[fechaObj.getDay()]
+  const mesNombre = MESES_CORTOS[m - 1]
+
+  const conteos = useMemo(() => {
+    const c: Record<CategoriaVivo, number> = {
+      corriendo: 0, pausada: 0, en_faena_sin_iniciar: 0,
+      pendiente_inicio: 0, cerrada_hoy: 0,
+    }
+    for (const j of jornadas) c[j.categoria_vivo]++
+    return c
+  }, [jornadas])
+
+  const vacio = jornadas.length === 0
+
+  return (
+    <Card className={esHoy ? 'border-emerald-300 bg-emerald-50/30' : ''}>
+      <button
+        onClick={() => setOpen(!open)}
+        className="w-full p-3 flex items-center gap-3 text-left hover:bg-gray-50 transition"
+      >
+        {open ? <ChevronDown className="h-4 w-4 text-gray-400" /> : <ChevronRight className="h-4 w-4 text-gray-400" />}
+        <div className="flex items-baseline gap-2">
+          <span className={`text-xs font-bold ${esHoy ? 'text-emerald-700' : 'text-gray-700'}`}>
+            {nombreDia}
+          </span>
+          <span className={`text-sm font-semibold ${esHoy ? 'text-emerald-700' : 'text-gray-900'}`}>
+            {d} {mesNombre}
+          </span>
+          {esHoy && <span className="rounded-full bg-emerald-600 text-white px-2 py-0.5 text-[9px] font-semibold">HOY</span>}
+        </div>
+        <span className="text-xs text-gray-500">
+          {vacio ? 'sin jornadas' : `${jornadas.length} jornada${jornadas.length === 1 ? '' : 's'}`}
+        </span>
+        {!vacio && (
+          <div className="ml-auto flex items-center gap-1 text-[10px]">
+            {conteos.corriendo > 0 && (
+              <span className="rounded-full bg-emerald-100 text-emerald-700 px-1.5 py-0.5 font-semibold flex items-center gap-0.5">
+                <Play className="h-2.5 w-2.5" /> {conteos.corriendo}
+              </span>
+            )}
+            {conteos.pausada > 0 && (
+              <span className="rounded-full bg-amber-100 text-amber-700 px-1.5 py-0.5 font-semibold flex items-center gap-0.5">
+                <Pause className="h-2.5 w-2.5" /> {conteos.pausada}
+              </span>
+            )}
+            {conteos.en_faena_sin_iniciar > 0 && (
+              <span className="rounded-full bg-sky-100 text-sky-700 px-1.5 py-0.5 font-semibold flex items-center gap-0.5">
+                <AlertCircle className="h-2.5 w-2.5" /> {conteos.en_faena_sin_iniciar}
+              </span>
+            )}
+            {conteos.pendiente_inicio > 0 && (
+              <span className="rounded-full bg-slate-100 text-slate-600 px-1.5 py-0.5 font-semibold flex items-center gap-0.5">
+                <CircleDashed className="h-2.5 w-2.5" /> {conteos.pendiente_inicio}
+              </span>
+            )}
+            {conteos.cerrada_hoy > 0 && (
+              <span className="rounded-full bg-purple-100 text-purple-700 px-1.5 py-0.5 font-semibold flex items-center gap-0.5">
+                <CheckCircle2 className="h-2.5 w-2.5" /> {conteos.cerrada_hoy}
+              </span>
+            )}
+          </div>
+        )}
+      </button>
+      {open && !vacio && (
+        <CardContent className="pt-0 pb-3 px-3 space-y-1.5">
+          {jornadas.map((j) => (
+            <EnVivoCard key={j.plan_semanal_ot_id} j={j} nowSeg={nowSeg} onRevisar={() => onRevisar(j)} />
+          ))}
+        </CardContent>
+      )}
+    </Card>
   )
 }
 
