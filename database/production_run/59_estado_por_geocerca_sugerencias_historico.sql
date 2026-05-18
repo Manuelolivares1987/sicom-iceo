@@ -32,6 +32,16 @@ END $$;
 
 
 -- ============================================================================
+-- 0. EXTENDER estado_comercial_enum con 'en_transito'
+-- ----------------------------------------------------------------------------
+-- ALTER TYPE ... ADD VALUE no funciona dentro de un block/transaccion en PG.
+-- Por eso este bloque corre standalone ANTES que los DO blocks siguientes.
+-- IF NOT EXISTS lo hace idempotente desde PG 9.6+.
+-- ============================================================================
+ALTER TYPE estado_comercial_enum ADD VALUE IF NOT EXISTS 'en_transito';
+
+
+-- ============================================================================
 -- 1. ENUM accion_sugerencia
 -- ============================================================================
 DO $$ BEGIN
