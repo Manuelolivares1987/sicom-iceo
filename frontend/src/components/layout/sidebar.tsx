@@ -34,6 +34,7 @@ import {
   QrCode,
   AlertTriangle,
   Scale,
+  Satellite,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -110,6 +111,8 @@ const navGroups: NavGroup[] = [
       { label: 'Fiabilidad', href: '/dashboard/fiabilidad', icon: Activity, module: 'flota' },
       { label: 'Informes Recepción', href: '/dashboard/flota/recepcion', icon: FileText, module: 'flota' },
       { label: 'Jornada', href: '/dashboard/flota/jornada', icon: Timer, module: 'flota' },
+      { label: 'Mapa GPS', href: '/dashboard/flota/mapa', icon: Satellite, module: 'flota', badge: 'Nuevo' },
+      { label: 'Check-List Entrega', href: '/dashboard/flota/checklist-salida', icon: ClipboardCheck, module: 'flota', badge: 'V02' },
       { label: 'Activos', href: '/dashboard/activos', icon: Cog, module: 'activos' },
     ],
   },
