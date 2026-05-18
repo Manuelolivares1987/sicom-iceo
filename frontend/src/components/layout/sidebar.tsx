@@ -160,6 +160,7 @@ const navGroups: NavGroup[] = [
       { label: 'Auditoría', href: '/dashboard/auditoria', icon: Eye, module: 'auditoria' },
       { label: 'Administración', href: '/dashboard/admin', icon: Settings, module: 'admin' },
       { label: 'GPS', href: '/dashboard/admin/gps', icon: Truck, module: 'admin' },
+      { label: 'Geocercas', href: '/dashboard/admin/geocercas', icon: AlertTriangle, module: 'admin', badge: 'Nuevo' },
     ],
   },
 ]
