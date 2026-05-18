@@ -82,7 +82,22 @@ CREATE INDEX IF NOT EXISTS idx_os_hist_activo_fecha    ON os_historico_importado
 CREATE INDEX IF NOT EXISTS idx_os_hist_patente_fecha   ON os_historico_importado (patente, fecha_entrega DESC);
 CREATE INDEX IF NOT EXISTS idx_os_hist_anio_tipo       ON os_historico_importado (anio, tipo_servicio);
 CREATE INDEX IF NOT EXISTS idx_os_hist_modelo          ON os_historico_importado (modelo_id) WHERE modelo_id IS NOT NULL;
-CREATE UNIQUE INDEX IF NOT EXISTS uq_os_hist_codigo    ON os_historico_importado (os_codigo) WHERE os_codigo IS NOT NULL;
+-- UNIQUE plano (no partial): PG trata NULLs como distintos, asi que permite
+-- multiples filas con os_codigo NULL pero un solo registro por cada os_codigo
+-- no NULL. Necesario plano (no partial) para que ON CONFLICT (os_codigo) lo use.
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+         WHERE conrelid = 'public.os_historico_importado'::regclass
+           AND contype  = 'u'
+           AND pg_get_constraintdef(oid) LIKE '%(os_codigo)%'
+    ) THEN
+        DROP INDEX IF EXISTS uq_os_hist_codigo;
+        ALTER TABLE os_historico_importado
+            ADD CONSTRAINT uq_os_hist_codigo UNIQUE (os_codigo);
+    END IF;
+END $$;
 
 
 -- ============================================================================
