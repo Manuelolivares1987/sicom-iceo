@@ -73,6 +73,9 @@ import {
 } from '@/hooks/use-activos'
 import { useOEEActivo } from '@/hooks/use-flota'
 import { HistorialEstadosChart } from '@/components/flota/historial-estados-chart'
+import { CambiarContratoModal } from '@/components/activos/cambiar-contrato-modal'
+import { HistoricoContratosCard } from '@/components/activos/historico-contratos-card'
+import { Building2 } from 'lucide-react'
 
 // ---------------------------------------------------------------------------
 // Tabs
@@ -157,8 +160,10 @@ function getPrioridadColor(p: string) {
 export default function ActivoDetailPage() {
   const { id } = useParams<{ id: string }>()
   const [tab, setTab] = useState<TabKey>('identificacion')
+  const [showContratoModal, setShowContratoModal] = useState(false)
+  const [contratoRefreshKey, setContratoRefreshKey] = useState(0)
 
-  const { data: activo, isLoading } = useActivo(id)
+  const { data: activo, isLoading, refetch: refetchActivo } = useActivo(id)
   const { data: certs } = useCertificacionesByActivo(id)
   const updateActivo = useUpdateActivo()
 
@@ -226,6 +231,20 @@ export default function ActivoDetailPage() {
               {a.potencia && <span>Potencia: <strong>{a.potencia}</strong></span>}
               {a.operacion && <span>Op: <strong>{a.operacion}</strong></span>}
               {a.cliente_actual && <span>Cliente: <strong>{a.cliente_actual}</strong></span>}
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Building2 className="h-4 w-4 text-gray-400" />
+              <span className="text-sm text-gray-600">
+                Contrato:&nbsp;
+                <strong>
+                  {a.contrato?.codigo
+                    ? `${a.contrato.codigo} — ${a.contrato.cliente ?? ''}`
+                    : (a.contrato_id ? '(cargando...)' : <em className="text-gray-400">Sin contrato</em>)}
+                </strong>
+              </span>
+              <Button size="sm" variant="outline" onClick={() => setShowContratoModal(true)} className="gap-1">
+                <Pencil className="h-3 w-3" /> Cambiar contrato
+              </Button>
             </div>
           </div>
 
@@ -309,8 +328,24 @@ export default function ActivoDetailPage() {
         {tab === 'ots' && <TabOTs activoId={id} />}
         {tab === 'planes' && <TabPlanes activoId={id} />}
         {tab === 'costos' && <TabCostos activoId={id} />}
-        {tab === 'historial' && <TabHistorial activoId={id} />}
+        {tab === 'historial' && <TabHistorial activoId={id} contratoRefreshKey={contratoRefreshKey} />}
       </div>
+
+      {/* Modal cambio de contrato */}
+      <CambiarContratoModal
+        abierto={showContratoModal}
+        onClose={() => setShowContratoModal(false)}
+        activoId={id}
+        activoCodigo={a.codigo}
+        contratoActualId={a.contrato_id ?? null}
+        contratoActualCodigo={a.contrato?.codigo ?? null}
+        clienteActual={a.contrato?.cliente ?? a.cliente_actual ?? null}
+        estadoComercial={a.estado_comercial ?? null}
+        onCambioOk={() => {
+          refetchActivo()
+          setContratoRefreshKey((k) => k + 1)
+        }}
+      />
     </div>
   )
 }
@@ -655,11 +690,14 @@ function TabCostos({ activoId }: { activoId: string }) {
   )
 }
 
-function TabHistorial({ activoId }: { activoId: string }) {
+function TabHistorial({ activoId, contratoRefreshKey }: { activoId: string; contratoRefreshKey?: number }) {
   const { data: historial, isLoading } = useHistorialMantenimiento(activoId)
 
   return (
     <div className="space-y-4">
+      {/* Histórico de cambios de contrato (comercial) */}
+      <HistoricoContratosCard activoId={activoId} refrescarKey={contratoRefreshKey} />
+
       {/* Gráfico histórico anual de estados (barras apiladas) */}
       <HistorialEstadosChart activoId={activoId} />
 
