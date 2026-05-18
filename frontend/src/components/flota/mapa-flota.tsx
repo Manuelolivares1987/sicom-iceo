@@ -8,10 +8,17 @@ import 'leaflet/dist/leaflet.css'
 export type PosicionFlota = {
   activo_id: string
   activo_codigo: string
+  activo_patente: string | null
   activo_nombre: string | null
   activo_tipo: string
+  tipo_equipamiento: string
+  activo_estado: string | null
+  activo_estado_comercial: string | null
   km_actual: number | null
   horas_actual: number | null
+  contrato_id: string | null
+  contrato_codigo: string | null
+  cliente: string | null
   gps_device_id: string
   gps_device_name: string | null
   ts_gps: string | null
@@ -126,14 +133,20 @@ export function MapaFlota({ posiciones }: { posiciones: PosicionFlota[] }) {
           icon={iconoVehiculo(p.estado_pin, p.heading)}
         >
           <Popup>
-            <div style={{ minWidth: 220, fontSize: 13 }}>
-              <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 4 }}>
+            <div style={{ minWidth: 240, fontSize: 13 }}>
+              <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 2 }}>
                 {p.activo_codigo}
-                {p.activo_nombre ? ` — ${p.activo_nombre}` : ''}
+                {p.activo_patente ? ` · ${p.activo_patente}` : ''}
               </div>
+              {p.activo_nombre && (
+                <div style={{ fontSize: 12, color: '#6B7280', marginBottom: 4 }}>{p.activo_nombre}</div>
+              )}
               <div style={{ color: COLOR_BY_ESTADO[p.estado_pin], fontWeight: 500, marginBottom: 6 }}>
                 {LABEL_BY_ESTADO[p.estado_pin]}
               </div>
+              {p.cliente && (
+                <div>Cliente: <b>{p.cliente}</b>{p.contrato_codigo && ` (${p.contrato_codigo})`}</div>
+              )}
               <div>Velocidad: <b>{p.velocidad_kmh != null ? `${p.velocidad_kmh.toFixed(0)} km/h` : '—'}</b></div>
               <div>Motor: <b>{p.ignicion == null ? '—' : (p.ignicion ? 'Encendido' : 'Apagado')}</b></div>
               <div>Ultimo reporte: <b>{formatHaceMin(p.minutos_desde_reporte)}</b></div>

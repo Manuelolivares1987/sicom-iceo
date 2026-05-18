@@ -324,11 +324,17 @@ CREATE OR REPLACE VIEW v_flota_posiciones AS
 SELECT
     a.id                   AS activo_id,
     a.codigo               AS activo_codigo,
+    a.patente              AS activo_patente,
     a.nombre               AS activo_nombre,
     a.tipo                 AS activo_tipo,
+    a.tipo_equipamiento    AS tipo_equipamiento,
     a.estado               AS activo_estado,
+    a.estado_comercial     AS activo_estado_comercial,
     a.kilometraje_actual   AS km_actual,
     a.horas_uso_actual     AS horas_actual,
+    c.id                   AS contrato_id,
+    c.codigo               AS contrato_codigo,
+    c.cliente              AS cliente,
     gam.gps_device_id,
     gam.gps_device_name,
     gam.imei,
@@ -365,6 +371,7 @@ FROM gps_activo_mapeo gam
 JOIN config_gps_proveedor p ON p.id = gam.proveedor_id
 JOIN activos a              ON a.id = gam.activo_id
 LEFT JOIN gps_estado_actual e ON e.activo_id = a.id
+LEFT JOIN contratos c        ON c.id = a.contrato_id
 WHERE gam.activo = true
   AND p.activo  = true
   AND a.estado <> 'dado_baja';
