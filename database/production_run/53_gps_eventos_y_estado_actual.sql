@@ -346,13 +346,16 @@ SELECT
     e.horometro_hrs,
     e.bateria_pct,
     e.gsm_red,
-    -- Estado simplificado para colorear pin en mapa
+    -- Estado simplificado para colorear pin en mapa.
+    -- Usa `conexion` (Navixy connection_status) en vez de "ts_gps > 2h": un
+    -- tracker idle parqueado por horas no reporta nueva posicion pero SI
+    -- esta conectado -> se debe mostrar como 'detenido', no 'sin_senal'.
     CASE
-        WHEN e.ts_gps IS NULL                              THEN 'sin_datos'
-        WHEN e.ts_gps < NOW() - INTERVAL '2 hours'         THEN 'sin_senal'
-        WHEN COALESCE(e.velocidad_kmh,0) >= 5              THEN 'en_ruta'
-        WHEN e.ignicion = true                             THEN 'detenido_motor_on'
-        ELSE                                                    'detenido'
+        WHEN e.ts_gps IS NULL OR e.conexion IS NULL   THEN 'sin_datos'
+        WHEN e.conexion = 'offline'                    THEN 'sin_senal'
+        WHEN COALESCE(e.velocidad_kmh,0) >= 5         THEN 'en_ruta'
+        WHEN e.ignicion = true                         THEN 'detenido_motor_on'
+        ELSE                                                'detenido'
     END AS estado_pin,
     -- Minutos desde el ultimo reporte (util para mostrar "hace X min")
     CASE WHEN e.ts_gps IS NULL THEN NULL
