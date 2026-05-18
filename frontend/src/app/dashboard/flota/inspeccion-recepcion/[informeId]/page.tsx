@@ -1,10 +1,12 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
+import Link from 'next/link'
 import {
   ClipboardCheck, Camera, AlertTriangle, ChevronRight, ChevronLeft,
   CheckCircle2, XCircle, Plus, Trash2, PenTool, Send, Package, Wrench,
+  GitCompare, ExternalLink, Sparkles,
 } from 'lucide-react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -31,9 +33,13 @@ import {
   subirFotoHallazgo, subirFirmaInforme,
   type GravedadHallazgo, type TipoCostoRecepcion,
 } from '@/lib/services/informe-recepcion'
+import {
+  buscarInstanceRecepcionPorInforme, compararChecklists, aplicarDiffAInforme,
+  type DiffItem, type ChecklistV2Instance,
+} from '@/lib/services/checklist-v2'
 import { cn } from '@/lib/utils'
 
-type Step = 1 | 2 | 3 | 4
+type Step = 1 | 2 | 3 | 4 | 5
 
 export default function InspeccionRecepcionPage() {
   useRequireAuth()
@@ -112,8 +118,9 @@ export default function InspeccionRecepcionPage() {
   const stepLabels: Record<Step, string> = {
     1: 'Checklist',
     2: 'Costos base',
-    3: 'Firma',
-    4: 'Enviar',
+    3: 'Comparación V02',
+    4: 'Firma',
+    5: 'Enviar',
   }
 
   return (
@@ -137,7 +144,7 @@ export default function InspeccionRecepcionPage() {
           </div>
         </div>
         <div className="mt-4 flex gap-2">
-          {([1, 2, 3, 4] as Step[]).map((s) => (
+          {([1, 2, 3, 4, 5] as Step[]).map((s) => (
             <button
               key={s}
               className={cn(
@@ -292,13 +299,22 @@ export default function InspeccionRecepcionPage() {
 
           <div className="flex justify-between">
             <Button variant="ghost" onClick={() => setStep(1)}><ChevronLeft className="h-4 w-4" /> Checklist</Button>
-            <Button variant="primary" onClick={() => setStep(3)}>Firma <ChevronRight className="h-4 w-4" /></Button>
+            <Button variant="primary" onClick={() => setStep(3)}>Comparación V02 <ChevronRight className="h-4 w-4" /></Button>
           </div>
         </div>
       )}
 
-      {/* ─── Step 3 — Firma ─── */}
+      {/* ─── Step 3 — Comparación V02 entrega vs recepción ─── */}
       {step === 3 && (
+        <ComparacionV02Tab
+          informeId={informeId!}
+          onContinuar={() => setStep(4)}
+          onBack={() => setStep(2)}
+        />
+      )}
+
+      {/* ─── Step 4 — Firma ─── */}
+      {step === 4 && (
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-base flex items-center gap-2">
@@ -312,8 +328,8 @@ export default function InspeccionRecepcionPage() {
             </p>
             <SignaturePad onCapture={setFirmaDataUrl} label="Firma del técnico" />
             <div className="flex justify-between">
-              <Button variant="ghost" onClick={() => setStep(2)}><ChevronLeft className="h-4 w-4" /> Costos</Button>
-              <Button variant="primary" onClick={() => setStep(4)} disabled={!firmaDataUrl}>
+              <Button variant="ghost" onClick={() => setStep(3)}><ChevronLeft className="h-4 w-4" /> Comparación</Button>
+              <Button variant="primary" onClick={() => setStep(5)} disabled={!firmaDataUrl}>
                 Enviar <ChevronRight className="h-4 w-4" />
               </Button>
             </div>
@@ -321,8 +337,8 @@ export default function InspeccionRecepcionPage() {
         </Card>
       )}
 
-      {/* ─── Step 4 — Resumen y enviar ─── */}
-      {step === 4 && (
+      {/* ─── Step 5 — Resumen y enviar ─── */}
+      {step === 5 && (
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-base">Resumen y envío a revisión</CardTitle>
@@ -339,7 +355,7 @@ export default function InspeccionRecepcionPage() {
               revisará desde <code>/dashboard/flota/recepcion/{informeId}/emitir</code>.
             </p>
             <div className="flex justify-between">
-              <Button variant="ghost" onClick={() => setStep(3)}><ChevronLeft className="h-4 w-4" /> Firma</Button>
+              <Button variant="ghost" onClick={() => setStep(4)}><ChevronLeft className="h-4 w-4" /> Firma</Button>
               <Button variant="primary" onClick={enviar} loading={saving} disabled={!firmaDataUrl}>
                 <Send className="h-4 w-4" /> Enviar a revisión
               </Button>
@@ -604,4 +620,257 @@ function SummaryCell({ label, value, color }: { label: string; value: string; co
 
 function fmt(n: number): string {
   return Number(n).toLocaleString('es-CL')
+}
+
+// ────────────────────────────────────────────────────────
+// Step 3 — Comparación V02 entrega vs recepción
+// ────────────────────────────────────────────────────────
+function ComparacionV02Tab({
+  informeId, onContinuar, onBack,
+}: {
+  informeId: string
+  onContinuar: () => void
+  onBack: () => void
+}) {
+  const [instance, setInstance] = useState<ChecklistV2Instance | null>(null)
+  const [diff, setDiff]         = useState<DiffItem[]>([])
+  const [loading, setLoading]   = useState(true)
+  const [applying, setApplying] = useState(false)
+  const [error, setError]       = useState<string | null>(null)
+  const [aplicadoCount, setAplicadoCount] = useState<number | null>(null)
+
+  const cargar = async () => {
+    setLoading(true); setError(null)
+    try {
+      const inst = await buscarInstanceRecepcionPorInforme(informeId)
+      setInstance(inst)
+      if (inst && inst.estado === 'cerrado') {
+        const d = await compararChecklists(inst.id)
+        setDiff(d)
+      } else {
+        setDiff([])
+      }
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { cargar() /* eslint-disable-line react-hooks/exhaustive-deps */ }, [informeId])
+
+  const handleAplicar = async () => {
+    if (!instance) return
+    setApplying(true); setError(null)
+    try {
+      const r = await aplicarDiffAInforme(instance.id)
+      setAplicadoCount(r.hallazgos_insertados)
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setApplying(false)
+    }
+  }
+
+  if (loading) {
+    return <div className="flex h-32 items-center justify-center"><Spinner /></div>
+  }
+
+  // Sin instance vinculado (raro — debería crearse por trigger)
+  if (!instance) {
+    return (
+      <Card className="border-amber-200 bg-amber-50">
+        <CardContent className="space-y-3 p-4 text-sm text-amber-900">
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="h-5 w-5 shrink-0" />
+            <div>
+              <div className="font-semibold">No hay checklist V02 de recepción vinculado</div>
+              <p className="mt-1 text-xs">
+                El sistema lo crea automáticamente cuando el activo pasa a estado <b>en_recepcion</b>.
+                Si este informe no tiene uno, probablemente fue creado antes que se aplicara MIG55, o el activo
+                no transitó por el trigger.
+              </p>
+            </div>
+          </div>
+          <div className="flex justify-between">
+            <Button variant="ghost" onClick={onBack}><ChevronLeft className="h-4 w-4" /> Costos</Button>
+            <Button variant="primary" onClick={onContinuar}>Saltar a firma <ChevronRight className="h-4 w-4" /></Button>
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  // En progreso → invitar al wizard
+  if (instance.estado === 'en_progreso') {
+    return (
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <GitCompare className="h-4 w-4" /> Check-List V02 Recepción — en progreso
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-gray-600">
+            El sistema creó el check-list V02 de recepción para este informe. Llénalo completo y
+            fírmalo (operador + cliente). Después podrás comparar contra el de entrega y aplicar
+            las diferencias automáticamente como hallazgos.
+          </p>
+          <div className="flex flex-wrap gap-3">
+            <Link href={`/dashboard/flota/checklist-recepcion/${informeId}`}>
+              <Button variant="primary" className="gap-1">
+                <ExternalLink className="h-4 w-4" /> Llenar checklist V02 recepción
+              </Button>
+            </Link>
+            <Button variant="outline" onClick={cargar}>Refrescar</Button>
+          </div>
+          <div className="flex justify-between pt-2 border-t">
+            <Button variant="ghost" onClick={onBack}><ChevronLeft className="h-4 w-4" /> Costos</Button>
+            <Button variant="ghost" onClick={onContinuar}>Saltar a firma <ChevronRight className="h-4 w-4" /></Button>
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  // Cerrado → tabla con diff
+  const totalCobrable = diff
+    .filter((d) => d.cobrable_final === 'cliente')
+    .reduce((s, d) => s + (Number(d.costo_estimado_real ?? d.costo_referencial ?? 0)), 0)
+
+  return (
+    <div className="space-y-3">
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <GitCompare className="h-4 w-4" /> Diferencias entrega vs recepción ({diff.length})
+          </CardTitle>
+          <p className="text-xs text-gray-500">
+            Ítems donde el estado al recibir difiere del estado al entregar (OK → NO_OK o fuera de rango numérico).
+            Cada uno tiene cobrable sugerido según la regla del template; puedes ajustarlo manualmente despues.
+          </p>
+        </CardHeader>
+        <CardContent className="p-0">
+          {diff.length === 0 ? (
+            <div className="p-6 text-center text-sm text-green-700">
+              <CheckCircle2 className="mx-auto mb-2 h-6 w-6" />
+              No hay diferencias detectadas — el activo se devolvió en el mismo estado de la entrega.
+            </div>
+          ) : (
+            <div className="max-h-96 overflow-auto">
+              <table className="w-full text-xs">
+                <thead className="sticky top-0 bg-gray-50">
+                  <tr>
+                    <th className="px-2 py-1.5 text-left">Código</th>
+                    <th className="px-2 py-1.5 text-left">Descripción</th>
+                    <th className="px-2 py-1.5 text-center">Entrega</th>
+                    <th className="px-2 py-1.5 text-center">Recepción</th>
+                    <th className="px-2 py-1.5 text-left">Cobrable</th>
+                    <th className="px-2 py-1.5 text-right">Costo ref.</th>
+                    <th className="px-2 py-1.5 text-center">Foto</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {diff.map((d) => (
+                    <tr key={d.template_item_id} className="border-t">
+                      <td className="px-2 py-1.5 font-mono text-[11px]">{d.codigo_item}</td>
+                      <td className="px-2 py-1.5">{d.descripcion}</td>
+                      <td className="px-2 py-1.5 text-center">
+                        <ResultadoBadge r={d.resultado_entrega ?? '-'} v={d.valor_entrega} />
+                      </td>
+                      <td className="px-2 py-1.5 text-center">
+                        <ResultadoBadge r={d.resultado_recepcion} v={d.valor_recepcion} />
+                      </td>
+                      <td className="px-2 py-1.5">
+                        <CobrableBadge c={d.cobrable_final} />
+                      </td>
+                      <td className="px-2 py-1.5 text-right">
+                        {d.costo_estimado_real != null
+                          ? `$${fmt(d.costo_estimado_real)}`
+                          : d.costo_referencial != null
+                            ? `$${fmt(d.costo_referencial)}`
+                            : '—'}
+                      </td>
+                      <td className="px-2 py-1.5 text-center">
+                        {d.foto_recepcion_url
+                          ? <a href={d.foto_recepcion_url} target="_blank" rel="noopener noreferrer"
+                               className="text-blue-600 underline">ver</a>
+                          : '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot className="sticky bottom-0 bg-gray-50">
+                  <tr className="border-t border-t-gray-300">
+                    <td colSpan={5} className="px-2 py-1.5 text-right font-semibold">Total cobrable estimado:</td>
+                    <td className="px-2 py-1.5 text-right font-bold text-green-700">${fmt(totalCobrable)}</td>
+                    <td />
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Acción: aplicar diff */}
+      {diff.length > 0 && (
+        <Card>
+          <CardContent className="space-y-3 p-3">
+            <p className="text-sm text-gray-700">
+              <Sparkles className="inline h-4 w-4 text-amber-500" />
+              <b className="ml-1">Aplicar al informe</b> — vuelca cada diferencia como hallazgo + costo en este informe.
+              Después puedes editar gravedad / cobrable / añadir fotos en el tab Checklist.
+            </p>
+            {aplicadoCount != null && (
+              <div className="rounded border border-green-200 bg-green-50 p-2 text-sm text-green-700">
+                <CheckCircle2 className="inline h-4 w-4" /> {aplicadoCount} hallazgos volcados al informe.
+                Revísalos en el tab "Checklist" o continúa a Firma.
+              </div>
+            )}
+            {error && (
+              <div className="rounded border border-red-200 bg-red-50 p-2 text-sm text-red-700">
+                <AlertTriangle className="inline h-4 w-4" /> {error}
+              </div>
+            )}
+            <Button onClick={handleAplicar} loading={applying} disabled={aplicadoCount != null}>
+              <Sparkles className="h-4 w-4" /> {aplicadoCount != null ? 'Ya aplicado' : 'Aplicar diff al informe'}
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      <div className="flex justify-between">
+        <Button variant="ghost" onClick={onBack}><ChevronLeft className="h-4 w-4" /> Costos</Button>
+        <Button variant="primary" onClick={onContinuar}>Firma <ChevronRight className="h-4 w-4" /></Button>
+      </div>
+    </div>
+  )
+}
+
+function ResultadoBadge({ r, v }: { r: string; v: number | null }) {
+  const color = r === 'ok' ? 'bg-green-100 text-green-700'
+              : r === 'no_ok' ? 'bg-red-100 text-red-700'
+              : r === 'na' ? 'bg-gray-100 text-gray-600'
+              : 'bg-amber-50 text-amber-700'
+  return (
+    <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${color}`}>
+      {r.toUpperCase()}{v != null ? ` ${v}` : ''}
+    </span>
+  )
+}
+
+function CobrableBadge({ c }: { c: string }) {
+  const map: Record<string, string> = {
+    cliente:    'bg-red-100 text-red-700',
+    empresa:    'bg-blue-100 text-blue-700',
+    compartido: 'bg-purple-100 text-purple-700',
+    evaluar:    'bg-amber-100 text-amber-700',
+    na:         'bg-gray-100 text-gray-600',
+  }
+  return (
+    <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${map[c] ?? 'bg-gray-100'}`}>
+      {c.toUpperCase()}
+    </span>
+  )
 }

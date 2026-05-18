@@ -26,6 +26,10 @@ Thumbs.db
 # Trabajo local (audios, transcripciones, scripts temporales)
 .transcripciones/
 
+# Artefactos intermedios de generacion de PDF (CHECKLISTS_V02_POR_EQUIPO)
+*.html
+frontend/md-to-html.mjs
+
 # Service Worker generado por next-pwa en build
 frontend/public/sw.js
 frontend/public/sw.js.map

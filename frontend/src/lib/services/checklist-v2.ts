@@ -263,3 +263,58 @@ export async function cerrarChecklist(params: {
   })
   if (error) throw error
 }
+
+// ====== Recepcion / Comparacion ============================================
+
+/** Busca el checklist V02 recepcion vinculado a un informe_recepcion. */
+export async function buscarInstanceRecepcionPorInforme(
+  informeId: string,
+): Promise<ChecklistV2Instance | null> {
+  const { data, error } = await supabase
+    .from('checklist_v2_instance')
+    .select('*')
+    .eq('informe_recepcion_id', informeId)
+    .eq('momento_uso', 'recepcion_devolucion')
+    .order('fecha_inicio', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (error) throw error
+  return (data as ChecklistV2Instance | null) ?? null
+}
+
+export type DiffItem = {
+  template_item_id:    string
+  codigo_item:         string
+  bloque:              BloqueChecklist
+  descripcion:         string
+  resultado_entrega:   ResultadoItem | null
+  resultado_recepcion: ResultadoItem
+  valor_entrega:       number | null
+  valor_recepcion:     number | null
+  delta_valor:         number | null
+  foto_entrega_url:    string | null
+  foto_recepcion_url:  string | null
+  default_cobrable:    DefaultCobrable
+  cobrable_final:      DefaultCobrable
+  costo_referencial:   number | null
+  costo_estimado_real: number | null
+  es_hallazgo_nuevo:   boolean
+}
+
+export async function compararChecklists(recepcionInstanceId: string): Promise<DiffItem[]> {
+  const { data, error } = await supabase.rpc('fn_comparar_checklists_entrega_recepcion', {
+    p_recepcion_id: recepcionInstanceId,
+  })
+  if (error) throw error
+  return (data ?? []) as DiffItem[]
+}
+
+export async function aplicarDiffAInforme(recepcionInstanceId: string): Promise<{
+  ok: boolean; informe_id: string; hallazgos_insertados: number
+}> {
+  const { data, error } = await supabase.rpc('rpc_aplicar_diff_a_informe', {
+    p_recepcion_id: recepcionInstanceId,
+  })
+  if (error) throw error
+  return data as { ok: boolean; informe_id: string; hallazgos_insertados: number }
+}
