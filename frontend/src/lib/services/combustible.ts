@@ -270,9 +270,36 @@ export interface RegistrarMovimientoPayload {
   horometro_vehiculo?: number | null
   kilometraje_vehiculo?: number | null
   observaciones?: string | null
-  // NUEVO MIG61: fotos separadas. Obligatorias en despachos.
+  // MIG61: fotos separadas. Obligatorias en despachos.
   foto_medidor_inicial_url?: string | null
   foto_medidor_final_url?: string | null
+  // MIG62: vehiculo externo autorizado + receptor
+  vehiculo_externo_id?: string | null
+  firma_receptor_url?: string | null
+  nombre_receptor?: string | null
+  rut_receptor?: string | null
+  foto_patente_url?: string | null
+}
+
+export interface VehiculoExternoAutorizado {
+  id: string
+  patente: string
+  empresa: string
+  contrato_id: string | null
+  activo: boolean
+  fecha_autorizacion: string
+  notas: string | null
+}
+
+export async function getVehiculosExternosAutorizados(): Promise<VehiculoExternoAutorizado[]> {
+  const { data, error } = await supabase
+    .from('vehiculos_autorizados_externos')
+    .select('id, patente, empresa, contrato_id, activo, fecha_autorizacion, notas')
+    .eq('activo', true)
+    .order('empresa')
+    .order('patente')
+  if (error) throw error
+  return (data ?? []) as VehiculoExternoAutorizado[]
 }
 
 export async function registrarMovimiento(payload: RegistrarMovimientoPayload) {
@@ -294,6 +321,11 @@ export async function registrarMovimiento(payload: RegistrarMovimientoPayload) {
     p_observaciones: payload.observaciones ?? null,
     p_foto_medidor_inicial_url: payload.foto_medidor_inicial_url ?? null,
     p_foto_medidor_final_url:   payload.foto_medidor_final_url ?? null,
+    p_vehiculo_externo_id:      payload.vehiculo_externo_id ?? null,
+    p_firma_receptor_url:       payload.firma_receptor_url ?? null,
+    p_nombre_receptor:          payload.nombre_receptor ?? null,
+    p_rut_receptor:             payload.rut_receptor ?? null,
+    p_foto_patente_url:         payload.foto_patente_url ?? null,
   })
   return {
     data: data as {

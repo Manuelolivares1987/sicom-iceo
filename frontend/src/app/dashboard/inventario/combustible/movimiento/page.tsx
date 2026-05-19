@@ -22,11 +22,16 @@ import {
   useRegistrarMovimientoCombustible,
 } from '@/hooks/use-combustible'
 import { useActivos } from '@/hooks/use-activos'
-import { uploadEvidenciaCombustible } from '@/lib/services/combustible'
+import {
+  uploadEvidenciaCombustible,
+  getVehiculosExternosAutorizados,
+} from '@/lib/services/combustible'
 import type {
   TipoMovimientoCombustible,
   DestinoDespacho,
+  VehiculoExternoAutorizado,
 } from '@/lib/services/combustible'
+import { SignaturePad } from '@/components/ui/signature-pad'
 
 type TipoUI = Extract<TipoMovimientoCombustible, 'ingreso' | 'despacho'>
 
@@ -66,6 +71,23 @@ export default function NuevoMovimientoPage() {
   const [uploadingInicial, setUploadingInicial] = useState(false)
   const [uploadingFinal, setUploadingFinal] = useState(false)
   const [observaciones, setObservaciones] = useState('')
+
+  // MIG62: vehiculo externo autorizado + receptor (firma, foto patente, nombre/RUT)
+  const [esExterno, setEsExterno] = useState(false)
+  const [vehiculoExternoId, setVehiculoExternoId] = useState('')
+  const [externos, setExternos] = useState<VehiculoExternoAutorizado[]>([])
+  const [fotoPatenteUrl, setFotoPatenteUrl] = useState<string | null>(null)
+  const [uploadingPatente, setUploadingPatente] = useState(false)
+  const [nombreReceptor, setNombreReceptor] = useState('')
+  const [rutReceptor, setRutReceptor] = useState('')
+  const [firmaReceptorDataUrl, setFirmaReceptorDataUrl] = useState<string | null>(null)
+  const [uploadingFirma, setUploadingFirma] = useState(false)
+
+  useEffect(() => {
+    if (tipo === 'despacho') {
+      getVehiculosExternosAutorizados().then(setExternos).catch(() => { /* skip */ })
+    }
+  }, [tipo])
 
   // Feedback
   const [submitError, setSubmitError] = useState<string | null>(null)
@@ -124,6 +146,31 @@ export default function NuevoMovimientoPage() {
     [activos]
   )
 
+  async function handleFotoPatente(file: File) {
+    if (!estanqueId) { setSubmitError('Seleccione el estanque primero.'); return }
+    setUploadingPatente(true); setSubmitError(null)
+    const { url, error } = await uploadEvidenciaCombustible(file, { tipo: 'medidor', estanqueId })
+    setUploadingPatente(false)
+    if (error || !url) { setSubmitError(error?.message ?? 'No se pudo subir la foto de la patente.'); return }
+    setFotoPatenteUrl(url)
+  }
+
+  async function subirFirmaReceptor(dataUrl: string): Promise<string | null> {
+    if (!estanqueId) return null
+    // dataUrl -> Blob
+    const base64 = dataUrl.split(',')[1] ?? ''
+    const bin = atob(base64)
+    const buf = new Uint8Array(bin.length)
+    for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i)
+    const blob = new Blob([buf], { type: 'image/png' })
+    const file = new File([blob], `firma_receptor_${Date.now()}.png`, { type: 'image/png' })
+    setUploadingFirma(true)
+    const { url, error } = await uploadEvidenciaCombustible(file, { tipo: 'medidor', estanqueId })
+    setUploadingFirma(false)
+    if (error) throw error
+    return url
+  }
+
   async function handleFoto(file: File, momento: 'inicial' | 'final') {
     if (!estanqueId) {
       setSubmitError('Seleccione el estanque primero.')
@@ -172,11 +219,28 @@ export default function NuevoMovimientoPage() {
     if (tipo === 'despacho') {
       if (destinoTipo === 'vehiculo_flota' && !vehiculoId)
         return setSubmitError('Seleccione el vehiculo.')
-      if (destinoTipo !== 'vehiculo_flota' && !destinoDescripcion.trim())
+      // Si es externo autorizado: requiere patente del externo + foto patente + firma
+      if (esExterno) {
+        if (!vehiculoExternoId) return setSubmitError('Seleccione el vehiculo externo autorizado.')
+        if (!fotoPatenteUrl)   return setSubmitError('Capture foto de la patente del vehiculo.')
+        if (!firmaReceptorDataUrl) return setSubmitError('Capture firma del receptor.')
+        if (!nombreReceptor.trim()) return setSubmitError('Ingrese nombre del receptor.')
+      } else if (destinoTipo !== 'vehiculo_flota' && !destinoDescripcion.trim()) {
         return setSubmitError('Describa el destino.')
+      }
     }
 
     try {
+      // Subir firma receptor a storage si la hay
+      let firmaUrl: string | null = null
+      if (firmaReceptorDataUrl) {
+        try {
+          firmaUrl = await subirFirmaReceptor(firmaReceptorDataUrl)
+        } catch (e) {
+          return setSubmitError(`No se pudo subir la firma: ${(e as Error).message}`)
+        }
+      }
+
       const result = await registrar.mutateAsync({
         tipo,
         estanque_id: estanqueId,
@@ -191,16 +255,22 @@ export default function NuevoMovimientoPage() {
         costo_unitario_clp: tipo === 'ingreso' ? parseFloat(costoUnit) : null,
         destino_tipo: tipo === 'despacho' ? destinoTipo : null,
         vehiculo_activo_id:
-          tipo === 'despacho' && destinoTipo === 'vehiculo_flota' ? vehiculoId : null,
+          tipo === 'despacho' && destinoTipo === 'vehiculo_flota' && !esExterno ? vehiculoId : null,
         destino_descripcion:
-          tipo === 'despacho' && destinoTipo !== 'vehiculo_flota'
+          tipo === 'despacho' && !esExterno && destinoTipo !== 'vehiculo_flota'
             ? destinoDescripcion
             : null,
         horometro_vehiculo:
-          tipo === 'despacho' && horometro ? parseFloat(horometro) : null,
+          tipo === 'despacho' && !esExterno && horometro ? parseFloat(horometro) : null,
         kilometraje_vehiculo:
-          tipo === 'despacho' && kilometraje ? parseFloat(kilometraje) : null,
+          tipo === 'despacho' && !esExterno && kilometraje ? parseFloat(kilometraje) : null,
         observaciones: observaciones || null,
+        // MIG62: externo + receptor
+        vehiculo_externo_id: esExterno ? vehiculoExternoId : null,
+        firma_receptor_url:  firmaUrl,
+        nombre_receptor:     nombreReceptor.trim() || null,
+        rut_receptor:        rutReceptor.trim() || null,
+        foto_patente_url:    fotoPatenteUrl,
       })
       if (result) {
         setSubmitSuccess({
@@ -220,6 +290,12 @@ export default function NuevoMovimientoPage() {
     setFotoInicialUrl(null)
     setFotoFinalUrl(null)
     setObservaciones('')
+    setEsExterno(false)
+    setVehiculoExternoId('')
+    setFotoPatenteUrl(null)
+    setNombreReceptor('')
+    setRutReceptor('')
+    setFirmaReceptorDataUrl(null)
     setNumFactura('')
     setVehiculoId('')
     setDestinoDescripcion('')
@@ -491,6 +567,35 @@ export default function NuevoMovimientoPage() {
         <Card>
           <CardContent className="space-y-3 p-4">
             <h3 className="text-sm font-semibold text-gray-700">Destino</h3>
+
+            {/* Toggle: Externo autorizado vs Flota propia */}
+            <div className="flex items-center justify-between rounded-lg border bg-amber-50/40 border-amber-200 p-2">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" checked={esExterno}
+                       onChange={(e) => setEsExterno(e.target.checked)} />
+                <span className="text-sm font-medium text-amber-900">
+                  Vehiculo EXTERNO autorizado (no es flota Pillado)
+                </span>
+              </label>
+              <span className="text-[10px] text-amber-700">
+                {esExterno ? 'Requiere foto patente + firma receptor' : ''}
+              </span>
+            </div>
+
+            {esExterno ? (
+              <select
+                value={vehiculoExternoId}
+                onChange={(e) => setVehiculoExternoId(e.target.value)}
+                className="w-full h-10 rounded-md border border-gray-200 bg-white px-2 text-sm">
+                <option value="">— Selecciona patente autorizada —</option>
+                {externos.map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {v.patente} · {v.empresa}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <>
             <div className="grid grid-cols-2 gap-2">
               {([
                 { v: 'vehiculo_flota', l: 'Vehiculo' },
@@ -575,6 +680,83 @@ export default function NuevoMovimientoPage() {
                 />
               </div>
             )}
+              </>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Receptor (foto patente + firma) — visible en despachos */}
+      {tipo === 'despacho' && medidorId && (
+        <Card>
+          <CardContent className="space-y-3 p-4">
+            <h3 className="text-sm font-semibold text-gray-700">
+              Receptor {esExterno && <span className="text-red-500">*</span>}
+            </h3>
+            <p className="text-xs text-gray-500">
+              {esExterno
+                ? 'Vehiculo externo: foto patente + firma del receptor son OBLIGATORIAS para defender cobro al cliente.'
+                : 'Flota propia: opcional. Recomendado para trazabilidad cuando un tercero conduce.'}
+            </p>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              {/* Foto patente */}
+              <div className="space-y-2">
+                <div className="inline-block rounded-full bg-purple-100 px-2 py-0.5 text-[10px] font-bold text-purple-700">
+                  FOTO PATENTE {esExterno && '*'}
+                </div>
+                {fotoPatenteUrl ? (
+                  <div className="space-y-1">
+                    <img src={fotoPatenteUrl} alt="Patente"
+                         className="h-32 w-full rounded-lg border object-cover" />
+                    <Button variant="outline" size="sm" className="w-full"
+                            onClick={() => setFotoPatenteUrl(null)}>Cambiar foto</Button>
+                  </div>
+                ) : (
+                  <label className={cn(
+                    'flex h-32 cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed border-gray-300 p-3 hover:border-gray-400',
+                    uploadingPatente && 'opacity-60'
+                  )}>
+                    {uploadingPatente
+                      ? <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+                      : <Camera className="h-6 w-6 text-gray-400" />}
+                    <span className="text-xs text-gray-700">
+                      {uploadingPatente ? 'Subiendo...' : 'Tomar foto patente'}
+                    </span>
+                    <input type="file" accept="image/*" capture="environment" className="hidden"
+                           disabled={uploadingPatente}
+                           onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFotoPatente(f) }} />
+                  </label>
+                )}
+              </div>
+
+              {/* Datos receptor */}
+              <div className="space-y-2">
+                <div className="inline-block rounded-full bg-indigo-100 px-2 py-0.5 text-[10px] font-bold text-indigo-700">
+                  DATOS RECEPTOR {esExterno && '*'}
+                </div>
+                <Input value={nombreReceptor}
+                       onChange={(e) => setNombreReceptor(e.target.value)}
+                       placeholder="Nombre del receptor" />
+                <Input value={rutReceptor}
+                       onChange={(e) => setRutReceptor(e.target.value)}
+                       placeholder="RUT (opcional)" />
+              </div>
+            </div>
+
+            {/* Firma */}
+            <div className="space-y-2">
+              <div className="inline-block rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
+                FIRMA RECEPTOR {esExterno && '*'}
+              </div>
+              <div className="rounded border bg-white p-1">
+                <SignaturePad label="Firma" onCapture={(d) => setFirmaReceptorDataUrl(d)}
+                              existingUrl={firmaReceptorDataUrl} />
+              </div>
+              {uploadingFirma && (
+                <div className="text-xs text-blue-700"><Loader2 className="inline h-3 w-3 animate-spin" /> Subiendo firma...</div>
+              )}
+            </div>
           </CardContent>
         </Card>
       )}
