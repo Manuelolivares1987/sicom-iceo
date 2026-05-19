@@ -1,0 +1,151 @@
+import { supabase } from '@/lib/supabase'
+
+// ====== ADMIN ==============================================================
+
+export type PerfilPortalAdmin = {
+  id:                 string
+  user_id:            string
+  email:              string | null
+  nombre_visible:     string
+  empresa:            string | null
+  rut_empresa:        string | null
+  contratos_ids:      string[]
+  empresas_externas:  string[]
+  activo:             boolean
+  creado_at:          string
+  ultimo_acceso_at:   string | null
+  notas:              string | null
+  n_contratos:        number | null
+  n_empresas:         number | null
+}
+
+export async function cargarPerfilesPortal(): Promise<PerfilPortalAdmin[]> {
+  const { data, error } = await supabase
+    .from('v_admin_perfiles_portal')
+    .select('*')
+    .order('creado_at', { ascending: false })
+  if (error) throw error
+  return (data ?? []) as PerfilPortalAdmin[]
+}
+
+export async function crearPerfilPortal(params: {
+  userId:            string
+  nombreVisible:     string
+  empresa?:          string
+  rutEmpresa?:       string
+  contratosIds:      string[]
+  empresasExternas:  string[]
+  notas?:            string
+}): Promise<{ ok: boolean; perfil_id: string }> {
+  const { data, error } = await supabase.rpc('rpc_admin_crear_perfil_portal', {
+    p_user_id:           params.userId,
+    p_nombre_visible:    params.nombreVisible,
+    p_empresa:           params.empresa ?? null,
+    p_rut_empresa:       params.rutEmpresa ?? null,
+    p_contratos_ids:     params.contratosIds,
+    p_empresas_externas: params.empresasExternas,
+    p_notas:             params.notas ?? null,
+  })
+  if (error) throw error
+  return data as { ok: boolean; perfil_id: string }
+}
+
+export async function togglePerfilPortal(userId: string, activo: boolean): Promise<void> {
+  const { error } = await supabase.rpc('rpc_admin_toggle_perfil_portal', {
+    p_user_id: userId, p_activo: activo,
+  })
+  if (error) throw error
+}
+
+export async function cargarEmpresasExternasDistintas(): Promise<string[]> {
+  const { data, error } = await supabase
+    .from('vehiculos_autorizados_externos')
+    .select('empresa')
+    .eq('activo', true)
+    .order('empresa')
+  if (error) throw error
+  return Array.from(new Set((data ?? []).map((r: { empresa: string }) => r.empresa)))
+}
+
+
+// ====== PORTAL (cliente) ===================================================
+
+export type TransaccionCombustibleCliente = {
+  id:                          string
+  tipo:                        string
+  litros:                      number
+  lectura_inicial_lt:          number
+  lectura_final_lt:            number
+  costo_unitario_clp:          number | null
+  costo_total_clp:             number | null
+  fecha:                       string
+  observaciones:               string | null
+  estanque_nombre:             string | null
+  estanque_codigo:             string | null
+  destino_tipo:                string | null
+  destino_descripcion:         string | null
+  vehiculo_activo_id:          string | null
+  activo_codigo:               string | null
+  activo_patente:              string | null
+  activo_contrato_id:          string | null
+  activo_contrato_codigo:      string | null
+  activo_cliente:              string | null
+  vehiculo_externo_id:         string | null
+  externo_patente:             string | null
+  externo_empresa:             string | null
+  foto_medidor_inicial_url:    string | null
+  foto_medidor_final_url:      string | null
+  foto_patente_url:            string | null
+  nombre_receptor:             string | null
+  rut_receptor:                string | null
+  firma_receptor_url:          string | null
+  horometro_vehiculo:          number | null
+  kilometraje_vehiculo:        number | null
+}
+
+export type FiltrosPortal = {
+  fechaDesde?: string  // ISO date
+  fechaHasta?: string
+  patente?:    string  // busqueda libre
+  empresa?:    string
+}
+
+export async function cargarTransaccionesCliente(filtros: FiltrosPortal = {}): Promise<TransaccionCombustibleCliente[]> {
+  let q = supabase
+    .from('v_combustible_movimientos_cliente')
+    .select('*')
+    .order('fecha', { ascending: false })
+    .limit(500)
+
+  if (filtros.fechaDesde) q = q.gte('fecha', filtros.fechaDesde + 'T00:00:00')
+  if (filtros.fechaHasta) q = q.lte('fecha', filtros.fechaHasta + 'T23:59:59')
+
+  const { data, error } = await q
+  if (error) throw error
+  let rows = (data ?? []) as TransaccionCombustibleCliente[]
+  if (filtros.patente) {
+    const q2 = filtros.patente.toLowerCase()
+    rows = rows.filter((r) =>
+      (r.activo_patente ?? '').toLowerCase().includes(q2) ||
+      (r.externo_patente ?? '').toLowerCase().includes(q2)
+    )
+  }
+  if (filtros.empresa) {
+    const q2 = filtros.empresa.toLowerCase()
+    rows = rows.filter((r) =>
+      (r.externo_empresa ?? '').toLowerCase().includes(q2) ||
+      (r.activo_cliente  ?? '').toLowerCase().includes(q2)
+    )
+  }
+  return rows
+}
+
+export async function marcarAccesoPortal(): Promise<void> {
+  await supabase.rpc('rpc_portal_marcar_acceso')
+}
+
+export async function esUsuarioPortal(): Promise<boolean> {
+  const { data, error } = await supabase.rpc('fn_es_usuario_portal')
+  if (error) return false
+  return data === true
+}

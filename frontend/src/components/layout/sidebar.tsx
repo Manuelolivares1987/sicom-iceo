@@ -161,6 +161,7 @@ const navGroups: NavGroup[] = [
       { label: 'Administración', href: '/dashboard/admin', icon: Settings, module: 'admin' },
       { label: 'GPS', href: '/dashboard/admin/gps', icon: Truck, module: 'admin' },
       { label: 'Geocercas', href: '/dashboard/admin/geocercas', icon: AlertTriangle, module: 'admin', badge: 'Nuevo' },
+      { label: 'Portal Cliente', href: '/dashboard/admin/portal-usuarios', icon: Briefcase, module: 'admin', badge: 'Nuevo' },
     ],
   },
 ]
