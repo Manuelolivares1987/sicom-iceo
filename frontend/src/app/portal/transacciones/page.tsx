@@ -4,9 +4,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   Search, Filter, X, AlertTriangle, RefreshCw, Calendar, Truck,
-  Camera, FileSignature, Fuel, Download,
+  Camera, FileSignature, Fuel,
 } from 'lucide-react'
-import ExcelJS from 'exceljs'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -79,99 +78,6 @@ export default function PortalTransaccionesPage() {
     return { transacciones: rows.length, litros, costo }
   }, [rows])
 
-  const [exportando, setExportando] = useState(false)
-  const exportarExcel = async () => {
-    if (rows.length === 0) return
-    setExportando(true)
-    try {
-      const wb = new ExcelJS.Workbook()
-      wb.creator = 'Portal Cliente Pillado'
-      wb.created = new Date()
-
-      // Hoja 1: Transacciones
-      const ws = wb.addWorksheet('Despachos')
-      ws.columns = [
-        { header: 'Fecha',             key: 'fecha',           width: 20 },
-        { header: 'Patente',           key: 'patente',         width: 12 },
-        { header: 'Empresa / Cliente', key: 'empresa',         width: 28 },
-        { header: 'Estanque',          key: 'estanque',        width: 16 },
-        { header: 'Litros',            key: 'litros',          width: 10 },
-        { header: 'Lectura inicial',   key: 'lectura_ini',     width: 14 },
-        { header: 'Lectura final',     key: 'lectura_fin',     width: 14 },
-        { header: 'Costo CLP',         key: 'costo',           width: 14 },
-        { header: 'Receptor',          key: 'receptor',        width: 22 },
-        { header: 'RUT',               key: 'rut',             width: 13 },
-        { header: 'Observaciones',     key: 'obs',             width: 30 },
-        { header: 'Foto medidor inicial', key: 'foto_ini',     width: 30 },
-        { header: 'Foto medidor final',   key: 'foto_fin',     width: 30 },
-        { header: 'Foto patente',         key: 'foto_pat',     width: 30 },
-        { header: 'Firma receptor',       key: 'firma',        width: 30 },
-      ]
-      const header = ws.getRow(1)
-      header.font = { bold: true, color: { argb: 'FFFFFFFF' } }
-      header.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2D8B3D' } }
-      header.alignment = { vertical: 'middle', horizontal: 'center' }
-      header.height = 22
-
-      rows.forEach((r) => {
-        ws.addRow({
-          fecha:       new Date(r.fecha).toLocaleString('es-CL'),
-          patente:     r.activo_patente ?? r.externo_patente ?? '',
-          empresa:     r.activo_cliente ?? r.externo_empresa ?? '',
-          estanque:    r.estanque_codigo ?? '',
-          litros:      Number(r.litros) || 0,
-          lectura_ini: r.lectura_inicial_lt != null ? Number(r.lectura_inicial_lt) : null,
-          lectura_fin: r.lectura_final_lt != null ? Number(r.lectura_final_lt) : null,
-          costo:       r.costo_total_clp != null ? Number(r.costo_total_clp) : null,
-          receptor:    r.nombre_receptor ?? '',
-          rut:         r.rut_receptor ?? '',
-          obs:         r.observaciones ?? '',
-          foto_ini:    r.foto_medidor_inicial_url ?? '',
-          foto_fin:    r.foto_medidor_final_url ?? '',
-          foto_pat:    r.foto_patente_url ?? '',
-          firma:       r.firma_receptor_url ?? '',
-        })
-      })
-      ws.getColumn('litros').numFmt = '#,##0.00 "L"'
-      ws.getColumn('lectura_ini').numFmt = '#,##0.00'
-      ws.getColumn('lectura_fin').numFmt = '#,##0.00'
-      ws.getColumn('costo').numFmt = '"$"#,##0'
-      ws.views = [{ state: 'frozen', ySplit: 1 }]
-
-      // Hoja 2: Resumen
-      const ws2 = wb.addWorksheet('Resumen')
-      ws2.columns = [{ width: 28 }, { width: 22 }]
-      const rows2: Array<[string, string | number]> = [
-        ['Reporte generado',  new Date().toLocaleString('es-CL')],
-        ['Período desde',     fechaDesde],
-        ['Período hasta',     fechaHasta],
-        ['Filtro patente',    patente || '(todas)'],
-        ['Filtro empresa',    empresa || '(todas)'],
-        ['', ''],
-        ['Total despachos',   stats.transacciones],
-        ['Litros totales',    Math.round(stats.litros * 100) / 100],
-        ['Costo total CLP',   Math.round(stats.costo)],
-      ]
-      rows2.forEach(([k, v], i) => {
-        const row = ws2.addRow([k, v])
-        if (k === '') return
-        row.getCell(1).font = { bold: true }
-        if (i >= 6) row.getCell(2).numFmt = i === 8 ? '"$"#,##0' : '#,##0.00'
-      })
-
-      const buf = await wb.xlsx.writeBuffer()
-      const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `pillado_combustible_${fechaDesde}_${fechaHasta}.xlsx`
-      a.click()
-      URL.revokeObjectURL(url)
-    } finally {
-      setExportando(false)
-    }
-  }
-
   return (
     <div className="space-y-4 p-4">
       {/* Stats */}
@@ -199,14 +105,6 @@ export default function PortalTransaccionesPage() {
               <RefreshCw className={`mr-1 inline h-3 w-3 ${loading ? 'animate-spin' : ''}`} />
               {rows.length} resultados
             </span>
-            <Button variant="outline" size="sm" onClick={exportarExcel}
-                    disabled={exportando || rows.length === 0}
-                    className="gap-1 border-pillado-green-300 text-pillado-green-700 hover:bg-pillado-green-50">
-              {exportando
-                ? <Spinner className="h-3 w-3" />
-                : <Download className="h-3 w-3" />}
-              {exportando ? 'Generando…' : 'Exportar Excel'}
-            </Button>
           </div>
           <div className="grid gap-2 sm:grid-cols-4">
             <div>
