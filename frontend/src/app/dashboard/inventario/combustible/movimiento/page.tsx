@@ -59,9 +59,12 @@ export default function NuevoMovimientoPage() {
   const [horometro, setHorometro] = useState('')
   const [kilometraje, setKilometraje] = useState('')
 
-  // Foto y observaciones
-  const [fotoUrl, setFotoUrl] = useState<string | null>(null)
-  const [uploadingFoto, setUploadingFoto] = useState(false)
+  // Fotos del medidor: una ANTES (lectura inicial) y otra DESPUES (lectura final)
+  // Para despachos, ambas son OBLIGATORIAS (MIG61 valida en BD).
+  const [fotoInicialUrl, setFotoInicialUrl] = useState<string | null>(null)
+  const [fotoFinalUrl, setFotoFinalUrl] = useState<string | null>(null)
+  const [uploadingInicial, setUploadingInicial] = useState(false)
+  const [uploadingFinal, setUploadingFinal] = useState(false)
   const [observaciones, setObservaciones] = useState('')
 
   // Feedback
@@ -121,23 +124,23 @@ export default function NuevoMovimientoPage() {
     [activos]
   )
 
-  async function handleFoto(file: File) {
+  async function handleFoto(file: File, momento: 'inicial' | 'final') {
     if (!estanqueId) {
       setSubmitError('Seleccione el estanque primero.')
       return
     }
-    setUploadingFoto(true)
+    if (momento === 'inicial') setUploadingInicial(true); else setUploadingFinal(true)
     setSubmitError(null)
     const { url, error } = await uploadEvidenciaCombustible(file, {
       tipo: 'medidor',
       estanqueId,
     })
-    setUploadingFoto(false)
+    if (momento === 'inicial') setUploadingInicial(false); else setUploadingFinal(false)
     if (error || !url) {
-      setSubmitError(error?.message ?? 'No se pudo subir la foto.')
+      setSubmitError(error?.message ?? `No se pudo subir la foto ${momento}.`)
       return
     }
-    setFotoUrl(url)
+    if (momento === 'inicial') setFotoInicialUrl(url); else setFotoFinalUrl(url)
   }
 
   async function handleSubmit() {
@@ -149,7 +152,15 @@ export default function NuevoMovimientoPage() {
     const lf = parseFloat(lectFinal)
     if (isNaN(li) || isNaN(lf)) return setSubmitError('Lecturas invalidas.')
     if (lf <= li) return setSubmitError('Lectura final debe ser mayor a la inicial.')
-    if (!fotoUrl) return setSubmitError('Adjunte la foto del medidor.')
+
+    // Validacion fotos: en despachos ambas son obligatorias.
+    // En ingresos basta con foto inicial (registro de medidor pre-carga).
+    if (!fotoInicialUrl) {
+      return setSubmitError('Adjunte la foto del medidor ANTES del movimiento.')
+    }
+    if (tipo === 'despacho' && !fotoFinalUrl) {
+      return setSubmitError('Adjunte la foto del medidor DESPUES del despacho (trazabilidad cobro a cliente).')
+    }
 
     if (tipo === 'ingreso') {
       if (!proveedor.trim()) return setSubmitError('Ingrese el proveedor.')
@@ -172,7 +183,9 @@ export default function NuevoMovimientoPage() {
         medidor_id: medidorId,
         lectura_inicial_lt: li,
         lectura_final_lt: lf,
-        foto_medidor_url: fotoUrl,
+        foto_medidor_url: fotoInicialUrl,  // legacy: la inicial como "principal"
+        foto_medidor_inicial_url: fotoInicialUrl,
+        foto_medidor_final_url:   fotoFinalUrl,
         proveedor: tipo === 'ingreso' ? proveedor : null,
         numero_factura: tipo === 'ingreso' ? numFactura : null,
         costo_unitario_clp: tipo === 'ingreso' ? parseFloat(costoUnit) : null,
@@ -204,7 +217,8 @@ export default function NuevoMovimientoPage() {
   function reset() {
     setSubmitSuccess(null)
     setLectFinal('')
-    setFotoUrl(null)
+    setFotoInicialUrl(null)
+    setFotoFinalUrl(null)
     setObservaciones('')
     setNumFactura('')
     setVehiculoId('')
@@ -565,60 +579,35 @@ export default function NuevoMovimientoPage() {
         </Card>
       )}
 
-      {/* Foto del medidor */}
+      {/* Fotos del medidor: INICIAL (antes) + FINAL (despues) */}
       {medidorId && (
         <Card>
           <CardContent className="space-y-3 p-4">
             <h3 className="text-sm font-semibold text-gray-700">
-              Foto del medidor *
+              Fotos del medidor {tipo === 'despacho' && <span className="text-red-500">*</span>}
             </h3>
-            {fotoUrl ? (
-              <div className="space-y-2">
-                <img
-                  src={fotoUrl}
-                  alt="Medidor"
-                  className="h-48 w-full rounded-lg border object-cover"
-                />
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="w-full"
-                  onClick={() => setFotoUrl(null)}
-                >
-                  Cambiar foto
-                </Button>
-              </div>
-            ) : (
-              <label
-                className={cn(
-                  'flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-gray-300 p-6 text-center',
-                  uploadingFoto && 'opacity-60'
-                )}
-              >
-                {uploadingFoto ? (
-                  <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
-                ) : (
-                  <Camera className="h-8 w-8 text-gray-400" />
-                )}
-                <span className="text-sm font-medium text-gray-700">
-                  {uploadingFoto ? 'Subiendo…' : 'Tomar foto'}
-                </span>
-                <span className="text-xs text-gray-500">
-                  Muestra el totalizador con la lectura actual
-                </span>
-                <input
-                  type="file"
-                  accept="image/*"
-                  capture="environment"
-                  className="hidden"
-                  disabled={uploadingFoto}
-                  onChange={(e) => {
-                    const f = e.target.files?.[0]
-                    if (f) handleFoto(f)
-                  }}
-                />
-              </label>
-            )}
+            <p className="text-xs text-gray-500">
+              Captura el totalizador <b>ANTES</b> y <b>DESPUÉS</b> del movimiento. La diferencia entre
+              ambas lecturas valida los litros despachados (foto = evidencia de cobro al cliente).
+            </p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <FotoSlot
+                titulo="ANTES (lectura inicial)"
+                colorBadge="bg-blue-100 text-blue-700"
+                fotoUrl={fotoInicialUrl}
+                uploading={uploadingInicial}
+                onClear={() => setFotoInicialUrl(null)}
+                onFile={(f) => handleFoto(f, 'inicial')}
+              />
+              <FotoSlot
+                titulo={tipo === 'despacho' ? 'DESPUÉS (lectura final) *' : 'DESPUÉS (lectura final)'}
+                colorBadge="bg-green-100 text-green-700"
+                fotoUrl={fotoFinalUrl}
+                uploading={uploadingFinal}
+                onClear={() => setFotoFinalUrl(null)}
+                onFile={(f) => handleFoto(f, 'final')}
+              />
+            </div>
           </CardContent>
         </Card>
       )}
@@ -653,7 +642,11 @@ export default function NuevoMovimientoPage() {
       <div className="fixed bottom-0 left-0 right-0 z-30 border-t bg-white p-3 lg:static lg:border-0 lg:bg-transparent lg:p-0">
         <Button
           onClick={handleSubmit}
-          disabled={registrar.isPending || !medidorId || !fotoUrl}
+          disabled={
+            registrar.isPending || !medidorId ||
+            !fotoInicialUrl ||
+            (tipo === 'despacho' && !fotoFinalUrl)
+          }
           className="w-full"
           size="lg"
         >
@@ -669,6 +662,49 @@ export default function NuevoMovimientoPage() {
           )}
         </Button>
       </div>
+    </div>
+  )
+}
+
+function FotoSlot({
+  titulo, colorBadge, fotoUrl, uploading, onClear, onFile,
+}: {
+  titulo: string
+  colorBadge: string
+  fotoUrl: string | null
+  uploading: boolean
+  onClear: () => void
+  onFile: (f: File) => void
+}) {
+  return (
+    <div className="space-y-2">
+      <div className={cn('inline-block rounded-full px-2 py-0.5 text-[10px] font-bold', colorBadge)}>
+        {titulo}
+      </div>
+      {fotoUrl ? (
+        <div className="space-y-2">
+          <img src={fotoUrl} alt={titulo}
+               className="h-40 w-full rounded-lg border object-cover" />
+          <Button variant="outline" size="sm" className="w-full" onClick={onClear}>
+            Cambiar foto
+          </Button>
+        </div>
+      ) : (
+        <label className={cn(
+          'flex h-40 cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed border-gray-300 p-3 text-center hover:border-gray-400',
+          uploading && 'opacity-60'
+        )}>
+          {uploading
+            ? <Loader2 className="h-7 w-7 animate-spin text-gray-400" />
+            : <Camera className="h-7 w-7 text-gray-400" />}
+          <span className="text-xs font-medium text-gray-700">
+            {uploading ? 'Subiendo…' : 'Tomar foto'}
+          </span>
+          <input type="file" accept="image/*" capture="environment" className="hidden"
+                 disabled={uploading}
+                 onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f) }} />
+        </label>
+      )}
     </div>
   )
 }

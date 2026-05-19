@@ -270,6 +270,9 @@ export interface RegistrarMovimientoPayload {
   horometro_vehiculo?: number | null
   kilometraje_vehiculo?: number | null
   observaciones?: string | null
+  // NUEVO MIG61: fotos separadas. Obligatorias en despachos.
+  foto_medidor_inicial_url?: string | null
+  foto_medidor_final_url?: string | null
 }
 
 export async function registrarMovimiento(payload: RegistrarMovimientoPayload) {
@@ -289,6 +292,8 @@ export async function registrarMovimiento(payload: RegistrarMovimientoPayload) {
     p_horometro_vehiculo: payload.horometro_vehiculo ?? null,
     p_kilometraje_vehiculo: payload.kilometraje_vehiculo ?? null,
     p_observaciones: payload.observaciones ?? null,
+    p_foto_medidor_inicial_url: payload.foto_medidor_inicial_url ?? null,
+    p_foto_medidor_final_url:   payload.foto_medidor_final_url ?? null,
   })
   return {
     data: data as {
