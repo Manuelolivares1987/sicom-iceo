@@ -24,6 +24,9 @@ import {
   ESTADO_DIARIO_COLORS,
 } from '@/lib/services/flota'
 import { supabase } from '@/lib/supabase'
+import { cambiarContratoActivo } from '@/lib/services/contrato-activo'
+import { cargarContratosActivos, type ContratoOption } from '@/lib/services/geocercas'
+import { Building2 } from 'lucide-react'
 
 type EstadoCodigo = 'A' | 'D' | 'H' | 'R' | 'M' | 'T' | 'F' | 'V' | 'U' | 'L'
 type TipoOT = 'preventivo' | 'correctivo' | 'inspeccion' | 'lubricacion'
@@ -40,6 +43,7 @@ interface CambiarEstadoModalProps {
     estado_comercial?: string | null
     operacion?: string | null
     cliente_actual?: string | null
+    contrato_id?: string | null
   } | null
 }
 
@@ -109,6 +113,22 @@ export function CambiarEstadoModal({ open, onClose, activo }: CambiarEstadoModal
   const [otResponsableId, setOtResponsableId] = useState<string>('')
   const [otDescripcion, setOtDescripcion] = useState('')
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
+
+  // ── Contratos: opcional cambiar contrato en el mismo flujo ──
+  const [contratos, setContratos] = useState<ContratoOption[]>([])
+  const [nuevoContratoId, setNuevoContratoId] = useState<string>('')
+  const [razonContrato, setRazonContrato] = useState('')
+  useEffect(() => {
+    if (!open) return
+    cargarContratosActivos().then(setContratos).catch(() => { /* skip */ })
+  }, [open])
+  // Pre-rellenar con el contrato actual al abrir/cambiar de activo
+  useEffect(() => {
+    if (open && activo) {
+      setNuevoContratoId(activo.contrato_id ?? '')
+      setRazonContrato('')
+    }
+  }, [open, activo?.id, activo?.contrato_id])
 
   // ── Reset del formulario: SOLO al abrir o cambiar de activo.
   //    Si dependiera de estadoHoy, el refetch post-mutación borraría el errorMsg.
@@ -191,6 +211,23 @@ export function CambiarEstadoModal({ open, onClose, activo }: CambiarEstadoModal
         ot_responsable_id: otResponsableId || undefined,
         ot_descripcion: otDescripcion.trim() || undefined,
       })
+
+      // Si el usuario cambio el contrato en el selector -> aplicarlo
+      const contratoOriginal = activo.contrato_id ?? null
+      const contratoNuevo    = nuevoContratoId || null
+      if (contratoNuevo !== contratoOriginal) {
+        try {
+          await cambiarContratoActivo({
+            activoId: activo.id,
+            nuevoContratoId: contratoNuevo,
+            razon: razonContrato.trim() || `Cambio de contrato junto a cambio de estado a ${nuevoEstado}. Motivo: ${motivo.trim()}`,
+          })
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : 'Error al cambiar contrato'
+          setErrorMsg(`Estado aplicado, pero el contrato no se pudo cambiar: ${msg}`)
+          return
+        }
+      }
 
       if (result?.success) {
         // Si se pidió crear OT pero falló, avisamos sin cerrar el modal
@@ -328,6 +365,39 @@ export function CambiarEstadoModal({ open, onClose, activo }: CambiarEstadoModal
             maxLength={500}
           />
           <div className="mt-1 text-xs text-gray-400 text-right">{motivo.length}/500</div>
+        </div>
+
+        {/* ── Contrato (opcional, en el mismo flujo) ── */}
+        <div className="rounded-lg border border-blue-200 bg-blue-50/40 p-3 space-y-2">
+          <label className="flex items-center gap-1.5 text-sm font-medium text-gray-700">
+            <Building2 className="h-4 w-4 text-blue-600" />
+            Contrato del activo (opcional)
+          </label>
+          <Select
+            value={nuevoContratoId}
+            onChange={(e) => setNuevoContratoId(e.target.value)}
+            helperText={
+              !activo?.contrato_id && nuevoContratoId
+                ? 'Se ASIGNARÁ este contrato al activo.'
+                : activo?.contrato_id && !nuevoContratoId
+                ? 'Se QUITARÁ el contrato actual.'
+                : nuevoContratoId !== (activo?.contrato_id ?? '')
+                ? 'Se CAMBIARÁ del contrato actual al seleccionado.'
+                : 'Sin cambios al contrato (queda igual).'
+            }
+          >
+            <option value="">— Sin contrato —</option>
+            {contratos.map((c) => (
+              <option key={c.id} value={c.id}>{c.codigo} · {c.cliente}</option>
+            ))}
+          </Select>
+          {nuevoContratoId !== (activo?.contrato_id ?? '') && (
+            <Input
+              placeholder="Razón del cambio de contrato (opcional)"
+              value={razonContrato}
+              onChange={(e) => setRazonContrato(e.target.value)}
+            />
+          )}
         </div>
 
         {/* ── Sección Crear OT ── */}
