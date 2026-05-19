@@ -144,6 +144,59 @@ export async function marcarAccesoPortal(): Promise<void> {
   await supabase.rpc('rpc_portal_marcar_acceso')
 }
 
+// ====== Agregaciones para dashboard ========================================
+
+export type ResumenPorDia = {
+  fecha:           string      // YYYY-MM-DD
+  transacciones:   number
+  litros:          number
+  costo:           number
+  patentes_unicas: number
+}
+
+export function agruparPorDia(rows: TransaccionCombustibleCliente[]): ResumenPorDia[] {
+  const grupos = new Map<string, {
+    transacciones: number; litros: number; costo: number; patentes: Set<string>
+  }>()
+  for (const r of rows) {
+    const fecha = r.fecha.slice(0, 10)  // YYYY-MM-DD
+    if (!grupos.has(fecha)) {
+      grupos.set(fecha, { transacciones: 0, litros: 0, costo: 0, patentes: new Set() })
+    }
+    const g = grupos.get(fecha)!
+    g.transacciones++
+    g.litros += Number(r.litros)
+    g.costo  += Number(r.costo_total_clp ?? 0)
+    const pat = r.activo_patente ?? r.externo_patente
+    if (pat) g.patentes.add(pat)
+  }
+  return Array.from(grupos.entries())
+    .map(([fecha, g]) => ({
+      fecha,
+      transacciones:   g.transacciones,
+      litros:          g.litros,
+      costo:           g.costo,
+      patentes_unicas: g.patentes.size,
+    }))
+    .sort((a, b) => a.fecha.localeCompare(b.fecha))
+}
+
+export function calcularKpis(rows: TransaccionCombustibleCliente[]) {
+  const litros = rows.reduce((s, r) => s + Number(r.litros), 0)
+  const costo  = rows.reduce((s, r) => s + Number(r.costo_total_clp ?? 0), 0)
+  const patentes = new Set<string>()
+  for (const r of rows) {
+    const p = r.activo_patente ?? r.externo_patente
+    if (p) patentes.add(p)
+  }
+  return {
+    transacciones: rows.length,
+    litros,
+    costo,
+    patentes_unicas: patentes.size,
+  }
+}
+
 export async function esUsuarioPortal(): Promise<boolean> {
   const { data, error } = await supabase.rpc('fn_es_usuario_portal')
   if (error) return false

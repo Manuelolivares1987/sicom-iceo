@@ -33,7 +33,7 @@ export default function PortalLoginPage() {
         return
       }
       await marcarAccesoPortal()
-      router.push('/portal/transacciones')
+      router.push('/portal/dashboard')
     } catch (e) {
       setError((e as Error).message)
     } finally {
