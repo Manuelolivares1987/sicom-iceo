@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   Search, Filter, X, AlertTriangle, RefreshCw, Calendar, Truck,
-  Camera, FileSignature, Fuel,
+  Camera, FileSignature, Fuel, Download,
 } from 'lucide-react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -78,6 +78,65 @@ export default function PortalTransaccionesPage() {
     return { transacciones: rows.length, litros, costo }
   }, [rows])
 
+  const exportarCSV = () => {
+    if (rows.length === 0) return
+    // Excel-ES interpreta `;` como separador. UTF-8 BOM para que respete tildes.
+    const sep = ';'
+    const headers = [
+      'Fecha', 'Patente', 'Empresa / Cliente', 'Estanque', 'Litros',
+      'Lectura inicial', 'Lectura final', 'Costo CLP', 'Receptor', 'RUT',
+      'Observaciones', 'Foto medidor inicial', 'Foto medidor final',
+      'Foto patente', 'Firma receptor',
+    ]
+    const esc = (v: unknown) => {
+      if (v == null) return ''
+      const s = String(v).replace(/"/g, '""')
+      return /[";\n\r]/.test(s) ? `"${s}"` : s
+    }
+    const fmtNum = (n: number | null | undefined) =>
+      n == null ? '' : String(n).replace('.', ',') // coma decimal para Excel-ES
+
+    const lines = [
+      headers.join(sep),
+      ...rows.map((r) => [
+        new Date(r.fecha).toLocaleString('es-CL'),
+        r.activo_patente ?? r.externo_patente ?? '',
+        r.activo_cliente ?? r.externo_empresa ?? '',
+        r.estanque_codigo ?? '',
+        fmtNum(Number(r.litros)),
+        fmtNum(r.lectura_inicial_lt != null ? Number(r.lectura_inicial_lt) : null),
+        fmtNum(r.lectura_final_lt != null ? Number(r.lectura_final_lt) : null),
+        fmtNum(r.costo_total_clp != null ? Number(r.costo_total_clp) : null),
+        r.nombre_receptor ?? '',
+        r.rut_receptor ?? '',
+        r.observaciones ?? '',
+        r.foto_medidor_inicial_url ?? '',
+        r.foto_medidor_final_url ?? '',
+        r.foto_patente_url ?? '',
+        r.firma_receptor_url ?? '',
+      ].map(esc).join(sep)),
+      '',
+      // Resumen al pie
+      `Resumen${sep}`,
+      `Periodo desde${sep}${fechaDesde}`,
+      `Periodo hasta${sep}${fechaHasta}`,
+      `Filtro patente${sep}${patente || '(todas)'}`,
+      `Filtro empresa${sep}${empresa || '(todas)'}`,
+      `Total despachos${sep}${stats.transacciones}`,
+      `Litros totales${sep}${fmtNum(Math.round(stats.litros * 100) / 100)}`,
+      `Costo total CLP${sep}${Math.round(stats.costo)}`,
+    ]
+
+    const csv = '﻿' + lines.join('\r\n')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `pillado_combustible_${fechaDesde}_${fechaHasta}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   return (
     <div className="space-y-4 p-4">
       {/* Stats */}
@@ -105,6 +164,11 @@ export default function PortalTransaccionesPage() {
               <RefreshCw className={`mr-1 inline h-3 w-3 ${loading ? 'animate-spin' : ''}`} />
               {rows.length} resultados
             </span>
+            <Button variant="outline" size="sm" onClick={exportarCSV}
+                    disabled={rows.length === 0}
+                    className="gap-1 border-pillado-green-300 text-pillado-green-700 hover:bg-pillado-green-50">
+              <Download className="h-3 w-3" /> Exportar CSV
+            </Button>
           </div>
           <div className="grid gap-2 sm:grid-cols-4">
             <div>
