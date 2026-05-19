@@ -260,6 +260,14 @@ export interface SalidaCombustiblePayload {
   fecha_movimiento?: string | null
   observacion?: string | null
   evidencia_url?: string | null
+  // MIG64: vehiculo externo + fotos + receptor
+  vehiculo_externo_id?:      string | null
+  foto_medidor_inicial_url?: string | null
+  foto_medidor_final_url?:   string | null
+  foto_patente_url?:         string | null
+  firma_receptor_url?:       string | null
+  nombre_receptor?:          string | null
+  rut_receptor?:             string | null
 }
 
 export interface SalidaCombustibleResult {
@@ -410,6 +418,14 @@ export async function registrarSalidaCombustible(payload: SalidaCombustiblePaylo
     p_fecha_movimiento: payload.fecha_movimiento ?? null,
     p_observacion:      payload.observacion ?? null,
     p_evidencia_url:    payload.evidencia_url ?? null,
+    // MIG64
+    p_vehiculo_externo_id:      payload.vehiculo_externo_id ?? null,
+    p_foto_medidor_inicial_url: payload.foto_medidor_inicial_url ?? null,
+    p_foto_medidor_final_url:   payload.foto_medidor_final_url ?? null,
+    p_foto_patente_url:         payload.foto_patente_url ?? null,
+    p_firma_receptor_url:       payload.firma_receptor_url ?? null,
+    p_nombre_receptor:          payload.nombre_receptor ?? null,
+    p_rut_receptor:             payload.rut_receptor ?? null,
   })
   if (error) return { data: null, error }
   return { data: data as SalidaCombustibleResult, error: null }
