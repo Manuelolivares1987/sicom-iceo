@@ -1,9 +1,9 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
-  ArrowLeft, Save, AlertCircle, ArrowDownRight, Camera, Loader2,
+  ArrowLeft, Save, AlertCircle, ArrowDownRight, Camera, Loader2, MapPin, BarChart3,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -13,18 +13,29 @@ import { Spinner } from '@/components/ui/spinner'
 import { SignaturePad } from '@/components/ui/signature-pad'
 import { cn, formatCLP, todayISO } from '@/lib/utils'
 import { useToast } from '@/contexts/toast-context'
+import { useAuth } from '@/contexts/auth-context'
 import {
   useEstanquesActivos, useFaenas, useActivos, useRegistrarSalidaCombustible,
 } from '@/hooks/use-combustible-cpp'
 import { useOTsValidasSalida, useCECO } from '@/hooks/use-bodega-salida-fifo'
 import type {
-  SalidaCombustiblePayload, DestinoSalidaCombustible,
+  SalidaCombustiblePayload, DestinoSalidaCombustible, PropuestaLitrosEquipo,
 } from '@/lib/services/combustible-cpp'
+import { getPropuestaLitrosEquipo } from '@/lib/services/combustible-cpp'
 import { uploadEvidenciaCombustible } from '@/lib/services/combustible'
 import {
   getVehiculosExternosAutorizados,
   type VehiculoExternoAutorizado,
 } from '@/lib/services/combustible'
+import { capturarFotoConGeo, FotoGeoError } from '@/lib/services/foto-geo'
+
+interface FotoSellada {
+  url: string
+  lat: number
+  lon: number
+  ts:  string
+  accuracy: number
+}
 
 const DESTINOS: { v: DestinoSalidaCombustible; label: string; hint: string }[] = [
   { v: 'equipo',          label: 'Equipo / vehículo', hint: 'Despacho a un activo del maestro o vehículo externo autorizado' },
@@ -46,6 +57,8 @@ function dataUrlToBlob(dataUrl: string): Blob {
 export function SalidaCombustibleForm() {
   const router = useRouter()
   const toast = useToast()
+  const { user } = useAuth()
+
   const [estanqueId, setEstanqueId] = useState('')
   const [litros, setLitros]         = useState<number | ''>('')
   const [destino, setDestino]       = useState<DestinoSalidaCombustible>('equipo')
@@ -58,20 +71,27 @@ export function SalidaCombustibleForm() {
   const [fecha, setFecha]           = useState<string>(todayISO())
   const [observacion, setObservacion] = useState('')
 
-  // MIG64: externos + fotos + receptor
+  // MIG64
   const [esExterno, setEsExterno]           = useState(false)
   const [vehiculoExternoId, setVehiculoExternoId] = useState('')
   const [externos, setExternos]             = useState<VehiculoExternoAutorizado[]>([])
-  const [fotoInicial, setFotoInicial]       = useState<string | null>(null)
-  const [fotoFinal, setFotoFinal]           = useState<string | null>(null)
-  const [fotoPatente, setFotoPatente]       = useState<string | null>(null)
   const [nombreReceptor, setNombreReceptor] = useState('')
   const [rutReceptor, setRutReceptor]       = useState('')
   const [firmaDataUrl, setFirmaDataUrl]     = useState<string | null>(null)
-  const [uploadingIni, setUploadingIni]     = useState(false)
-  const [uploadingFin, setUploadingFin]     = useState(false)
-  const [uploadingPat, setUploadingPat]     = useState(false)
   const [submitting, setSubmitting]         = useState(false)
+
+  // MIG66: fotos selladas
+  const [fotoInicial, setFotoInicial] = useState<FotoSellada | null>(null)
+  const [fotoFinal, setFotoFinal]     = useState<FotoSellada | null>(null)
+  const [fotoPatente, setFotoPatente] = useState<FotoSellada | null>(null)
+  const [uploadingIni, setUploadingIni] = useState(false)
+  const [uploadingFin, setUploadingFin] = useState(false)
+  const [uploadingPat, setUploadingPat] = useState(false)
+
+  // MIG66: lecturas medidor + propuesta histórica
+  const [lecturaIni, setLecturaIni] = useState<number | ''>('')
+  const [lecturaFin, setLecturaFin] = useState<number | ''>('')
+  const [propuesta, setPropuesta]   = useState<PropuestaLitrosEquipo | null>(null)
 
   const { data: estanques, isLoading: loadEst } = useEstanquesActivos()
   const { data: activos } = useActivos()
@@ -86,10 +106,15 @@ export function SalidaCombustibleForm() {
     }
   }, [destino])
 
-  // Si cambian destino a algo distinto de equipo, limpiar externo
   useEffect(() => {
     if (destino !== 'equipo') setEsExterno(false)
   }, [destino])
+
+  // Cargar propuesta histórica cuando se elige un equipo
+  useEffect(() => {
+    if (!equipoId || esExterno) { setPropuesta(null); return }
+    getPropuestaLitrosEquipo(equipoId).then(({ data }) => setPropuesta(data ?? null))
+  }, [equipoId, esExterno])
 
   const estanque = estanques?.find((e) => e.id === estanqueId)
   const litrosNum = typeof litros === 'number' ? litros : 0
@@ -103,8 +128,23 @@ export function SalidaCombustibleForm() {
   const requiereCECO    = destino === 'ceco'
   const requiereFaena   = destino === 'faena'
   const requiereCliente = destino === 'venta_externa'
+  const requiereFotos   = destino === 'equipo'
 
-  const requiereFotos = destino === 'equipo'  // a equipo (flota o externo) -> 2 fotos medidor
+  // Diferencia medidor
+  const diffMedidor = useMemo(() => {
+    if (typeof lecturaIni !== 'number' || typeof lecturaFin !== 'number') return null
+    const d = lecturaFin - lecturaIni
+    return d > 0 ? Math.round(d * 100) / 100 : null
+  }, [lecturaIni, lecturaFin])
+
+  const desviacionLitros = useMemo(() => {
+    if (diffMedidor == null || litrosNum <= 0) return null
+    return Math.round(Math.abs(diffMedidor - litrosNum) * 100) / 100
+  }, [diffMedidor, litrosNum])
+
+  const desviacionFueraTolerancia =
+    diffMedidor != null && desviacionLitros != null &&
+    desviacionLitros > Math.max(litrosNum * 0.03, 1)
 
   const errores: string[] = []
   if (!estanqueId) errores.push('Selecciona estanque.')
@@ -118,8 +158,8 @@ export function SalidaCombustibleForm() {
   if (requiereFaena && !faenaId) errores.push('Destino faena: selecciona la faena.')
   if (requiereCliente && !clienteNombre.trim()) errores.push('Venta externa: nombre del cliente obligatorio.')
 
-  if (requiereFotos && !fotoInicial) errores.push('Foto del medidor ANTES (inicial) obligatoria.')
-  if (requiereFotos && !fotoFinal) errores.push('Foto del medidor DESPUES (final) obligatoria.')
+  if (requiereFotos && !fotoInicial) errores.push('Foto del medidor ANTES obligatoria (con GPS).')
+  if (requiereFotos && !fotoFinal) errores.push('Foto del medidor DESPUÉS obligatoria (con GPS).')
   if (esExterno && !fotoPatente)   errores.push('Foto de la PATENTE obligatoria para vehículo externo.')
   if (esExterno && !firmaDataUrl)  errores.push('Firma del RECEPTOR obligatoria para vehículo externo.')
   if (esExterno && !nombreReceptor.trim()) errores.push('Nombre del receptor obligatorio para vehículo externo.')
@@ -135,13 +175,21 @@ export function SalidaCombustibleForm() {
     const setUp = tipo === 'inicial' ? setUploadingIni : tipo === 'final' ? setUploadingFin : setUploadingPat
     setUp(true)
     try {
-      const { url, error } = await uploadEvidenciaCombustible(file, { tipo: 'medidor', estanqueId })
+      const sello = await capturarFotoConGeo(file, {
+        usuarioEmail: user?.email ?? null,
+        contexto: `Salida combustible · ${estanque?.codigo ?? ''} · ${tipo.toUpperCase()}`,
+      })
+      const sealedFile = new File([sello.blob], `${tipo}_${Date.now()}.jpg`, { type: 'image/jpeg' })
+      const { url, error } = await uploadEvidenciaCombustible(sealedFile, { tipo: 'medidor', estanqueId })
       if (error || !url) throw error ?? new Error('No se pudo subir')
-      if (tipo === 'inicial') setFotoInicial(url)
-      else if (tipo === 'final') setFotoFinal(url)
-      else setFotoPatente(url)
+
+      const data: FotoSellada = { url, lat: sello.lat, lon: sello.lon, ts: sello.ts, accuracy: sello.accuracy }
+      if (tipo === 'inicial') setFotoInicial(data)
+      else if (tipo === 'final') setFotoFinal(data)
+      else setFotoPatente(data)
     } catch (e) {
-      toast.error(`Foto ${tipo}: ${(e as Error).message}`)
+      if (e instanceof FotoGeoError) toast.error(`Foto ${tipo} bloqueada: ${e.message}`)
+      else toast.error(`Foto ${tipo}: ${(e as Error).message}`)
     } finally {
       setUp(false)
     }
@@ -163,7 +211,6 @@ export function SalidaCombustibleForm() {
     }
     setSubmitting(true)
     try {
-      // Subir firma si la hay
       let firmaUrl: string | null = null
       if (firmaDataUrl) {
         try { firmaUrl = await subirFirma() }
@@ -182,18 +229,31 @@ export function SalidaCombustibleForm() {
         cliente_nombre: requiereCliente ? clienteNombre.trim() : null,
         fecha_movimiento: fecha ? `${fecha}T00:00:00Z` : null,
         observacion: observacion.trim() || null,
-        // MIG64
         vehiculo_externo_id: esExterno ? vehiculoExternoId : null,
-        foto_medidor_inicial_url: fotoInicial,
-        foto_medidor_final_url:   fotoFinal,
-        foto_patente_url:         fotoPatente,
+        foto_medidor_inicial_url: fotoInicial?.url ?? null,
+        foto_medidor_final_url:   fotoFinal?.url ?? null,
+        foto_patente_url:         fotoPatente?.url ?? null,
         firma_receptor_url:       firmaUrl,
         nombre_receptor:          nombreReceptor.trim() || null,
         rut_receptor:             rutReceptor.trim() || null,
+        // MIG66
+        foto_medidor_inicial_lat: fotoInicial?.lat ?? null,
+        foto_medidor_inicial_lon: fotoInicial?.lon ?? null,
+        foto_medidor_inicial_ts:  fotoInicial?.ts ?? null,
+        foto_medidor_final_lat:   fotoFinal?.lat ?? null,
+        foto_medidor_final_lon:   fotoFinal?.lon ?? null,
+        foto_medidor_final_ts:    fotoFinal?.ts ?? null,
+        foto_patente_lat:         fotoPatente?.lat ?? null,
+        foto_patente_lon:         fotoPatente?.lon ?? null,
+        foto_patente_ts:          fotoPatente?.ts ?? null,
+        lectura_medidor_inicial_lt: typeof lecturaIni === 'number' ? lecturaIni : null,
+        lectura_medidor_final_lt:   typeof lecturaFin === 'number' ? lecturaFin : null,
       }
 
       registrar.mutate(payload, {
         onSuccess: (data) => {
+          const w = (data as unknown as { warning_medidor?: string | null }).warning_medidor
+          if (w) toast.info(`Aviso: ${w}`)
           toast.success(`Salida ${data.folio}: ${data.litros_salida} lt @ ${formatCLP(data.cpp_vigente)} = ${formatCLP(data.costo_total)}`)
           router.push('/dashboard/combustible')
         },
@@ -226,8 +286,8 @@ export function SalidaCombustibleForm() {
         <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
         <div>
           La salida costea al <strong>CPP vigente</strong> del estanque y descuenta stock teórico.
-          Las salidas a equipos requieren <strong>2 fotos del medidor</strong>. Los despachos a
-          vehículos externos autorizados (LISSET LOPEZ G, MYG, etc.) también requieren <strong>foto de la patente + firma del receptor</strong>.
+          Las fotos se firman con <strong>GPS + fecha/hora del sistema</strong> (anti-reciclaje).
+          Los despachos a vehículos externos requieren patente + firma del receptor.
         </div>
       </div>
 
@@ -256,7 +316,7 @@ export function SalidaCombustibleForm() {
               )}
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Litros *</label>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Litros de SALIDA *</label>
               <Input type="number" step="0.01" min="0.01" max={stockActual}
                      value={litros}
                      onChange={(e) => setLitros(e.target.value === '' ? '' : Number(e.target.value))}
@@ -286,7 +346,6 @@ export function SalidaCombustibleForm() {
             </div>
           </div>
 
-          {/* Toggle externo (solo si destino=equipo) */}
           {requiereEquipo && (
             <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-3">
               <label className="flex items-center gap-2 cursor-pointer">
@@ -325,6 +384,27 @@ export function SalidaCombustibleForm() {
                   <option key={a.id} value={a.id}>{a.codigo} — {a.nombre} {a.tipo ? `[${a.tipo}]` : ''}</option>
                 ))}
               </select>
+
+              {/* Propuesta histórica MIG66 */}
+              {propuesta && propuesta.n_muestras > 0 && (
+                <div className="mt-2 rounded-lg border border-purple-200 bg-purple-50 p-2 text-xs text-purple-900 flex items-start gap-2">
+                  <BarChart3 className="h-4 w-4 mt-0.5 shrink-0" />
+                  <div className="flex-1">
+                    <div>
+                      <strong>Promedio histórico:</strong> {Number(propuesta.promedio).toFixed(1)} lt
+                      {' '}(n={propuesta.n_muestras}, σ±{Number(propuesta.stddev).toFixed(1)},
+                      {' '}rango {Number(propuesta.minimo).toFixed(0)}–{Number(propuesta.maximo).toFixed(0)} lt)
+                    </div>
+                    <button type="button" className="text-purple-700 underline mt-1"
+                            onClick={() => setLitros(Number(propuesta.promedio))}>
+                      Usar {Number(propuesta.promedio).toFixed(1)} lt como propuesta
+                    </button>
+                  </div>
+                </div>
+              )}
+              {propuesta && propuesta.n_muestras === 0 && (
+                <div className="mt-2 text-[11px] text-gray-500">Equipo sin historial de despachos previos.</div>
+              )}
             </div>
           )}
 
@@ -389,6 +469,55 @@ export function SalidaCombustibleForm() {
             </div>
           </div>
 
+          {/* Lecturas medidor MIG66 */}
+          <div className="rounded-lg border border-indigo-200 bg-indigo-50/50 p-3 space-y-2">
+            <div className="text-xs font-semibold text-indigo-900">
+              Lectura del totalizador del estanque (opcional, recomendado)
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div>
+                <label className="block text-[11px] text-gray-700 mb-1">Lectura ANTES (lt)</label>
+                <Input type="number" step="0.01" min="0" value={lecturaIni}
+                       onChange={(e) => setLecturaIni(e.target.value === '' ? '' : Number(e.target.value))} />
+              </div>
+              <div>
+                <label className="block text-[11px] text-gray-700 mb-1">Lectura DESPUÉS (lt)</label>
+                <Input type="number" step="0.01" min="0" value={lecturaFin}
+                       onChange={(e) => setLecturaFin(e.target.value === '' ? '' : Number(e.target.value))} />
+              </div>
+              <div>
+                <label className="block text-[11px] text-gray-700 mb-1">Diferencia (propuesta)</label>
+                <div className={cn(
+                  'h-[42px] flex items-center px-3 rounded-md border text-sm tabular-nums font-semibold',
+                  diffMedidor == null ? 'bg-gray-50 border-gray-200 text-gray-400'
+                  : desviacionFueraTolerancia ? 'bg-amber-50 border-amber-300 text-amber-900'
+                  : 'bg-green-50 border-green-300 text-green-900',
+                )}>
+                  {diffMedidor != null ? `${diffMedidor.toFixed(2)} lt` : '—'}
+                </div>
+              </div>
+            </div>
+            {diffMedidor != null && (
+              <div className="text-[11px]">
+                {desviacionFueraTolerancia ? (
+                  <span className="text-amber-700">
+                    Diferencia ({diffMedidor.toFixed(2)} lt) difiere de litros declarados
+                    ({litrosNum.toFixed(2)} lt) en {desviacionLitros?.toFixed(2)} lt (&gt; 3%).
+                  </span>
+                ) : litrosNum > 0 ? (
+                  <span className="text-green-700">
+                    Diferencia coincide con litros declarados (±{desviacionLitros?.toFixed(2)} lt).
+                  </span>
+                ) : (
+                  <button type="button" className="text-blue-700 underline"
+                          onClick={() => setLitros(diffMedidor)}>
+                    Usar {diffMedidor.toFixed(2)} lt como litros de salida
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">Fecha</label>
@@ -400,7 +529,6 @@ export function SalidaCombustibleForm() {
             </div>
           </div>
 
-          {/* Preview impacto */}
           {estanque && litrosNum > 0 && !excedeStock && (
             <div className="rounded-lg border border-green-200 bg-green-50 p-3 text-xs text-green-900 space-y-1">
               <div className="font-semibold">Impacto simulado</div>
@@ -415,24 +543,22 @@ export function SalidaCombustibleForm() {
         </CardContent>
       </Card>
 
-      {/* Fotos del medidor (cuando destino es equipo o externo) */}
       {requiereFotos && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Fotos del medidor <span className="text-red-500">*</span></CardTitle>
+            <CardTitle className="text-base">Fotos del medidor con GPS <span className="text-red-500">*</span></CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-xs text-gray-500 mb-3">
-              Captura el totalizador <b>ANTES</b> y <b>DESPUÉS</b> del despacho. La diferencia
-              entre ambas lecturas valida los litros entregados.
+              Captura el totalizador <b>ANTES</b> y <b>DESPUÉS</b>. Cada foto se firma con ubicación GPS y timestamp.
             </p>
             <div className="grid gap-3 sm:grid-cols-2">
               <FotoSlot titulo="ANTES (medidor inicial)" colorBadge="bg-blue-100 text-blue-700"
-                        fotoUrl={fotoInicial} uploading={uploadingIni}
+                        foto={fotoInicial} uploading={uploadingIni}
                         onClear={() => setFotoInicial(null)}
                         onFile={(f) => handleFoto(f, 'inicial')} />
               <FotoSlot titulo="DESPUÉS (medidor final)" colorBadge="bg-green-100 text-green-700"
-                        fotoUrl={fotoFinal} uploading={uploadingFin}
+                        foto={fotoFinal} uploading={uploadingFin}
                         onClear={() => setFotoFinal(null)}
                         onFile={(f) => handleFoto(f, 'final')} />
             </div>
@@ -440,7 +566,6 @@ export function SalidaCombustibleForm() {
         </Card>
       )}
 
-      {/* Receptor (cuando es externo) */}
       {esExterno && (
         <Card>
           <CardHeader>
@@ -452,7 +577,7 @@ export function SalidaCombustibleForm() {
             </p>
             <div className="grid gap-3 sm:grid-cols-2">
               <FotoSlot titulo="FOTO PATENTE *" colorBadge="bg-purple-100 text-purple-700"
-                        fotoUrl={fotoPatente} uploading={uploadingPat}
+                        foto={fotoPatente} uploading={uploadingPat}
                         onClear={() => setFotoPatente(null)}
                         onFile={(f) => handleFoto(f, 'patente')} />
               <div className="space-y-2">
@@ -496,8 +621,8 @@ export function SalidaCombustibleForm() {
   )
 }
 
-function FotoSlot({ titulo, colorBadge, fotoUrl, uploading, onClear, onFile }: {
-  titulo: string; colorBadge: string; fotoUrl: string | null; uploading: boolean
+function FotoSlot({ titulo, colorBadge, foto, uploading, onClear, onFile }: {
+  titulo: string; colorBadge: string; foto: FotoSellada | null; uploading: boolean
   onClear: () => void; onFile: (f: File) => void
 }) {
   return (
@@ -505,9 +630,13 @@ function FotoSlot({ titulo, colorBadge, fotoUrl, uploading, onClear, onFile }: {
       <div className={cn('inline-block rounded-full px-2 py-0.5 text-[10px] font-bold', colorBadge)}>
         {titulo}
       </div>
-      {fotoUrl ? (
+      {foto ? (
         <div className="space-y-2">
-          <img src={fotoUrl} alt={titulo} className="h-40 w-full rounded-lg border object-cover" />
+          <img src={foto.url} alt={titulo} className="h-40 w-full rounded-lg border object-cover" />
+          <div className="text-[10px] text-gray-600 flex items-center gap-1">
+            <MapPin className="h-3 w-3" />
+            {foto.lat.toFixed(5)}, {foto.lon.toFixed(5)} (±{Math.round(foto.accuracy)}m) · {new Date(foto.ts).toLocaleString('es-CL', { hour12: false })}
+          </div>
           <Button variant="outline" size="sm" className="w-full" onClick={onClear}>Cambiar foto</Button>
         </div>
       ) : (
@@ -519,8 +648,9 @@ function FotoSlot({ titulo, colorBadge, fotoUrl, uploading, onClear, onFile }: {
             ? <Loader2 className="h-7 w-7 animate-spin text-gray-400" />
             : <Camera className="h-7 w-7 text-gray-400" />}
           <span className="text-xs font-medium text-gray-700">
-            {uploading ? 'Subiendo…' : 'Tomar foto'}
+            {uploading ? 'Geolocalizando + subiendo…' : 'Tomar foto'}
           </span>
+          <span className="text-[10px] text-gray-500">Requiere GPS activo</span>
           <input type="file" accept="image/*" capture="environment" className="hidden"
                  disabled={uploading}
                  onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f) }} />

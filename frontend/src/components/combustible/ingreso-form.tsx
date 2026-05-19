@@ -2,21 +2,36 @@
 
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, Save, AlertCircle, ArrowUpRight, Sparkles } from 'lucide-react'
+import {
+  ArrowLeft, Save, AlertCircle, ArrowUpRight, Sparkles, Camera, Loader2, MapPin,
+} from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Spinner } from '@/components/ui/spinner'
-import { formatCLP, todayISO } from '@/lib/utils'
+import { cn, formatCLP, todayISO } from '@/lib/utils'
 import { useToast } from '@/contexts/toast-context'
+import { useAuth } from '@/contexts/auth-context'
 import {
   useEstanquesActivos, useProveedoresCombustible, useRegistrarIngresoCombustible,
 } from '@/hooks/use-combustible-cpp'
 import type { IngresoCombustiblePayload } from '@/lib/services/combustible-cpp'
+import { uploadEvidenciaCombustible } from '@/lib/services/combustible'
+import { capturarFotoConGeo, FotoGeoError } from '@/lib/services/foto-geo'
+
+interface FotoSellada {
+  url: string
+  lat: number
+  lon: number
+  ts:  string
+  accuracy: number
+}
 
 export function IngresoCombustibleForm() {
   const router = useRouter()
   const toast = useToast()
+  const { user } = useAuth()
+
   const [estanqueId, setEstanqueId] = useState('')
   const [litros, setLitros]       = useState<number | ''>('')
   const [costo, setCosto]         = useState<number | ''>('')
@@ -25,6 +40,18 @@ export function IngresoCombustibleForm() {
   const [docNumero, setDocNumero] = useState('')
   const [fecha, setFecha]         = useState<string>(todayISO())
   const [observacion, setObservacion] = useState('')
+
+  // MIG65 + MIG66
+  const [fotoPatente, setFotoPatente] = useState<FotoSellada | null>(null)
+  const [fotoInicial, setFotoInicial] = useState<FotoSellada | null>(null)
+  const [fotoFinal, setFotoFinal]     = useState<FotoSellada | null>(null)
+  const [uploadingPat, setUploadingPat] = useState(false)
+  const [uploadingIni, setUploadingIni] = useState(false)
+  const [uploadingFin, setUploadingFin] = useState(false)
+
+  // MIG66: lecturas medidor estanque (opcional)
+  const [lecturaIni, setLecturaIni] = useState<number | ''>('')
+  const [lecturaFin, setLecturaFin] = useState<number | ''>('')
 
   const { data: estanques, isLoading: loadEst } = useEstanquesActivos()
   const { data: proveedores, isLoading: loadProv } = useProveedoresCombustible()
@@ -35,7 +62,22 @@ export function IngresoCombustibleForm() {
   const costoNum = typeof costo === 'number' ? costo : 0
   const valorTotal = litrosNum * costoNum
 
-  // CPP simulado
+  // Diferencia de medidor → propuesta de litros
+  const diffMedidor = useMemo(() => {
+    if (typeof lecturaIni !== 'number' || typeof lecturaFin !== 'number') return null
+    const d = lecturaFin - lecturaIni
+    return d > 0 ? Math.round(d * 100) / 100 : null
+  }, [lecturaIni, lecturaFin])
+
+  const desviacionLitros = useMemo(() => {
+    if (diffMedidor == null || litrosNum <= 0) return null
+    return Math.round(Math.abs(diffMedidor - litrosNum) * 100) / 100
+  }, [diffMedidor, litrosNum])
+
+  const desviacionFueraTolerancia =
+    diffMedidor != null && desviacionLitros != null &&
+    desviacionLitros > Math.max(litrosNum * 0.03, 1)
+
   const cppSimulado = useMemo(() => {
     if (!estanque || litrosNum <= 0 || costoNum < 0) return null
     const stockAct = Number(estanque.stock_teorico_lt)
@@ -53,10 +95,43 @@ export function IngresoCombustibleForm() {
   if (costoNum < 0) errores.push('Costo debe ser >= 0.')
   if (excedeCapacidad) errores.push(`Ingreso supera capacidad del estanque (${estanque?.capacidad_lt} lt).`)
   if (!docNumero.trim()) errores.push('N° documento obligatorio.')
+  if (!fotoPatente) errores.push('Foto de la PATENTE del camión proveedor obligatoria (con GPS activo).')
+  if (!fotoInicial) errores.push('Foto del medidor ANTES obligatoria (con GPS activo).')
+  if (!fotoFinal)   errores.push('Foto del medidor DESPUÉS obligatoria (con GPS activo).')
   const canSubmit = errores.length === 0
 
   if (loadEst || loadProv) {
     return <div className="flex justify-center py-10"><Spinner /></div>
+  }
+
+  async function handleFoto(file: File, tipo: 'patente' | 'inicial' | 'final') {
+    if (!estanqueId) { toast.error('Selecciona el estanque primero.'); return }
+    const setUp = tipo === 'patente' ? setUploadingPat : tipo === 'inicial' ? setUploadingIni : setUploadingFin
+    setUp(true)
+    try {
+      // 1) Capturar geo + estampar overlay
+      const sello = await capturarFotoConGeo(file, {
+        usuarioEmail: user?.email ?? null,
+        contexto: `Ingreso combustible · ${estanque?.codigo ?? ''} · ${tipo.toUpperCase()}`,
+      })
+      // 2) Subir el blob con overlay
+      const sealedFile = new File([sello.blob], `${tipo}_${Date.now()}.jpg`, { type: 'image/jpeg' })
+      const { url, error } = await uploadEvidenciaCombustible(sealedFile, { tipo: 'medidor', estanqueId })
+      if (error || !url) throw error ?? new Error('No se pudo subir')
+
+      const data: FotoSellada = { url, lat: sello.lat, lon: sello.lon, ts: sello.ts, accuracy: sello.accuracy }
+      if (tipo === 'patente') setFotoPatente(data)
+      else if (tipo === 'inicial') setFotoInicial(data)
+      else setFotoFinal(data)
+    } catch (e) {
+      if (e instanceof FotoGeoError) {
+        toast.error(`Foto ${tipo} bloqueada: ${e.message}`)
+      } else {
+        toast.error(`Foto ${tipo}: ${(e as Error).message}`)
+      }
+    } finally {
+      setUp(false)
+    }
   }
 
   const onSubmit = () => {
@@ -73,9 +148,25 @@ export function IngresoCombustibleForm() {
       doc_numero: docNumero.trim(),
       fecha_movimiento: fecha ? `${fecha}T00:00:00Z` : null,
       observacion: observacion.trim() || null,
+      foto_patente_url:         fotoPatente!.url,
+      foto_medidor_inicial_url: fotoInicial!.url,
+      foto_medidor_final_url:   fotoFinal!.url,
+      foto_patente_lat:           fotoPatente!.lat,
+      foto_patente_lon:           fotoPatente!.lon,
+      foto_patente_ts:            fotoPatente!.ts,
+      foto_medidor_inicial_lat:   fotoInicial!.lat,
+      foto_medidor_inicial_lon:   fotoInicial!.lon,
+      foto_medidor_inicial_ts:    fotoInicial!.ts,
+      foto_medidor_final_lat:     fotoFinal!.lat,
+      foto_medidor_final_lon:     fotoFinal!.lon,
+      foto_medidor_final_ts:      fotoFinal!.ts,
+      lectura_medidor_inicial_lt: typeof lecturaIni === 'number' ? lecturaIni : null,
+      lectura_medidor_final_lt:   typeof lecturaFin === 'number' ? lecturaFin : null,
     }
     registrar.mutate(payload, {
       onSuccess: (data) => {
+        const w = (data as unknown as { warning_medidor?: string | null }).warning_medidor
+        if (w) toast.info(`Aviso: ${w}`)
         toast.success(
           `Ingreso ${data.folio}: +${data.litros_ingresados} lt @ ${formatCLP(data.costo_unitario_ingreso)} · CPP ${formatCLP(data.cpp_anterior)} → ${formatCLP(data.cpp_nuevo)}`,
         )
@@ -103,8 +194,9 @@ export function IngresoCombustibleForm() {
       <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-900 flex items-start gap-2">
         <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
         <div>
-          <strong>CPP móvil.</strong> El ingreso recalcula el costo promedio del estanque automáticamente.
-          Solo afecta combustible — no toca stock_bodega ni inventario_capas.
+          <strong>CPP móvil + evidencia geo-verificada.</strong> Cada foto se firma con GPS, fecha y
+          usuario antes de subirse (anti-reciclaje). Opcionalmente puedes anotar las lecturas del
+          totalizador para validar que los litros declarados coinciden con la diferencia física.
         </div>
       </div>
 
@@ -153,12 +245,13 @@ export function IngresoCombustibleForm() {
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Litros *</label>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Litros ingresados *</label>
               <Input
                 type="number" step="0.01" min="0.01"
                 value={litros}
                 onChange={(e) => setLitros(e.target.value === '' ? '' : Number(e.target.value))}
                 className={excedeCapacidad ? 'border-red-500' : ''}
+                placeholder="ej: 2000"
               />
             </div>
             <div>
@@ -175,6 +268,55 @@ export function IngresoCombustibleForm() {
                 {formatCLP(valorTotal)}
               </div>
             </div>
+          </div>
+
+          {/* MIG66: lecturas medidor opcionales */}
+          <div className="rounded-lg border border-indigo-200 bg-indigo-50/50 p-3 space-y-2">
+            <div className="text-xs font-semibold text-indigo-900">
+              Lectura del totalizador del estanque (opcional, recomendado)
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div>
+                <label className="block text-[11px] text-gray-700 mb-1">Lectura ANTES (lt)</label>
+                <Input type="number" step="0.01" min="0" value={lecturaIni}
+                       onChange={(e) => setLecturaIni(e.target.value === '' ? '' : Number(e.target.value))} />
+              </div>
+              <div>
+                <label className="block text-[11px] text-gray-700 mb-1">Lectura DESPUÉS (lt)</label>
+                <Input type="number" step="0.01" min="0" value={lecturaFin}
+                       onChange={(e) => setLecturaFin(e.target.value === '' ? '' : Number(e.target.value))} />
+              </div>
+              <div>
+                <label className="block text-[11px] text-gray-700 mb-1">Diferencia (propuesta)</label>
+                <div className={cn(
+                  'h-[42px] flex items-center px-3 rounded-md border text-sm tabular-nums font-semibold',
+                  diffMedidor == null ? 'bg-gray-50 border-gray-200 text-gray-400'
+                  : desviacionFueraTolerancia ? 'bg-amber-50 border-amber-300 text-amber-900'
+                  : 'bg-green-50 border-green-300 text-green-900',
+                )}>
+                  {diffMedidor != null ? `${diffMedidor.toFixed(2)} lt` : '—'}
+                </div>
+              </div>
+            </div>
+            {diffMedidor != null && (
+              <div className="text-[11px]">
+                {desviacionFueraTolerancia ? (
+                  <span className="text-amber-700">
+                    Diferencia medidor ({diffMedidor.toFixed(2)} lt) difiere de litros declarados
+                    ({litrosNum.toFixed(2)} lt) en {desviacionLitros?.toFixed(2)} lt (&gt; 3%). Revisa antes de guardar.
+                  </span>
+                ) : litrosNum > 0 ? (
+                  <span className="text-green-700">
+                    Diferencia coincide con litros declarados (±{desviacionLitros?.toFixed(2)} lt).
+                  </span>
+                ) : (
+                  <button type="button" className="text-blue-700 underline"
+                          onClick={() => setLitros(diffMedidor)}>
+                    Usar {diffMedidor.toFixed(2)} lt como litros ingresados
+                  </button>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -213,10 +355,38 @@ export function IngresoCombustibleForm() {
               <div>
                 <strong>Simulación CPP:</strong> {formatCLP(Number(estanque.costo_promedio_lt))} → <strong>{formatCLP(cppSimulado)}</strong>
                 {' '}· Stock {Number(estanque.stock_teorico_lt).toFixed(2)} → <strong>{(Number(estanque.stock_teorico_lt) + litrosNum).toFixed(2)} lt</strong>
-                {' '}· Valor stock post: {formatCLP((Number(estanque.stock_teorico_lt) + litrosNum) * cppSimulado)}
               </div>
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      {/* Evidencia visual obligatoria con geo */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">
+            Evidencia visual con GPS <span className="text-red-500">*</span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-xs text-gray-500 mb-3">
+            Cada foto se firma automáticamente con <b>fecha/hora del sistema + coordenadas GPS</b>.
+            Si el dispositivo no entrega ubicación, la foto se rechaza.
+          </p>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <FotoSlot titulo="PATENTE CAMIÓN *" colorBadge="bg-purple-100 text-purple-700"
+                      foto={fotoPatente} uploading={uploadingPat}
+                      onClear={() => setFotoPatente(null)}
+                      onFile={(f) => handleFoto(f, 'patente')} />
+            <FotoSlot titulo="ANTES (medidor inicial) *" colorBadge="bg-blue-100 text-blue-700"
+                      foto={fotoInicial} uploading={uploadingIni}
+                      onClear={() => setFotoInicial(null)}
+                      onFile={(f) => handleFoto(f, 'inicial')} />
+            <FotoSlot titulo="DESPUÉS (medidor final) *" colorBadge="bg-green-100 text-green-700"
+                      foto={fotoFinal} uploading={uploadingFin}
+                      onClear={() => setFotoFinal(null)}
+                      onFile={(f) => handleFoto(f, 'final')} />
+          </div>
         </CardContent>
       </Card>
 
@@ -239,3 +409,41 @@ export function IngresoCombustibleForm() {
   )
 }
 
+function FotoSlot({ titulo, colorBadge, foto, uploading, onClear, onFile }: {
+  titulo: string; colorBadge: string; foto: FotoSellada | null; uploading: boolean
+  onClear: () => void; onFile: (f: File) => void
+}) {
+  return (
+    <div className="space-y-2">
+      <div className={cn('inline-block rounded-full px-2 py-0.5 text-[10px] font-bold', colorBadge)}>
+        {titulo}
+      </div>
+      {foto ? (
+        <div className="space-y-2">
+          <img src={foto.url} alt={titulo} className="h-40 w-full rounded-lg border object-cover" />
+          <div className="text-[10px] text-gray-600 flex items-center gap-1">
+            <MapPin className="h-3 w-3" />
+            {foto.lat.toFixed(5)}, {foto.lon.toFixed(5)} (±{Math.round(foto.accuracy)}m) · {new Date(foto.ts).toLocaleString('es-CL', { hour12: false })}
+          </div>
+          <Button variant="outline" size="sm" className="w-full" onClick={onClear}>Cambiar foto</Button>
+        </div>
+      ) : (
+        <label className={cn(
+          'flex h-40 cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed border-gray-300 p-3 text-center hover:border-gray-400',
+          uploading && 'opacity-60'
+        )}>
+          {uploading
+            ? <Loader2 className="h-7 w-7 animate-spin text-gray-400" />
+            : <Camera className="h-7 w-7 text-gray-400" />}
+          <span className="text-xs font-medium text-gray-700">
+            {uploading ? 'Geolocalizando + subiendo…' : 'Tomar foto'}
+          </span>
+          <span className="text-[10px] text-gray-500">Requiere GPS activo</span>
+          <input type="file" accept="image/*" capture="environment" className="hidden"
+                 disabled={uploading}
+                 onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f) }} />
+        </label>
+      )}
+    </div>
+  )
+}

@@ -211,6 +211,22 @@ export interface IngresoCombustiblePayload {
   fecha_movimiento?: string | null
   observacion?: string | null
   evidencia_url?: string | null
+  // MIG65: evidencia visual (foto patente camion + 2 fotos medidor)
+  foto_patente_url?:         string | null
+  foto_medidor_inicial_url?: string | null
+  foto_medidor_final_url?:   string | null
+  // MIG66: geo de cada foto + lecturas medidor estanque
+  foto_patente_lat?:           number | null
+  foto_patente_lon?:           number | null
+  foto_patente_ts?:            string | null
+  foto_medidor_inicial_lat?:   number | null
+  foto_medidor_inicial_lon?:   number | null
+  foto_medidor_inicial_ts?:    string | null
+  foto_medidor_final_lat?:     number | null
+  foto_medidor_final_lon?:     number | null
+  foto_medidor_final_ts?:      string | null
+  lectura_medidor_inicial_lt?: number | null
+  lectura_medidor_final_lt?:   number | null
 }
 
 export interface IngresoCombustibleResult {
@@ -239,6 +255,20 @@ export async function registrarIngresoCombustible(payload: IngresoCombustiblePay
     p_fecha_movimiento:   payload.fecha_movimiento ?? null,
     p_observacion:        payload.observacion ?? null,
     p_evidencia_url:      payload.evidencia_url ?? null,
+    p_foto_patente_url:         payload.foto_patente_url ?? null,
+    p_foto_medidor_inicial_url: payload.foto_medidor_inicial_url ?? null,
+    p_foto_medidor_final_url:   payload.foto_medidor_final_url ?? null,
+    p_foto_patente_lat:           payload.foto_patente_lat ?? null,
+    p_foto_patente_lon:           payload.foto_patente_lon ?? null,
+    p_foto_patente_ts:            payload.foto_patente_ts ?? null,
+    p_foto_medidor_inicial_lat:   payload.foto_medidor_inicial_lat ?? null,
+    p_foto_medidor_inicial_lon:   payload.foto_medidor_inicial_lon ?? null,
+    p_foto_medidor_inicial_ts:    payload.foto_medidor_inicial_ts ?? null,
+    p_foto_medidor_final_lat:     payload.foto_medidor_final_lat ?? null,
+    p_foto_medidor_final_lon:     payload.foto_medidor_final_lon ?? null,
+    p_foto_medidor_final_ts:      payload.foto_medidor_final_ts ?? null,
+    p_lectura_medidor_inicial_lt: payload.lectura_medidor_inicial_lt ?? null,
+    p_lectura_medidor_final_lt:   payload.lectura_medidor_final_lt ?? null,
   })
   if (error) return { data: null, error }
   return { data: data as IngresoCombustibleResult, error: null }
@@ -268,6 +298,18 @@ export interface SalidaCombustiblePayload {
   firma_receptor_url?:       string | null
   nombre_receptor?:          string | null
   rut_receptor?:             string | null
+  // MIG66: geo de cada foto + lecturas medidor estanque
+  foto_patente_lat?:           number | null
+  foto_patente_lon?:           number | null
+  foto_patente_ts?:            string | null
+  foto_medidor_inicial_lat?:   number | null
+  foto_medidor_inicial_lon?:   number | null
+  foto_medidor_inicial_ts?:    string | null
+  foto_medidor_final_lat?:     number | null
+  foto_medidor_final_lon?:     number | null
+  foto_medidor_final_ts?:      string | null
+  lectura_medidor_inicial_lt?: number | null
+  lectura_medidor_final_lt?:   number | null
 }
 
 export interface SalidaCombustibleResult {
@@ -426,9 +468,36 @@ export async function registrarSalidaCombustible(payload: SalidaCombustiblePaylo
     p_firma_receptor_url:       payload.firma_receptor_url ?? null,
     p_nombre_receptor:          payload.nombre_receptor ?? null,
     p_rut_receptor:             payload.rut_receptor ?? null,
+    p_foto_patente_lat:           payload.foto_patente_lat ?? null,
+    p_foto_patente_lon:           payload.foto_patente_lon ?? null,
+    p_foto_patente_ts:            payload.foto_patente_ts ?? null,
+    p_foto_medidor_inicial_lat:   payload.foto_medidor_inicial_lat ?? null,
+    p_foto_medidor_inicial_lon:   payload.foto_medidor_inicial_lon ?? null,
+    p_foto_medidor_inicial_ts:    payload.foto_medidor_inicial_ts ?? null,
+    p_foto_medidor_final_lat:     payload.foto_medidor_final_lat ?? null,
+    p_foto_medidor_final_lon:     payload.foto_medidor_final_lon ?? null,
+    p_foto_medidor_final_ts:      payload.foto_medidor_final_ts ?? null,
+    p_lectura_medidor_inicial_lt: payload.lectura_medidor_inicial_lt ?? null,
+    p_lectura_medidor_final_lt:   payload.lectura_medidor_final_lt ?? null,
   })
   if (error) return { data: null, error }
   return { data: data as SalidaCombustibleResult, error: null }
+}
+
+// ── MIG66: propuesta de litros (historico ultimos 5 despachos al equipo) ──
+export interface PropuestaLitrosEquipo {
+  equipo_id:  string
+  n_muestras: number
+  promedio:   number
+  stddev:     number
+  minimo:     number
+  maximo:     number
+  ultimos:    Array<{ lt: number; fecha: string }>
+}
+export async function getPropuestaLitrosEquipo(equipoId: string) {
+  const { data, error } = await supabase.rpc('rpc_propuesta_litros_equipo', { p_equipo_id: equipoId })
+  if (error) return { data: null, error }
+  return { data: data as PropuestaLitrosEquipo, error: null }
 }
 
 // ── MIG49: anular ingreso de combustible (corregir precio mal cargado) ─────
