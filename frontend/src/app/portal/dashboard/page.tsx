@@ -116,22 +116,35 @@ export default function PortalDashboardPage() {
       )}
 
       {/* Titulo del periodo */}
-      <Card className="bg-gradient-to-r from-blue-600 to-blue-700 text-white">
-        <CardContent className="flex items-center justify-between p-4">
+      <Card className="overflow-hidden border-0 bg-gradient-to-r from-pillado-green-700 via-pillado-green-600 to-pillado-green-500 text-white shadow-lg">
+        <CardContent className="flex items-center justify-between p-5">
           <div>
-            <div className="text-xs uppercase opacity-80">Periodo</div>
-            <div className="text-2xl font-bold capitalize">{label}</div>
+            <div className="text-xs uppercase tracking-widest opacity-80">Periodo</div>
+            <div className="mt-1 text-2xl font-bold capitalize sm:text-3xl">{label}</div>
+            <div className="mt-0.5 text-xs text-pillado-orange-200">
+              {desde} → {hasta}
+            </div>
           </div>
-          <Calendar className="h-8 w-8 opacity-50" />
+          <div className="rounded-full bg-pillado-orange-500/20 p-3">
+            <Calendar className="h-8 w-8 text-pillado-orange-300" />
+          </div>
         </CardContent>
       </Card>
 
-      {/* KPIs */}
+      {/* KPIs con paleta Pillado */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <KpiCard icon={<Truck className="h-5 w-5" />}   label="Despachos"      valor={kpis.transacciones.toString()} color="text-blue-700 bg-blue-50" />
-        <KpiCard icon={<Fuel className="h-5 w-5" />}    label="Litros totales" valor={fmtLt(kpis.litros)}            color="text-amber-700 bg-amber-50" />
-        <KpiCard icon={<DollarSign className="h-5 w-5" />} label="Costo total" valor={fmtCLP(kpis.costo)}            color="text-green-700 bg-green-50" />
-        <KpiCard icon={<Truck className="h-5 w-5" />}   label="Patentes únicas" valor={kpis.patentes_unicas.toString()} color="text-purple-700 bg-purple-50" />
+        <KpiCard icon={<Truck className="h-5 w-5" />}      label="Despachos"
+                 valor={kpis.transacciones.toString()}
+                 bg="bg-white" border="border-pillado-green-300" accent="text-pillado-green-700" />
+        <KpiCard icon={<Fuel className="h-5 w-5" />}       label="Litros totales"
+                 valor={fmtLt(kpis.litros)}
+                 bg="bg-white" border="border-pillado-orange-300" accent="text-pillado-orange-700" />
+        <KpiCard icon={<DollarSign className="h-5 w-5" />} label="Costo total"
+                 valor={fmtCLP(kpis.costo)}
+                 bg="bg-pillado-green-500 text-white" border="border-pillado-green-600" accent="text-pillado-orange-300" />
+        <KpiCard icon={<Truck className="h-5 w-5" />}      label="Patentes únicas"
+                 valor={kpis.patentes_unicas.toString()}
+                 bg="bg-white" border="border-gray-300" accent="text-gray-700" />
       </div>
 
       {/* Grafico de barras */}
@@ -167,7 +180,7 @@ export default function PortalDashboardPage() {
                   />
                   <Bar dataKey="litros" radius={[4, 4, 0, 0]}>
                     {resumenDia.map((_, idx) => (
-                      <Cell key={idx} fill="#3B82F6" />
+                      <Cell key={idx} fill="#2D8B3D" />
                     ))}
                   </Bar>
                 </BarChart>
@@ -232,22 +245,25 @@ function TabBtn({ label, active, onClick }: { label: string; active: boolean; on
     <button onClick={onClick}
             className={`rounded-md border px-3 py-1.5 text-sm font-medium transition-colors ${
               active
-                ? 'border-blue-600 bg-blue-600 text-white'
-                : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
+                ? 'border-pillado-green-500 bg-pillado-green-500 text-white shadow-md'
+                : 'border-gray-200 bg-white text-gray-700 hover:bg-pillado-green-50 hover:text-pillado-green-700'
             }`}>
       {label}
     </button>
   )
 }
 
-function KpiCard({ icon, label, valor, color }: { icon: React.ReactNode; label: string; valor: string; color: string }) {
+function KpiCard({ icon, label, valor, bg, border, accent }: {
+  icon: React.ReactNode; label: string; valor: string
+  bg: string; border: string; accent: string
+}) {
   return (
-    <div className={`rounded-lg border p-3 ${color}`}>
+    <div className={`rounded-xl border-2 p-4 shadow-sm transition-shadow hover:shadow-md ${bg} ${border}`}>
       <div className="flex items-center justify-between">
-        <div className="text-xs font-medium opacity-80">{label}</div>
-        <div className="opacity-50">{icon}</div>
+        <div className={`text-xs font-semibold uppercase tracking-wider opacity-80`}>{label}</div>
+        <div className={accent}>{icon}</div>
       </div>
-      <div className="mt-1 text-2xl font-bold">{valor}</div>
+      <div className={`mt-2 text-2xl font-bold sm:text-3xl ${accent}`}>{valor}</div>
     </div>
   )
 }

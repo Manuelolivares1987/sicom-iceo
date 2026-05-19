@@ -82,9 +82,12 @@ export default function PortalTransaccionesPage() {
     <div className="space-y-4 p-4">
       {/* Stats */}
       <div className="grid grid-cols-3 gap-2">
-        <StatBox label="Transacciones" valor={stats.transacciones.toString()} color="bg-blue-50 text-blue-700" />
-        <StatBox label="Litros totales" valor={fmtLt(stats.litros)} color="bg-amber-50 text-amber-700" />
-        <StatBox label="Costo total" valor={fmtCLP(stats.costo)} color="bg-green-50 text-green-700" />
+        <StatBox label="Despachos" valor={stats.transacciones.toString()}
+                 color="border-pillado-green-300 bg-white text-pillado-green-700" />
+        <StatBox label="Litros totales" valor={fmtLt(stats.litros)}
+                 color="border-pillado-orange-300 bg-white text-pillado-orange-700" />
+        <StatBox label="Costo total" valor={fmtCLP(stats.costo)}
+                 color="border-pillado-green-500 bg-pillado-green-500 text-white" />
       </div>
 
       {/* Filtros */}
@@ -136,9 +139,11 @@ export default function PortalTransaccionesPage() {
         </Card>
       )}
 
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base">Despachos de combustible</CardTitle>
+      <Card className="border-pillado-green-200">
+        <CardHeader className="border-b border-pillado-green-100 bg-pillado-green-50/40 pb-2">
+          <CardTitle className="flex items-center gap-2 text-base text-pillado-green-800">
+            <Fuel className="h-4 w-4" /> Despachos de combustible
+          </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
           {loading && rows.length === 0 ? (
@@ -197,9 +202,9 @@ export default function PortalTransaccionesPage() {
 
 function StatBox({ label, valor, color }: { label: string; valor: string; color: string }) {
   return (
-    <div className={`rounded-lg border px-3 py-2 ${color}`}>
-      <div className="text-[10px] font-medium opacity-80">{label}</div>
-      <div className="text-lg font-bold">{valor}</div>
+    <div className={`rounded-xl border-2 px-3 py-2.5 shadow-sm ${color}`}>
+      <div className="text-[10px] font-semibold uppercase tracking-wider opacity-80">{label}</div>
+      <div className="mt-1 text-lg font-bold sm:text-xl">{valor}</div>
     </div>
   )
 }
