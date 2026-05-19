@@ -100,10 +100,11 @@ export async function eliminarGeocerca(id: string): Promise<void> {
 export type ContratoOption = { id: string; codigo: string; cliente: string }
 
 export async function cargarContratosActivos(): Promise<ContratoOption[]> {
+  // Nota: la tabla contratos no tiene columna 'activo' — listamos todos
+  // y dejamos que la UI ordene/filtre si hace falta.
   const { data, error } = await supabase
     .from('contratos')
     .select('id, codigo, cliente')
-    .eq('activo', true)
     .order('codigo')
   if (error) throw error
   return (data ?? []) as ContratoOption[]
