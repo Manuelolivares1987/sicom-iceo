@@ -17,6 +17,21 @@ export function formatPercent(value: number, decimals = 1): string {
   return `${value.toFixed(decimals)}%`
 }
 
+// Extrae un mensaje legible de cualquier tipo de error (Error, PostgrestError,
+// objeto plano con .message/.details/.hint, string). Util para toasts.
+export function errorMessage(err: unknown, fallback = 'Error desconocido'): string {
+  if (!err) return fallback
+  if (typeof err === 'string') return err
+  if (err instanceof Error) return err.message
+  if (typeof err === 'object') {
+    const e = err as Record<string, unknown>
+    const parts = [e.message, e.details, e.hint, e.code]
+      .filter((x) => typeof x === 'string' && x.length > 0)
+    if (parts.length > 0) return parts.join(' · ')
+  }
+  return fallback
+}
+
 // Parsea un string de fecha respetando la zona horaria local.
 // Para DATE de Postgres (YYYY-MM-DD), new Date(str) lo interpreta como
 // UTC-medianoche y al formatear a es-CL (UTC-4) retrocede un dia. Aqui

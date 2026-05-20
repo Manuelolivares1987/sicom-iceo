@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Spinner } from '@/components/ui/spinner'
 import { SignaturePad } from '@/components/ui/signature-pad'
-import { cn, formatCLP, todayISO } from '@/lib/utils'
+import { cn, formatCLP, todayISO, errorMessage } from '@/lib/utils'
 import { useToast } from '@/contexts/toast-context'
 import { useAuth } from '@/contexts/auth-context'
 import {
@@ -258,14 +258,13 @@ export function SalidaCombustibleForm() {
           router.push('/dashboard/combustible')
         },
         onError: (err: unknown) => {
-          const msg = err instanceof Error ? err.message : 'Error al registrar salida'
-          toast.error(msg)
+          toast.error(errorMessage(err, 'Error al registrar salida'))
           setSubmitting(false)
         },
         onSettled: () => setSubmitting(false),
       })
     } catch (e) {
-      toast.error((e as Error).message)
+      toast.error(errorMessage(e, 'Error al registrar salida'))
       setSubmitting(false)
     }
   }

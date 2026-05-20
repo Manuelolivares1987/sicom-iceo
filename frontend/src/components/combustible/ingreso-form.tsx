@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Spinner } from '@/components/ui/spinner'
-import { cn, formatCLP, todayISO } from '@/lib/utils'
+import { cn, formatCLP, todayISO, errorMessage } from '@/lib/utils'
 import { useToast } from '@/contexts/toast-context'
 import { useAuth } from '@/contexts/auth-context'
 import {
@@ -173,8 +173,7 @@ export function IngresoCombustibleForm() {
         router.push('/dashboard/combustible')
       },
       onError: (err: unknown) => {
-        const msg = err instanceof Error ? err.message : 'Error al registrar ingreso'
-        toast.error(msg)
+        toast.error(errorMessage(err, 'Error al registrar ingreso'))
       },
     })
   }

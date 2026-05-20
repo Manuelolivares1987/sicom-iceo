@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Spinner } from '@/components/ui/spinner'
-import { formatCLP, todayISO, cn } from '@/lib/utils'
+import { formatCLP, todayISO, cn, errorMessage } from '@/lib/utils'
 import { useToast } from '@/contexts/toast-context'
 import { useAuth } from '@/contexts/auth-context'
 import {
@@ -122,8 +122,7 @@ export default function AjusteStockEstanquePage() {
         }
       },
       onError: (err: unknown) => {
-        const msg = err instanceof Error ? err.message : 'Error al ajustar stock'
-        toast.error(msg)
+        toast.error(errorMessage(err, 'Error al ajustar stock'))
       },
     })
   }
