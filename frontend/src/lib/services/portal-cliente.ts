@@ -277,6 +277,23 @@ export function calcularKpisCliente(rows: TransaccionCombustibleCliente[]): KpiC
   }
 }
 
+// ====== MIG74: Corregir patente de despacho ================================
+export async function corregirPatenteDespacho(params: {
+  id:                       string
+  nuevoEquipoId?:           string | null
+  nuevoVehiculoExternoId?:  string | null
+  motivo:                   string
+}): Promise<{ success: boolean; patente_anterior: string; patente_nueva: string; origen: string }> {
+  const { data, error } = await supabase.rpc('rpc_admin_corregir_patente_despacho', {
+    p_id:                          params.id,
+    p_nuevo_equipo_id:             params.nuevoEquipoId ?? null,
+    p_nuevo_vehiculo_externo_id:   params.nuevoVehiculoExternoId ?? null,
+    p_motivo:                      params.motivo,
+  })
+  if (error) throw error
+  return data as { success: boolean; patente_anterior: string; patente_nueva: string; origen: string }
+}
+
 export function totalMesEnCurso(rows: TransaccionCombustibleCliente[]): number {
   const now = new Date()
   const inicioMes = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()

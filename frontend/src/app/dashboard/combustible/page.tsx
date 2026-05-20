@@ -69,6 +69,7 @@ export default function CombustiblePage() {
           { label: 'Control kardex',      description: 'Teórico vs físico vs último kardex',       href: '/dashboard/combustible/control',           icon: Gauge,          accent: 'blue' },
           { label: 'Corregir ingreso',    description: 'Anular ingreso mal cargado (admin)',       href: '/dashboard/combustible/corregir-ingreso',  icon: Ban,            accent: 'red',  badge: 'Admin' },
           { label: 'Ajustar stock',       description: 'Corregir litros físicos del estanque',     href: '/dashboard/combustible/ajuste',            icon: Wrench,         accent: 'purple', badge: 'Admin' },
+          { label: 'Corregir patente',    description: 'Cambiar patente de un despacho ya hecho',  href: '/dashboard/combustible/corregir-despacho', icon: Wrench,         accent: 'amber',  badge: 'Admin' },
         ]}
       />
 
