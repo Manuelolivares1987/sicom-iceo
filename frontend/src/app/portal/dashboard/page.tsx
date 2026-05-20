@@ -139,7 +139,7 @@ export default function PortalDashboardPage() {
         <KpiCard icon={<Fuel className="h-5 w-5" />}       label="Litros totales"
                  valor={fmtLt(kpis.litros)}
                  bg="bg-white" border="border-pillado-orange-300" accent="text-pillado-orange-700" />
-        <KpiCard icon={<DollarSign className="h-5 w-5" />} label="Costo total"
+        <KpiCard icon={<DollarSign className="h-5 w-5" />} label="Total a pagar"
                  valor={fmtCLP(kpis.costo)}
                  bg="bg-pillado-green-500 text-white" border="border-pillado-green-600" accent="text-pillado-orange-300" />
         <KpiCard icon={<Truck className="h-5 w-5" />}      label="Patentes únicas"
@@ -207,7 +207,7 @@ export default function PortalDashboardPage() {
                   <th className="px-3 py-2 text-left">Fecha</th>
                   <th className="px-3 py-2 text-right">Despachos</th>
                   <th className="px-3 py-2 text-right">Litros</th>
-                  <th className="px-3 py-2 text-right">Costo</th>
+                  <th className="px-3 py-2 text-right">Total a pagar</th>
                   <th className="px-3 py-2 text-right">Patentes</th>
                 </tr>
               </thead>

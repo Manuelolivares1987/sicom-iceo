@@ -157,19 +157,21 @@ export type ResumenPorDia = {
   patentes_unicas: number
 }
 
+// Agrupa por dia mostrando el TOTAL A PAGAR del cliente (no el CPP interno).
+// MIG73: el portal ve total_venta_clp, no costo_total_clp.
 export function agruparPorDia(rows: TransaccionCombustibleCliente[]): ResumenPorDia[] {
   const grupos = new Map<string, {
     transacciones: number; litros: number; costo: number; patentes: Set<string>
   }>()
   for (const r of rows) {
-    const fecha = r.fecha.slice(0, 10)  // YYYY-MM-DD
+    const fecha = r.fecha.slice(0, 10)
     if (!grupos.has(fecha)) {
       grupos.set(fecha, { transacciones: 0, litros: 0, costo: 0, patentes: new Set() })
     }
     const g = grupos.get(fecha)!
     g.transacciones++
     g.litros += Number(r.litros)
-    g.costo  += Number(r.costo_total_clp ?? 0)
+    g.costo  += Number(r.total_venta_clp ?? 0)
     const pat = r.activo_patente ?? r.externo_patente
     if (pat) g.patentes.add(pat)
   }
@@ -184,9 +186,10 @@ export function agruparPorDia(rows: TransaccionCombustibleCliente[]): ResumenPor
     .sort((a, b) => a.fecha.localeCompare(b.fecha))
 }
 
+// MIG73: el cliente ve total_venta_clp (lo que paga), no costo_total_clp (CPP).
 export function calcularKpis(rows: TransaccionCombustibleCliente[]) {
   const litros = rows.reduce((s, r) => s + Number(r.litros), 0)
-  const costo  = rows.reduce((s, r) => s + Number(r.costo_total_clp ?? 0), 0)
+  const costo  = rows.reduce((s, r) => s + Number(r.total_venta_clp ?? 0), 0)
   const patentes = new Set<string>()
   for (const r of rows) {
     const p = r.activo_patente ?? r.externo_patente
