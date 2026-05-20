@@ -16,8 +16,13 @@
 -- ADITIVA, IDEMPOTENTE.
 -- ============================================================================
 
--- ── 1. Vista con UNION ALL ─────────────────────────────────────────────────
-CREATE OR REPLACE VIEW v_combustible_movimientos_cliente AS
+-- ── 1. Vista con UNION ALL + security_invoker=true ─────────────────────────
+-- CRITICO: security_invoker=true hace que la vista APLIQUE las RLS de las
+-- tablas base con el rol del que CONSULTA (no del owner). Sin esto, la vista
+-- bypasea las policies y el portal cliente veria todos los despachos.
+CREATE OR REPLACE VIEW v_combustible_movimientos_cliente
+WITH (security_invoker = true)
+AS
 
 -- (a) Movimientos legacy (combustible_movimientos / pantalla /movimiento)
 SELECT
@@ -147,6 +152,11 @@ CREATE POLICY pol_kardex_valorizado_portal_cliente
 SELECT jsonb_build_object(
     'vista_union', EXISTS(SELECT 1 FROM information_schema.views
                           WHERE table_name='v_combustible_movimientos_cliente'),
+    'vista_security_invoker', (
+        SELECT 'security_invoker=true' = ANY(c.reloptions)
+          FROM pg_class c
+         WHERE c.relname='v_combustible_movimientos_cliente'
+    ),
     'rls_kardex', EXISTS(SELECT 1 FROM pg_policies
                          WHERE tablename='combustible_kardex_valorizado'
                            AND policyname='pol_kardex_valorizado_portal_cliente'),
