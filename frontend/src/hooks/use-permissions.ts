@@ -120,7 +120,7 @@ const PERMISSIONS: Record<RolUsuario, Record<Module, Permission[]>> = {
   },
   comercial: {
     contratos: ['view','export'],
-    activos: ['view'],
+    activos: [],                  // comercial NO ve apartado Flota ni Activos sueltos
     ordenes_trabajo: [],
     inventario: [],
     mantenimiento: [],
@@ -131,7 +131,7 @@ const PERMISSIONS: Record<RolUsuario, Record<Module, Permission[]>> = {
     reportes: ['view','export'],
     auditoria: [],
     admin: [],
-    flota: ['view','export'],
+    flota: [],                    // comercial NO ve apartado Flota
     prevencion: [],
     comercial: ['view','create','edit','export'],
     reporte_diario: ['view','export'],
