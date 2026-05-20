@@ -17,6 +17,27 @@
 -- ADITIVA, IDEMPOTENTE. No toca esquema, solo reemplaza la function.
 -- ============================================================================
 
+-- ── 0. DROP de TODAS las signatures previas ────────────────────────────────
+-- (MIG64 dejo una signature, MIG66 otra distinta. Al usar CREATE OR REPLACE
+--  con una signature diferente, PG crea una funcion nueva sin reemplazar la
+--  anterior. Resultado: queries por nombre tiran 42725 "is not unique".)
+DO $$
+DECLARE
+    r RECORD;
+BEGIN
+    FOR r IN
+        SELECT 'DROP FUNCTION IF EXISTS public.' || p.proname ||
+               '(' || pg_get_function_identity_arguments(p.oid) || ')' AS drop_stmt
+          FROM pg_proc p
+          JOIN pg_namespace n ON n.oid = p.pronamespace
+         WHERE n.nspname = 'public'
+           AND p.proname = 'rpc_registrar_salida_combustible_valorizada'
+    LOOP
+        EXECUTE r.drop_stmt;
+    END LOOP;
+END $$;
+
+
 CREATE OR REPLACE FUNCTION rpc_registrar_salida_combustible_valorizada(
     p_estanque_id      UUID,
     p_litros           NUMERIC,
