@@ -78,6 +78,9 @@ export type TransaccionCombustibleCliente = {
   lectura_final_lt:            number
   costo_unitario_clp:          number | null
   costo_total_clp:             number | null
+  // MIG73: precio de venta al cliente
+  precio_venta_clp_lt:         number | null
+  total_venta_clp:             number | null
   fecha:                       string
   observaciones:               string | null
   estanque_nombre:             string | null
@@ -201,4 +204,83 @@ export async function esUsuarioPortal(): Promise<boolean> {
   const { data, error } = await supabase.rpc('fn_es_usuario_portal')
   if (error) return false
   return data === true
+}
+
+// ====== MIG73: Precios de venta de combustible =============================
+
+export type PrecioVentaCombustible = {
+  id:              string
+  empresa_externa: string | null
+  contrato_id:     string | null
+  precio_clp_lt:   number
+  vigente_desde:   string
+  vigente_hasta:   string | null
+  moneda:          string
+  observacion:     string | null
+  created_at:      string
+}
+
+export async function listarPreciosVentaCombustible(): Promise<PrecioVentaCombustible[]> {
+  const { data, error } = await supabase
+    .from('precios_venta_combustible')
+    .select('*')
+    .order('vigente_desde', { ascending: false })
+  if (error) throw error
+  return (data ?? []) as PrecioVentaCombustible[]
+}
+
+export async function setPrecioVentaCombustible(params: {
+  empresa?:       string
+  contratoId?:    string
+  precioClpLt:    number
+  vigenteDesde?:  string  // ISO; default NOW
+  observacion?:   string
+}): Promise<{ success: boolean; nuevo_id: string; cerrado_id: string | null }> {
+  const { data, error } = await supabase.rpc('rpc_admin_set_precio_venta', {
+    p_empresa:        params.empresa ?? null,
+    p_contrato_id:    params.contratoId ?? null,
+    p_precio_clp_lt:  params.precioClpLt,
+    p_vigente_desde:  params.vigenteDesde ?? null,
+    p_observacion:    params.observacion ?? null,
+  })
+  if (error) throw error
+  return data as { success: boolean; nuevo_id: string; cerrado_id: string | null }
+}
+
+export type KpiCliente = {
+  transacciones:     number
+  litros:            number
+  costo_propio:      number  // CPP (interno: costo Pillado)
+  total_a_pagar:     number  // Suma de total_venta_clp (lo que el cliente paga)
+  patentes_unicas:   number
+  filas_sin_precio:  number  // despachos donde no hay precio_venta_clp_lt
+}
+
+export function calcularKpisCliente(rows: TransaccionCombustibleCliente[]): KpiCliente {
+  const patentes = new Set<string>()
+  let litros = 0, costoPropio = 0, totalVenta = 0, sinPrecio = 0
+  for (const r of rows) {
+    litros      += Number(r.litros)
+    costoPropio += Number(r.costo_total_clp ?? 0)
+    totalVenta  += Number(r.total_venta_clp ?? 0)
+    if (r.precio_venta_clp_lt == null) sinPrecio++
+    const p = r.activo_patente ?? r.externo_patente
+    if (p) patentes.add(p)
+  }
+  return {
+    transacciones:    rows.length,
+    litros,
+    costo_propio:     costoPropio,
+    total_a_pagar:    totalVenta,
+    patentes_unicas:  patentes.size,
+    filas_sin_precio: sinPrecio,
+  }
+}
+
+export function totalMesEnCurso(rows: TransaccionCombustibleCliente[]): number {
+  const now = new Date()
+  const inicioMes = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
+  return rows
+    .filter((r) => r.fecha >= inicioMes)
+    .reduce((s, r) => s + Number(r.total_venta_clp ?? 0), 0)
 }

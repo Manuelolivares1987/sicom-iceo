@@ -14,6 +14,7 @@ import { Modal } from '@/components/ui/modal'
 import { supabase } from '@/lib/supabase'
 import {
   cargarTransaccionesCliente, esUsuarioPortal,
+  calcularKpisCliente, totalMesEnCurso,
   type TransaccionCombustibleCliente,
 } from '@/lib/services/portal-cliente'
 
@@ -72,11 +73,8 @@ export default function PortalTransaccionesPage() {
     /* eslint-disable-next-line react-hooks/exhaustive-deps */
   }, [fechaDesde, fechaHasta, patente, empresa])
 
-  const stats = useMemo(() => {
-    const litros = rows.reduce((s, r) => s + Number(r.litros), 0)
-    const costo  = rows.reduce((s, r) => s + Number(r.costo_total_clp ?? 0), 0)
-    return { transacciones: rows.length, litros, costo }
-  }, [rows])
+  const stats = useMemo(() => calcularKpisCliente(rows), [rows])
+  const totalMes = useMemo(() => totalMesEnCurso(rows), [rows])
 
   const exportarCSV = () => {
     if (rows.length === 0) return
@@ -96,8 +94,16 @@ export default function PortalTransaccionesPage() {
     const fmtNum = (n: number | null | undefined) =>
       n == null ? '' : String(n).replace('.', ',') // coma decimal para Excel-ES
 
+    const headersConPrecio = [
+      'Fecha', 'Patente', 'Empresa / Cliente', 'Estanque', 'Litros',
+      'Lectura inicial', 'Lectura final',
+      'Precio venta CLP/lt', 'Total a pagar CLP',
+      'Receptor', 'RUT',
+      'Observaciones', 'Foto medidor inicial', 'Foto medidor final',
+      'Foto patente', 'Firma receptor',
+    ]
     const lines = [
-      headers.join(sep),
+      headersConPrecio.join(sep),
       ...rows.map((r) => [
         new Date(r.fecha).toLocaleString('es-CL'),
         r.activo_patente ?? r.externo_patente ?? '',
@@ -106,7 +112,8 @@ export default function PortalTransaccionesPage() {
         fmtNum(Number(r.litros)),
         fmtNum(r.lectura_inicial_lt != null ? Number(r.lectura_inicial_lt) : null),
         fmtNum(r.lectura_final_lt != null ? Number(r.lectura_final_lt) : null),
-        fmtNum(r.costo_total_clp != null ? Number(r.costo_total_clp) : null),
+        fmtNum(r.precio_venta_clp_lt != null ? Number(r.precio_venta_clp_lt) : null),
+        fmtNum(r.total_venta_clp != null ? Number(r.total_venta_clp) : null),
         r.nombre_receptor ?? '',
         r.rut_receptor ?? '',
         r.observaciones ?? '',
@@ -116,7 +123,6 @@ export default function PortalTransaccionesPage() {
         r.firma_receptor_url ?? '',
       ].map(esc).join(sep)),
       '',
-      // Resumen al pie
       `Resumen${sep}`,
       `Periodo desde${sep}${fechaDesde}`,
       `Periodo hasta${sep}${fechaHasta}`,
@@ -124,7 +130,8 @@ export default function PortalTransaccionesPage() {
       `Filtro empresa${sep}${empresa || '(todas)'}`,
       `Total despachos${sep}${stats.transacciones}`,
       `Litros totales${sep}${fmtNum(Math.round(stats.litros * 100) / 100)}`,
-      `Costo total CLP${sep}${Math.round(stats.costo)}`,
+      `Total a pagar CLP${sep}${Math.round(stats.total_a_pagar)}`,
+      `Despachos sin precio definido${sep}${stats.filas_sin_precio}`,
     ]
 
     const csv = '﻿' + lines.join('\r\n')
@@ -139,13 +146,31 @@ export default function PortalTransaccionesPage() {
 
   return (
     <div className="space-y-4 p-4">
-      {/* Stats */}
+      {/* KPI mes en curso */}
+      <div className="rounded-xl border-2 border-pillado-orange-300 bg-gradient-to-br from-pillado-orange-50 to-white p-3 shadow-sm">
+        <div className="text-[10px] font-semibold uppercase tracking-wider text-pillado-orange-700">
+          Total adeudado · mes en curso
+        </div>
+        <div className="mt-1 text-2xl font-bold text-pillado-orange-800 sm:text-3xl">
+          {fmtCLP(totalMes)}
+        </div>
+        <div className="mt-1 text-[11px] text-gray-600">
+          Suma de despachos del mes calendario al precio acordado.
+          {stats.filas_sin_precio > 0 && (
+            <span className="ml-1 text-amber-700">
+              · {stats.filas_sin_precio} despachos sin precio definido (consulta a Pillado).
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Stats del período seleccionado */}
       <div className="grid grid-cols-3 gap-2">
-        <StatBox label="Despachos" valor={stats.transacciones.toString()}
+        <StatBox label="Despachos período" valor={stats.transacciones.toString()}
                  color="border-pillado-green-300 bg-white text-pillado-green-700" />
-        <StatBox label="Litros totales" valor={fmtLt(stats.litros)}
+        <StatBox label="Litros período" valor={fmtLt(stats.litros)}
                  color="border-pillado-orange-300 bg-white text-pillado-orange-700" />
-        <StatBox label="Costo total" valor={fmtCLP(stats.costo)}
+        <StatBox label="Total a pagar período" valor={fmtCLP(stats.total_a_pagar)}
                  color="border-pillado-green-500 bg-pillado-green-500 text-white" />
       </div>
 
@@ -224,9 +249,9 @@ export default function PortalTransaccionesPage() {
                     <th className="px-2 py-2 text-left">Fecha</th>
                     <th className="px-2 py-2 text-left">Patente</th>
                     <th className="px-2 py-2 text-left">Empresa / Cliente</th>
-                    <th className="px-2 py-2 text-left">Estanque</th>
                     <th className="px-2 py-2 text-right">Litros</th>
-                    <th className="px-2 py-2 text-right">Costo</th>
+                    <th className="px-2 py-2 text-right">Precio/lt</th>
+                    <th className="px-2 py-2 text-right">Total a pagar</th>
                     <th className="px-2 py-2 text-center">Evidencia</th>
                   </tr>
                 </thead>
@@ -243,9 +268,17 @@ export default function PortalTransaccionesPage() {
                       <td className="px-2 py-1.5 text-gray-600">
                         {r.activo_cliente ?? r.externo_empresa ?? '—'}
                       </td>
-                      <td className="px-2 py-1.5 text-gray-500">{r.estanque_codigo ?? '—'}</td>
                       <td className="px-2 py-1.5 text-right font-mono">{fmtLt(r.litros)}</td>
-                      <td className="px-2 py-1.5 text-right">{fmtCLP(r.costo_total_clp)}</td>
+                      <td className="px-2 py-1.5 text-right text-gray-600">
+                        {r.precio_venta_clp_lt != null
+                          ? fmtCLP(r.precio_venta_clp_lt)
+                          : <span className="text-amber-600 text-[10px]">sin precio</span>}
+                      </td>
+                      <td className="px-2 py-1.5 text-right font-semibold text-pillado-orange-700">
+                        {r.total_venta_clp != null && r.total_venta_clp > 0
+                          ? fmtCLP(r.total_venta_clp)
+                          : '—'}
+                      </td>
                       <td className="px-2 py-1.5 text-center">
                         {[r.foto_medidor_inicial_url, r.foto_medidor_final_url, r.foto_patente_url, r.firma_receptor_url]
                           .filter(Boolean).length} 📷
@@ -291,7 +324,11 @@ function DetalleModal({ trx, onClose }: { trx: TransaccionCombustibleCliente; on
                  value={new Date(trx.fecha).toLocaleString('es-CL')} />
           <Field icon={<Fuel className="h-3 w-3" />} label="Litros"
                  value={fmtLt(trx.litros)} highlight />
-          <Field label="Costo" value={fmtCLP(trx.costo_total_clp)} highlight />
+          <Field label="Precio CLP/lt"
+                 value={trx.precio_venta_clp_lt != null ? fmtCLP(trx.precio_venta_clp_lt) : 'sin precio'} />
+          <Field label="Total a pagar"
+                 value={trx.total_venta_clp != null && trx.total_venta_clp > 0 ? fmtCLP(trx.total_venta_clp) : '—'}
+                 highlight />
           <Field label="Lectura inicial" value={fmtLt(trx.lectura_inicial_lt)} />
           <Field label="Lectura final" value={fmtLt(trx.lectura_final_lt)} />
           <Field label="Estanque" value={trx.estanque_nombre ?? '—'} />

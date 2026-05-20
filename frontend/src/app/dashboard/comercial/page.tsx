@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
+import Link from 'next/link'
 import {
   Briefcase,
   TrendingUp,
@@ -9,7 +10,9 @@ import {
   DollarSign,
   MapPin,
   AlertCircle,
+  Fuel,
 } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import {
   BarChart,
   Bar,
@@ -150,14 +153,28 @@ export default function ComercialPage() {
   return (
     <div className="space-y-6">
       {/* ── Header ── */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-          <Briefcase className="h-7 w-7 text-purple-600" />
-          Vista Comercial
-        </h1>
-        <p className="text-sm text-gray-500 mt-1">
-          Estado de arriendo, pérdida comercial y cumplimiento de contratos · {fechaInicio} al {fechaFin}
-        </p>
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+            <Briefcase className="h-7 w-7 text-purple-600" />
+            Vista Comercial
+          </h1>
+          <p className="text-sm text-gray-500 mt-1">
+            Estado de arriendo, pérdida comercial y cumplimiento de contratos · {fechaInicio} al {fechaFin}
+          </p>
+        </div>
+        <div className="flex gap-2 flex-wrap">
+          <Link href="/dashboard/comercial/combustible-consolidado">
+            <Button variant="outline" size="sm">
+              <Fuel className="h-4 w-4 mr-1" /> Consolidado combustible
+            </Button>
+          </Link>
+          <Link href="/dashboard/comercial/precios-combustible">
+            <Button size="sm" className="bg-pillado-green-600 hover:bg-pillado-green-700">
+              <DollarSign className="h-4 w-4 mr-1" /> Precios combustible
+            </Button>
+          </Link>
+        </div>
       </div>
 
       {/* ── KPIs comerciales ── */}
