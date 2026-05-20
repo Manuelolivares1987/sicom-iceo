@@ -20,7 +20,13 @@
 -- CRITICO: security_invoker=true hace que la vista APLIQUE las RLS de las
 -- tablas base con el rol del que CONSULTA (no del owner). Sin esto, la vista
 -- bypasea las policies y el portal cliente veria todos los despachos.
-CREATE OR REPLACE VIEW v_combustible_movimientos_cliente
+--
+-- DROP previo: CREATE OR REPLACE VIEW NO permite cambiar tipos de columnas
+-- existentes (la vista MIG63 tenia tipo y destino_tipo como enums, ahora son
+-- text por el UNION). CASCADE por si alguna otra vista depende de esta.
+DROP VIEW IF EXISTS v_combustible_movimientos_cliente CASCADE;
+
+CREATE VIEW v_combustible_movimientos_cliente
 WITH (security_invoker = true)
 AS
 
