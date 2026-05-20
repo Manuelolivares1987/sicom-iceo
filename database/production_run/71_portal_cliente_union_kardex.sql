@@ -27,7 +27,7 @@ AS
 -- (a) Movimientos legacy (combustible_movimientos / pantalla /movimiento)
 SELECT
     m.id,
-    m.tipo,
+    m.tipo::text         AS tipo,
     m.litros,
     m.lectura_inicial_lt,
     m.lectura_final_lt,
@@ -37,7 +37,7 @@ SELECT
     m.observaciones,
     e.nombre             AS estanque_nombre,
     e.codigo             AS estanque_codigo,
-    m.destino_tipo,
+    m.destino_tipo::text AS destino_tipo,
     m.destino_descripcion,
     m.vehiculo_activo_id,
     af.codigo            AS activo_codigo,
