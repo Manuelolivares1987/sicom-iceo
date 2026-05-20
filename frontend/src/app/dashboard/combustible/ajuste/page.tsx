@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
-  ArrowLeft, Save, AlertCircle, Scale, Sparkles, ShieldAlert,
+  ArrowLeft, Save, Scale, Sparkles, ShieldAlert, Camera, Loader2, MapPin,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -11,14 +11,26 @@ import { Input } from '@/components/ui/input'
 import { Spinner } from '@/components/ui/spinner'
 import { formatCLP, todayISO, cn } from '@/lib/utils'
 import { useToast } from '@/contexts/toast-context'
+import { useAuth } from '@/contexts/auth-context'
 import {
   useEstanquesActivos, useAjustarStockEstanque,
 } from '@/hooks/use-combustible-cpp'
 import type { AjustarStockEstanquePayload } from '@/lib/services/combustible-cpp'
+import { uploadEvidenciaCombustible } from '@/lib/services/combustible'
+import { capturarFotoConGeo, FotoGeoError } from '@/lib/services/foto-geo'
+
+interface FotoSellada {
+  url: string
+  lat: number
+  lon: number
+  ts:  string
+  accuracy: number
+}
 
 export default function AjusteStockEstanquePage() {
   const router = useRouter()
   const toast = useToast()
+  const { user } = useAuth()
 
   const [estanqueId, setEstanqueId]       = useState('')
   const [litrosCorrectos, setLitros]      = useState<number | ''>('')
@@ -27,6 +39,8 @@ export default function AjusteStockEstanquePage() {
   const [fecha, setFecha]                 = useState<string>(todayISO())
   const [tambienCPP, setTambienCPP]       = useState(false)
   const [nuevoCPP, setNuevoCPP]           = useState<number | ''>('')
+  const [foto, setFoto]                   = useState<FotoSellada | null>(null)
+  const [uploadingFoto, setUploadingFoto] = useState(false)
 
   const { data: estanques, isLoading: loadEst } = useEstanquesActivos()
   const ajustar = useAjustarStockEstanque()
@@ -56,7 +70,28 @@ export default function AjusteStockEstanquePage() {
   if (tambienCPP && (nuevoCPP === '' || (cppNum != null && cppNum < 0))) {
     errores.push('Nuevo CPP debe ser >= 0.')
   }
+  if (!foto) errores.push('Foto del varillaje/medidor obligatoria (con GPS activo).')
   const canSubmit = errores.length === 0
+
+  async function handleFoto(file: File) {
+    if (!estanqueId) { toast.error('Selecciona el estanque primero.'); return }
+    setUploadingFoto(true)
+    try {
+      const sello = await capturarFotoConGeo(file, {
+        usuarioEmail: user?.email ?? null,
+        contexto: `Ajuste stock · ${estanque?.codigo ?? ''}`,
+      })
+      const sealedFile = new File([sello.blob], `ajuste_${Date.now()}.jpg`, { type: 'image/jpeg' })
+      const { url, error } = await uploadEvidenciaCombustible(sealedFile, { tipo: 'medidor', estanqueId })
+      if (error || !url) throw error ?? new Error('No se pudo subir')
+      setFoto({ url, lat: sello.lat, lon: sello.lon, ts: sello.ts, accuracy: sello.accuracy })
+    } catch (e) {
+      if (e instanceof FotoGeoError) toast.error(`Foto bloqueada: ${e.message}`)
+      else toast.error(`Foto: ${(e as Error).message}`)
+    } finally {
+      setUploadingFoto(false)
+    }
+  }
 
   const onSubmit = () => {
     if (!canSubmit) { toast.error('Revisa los campos marcados'); return }
@@ -65,6 +100,10 @@ export default function AjusteStockEstanquePage() {
       estanque_id:      estanqueId,
       litros_correctos: litrosNum,
       motivo:           motivo.trim(),
+      foto_url:         foto!.url,
+      foto_lat:         foto!.lat,
+      foto_lon:         foto!.lon,
+      foto_ts:          foto!.ts,
       evidencia_url:    evidenciaUrl.trim() || null,
       fecha_movimiento: fecha ? `${fecha}T00:00:00Z` : null,
       nuevo_cpp:        tambienCPP && cppNum != null ? cppNum : null,
@@ -109,9 +148,8 @@ export default function AjusteStockEstanquePage() {
         <ShieldAlert className="h-4 w-4 mt-0.5 shrink-0" />
         <div>
           Ajusta el <strong>stock físico real</strong> de un estanque (corrige diferencias por varillaje,
-          stock inicial mal cargado, evaporación, etc). Genera un movimiento tipo <code>ajuste</code> en
-          el kardex con la diferencia. <strong>Motivo obligatorio</strong> (auditable). Solo administrador,
-          subgerente o jefe de mantenimiento.
+          stock inicial mal cargado, evaporación, etc). Requiere <strong>foto del varillaje con GPS</strong> +
+          motivo (mín 10 chars). Solo administrador, subgerente o jefe de mantenimiento.
         </div>
       </div>
 
@@ -188,16 +226,6 @@ export default function AjusteStockEstanquePage() {
                 <span>Δ: <strong>{delta >= 0 ? '+' : ''}{delta.toFixed(2)} lt</strong></span>
                 <span>Valor: <strong>{formatCLP(valorAnterior)} → {formatCLP(valorNuevo)}</strong></span>
               </div>
-              {delta > 0 && (
-                <div className="text-[10px]">
-                  Se inserta kardex tipo=ajuste con litros_entrada={delta.toFixed(2)} al CPP vigente.
-                </div>
-              )}
-              {delta < 0 && (
-                <div className="text-[10px]">
-                  Se inserta kardex tipo=ajuste con litros_salida={Math.abs(delta).toFixed(2)} al CPP vigente.
-                </div>
-              )}
             </div>
           )}
 
@@ -209,17 +237,17 @@ export default function AjusteStockEstanquePage() {
               value={motivo}
               onChange={(e) => setMotivo(e.target.value)}
               className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm min-h-[70px]"
-              placeholder="ej: Stock inicial mal cargado por error de captura. Varillaje físico del 2026-05-20 entrega 850.5 lt."
+              placeholder="ej: Stock inicial mal cargado por error de captura. Varillaje físico entrega 850.5 lt."
             />
             <div className="text-[10px] text-gray-500 mt-1">{motivo.length} / mín 10</div>
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">URL evidencia (opcional)</label>
+            <label className="block text-xs font-medium text-gray-700 mb-1">URL evidencia extra (opcional)</label>
             <Input
               value={evidenciaUrl}
               onChange={(e) => setEvidenciaUrl(e.target.value)}
-              placeholder="https://... (foto del varillaje, acta firmada, etc)"
+              placeholder="https://... (acta firmada, otro documento)"
             />
           </div>
 
@@ -241,10 +269,31 @@ export default function AjusteStockEstanquePage() {
                   placeholder={`actual: ${cppActual.toFixed(4)}`}
                 />
                 <p className="text-[10px] text-gray-500 mt-1">
-                  Solo úsalo si Finanzas validó un costo distinto al actual. Cambia el valor del stock.
+                  Solo úsalo si Finanzas validó un costo distinto al actual.
                 </p>
               </div>
             )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Foto obligatoria con geo */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">
+            Foto del varillaje / medidor con GPS <span className="text-red-500">*</span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-xs text-gray-500 mb-3">
+            Captura el varillaje físico que justifica el ajuste. La foto se firma con
+            <b> fecha/hora del sistema + coordenadas GPS</b>. Si el dispositivo no entrega
+            ubicación, la foto se rechaza.
+          </p>
+          <div className="max-w-xs">
+            <FotoSlot foto={foto} uploading={uploadingFoto}
+                      onClear={() => setFoto(null)}
+                      onFile={handleFoto} />
           </div>
         </CardContent>
       </Card>
@@ -267,6 +316,45 @@ export default function AjusteStockEstanquePage() {
           </Button>
         </CardContent>
       </Card>
+    </div>
+  )
+}
+
+function FotoSlot({ foto, uploading, onClear, onFile }: {
+  foto: FotoSellada | null; uploading: boolean
+  onClear: () => void; onFile: (f: File) => void
+}) {
+  return (
+    <div className="space-y-2">
+      <div className="inline-block rounded-full bg-purple-100 px-2 py-0.5 text-[10px] font-bold text-purple-700">
+        VARILLAJE / MEDIDOR *
+      </div>
+      {foto ? (
+        <div className="space-y-2">
+          <img src={foto.url} alt="Varillaje" className="h-44 w-full rounded-lg border object-cover" />
+          <div className="text-[10px] text-gray-600 flex items-center gap-1">
+            <MapPin className="h-3 w-3" />
+            {foto.lat.toFixed(5)}, {foto.lon.toFixed(5)} (±{Math.round(foto.accuracy)}m) · {new Date(foto.ts).toLocaleString('es-CL', { hour12: false })}
+          </div>
+          <Button variant="outline" size="sm" className="w-full" onClick={onClear}>Cambiar foto</Button>
+        </div>
+      ) : (
+        <label className={cn(
+          'flex h-44 cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed border-gray-300 p-3 text-center hover:border-gray-400',
+          uploading && 'opacity-60',
+        )}>
+          {uploading
+            ? <Loader2 className="h-7 w-7 animate-spin text-gray-400" />
+            : <Camera className="h-7 w-7 text-gray-400" />}
+          <span className="text-xs font-medium text-gray-700">
+            {uploading ? 'Geolocalizando + subiendo…' : 'Tomar foto'}
+          </span>
+          <span className="text-[10px] text-gray-500">Requiere GPS activo</span>
+          <input type="file" accept="image/*" capture="environment" className="hidden"
+                 disabled={uploading}
+                 onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f) }} />
+        </label>
+      )}
     </div>
   )
 }

@@ -331,6 +331,11 @@ export interface AjustarStockEstanquePayload {
   estanque_id:      string
   litros_correctos: number
   motivo:           string
+  // MIG68: foto + geo obligatorias
+  foto_url:         string
+  foto_lat:         number
+  foto_lon:         number
+  foto_ts:          string
   evidencia_url?:   string | null
   fecha_movimiento?: string | null
   nuevo_cpp?:       number | null
@@ -357,6 +362,10 @@ export async function ajustarStockEstanque(payload: AjustarStockEstanquePayload)
     p_estanque_id:      payload.estanque_id,
     p_litros_correctos: payload.litros_correctos,
     p_motivo:           payload.motivo,
+    p_foto_url:         payload.foto_url,
+    p_foto_lat:         payload.foto_lat,
+    p_foto_lon:         payload.foto_lon,
+    p_foto_ts:          payload.foto_ts,
     p_evidencia_url:    payload.evidencia_url ?? null,
     p_fecha_movimiento: payload.fecha_movimiento ?? null,
     p_nuevo_cpp:        payload.nuevo_cpp ?? null,
