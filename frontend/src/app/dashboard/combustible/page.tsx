@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import {
   Fuel, ArrowUpRight, ArrowDownRight, AlertTriangle, Layers, DollarSign,
-  RefreshCw, Scale, ShieldCheck, Gauge, Ban,
+  RefreshCw, Scale, ShieldCheck, Gauge, Ban, Wrench,
 } from 'lucide-react'
 import { QuickActionsGrid } from '@/components/ui/quick-actions-grid'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -68,6 +68,7 @@ export default function CombustiblePage() {
           { label: 'Despacho con sellos', description: 'Salida valorizada + sellos antifraude',    href: '/dashboard/combustible/despacho',          icon: ShieldCheck,    accent: 'amber' },
           { label: 'Control kardex',      description: 'Teórico vs físico vs último kardex',       href: '/dashboard/combustible/control',           icon: Gauge,          accent: 'blue' },
           { label: 'Corregir ingreso',    description: 'Anular ingreso mal cargado (admin)',       href: '/dashboard/combustible/corregir-ingreso',  icon: Ban,            accent: 'red',  badge: 'Admin' },
+          { label: 'Ajustar stock',       description: 'Corregir litros físicos del estanque',     href: '/dashboard/combustible/ajuste',            icon: Wrench,         accent: 'purple', badge: 'Admin' },
         ]}
       />
 

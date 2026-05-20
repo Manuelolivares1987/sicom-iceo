@@ -326,6 +326,45 @@ export interface SalidaCombustibleResult {
   tipo_movimiento_kardex: string
 }
 
+// ── MIG67: Ajuste de stock fisico del estanque ────────────────────────────
+export interface AjustarStockEstanquePayload {
+  estanque_id:      string
+  litros_correctos: number
+  motivo:           string
+  evidencia_url?:   string | null
+  fecha_movimiento?: string | null
+  nuevo_cpp?:       number | null
+}
+export interface AjustarStockEstanqueResult {
+  success: boolean
+  sin_cambios: boolean
+  kardex_id?: string
+  folio?: string
+  estanque_codigo: string
+  stock_actual?: number   // solo cuando sin_cambios=true
+  cpp_actual?:   number
+  mensaje?: string
+  stock_anterior?: number
+  stock_nuevo?:    number
+  delta?: number
+  cpp_anterior?: number
+  cpp_nuevo?:    number
+  valor_anterior?: number
+  valor_nuevo?:    number
+}
+export async function ajustarStockEstanque(payload: AjustarStockEstanquePayload) {
+  const { data, error } = await supabase.rpc('rpc_ajustar_stock_estanque', {
+    p_estanque_id:      payload.estanque_id,
+    p_litros_correctos: payload.litros_correctos,
+    p_motivo:           payload.motivo,
+    p_evidencia_url:    payload.evidencia_url ?? null,
+    p_fecha_movimiento: payload.fecha_movimiento ?? null,
+    p_nuevo_cpp:        payload.nuevo_cpp ?? null,
+  })
+  if (error) return { data: null, error }
+  return { data: data as AjustarStockEstanqueResult, error: null }
+}
+
 // ── Despacho con sellos (MIG41) ────────────────────────────────────────────
 
 export interface DespachoSellosPayload {

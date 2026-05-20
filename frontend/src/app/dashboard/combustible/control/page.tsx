@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { ArrowLeft, Scale, RefreshCw } from 'lucide-react'
+import { ArrowLeft, Scale, RefreshCw, Wrench } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -39,6 +39,11 @@ export default function CombustibleControlPage() {
           Control kardex vs varillaje
         </h1>
         <div className="flex-1" />
+        <Link href="/dashboard/combustible/ajuste">
+          <Button variant="outline" size="sm" className="border-purple-300 text-purple-700 hover:bg-purple-50">
+            <Wrench className="h-4 w-4 mr-1" /> Ajustar stock
+          </Button>
+        </Link>
         <Button variant="outline" size="sm"
           onClick={() => qc.invalidateQueries({ queryKey: ['combustible'] })}
           disabled={isFetching}>

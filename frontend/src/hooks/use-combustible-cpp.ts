@@ -5,8 +5,9 @@ import {
   registrarIngresoCombustible, registrarSalidaCombustible,
   registrarDespachoConSellos, listarDespachosConSellos,
   getIngresosAnulables, anularIngresoCombustible,
+  ajustarStockEstanque,
   type FiltrosMovimientos, type IngresoCombustiblePayload, type SalidaCombustiblePayload,
-  type DespachoSellosPayload,
+  type DespachoSellosPayload, type AjustarStockEstanquePayload,
 } from '@/lib/services/combustible-cpp'
 
 const STALE = 30_000
@@ -114,6 +115,20 @@ export function useRegistrarSalidaCombustible() {
   return useMutation({
     mutationFn: async (payload: SalidaCombustiblePayload) => {
       const { data, error } = await registrarSalidaCombustible(payload)
+      if (error) throw error
+      return data!
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['combustible'] })
+    },
+  })
+}
+
+export function useAjustarStockEstanque() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (payload: AjustarStockEstanquePayload) => {
+      const { data, error } = await ajustarStockEstanque(payload)
       if (error) throw error
       return data!
     },
