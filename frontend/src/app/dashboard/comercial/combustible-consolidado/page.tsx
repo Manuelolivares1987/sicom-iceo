@@ -69,25 +69,33 @@ export default function ComercialCombustibleConsolidadoPage() {
   }
   useEffect(() => { cargar() /* eslint-disable-line react-hooks/exhaustive-deps */ }, [rango])
 
-  const porEmpresa  = useMemo(() => agruparPorEmpresa(rows), [rows])
+  // Solo despachos con empresa cliente identificada (excluye consumos internos
+  // o despachos sin clasificar). Todas las agregaciones usan este subset.
+  const rowsConEmpresa = useMemo(
+    () => rows.filter((r) => (r.externo_empresa ?? r.activo_cliente) != null),
+    [rows],
+  )
+  const excluidas = rows.length - rowsConEmpresa.length
+
+  const porEmpresa  = useMemo(() => agruparPorEmpresa(rowsConEmpresa), [rowsConEmpresa])
   const empresasTop = useMemo(() => porEmpresa.slice(0, 8).map((e) => e.empresa), [porEmpresa])
-  const apilado     = useMemo(() => gruparApiladoPorDia(rows, empresasTop), [rows, empresasTop])
-  const topPatentes = useMemo(() => rankearPatentes(rows).slice(0, 10), [rows])
+  const apilado     = useMemo(() => gruparApiladoPorDia(rowsConEmpresa, empresasTop), [rowsConEmpresa, empresasTop])
+  const topPatentes = useMemo(() => rankearPatentes(rowsConEmpresa).slice(0, 10), [rowsConEmpresa])
 
   const kpis = useMemo(() => {
-    const litros = rows.reduce((s, r) => s + Number(r.litros), 0)
-    const costo  = rows.reduce((s, r) => s + Number(r.costo_total_clp ?? 0), 0)
+    const litros = rowsConEmpresa.reduce((s, r) => s + Number(r.litros), 0)
+    const costo  = rowsConEmpresa.reduce((s, r) => s + Number(r.costo_total_clp ?? 0), 0)
     const patentes = new Set<string>()
-    for (const r of rows) {
+    for (const r of rowsConEmpresa) {
       const p = r.activo_patente ?? r.externo_patente
       if (p) patentes.add(p)
     }
     return {
-      despachos: rows.length, litros, costo,
+      despachos: rowsConEmpresa.length, litros, costo,
       patentes_unicas: patentes.size,
       empresas: porEmpresa.length,
     }
-  }, [rows, porEmpresa])
+  }, [rowsConEmpresa, porEmpresa])
 
   const exportarCSV = () => {
     const headers = ['Empresa', 'Origen', 'Despachos', 'Litros', 'Costo CLP', 'Patentes', 'Primera fecha', 'Ultima fecha']
@@ -141,7 +149,12 @@ export default function ComercialCombustibleConsolidadoPage() {
         <TabBtn label="Trimestre"      active={rango === 'trimestre'}    onClick={() => setRango('trimestre')} />
         <TabBtn label="Año"            active={rango === 'anio'}         onClick={() => setRango('anio')} />
         <div className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
-          {rows.length} despachos · {desde} → {hasta}
+          {rowsConEmpresa.length} despachos a empresa · {desde} → {hasta}
+          {excluidas > 0 && (
+            <span className="rounded-full bg-gray-200 px-2 py-0.5 text-[10px] font-semibold text-gray-600">
+              {excluidas} sin empresa (ocultos)
+            </span>
+          )}
         </div>
       </div>
 
