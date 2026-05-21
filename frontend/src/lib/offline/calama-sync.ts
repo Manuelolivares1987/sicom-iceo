@@ -8,10 +8,13 @@
 import { supabase } from '@/lib/supabase'
 import { calamaDB } from './calama-db'
 import { genClientUuid } from '@/lib/services/calama-jornada'
+import { withTimeout } from '@/lib/upload/with-timeout'
 import type {
   LocalJornada, LocalEvidencia, LocalFirma, LocalEvento,
   LocalBlob, SyncStatus,
 } from './calama-offline-types'
+
+const UPLOAD_TIMEOUT_MS = 30_000
 
 // ============================================================================
 // PREPARAR OFFLINE
@@ -333,9 +336,13 @@ async function uploadEvidenciaBlob(local: LocalEvidencia, blob: Blob): Promise<{
   const ext = (blob.type.split('/')[1] || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '')
   const ts = Date.now()
   const path = `ot-${local.ot_id}/jornada-${local.jornada_id}/${local.momento}-${ts}-${local.local_id}.${ext}`
-  const { error } = await supabase.storage.from('calama-evidencias').upload(path, blob, {
-    upsert: false, contentType: blob.type || 'image/jpeg',
-  })
+  const { error } = await withTimeout(
+    supabase.storage.from('calama-evidencias').upload(path, blob, {
+      upsert: false, contentType: blob.type || 'image/jpeg',
+    }),
+    UPLOAD_TIMEOUT_MS,
+    'evidencia',
+  )
   if (error) throw error
   const { data } = supabase.storage.from('calama-evidencias').getPublicUrl(path)
   return { url: data.publicUrl, storage_path: path }
@@ -344,9 +351,13 @@ async function uploadEvidenciaBlob(local: LocalEvidencia, blob: Blob): Promise<{
 async function uploadFirmaBlob(local: LocalFirma, blob: Blob): Promise<{ url: string; storage_path: string }> {
   const ts = Date.now()
   const path = `ot-${local.ot_id}/jornada-${local.jornada_id}/${local.contexto}-${ts}-${local.local_id}.png`
-  const { error } = await supabase.storage.from('calama-firmas').upload(path, blob, {
-    upsert: false, contentType: 'image/png',
-  })
+  const { error } = await withTimeout(
+    supabase.storage.from('calama-firmas').upload(path, blob, {
+      upsert: false, contentType: 'image/png',
+    }),
+    UPLOAD_TIMEOUT_MS,
+    'firma',
+  )
   if (error) throw error
   const { data } = supabase.storage.from('calama-firmas').getPublicUrl(path)
   return { url: data.publicUrl, storage_path: path }

@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Check, AlertCircle, Loader2 } from 'lucide-react'
 import { SignaturePad } from '@/components/ui/signature-pad'
 import { uploadFirmaJornada, type FirmaContexto } from '@/lib/services/calama-jornada'
+import { compressImage } from '@/lib/image/compress'
 
 export type FirmaCaptureResult = {
   // Modo 'direct': url y storage_path llenos.
@@ -42,7 +43,13 @@ export function FirmaCapture({
   const handleSign = async (dataUrl: string) => {
     setError(null)
     try {
-      const blob = dataUrlToBlob(dataUrl)
+      const raw = dataUrlToBlob(dataUrl)
+      // Encoge la firma (HiDPI da PNG de ~30KB; lo bajamos a ~5-10KB) para que
+      // el bundle foto+firma viaje rapido en faena con señal debil.
+      let blob: Blob = raw
+      try {
+        blob = await compressImage(raw, { maxDim: 800, mimeType: 'image/png', skipUnderBytes: 0 })
+      } catch { /* keep original */ }
       if (mode === 'capture') {
         onCapture({ url: '', storage_path: '', blob, dataUrl })
         setDone(true)
@@ -50,7 +57,7 @@ export function FirmaCapture({
       }
       setUploading(true)
       const { url, storage_path } = await uploadFirmaJornada({
-        dataUrl, otId, planOtId, contexto,
+        blob, otId, planOtId, contexto,
       })
       onCapture({ url, storage_path, blob, dataUrl })
       setDone(true)

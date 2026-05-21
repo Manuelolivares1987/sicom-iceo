@@ -1,4 +1,10 @@
 import { supabase } from '@/lib/supabase'
+import { withTimeout } from '@/lib/upload/with-timeout'
+
+// Timeout para uploads a Storage. En faena con señal debil un upload puede
+// quedar colgado indefinidamente; este corte transforma "spinner infinito"
+// en error reintentable y dispara fallback offline en los smart handlers.
+const UPLOAD_TIMEOUT_MS = 30_000
 
 // ============================================================================
 // Tipos PRO terreno (jornada con evidencias + firmas + aceptacion/rechazo)
@@ -108,31 +114,33 @@ export async function uploadEvidenciaJornada(params: {
   const ts = Date.now()
   const ext = params.ext ?? 'jpg'
   const path = `ot-${params.otId}/jornada-${params.planOtId}/${params.momento}-${ts}.${ext}`
-  const { error } = await supabase.storage
-    .from('calama-evidencias')
-    .upload(path, params.blob, { upsert: false, contentType: params.blob.type || 'image/jpeg' })
+  const { error } = await withTimeout(
+    supabase.storage
+      .from('calama-evidencias')
+      .upload(path, params.blob, { upsert: false, contentType: params.blob.type || 'image/jpeg' }),
+    UPLOAD_TIMEOUT_MS,
+    'evidencia',
+  )
   if (error) throw error
   const { data } = supabase.storage.from('calama-evidencias').getPublicUrl(path)
   return { url: data.publicUrl, storage_path: path }
 }
 
 export async function uploadFirmaJornada(params: {
-  dataUrl: string
+  blob: Blob
   otId: string
   planOtId: string
   contexto: FirmaContexto
 }): Promise<{ url: string; storage_path: string }> {
-  // dataUrl viene como data:image/png;base64,...
-  const base64 = params.dataUrl.split(',')[1] ?? ''
-  const bin = atob(base64)
-  const buf = new Uint8Array(bin.length)
-  for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i)
-  const blob = new Blob([buf], { type: 'image/png' })
   const ts = Date.now()
   const path = `ot-${params.otId}/jornada-${params.planOtId}/${params.contexto}-${ts}.png`
-  const { error } = await supabase.storage
-    .from('calama-firmas')
-    .upload(path, blob, { upsert: false, contentType: 'image/png' })
+  const { error } = await withTimeout(
+    supabase.storage
+      .from('calama-firmas')
+      .upload(path, params.blob, { upsert: false, contentType: 'image/png' }),
+    UPLOAD_TIMEOUT_MS,
+    'firma',
+  )
   if (error) throw error
   const { data } = supabase.storage.from('calama-firmas').getPublicUrl(path)
   return { url: data.publicUrl, storage_path: path }

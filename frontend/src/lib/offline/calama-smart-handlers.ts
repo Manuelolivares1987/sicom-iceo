@@ -17,6 +17,12 @@ import {
 } from './calama-sync'
 import type { LocalEvento } from './calama-offline-types'
 import { calamaDB } from './calama-db'
+import { withTimeout } from '@/lib/upload/with-timeout'
+
+// Timeout 30s en uploads a Storage. Si la red esta colgada, el error se
+// propaga, looksLikeNetworkError lo matchea por 'timeout' y la accion se
+// guarda en IndexedDB para sincronizarse despues.
+const UPLOAD_TIMEOUT_MS = 30_000
 
 export type SmartResult = {
   ok: boolean
@@ -32,7 +38,7 @@ function isOnline(): boolean {
 function looksLikeNetworkError(err: unknown): boolean {
   if (!err) return false
   const msg = err instanceof Error ? err.message : String(err)
-  return /Failed to fetch|NetworkError|TypeError|fetch failed|ECONNRESET|ENOTFOUND|Load failed|connection|offline/i.test(msg)
+  return /Failed to fetch|NetworkError|TypeError|fetch failed|ECONNRESET|ENOTFOUND|Load failed|connection|offline|timeout/i.test(msg)
 }
 
 // Generar client_uuid una sola vez por accion.
@@ -48,9 +54,13 @@ async function uploadEvidenciaToStorage(args: {
 }): Promise<{ url: string; storage_path: string }> {
   const ext = (args.blob.type.split('/')[1] || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '')
   const path = `ot-${args.otId}/jornada-${args.planOtId}/${args.momento}-${Date.now()}.${ext}`
-  const { error } = await supabase.storage.from('calama-evidencias').upload(path, args.blob, {
-    upsert: false, contentType: args.blob.type || 'image/jpeg',
-  })
+  const { error } = await withTimeout(
+    supabase.storage.from('calama-evidencias').upload(path, args.blob, {
+      upsert: false, contentType: args.blob.type || 'image/jpeg',
+    }),
+    UPLOAD_TIMEOUT_MS,
+    'evidencia',
+  )
   if (error) throw error
   const { data } = supabase.storage.from('calama-evidencias').getPublicUrl(path)
   return { url: data.publicUrl, storage_path: path }
@@ -60,9 +70,13 @@ async function uploadFirmaToStorage(args: {
   blob: Blob; otId: string; planOtId: string; contexto: string
 }): Promise<{ url: string; storage_path: string }> {
   const path = `ot-${args.otId}/jornada-${args.planOtId}/${args.contexto}-${Date.now()}.png`
-  const { error } = await supabase.storage.from('calama-firmas').upload(path, args.blob, {
-    upsert: false, contentType: 'image/png',
-  })
+  const { error } = await withTimeout(
+    supabase.storage.from('calama-firmas').upload(path, args.blob, {
+      upsert: false, contentType: 'image/png',
+    }),
+    UPLOAD_TIMEOUT_MS,
+    'firma',
+  )
   if (error) throw error
   const { data } = supabase.storage.from('calama-firmas').getPublicUrl(path)
   return { url: data.publicUrl, storage_path: path }
