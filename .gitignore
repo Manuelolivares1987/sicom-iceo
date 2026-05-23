@@ -1,5 +1,6 @@
 # Dependencies
 node_modules/
+database/scripts/node_modules/
 
 # Next.js
 .next/

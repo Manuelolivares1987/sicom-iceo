@@ -1,0 +1,15 @@
+{
+  "name": "sicom-db-scripts",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Herramientas locales para aplicar migraciones SQL a Supabase. NO subir a Netlify/produccion.",
+  "scripts": {
+    "aplicar": "node aplicar-migracion.mjs",
+    "psql": "node psql-cli.mjs"
+  },
+  "dependencies": {
+    "pg": "^8.13.0",
+    "dotenv": "^16.4.0"
+  }
+}
