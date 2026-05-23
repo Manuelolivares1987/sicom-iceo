@@ -176,12 +176,17 @@ BEGIN
             ),
             'ocupacion_actual', (
                 SELECT COALESCE(jsonb_agg(jsonb_build_object(
-                    'geocerca', nombre,
-                    'tipo',     tipo,
-                    'activos_dentro', activos_dentro_ahora
-                ) ORDER BY activos_dentro_ahora DESC), '[]'::jsonb)
-                  FROM v_geocerca_ocupacion
-                 WHERE activos_dentro_ahora > 0
+                    'geocerca', geocerca_nombre,
+                    'tipo',     geocerca_tipo,
+                    'activos_dentro', activos_dentro
+                ) ORDER BY activos_dentro DESC), '[]'::jsonb)
+                FROM (
+                    SELECT geocerca_nombre,
+                           geocerca_tipo::text AS geocerca_tipo,
+                           COUNT(*)::INTEGER  AS activos_dentro
+                      FROM v_geocerca_ocupacion
+                     GROUP BY geocerca_nombre, geocerca_tipo
+                ) s
             ),
             'fuera_de_zona_detalle', (
                 SELECT COALESCE(jsonb_agg(jsonb_build_object(
