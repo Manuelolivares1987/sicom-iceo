@@ -6,7 +6,7 @@ import {
   PointerSensor, useDraggable, useDroppable, useSensor, useSensors,
 } from '@dnd-kit/core'
 import {
-  Calendar, Save, ArrowLeft, ChevronLeft, ChevronRight, Lock, AlertTriangle,
+  Calendar, Save, ArrowLeft, ChevronLeft, ChevronRight, Lock, AlertTriangle, FileSpreadsheet,
   Trash2, User, Clock, MapPin, MessageSquare, BarChart3, Layers, X,
   CheckCircle2, CalendarPlus, Repeat, Ban, Eraser, ShieldAlert,
 } from 'lucide-react'
@@ -34,6 +34,7 @@ import {
 } from '@/hooks/use-calama-jornada'
 import { usePermissions } from '@/hooks/use-permissions'
 import { lunesDe, jornadaActiva } from '@/lib/services/calama-plan-semanal'
+import { exportarPlanSemanalExcel, descargarBlob } from '@/lib/export/plan-semanal-excel'
 import { zonaCodeFromFolio, excelCodigoFromFolio, type CalamaOTConRelaciones } from '@/lib/services/calama'
 import { EstadoBadge } from '@/components/calama/gantt-table'
 
@@ -535,6 +536,55 @@ export default function PlanSemanalPage() {
             </div>
           </div>
           <div className="flex gap-2 justify-end">
+            <Button
+              variant="outline"
+              disabled={!planSemanalId || (planOts?.length ?? 0) === 0}
+              onClick={async () => {
+                try {
+                  const otById = new Map((ots ?? []).map((o) => [o.id, o]))
+                  const diaById = new Map((dias ?? []).map((d) => [d.id, d]))
+                  const planificacion = (planificaciones ?? []).find((p) => p.id === planificacionId)
+                  const blob = await exportarPlanSemanalExcel({
+                    titulo: `Plan semanal Calama${planificacion ? ' — ' + planificacion.nombre : ''}`,
+                    fechaInicio: semanaIso,
+                    fechaFin: (dias && dias.length > 0) ? dias[dias.length - 1].fecha : semanaIso,
+                    jornadas: (planOts ?? []).filter((p) => jornadaActiva(p)).map((j) => {
+                      const ot = otById.get(j.ot_id)
+                      const dia = diaById.get(j.plan_dia_id)
+                      return {
+                        fecha: dia?.fecha ?? '',
+                        dia_nombre: dia?.nombre_dia ?? '',
+                        folio: ot?.folio ?? j.ot_id.slice(0, 8),
+                        tipo: 'OT calama',
+                        prioridad: ot?.prioridad ?? null,
+                        activo: ot?.tarea_maestro?.codigo
+                          ? `${ot.tarea_maestro.codigo} · ${ot.tarea_maestro.nombre ?? ''}`
+                          : null,
+                        pm_nombre: ot?.titulo ?? null,
+                        responsable: null,
+                        cuadrilla: null,
+                        horas_planificadas: j.horas_planificadas,
+                        avance_objetivo: j.avance_objetivo_pct,
+                        secuencia_jornada: j.secuencia_jornada,
+                        estado_jornada: j.estado_plan,
+                        estado_ot: ot?.estado ?? null,
+                        avance_final: ot?.avance_pct ?? null,
+                        faena: ot?.faena?.nombre ?? null,
+                        cliente: ot?.planificacion?.nombre ?? null,
+                        observaciones: j.observaciones,
+                      }
+                    }),
+                    scopeNombre: planificacion?.nombre ?? null,
+                  })
+                  descargarBlob(blob, `plan_calama_${semanaIso}.xlsx`)
+                  toast.success('Plan exportado')
+                } catch (err) {
+                  toast.error((err as Error).message)
+                }
+              }}
+            >
+              <FileSpreadsheet className="h-4 w-4 mr-1" /> Excel
+            </Button>
             {planSemanalId && planSem?.estado === 'borrador' && (
               <Button variant="primary" onClick={handleConfirmar} loading={confirmarPlan.isPending}
                 disabled={(planOts?.length ?? 0) === 0}>

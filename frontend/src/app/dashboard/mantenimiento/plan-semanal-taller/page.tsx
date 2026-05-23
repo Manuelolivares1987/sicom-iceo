@@ -7,8 +7,9 @@ import {
 } from '@dnd-kit/core'
 import {
   Calendar, ArrowLeft, ChevronLeft, ChevronRight, Lock, AlertTriangle, Trash2, User,
-  Play, Pause, CheckCircle2, BarChart3, ShieldAlert, RefreshCw, Wrench, Layers,
+  Play, Pause, CheckCircle2, BarChart3, ShieldAlert, RefreshCw, Wrench, Layers, FileSpreadsheet,
 } from 'lucide-react'
+import { exportarPlanSemanalExcel, descargarBlob } from '@/lib/export/plan-semanal-excel'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
@@ -161,6 +162,57 @@ export default function PlanSemanalTallerPage() {
           </Button>
           <Button variant="outline" size="sm" onClick={() => navSemana(1)}>
             <ChevronRight className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!jornadas || jornadas.length === 0}
+            onClick={async () => {
+              try {
+                const blob = await exportarPlanSemanalExcel({
+                  titulo: 'Plan semanal del taller',
+                  fechaInicio: semanaIso,
+                  fechaFin: dias?.[6]?.fecha ?? semanaIso,
+                  jornadas: (jornadas ?? []).map((j) => ({
+                    fecha: j.dia_fecha,
+                    dia_nombre: j.dia_nombre,
+                    folio: j.ot_folio,
+                    tipo: j.ot_tipo,
+                    prioridad: j.ot_prioridad,
+                    activo: j.activo_codigo ? `${j.activo_codigo}${j.activo_patente ? ' · ' + j.activo_patente : ''}` : null,
+                    pm_nombre: j.pm_nombre,
+                    responsable: j.responsable,
+                    cuadrilla: j.cuadrilla,
+                    horas_planificadas: j.horas_planificadas,
+                    avance_objetivo: j.avance_objetivo_pct,
+                    secuencia_jornada: j.secuencia_jornada,
+                    estado_jornada: j.jornada_estado,
+                    estado_ot: j.ot_estado,
+                    avance_final: j.ultima_ejecucion_avance,
+                    faena: j.faena_nombre,
+                    cliente: j.contrato_cliente,
+                    observaciones: j.observaciones,
+                  })),
+                  resumen: kpi ? {
+                    jornadas_planificadas: kpi.jornadas_planificadas,
+                    jornadas_finalizadas: kpi.jornadas_finalizadas,
+                    jornadas_en_ejecucion: kpi.jornadas_en_ejecucion,
+                    jornadas_pendientes: kpi.jornadas_pendientes,
+                    jornadas_atrasadas: kpi.jornadas_atrasadas,
+                    cumplimiento_pct: kpi.cumplimiento_pct,
+                    horas_planificadas: kpi.horas_planificadas,
+                    horas_reales: kpi.horas_reales,
+                  } : null,
+                  scopeNombre: 'Taller (global)',
+                })
+                descargarBlob(blob, `plan_taller_${semanaIso}.xlsx`)
+                toast.success('Plan exportado')
+              } catch (err) {
+                toast.error((err as Error).message)
+              }
+            }}
+          >
+            <FileSpreadsheet className="h-4 w-4 mr-1" /> Excel
           </Button>
           <Button
             size="sm"
