@@ -69,6 +69,41 @@ export async function cargarConsolidadoComercial(
   return (data ?? []) as TransaccionCombustibleCliente[]
 }
 
+// Carga solo ventas a vehiculos EXTERNOS (subcontratistas autorizados).
+// Es lo que comercial necesita para cobrar. La vista ya viene enriquecida con
+// precio_venta y total_venta_clp (MIG73).
+export type FiltrosVentasExternas = {
+  fechaDesde?: string
+  fechaHasta?: string
+  empresa?:    string
+  patente?:    string
+}
+
+export async function cargarVentasExternasComercial(
+  filtros: FiltrosVentasExternas = {},
+): Promise<TransaccionCombustibleCliente[]> {
+  let q = supabase
+    .from('v_combustible_movimientos_cliente')
+    .select('*')
+    .not('vehiculo_externo_id', 'is', null)
+    .order('fecha', { ascending: false })
+    .limit(5000)
+  if (filtros.fechaDesde) q = q.gte('fecha', filtros.fechaDesde + 'T00:00:00')
+  if (filtros.fechaHasta) q = q.lte('fecha', filtros.fechaHasta + 'T23:59:59')
+  const { data, error } = await q
+  if (error) throw error
+  let rows = (data ?? []) as TransaccionCombustibleCliente[]
+  if (filtros.empresa) {
+    const q2 = filtros.empresa.toLowerCase()
+    rows = rows.filter((r) => (r.externo_empresa ?? '').toLowerCase().includes(q2))
+  }
+  if (filtros.patente) {
+    const q2 = filtros.patente.toLowerCase()
+    rows = rows.filter((r) => (r.externo_patente ?? '').toLowerCase().includes(q2))
+  }
+  return rows
+}
+
 
 export type ResumenPorEmpresa = {
   empresa:          string       // "LISSET LOPEZ G" | "MYG" | cliente del contrato

@@ -164,13 +164,18 @@ export default function ComercialPage() {
           </p>
         </div>
         <div className="flex gap-2 flex-wrap">
+          <Link href="/dashboard/comercial/ventas-combustible">
+            <Button size="sm" className="bg-pillado-orange-600 hover:bg-pillado-orange-700">
+              <DollarSign className="h-4 w-4 mr-1" /> Ventas combustible (cobrar)
+            </Button>
+          </Link>
           <Link href="/dashboard/comercial/combustible-consolidado">
             <Button variant="outline" size="sm">
               <Fuel className="h-4 w-4 mr-1" /> Consolidado combustible
             </Button>
           </Link>
           <Link href="/dashboard/comercial/precios-combustible">
-            <Button size="sm" className="bg-pillado-green-600 hover:bg-pillado-green-700">
+            <Button variant="outline" size="sm">
               <DollarSign className="h-4 w-4 mr-1" /> Precios combustible
             </Button>
           </Link>
