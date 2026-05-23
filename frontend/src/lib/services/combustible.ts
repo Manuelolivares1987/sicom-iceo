@@ -393,11 +393,18 @@ export async function getConsumoVehiculoMes(mesISO?: string) {
 }
 
 // ── Upload foto ──────────────────────────────────────────
-// Devuelve la URL publica. Guardada bajo path: {tipo}/{estanqueId}/{timestamp}-{filename}
+// Devuelve la URL publica. Guardada bajo path: {tipo}/{contextoId}/{timestamp}-{nombre}
+
+export type TipoEvidenciaCombustible =
+  | 'medidor' | 'varillaje'
+  | 'patente' | 'medidor_inicial' | 'medidor_final'
+  | 'equipo'  | 'manguerado'
+  | 'sello_inicial' | 'sello_final' | 'odometro'
+  | 'firma'   | 'generico'
 
 export async function uploadEvidenciaCombustible(
   file: File,
-  opts: { tipo: 'medidor' | 'varillaje'; estanqueId: string }
+  opts: { tipo: TipoEvidenciaCombustible; estanqueId: string }
 ): Promise<{ url: string | null; error: Error | null }> {
   const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
   const path = `${opts.tipo}/${opts.estanqueId}/${Date.now()}-${safeName}`
@@ -407,4 +414,24 @@ export async function uploadEvidenciaCombustible(
   if (error) return { url: null, error }
   const { data } = supabase.storage.from('evidencias-combustible').getPublicUrl(path)
   return { url: data.publicUrl, error: null }
+}
+
+// Sube un Blob (no File) ya comprimido o una firma data-url decodificada.
+// Pensado para uploads desde camara/canvas donde no hay File ni filename.
+export async function uploadBlobEvidenciaCombustible(
+  blob: Blob,
+  opts: { tipo: TipoEvidenciaCombustible; contextoId: string; ext?: string }
+): Promise<{ url: string; storage_path: string }> {
+  const ext = opts.ext
+    ?? (blob.type === 'image/jpeg' ? 'jpg'
+      : blob.type === 'image/webp' ? 'webp'
+      : blob.type === 'image/png'  ? 'png'
+      : 'bin')
+  const path = `${opts.tipo}/${opts.contextoId}/${Date.now()}-${crypto.randomUUID()}.${ext}`
+  const { error } = await supabase.storage
+    .from('evidencias-combustible')
+    .upload(path, blob, { cacheControl: '3600', upsert: false, contentType: blob.type || 'image/jpeg' })
+  if (error) throw error
+  const { data } = supabase.storage.from('evidencias-combustible').getPublicUrl(path)
+  return { url: data.publicUrl, storage_path: path }
 }

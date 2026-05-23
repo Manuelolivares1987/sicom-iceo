@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import {
   Fuel, ArrowUpRight, ArrowDownRight, AlertTriangle, Layers, DollarSign,
-  RefreshCw, Scale, ShieldCheck, Gauge, Ban, Wrench,
+  RefreshCw, Scale, ShieldCheck, Gauge, Ban, Wrench, Repeat, ArrowRightLeft,
 } from 'lucide-react'
 import { QuickActionsGrid } from '@/components/ui/quick-actions-grid'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -66,6 +66,8 @@ export default function CombustiblePage() {
           { label: 'Ingreso combustible', description: 'Ingreso valorizado con CPP móvil',         href: '/dashboard/combustible/ingreso',           icon: ArrowUpRight,   accent: 'green' },
           { label: 'Salida combustible',  description: 'Salida al CPP vigente con destino',        href: '/dashboard/combustible/salida',            icon: ArrowDownRight, accent: 'red' },
           { label: 'Despacho con sellos', description: 'Salida valorizada + sellos antifraude',    href: '/dashboard/combustible/despacho',          icon: ShieldCheck,    accent: 'amber' },
+          { label: 'Recirculación',       description: 'Prueba de bomba (stock neutro, evidencia)',href: '/dashboard/combustible/recirculacion',     icon: Repeat,         accent: 'blue' },
+          { label: 'Traspaso estanques',  description: 'Mover combustible entre estanques',        href: '/dashboard/combustible/traspaso',          icon: ArrowRightLeft, accent: 'purple' },
           { label: 'Control kardex',      description: 'Teórico vs físico vs último kardex',       href: '/dashboard/combustible/control',           icon: Gauge,          accent: 'blue' },
           { label: 'Corregir ingreso',    description: 'Anular ingreso mal cargado (admin)',       href: '/dashboard/combustible/corregir-ingreso',  icon: Ban,            accent: 'red',  badge: 'Admin' },
           { label: 'Ajustar stock',       description: 'Corregir litros físicos del estanque',     href: '/dashboard/combustible/ajuste',            icon: Wrench,         accent: 'purple', badge: 'Admin' },

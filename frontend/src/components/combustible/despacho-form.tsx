@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, Save, AlertCircle, ShieldCheck, Lock } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -17,6 +17,18 @@ import { useOTsValidasSalida, useCECO } from '@/hooks/use-bodega-salida-fifo'
 import type {
   DespachoSellosPayload, DestinoSalidaCombustible,
 } from '@/lib/services/combustible-cpp'
+import {
+  getVehiculosExternosAutorizados,
+  type VehiculoExternoAutorizado,
+} from '@/lib/services/combustible'
+import {
+  PhotoCaptureCombustible,
+  type PhotoCaptureCombustibleResult,
+} from './photo-capture-combustible'
+import {
+  EvidenciaDespachoBloque, EVIDENCIA_VACIA, evidenciaCompleta,
+  type EvidenciaDespachoPayload,
+} from './evidencia-despacho-bloque'
 
 const DESTINOS: { v: DestinoSalidaCombustible; label: string }[] = [
   { v: 'equipo',          label: 'Equipo / vehículo' },
@@ -39,16 +51,23 @@ export function DespachoSellosForm() {
   const [faenaId, setFaenaId] = useState('')
   const [clienteNombre, setClienteNombre] = useState('')
 
+  // Externo
+  const [esExterno, setEsExterno] = useState(false)
+  const [vehiculoExternoId, setVehiculoExternoId] = useState('')
+  const [externos, setExternos] = useState<VehiculoExternoAutorizado[]>([])
+  const [kilometraje, setKilometraje] = useState<number | ''>('')
+
   // Sellos antifraude
   const [selloInicial, setSelloInicial] = useState('')
   const [selloFinal, setSelloFinal] = useState('')
-  const [fotoSelloIniUrl, setFotoSelloIniUrl] = useState('')
-  const [fotoSelloFinUrl, setFotoSelloFinUrl] = useState('')
-  const [fotoOdometroUrl, setFotoOdometroUrl] = useState('')
-  const [fotoEquipoUrl, setFotoEquipoUrl] = useState('')
+  const [fotoSelloIni, setFotoSelloIni] = useState<PhotoCaptureCombustibleResult | null>(null)
+  const [fotoSelloFin, setFotoSelloFin] = useState<PhotoCaptureCombustibleResult | null>(null)
+  const [fotoOdometro, setFotoOdometro] = useState<PhotoCaptureCombustibleResult | null>(null)
+  const [fotoEquipo, setFotoEquipo] = useState<PhotoCaptureCombustibleResult | null>(null)
 
-  const [receptorNombre, setReceptorNombre] = useState('')
-  const [receptorRut, setReceptorRut] = useState('')
+  // Evidencia del despacho (patente + 2 medidor + firma + receptor)
+  const [evidencia, setEvidencia] = useState<EvidenciaDespachoPayload>(EVIDENCIA_VACIA)
+
   const [motivo, setMotivo] = useState('')
   const [observacion, setObservacion] = useState('')
   const [fecha, setFecha] = useState<string>(todayISO())
@@ -59,6 +78,19 @@ export function DespachoSellosForm() {
   const { data: cecos } = useCECO()
   const { data: faenas } = useFaenas()
   const registrar = useRegistrarDespachoConSellos()
+
+  useEffect(() => {
+    if (destino === 'equipo') {
+      getVehiculosExternosAutorizados().then(setExternos).catch(() => { /* skip */ })
+    }
+  }, [destino])
+
+  useEffect(() => {
+    if (destino !== 'equipo') {
+      setEsExterno(false)
+      setVehiculoExternoId('')
+    }
+  }, [destino])
 
   const estanque = estanques?.find((e) => e.id === estanqueId)
   const litrosNum = typeof litros === 'number' ? litros : 0
@@ -74,11 +106,21 @@ export function DespachoSellosForm() {
   if (motivo.trim().length < 5) errores.push('Motivo mínimo 5 caracteres.')
   if (selloInicial.trim().length === 0) errores.push('Sello inicial obligatorio.')
   if (selloFinal.trim().length === 0) errores.push('Sello final obligatorio.')
-  if (destino === 'equipo' && !equipoId) errores.push('Destino equipo: selecciona el activo.')
+  if (!fotoSelloIni)  errores.push('Foto del sello INICIAL obligatoria.')
+  if (!fotoSelloFin)  errores.push('Foto del sello FINAL obligatoria.')
+  if (!fotoOdometro)  errores.push('Foto del odómetro/horómetro obligatoria.')
+  if (!fotoEquipo)    errores.push('Foto del equipo obligatoria.')
+  if (destino === 'equipo' && !esExterno && !equipoId) errores.push('Destino equipo: selecciona el activo.')
+  if (destino === 'equipo' && esExterno && !vehiculoExternoId) errores.push('Vehículo externo: selecciona la patente autorizada.')
+  if (esExterno && (typeof kilometraje !== 'number' || kilometraje < 0)) errores.push('Vehículo externo: kilometraje obligatorio.')
   if (destino === 'ot' && !otId) errores.push('Destino OT: selecciona la orden de trabajo.')
   if (destino === 'ceco' && !cecoId) errores.push('Destino CECO: selecciona el centro de costo.')
   if (destino === 'faena' && !faenaId) errores.push('Destino faena: selecciona la faena.')
   if (destino === 'venta_externa' && !clienteNombre.trim()) errores.push('Venta externa: nombre del cliente obligatorio.')
+  if (destino !== 'consumo_interno' && !evidenciaCompleta(evidencia)) {
+    errores.push('Completa la evidencia obligatoria: foto patente, fotos medidor inicio/fin, firma y datos del receptor.')
+  }
+
   const canSubmit = errores.length === 0
 
   if (loadEst) {
@@ -97,19 +139,25 @@ export function DespachoSellosForm() {
       sello_inicial:         selloInicial.trim(),
       sello_final:           selloFinal.trim(),
       motivo:                motivo.trim(),
-      equipo_id:             destino === 'equipo' ? equipoId : null,
+      equipo_id:             destino === 'equipo' && !esExterno ? equipoId : null,
       ot_id:                 destino === 'ot' ? otId : null,
       ceco_id:               destino === 'ceco' ? cecoId : null,
       faena_id:              destino === 'faena' ? faenaId : null,
       cliente_nombre:        destino === 'venta_externa' ? clienteNombre.trim() : null,
-      receptor_nombre:       receptorNombre.trim() || null,
-      receptor_rut:          receptorRut.trim() || null,
-      foto_sello_inicial_url: fotoSelloIniUrl.trim() || null,
-      foto_sello_final_url:   fotoSelloFinUrl.trim() || null,
-      foto_odometro_url:      fotoOdometroUrl.trim() || null,
-      foto_equipo_url:        fotoEquipoUrl.trim() || null,
+      vehiculo_externo_id:   esExterno ? vehiculoExternoId : null,
+      receptor_nombre:       evidencia.nombre_receptor.trim(),
+      receptor_rut:          evidencia.rut_receptor.trim(),
+      foto_sello_inicial_url: fotoSelloIni?.url ?? '',
+      foto_sello_final_url:   fotoSelloFin?.url ?? '',
+      foto_odometro_url:      fotoOdometro?.url ?? '',
+      foto_equipo_url:        fotoEquipo?.url ?? '',
+      foto_patente_url:         evidencia.foto_patente_url ?? '',
+      foto_medidor_inicial_url: evidencia.foto_medidor_inicial_url ?? '',
+      foto_medidor_final_url:   evidencia.foto_medidor_final_url ?? '',
+      firma_receptor_url:       evidencia.firma_receptor_url ?? '',
       fecha_movimiento:       fecha ? `${fecha}T00:00:00Z` : null,
       observacion:            observacion.trim() || null,
+      kilometraje_vehiculo:   esExterno && typeof kilometraje === 'number' ? kilometraje : null,
     }
     registrar.mutate(payload, {
       onSuccess: (data) => {
@@ -124,6 +172,8 @@ export function DespachoSellosForm() {
       },
     })
   }
+
+  const contextoId = estanqueId || 'sin-estanque'
 
   return (
     <div className="space-y-4">
@@ -140,8 +190,9 @@ export function DespachoSellosForm() {
       <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-900 flex items-start gap-2">
         <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
         <div>
-          <strong>Trazabilidad antifraude.</strong> El despacho registra sello inicial y final del estanque.
-          Costea al CPP vigente y deja huella en kardex valorizado. Las fotos son URL opcionales por ahora.
+          <strong>Trazabilidad antifraude.</strong> Todos los despachos (internos y externos) requieren foto
+          de la patente, fotos del medidor antes/después, firma del receptor con nombre y RUT, además de los
+          sellos del estanque.
         </div>
       </div>
 
@@ -208,8 +259,44 @@ export function DespachoSellosForm() {
           </div>
 
           {destino === 'equipo' && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-3 space-y-2">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" checked={esExterno}
+                       onChange={(e) => setEsExterno(e.target.checked)} />
+                <span className="text-sm font-medium text-amber-900">
+                  Vehículo EXTERNO autorizado (no es flota Pillado)
+                </span>
+              </label>
+              {esExterno && (
+                <div className="space-y-2">
+                  <Selector
+                    label="Patente autorizada *"
+                    value={vehiculoExternoId}
+                    onChange={setVehiculoExternoId}
+                    opciones={externos.map((v) => ({ v: v.id, label: `${v.patente} · ${v.empresa}` }))}
+                  />
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      Kilometraje del vehículo * (km)
+                    </label>
+                    <Input
+                      type="number" step="1" min="0"
+                      value={kilometraje}
+                      onChange={(e) => setKilometraje(e.target.value === '' ? '' : Number(e.target.value))}
+                      placeholder="ej: 123456"
+                    />
+                    <div className="text-[10px] text-amber-700 mt-1">
+                      Obligatorio: permite calcular rendimiento (lt/km) del vehículo externo.
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {destino === 'equipo' && !esExterno && (
             <Selector
-              label="Equipo *"
+              label="Equipo de la flota *"
               value={equipoId}
               onChange={setEquipoId}
               opciones={(activos ?? []).map((a) => ({ v: a.id, label: `${a.codigo} — ${a.nombre} ${a.tipo ? `[${a.tipo}]` : ''}` }))}
@@ -253,7 +340,7 @@ export function DespachoSellosForm() {
         </CardContent>
       </Card>
 
-      {/* Sellos antifraude */}
+      {/* Sellos antifraude — fotos REALES */}
       <Card className="border-amber-200">
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
@@ -265,57 +352,59 @@ export function DespachoSellosForm() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">Sello inicial *</label>
-              <Input
-                value={selloInicial}
-                onChange={(e) => setSelloInicial(e.target.value)}
-                placeholder="ej: SLI-001234"
-              />
+              <Input value={selloInicial} onChange={(e) => setSelloInicial(e.target.value)} placeholder="ej: SLI-001234" />
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">Sello final *</label>
-              <Input
-                value={selloFinal}
-                onChange={(e) => setSelloFinal(e.target.value)}
-                placeholder="ej: SLF-001235"
-              />
+              <Input value={selloFinal} onChange={(e) => setSelloFinal(e.target.value)} placeholder="ej: SLF-001235" />
             </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">URL foto sello inicial (opcional)</label>
-              <Input value={fotoSelloIniUrl} onChange={(e) => setFotoSelloIniUrl(e.target.value)} placeholder="https://..." />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">URL foto sello final (opcional)</label>
-              <Input value={fotoSelloFinUrl} onChange={(e) => setFotoSelloFinUrl(e.target.value)} placeholder="https://..." />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">URL foto odómetro (opcional)</label>
-              <Input value={fotoOdometroUrl} onChange={(e) => setFotoOdometroUrl(e.target.value)} placeholder="https://..." />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">URL foto equipo (opcional)</label>
-              <Input value={fotoEquipoUrl} onChange={(e) => setFotoEquipoUrl(e.target.value)} placeholder="https://..." />
-            </div>
+            <PhotoCaptureCombustible
+              label="Foto sello INICIAL" tipo="sello_inicial"
+              contextoId={contextoId} required
+              initialUrl={fotoSelloIni?.url ?? null}
+              onCapture={setFotoSelloIni}
+            />
+            <PhotoCaptureCombustible
+              label="Foto sello FINAL" tipo="sello_final"
+              contextoId={contextoId} required
+              initialUrl={fotoSelloFin?.url ?? null}
+              onCapture={setFotoSelloFin}
+            />
+            <PhotoCaptureCombustible
+              label="Foto odómetro / horómetro" tipo="odometro"
+              contextoId={contextoId} required
+              initialUrl={fotoOdometro?.url ?? null}
+              onCapture={setFotoOdometro}
+            />
+            <PhotoCaptureCombustible
+              label="Foto del equipo" tipo="equipo"
+              contextoId={contextoId} required
+              initialUrl={fotoEquipo?.url ?? null}
+              onCapture={setFotoEquipo}
+            />
           </div>
         </CardContent>
       </Card>
 
-      {/* Receptor */}
+      {/* Evidencia despacho: patente + 2 fotos medidor + firma + receptor */}
+      {destino !== 'consumo_interno' && (
+        <EvidenciaDespachoBloque
+          value={evidencia}
+          onChange={setEvidencia}
+          contextoId={contextoId}
+          labelReceptor="Receptor del combustible"
+          rolReceptor="Receptor"
+        />
+      )}
+
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Receptor (opcional)</CardTitle>
+          <CardTitle className="text-base">Fecha y observación</CardTitle>
         </CardHeader>
         <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <div className="md:col-span-2">
-            <label className="block text-xs font-medium text-gray-700 mb-1">Nombre receptor</label>
-            <Input value={receptorNombre} onChange={(e) => setReceptorNombre(e.target.value)} placeholder="Quien recibe el combustible" />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">RUT receptor</label>
-            <Input value={receptorRut} onChange={(e) => setReceptorRut(e.target.value)} placeholder="12.345.678-9" />
-          </div>
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">Fecha</label>
             <Input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} />

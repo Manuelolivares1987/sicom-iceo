@@ -310,6 +310,8 @@ export interface SalidaCombustiblePayload {
   foto_medidor_final_ts?:      string | null
   lectura_medidor_inicial_lt?: number | null
   lectura_medidor_final_lt?:   number | null
+  // MIG78: kilometraje obligatorio para externos
+  kilometraje_vehiculo?:       number | null
 }
 
 export interface SalidaCombustibleResult {
@@ -388,13 +390,13 @@ export interface DespachoSellosPayload {
   ceco_id?: string | null
   faena_id?: string | null
   cliente_nombre?: string | null
-  receptor_nombre?: string | null
-  receptor_rut?: string | null
-  foto_sello_inicial_url?: string | null
-  foto_sello_final_url?: string | null
-  foto_odometro_url?: string | null
-  foto_equipo_url?: string | null
-  firma_receptor_url?: string | null
+  receptor_nombre: string
+  receptor_rut: string
+  foto_sello_inicial_url: string
+  foto_sello_final_url: string
+  foto_odometro_url: string
+  foto_equipo_url: string
+  firma_receptor_url: string
   lat?: number | null
   lng?: number | null
   accuracy?: number | null
@@ -402,6 +404,15 @@ export interface DespachoSellosPayload {
   fecha_movimiento?: string | null
   observacion?: string | null
   evidencia_url?: string | null
+  // MIG77: vehiculo externo + fotos antes ausentes en el RPC de sellos
+  vehiculo_externo_id?: string | null
+  foto_patente_url: string
+  foto_medidor_inicial_url: string
+  foto_medidor_final_url: string
+  lectura_medidor_inicial_lt?: number | null
+  lectura_medidor_final_lt?: number | null
+  // MIG78: kilometraje obligatorio para externos
+  kilometraje_vehiculo?: number | null
 }
 
 export interface DespachoSellosResult {
@@ -466,13 +477,13 @@ export async function registrarDespachoConSellos(payload: DespachoSellosPayload)
     p_ceco_id:                payload.ceco_id ?? null,
     p_faena_id:               payload.faena_id ?? null,
     p_cliente_nombre:         payload.cliente_nombre ?? null,
-    p_receptor_nombre:        payload.receptor_nombre ?? null,
-    p_receptor_rut:           payload.receptor_rut ?? null,
-    p_foto_sello_inicial_url: payload.foto_sello_inicial_url ?? null,
-    p_foto_sello_final_url:   payload.foto_sello_final_url ?? null,
-    p_foto_odometro_url:      payload.foto_odometro_url ?? null,
-    p_foto_equipo_url:        payload.foto_equipo_url ?? null,
-    p_firma_receptor_url:     payload.firma_receptor_url ?? null,
+    p_receptor_nombre:        payload.receptor_nombre,
+    p_receptor_rut:           payload.receptor_rut,
+    p_foto_sello_inicial_url: payload.foto_sello_inicial_url,
+    p_foto_sello_final_url:   payload.foto_sello_final_url,
+    p_foto_odometro_url:      payload.foto_odometro_url,
+    p_foto_equipo_url:        payload.foto_equipo_url,
+    p_firma_receptor_url:     payload.firma_receptor_url,
     p_lat:                    payload.lat ?? null,
     p_lng:                    payload.lng ?? null,
     p_accuracy:               payload.accuracy ?? null,
@@ -480,6 +491,14 @@ export async function registrarDespachoConSellos(payload: DespachoSellosPayload)
     p_fecha_movimiento:       payload.fecha_movimiento ?? null,
     p_observacion:            payload.observacion ?? null,
     p_evidencia_url:          payload.evidencia_url ?? null,
+    // MIG77
+    p_vehiculo_externo_id:      payload.vehiculo_externo_id ?? null,
+    p_foto_patente_url:         payload.foto_patente_url,
+    p_foto_medidor_inicial_url: payload.foto_medidor_inicial_url,
+    p_foto_medidor_final_url:   payload.foto_medidor_final_url,
+    p_lectura_medidor_inicial_lt: payload.lectura_medidor_inicial_lt ?? null,
+    p_lectura_medidor_final_lt:   payload.lectura_medidor_final_lt ?? null,
+    p_kilometraje_vehiculo:       payload.kilometraje_vehiculo ?? null,
   })
   if (error) return { data: null, error }
   return { data: data as DespachoSellosResult, error: null }
@@ -527,6 +546,7 @@ export async function registrarSalidaCombustible(payload: SalidaCombustiblePaylo
     p_foto_medidor_final_ts:      payload.foto_medidor_final_ts ?? null,
     p_lectura_medidor_inicial_lt: payload.lectura_medidor_inicial_lt ?? null,
     p_lectura_medidor_final_lt:   payload.lectura_medidor_final_lt ?? null,
+    p_kilometraje_vehiculo:       payload.kilometraje_vehiculo ?? null,
   })
   if (error) return { data: null, error }
   return { data: data as SalidaCombustibleResult, error: null }

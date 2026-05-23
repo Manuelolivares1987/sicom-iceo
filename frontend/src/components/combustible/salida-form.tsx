@@ -79,6 +79,8 @@ export function SalidaCombustibleForm() {
   const [rutReceptor, setRutReceptor]       = useState('')
   const [firmaDataUrl, setFirmaDataUrl]     = useState<string | null>(null)
   const [submitting, setSubmitting]         = useState(false)
+  // MIG78: kilometraje obligatorio para externos
+  const [kilometraje, setKilometraje]       = useState<number | ''>('')
 
   // MIG66: fotos selladas
   const [fotoInicial, setFotoInicial] = useState<FotoSellada | null>(null)
@@ -128,7 +130,8 @@ export function SalidaCombustibleForm() {
   const requiereCECO    = destino === 'ceco'
   const requiereFaena   = destino === 'faena'
   const requiereCliente = destino === 'venta_externa'
-  const requiereFotos   = destino === 'equipo'
+  // MIG77: todo despacho fisico (no consumo_interno) requiere fotos + firma + receptor
+  const requiereFotos   = destino !== 'consumo_interno'
 
   // Diferencia medidor
   const diffMedidor = useMemo(() => {
@@ -158,11 +161,15 @@ export function SalidaCombustibleForm() {
   if (requiereFaena && !faenaId) errores.push('Destino faena: selecciona la faena.')
   if (requiereCliente && !clienteNombre.trim()) errores.push('Venta externa: nombre del cliente obligatorio.')
 
-  if (requiereFotos && !fotoInicial) errores.push('Foto del medidor ANTES obligatoria (con GPS).')
-  if (requiereFotos && !fotoFinal) errores.push('Foto del medidor DESPUÉS obligatoria (con GPS).')
-  if (esExterno && !fotoPatente)   errores.push('Foto de la PATENTE obligatoria para vehículo externo.')
-  if (esExterno && !firmaDataUrl)  errores.push('Firma del RECEPTOR obligatoria para vehículo externo.')
-  if (esExterno && !nombreReceptor.trim()) errores.push('Nombre del receptor obligatorio para vehículo externo.')
+  // MIG77: TODO despacho fisico (destino != consumo_interno) exige evidencia completa
+  const esDespachoFisico = destino !== 'consumo_interno'
+  if (esDespachoFisico && !fotoInicial) errores.push('Foto del medidor ANTES obligatoria (con GPS).')
+  if (esDespachoFisico && !fotoFinal)   errores.push('Foto del medidor DESPUÉS obligatoria (con GPS).')
+  if (esDespachoFisico && !fotoPatente) errores.push('Foto de la PATENTE del vehículo obligatoria.')
+  if (esDespachoFisico && !firmaDataUrl) errores.push('Firma del receptor obligatoria.')
+  if (esDespachoFisico && !nombreReceptor.trim()) errores.push('Nombre del receptor obligatorio.')
+  if (esDespachoFisico && rutReceptor.trim().length < 7) errores.push('RUT del receptor obligatorio.')
+  if (esExterno && (typeof kilometraje !== 'number' || kilometraje < 0)) errores.push('Vehículo externo: kilometraje obligatorio.')
 
   const canSubmit = errores.length === 0 && !submitting
 
@@ -248,6 +255,8 @@ export function SalidaCombustibleForm() {
         foto_patente_ts:          fotoPatente?.ts ?? null,
         lectura_medidor_inicial_lt: typeof lecturaIni === 'number' ? lecturaIni : null,
         lectura_medidor_final_lt:   typeof lecturaFin === 'number' ? lecturaFin : null,
+        // MIG78
+        kilometraje_vehiculo:       esExterno && typeof kilometraje === 'number' ? kilometraje : null,
       }
 
       registrar.mutate(payload, {
@@ -361,15 +370,27 @@ export function SalidaCombustibleForm() {
           )}
 
           {requiereEquipo && esExterno && (
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Vehiculo externo autorizado *</label>
-              <select value={vehiculoExternoId} onChange={(e) => setVehiculoExternoId(e.target.value)}
-                      className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm">
-                <option value="">— Selecciona patente —</option>
-                {externos.map((v) => (
-                  <option key={v.id} value={v.id}>{v.patente} · {v.empresa}</option>
-                ))}
-              </select>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Vehiculo externo autorizado *</label>
+                <select value={vehiculoExternoId} onChange={(e) => setVehiculoExternoId(e.target.value)}
+                        className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm">
+                  <option value="">— Selecciona patente —</option>
+                  {externos.map((v) => (
+                    <option key={v.id} value={v.id}>{v.patente} · {v.empresa}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Kilometraje del vehículo * (km)</label>
+                <Input type="number" step="1" min="0"
+                       value={kilometraje}
+                       onChange={(e) => setKilometraje(e.target.value === '' ? '' : Number(e.target.value))}
+                       placeholder="ej: 123456" />
+                <div className="text-[10px] text-amber-700 mt-1">
+                  Obligatorio para calcular rendimiento (lt/km) del vehículo externo.
+                </div>
+              </div>
             </div>
           )}
 
@@ -565,14 +586,14 @@ export function SalidaCombustibleForm() {
         </Card>
       )}
 
-      {esExterno && (
+      {requiereFotos && (
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Receptor <span className="text-red-500">*</span></CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             <p className="text-xs text-gray-500">
-              Vehículo externo: foto de la patente + firma del receptor obligatorios para defender el cobro.
+              Todo despacho (interno o externo) requiere foto de la patente + firma del receptor con nombre y RUT.
             </p>
             <div className="grid gap-3 sm:grid-cols-2">
               <FotoSlot titulo="FOTO PATENTE *" colorBadge="bg-purple-100 text-purple-700"
@@ -585,7 +606,7 @@ export function SalidaCombustibleForm() {
                 </div>
                 <Input placeholder="Nombre del receptor *" value={nombreReceptor}
                        onChange={(e) => setNombreReceptor(e.target.value)} />
-                <Input placeholder="RUT (opcional)" value={rutReceptor}
+                <Input placeholder="RUT del receptor *" value={rutReceptor}
                        onChange={(e) => setRutReceptor(e.target.value)} />
               </div>
             </div>
