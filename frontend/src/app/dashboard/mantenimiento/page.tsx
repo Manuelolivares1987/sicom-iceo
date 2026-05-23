@@ -436,13 +436,20 @@ export default function MantenimientoPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">
-          Mantenimiento Preventivo
-        </h1>
-        <p className="mt-1 text-sm text-gray-500">
-          Planes de mantenimiento, calendario y pautas del fabricante.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">
+            Mantenimiento Preventivo
+          </h1>
+          <p className="mt-1 text-sm text-gray-500">
+            Planes de mantenimiento, calendario y pautas del fabricante.
+          </p>
+        </div>
+        <a href="/dashboard/mantenimiento/plan-semanal-taller"
+           className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow hover:bg-blue-700">
+          <CalendarDays className="h-4 w-4" />
+          Plan semanal taller (Kanban)
+        </a>
       </div>
 
       {/* Stats */}
