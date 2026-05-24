@@ -284,7 +284,7 @@ function ActivosTab({ activos, loading, filtro, setFiltro, filtroEstado, setFilt
                       ) : <span className="text-gray-300">—</span>}
                     </td>
                     <td className="px-2 py-1.5 text-center">
-                      <BadgeGps estado={a.gps_estado_pin} />
+                      <BadgeGps estado={a.gps_estado_pin} minutosOffline={a.gps_minutos_offline} />
                     </td>
                     <td className="px-2 py-1.5 text-center">
                       {a.geocerca_esperada_id == null ? <span className="text-gray-300">—</span>
@@ -340,7 +340,7 @@ function BadgePm({ status }: { status: string }) {
   return <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${color}`}>{label}</span>
 }
 
-function BadgeGps({ estado }: { estado: string }) {
+function BadgeGps({ estado, minutosOffline }: { estado: string; minutosOffline?: number | null }) {
   const map: Record<string, [string, string]> = {
     en_ruta: ['En ruta', 'bg-blue-100 text-blue-700'],
     detenido_motor_on: ['Det. ON', 'bg-amber-100 text-amber-700'],
@@ -351,16 +351,91 @@ function BadgeGps({ estado }: { estado: string }) {
     sin_gps: ['Sin GPS', 'bg-gray-100 text-gray-400'],
   }
   const [label, color] = map[estado] ?? ['—', 'bg-gray-100 text-gray-500']
-  return <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${color}`}>{label}</span>
+  // Para sin_senal_24h: mostrar dias/horas reales en lugar del label generico
+  let displayLabel = label
+  if (estado === 'sin_senal_24h' && typeof minutosOffline === 'number' && minutosOffline > 0) {
+    const dias = minutosOffline / 1440
+    const horas = minutosOffline / 60
+    displayLabel = dias >= 1 ? `${Math.round(dias)}d sin señal` : `${Math.round(horas)}h sin señal`
+  }
+  // Color escalado por criticidad
+  let dynamicColor = color
+  if (estado === 'sin_senal_24h' && typeof minutosOffline === 'number') {
+    if (minutosOffline > 7 * 1440)        dynamicColor = 'bg-red-200 text-red-900 ring-1 ring-red-400'
+    else if (minutosOffline > 3 * 1440)   dynamicColor = 'bg-red-100 text-red-800'
+  }
+  return <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${dynamicColor}`}>{displayLabel}</span>
 }
 
 function GpsTab({ activos, kpi }: { activos: FlotaDashboardActivo[]; kpi: any }) {
+  // CRITICO: arrendados/leasing sin señal — son los que generan riesgo de cobro
+  const arrendadosSinSenal = activos
+    .filter((a) =>
+      (a.estado_comercial === 'arrendado' || a.estado_comercial === 'leasing')
+      && a.gps_estado_pin === 'sin_senal_24h')
+    .sort((a, b) => (b.gps_minutos_offline ?? 0) - (a.gps_minutos_offline ?? 0))
   const fueraDeZona = activos.filter((a) => a.en_zona_esperada === false)
   const sinSenal = activos.filter((a) => a.gps_estado_pin === 'sin_senal_24h' || a.gps_estado_pin === 'offline')
   const sinGps = activos.filter((a) => a.gps_estado_pin === 'sin_gps')
 
   return (
     <div className="space-y-3">
+      {/* Banner critico arriba si hay arrendados sin señal */}
+      {arrendadosSinSenal.length > 0 && (
+        <Card className="border-red-300 bg-red-50">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center gap-2 text-red-800">
+              <ShieldAlert className="h-5 w-5" />
+              {arrendadosSinSenal.length} activos arrendados/leasing sin señal GPS
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-2 max-h-[40vh] overflow-y-auto">
+            <p className="text-xs text-red-700 mb-2">
+              Riesgo de cobro: estos activos están facturados a cliente pero no podemos verificar ubicación. Llamar a verificar.
+            </p>
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-left text-red-900 border-b border-red-200">
+                  <th className="px-2 py-1">Activo</th>
+                  <th className="px-2 py-1">Cliente</th>
+                  <th className="px-2 py-1">Faena</th>
+                  <th className="px-2 py-1 text-right">Días sin señal</th>
+                  <th className="px-2 py-1 text-right">Batería</th>
+                </tr>
+              </thead>
+              <tbody>
+                {arrendadosSinSenal.map((a) => {
+                  const dias = a.gps_minutos_offline ? Math.round(a.gps_minutos_offline / 1440) : null
+                  const bat = a.gps_bateria_pct
+                  return (
+                    <tr key={a.activo_id} className="border-b border-red-100 last:border-0">
+                      <td className="px-2 py-1.5">
+                        <Link href={`/dashboard/activos/${a.activo_id}`} className="font-mono text-red-800 hover:underline">
+                          {a.activo_codigo}
+                        </Link>
+                        {a.patente && <span className="ml-1 text-gray-600">· {a.patente}</span>}
+                      </td>
+                      <td className="px-2 py-1.5 text-gray-700">{a.contrato_cliente ?? '—'}</td>
+                      <td className="px-2 py-1.5 text-gray-500 text-[10px]">{a.faena_nombre ?? '—'}</td>
+                      <td className="px-2 py-1.5 text-right font-bold tabular-nums">
+                        {dias != null ? `${dias}d` : '—'}
+                      </td>
+                      <td className="px-2 py-1.5 text-right tabular-nums">
+                        {bat != null ? (
+                          <span className={bat < 10 ? 'text-red-700 font-bold' : bat < 30 ? 'text-amber-700' : 'text-gray-600'}>
+                            {bat}%
+                          </span>
+                        ) : <span className="text-gray-400">—</span>}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </CardContent>
+        </Card>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         <CardListaActivos
           titulo={`Fuera de zona esperada (${fueraDeZona.length})`}
