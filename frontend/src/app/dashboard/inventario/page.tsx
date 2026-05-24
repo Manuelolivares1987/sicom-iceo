@@ -28,6 +28,8 @@ import {
   Gauge,
   Ban,
   Briefcase,
+  Repeat,
+  ArrowRightLeft,
 } from 'lucide-react'
 import { QuickActionsGrid } from '@/components/ui/quick-actions-grid'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -271,6 +273,15 @@ export default function InventarioPage() {
           { label: 'Despachos a OT',      description: 'Despachos directos a OT',         href: '/dashboard/abastecimiento/despachos',   icon: Truck,          accent: 'red' },
           { label: 'Salida combustible',  description: 'Salida valorizada CPP vigente',   href: '/dashboard/combustible/salida',         icon: ArrowDownRight, accent: 'red' },
           { label: 'Despacho con sellos', description: 'Salida + sellos antifraude',      href: '/dashboard/combustible/despacho',       icon: ShieldCheck,    accent: 'amber' },
+        ]}
+      />
+
+      <QuickActionsGrid
+        title="Movimientos internos de combustible"
+        cols={2}
+        actions={[
+          { label: 'Recirculación',       description: 'Prueba de bomba (stock neutro, evidencia completa)', href: '/dashboard/combustible/recirculacion', icon: Repeat,         accent: 'blue' },
+          { label: 'Traspaso estanques',  description: 'Mover combustible entre estanques con foto y firma', href: '/dashboard/combustible/traspaso',      icon: ArrowRightLeft, accent: 'purple' },
         ]}
       />
 
