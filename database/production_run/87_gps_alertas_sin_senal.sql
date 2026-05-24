@@ -42,7 +42,20 @@ BEGIN
         RETURN;
     END IF;
     ALTER TABLE alertas DROP CONSTRAINT chk_alertas_tipo;
-    v_new := regexp_replace(v_def, '\]\)\)$', ', ''gps_sin_senal''::text]))', 1);
+    -- Insertar el nuevo valor antes del cierre del ARRAY. Soporta los dos
+    -- formatos comunes que devuelve pg_get_constraintdef:
+    --   formato A: ...'x'::text]))
+    --   formato B: ...'x'::character varying])::text[]))
+    IF v_def ~ '\]\)::text\[\]' THEN
+        v_new := regexp_replace(
+            v_def,
+            '\]\)::text\[\]',
+            ', ''gps_sin_senal''::character varying])::text[]',
+            1
+        );
+    ELSE
+        v_new := regexp_replace(v_def, '\]\)\)', ', ''gps_sin_senal''::text]))', 1);
+    END IF;
     EXECUTE 'ALTER TABLE alertas ADD CONSTRAINT chk_alertas_tipo ' || v_new;
     RAISE NOTICE 'Constraint chk_alertas_tipo extendido con gps_sin_senal';
 END $body$;
