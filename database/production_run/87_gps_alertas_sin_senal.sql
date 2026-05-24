@@ -21,6 +21,33 @@
 -- ADITIVA, IDEMPOTENTE.
 -- ============================================================================
 
+-- ── 0. Extender CHECK chk_alertas_tipo para aceptar 'gps_sin_senal' ────────
+-- Sin esto, fn_gps_generar_alertas_sin_senal falla al insertar la alerta.
+DO $body$
+DECLARE
+    v_def TEXT;
+    v_new TEXT;
+BEGIN
+    SELECT pg_get_constraintdef(c.oid) INTO v_def
+      FROM pg_constraint c
+     WHERE c.conrelid = 'public.alertas'::regclass
+       AND c.conname  = 'chk_alertas_tipo';
+
+    IF v_def IS NULL THEN
+        RAISE NOTICE 'Constraint chk_alertas_tipo no existe — se omite el patch';
+        RETURN;
+    END IF;
+    IF v_def LIKE '%gps_sin_senal%' THEN
+        RAISE NOTICE 'Constraint ya incluye gps_sin_senal — nada que hacer';
+        RETURN;
+    END IF;
+    ALTER TABLE alertas DROP CONSTRAINT chk_alertas_tipo;
+    v_new := regexp_replace(v_def, '\]\)\)$', ', ''gps_sin_senal''::text]))', 1);
+    EXECUTE 'ALTER TABLE alertas ADD CONSTRAINT chk_alertas_tipo ' || v_new;
+    RAISE NOTICE 'Constraint chk_alertas_tipo extendido con gps_sin_senal';
+END $body$;
+
+
 -- ── 1. Vista de activos en riesgo ───────────────────────────────────────────
 DROP VIEW IF EXISTS v_gps_activos_riesgo CASCADE;
 CREATE VIEW v_gps_activos_riesgo AS
