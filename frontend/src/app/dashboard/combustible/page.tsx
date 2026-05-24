@@ -19,6 +19,7 @@ import {
 } from '@/hooks/use-combustible-cpp'
 import type { EstadoControlCombustible } from '@/lib/services/combustible-cpp'
 import { useQueryClient } from '@tanstack/react-query'
+import { ProyeccionStockCard } from '@/components/combustible/proyeccion-stock-card'
 
 const ESTADO_COLOR: Record<EstadoControlCombustible, string> = {
   cuadrado:           'bg-green-100 text-green-700',
@@ -74,6 +75,9 @@ export default function CombustiblePage() {
           { label: 'Corregir patente',    description: 'Cambiar patente de un despacho ya hecho',  href: '/dashboard/combustible/corregir-despacho', icon: Wrench,         accent: 'amber',  badge: 'Admin' },
         ]}
       />
+
+      {/* Proyeccion de stock con demanda real */}
+      <ProyeccionStockCard />
 
       {/* KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">

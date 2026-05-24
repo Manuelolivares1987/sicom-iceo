@@ -100,18 +100,15 @@ BEGIN
             'gps_sin_senal',
             'GPS sin señal: ' || v_r.activo_codigo ||
                 CASE WHEN v_r.patente IS NOT NULL THEN ' · ' || v_r.patente ELSE '' END,
-            FORMAT(
-                'Activo %s (%s) en %s lleva %.1f dias sin reportar GPS. Cliente: %s, Faena: %s. Bateria: %s. Causa probable: %s.',
-                v_r.activo_codigo,
-                COALESCE(v_r.patente, '—'),
-                v_r.estado_comercial,
-                v_r.dias_sin_senal,
-                COALESCE(v_r.contrato_cliente, '—'),
-                COALESCE(v_r.faena_nombre, '—'),
-                CASE WHEN v_r.gps_bateria_pct IS NULL THEN '—'
-                     ELSE v_r.gps_bateria_pct::text || '%' END,
-                v_r.motivo_sugerido
-            ),
+            'Activo ' || v_r.activo_codigo
+                || ' (' || COALESCE(v_r.patente, '—') || ')'
+                || ' en ' || v_r.estado_comercial
+                || ' lleva ' || ROUND(v_r.dias_sin_senal, 1)::text
+                || ' dias sin reportar GPS. Cliente: ' || COALESCE(v_r.contrato_cliente, '—')
+                || ', Faena: ' || COALESCE(v_r.faena_nombre, '—')
+                || '. Bateria: ' || CASE WHEN v_r.gps_bateria_pct IS NULL THEN '—'
+                                          ELSE v_r.gps_bateria_pct::text || '%' END
+                || '. Causa probable: ' || v_r.motivo_sugerido,
             v_r.severidad_sugerida,
             'activo', v_r.activo_id, false, NOW()
         );

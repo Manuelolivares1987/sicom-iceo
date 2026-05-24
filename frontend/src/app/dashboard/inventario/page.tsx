@@ -32,6 +32,7 @@ import {
   ArrowRightLeft,
 } from 'lucide-react'
 import { QuickActionsGrid } from '@/components/ui/quick-actions-grid'
+import { ProyeccionStockCard } from '@/components/combustible/proyeccion-stock-card'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -284,6 +285,9 @@ export default function InventarioPage() {
           { label: 'Traspaso estanques',  description: 'Mover combustible entre estanques con foto y firma', href: '/dashboard/combustible/traspaso',      icon: ArrowRightLeft, accent: 'purple' },
         ]}
       />
+
+      {/* Proyeccion de stock combustible: demanda real MYG + LISSET */}
+      <ProyeccionStockCard compacto />
 
       <QuickActionsGrid
         title="Control y reportes"

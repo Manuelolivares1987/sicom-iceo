@@ -32,6 +32,7 @@ import { useRequireAuth } from '@/hooks/use-require-auth'
 import { useFlotaVehicular, useOEEFlota } from '@/hooks/use-flota'
 import { useReporteDiario } from '@/hooks/use-reporte-diario'
 import { useFlotaDashboard } from '@/hooks/use-flota-dashboard'
+import { ProyeccionStockCard } from '@/components/combustible/proyeccion-stock-card'
 
 export default function ComercialPage() {
   useRequireAuth()
@@ -248,6 +249,9 @@ export default function ComercialPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* ── Proyeccion stock combustible (demanda real MYG + LISSET) ── */}
+      <ProyeccionStockCard compacto />
 
       {/* ── Riesgo de cobro: arrendados/leasing sin señal GPS ── */}
       {arrendadosSinSenal.length > 0 && (
