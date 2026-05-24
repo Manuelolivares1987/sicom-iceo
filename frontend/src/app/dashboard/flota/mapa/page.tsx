@@ -15,6 +15,7 @@ import { Spinner } from '@/components/ui/spinner'
 import { useRequireAuth } from '@/hooks/use-require-auth'
 import { supabase } from '@/lib/supabase'
 import type { PosicionFlota } from '@/components/flota/mapa-flota'
+import { useFlotaDashboard } from '@/hooks/use-flota-dashboard'
 
 const MapaFlota = dynamic(
   () => import('@/components/flota/mapa-flota').then((m) => m.MapaFlota),
@@ -57,6 +58,16 @@ export default function MapaFlotaPage() {
   const [tiposSeleccionados, setTiposSeleccionados]     = useState<Set<string>>(new Set())
   const [clienteSeleccionado, setClienteSeleccionado]   = useState<string>('')
   const [busqueda, setBusqueda]                         = useState('')
+
+  // Riesgo de cobro: arrendados/leasing sin señal GPS hace >24h
+  const { data: flotaUnificada } = useFlotaDashboard()
+  const arrendadosSinSenal = useMemo(() => {
+    if (!flotaUnificada) return []
+    return flotaUnificada.filter((a) =>
+      (a.estado_comercial === 'arrendado' || a.estado_comercial === 'leasing')
+      && a.gps_estado_pin === 'sin_senal_24h',
+    ).sort((a, b) => (b.gps_minutos_offline ?? 0) - (a.gps_minutos_offline ?? 0))
+  }, [flotaUnificada])
 
   const cargar = async () => {
     setError(null)
@@ -161,6 +172,63 @@ export default function MapaFlotaPage() {
           Refrescar
         </Button>
       </div>
+
+      {/* Riesgo de cobro: arrendados/leasing sin senal GPS */}
+      {arrendadosSinSenal.length > 0 && (
+        <Card className="border-red-300 bg-red-50">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center gap-2 text-red-800">
+              <AlertTriangle className="h-5 w-5" />
+              Riesgo de cobro: {arrendadosSinSenal.length} activos arrendados/leasing sin señal GPS
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-xs text-red-700 mb-3">
+              Estos activos están facturados a cliente pero no podemos verificar ubicación. Coordinar con cliente para diagnóstico del tracker.
+            </p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="text-left text-red-900 border-b border-red-200">
+                    <th className="px-2 py-1">PPU / Activo</th>
+                    <th className="px-2 py-1">Cliente</th>
+                    <th className="px-2 py-1">Faena</th>
+                    <th className="px-2 py-1 text-right">Días sin señal</th>
+                    <th className="px-2 py-1 text-right">Batería</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {arrendadosSinSenal.slice(0, 10).map((a) => {
+                    const dias = a.gps_minutos_offline ? Math.round(a.gps_minutos_offline / 1440) : null
+                    const bat  = a.gps_bateria_pct
+                    return (
+                      <tr key={a.activo_id} className="border-b border-red-100 last:border-0 hover:bg-red-100/50">
+                        <td className="px-2 py-1.5 font-mono">
+                          {a.patente ?? a.activo_codigo}
+                          <div className="text-[10px] text-gray-600 font-sans">{a.activo_nombre}</div>
+                        </td>
+                        <td className="px-2 py-1.5 text-gray-700">{a.contrato_cliente ?? '—'}</td>
+                        <td className="px-2 py-1.5 text-[10px] text-gray-500">{a.faena_nombre ?? '—'}</td>
+                        <td className="px-2 py-1.5 text-right tabular-nums font-bold">{dias != null ? `${dias}d` : '—'}</td>
+                        <td className="px-2 py-1.5 text-right tabular-nums">
+                          {bat != null ? (
+                            <span className={bat < 10 ? 'text-red-700 font-bold' : bat < 30 ? 'text-amber-700' : 'text-gray-600'}>{bat}%</span>
+                          ) : <span className="text-gray-400">—</span>}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+              {arrendadosSinSenal.length > 10 && (
+                <p className="text-[10px] text-gray-500 mt-2 text-center">
+                  Mostrando 10 de {arrendadosSinSenal.length}.
+                </p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Filtros */}
       <Card>

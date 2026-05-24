@@ -75,6 +75,7 @@ const navGroups: NavGroup[] = [
       { label: 'Mis OTs', href: '/dashboard/mis-ots', icon: ClipboardCheck, module: 'ordenes_trabajo' as Module },
       { label: 'Órdenes de Trabajo', href: '/dashboard/ordenes-trabajo', icon: ClipboardList, module: 'ordenes_trabajo' },
       { label: 'Mantenimiento', href: '/dashboard/mantenimiento', icon: Wrench, module: 'mantenimiento' },
+      { label: 'Plan semanal taller', href: '/dashboard/mantenimiento/plan-semanal-taller', icon: CalendarClock, module: 'mantenimiento', badge: 'Nuevo' },
     ],
   },
   // Operación Calama (planificación + ejecución para faenas Calama)

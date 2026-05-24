@@ -18,6 +18,7 @@ import {
   cargarStockEstanques, type EstanqueStock,
 } from '@/lib/services/combustible-comercial'
 import type { TransaccionCombustibleCliente } from '@/lib/services/portal-cliente'
+import { ProyeccionStockCard } from '@/components/combustible/proyeccion-stock-card'
 
 type Rango = 'hoy' | 'semana' | 'mes' | 'mes_anterior' | 'trimestre' | 'anio'
 
@@ -157,6 +158,9 @@ export default function ComercialCombustibleConsolidadoPage() {
           )}
         </div>
       </div>
+
+      {/* Proyeccion de stock con demanda real MYG + LISSET */}
+      <ProyeccionStockCard compacto />
 
       {/* STOCK ACTUAL DE ESTANQUES (siempre visible — info crítica para comercial) */}
       <Card className="border-pillado-orange-300 bg-pillado-orange-50/40">
