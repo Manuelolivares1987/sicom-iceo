@@ -543,6 +543,13 @@ export default function PlanSemanalPage() {
                 try {
                   const otById = new Map((ots ?? []).map((o) => [o.id, o]))
                   const diaById = new Map((dias ?? []).map((d) => [d.id, d]))
+                  // Map codigo_zona -> nombre (oficina, truckshop, etc.)
+                  // Las macro zonas suelen tener codigo terminado en .0.0 (1.0.0, 2.0.0)
+                  // pero el catalogo puede tener tambien sub-zonas — buscamos primero
+                  // por coincidencia exacta y caemos al codigo si no hay nombre.
+                  const zonaNombrePorCodigo = new Map(
+                    (zonas ?? []).map((z) => [z.codigo_zona, z.nombre] as const),
+                  )
                   const planificacion = (planificaciones ?? []).find((p) => p.id === planificacionId)
                   const blob = await exportarPlanSemanalExcel({
                     titulo: `Plan semanal Calama${planificacion ? ' — ' + planificacion.nombre : ''}`,
@@ -552,11 +559,13 @@ export default function PlanSemanalPage() {
                       const ot = otById.get(j.ot_id)
                       const dia = diaById.get(j.plan_dia_id)
                       const folio = ot?.folio ?? j.ot_id.slice(0, 8)
+                      const macroZona = ot?.folio ? zonaCodeFromFolio(ot.folio) : null
                       return {
                         fecha: dia?.fecha ?? '',
                         dia_nombre: dia?.nombre_dia ?? '',
                         folio,
-                        macro_zona: ot?.folio ? zonaCodeFromFolio(ot.folio) : null,
+                        macro_zona: macroZona,
+                        macro_zona_nombre: macroZona ? (zonaNombrePorCodigo.get(macroZona) ?? null) : null,
                         codigo_excel: ot?.folio ? excelCodigoFromFolio(ot.folio) : null,
                         tipo: 'OT calama',
                         prioridad: ot?.prioridad ?? null,

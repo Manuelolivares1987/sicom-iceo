@@ -8,8 +8,9 @@ export type JornadaExcelRow = {
   dia_nombre: string
   folio: string
   // Calama-specific (se omiten si mostrarMacroZona=false)
-  macro_zona?: string | null    // ej '1.0.0'
-  codigo_excel?: string | null  // ej '1.1.0' (parseado del folio)
+  macro_zona?: string | null         // ej '1.0.0'
+  macro_zona_nombre?: string | null  // ej 'Oficina', 'Truckshop'
+  codigo_excel?: string | null       // ej '1.1.0' (parseado del folio)
   tipo: string              // preventivo / correctivo / inspeccion / OT calama
   prioridad?: string | null
   activo?: string | null    // codigo - patente
@@ -155,8 +156,9 @@ export async function exportarPlanSemanalExcel(input: PlanSemanalExcelInput): Pr
     { header: 'Folio OT',       key: 'folio',          width: 18 },
   ]
   const calamaCols = input.mostrarMacroZona ? [
-    { header: 'Macro zona',     key: 'macro_zona',     width: 12 },
-    { header: 'Código Excel',   key: 'codigo_excel',   width: 12 },
+    { header: 'Macro zona',     key: 'macro_zona',         width: 12 },
+    { header: 'Zona (nombre)',  key: 'macro_zona_nombre',  width: 22 },
+    { header: 'Código Excel',   key: 'codigo_excel',       width: 12 },
   ] : []
   const restoCols = [
     { header: 'Tipo',           key: 'tipo',           width: 14 },
