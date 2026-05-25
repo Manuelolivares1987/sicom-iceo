@@ -73,6 +73,7 @@ import {
 } from '@/hooks/use-activos'
 import { useOEEActivo } from '@/hooks/use-flota'
 import { HistorialEstadosChart } from '@/components/flota/historial-estados-chart'
+import { useHistorialOSLegacyByActivo } from '@/hooks/use-historial-os-legacy'
 import { CambiarContratoModal } from '@/components/activos/cambiar-contrato-modal'
 import { HistoricoContratosCard } from '@/components/activos/historico-contratos-card'
 import { Building2 } from 'lucide-react'
@@ -692,6 +693,7 @@ function TabCostos({ activoId }: { activoId: string }) {
 
 function TabHistorial({ activoId, contratoRefreshKey }: { activoId: string; contratoRefreshKey?: number }) {
   const { data: historial, isLoading } = useHistorialMantenimiento(activoId)
+  const { data: legacy, isLoading: loadingLegacy } = useHistorialOSLegacyByActivo(activoId)
 
   return (
     <div className="space-y-4">
@@ -701,13 +703,69 @@ function TabHistorial({ activoId, contratoRefreshKey }: { activoId: string; cont
       {/* Gráfico histórico anual de estados (barras apiladas) */}
       <HistorialEstadosChart activoId={activoId} />
 
-      {/* Historial de intervenciones (OTs) */}
+      {/* ── Historial OS legacy (importado del Excel pre-sistema) ── */}
+      {!loadingLegacy && legacy && legacy.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center gap-2">
+              <History className="h-4 w-4 text-amber-700" />
+              Histórico previo (OS Auditoría, {legacy.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0 overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Fecha</TableHead>
+                  <TableHead>OS</TableHead>
+                  <TableHead>Tipo</TableHead>
+                  <TableHead className="text-right">Horómetro</TableHead>
+                  <TableHead className="text-right">Kilometraje</TableHead>
+                  <TableHead className="text-right">Hs MO</TableHead>
+                  <TableHead className="text-right">% Cumpl.</TableHead>
+                  <TableHead>Responsable</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {legacy.map((os) => {
+                  const tiposActivos = [
+                    os.flag_mant_prev && 'MP',
+                    os.flag_correctivo && 'Corr.',
+                    os.flag_neumaticos && 'Neum.',
+                    os.flag_rev_tec && 'RT',
+                    os.flag_hab_estado && 'Hab.',
+                    os.flag_serv_externo && 'Ext.',
+                  ].filter(Boolean).join(' · ')
+                  return (
+                    <TableRow key={os.id} className="text-xs">
+                      <TableCell className="whitespace-nowrap">{os.fecha_recepcion ? formatDate(os.fecha_recepcion) : '—'}</TableCell>
+                      <TableCell className="font-mono font-semibold">{os.os_cqbo ?? os.os_numero}</TableCell>
+                      <TableCell>{tiposActivos || os.tipo_principal}</TableCell>
+                      <TableCell className="text-right tabular-nums">{os.horometro ? os.horometro.toLocaleString('es-CL') : '—'}</TableCell>
+                      <TableCell className="text-right tabular-nums">{os.kilometraje ? os.kilometraje.toLocaleString('es-CL') : '—'}</TableCell>
+                      <TableCell className="text-right tabular-nums">{os.horas_mo ? `${os.horas_mo} h` : '—'}</TableCell>
+                      <TableCell className="text-right tabular-nums">{os.cumplimiento_pct != null ? `${os.cumplimiento_pct}%` : '—'}</TableCell>
+                      <TableCell className="text-gray-600">{os.responsable ?? '—'}</TableCell>
+                    </TableRow>
+                  )
+                })}
+              </TableBody>
+            </Table>
+            <div className="p-2 text-[10px] text-gray-500 border-t">
+              MP=Mant. Preventiva · Corr.=Correctivo · Neum.=Neumáticos · RT=Rev. Técnica · Hab.=Habilitación/Estado · Ext.=Servicio externo
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Historial de intervenciones (OTs del sistema actual) */}
       {isLoading && <div className="flex justify-center py-6"><Spinner className="h-8 w-8" /></div>}
-      {!isLoading && (!historial || historial.length === 0) && (
+      {!isLoading && (!historial || historial.length === 0) && (!legacy || legacy.length === 0) && (
         <EmptyState icon={History} title="Sin intervenciones" description="El equipo no registra OTs todavía." />
       )}
       {!isLoading && historial && historial.length > 0 && (
     <div className="space-y-2">
+      <div className="text-sm font-semibold text-gray-700 mt-2">OTs del sistema ({historial.length})</div>
       {(historial as any[]).map((item: any, idx: number) => (
         <Card key={item.id ?? idx}>
           <CardContent className="p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-2">
