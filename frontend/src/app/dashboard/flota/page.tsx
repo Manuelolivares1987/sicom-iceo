@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useMemo } from 'react'
+import Link from 'next/link'
 import {
   Truck,
   Activity,
@@ -638,7 +639,16 @@ export default function FlotaPage() {
                     onClick={() => handleRowClick(activo)}
                     title="Click para cambiar estado del equipo"
                   >
-                    <td className="px-2 py-2 font-mono font-semibold">{activo.patente as string || activo.codigo as string}</td>
+                    <td className="px-2 py-2 font-mono font-semibold">
+                      <Link
+                        href={`/dashboard/activos/${activo.id as string}`}
+                        onClick={(e) => e.stopPropagation()}
+                        className="text-blue-700 hover:text-blue-900 hover:underline"
+                        title="Ver ficha + historial de mantenimiento"
+                      >
+                        {activo.patente as string || activo.codigo as string}
+                      </Link>
+                    </td>
                     <td className="px-2 py-2 text-gray-500">{activo.centro_costo as string}</td>
                     <td className="px-2 py-2">{activo.nombre as string}</td>
                     <td className="px-2 py-2">
