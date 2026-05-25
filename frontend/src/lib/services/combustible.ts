@@ -302,6 +302,59 @@ export async function getVehiculosExternosAutorizados(): Promise<VehiculoExterno
   return (data ?? []) as VehiculoExternoAutorizado[]
 }
 
+// --- Admin de vehículos externos (listar/crear/editar/revocar) -------------
+// RLS: escritura permitida a roles admin/subgerente/jefe_mant/bodeguero (MIG62).
+
+export async function getTodosVehiculosExternos(): Promise<VehiculoExternoAutorizado[]> {
+  const { data, error } = await supabase
+    .from('vehiculos_autorizados_externos')
+    .select('id, patente, empresa, contrato_id, activo, fecha_autorizacion, notas')
+    .order('activo', { ascending: false })
+    .order('empresa')
+    .order('patente')
+  if (error) throw error
+  return (data ?? []) as VehiculoExternoAutorizado[]
+}
+
+export interface VehiculoExternoInput {
+  patente: string
+  empresa: string
+  notas?: string | null
+}
+
+function normalizarInput(input: VehiculoExternoInput) {
+  return {
+    patente: input.patente.trim().toUpperCase(),
+    empresa: input.empresa.trim(),
+    notas: input.notas?.trim() || null,
+  }
+}
+
+export async function crearVehiculoExterno(input: VehiculoExternoInput) {
+  const { error } = await supabase
+    .from('vehiculos_autorizados_externos')
+    .insert(normalizarInput(input))
+  if (error) throw error
+}
+
+export async function actualizarVehiculoExterno(id: string, input: VehiculoExternoInput) {
+  const { error } = await supabase
+    .from('vehiculos_autorizados_externos')
+    .update(normalizarInput(input))
+    .eq('id', id)
+  if (error) throw error
+}
+
+export async function setVehiculoExternoActivo(id: string, activo: boolean) {
+  const patch: Record<string, unknown> = { activo }
+  patch.fecha_revocacion = activo ? null : new Date().toISOString().slice(0, 10)
+  const { error } = await supabase
+    .from('vehiculos_autorizados_externos')
+    .update(patch)
+    .eq('id', id)
+  if (error) throw error
+}
+
 export async function registrarMovimiento(payload: RegistrarMovimientoPayload) {
   const { data, error } = await supabase.rpc('fn_registrar_movimiento_combustible', {
     p_tipo: payload.tipo,

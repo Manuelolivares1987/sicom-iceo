@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import {
   Fuel, ArrowUpRight, ArrowDownRight, AlertTriangle, Layers, DollarSign,
-  RefreshCw, Scale, ShieldCheck, Gauge, Ban, Wrench, Repeat, ArrowRightLeft,
+  RefreshCw, Scale, ShieldCheck, Gauge, Ban, Wrench, Repeat, ArrowRightLeft, Truck,
 } from 'lucide-react'
 import { QuickActionsGrid } from '@/components/ui/quick-actions-grid'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -73,6 +73,7 @@ export default function CombustiblePage() {
           { label: 'Corregir ingreso',    description: 'Anular ingreso mal cargado (admin)',       href: '/dashboard/combustible/corregir-ingreso',  icon: Ban,            accent: 'red',  badge: 'Admin' },
           { label: 'Ajustar stock',       description: 'Corregir litros físicos del estanque',     href: '/dashboard/combustible/ajuste',            icon: Wrench,         accent: 'purple', badge: 'Admin' },
           { label: 'Corregir patente',    description: 'Cambiar patente de un despacho ya hecho',  href: '/dashboard/combustible/corregir-despacho', icon: Wrench,         accent: 'amber',  badge: 'Admin' },
+          { label: 'Vehículos externos',  description: 'Administrar patentes autorizadas (alta/edición/revocar)', href: '/dashboard/combustible/vehiculos-externos', icon: Truck,        accent: 'blue',   badge: 'Admin' },
         ]}
       />
 
