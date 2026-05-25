@@ -7,6 +7,9 @@ export type JornadaExcelRow = {
   fecha: string             // ISO YYYY-MM-DD
   dia_nombre: string
   folio: string
+  // Calama-specific (se omiten si mostrarMacroZona=false)
+  macro_zona?: string | null    // ej '1.0.0'
+  codigo_excel?: string | null  // ej '1.1.0' (parseado del folio)
   tipo: string              // preventivo / correctivo / inspeccion / OT calama
   prioridad?: string | null
   activo?: string | null    // codigo - patente
@@ -43,6 +46,8 @@ export type PlanSemanalExcelInput = {
   resumen?: ResumenKpi | null
   scopeNombre?: string | null   // ej: faena, planificacion, cliente — info contextual
   generadoPor?: string | null
+  /** Si true, agrega columnas 'Macro zona' y 'Codigo Excel' (solo aplica a Calama). */
+  mostrarMacroZona?: boolean
 }
 
 function fmtDate(iso: string): string {
@@ -144,10 +149,16 @@ export async function exportarPlanSemanalExcel(input: PlanSemanalExcelInput): Pr
 
   // ── Hoja 2: Detalle ────────────────────────────────────────────────────────
   const wsD = wb.addWorksheet('Detalle jornadas')
-  wsD.columns = [
+  const baseCols = [
     { header: 'Fecha',          key: 'fecha',          width: 12 },
     { header: 'Día',            key: 'dia_nombre',     width: 12 },
     { header: 'Folio OT',       key: 'folio',          width: 18 },
+  ]
+  const calamaCols = input.mostrarMacroZona ? [
+    { header: 'Macro zona',     key: 'macro_zona',     width: 12 },
+    { header: 'Código Excel',   key: 'codigo_excel',   width: 12 },
+  ] : []
+  const restoCols = [
     { header: 'Tipo',           key: 'tipo',           width: 14 },
     { header: 'Prioridad',      key: 'prioridad',      width: 12 },
     { header: 'Activo',         key: 'activo',         width: 22 },
@@ -164,6 +175,7 @@ export async function exportarPlanSemanalExcel(input: PlanSemanalExcelInput): Pr
     { header: 'Cliente',        key: 'cliente',        width: 22 },
     { header: 'Observaciones',  key: 'observaciones',  width: 40 },
   ]
+  wsD.columns = [...baseCols, ...calamaCols, ...restoCols]
 
   // Header style
   wsD.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } }

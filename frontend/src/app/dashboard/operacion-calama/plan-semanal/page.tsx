@@ -551,10 +551,13 @@ export default function PlanSemanalPage() {
                     jornadas: (planOts ?? []).filter((p) => jornadaActiva(p)).map((j) => {
                       const ot = otById.get(j.ot_id)
                       const dia = diaById.get(j.plan_dia_id)
+                      const folio = ot?.folio ?? j.ot_id.slice(0, 8)
                       return {
                         fecha: dia?.fecha ?? '',
                         dia_nombre: dia?.nombre_dia ?? '',
-                        folio: ot?.folio ?? j.ot_id.slice(0, 8),
+                        folio,
+                        macro_zona: ot?.folio ? zonaCodeFromFolio(ot.folio) : null,
+                        codigo_excel: ot?.folio ? excelCodigoFromFolio(ot.folio) : null,
                         tipo: 'OT calama',
                         prioridad: ot?.prioridad ?? null,
                         activo: ot?.tarea_maestro?.codigo
@@ -574,6 +577,7 @@ export default function PlanSemanalPage() {
                         observaciones: j.observaciones,
                       }
                     }),
+                    mostrarMacroZona: true,
                     scopeNombre: planificacion?.nombre ?? null,
                   })
                   descargarBlob(blob, `plan_calama_${semanaIso}.xlsx`)
