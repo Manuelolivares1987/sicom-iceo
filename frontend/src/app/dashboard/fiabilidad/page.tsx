@@ -39,6 +39,23 @@ const ESTADO_LABELS: Record<string, string> = {
 }
 const ESTADO_ORDEN = ['A', 'C', 'L', 'U', 'D', 'H', 'R', 'M', 'T', 'F', 'V']
 
+// ─── Categorías para la distribución por estado (7 grupos limpios) ───────
+// Mantención agrupa M/T/F/H/R (no operativo / en proceso).
+const ESTADO_A_CATEGORIA: Record<string, string> = {
+  A: 'Arriendo comercial', C: 'Contratos', D: 'Disponible', L: 'Leasing operativo',
+  U: 'Uso interno', V: 'Venta', M: 'Mantención', T: 'Mantención', F: 'Mantención',
+  H: 'Mantención', R: 'Mantención',
+}
+const CATEGORIA_ORDEN = [
+  'Arriendo comercial', 'Contratos', 'Disponible', 'Leasing operativo',
+  'Mantención', 'Uso interno', 'Venta',
+]
+const CATEGORIA_COLOR: Record<string, string> = {
+  'Arriendo comercial': '#16A34A', 'Contratos': '#15803D', 'Disponible': '#2563EB',
+  'Leasing operativo': '#4F46E5', 'Mantención': '#F59E0B', 'Uso interno': '#0891B2',
+  'Venta': '#9333EA',
+}
+
 // ─── Helpers ───────────────────────────────────────────
 const fmtPct = (v: number | null | undefined, digits = 1) =>
   v == null ? '—' : `${(Number(v) * 100).toFixed(digits)}%`
@@ -80,6 +97,7 @@ export default function FiabilidadPage() {
   const [fechaFin, setFechaFin] = useState(todayISO())
   const [filtroCat, setFiltroCat] = useState<CategoriaUso | 'todas'>('todas')
   const [equipoSel, setEquipoSel] = useState<string | null>(null)
+  const [filtroEstado, setFiltroEstado] = useState<string | null>(null)
 
   const { data: porCategoria = [], isLoading: loadingCat } =
     useFiabilidadFlota(fechaInicio, fechaFin)
@@ -87,6 +105,17 @@ export default function FiabilidadPage() {
     useDetalleFiabilidadFlota(fechaInicio, fechaFin)
   const { data: matriz = [], isLoading: loadingMatriz } =
     useMatrizEstadosFlota(fechaInicio, fechaFin)
+
+  // Comparación: "resto del año" = 1-ene al día anterior al período seleccionado
+  const compIni = `${fechaInicio.slice(0, 4)}-01-01`
+  const compFin = (() => {
+    const d = new Date(fechaInicio + 'T00:00:00'); d.setDate(d.getDate() - 1)
+    return d.toISOString().slice(0, 10)
+  })()
+  const { data: porCategoriaComp = [] } = useFiabilidadFlota(
+    compFin >= compIni ? compIni : fechaInicio,
+    compFin >= compIni ? compFin : fechaInicio,
+  )
 
   // ─── Agregados globales ────────────────────────────────
   const kpiGlobal = useMemo(() => {
@@ -107,6 +136,24 @@ export default function FiabilidadPage() {
     return { ...acc, disp_fisica: disp, mtbf, mttr }
   }, [porCategoria])
 
+  // KPIs del "resto del año" para comparar
+  const kpiComparacion = useMemo(() => {
+    if (porCategoriaComp.length === 0) return null
+    const acc = porCategoriaComp.reduce(
+      (a, c) => ({
+        dias_equipo: a.dias_equipo + Number(c.dias_equipo),
+        dias_up: a.dias_up + Number(c.dias_up),
+        dias_down: a.dias_down + Number(c.dias_down),
+        eventos: a.eventos + Number(c.eventos_falla_total),
+      }),
+      { dias_equipo: 0, dias_up: 0, dias_down: 0, eventos: 0 },
+    )
+    const disp = acc.dias_equipo > 0 ? acc.dias_up / acc.dias_equipo : 0
+    const mtbf = acc.eventos > 0 ? acc.dias_up / acc.eventos : acc.dias_up
+    const mttr = acc.eventos > 0 ? acc.dias_down / acc.eventos : 0
+    return { disp_fisica: disp, mtbf, mttr, dias_up: acc.dias_up, dias_down: acc.dias_down }
+  }, [porCategoriaComp])
+
   const utilBruta = useMemo(() => {
     if (detalles.length === 0) return 0
     const sumTotal = detalles.reduce((s, d) => s + d.dias_observados, 0)
@@ -121,11 +168,30 @@ export default function FiabilidadPage() {
   }, [detalles])
 
 
-  // ─── Filtrado por categoría ────────────────────────────
+  // ─── Días con datos + estado actual por activo (último día) ──
+  const diasUnicos = useMemo(
+    () => Array.from(new Set(matriz.map((c) => c.fecha))).sort(),
+    [matriz],
+  )
+  const estadoActualPorActivo = useMemo(() => {
+    const m = new Map<string, string>()
+    if (diasUnicos.length === 0) return m
+    const ultimo = diasUnicos[diasUnicos.length - 1]
+    for (const c of matriz) if (c.fecha === ultimo) m.set(c.activo_id, c.estado_codigo)
+    return m
+  }, [matriz, diasUnicos])
+
+  // ─── Filtrado por categoría / estado ───────────────────
   const detallesFiltrados = useMemo(() => {
-    if (filtroCat === 'todas') return detalles
-    return detalles.filter((d) => d.categoria_uso === filtroCat)
-  }, [detalles, filtroCat])
+    let rows = detalles
+    if (filtroCat !== 'todas') rows = rows.filter((d) => d.categoria_uso === filtroCat)
+    if (filtroEstado) {
+      rows = rows.filter(
+        (d) => ESTADO_A_CATEGORIA[estadoActualPorActivo.get(d.activo_id) ?? ''] === filtroEstado,
+      )
+    }
+    return rows
+  }, [detalles, filtroCat, filtroEstado, estadoActualPorActivo])
 
   // ─── Rankings ──────────────────────────────────────────
   const top5Criticos = useMemo(
@@ -161,11 +227,7 @@ export default function FiabilidadPage() {
     [oeeRanking],
   )
 
-  // ─── Distribución diaria de estados + matriz equipo×día ──
-  const diasUnicos = useMemo(
-    () => Array.from(new Set(matriz.map((c) => c.fecha))).sort(),
-    [matriz],
-  )
+  // ─── Distribución diaria de estados ──
   const distribucionDiaria = useMemo(() => {
     const byDia: Record<string, Record<string, number>> = {}
     for (const c of matriz) {
@@ -174,44 +236,25 @@ export default function FiabilidadPage() {
     }
     return diasUnicos.map((f) => ({ dia: f.slice(8, 10), ...byDia[f] }))
   }, [matriz, diasUnicos])
-  const matrizEquipos = useMemo(() => {
-    const info = new Map(detalles.map((d) => [d.activo_id, d]))
-    const byActivo = new Map<string, Record<string, string>>()
-    for (const c of matriz) {
-      if (!byActivo.has(c.activo_id)) byActivo.set(c.activo_id, {})
-      byActivo.get(c.activo_id)![c.fecha] = c.estado_codigo
-    }
-    let rows = Array.from(byActivo.entries()).map(([activo_id, estados]) => {
-      const d = info.get(activo_id)
-      return {
-        activo_id,
-        patente: d?.patente ?? activo_id.slice(0, 8),
-        categoria: (d?.categoria_uso ?? null) as CategoriaUso | null,
-        estados,
-      }
-    })
-    if (filtroCat !== 'todas') rows = rows.filter((r) => r.categoria === filtroCat)
-    rows.sort((a, b) => (a.patente ?? '').localeCompare(b.patente ?? ''))
-    return rows
-  }, [matriz, detalles, filtroCat])
 
-  // ─── Distribución por estado ACTUAL (último día con datos) ──
-  const distribucionEstado = useMemo(() => {
-    if (diasUnicos.length === 0) return []
-    const ultimo = diasUnicos[diasUnicos.length - 1]
+  // ─── Distribución por categoría (estado actual) ──
+  const distribucionCategoria = useMemo(() => {
     const counts: Record<string, number> = {}
-    for (const c of matriz) {
-      if (c.fecha === ultimo) counts[c.estado_codigo] = (counts[c.estado_codigo] ?? 0) + 1
+    for (const est of Array.from(estadoActualPorActivo.values())) {
+      const cat = ESTADO_A_CATEGORIA[est]
+      if (cat) counts[cat] = (counts[cat] ?? 0) + 1
     }
-    return ESTADO_ORDEN.filter((e) => counts[e]).map((e) => ({
-      key: e, name: ESTADO_LABELS[e], value: counts[e], color: ESTADO_COLORES[e],
+    return CATEGORIA_ORDEN.filter((c) => counts[c]).map((c) => ({
+      key: c, name: c, value: counts[c], color: CATEGORIA_COLOR[c],
     }))
-  }, [matriz, diasUnicos])
+  }, [estadoActualPorActivo])
 
   // ─── Ranking por marca (según indicadores) ──
   const rankingMarcas = useMemo(() => {
     const byMarca = new Map<string, { marca: string; equipos: number; oeeSum: number; oeeN: number; up: number; dias: number }>()
+    const EXCLUIR = /^(yale|ram)$/i
     for (const d of detalles) {
+      if (EXCLUIR.test((d.marca ?? '').trim())) continue
       const m = d.marca ?? 'Sin marca'
       const x = byMarca.get(m) ?? { marca: m, equipos: 0, oeeSum: 0, oeeN: 0, up: 0, dias: 0 }
       x.equipos++
@@ -370,49 +413,38 @@ export default function FiabilidadPage() {
             />
           </div>
 
-          {/* ─── Glosario: qué significa cada indicador ─── */}
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base text-gray-700">¿Qué significa cada indicador y cómo se calcula?</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid gap-3 text-xs text-gray-600 sm:grid-cols-2 lg:grid-cols-3">
-                <div><b className="text-gray-800">Disponibilidad Física</b><br />% del tiempo que el equipo estuvo operativo.<br /><span className="text-gray-400">= Días operativos (UP) ÷ días totales</span></div>
-                <div><b className="text-gray-800">Utilización Bruta</b><br />% del tiempo generando ingreso (en cliente).<br /><span className="text-gray-400">= (Días Arrendado + Contrato + Leasing) ÷ días totales</span></div>
-                <div><b className="text-gray-800">OEE</b> — eficiencia global del equipo.<br /><span className="text-gray-400">= Disponibilidad × Rendimiento × Calidad</span></div>
-                <div><b className="text-gray-800">MTBF</b> — días operativo promedio entre fallas.<br /><span className="text-gray-400">= Días UP ÷ nº de fallas</span></div>
-                <div><b className="text-gray-800">MTTR</b> — días promedio para reparar una falla.<br /><span className="text-gray-400">= Días DOWN ÷ nº de fallas</span></div>
-                <div><b className="text-gray-800">Disponibilidad Inherente</b> — disponibilidad teórica por confiabilidad.<br /><span className="text-gray-400">= MTBF ÷ (MTBF + MTTR)</span></div>
-              </div>
-            </CardContent>
-          </Card>
-
           {/* ─── Distribución por estado + Distribución diaria ─── */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {/* Distribución por estado actual */}
+            {/* Distribución por categoría (hoy) — filtro */}
             <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base text-gray-700">
-                  Distribución por estado (hoy)
-                </CardTitle>
-                <p className="text-[11px] text-gray-400">
-                  Cuántos equipos hay en cada estado al día de hoy
-                </p>
+              <CardHeader className="flex flex-col gap-2 pb-2 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <CardTitle className="text-base text-gray-700">Distribución por categoría (hoy)</CardTitle>
+                  <p className="text-[11px] text-gray-400">Click en una categoría para filtrar la tabla detalle</p>
+                </div>
+                {filtroEstado && (
+                  <button className="text-xs text-blue-600 hover:underline" onClick={() => setFiltroEstado(null)}>
+                    Limpiar filtro
+                  </button>
+                )}
               </CardHeader>
               <CardContent>
                 <div className="h-56">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie
-                        data={distribucionEstado}
+                        data={distribucionCategoria}
                         cx="50%" cy="50%"
                         innerRadius={52} outerRadius={96}
                         paddingAngle={2}
                         dataKey="value"
+                        cursor="pointer"
                         label={({ value }) => `${value}`}
+                        onClick={(d: any) => d?.key && setFiltroEstado(filtroEstado === d.key ? null : d.key)}
                       >
-                        {distribucionEstado.map((e) => (
-                          <Cell key={e.key} fill={e.color} />
+                        {distribucionCategoria.map((e) => (
+                          <Cell key={e.key} fill={e.color}
+                            opacity={filtroEstado && filtroEstado !== e.key ? 0.3 : 1} />
                         ))}
                       </Pie>
                       <Tooltip formatter={(v: number, n: string) => [`${v} equipos`, n]} />
@@ -420,11 +452,16 @@ export default function FiabilidadPage() {
                   </ResponsiveContainer>
                 </div>
                 <div className="flex flex-wrap justify-center gap-x-3 gap-y-1">
-                  {distribucionEstado.map((e) => (
-                    <span key={e.key} className="flex items-center gap-1 text-[11px] text-gray-700">
+                  {distribucionCategoria.map((e) => (
+                    <button
+                      key={e.key}
+                      onClick={() => setFiltroEstado(filtroEstado === e.key ? null : e.key)}
+                      className="flex items-center gap-1 text-[11px] text-gray-700 hover:underline"
+                      style={{ opacity: filtroEstado && filtroEstado !== e.key ? 0.4 : 1 }}
+                    >
                       <span className="inline-block h-3 w-3 rounded-sm" style={{ background: e.color }} />
                       {e.name}: <b>{e.value}</b>
-                    </span>
+                    </button>
                   ))}
                 </div>
               </CardContent>
@@ -468,67 +505,6 @@ export default function FiabilidadPage() {
               </CardContent>
             </Card>
           </div>
-
-          {/* ─── Historia mensual por equipo (matriz equipo × día) ─── */}
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base text-gray-700">
-                Historia mensual por equipo
-              </CardTitle>
-              <p className="text-[11px] text-gray-400">
-                Estado de cada equipo, día por día (como la planilla de Confiabilidad)
-                {matrizEquipos.length > 0 && ` · ${matrizEquipos.length} equipos · ${diasUnicos.length} días`}
-              </p>
-            </CardHeader>
-            <CardContent className="overflow-x-auto">
-              {matrizEquipos.length === 0 ? (
-                <p className="py-6 text-center text-xs text-gray-400">
-                  Sin datos de estado diario en el período seleccionado
-                </p>
-              ) : (
-                <table className="border-collapse text-[10px]">
-                  <thead>
-                    <tr className="text-gray-500">
-                      <th className="sticky left-0 z-10 bg-white px-2 py-1 text-left">Patente</th>
-                      {diasUnicos.map((f) => (
-                        <th key={f} className="w-5 px-0 py-1 text-center font-normal">{f.slice(8, 10)}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {matrizEquipos.map((r) => (
-                      <tr key={r.activo_id}>
-                        <td className="sticky left-0 z-10 border-r bg-white px-2 py-0.5 font-mono font-semibold whitespace-nowrap">
-                          {r.patente}
-                        </td>
-                        {diasUnicos.map((f) => {
-                          const e = r.estados[f]
-                          return (
-                            <td
-                              key={f}
-                              className="h-5 w-5 text-center font-semibold"
-                              style={{ background: e ? ESTADO_COLORES[e] : '#F3F4F6', color: e ? '#fff' : '#D1D5DB' }}
-                              title={e ? `${f}: ${ESTADO_LABELS[e]}` : f}
-                            >
-                              {e ?? ''}
-                            </td>
-                          )
-                        })}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-              <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1">
-                {ESTADO_ORDEN.map((e) => (
-                  <span key={e} className="flex items-center gap-1 text-[10px] text-gray-600">
-                    <span className="inline-block h-3 w-3 rounded-sm" style={{ background: ESTADO_COLORES[e] }} />
-                    {e} = {ESTADO_LABELS[e]}
-                  </span>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
 
           {/* ─── Rankings (Bar charts horizontales) ─── */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -770,6 +746,48 @@ export default function FiabilidadPage() {
               </p>
             </CardContent>
           </Card>
+
+          {/* ─── Evolución vs resto del año ─── */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base text-gray-700">Evolución vs resto del año</CardTitle>
+              <p className="text-[11px] text-gray-400">
+                Período seleccionado comparado con el resto de {fechaInicio.slice(0, 4)} — ¿mejoramos o vamos más bajo?
+              </p>
+            </CardHeader>
+            <CardContent>
+              {!kpiComparacion ? (
+                <p className="py-4 text-xs text-gray-400">Sin período de comparación (ajusta el rango de fechas).</p>
+              ) : (
+                <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                  <CompTile label="Disponibilidad Física" actual={kpiGlobal.disp_fisica * 100} prev={kpiComparacion.disp_fisica * 100} unit="%" betterUp />
+                  <CompTile label="Días DOWN (del total)" actual={(1 - kpiGlobal.disp_fisica) * 100} prev={(1 - kpiComparacion.disp_fisica) * 100} unit="%" betterUp={false} />
+                  <CompTile label="MTBF" actual={kpiGlobal.mtbf} prev={kpiComparacion.mtbf} unit="d" betterUp />
+                  <CompTile label="MTTR" actual={kpiGlobal.mttr} prev={kpiComparacion.mttr} unit="d" betterUp={false} />
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* ─── Glosario: qué significa cada indicador (abajo) ─── */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base text-gray-700">¿Qué significa cada indicador y cómo se calcula?</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-3 text-xs text-gray-600 sm:grid-cols-2 lg:grid-cols-3">
+                <div><b className="text-gray-800">Días-Equipo</b> — total de días observados sumando todos los equipos.<br /><span className="text-gray-400">= Σ (equipos × días del período)</span></div>
+                <div><b className="text-gray-800">Días UP</b> — días en que el equipo estuvo operativo (trabajando o disponible).<br /><span className="text-gray-400">Estados A, C, D, L, U</span></div>
+                <div><b className="text-gray-800">Días DOWN</b> — días en que el equipo NO estuvo disponible.<br /><span className="text-gray-400">Estados M, T, F</span></div>
+                <div><b className="text-gray-800">Disponibilidad Física</b> — % del tiempo operativo.<br /><span className="text-gray-400">= Días UP ÷ Días-Equipo</span></div>
+                <div><b className="text-gray-800">Utilización Bruta</b> — % del tiempo generando ingreso.<br /><span className="text-gray-400">= (Días A + C + L) ÷ Días-Equipo</span></div>
+                <div><b className="text-gray-800">OEE</b> — eficiencia global del equipo.<br /><span className="text-gray-400">= Disponibilidad × Rendimiento × Calidad</span></div>
+                <div><b className="text-gray-800">MTBF</b> — días operativo promedio entre fallas.<br /><span className="text-gray-400">= Días UP ÷ nº de fallas</span></div>
+                <div><b className="text-gray-800">MTTR</b> — días promedio para reparar una falla.<br /><span className="text-gray-400">= Días DOWN ÷ nº de fallas</span></div>
+                <div><b className="text-gray-800">Disponibilidad Inherente</b> — disponibilidad teórica por confiabilidad.<br /><span className="text-gray-400">= MTBF ÷ (MTBF + MTTR)</span></div>
+              </div>
+            </CardContent>
+          </Card>
         </>
       )}
 
@@ -835,6 +853,31 @@ export default function FiabilidadPage() {
 }
 
 // ─── Subcomponentes ──────────────────────────────────────
+function CompTile({
+  label, actual, prev, unit, betterUp,
+}: {
+  label: string
+  actual: number
+  prev: number
+  unit: string
+  betterUp: boolean
+}) {
+  const dec = unit === 'd' ? 1 : 0
+  const delta = actual - prev
+  const mejora = betterUp ? delta >= 0 : delta <= 0
+  const color = Math.abs(delta) < 0.05 ? 'text-gray-400' : mejora ? 'text-green-600' : 'text-red-600'
+  const arrow = delta > 0.05 ? '▲' : delta < -0.05 ? '▼' : '='
+  return (
+    <div className="rounded-xl border bg-white p-3 shadow-sm">
+      <div className="text-[10px] uppercase tracking-wide text-gray-400">{label}</div>
+      <div className="mt-0.5 text-xl font-bold text-gray-800">{actual.toFixed(dec)}{unit}</div>
+      <div className={`text-[11px] ${color}`}>
+        {arrow} {Math.abs(delta).toFixed(dec)}{unit} <span className="text-gray-400">vs {prev.toFixed(dec)}{unit} (resto año)</span>
+      </div>
+    </div>
+  )
+}
+
 function KpiTile({
   icon, label, value, hint, tone,
 }: {
