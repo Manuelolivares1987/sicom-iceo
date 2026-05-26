@@ -13,12 +13,11 @@ const MESES = [
   { archivo: 'MAYO.xlsx',    mes: 5 },
 ]
 const ANIO = 2026
-const VALIDOS = new Set(['A','D','H','R','M','T','F','V','U','L'])
-// 'C' (en contrato) no es estado valido del sistema -> mapear a 'A'
+const VALIDOS = new Set(['A','C','D','H','R','M','T','F','V','U','L'])
+// 'C' (en contrato) es estado valido (Francke, CMP). Se preserva tal cual.
 function mapEstado(s) {
   if (!s) return null
   const e = String(s).trim().toUpperCase()
-  if (e === 'C') return 'A'
   return VALIDOS.has(e) ? e : null
 }
 function norm(p) { return p == null ? '' : String(p).trim().toUpperCase().replace(/\s+/g, '') }
