@@ -31,6 +31,7 @@ import { cn, todayISO } from '@/lib/utils'
 import { useRequireAuth } from '@/hooks/use-require-auth'
 import { useFlotaVehicular, useOEEFlota } from '@/hooks/use-flota'
 import { useReporteDiario } from '@/hooks/use-reporte-diario'
+import { useFiabilidadFlota } from '@/hooks/use-fiabilidad'
 
 export default function ComercialPage() {
   useRequireAuth()
@@ -44,6 +45,28 @@ export default function ComercialPage() {
   const { data: oeeTotal } = useOEEFlota(fechaInicio, fechaFin)
   const { data: oeeHoy } = useOEEFlota(fechaFin, fechaFin)
   const { data: reporte } = useReporteDiario()
+  const { data: porCategoriaFiab = [] } = useFiabilidadFlota(fechaInicio, fechaFin)
+
+  // ── Indicadores tomados del panel de Fiabilidad (disponibilidad/utilización reales) ──
+  const fiab = useMemo(() => {
+    if (porCategoriaFiab.length === 0) return null
+    const acc = porCategoriaFiab.reduce(
+      (a, c: any) => ({
+        dias: a.dias + Number(c.dias_equipo),
+        up: a.up + Number(c.dias_up),
+        al: a.al + Number(c.dias_up) - Number(c.dias_down), // aprox; util se calcula abajo
+        equipos: a.equipos + Number(c.total_equipos),
+      }),
+      { dias: 0, up: 0, al: 0, equipos: 0 },
+    )
+    const disp = acc.dias > 0 ? (acc.up / acc.dias) * 100 : 0
+    // utilización bruta ponderada por categoría
+    const util =
+      acc.dias > 0
+        ? (porCategoriaFiab.reduce((s, c: any) => s + Number(c.utilizacion_bruta) * Number(c.dias_equipo), 0) / acc.dias) * 100
+        : 0
+    return { disp, util }
+  }, [porCategoriaFiab])
 
   // ── Agregaciones ──
   // El breakdown comercial se calcula SOLO sobre equipos operativos; los
@@ -237,6 +260,41 @@ export default function ComercialPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* ── Realidad operativa (datos del panel de Fiabilidad) ── */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center justify-between gap-2 text-base">
+            <span className="flex items-center gap-2"><TrendingUp className="h-5 w-5 text-emerald-600" /> Realidad operativa (panel de Fiabilidad)</span>
+            <Link href="/dashboard/fiabilidad" className="text-xs text-blue-600 hover:underline">Ver fiabilidad →</Link>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {!fiab ? (
+            <p className="py-3 text-sm text-gray-400">Sin datos de fiabilidad en el período.</p>
+          ) : (
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+                <div className="text-xs font-medium text-emerald-700">Disponibilidad Física</div>
+                <div className="mt-1 text-2xl font-bold text-emerald-900">{fiab.disp.toFixed(1)}%</div>
+                <div className="text-[10px] text-emerald-600">Días operativos ÷ días totales</div>
+              </div>
+              <div className="rounded-xl border border-blue-200 bg-blue-50 p-3">
+                <div className="text-xs font-medium text-blue-700">Utilización Bruta</div>
+                <div className="mt-1 text-2xl font-bold text-blue-900">{fiab.util.toFixed(1)}%</div>
+                <div className="text-[10px] text-blue-600">(A + C + L) ÷ días totales — captura de ingreso</div>
+              </div>
+              <div className="rounded-xl border border-gray-200 bg-gray-50 p-3">
+                <div className="text-xs font-medium text-gray-600">OEE Flota (mes)</div>
+                <div className="mt-1 text-2xl font-bold text-gray-900">
+                  {oeeTotal?.oee_promedio != null ? `${Number(oeeTotal.oee_promedio).toFixed(1)}%` : '—'}
+                </div>
+                <div className="text-[10px] text-gray-500">Disponibilidad × Rendimiento × Calidad</div>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* ── Pie: Estado Comercial (clickable) ── */}
       <Card>

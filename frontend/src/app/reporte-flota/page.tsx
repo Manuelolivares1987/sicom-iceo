@@ -1,0 +1,131 @@
+'use client'
+
+import { useEffect, useState } from 'react'
+import { supabase } from '@/lib/supabase'
+import { generarReporteFlotaPDF, type ReporteFlotaData } from '@/components/flota/reporte-flota-pdf'
+
+const COLOR: Record<string, string> = {
+  A: '#16A34A', C: '#15803D', L: '#4F46E5', U: '#0891B2', D: '#2563EB',
+  H: '#A855F7', R: '#06B6D4', M: '#F59E0B', T: '#FB923C', F: '#DC2626', V: '#9333EA',
+}
+const LABEL: Record<string, string> = {
+  A: 'Arrendado', C: 'En contrato', D: 'Disponible', H: 'Habilitación', R: 'Recepción',
+  M: 'Mantención', T: 'Taller', F: 'Fuera de servicio', V: 'Venta', U: 'Uso interno', L: 'Leasing',
+}
+const ORDEN = ['A', 'C', 'L', 'U', 'D', 'M', 'T', 'F', 'H', 'R', 'V']
+
+export default function ReporteFlotaPublicoPage() {
+  const [data, setData] = useState<ReporteFlotaData | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [descargando, setDescargando] = useState(false)
+
+  useEffect(() => {
+    supabase.rpc('fn_reporte_flota_publico').then(({ data, error }) => {
+      if (error) setError(error.message)
+      else setData(data as ReporteFlotaData)
+    })
+  }, [])
+
+  const descargarPDF = async () => {
+    if (!data) return
+    setDescargando(true)
+    try {
+      const blob = await generarReporteFlotaPDF(data)
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `reporte-flota-${data.fecha ?? 'hoy'}.pdf`
+      a.click()
+      URL.revokeObjectURL(url)
+    } finally {
+      setDescargando(false)
+    }
+  }
+
+  const est = data?.por_estado ?? {}
+  const oper = Object.entries(data?.por_operacion ?? {})
+
+  return (
+    <div className="min-h-screen bg-gray-50 py-8">
+      <div className="mx-auto max-w-3xl px-4">
+        <div className="mb-6 flex items-start justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-bold text-[#0b2a4a]">Reporte de Flota — Pillado</h1>
+            <p className="text-sm text-gray-500">
+              Estado real de la flota{data?.fecha ? ` al ${data.fecha}` : ''} · SICOM-ICEO
+            </p>
+          </div>
+          {data && (
+            <button
+              onClick={descargarPDF}
+              disabled={descargando}
+              className="rounded-lg bg-[#0b2a4a] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0e3458] disabled:opacity-50"
+            >
+              {descargando ? 'Generando…' : 'Descargar PDF'}
+            </button>
+          )}
+        </div>
+
+        {error && <div className="rounded-lg bg-red-50 p-4 text-sm text-red-700">No se pudo cargar el reporte: {error}</div>}
+        {!data && !error && <div className="py-20 text-center text-gray-400">Cargando…</div>}
+
+        {data && (
+          <div className="space-y-5">
+            <div className="grid grid-cols-3 gap-3">
+              <Kpi n={String(data.total)} l="Equipos de flota" />
+              <Kpi n={`${data.disponibilidad ?? '—'}%`} l="Disponibilidad física (mes)" />
+              <Kpi n={`${data.utilizacion ?? '—'}%`} l="Utilización bruta (mes)" />
+            </div>
+
+            <Card title="Distribución por estado">
+              <div className="space-y-1">
+                {ORDEN.filter((e) => est[e]).map((e) => (
+                  <div key={e} className="flex items-center justify-between text-sm">
+                    <span className="flex items-center gap-2">
+                      <span className="inline-block h-3 w-3 rounded-sm" style={{ background: COLOR[e] }} />
+                      {LABEL[e]} <span className="text-gray-400">({e})</span>
+                    </span>
+                    <b>{est[e]}</b>
+                  </div>
+                ))}
+              </div>
+            </Card>
+
+            <Card title="Por operación">
+              {oper.map(([k, v]) => (
+                <div key={k} className="flex justify-between text-sm"><span>{k}</span><b>{v}</b></div>
+              ))}
+            </Card>
+
+            <Card title="Por cliente">
+              {(data.por_cliente ?? []).map((c) => (
+                <div key={c.cliente} className="flex justify-between border-b border-gray-100 py-1 text-sm">
+                  <span>{c.cliente}</span><b>{c.equipos}</b>
+                </div>
+              ))}
+            </Card>
+
+            <p className="pt-2 text-center text-xs text-gray-400">Pillado · SICOM-ICEO</p>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function Kpi({ n, l }: { n: string; l: string }) {
+  return (
+    <div className="rounded-xl border bg-white p-4 text-center">
+      <div className="text-2xl font-bold text-[#0b2a4a]">{n}</div>
+      <div className="mt-1 text-[11px] text-gray-500">{l}</div>
+    </div>
+  )
+}
+function Card({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="rounded-xl border bg-white p-4">
+      <h2 className="mb-2 text-sm font-semibold text-[#0b2a4a]">{title}</h2>
+      {children}
+    </div>
+  )
+}
