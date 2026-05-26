@@ -38,21 +38,21 @@ const ESTADO_LABELS: Record<string, string> = {
 }
 const ESTADO_ORDEN = ['A', 'C', 'L', 'U', 'D', 'H', 'R', 'M', 'T', 'F', 'V']
 
-// ─── Categorías para la distribución por estado (7 grupos limpios) ───────
-// Mantención agrupa M/T/F/H/R (no operativo / en proceso).
+// ─── Categorías para la distribución por estado (cada estado = una categoría) ──
 const ESTADO_A_CATEGORIA: Record<string, string> = {
   A: 'Arriendo comercial', C: 'Contratos', D: 'Disponible', L: 'Leasing operativo',
-  U: 'Uso interno', V: 'Venta', M: 'Mantención', T: 'Mantención', F: 'Mantención',
-  H: 'Mantención', R: 'Mantención',
+  U: 'Uso interno', V: 'Venta', M: 'Mantención', T: 'Taller', F: 'Fuera de servicio',
+  H: 'Habilitación', R: 'Recepción',
 }
 const CATEGORIA_ORDEN = [
-  'Arriendo comercial', 'Contratos', 'Disponible', 'Leasing operativo',
-  'Mantención', 'Uso interno', 'Venta',
+  'Arriendo comercial', 'Contratos', 'Leasing operativo', 'Uso interno', 'Disponible',
+  'Mantención', 'Taller', 'Fuera de servicio', 'Habilitación', 'Recepción', 'Venta',
 ]
 const CATEGORIA_COLOR: Record<string, string> = {
-  'Arriendo comercial': '#16A34A', 'Contratos': '#15803D', 'Disponible': '#2563EB',
-  'Leasing operativo': '#4F46E5', 'Mantención': '#F59E0B', 'Uso interno': '#0891B2',
-  'Venta': '#9333EA',
+  'Arriendo comercial': '#16A34A', 'Contratos': '#15803D', 'Leasing operativo': '#4F46E5',
+  'Uso interno': '#0891B2', 'Disponible': '#2563EB', 'Mantención': '#F59E0B',
+  'Taller': '#FB923C', 'Fuera de servicio': '#DC2626', 'Habilitación': '#A855F7',
+  'Recepción': '#06B6D4', 'Venta': '#9333EA',
 }
 
 // ─── Helpers ───────────────────────────────────────────
@@ -344,6 +344,28 @@ export default function FiabilidadPage() {
 
       {!isLoading && kpiGlobal && (
         <>
+          {/* ─── Evolución vs resto del año (primera mirada) ─── */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base text-gray-700">Evolución vs resto del año</CardTitle>
+              <p className="text-[11px] text-gray-400">
+                Período seleccionado comparado con el resto de {fechaInicio.slice(0, 4)} — ¿mejoramos o vamos más bajo?
+              </p>
+            </CardHeader>
+            <CardContent>
+              {!kpiComparacion ? (
+                <p className="py-4 text-xs text-gray-400">Sin período de comparación (ajusta el rango de fechas).</p>
+              ) : (
+                <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                  <CompTile label="Disponibilidad Física" actual={kpiGlobal.disp_fisica * 100} prev={kpiComparacion.disp_fisica * 100} unit="%" betterUp />
+                  <CompTile label="Días DOWN (del total)" actual={(1 - kpiGlobal.disp_fisica) * 100} prev={(1 - kpiComparacion.disp_fisica) * 100} unit="%" betterUp={false} />
+                  <CompTile label="MTBF" actual={kpiGlobal.mtbf} prev={kpiComparacion.mtbf} unit="d" betterUp />
+                  <CompTile label="MTTR" actual={kpiGlobal.mttr} prev={kpiComparacion.mttr} unit="d" betterUp={false} />
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
           {/* ─── KPI Tiles ───────────────────────── */}
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
             <KpiTile
@@ -418,7 +440,9 @@ export default function FiabilidadPage() {
             <Card>
               <CardHeader className="flex flex-col gap-2 pb-2 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <CardTitle className="text-base text-gray-700">Distribución por categoría (hoy)</CardTitle>
+                  <CardTitle className="text-base text-gray-700">
+                    Distribución por estado{diasUnicos.length > 0 ? ` · ${diasUnicos[diasUnicos.length - 1]}` : ''}
+                  </CardTitle>
                   <p className="text-[11px] text-gray-400">Click en una categoría para filtrar la tabla detalle</p>
                 </div>
                 {filtroEstado && (
@@ -743,28 +767,6 @@ export default function FiabilidadPage() {
                 Columnas día-estado: A=Arrendado · D=Disponible · U=Uso Interno · L=Leasing · M=Mantención (&gt;1d) · T=Taller (&lt;1d) · F=Fuera Servicio ·
                 UP=días operativos · DOWN=días no disponibles. OEE: A=Disp · P=Rendimiento · Q=Calidad · OEE = A × P × Q.
               </p>
-            </CardContent>
-          </Card>
-
-          {/* ─── Evolución vs resto del año ─── */}
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base text-gray-700">Evolución vs resto del año</CardTitle>
-              <p className="text-[11px] text-gray-400">
-                Período seleccionado comparado con el resto de {fechaInicio.slice(0, 4)} — ¿mejoramos o vamos más bajo?
-              </p>
-            </CardHeader>
-            <CardContent>
-              {!kpiComparacion ? (
-                <p className="py-4 text-xs text-gray-400">Sin período de comparación (ajusta el rango de fechas).</p>
-              ) : (
-                <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-                  <CompTile label="Disponibilidad Física" actual={kpiGlobal.disp_fisica * 100} prev={kpiComparacion.disp_fisica * 100} unit="%" betterUp />
-                  <CompTile label="Días DOWN (del total)" actual={(1 - kpiGlobal.disp_fisica) * 100} prev={(1 - kpiComparacion.disp_fisica) * 100} unit="%" betterUp={false} />
-                  <CompTile label="MTBF" actual={kpiGlobal.mtbf} prev={kpiComparacion.mtbf} unit="d" betterUp />
-                  <CompTile label="MTTR" actual={kpiGlobal.mttr} prev={kpiComparacion.mttr} unit="d" betterUp={false} />
-                </div>
-              )}
             </CardContent>
           </Card>
 
