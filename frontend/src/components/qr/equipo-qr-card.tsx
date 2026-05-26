@@ -15,6 +15,9 @@ interface Props {
   nombre?: string | null
   /** Si la columna existe en la BD y la ficha la trae, se respeta. Si es undefined, no se muestra advertencia. */
   qrPublicoHabilitado?: boolean | null
+  /** Si se entrega, muestra el interruptor para habilitar/deshabilitar el QR público desde la ficha. */
+  onToggleHabilitado?: (next: boolean) => void
+  toggleLoading?: boolean
 }
 
 function safeFilename(s: string): string {
@@ -30,7 +33,7 @@ function escapeHtml(s: string): string {
     .replace(/'/g, '&#39;')
 }
 
-export function EquipoQrCard({ activoId, codigo, nombre, qrPublicoHabilitado }: Props) {
+export function EquipoQrCard({ activoId, codigo, nombre, qrPublicoHabilitado, onToggleHabilitado, toggleLoading }: Props) {
   const wrapperRef = useRef<HTMLDivElement>(null)
   const [origin, setOrigin] = useState('')
   const [copiado, setCopiado] = useState(false)
@@ -159,15 +162,38 @@ export function EquipoQrCard({ activoId, codigo, nombre, qrPublicoHabilitado }: 
       {deshabilitado && (
         <div className="mb-4 rounded-lg border-2 border-orange-300 bg-orange-50 p-3 flex items-start gap-2">
           <AlertTriangle className="h-5 w-5 text-orange-700 shrink-0 mt-0.5" />
-          <div>
+          <div className="flex-1">
             <p className="text-sm font-semibold text-orange-900">
               Este QR está deshabilitado
             </p>
             <p className="text-xs text-orange-800 mt-0.5">
-              Actívelo en la ficha del equipo (campo <code>qr_publico_habilitado</code>) antes
-              de imprimirlo, o el operador verá una página vacía al escanear.
+              Mientras esté deshabilitado, el operador verá una página vacía al escanear.
+              {onToggleHabilitado
+                ? ' Actívelo con el botón de abajo antes de imprimirlo.'
+                : ' Actívelo en la ficha del equipo (campo qr_publico_habilitado) antes de imprimirlo.'}
             </p>
           </div>
+        </div>
+      )}
+
+      {onToggleHabilitado && habilitadoConocido && (
+        <div className="mb-4 flex items-center justify-between gap-3 rounded-lg border-2 border-gray-200 bg-gray-50 p-3">
+          <div>
+            <p className="text-sm font-semibold text-gray-800">QR público {qrPublicoHabilitado ? 'habilitado' : 'deshabilitado'}</p>
+            <p className="text-xs text-gray-500">
+              Controla si el operador puede abrir el checklist al escanear esta etiqueta.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => onToggleHabilitado(!qrPublicoHabilitado)}
+            disabled={toggleLoading}
+            className={`shrink-0 rounded-lg px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 ${
+              qrPublicoHabilitado ? 'bg-gray-600 hover:bg-gray-700' : 'bg-pillado-green-600 hover:bg-pillado-green-700'
+            }`}
+          >
+            {toggleLoading ? 'Guardando…' : qrPublicoHabilitado ? 'Deshabilitar QR' : 'Habilitar QR'}
+          </button>
         </div>
       )}
 

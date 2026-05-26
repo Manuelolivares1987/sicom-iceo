@@ -79,6 +79,7 @@ export interface Activo {
   horas_uso_actual: number
   ciclos_actual: number
   notas: string | null
+  qr_publico_habilitado?: boolean | null
   created_at: string
   updated_at: string
   created_by: string | null

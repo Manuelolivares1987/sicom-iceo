@@ -337,7 +337,14 @@ export default function ActivoDetailPage() {
             activoId={a.id}
             codigo={a.patente || a.codigo}
             nombre={a.nombre}
-            qrPublicoHabilitado={a.qr_publico_habilitado}
+            qrPublicoHabilitado={a.qr_publico_habilitado ?? false}
+            toggleLoading={updateActivo.isPending}
+            onToggleHabilitado={(next) =>
+              updateActivo.mutate(
+                { id: a.id, updates: { qr_publico_habilitado: next } },
+                { onSuccess: () => refetchActivo() },
+              )
+            }
           />
         )}
       </div>
