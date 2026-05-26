@@ -41,6 +41,7 @@ import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Modal } from '@/components/ui/modal'
+import { EquipoQrCard } from '@/components/qr/equipo-qr-card'
 import {
   Table,
   TableHeader,
@@ -88,6 +89,7 @@ const TABS = [
   { key: 'planes', label: 'Planes PM', icon: ClipboardList },
   { key: 'costos', label: 'Costos', icon: DollarSign },
   { key: 'historial', label: 'Historial', icon: History },
+  { key: 'qr', label: 'QR / Bitácora', icon: QrCode },
 ] as const
 type TabKey = (typeof TABS)[number]['key']
 
@@ -330,6 +332,14 @@ export default function ActivoDetailPage() {
         {tab === 'planes' && <TabPlanes activoId={id} />}
         {tab === 'costos' && <TabCostos activoId={id} />}
         {tab === 'historial' && <TabHistorial activoId={id} contratoRefreshKey={contratoRefreshKey} />}
+        {tab === 'qr' && (
+          <EquipoQrCard
+            activoId={a.id}
+            codigo={a.patente || a.codigo}
+            nombre={a.nombre}
+            qrPublicoHabilitado={a.qr_publico_habilitado}
+          />
+        )}
       </div>
 
       {/* Modal cambio de contrato */}

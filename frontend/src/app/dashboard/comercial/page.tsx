@@ -65,14 +65,41 @@ export default function ComercialPage() {
   const anioIni = `${fechaFin.slice(0, 4)}-01-01`
   const { data: equiposComercial = [] } = useComercialEquipos(anioIni, fechaFin)
 
+  // Solo equipos de la flota vehicular (mismo universo que Fiabilidad y la tabla de días)
+  const flotaIds = useMemo(() => new Set((flota ?? []).map((a: any) => a.id)), [flota])
+
   // Estado actual por activo (último día con datos) = misma base que Fiabilidad
   const estadoActualPorActivo = useMemo(() => {
     const m = new Map<string, string>()
     if (matriz.length === 0) return m
     const ult = matriz.reduce((mx, c) => (c.fecha > mx ? c.fecha : mx), matriz[0].fecha)
-    for (const c of matriz) if (c.fecha === ult) m.set(c.activo_id, c.estado_codigo)
+    for (const c of matriz) if (c.fecha === ult && flotaIds.has(c.activo_id)) m.set(c.activo_id, c.estado_codigo)
     return m
-  }, [matriz])
+  }, [matriz, flotaIds])
+
+  // KPIs comerciales derivados de la MISMA fuente que el gráfico de torta y Fiabilidad
+  // (estado_diario_flota), para que todos los valores de la pantalla cuadren entre sí.
+  const comercialStats = useMemo(() => {
+    const estados = Array.from(estadoActualPorActivo.values())
+    const total = estados.length
+    const c = (codes: string[]) => estados.filter((e) => codes.includes(e)).length
+    const arrendados = c(['A', 'C']) // arriendo comercial + contratos
+    const disponibles = c(['D'])
+    const usoInterno = c(['U'])
+    const leasing = c(['L'])
+    const noDisponibles = c(['M', 'T', 'F', 'H', 'R', 'V'])
+    return {
+      total,
+      arrendados,
+      disponibles,
+      usoInterno,
+      leasing,
+      noDisponibles,
+      tasaOcupacion: total > 0 ? ((arrendados + usoInterno + leasing) / total) * 100 : 0,
+      perdidaComercial: disponibles,
+      perdidaPct: total > 0 ? (disponibles / total) * 100 : 0,
+    }
+  }, [estadoActualPorActivo])
 
   // ── Indicadores tomados del panel de Fiabilidad (disponibilidad/utilización reales) ──
   const fiab = useMemo(() => {
@@ -218,9 +245,9 @@ export default function ComercialPage() {
               <span className="text-xs font-medium text-green-700">Arrendados</span>
               <TrendingUp className="h-4 w-4 text-green-600" />
             </div>
-            <div className="mt-2 text-3xl font-bold text-green-900">{stats?.arrendados ?? 0}</div>
+            <div className="mt-2 text-3xl font-bold text-green-900">{comercialStats.arrendados}</div>
             <div className="mt-1 text-xs text-green-600">
-              {stats?.total ? ((stats.arrendados / stats.total) * 100).toFixed(1) : 0}% de la flota
+              {comercialStats.total ? ((comercialStats.arrendados / comercialStats.total) * 100).toFixed(1) : 0}% de la flota
             </div>
           </CardContent>
         </Card>
@@ -230,9 +257,9 @@ export default function ComercialPage() {
               <span className="text-xs font-medium text-amber-700">Pérdida Comercial</span>
               <TrendingDown className="h-4 w-4 text-amber-600" />
             </div>
-            <div className="mt-2 text-3xl font-bold text-amber-900">{stats?.perdidaComercial ?? 0}</div>
+            <div className="mt-2 text-3xl font-bold text-amber-900">{comercialStats.perdidaComercial}</div>
             <div className="mt-1 text-xs text-amber-600">
-              {stats?.perdidaPct.toFixed(1) ?? 0}% ociosos sin arriendo
+              {comercialStats.perdidaPct.toFixed(1)}% ociosos sin arriendo
             </div>
           </CardContent>
         </Card>
@@ -243,7 +270,7 @@ export default function ComercialPage() {
               <DollarSign className="h-4 w-4 text-blue-600" />
             </div>
             <div className="mt-2 text-3xl font-bold text-blue-900">
-              {stats?.tasaOcupacion.toFixed(1) ?? 0}%
+              {comercialStats.tasaOcupacion.toFixed(1)}%
             </div>
             <div className="mt-1 text-xs text-blue-600">
               Arrendados + Uso Interno + Leasing
@@ -591,7 +618,7 @@ export default function ComercialPage() {
               </tr>
             </thead>
             <tbody>
-              {flota?.filter((a: any) => a.estado_comercial === 'arrendado' && (!filtroCliente || a.cliente_actual === filtroCliente)).map((activo: any) => (
+              {flota?.filter((a: any) => ['A', 'C'].includes(estadoActualPorActivo.get(a.id) ?? '') && (!filtroCliente || a.cliente_actual === filtroCliente)).map((activo: any) => (
                 <tr key={activo.id} className="border-b hover:bg-gray-50">
                   <td className="px-2 py-2 font-mono font-semibold">{activo.patente || activo.codigo}</td>
                   <td className="px-2 py-2">{activo.nombre}</td>
@@ -629,7 +656,7 @@ export default function ComercialPage() {
               </tr>
             </thead>
             <tbody>
-              {flota?.filter((a: any) => a.estado_comercial === 'disponible' && (!filtroCliente || !a.cliente_actual)).map((activo: any) => (
+              {flota?.filter((a: any) => (estadoActualPorActivo.get(a.id) ?? '') === 'D' && (!filtroCliente || !a.cliente_actual)).map((activo: any) => (
                 <tr key={activo.id} className="border-b hover:bg-amber-50">
                   <td className="px-2 py-2 font-mono font-semibold">{activo.patente || activo.codigo}</td>
                   <td className="px-2 py-2">{activo.nombre}</td>

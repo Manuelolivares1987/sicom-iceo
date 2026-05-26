@@ -8,6 +8,14 @@ export interface ReporteFlotaData {
   por_cliente: Array<{ cliente: string; equipos: number }> | null
   disponibilidad: number | null
   utilizacion: number | null
+  equipos?: Array<{
+    patente: string | null
+    equipamiento: string | null
+    estado: string | null
+    dias_arrendado: number
+    ultimo_cliente: string | null
+    dias_sin_arriendo: number | null
+  }> | null
 }
 
 const LABEL: Record<string, string> = {
@@ -37,6 +45,11 @@ const s = StyleSheet.create({
   barTrack: { flex: 1, height: 9, backgroundColor: '#f3f4f6', borderRadius: 2, marginHorizontal: 6 },
   barFill: { height: 9, borderRadius: 2 },
   barN: { width: 22, fontSize: 9, textAlign: 'right', fontWeight: 'bold' },
+  th: { flexDirection: 'row', backgroundColor: '#f3f4f6', paddingVertical: 4, paddingHorizontal: 4, borderBottom: '1 solid #e5e7eb' },
+  tr: { flexDirection: 'row', paddingVertical: 2.5, paddingHorizontal: 4, borderBottom: '0.5 solid #f3f4f6' },
+  thc: { fontSize: 8, fontWeight: 'bold', color: '#374151' },
+  tc: { fontSize: 8, color: '#1f2937' },
+  cPat: { width: '16%' }, cEq: { width: '34%' }, cEst: { width: '14%' }, cDias: { width: '10%', textAlign: 'right' }, cCli: { width: '26%' },
   footer: { position: 'absolute', bottom: 24, left: 36, right: 36, fontSize: 8, color: '#9ca3af', borderTop: '1 solid #e5e7eb', paddingTop: 6, flexDirection: 'row', justifyContent: 'space-between' },
 })
 
@@ -81,6 +94,35 @@ function ReporteFlotaPDF({ data }: { data: ReporteFlotaData }) {
           <Text>Generado {new Date().toLocaleDateString('es-CL')}</Text>
         </View>
       </Page>
+
+      {data.equipos && data.equipos.length > 0 && (
+        <Page size="A4" style={s.page}>
+          <Text style={s.h1}>Días arrendado por equipo</Text>
+          <Text style={s.sub}>Días en arriendo/contrato en el año · último cliente arrendado</Text>
+
+          <View style={s.th}>
+            <Text style={[s.thc, s.cPat]}>Patente</Text>
+            <Text style={[s.thc, s.cEq]}>Equipo</Text>
+            <Text style={[s.thc, s.cEst]}>Estado</Text>
+            <Text style={[s.thc, s.cDias]}>Días</Text>
+            <Text style={[s.thc, s.cCli]}>Último cliente</Text>
+          </View>
+          {data.equipos.map((e, i) => (
+            <View key={(e.patente ?? '') + i} style={s.tr} wrap={false}>
+              <Text style={[s.tc, s.cPat]}>{e.patente ?? '—'}</Text>
+              <Text style={[s.tc, s.cEq]}>{e.equipamiento ?? '—'}</Text>
+              <Text style={[s.tc, s.cEst]}>{e.estado ? LABEL[e.estado] ?? e.estado : '—'}</Text>
+              <Text style={[s.tc, s.cDias]}>{e.dias_arrendado}</Text>
+              <Text style={[s.tc, s.cCli]}>{e.ultimo_cliente ?? 'Sin contrato'}</Text>
+            </View>
+          ))}
+
+          <View style={s.footer} fixed>
+            <Text>Pillado · SICOM-ICEO</Text>
+            <Text>Generado {new Date().toLocaleDateString('es-CL')}</Text>
+          </View>
+        </Page>
+      )}
     </Document>
   )
 }
