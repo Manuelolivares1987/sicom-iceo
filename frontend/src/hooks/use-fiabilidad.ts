@@ -4,9 +4,23 @@ import {
   getFiabilidadFlota,
   getOEEFiabilidadActivo,
   getDetalleFiabilidadFlota,
+  getMatrizEstadosFlota,
   updateCategoriaActivo,
   type CategoriaUso,
 } from '@/lib/services/fiabilidad'
+
+export function useMatrizEstadosFlota(fechaInicio: string, fechaFin: string) {
+  return useQuery({
+    queryKey: ['matriz-estados-flota', fechaInicio, fechaFin],
+    queryFn: async () => {
+      const { data, error } = await getMatrizEstadosFlota(fechaInicio, fechaFin)
+      if (error) throw error
+      return data
+    },
+    enabled: !!fechaInicio && !!fechaFin,
+    staleTime: 30_000,
+  })
+}
 
 export function useFiabilidadActivo(
   activoId: string | undefined,

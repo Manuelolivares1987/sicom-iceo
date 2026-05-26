@@ -8,14 +8,15 @@ import {
 import {
   PieChart, Pie, Cell,
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  ScatterChart, Scatter, ZAxis,
   RadialBarChart, RadialBar, PolarAngleAxis,
 } from 'recharts'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Spinner } from '@/components/ui/spinner'
 import { Badge } from '@/components/ui/badge'
 import { useRequireAuth } from '@/hooks/use-require-auth'
-import { useFiabilidadFlota, useDetalleFiabilidadFlota } from '@/hooks/use-fiabilidad'
+import {
+  useFiabilidadFlota, useDetalleFiabilidadFlota, useMatrizEstadosFlota,
+} from '@/hooks/use-fiabilidad'
 import {
   CATEGORIA_LABELS,
   CATEGORIA_COLORS,
@@ -32,6 +33,18 @@ const CAT_PIE_COLORS: Record<string, string> = {
   venta: '#7C3AED',
   sin_categoria: '#9CA3AF',
 }
+
+// ─── Estados diarios de flota (Confiabilidad) ───────────
+const ESTADO_COLORES: Record<string, string> = {
+  A: '#16A34A', C: '#15803D', L: '#4F46E5', U: '#0891B2', D: '#2563EB',
+  H: '#A855F7', R: '#06B6D4', M: '#F59E0B', T: '#FB923C', F: '#DC2626', V: '#9333EA',
+}
+const ESTADO_LABELS: Record<string, string> = {
+  A: 'Arrendado', C: 'En contrato', D: 'Disponible', H: 'Habilitación', R: 'Recepción',
+  M: 'Mantención', T: 'Taller', F: 'Fuera de servicio', V: 'Venta',
+  U: 'Uso interno', L: 'Leasing',
+}
+const ESTADO_ORDEN = ['A', 'C', 'L', 'U', 'D', 'H', 'R', 'M', 'T', 'F', 'V']
 
 // ─── Helpers ───────────────────────────────────────────
 const fmtPct = (v: number | null | undefined, digits = 1) =>
@@ -78,6 +91,8 @@ export default function FiabilidadPage() {
     useFiabilidadFlota(fechaInicio, fechaFin)
   const { data: detalles = [], isLoading: loadingDetalle } =
     useDetalleFiabilidadFlota(fechaInicio, fechaFin)
+  const { data: matriz = [], isLoading: loadingMatriz } =
+    useMatrizEstadosFlota(fechaInicio, fechaFin)
 
   // ─── Agregados globales ────────────────────────────────
   const kpiGlobal = useMemo(() => {
@@ -163,23 +178,41 @@ export default function FiabilidadPage() {
     [oeeRanking],
   )
 
-  // ─── Scatter: Disp.Inh vs OEE ─────────────────────────
-  const scatterData = useMemo(
-    () =>
-      detalles
-        .filter((d) => d.oee_total != null && d.dias_observados > 0)
-        .map((d) => ({
-          patente: d.patente,
-          disp: Number(d.disponibilidad_inherente) * 100,
-          oee: Number(d.oee_total) * 100,
-          dias: d.dias_observados,
-          color: CAT_PIE_COLORS[d.categoria_uso ?? 'sin_categoria'] ?? '#6B7280',
-          categoria: d.categoria_uso,
-        })),
-    [detalles],
+  // ─── Distribución diaria de estados + matriz equipo×día ──
+  const diasUnicos = useMemo(
+    () => Array.from(new Set(matriz.map((c) => c.fecha))).sort(),
+    [matriz],
   )
+  const distribucionDiaria = useMemo(() => {
+    const byDia: Record<string, Record<string, number>> = {}
+    for (const c of matriz) {
+      const dia = (byDia[c.fecha] ??= {})
+      dia[c.estado_codigo] = (dia[c.estado_codigo] ?? 0) + 1
+    }
+    return diasUnicos.map((f) => ({ dia: f.slice(8, 10), ...byDia[f] }))
+  }, [matriz, diasUnicos])
+  const matrizEquipos = useMemo(() => {
+    const info = new Map(detalles.map((d) => [d.activo_id, d]))
+    const byActivo = new Map<string, Record<string, string>>()
+    for (const c of matriz) {
+      if (!byActivo.has(c.activo_id)) byActivo.set(c.activo_id, {})
+      byActivo.get(c.activo_id)![c.fecha] = c.estado_codigo
+    }
+    let rows = Array.from(byActivo.entries()).map(([activo_id, estados]) => {
+      const d = info.get(activo_id)
+      return {
+        activo_id,
+        patente: d?.patente ?? activo_id.slice(0, 8),
+        categoria: (d?.categoria_uso ?? null) as CategoriaUso | null,
+        estados,
+      }
+    })
+    if (filtroCat !== 'todas') rows = rows.filter((r) => r.categoria === filtroCat)
+    rows.sort((a, b) => (a.patente ?? '').localeCompare(b.patente ?? ''))
+    return rows
+  }, [matriz, detalles, filtroCat])
 
-  const isLoading = loadingCat || loadingDetalle
+  const isLoading = loadingCat || loadingDetalle || loadingMatriz
 
   return (
     <div className="space-y-6">
@@ -370,62 +403,105 @@ export default function FiabilidadPage() {
               </CardContent>
             </Card>
 
-            {/* Scatter Disp.Inh vs OEE */}
+            {/* Distribución diaria de estados de la flota */}
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-base text-gray-700">
-                  Matriz Disponibilidad Inherente vs OEE
+                  Distribución diaria de estados de la flota
                 </CardTitle>
                 <p className="text-[11px] text-gray-400">
-                  Arriba-derecha = world class · Abajo-izq = foco de mejora
+                  Equipos por estado, día a día — del Excel de Confiabilidad al sistema
                 </p>
               </CardHeader>
               <CardContent>
                 <div className="h-72">
                   <ResponsiveContainer width="100%" height="100%">
-                    <ScatterChart margin={{ top: 10, right: 10, bottom: 20, left: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis
-                        type="number" dataKey="disp" name="Disp. Inh."
-                        unit="%" domain={[0, 100]}
-                        label={{ value: 'Disp. Inherente (%)', position: 'bottom', offset: -5, fontSize: 11 }}
-                      />
-                      <YAxis
-                        type="number" dataKey="oee" name="OEE"
-                        unit="%" domain={[0, 100]}
-                        label={{ value: 'OEE (%)', angle: -90, position: 'insideLeft', fontSize: 11 }}
-                      />
-                      <ZAxis type="number" dataKey="dias" range={[40, 200]} name="Días" />
+                    <BarChart data={distribucionDiaria} margin={{ top: 6, right: 6, bottom: 4, left: -16 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                      <XAxis dataKey="dia" tick={{ fontSize: 9 }} interval={0} />
+                      <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
                       <Tooltip
-                        cursor={{ strokeDasharray: '3 3' }}
-                        content={({ active, payload }) => {
-                          if (!active || !payload?.length) return null
-                          const d: any = payload[0].payload
-                          return (
-                            <div className="rounded border bg-white p-2 text-xs shadow">
-                              <div className="font-mono font-semibold">{d.patente}</div>
-                              <div className="text-gray-600">
-                                Disp.Inh: {d.disp.toFixed(1)}%
-                              </div>
-                              <div className="text-gray-600">OEE: {d.oee.toFixed(1)}%</div>
-                              <div className="text-gray-500 text-[11px]">
-                                {d.categoria ? CATEGORIA_LABELS[d.categoria as CategoriaUso] : '—'}
-                              </div>
-                            </div>
-                          )
-                        }}
+                        formatter={(v: number, n: string) => [`${v} eq`, ESTADO_LABELS[n] ?? n]}
+                        labelFormatter={(l) => `Día ${l}`}
                       />
-                      <Scatter data={scatterData} fill="#6366F1">
-                        {scatterData.map((entry, i) => (
-                          <Cell key={i} fill={entry.color} />
-                        ))}
-                      </Scatter>
-                    </ScatterChart>
+                      {ESTADO_ORDEN.map((e) => (
+                        <Bar key={e} dataKey={e} stackId="estados" fill={ESTADO_COLORES[e]} name={e} />
+                      ))}
+                    </BarChart>
                   </ResponsiveContainer>
+                </div>
+                <div className="flex flex-wrap gap-x-3 gap-y-1 mt-2 justify-center">
+                  {ESTADO_ORDEN.map((e) => (
+                    <span key={e} className="flex items-center gap-1 text-[10px] text-gray-600">
+                      <span className="inline-block w-3 h-3 rounded-sm" style={{ background: ESTADO_COLORES[e] }} />
+                      {e} · {ESTADO_LABELS[e]}
+                    </span>
+                  ))}
                 </div>
               </CardContent>
             </Card>
           </div>
+
+          {/* ─── Historia mensual por equipo (matriz equipo × día) ─── */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base text-gray-700">
+                Historia mensual por equipo
+              </CardTitle>
+              <p className="text-[11px] text-gray-400">
+                Estado de cada equipo, día por día (como la planilla de Confiabilidad)
+                {matrizEquipos.length > 0 && ` · ${matrizEquipos.length} equipos · ${diasUnicos.length} días`}
+              </p>
+            </CardHeader>
+            <CardContent className="overflow-x-auto">
+              {matrizEquipos.length === 0 ? (
+                <p className="py-6 text-center text-xs text-gray-400">
+                  Sin datos de estado diario en el período seleccionado
+                </p>
+              ) : (
+                <table className="border-collapse text-[10px]">
+                  <thead>
+                    <tr className="text-gray-500">
+                      <th className="sticky left-0 z-10 bg-white px-2 py-1 text-left">Patente</th>
+                      {diasUnicos.map((f) => (
+                        <th key={f} className="w-5 px-0 py-1 text-center font-normal">{f.slice(8, 10)}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {matrizEquipos.map((r) => (
+                      <tr key={r.activo_id}>
+                        <td className="sticky left-0 z-10 border-r bg-white px-2 py-0.5 font-mono font-semibold whitespace-nowrap">
+                          {r.patente}
+                        </td>
+                        {diasUnicos.map((f) => {
+                          const e = r.estados[f]
+                          return (
+                            <td
+                              key={f}
+                              className="h-5 w-5 text-center font-semibold"
+                              style={{ background: e ? ESTADO_COLORES[e] : '#F3F4F6', color: e ? '#fff' : '#D1D5DB' }}
+                              title={e ? `${f}: ${ESTADO_LABELS[e]}` : f}
+                            >
+                              {e ?? ''}
+                            </td>
+                          )
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+              <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1">
+                {ESTADO_ORDEN.map((e) => (
+                  <span key={e} className="flex items-center gap-1 text-[10px] text-gray-600">
+                    <span className="inline-block h-3 w-3 rounded-sm" style={{ background: ESTADO_COLORES[e] }} />
+                    {e} = {ESTADO_LABELS[e]}
+                  </span>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
 
           {/* ─── Rankings (Bar charts horizontales) ─── */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">

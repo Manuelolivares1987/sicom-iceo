@@ -199,6 +199,27 @@ export async function getDetalleFiabilidadFlota(
   return { data: detalles.filter((d) => d.dias_observados > 0), error: null }
 }
 
+// ── Matriz de estados diarios (equipo × día) ──
+// Lee estado_diario_flota en el rango. Alimenta la distribución diaria de
+// estados y la historia mensual por equipo.
+
+export interface EstadoDiaCelda {
+  activo_id: string
+  fecha: string         // YYYY-MM-DD
+  estado_codigo: string // A/D/H/R/M/T/F/V/U/L
+}
+
+export async function getMatrizEstadosFlota(fechaInicio: string, fechaFin: string) {
+  const { data, error } = await supabase
+    .from('estado_diario_flota')
+    .select('activo_id, fecha, estado_codigo')
+    .gte('fecha', fechaInicio)
+    .lte('fecha', fechaFin)
+    .order('fecha', { ascending: true })
+    .limit(50000)
+  return { data: (data ?? []) as EstadoDiaCelda[], error }
+}
+
 // ── Actualizar categoria_uso del activo (manual) ──
 
 export async function updateCategoriaActivo(
