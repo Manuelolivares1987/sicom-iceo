@@ -210,14 +210,25 @@ export interface EstadoDiaCelda {
 }
 
 export async function getMatrizEstadosFlota(fechaInicio: string, fechaFin: string) {
-  const { data, error } = await supabase
-    .from('estado_diario_flota')
-    .select('activo_id, fecha, estado_codigo')
-    .gte('fecha', fechaInicio)
-    .lte('fecha', fechaFin)
-    .order('fecha', { ascending: true })
-    .limit(50000)
-  return { data: (data ?? []) as EstadoDiaCelda[], error }
+  // Paginar: Supabase corta en 1000 filas. 55 equipos × 31 días > 1000.
+  const PAGE = 1000
+  let from = 0
+  let todas: EstadoDiaCelda[] = []
+  for (;;) {
+    const { data, error } = await supabase
+      .from('estado_diario_flota')
+      .select('activo_id, fecha, estado_codigo')
+      .gte('fecha', fechaInicio)
+      .lte('fecha', fechaFin)
+      .order('fecha', { ascending: true })
+      .order('activo_id', { ascending: true })
+      .range(from, from + PAGE - 1)
+    if (error) return { data: todas, error }
+    todas = todas.concat((data ?? []) as EstadoDiaCelda[])
+    if (!data || data.length < PAGE) break
+    from += PAGE
+  }
+  return { data: todas, error: null }
 }
 
 // ── Actualizar categoria_uso del activo (manual) ──

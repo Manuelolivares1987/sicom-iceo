@@ -13,6 +13,7 @@ import {
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Spinner } from '@/components/ui/spinner'
 import { Badge } from '@/components/ui/badge'
+import { Modal } from '@/components/ui/modal'
 import { useRequireAuth } from '@/hooks/use-require-auth'
 import {
   useFiabilidadFlota, useDetalleFiabilidadFlota, useMatrizEstadosFlota,
@@ -26,14 +27,6 @@ import {
 import { todayISO } from '@/lib/utils'
 
 // ─── Paleta ─────────────────────────────────────────────
-const CAT_PIE_COLORS: Record<string, string> = {
-  arriendo_comercial: '#16A34A',
-  leasing_operativo: '#2563EB',
-  uso_interno: '#0891B2',
-  venta: '#7C3AED',
-  sin_categoria: '#9CA3AF',
-}
-
 // ─── Estados diarios de flota (Confiabilidad) ───────────
 const ESTADO_COLORES: Record<string, string> = {
   A: '#16A34A', C: '#15803D', L: '#4F46E5', U: '#0891B2', D: '#2563EB',
@@ -86,6 +79,7 @@ export default function FiabilidadPage() {
   const [fechaInicio, setFechaInicio] = useState(primerDiaMes)
   const [fechaFin, setFechaFin] = useState(todayISO())
   const [filtroCat, setFiltroCat] = useState<CategoriaUso | 'todas'>('todas')
+  const [equipoSel, setEquipoSel] = useState<string | null>(null)
 
   const { data: porCategoria = [], isLoading: loadingCat } =
     useFiabilidadFlota(fechaInicio, fechaFin)
@@ -126,17 +120,6 @@ export default function FiabilidadPage() {
     return conOEE.reduce((s, d) => s + Number(d.oee_total), 0) / conOEE.length
   }, [detalles])
 
-  // ─── Pie: equipos por categoría ────────────────────────
-  const piePorCategoria = useMemo(
-    () =>
-      porCategoria.map((c) => ({
-        key: (c.categoria ?? 'sin_categoria') as string,
-        name: c.categoria ? CATEGORIA_LABELS[c.categoria] : 'Sin categoría',
-        value: Number(c.total_equipos),
-        color: CAT_PIE_COLORS[c.categoria ?? 'sin_categoria'] ?? '#6B7280',
-      })),
-    [porCategoria],
-  )
 
   // ─── Filtrado por categoría ────────────────────────────
   const detallesFiltrados = useMemo(() => {
@@ -211,6 +194,49 @@ export default function FiabilidadPage() {
     rows.sort((a, b) => (a.patente ?? '').localeCompare(b.patente ?? ''))
     return rows
   }, [matriz, detalles, filtroCat])
+
+  // ─── Distribución por estado ACTUAL (último día con datos) ──
+  const distribucionEstado = useMemo(() => {
+    if (diasUnicos.length === 0) return []
+    const ultimo = diasUnicos[diasUnicos.length - 1]
+    const counts: Record<string, number> = {}
+    for (const c of matriz) {
+      if (c.fecha === ultimo) counts[c.estado_codigo] = (counts[c.estado_codigo] ?? 0) + 1
+    }
+    return ESTADO_ORDEN.filter((e) => counts[e]).map((e) => ({
+      key: e, name: ESTADO_LABELS[e], value: counts[e], color: ESTADO_COLORES[e],
+    }))
+  }, [matriz, diasUnicos])
+
+  // ─── Ranking por marca (según indicadores) ──
+  const rankingMarcas = useMemo(() => {
+    const byMarca = new Map<string, { marca: string; equipos: number; oeeSum: number; oeeN: number; up: number; dias: number }>()
+    for (const d of detalles) {
+      const m = d.marca ?? 'Sin marca'
+      const x = byMarca.get(m) ?? { marca: m, equipos: 0, oeeSum: 0, oeeN: 0, up: 0, dias: 0 }
+      x.equipos++
+      if (d.oee_total != null) { x.oeeSum += Number(d.oee_total); x.oeeN++ }
+      x.up += d.dias_up; x.dias += d.dias_observados
+      byMarca.set(m, x)
+    }
+    return Array.from(byMarca.values())
+      .map((x) => ({
+        marca: x.marca,
+        equipos: x.equipos,
+        oee: x.oeeN > 0 ? x.oeeSum / x.oeeN : null,
+        disp: x.dias > 0 ? x.up / x.dias : 0,
+      }))
+      .sort((a, b) => (b.oee ?? -1) - (a.oee ?? -1))
+  }, [detalles])
+
+  // ─── Historia del equipo seleccionado (modal) ──
+  const equipoHistoria = useMemo(() => {
+    if (!equipoSel) return null
+    const estados: Record<string, string> = {}
+    for (const c of matriz) if (c.activo_id === equipoSel) estados[c.fecha] = c.estado_codigo
+    const det = detalles.find((d) => d.activo_id === equipoSel) ?? null
+    return { det, estados }
+  }, [equipoSel, matriz, detalles])
 
   const isLoading = loadingCat || loadingDetalle || loadingMatriz
 
@@ -326,80 +352,81 @@ export default function FiabilidadPage() {
               value={kpiGlobal.disp_fisica * 100}
               target={92}
               unit="%"
-              description="World-class industria pesada: ≥ 92%"
+              description="Días operativos ÷ días totales · Meta ≥ 92%"
             />
             <GaugeCard
               title="Utilización Bruta"
               value={utilBruta * 100}
               target={70}
               unit="%"
-              description="(A + L) / Total — captura comercial"
+              description="(Días A + C + L) ÷ días totales · Meta ≥ 70%"
             />
             <GaugeCard
               title="OEE Flota"
               value={(oeeGlobal ?? 0) * 100}
               target={85}
               unit="%"
-              description="A × P × Q — world-class ≥ 85%"
+              description="Disponibilidad × Rendimiento × Calidad · Meta ≥ 85%"
             />
           </div>
 
-          {/* ─── Distribución por Categoría + Matriz Disp vs OEE ─── */}
+          {/* ─── Glosario: qué significa cada indicador ─── */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base text-gray-700">¿Qué significa cada indicador y cómo se calcula?</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-3 text-xs text-gray-600 sm:grid-cols-2 lg:grid-cols-3">
+                <div><b className="text-gray-800">Disponibilidad Física</b><br />% del tiempo que el equipo estuvo operativo.<br /><span className="text-gray-400">= Días operativos (UP) ÷ días totales</span></div>
+                <div><b className="text-gray-800">Utilización Bruta</b><br />% del tiempo generando ingreso (en cliente).<br /><span className="text-gray-400">= (Días Arrendado + Contrato + Leasing) ÷ días totales</span></div>
+                <div><b className="text-gray-800">OEE</b> — eficiencia global del equipo.<br /><span className="text-gray-400">= Disponibilidad × Rendimiento × Calidad</span></div>
+                <div><b className="text-gray-800">MTBF</b> — días operativo promedio entre fallas.<br /><span className="text-gray-400">= Días UP ÷ nº de fallas</span></div>
+                <div><b className="text-gray-800">MTTR</b> — días promedio para reparar una falla.<br /><span className="text-gray-400">= Días DOWN ÷ nº de fallas</span></div>
+                <div><b className="text-gray-800">Disponibilidad Inherente</b> — disponibilidad teórica por confiabilidad.<br /><span className="text-gray-400">= MTBF ÷ (MTBF + MTTR)</span></div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* ─── Distribución por estado + Distribución diaria ─── */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {/* Pie interactivo */}
+            {/* Distribución por estado actual */}
             <Card>
-              <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-2">
+              <CardHeader className="pb-2">
                 <CardTitle className="text-base text-gray-700">
-                  Distribución por Categoría
+                  Distribución por estado (hoy)
                 </CardTitle>
-                {filtroCat !== 'todas' && (
-                  <button
-                    className="text-xs text-blue-600 hover:underline"
-                    onClick={() => setFiltroCat('todas')}
-                  >
-                    Limpiar filtro
-                  </button>
-                )}
+                <p className="text-[11px] text-gray-400">
+                  Cuántos equipos hay en cada estado al día de hoy
+                </p>
               </CardHeader>
               <CardContent>
-                <div className="h-72">
+                <div className="h-56">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie
-                        data={piePorCategoria}
+                        data={distribucionEstado}
                         cx="50%" cy="50%"
-                        innerRadius={60} outerRadius={110}
-                        paddingAngle={3}
+                        innerRadius={52} outerRadius={96}
+                        paddingAngle={2}
                         dataKey="value"
-                        label={({ name, value }) => `${name}: ${value}`}
-                        cursor="pointer"
-                        onClick={(data: any) => {
-                          if (data?.key && data.key !== 'sin_categoria') {
-                            setFiltroCat(
-                              filtroCat === data.key
-                                ? 'todas'
-                                : (data.key as CategoriaUso),
-                            )
-                          }
-                        }}
+                        label={({ value }) => `${value}`}
                       >
-                        {piePorCategoria.map((entry) => (
-                          <Cell
-                            key={entry.key}
-                            fill={entry.color}
-                            opacity={
-                              filtroCat !== 'todas' && filtroCat !== entry.key ? 0.3 : 1
-                            }
-                          />
+                        {distribucionEstado.map((e) => (
+                          <Cell key={e.key} fill={e.color} />
                         ))}
                       </Pie>
-                      <Tooltip />
+                      <Tooltip formatter={(v: number, n: string) => [`${v} equipos`, n]} />
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
-                <p className="text-xs text-gray-500 text-center mt-1">
-                  Click en un segmento para filtrar la tabla detalle
-                </p>
+                <div className="flex flex-wrap justify-center gap-x-3 gap-y-1">
+                  {distribucionEstado.map((e) => (
+                    <span key={e.key} className="flex items-center gap-1 text-[11px] text-gray-700">
+                      <span className="inline-block h-3 w-3 rounded-sm" style={{ background: e.color }} />
+                      {e.name}: <b>{e.value}</b>
+                    </span>
+                  ))}
+                </div>
               </CardContent>
             </Card>
 
@@ -540,6 +567,45 @@ export default function FiabilidadPage() {
             />
           </div>
 
+          {/* ─── Ranking de marcas ─── */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base text-gray-700">Ranking de marcas por desempeño</CardTitle>
+              <p className="text-[11px] text-gray-400">Promedio de OEE y disponibilidad física por marca de vehículo (mejor a peor)</p>
+            </CardHeader>
+            <CardContent className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b bg-gray-50 text-left uppercase text-gray-500">
+                    <th className="px-2 py-2">#</th>
+                    <th className="px-2 py-2">Marca</th>
+                    <th className="px-2 py-2 text-right">Equipos</th>
+                    <th className="px-2 py-2 text-right">OEE prom.</th>
+                    <th className="px-2 py-2 text-right">Disp. física prom.</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rankingMarcas.map((m, i) => (
+                    <tr key={m.marca} className="border-b hover:bg-gray-50">
+                      <td className="px-2 py-1.5 text-gray-400">{i + 1}</td>
+                      <td className="px-2 py-1.5 font-semibold">{m.marca}</td>
+                      <td className="px-2 py-1.5 text-right">{m.equipos}</td>
+                      <td className={`px-2 py-1.5 text-right ${colorOEE(m.oee)}`}>
+                        {m.oee == null ? 'N/A' : fmtPct(m.oee)}
+                      </td>
+                      <td className={`px-2 py-1.5 text-right ${colorDispTxt(m.disp)}`}>
+                        {fmtPct(m.disp)}
+                      </td>
+                    </tr>
+                  ))}
+                  {rankingMarcas.length === 0 && (
+                    <tr><td colSpan={5} className="py-6 text-center text-gray-400">Sin datos</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </CardContent>
+          </Card>
+
           {/* ─── KPIs por Categoría ─── */}
           <Card>
             <CardHeader className="pb-2">
@@ -641,7 +707,15 @@ export default function FiabilidadPage() {
                 <tbody>
                   {detallesFiltrados.map((d) => (
                     <tr key={d.activo_id} className="border-b hover:bg-gray-50">
-                      <td className="px-2 py-1.5 font-mono font-semibold">{d.patente}</td>
+                      <td className="px-2 py-1.5">
+                        <button
+                          onClick={() => setEquipoSel(d.activo_id)}
+                          className="font-mono font-semibold text-blue-600 hover:underline"
+                          title="Ver historia mensual del equipo"
+                        >
+                          {d.patente}
+                        </button>
+                      </td>
                       <td className="px-2 py-1.5">{d.equipamiento ?? '—'}</td>
                       <td className="px-2 py-1.5 text-gray-500 max-w-[160px] truncate">
                         {d.cliente_actual ?? '—'}
@@ -698,6 +772,64 @@ export default function FiabilidadPage() {
           </Card>
         </>
       )}
+
+      {/* ─── Modal: historia mensual del equipo ─── */}
+      <Modal
+        open={!!equipoSel}
+        onClose={() => setEquipoSel(null)}
+        title={equipoHistoria?.det ? `Historia mensual · ${equipoHistoria.det.patente}` : 'Historia del equipo'}
+      >
+        {equipoHistoria && (
+          <div className="space-y-4">
+            <div className="text-sm text-gray-600">
+              {[equipoHistoria.det?.marca, equipoHistoria.det?.modelo, equipoHistoria.det?.equipamiento]
+                .filter(Boolean).join(' · ') || '—'}
+              {equipoHistoria.det?.cliente_actual && (
+                <span className="text-gray-400"> · Cliente: {equipoHistoria.det.cliente_actual}</span>
+              )}
+            </div>
+
+            <div className="flex flex-wrap gap-0.5">
+              {diasUnicos.map((f) => {
+                const e = equipoHistoria.estados[f]
+                return (
+                  <div key={f} className="flex flex-col items-center">
+                    <div className="text-[8px] text-gray-400">{f.slice(8, 10)}</div>
+                    <div
+                      className="h-5 w-5 text-center text-[10px] font-semibold leading-5"
+                      style={{ background: e ? ESTADO_COLORES[e] : '#F3F4F6', color: e ? '#fff' : '#D1D5DB' }}
+                      title={e ? `${f}: ${ESTADO_LABELS[e]}` : f}
+                    >
+                      {e ?? ''}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
+              {(() => {
+                const counts: Record<string, number> = {}
+                for (const f of diasUnicos) { const e = equipoHistoria.estados[f]; if (e) counts[e] = (counts[e] ?? 0) + 1 }
+                return ESTADO_ORDEN.filter((e) => counts[e]).map((e) => (
+                  <span key={e} className="flex items-center gap-1 text-gray-700">
+                    <span className="inline-block h-3 w-3 rounded-sm" style={{ background: ESTADO_COLORES[e] }} />
+                    {ESTADO_LABELS[e]}: <b>{counts[e]}</b> d
+                  </span>
+                ))
+              })()}
+            </div>
+
+            {equipoHistoria.det && (
+              <div className="grid grid-cols-3 gap-2 border-t pt-3 text-xs">
+                <div>OEE: <b className={colorOEE(equipoHistoria.det.oee_total)}>{equipoHistoria.det.oee_total == null ? 'N/A' : fmtPct(equipoHistoria.det.oee_total)}</b></div>
+                <div>Disp. física: <b>{fmtPct(equipoHistoria.det.disponibilidad_fisica)}</b></div>
+                <div>MTBF / MTTR: <b>{fmtNum(equipoHistoria.det.mtbf_dias)} / {fmtNum(equipoHistoria.det.mttr_dias)} d</b></div>
+              </div>
+            )}
+          </div>
+        )}
+      </Modal>
     </div>
   )
 }
@@ -756,12 +888,15 @@ function GaugeCard({
         <div className="relative h-36">
           <ResponsiveContainer width="100%" height="100%">
             <RadialBarChart
-              innerRadius="70%" outerRadius="100%"
+              innerRadius="68%" outerRadius="100%"
               data={data} startAngle={180} endAngle={0}
               cx="50%" cy="100%"
             >
               <PolarAngleAxis type="number" domain={[0, 100]} tick={false} />
-              <RadialBar dataKey="value" cornerRadius={10} fill={color} />
+              <RadialBar
+                dataKey="value" cornerRadius={8} fill={color}
+                background={{ fill: '#E5E7EB' }}
+              />
             </RadialBarChart>
           </ResponsiveContainer>
           <div className="absolute inset-0 flex flex-col items-center justify-end pb-2">
