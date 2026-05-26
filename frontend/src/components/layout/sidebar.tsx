@@ -9,6 +9,7 @@ import { usePermissions, type Module, type ExtendedModule } from '@/hooks/use-pe
 import {
   LayoutDashboard,
   FileText,
+  Share2,
   Cog,
   ClipboardList,
   Wrench,
@@ -66,6 +67,7 @@ const navGroups: NavGroup[] = [
     items: [
       { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
       { label: 'Reporte Diario', href: '/dashboard/reporte-diario', icon: CalendarClock, module: 'reporte_diario' },
+      { label: 'Reporte Flota (público)', href: '/reporte-flota', icon: Share2, badge: 'Link' },
     ],
   },
   // Trabajo diario
