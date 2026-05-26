@@ -31,7 +31,22 @@ import { cn, todayISO } from '@/lib/utils'
 import { useRequireAuth } from '@/hooks/use-require-auth'
 import { useFlotaVehicular, useOEEFlota } from '@/hooks/use-flota'
 import { useReporteDiario } from '@/hooks/use-reporte-diario'
-import { useFiabilidadFlota } from '@/hooks/use-fiabilidad'
+import { useFiabilidadFlota, useMatrizEstadosFlota } from '@/hooks/use-fiabilidad'
+import { useComercialEquipos } from '@/hooks/use-comercial-equipos'
+
+// Distribución por estado (misma del panel de Fiabilidad)
+const ESTADO_A_CAT: Record<string, string> = {
+  A: 'Arriendo comercial', C: 'Contratos', D: 'Disponible', L: 'Leasing operativo',
+  U: 'Uso interno', V: 'Venta', M: 'Mantención', T: 'Taller', F: 'Fuera de servicio',
+  H: 'Habilitación', R: 'Recepción',
+}
+const CAT_ORDEN = ['Arriendo comercial', 'Contratos', 'Leasing operativo', 'Uso interno', 'Disponible', 'Mantención', 'Taller', 'Fuera de servicio', 'Habilitación', 'Recepción', 'Venta']
+const CAT_COLOR: Record<string, string> = {
+  'Arriendo comercial': '#16A34A', 'Contratos': '#15803D', 'Leasing operativo': '#4F46E5',
+  'Uso interno': '#0891B2', 'Disponible': '#2563EB', 'Mantención': '#F59E0B',
+  'Taller': '#FB923C', 'Fuera de servicio': '#DC2626', 'Habilitación': '#A855F7',
+  'Recepción': '#06B6D4', 'Venta': '#9333EA',
+}
 
 export default function ComercialPage() {
   useRequireAuth()
@@ -46,6 +61,18 @@ export default function ComercialPage() {
   const { data: oeeHoy } = useOEEFlota(fechaFin, fechaFin)
   const { data: reporte } = useReporteDiario()
   const { data: porCategoriaFiab = [] } = useFiabilidadFlota(fechaInicio, fechaFin)
+  const { data: matriz = [] } = useMatrizEstadosFlota(fechaInicio, fechaFin)
+  const anioIni = `${fechaFin.slice(0, 4)}-01-01`
+  const { data: equiposComercial = [] } = useComercialEquipos(anioIni, fechaFin)
+
+  // Estado actual por activo (último día con datos) = misma base que Fiabilidad
+  const estadoActualPorActivo = useMemo(() => {
+    const m = new Map<string, string>()
+    if (matriz.length === 0) return m
+    const ult = matriz.reduce((mx, c) => (c.fecha > mx ? c.fecha : mx), matriz[0].fecha)
+    for (const c of matriz) if (c.fecha === ult) m.set(c.activo_id, c.estado_codigo)
+    return m
+  }, [matriz])
 
   // ── Indicadores tomados del panel de Fiabilidad (disponibilidad/utilización reales) ──
   const fiab = useMemo(() => {
@@ -116,39 +143,17 @@ export default function ComercialPage() {
     }
   }, [flota])
 
+  // Misma distribución por estado que el panel de Fiabilidad (estado_diario_flota)
   const estadoPie = useMemo(() => {
-    if (!stats) return []
-    const labels: Record<string, string> = {
-      arrendado: 'Arrendado',
-      disponible: 'Disponible',
-      uso_interno: 'Uso Interno',
-      leasing: 'Leasing',
-      en_recepcion: 'En Recepcion',
-      en_venta: 'En Venta',
-      sin_estado: 'Sin Estado',
+    const counts: Record<string, number> = {}
+    for (const est of Array.from(estadoActualPorActivo.values())) {
+      const cat = ESTADO_A_CAT[est]
+      if (cat) counts[cat] = (counts[cat] ?? 0) + 1
     }
-    const colors: Record<string, string> = {
-      arrendado: '#16A34A',
-      disponible: '#F59E0B',
-      uso_interno: '#0891B2',
-      leasing: '#7C3AED',
-      en_recepcion: '#2563EB',
-      en_venta: '#DC2626',
-      no_disponible: '#9CA3AF',
-    }
-    const entries = Object.entries(stats.porEstadoComercial).map(([key, value]) => ({
-      key, name: labels[key] || key, value, color: colors[key] || '#6B7280',
+    return CAT_ORDEN.filter((c) => counts[c]).map((c) => ({
+      key: c, name: c, value: counts[c], color: CAT_COLOR[c],
     }))
-    if (stats.noDisponibles > 0) {
-      entries.push({
-        key: 'no_disponible',
-        name: 'No disponible (taller)',
-        value: stats.noDisponibles,
-        color: colors.no_disponible,
-      })
-    }
-    return entries
-  }, [stats])
+  }, [estadoActualPorActivo])
 
   // ── Filtro por segmento del pie chart ──
   const [filtroEstado, setFiltroEstado] = useState<string | null>(null)
@@ -380,10 +385,7 @@ export default function ComercialPage() {
                 </tr>
               </thead>
               <tbody>
-                {flota?.filter((a: any) => {
-                  if (filtroEstado === 'no_disponible') return a.estado !== 'operativo'
-                  return a.estado === 'operativo' && a.estado_comercial === filtroEstado
-                }).map((activo: any) => (
+                {flota?.filter((a: any) => ESTADO_A_CAT[estadoActualPorActivo.get(a.id) ?? ''] === filtroEstado).map((activo: any) => (
                   <tr key={activo.id} className="border-b hover:bg-blue-50">
                     <td className="px-2 py-2 font-mono font-semibold">{activo.patente || activo.codigo}</td>
                     <td className="px-2 py-2">{activo.nombre}</td>
@@ -398,6 +400,49 @@ export default function ComercialPage() {
           </CardContent>
         </Card>
       )}
+
+      {/* ── Días arrendado por equipo + último contrato ── */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <DollarSign className="h-5 w-5 text-green-600" /> Días arrendado por equipo + último contrato
+          </CardTitle>
+          <p className="text-[11px] text-gray-400">
+            Cuánto ha estado arrendado cada equipo en {fechaFin.slice(0, 4)}, y el último cliente que tuvo antes de dejar de estar arrendado
+          </p>
+        </CardHeader>
+        <CardContent className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="border-b bg-gray-50 text-left uppercase text-gray-500">
+                <th className="px-2 py-2">PPU</th>
+                <th className="px-2 py-2">Equipo</th>
+                <th className="px-2 py-2 text-right">Días arrendado (año)</th>
+                <th className="px-2 py-2">Estado hoy</th>
+                <th className="px-2 py-2">Último cliente arrendado</th>
+                <th className="px-2 py-2 text-right">Días sin arriendo</th>
+              </tr>
+            </thead>
+            <tbody>
+              {[...equiposComercial].sort((a, b) => b.dias_arrendado - a.dias_arrendado).map((e) => (
+                <tr key={e.activo_id} className="border-b hover:bg-gray-50">
+                  <td className="px-2 py-1.5 font-mono font-semibold">{e.patente}</td>
+                  <td className="px-2 py-1.5 text-gray-500">{e.equipamiento ?? '—'}</td>
+                  <td className="px-2 py-1.5 text-right font-semibold">{e.dias_arrendado}</td>
+                  <td className="px-2 py-1.5">{e.estado_actual ? (ESTADO_A_CAT[e.estado_actual] ?? e.estado_actual) : '—'}</td>
+                  <td className="px-2 py-1.5 text-gray-600">{e.ultimo_cliente ?? 'Nunca arrendado'}</td>
+                  <td className={`px-2 py-1.5 text-right ${(e.dias_sin_arriendo ?? 0) > 0 ? 'font-semibold text-amber-700' : 'text-gray-400'}`}>
+                    {e.dias_sin_arriendo == null ? '—' : e.dias_sin_arriendo === 0 ? 'Arrendado' : `${e.dias_sin_arriendo} d`}
+                  </td>
+                </tr>
+              ))}
+              {equiposComercial.length === 0 && (
+                <tr><td colSpan={6} className="py-6 text-center text-gray-400">Sin datos</td></tr>
+              )}
+            </tbody>
+          </table>
+        </CardContent>
+      </Card>
 
       {/* ── Distribución por cliente ── */}
       <Card>

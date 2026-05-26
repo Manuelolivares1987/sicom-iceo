@@ -15,6 +15,10 @@ const LABEL: Record<string, string> = {
   M: 'Mantención', T: 'Taller', F: 'Fuera de servicio', V: 'Venta', U: 'Uso interno', L: 'Leasing',
 }
 const ORDEN = ['A', 'C', 'L', 'U', 'D', 'M', 'T', 'F', 'H', 'R', 'V']
+const COLOR: Record<string, string> = {
+  A: '#16A34A', C: '#15803D', L: '#4F46E5', U: '#0891B2', D: '#2563EB',
+  M: '#F59E0B', T: '#FB923C', F: '#DC2626', H: '#A855F7', R: '#06B6D4', V: '#9333EA',
+}
 
 const s = StyleSheet.create({
   page: { padding: 36, fontSize: 10, color: '#1f2937', fontFamily: 'Helvetica' },
@@ -28,6 +32,11 @@ const s = StyleSheet.create({
   row: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 3, borderBottom: '0.5 solid #f3f4f6' },
   cell: { fontSize: 10 },
   bold: { fontWeight: 'bold' },
+  barRow: { flexDirection: 'row', alignItems: 'center', marginVertical: 2 },
+  barLabel: { width: 110, fontSize: 9 },
+  barTrack: { flex: 1, height: 9, backgroundColor: '#f3f4f6', borderRadius: 2, marginHorizontal: 6 },
+  barFill: { height: 9, borderRadius: 2 },
+  barN: { width: 22, fontSize: 9, textAlign: 'right', fontWeight: 'bold' },
   footer: { position: 'absolute', bottom: 24, left: 36, right: 36, fontSize: 8, color: '#9ca3af', borderTop: '1 solid #e5e7eb', paddingTop: 6, flexDirection: 'row', justifyContent: 'space-between' },
 })
 
@@ -48,9 +57,12 @@ function ReporteFlotaPDF({ data }: { data: ReporteFlotaData }) {
 
         <Text style={s.h2}>Distribución por estado</Text>
         {ORDEN.filter((e) => est[e]).map((e) => (
-          <View key={e} style={s.row}>
-            <Text style={s.cell}>{LABEL[e]} ({e})</Text>
-            <Text style={[s.cell, s.bold]}>{est[e]}</Text>
+          <View key={e} style={s.barRow}>
+            <Text style={s.barLabel}>{LABEL[e]}</Text>
+            <View style={s.barTrack}>
+              <View style={[s.barFill, { width: `${data.total > 0 ? Math.round((est[e] / data.total) * 100) : 0}%`, backgroundColor: COLOR[e] ?? '#9ca3af' }]} />
+            </View>
+            <Text style={s.barN}>{est[e]}</Text>
           </View>
         ))}
 

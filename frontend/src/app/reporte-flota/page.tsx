@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts'
 import { supabase } from '@/lib/supabase'
 import { generarReporteFlotaPDF, type ReporteFlotaData } from '@/components/flota/reporte-flota-pdf'
 
@@ -78,16 +79,32 @@ export default function ReporteFlotaPublicoPage() {
             </div>
 
             <Card title="Distribución por estado">
-              <div className="space-y-1">
-                {ORDEN.filter((e) => est[e]).map((e) => (
-                  <div key={e} className="flex items-center justify-between text-sm">
-                    <span className="flex items-center gap-2">
-                      <span className="inline-block h-3 w-3 rounded-sm" style={{ background: COLOR[e] }} />
-                      {LABEL[e]} <span className="text-gray-400">({e})</span>
-                    </span>
-                    <b>{est[e]}</b>
-                  </div>
-                ))}
+              <div className="grid items-center gap-4 sm:grid-cols-2">
+                <div className="h-56">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={ORDEN.filter((e) => est[e]).map((e) => ({ name: LABEL[e], value: est[e], color: COLOR[e] }))}
+                        cx="50%" cy="50%" innerRadius={48} outerRadius={88} paddingAngle={2}
+                        dataKey="value" label={({ value }) => `${value}`}
+                      >
+                        {ORDEN.filter((e) => est[e]).map((e) => (<Cell key={e} fill={COLOR[e]} />))}
+                      </Pie>
+                      <Tooltip formatter={(v: number, n: string) => [`${v} equipos`, n]} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="space-y-1">
+                  {ORDEN.filter((e) => est[e]).map((e) => (
+                    <div key={e} className="flex items-center justify-between text-sm">
+                      <span className="flex items-center gap-2">
+                        <span className="inline-block h-3 w-3 rounded-sm" style={{ background: COLOR[e] }} />
+                        {LABEL[e]} <span className="text-gray-400">({e})</span>
+                      </span>
+                      <b>{est[e]}</b>
+                    </div>
+                  ))}
+                </div>
               </div>
             </Card>
 
