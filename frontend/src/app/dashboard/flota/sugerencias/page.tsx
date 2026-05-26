@@ -1,0 +1,167 @@
+'use client'
+
+import { useMemo, useState } from 'react'
+import Link from 'next/link'
+import { ArrowLeft, MapPin, Check, CheckCheck, RefreshCw } from 'lucide-react'
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Spinner } from '@/components/ui/spinner'
+import { useRequireAuth } from '@/hooks/use-require-auth'
+import { useToast } from '@/contexts/toast-context'
+import { errorMessage, todayISO } from '@/lib/utils'
+import { useSugerenciasEstado, useConfirmarEstado } from '@/hooks/use-sugerencias-estado'
+
+const COLOR: Record<string, string> = {
+  A: '#16A34A', C: '#15803D', L: '#4F46E5', U: '#0891B2', D: '#2563EB',
+  H: '#A855F7', R: '#06B6D4', M: '#F59E0B', T: '#FB923C', F: '#DC2626', V: '#9333EA',
+}
+const LABEL: Record<string, string> = {
+  A: 'Arrendado', C: 'En contrato', D: 'Disponible', H: 'Habilitación', R: 'Recepción',
+  M: 'Mantención', T: 'Taller', F: 'Fuera de servicio', V: 'Venta', U: 'Uso interno', L: 'Leasing',
+}
+const OPCIONES = ['A', 'C', 'D', 'H', 'R', 'M', 'T', 'F', 'U', 'L', 'V']
+
+function Pill({ e }: { e: string | null }) {
+  if (!e) return <span className="text-gray-300">—</span>
+  return (
+    <span className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs font-semibold text-white" style={{ background: COLOR[e] ?? '#9CA3AF' }}>
+      {e} · {LABEL[e] ?? e}
+    </span>
+  )
+}
+
+export default function SugerenciasEstadoPage() {
+  useRequireAuth()
+  const toast = useToast()
+  const [fecha, setFecha] = useState(todayISO())
+  const [soloCambios, setSoloCambios] = useState(true)
+  const [elegido, setElegido] = useState<Record<string, string>>({}) // override del planificador
+
+  const { data: sugerencias = [], isLoading, refetch, isFetching } = useSugerenciasEstado(fecha)
+  const confirmar = useConfirmarEstado()
+
+  const filtradas = useMemo(
+    () => (soloCambios ? sugerencias.filter((s) => !s.coincide && s.estado_sugerido) : sugerencias),
+    [sugerencias, soloCambios],
+  )
+  const cambios = useMemo(() => sugerencias.filter((s) => !s.coincide && s.estado_sugerido), [sugerencias])
+
+  const confirmarUno = (activoId: string, estado: string) => {
+    confirmar.mutate({ activoId, fecha, estado }, {
+      onSuccess: () => toast.success('Estado confirmado'),
+      onError: (e) => toast.error(errorMessage(e, 'No se pudo confirmar')),
+    })
+  }
+  const confirmarTodas = async () => {
+    for (const s of cambios) {
+      const est = elegido[s.activo_id] ?? s.estado_sugerido!
+      try { await confirmar.mutateAsync({ activoId: s.activo_id, fecha, estado: est }) } catch { /* sigue */ }
+    }
+    toast.success(`${cambios.length} estados confirmados`)
+  }
+
+  return (
+    <div className="space-y-4 p-6">
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <Link href="/dashboard/flota/dashboard" className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-800">
+            <ArrowLeft className="h-4 w-4" /> Volver a Flota
+          </Link>
+          <h1 className="mt-1 flex items-center gap-2 text-2xl font-bold">
+            <MapPin className="h-6 w-6 text-emerald-600" /> Sugerencias de estado (GPS)
+          </h1>
+          <p className="mt-1 text-sm text-gray-600">
+            Estado sugerido por la ubicación GPS / geocerca de cada equipo. <b>Nada se aplica solo</b> — tú confirmas.
+          </p>
+        </div>
+        <div className="flex items-end gap-2">
+          <div>
+            <label className="block text-[10px] uppercase text-gray-400">Fecha a planificar</label>
+            <input type="date" className="h-9 rounded border border-gray-300 px-2 text-sm" value={fecha} onChange={(e) => setFecha(e.target.value)} />
+          </div>
+          <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
+            <RefreshCw className={`h-4 w-4 mr-1 ${isFetching ? 'animate-spin' : ''}`} /> Actualizar
+          </Button>
+        </div>
+      </header>
+
+      <Card>
+        <CardHeader className="flex flex-col gap-2 pb-2 sm:flex-row sm:items-center sm:justify-between">
+          <CardTitle className="text-base text-gray-700">
+            {cambios.length} cambios sugeridos · {sugerencias.length} equipos con GPS
+          </CardTitle>
+          <div className="flex items-center gap-3">
+            <label className="flex items-center gap-1 text-xs text-gray-600">
+              <input type="checkbox" checked={soloCambios} onChange={(e) => setSoloCambios(e.target.checked)} />
+              Solo cambios
+            </label>
+            <Button size="sm" onClick={confirmarTodas} disabled={confirmar.isPending || cambios.length === 0}>
+              <CheckCheck className="mr-1 h-4 w-4" /> Confirmar todas
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="overflow-x-auto">
+          {isLoading ? (
+            <div className="flex justify-center py-10"><Spinner className="h-6 w-6" /></div>
+          ) : filtradas.length === 0 ? (
+            <p className="py-8 text-center text-sm text-gray-400">
+              {soloCambios ? 'No hay cambios sugeridos: todos los equipos coinciden con su ubicación.' : 'Sin equipos con GPS.'}
+            </p>
+          ) : (
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b bg-gray-50 text-left uppercase text-gray-500">
+                  <th className="px-2 py-2">Patente</th>
+                  <th className="px-2 py-2">Equipo</th>
+                  <th className="px-2 py-2">Zona GPS</th>
+                  <th className="px-2 py-2">Estado actual (día previo)</th>
+                  <th className="px-2 py-2">Sugerido</th>
+                  <th className="px-2 py-2">Confirmar como</th>
+                  <th className="px-2 py-2"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtradas.map((s) => {
+                  const sel = elegido[s.activo_id] ?? s.estado_sugerido ?? ''
+                  return (
+                    <tr key={s.activo_id} className="border-b hover:bg-gray-50">
+                      <td className="px-2 py-1.5 font-mono font-semibold">{s.patente}</td>
+                      <td className="px-2 py-1.5 text-gray-500">{s.equipamiento ?? '—'}</td>
+                      <td className="px-2 py-1.5 text-gray-600">{s.zona ?? 'Fuera de zona'}</td>
+                      <td className="px-2 py-1.5"><Pill e={s.estado_actual} /></td>
+                      <td className="px-2 py-1.5"><Pill e={s.estado_sugerido} /></td>
+                      <td className="px-2 py-1.5">
+                        <select
+                          className="h-8 rounded border border-gray-300 px-1 text-xs"
+                          value={sel}
+                          onChange={(e) => setElegido((p) => ({ ...p, [s.activo_id]: e.target.value }))}
+                        >
+                          {OPCIONES.map((o) => (
+                            <option key={o} value={o}>{o} · {LABEL[o]}</option>
+                          ))}
+                        </select>
+                      </td>
+                      <td className="px-2 py-1.5">
+                        <Button size="sm" variant="outline" disabled={confirmar.isPending || !sel}
+                          onClick={() => confirmarUno(s.activo_id, sel)}>
+                          <Check className="mr-1 h-4 w-4" /> Confirmar
+                        </Button>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          )}
+          <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1">
+            {OPCIONES.map((e) => (
+              <span key={e} className="flex items-center gap-1 text-[10px] text-gray-600">
+                <span className="inline-block h-3 w-3 rounded-sm" style={{ background: COLOR[e] }} />{e}={LABEL[e]}
+              </span>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  )
+}

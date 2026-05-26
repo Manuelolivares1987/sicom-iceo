@@ -8,7 +8,6 @@ import {
 import {
   PieChart, Pie, Cell,
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  RadialBarChart, RadialBar, PolarAngleAxis,
 } from 'recharts'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Spinner } from '@/components/ui/spinner'
@@ -918,40 +917,36 @@ function GaugeCard({
 }) {
   const pct = Math.max(0, Math.min(100, value))
   const color = pct >= target ? '#16A34A' : pct >= target * 0.85 ? '#F59E0B' : '#DC2626'
-  const data = [{ name: title, value: pct, fill: color }]
+  // Semicírculo: arco superior de (20,100) a (180,100), radio 80. Longitud = π·80.
+  const R = 80
+  const ARC = Math.PI * R
+  const dash = (pct / 100) * ARC
+  const arcPath = `M 20 100 A ${R} ${R} 0 0 1 180 100`
   return (
     <Card>
       <CardHeader className="pb-0">
-        <CardTitle className="text-sm text-gray-600 flex items-center gap-2">
+        <CardTitle className="flex items-center gap-2 text-sm text-gray-600">
           <GaugeIcon className="h-4 w-4" />
           {title}
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="relative h-36">
-          <ResponsiveContainer width="100%" height="100%">
-            <RadialBarChart
-              innerRadius="68%" outerRadius="100%"
-              data={data} startAngle={180} endAngle={0}
-              cx="50%" cy="100%"
-            >
-              <PolarAngleAxis type="number" domain={[0, 100]} tick={false} />
-              <RadialBar
-                dataKey="value" cornerRadius={8} fill={color}
-                background={{ fill: '#E5E7EB' }}
-              />
-            </RadialBarChart>
-          </ResponsiveContainer>
-          <div className="absolute inset-0 flex flex-col items-center justify-end pb-2">
-            <div className="text-3xl font-bold" style={{ color }}>
+        <div className="mx-auto" style={{ maxWidth: 240 }}>
+          <svg viewBox="0 0 200 118" className="w-full">
+            <path d={arcPath} fill="none" stroke="#E5E7EB" strokeWidth="16" strokeLinecap="round" />
+            <path
+              d={arcPath} fill="none" stroke={color} strokeWidth="16" strokeLinecap="round"
+              strokeDasharray={`${dash} ${ARC}`}
+            />
+            <text x="100" y="90" textAnchor="middle" fontSize="34" fontWeight="700" fill={color}>
               {value.toFixed(1)}{unit}
-            </div>
-            <div className="text-[10px] text-gray-400">
+            </text>
+            <text x="100" y="112" textAnchor="middle" fontSize="11" fill="#9CA3AF">
               Meta {target}{unit}
-            </div>
-          </div>
+            </text>
+          </svg>
         </div>
-        <p className="text-[11px] text-gray-500 text-center">{description}</p>
+        <p className="mt-1 text-center text-[11px] text-gray-500">{description}</p>
       </CardContent>
     </Card>
   )

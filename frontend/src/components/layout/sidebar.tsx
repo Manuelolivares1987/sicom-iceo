@@ -113,6 +113,7 @@ const navGroups: NavGroup[] = [
       { label: 'Informes Recepción', href: '/dashboard/flota/recepcion', icon: FileText, module: 'flota' },
       { label: 'Jornada', href: '/dashboard/flota/jornada', icon: Timer, module: 'flota' },
       { label: 'Mapa GPS', href: '/dashboard/flota/mapa', icon: Satellite, module: 'flota', badge: 'Nuevo' },
+      { label: 'Sugerencias estado (GPS)', href: '/dashboard/flota/sugerencias', icon: Satellite, module: 'flota', badge: 'Nuevo' },
       { label: 'Check-List Entrega', href: '/dashboard/flota/checklist-salida', icon: ClipboardCheck, module: 'flota', badge: 'V02' },
       { label: 'Plan Preventivo', href: '/dashboard/flota/plan-preventivo', icon: CalendarClock, module: 'flota', badge: 'Nuevo' },
       { label: 'Estado Flota', href: '/dashboard/flota/estado-flota', icon: ShieldCheck, module: 'flota', badge: 'Nuevo' },
