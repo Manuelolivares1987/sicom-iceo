@@ -175,10 +175,15 @@ export default function FiabilidadPage() {
   const estadoActualPorActivo = useMemo(() => {
     const m = new Map<string, string>()
     if (diasUnicos.length === 0) return m
+    // Solo los equipos de la tabla detalle (vehículos de flota), para que el
+    // gráfico cuadre con la tabla y el filtro siempre encuentre patentes.
+    const idsFlota = new Set(detalles.map((d) => d.activo_id))
     const ultimo = diasUnicos[diasUnicos.length - 1]
-    for (const c of matriz) if (c.fecha === ultimo) m.set(c.activo_id, c.estado_codigo)
+    for (const c of matriz) {
+      if (c.fecha === ultimo && idsFlota.has(c.activo_id)) m.set(c.activo_id, c.estado_codigo)
+    }
     return m
-  }, [matriz, diasUnicos])
+  }, [matriz, diasUnicos, detalles])
 
   // ─── Filtrado por categoría / estado ───────────────────
   const detallesFiltrados = useMemo(() => {
