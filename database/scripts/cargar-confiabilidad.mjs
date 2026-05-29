@@ -10,8 +10,11 @@ const MESES = [
   { archivo: 'FEBRERO.xlsx', mes: 2 },
   { archivo: 'MARZO.xlsx',   mes: 3 },
   { archivo: 'ABRIL.xlsx',   mes: 4 },
-  { archivo: 'MAYO.xlsx',    mes: 5 },
+  { archivo: 'MAYO ACTUALIZADO.xlsx', mes: 5 },
 ]
+// SOLO_MES (env, opcional): limita la carga a ese mes (ej: SOLO_MES=5)
+// para no re-upsertar meses ya cargados y cuidar el I/O del tier Micro.
+const SOLO_MES = process.env.SOLO_MES ? Number(process.env.SOLO_MES) : null
 const ANIO = 2026
 const VALIDOS = new Set(['A','C','D','H','R','M','T','F','V','U','L'])
 // 'C' (en contrato) es estado valido (Francke, CMP). Se preserva tal cual.
@@ -39,6 +42,7 @@ let totalRows = 0, totalUpsert = 0, totalSkipEstado = 0
 const sinMatch = new Set()
 
 for (const { archivo, mes } of MESES) {
+  if (SOLO_MES && mes !== SOLO_MES) continue
   const wb = new ExcelJS.Workbook()
   await wb.xlsx.readFile(DIR + archivo)
   const ws = wb.getWorksheet('Report Diario')
