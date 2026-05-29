@@ -27,6 +27,7 @@ import { ESTADO_DIARIO_LABELS, ESTADO_DIARIO_COLORS } from '@/lib/services/flota
 import { TendenciaFlotaChart } from '@/components/flota/tendencia-flota-chart'
 import { DistribucionEstadosChart } from '@/components/flota/distribucion-estados-chart'
 import { CambiosEstadoDiaTimeline } from '@/components/flota/cambios-estado-dia-timeline'
+import { EnviarReporteModal } from '@/components/flota/enviar-reporte-modal'
 
 function Section({
   icon: Icon,
@@ -125,6 +126,7 @@ export default function ReporteDiarioPage() {
             <Printer className="h-4 w-4" />
             Imprimir / PDF
           </button>
+          <EnviarReporteModal />
         </div>
       </div>
 
