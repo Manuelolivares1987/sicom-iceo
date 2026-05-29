@@ -172,18 +172,20 @@ export default function FiabilidadPage() {
     () => Array.from(new Set(matriz.map((c) => c.fecha))).sort(),
     [matriz],
   )
+  // Solo los equipos de la tabla detalle (vehículos de flota). Se excluyen
+  // surtidores/bombas/estanques para que TODOS los gráficos (torta + barras)
+  // usen el mismo universo y la flota se vea constante día a día.
+  const idsFlota = useMemo(() => new Set(detalles.map((d) => d.activo_id)), [detalles])
+
   const estadoActualPorActivo = useMemo(() => {
     const m = new Map<string, string>()
     if (diasUnicos.length === 0) return m
-    // Solo los equipos de la tabla detalle (vehículos de flota), para que el
-    // gráfico cuadre con la tabla y el filtro siempre encuentre patentes.
-    const idsFlota = new Set(detalles.map((d) => d.activo_id))
     const ultimo = diasUnicos[diasUnicos.length - 1]
     for (const c of matriz) {
       if (c.fecha === ultimo && idsFlota.has(c.activo_id)) m.set(c.activo_id, c.estado_codigo)
     }
     return m
-  }, [matriz, diasUnicos, detalles])
+  }, [matriz, diasUnicos, idsFlota])
 
   // ─── Filtrado por categoría / estado ───────────────────
   const detallesFiltrados = useMemo(() => {
@@ -235,11 +237,13 @@ export default function FiabilidadPage() {
   const distribucionDiaria = useMemo(() => {
     const byDia: Record<string, Record<string, number>> = {}
     for (const c of matriz) {
+      // Mismo universo que la torta/tabla: solo vehículos de flota.
+      if (!idsFlota.has(c.activo_id)) continue
       const dia = (byDia[c.fecha] ??= {})
       dia[c.estado_codigo] = (dia[c.estado_codigo] ?? 0) + 1
     }
     return diasUnicos.map((f) => ({ dia: f.slice(8, 10), ...byDia[f] }))
-  }, [matriz, diasUnicos])
+  }, [matriz, diasUnicos, idsFlota])
 
   // ─── Distribución por categoría (estado actual) ──
   const distribucionCategoria = useMemo(() => {
