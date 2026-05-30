@@ -28,6 +28,7 @@ import { TendenciaFlotaChart } from '@/components/flota/tendencia-flota-chart'
 import { DistribucionEstadosChart } from '@/components/flota/distribucion-estados-chart'
 import { CambiosEstadoDiaTimeline } from '@/components/flota/cambios-estado-dia-timeline'
 import { EnviarReporteModal } from '@/components/flota/enviar-reporte-modal'
+import { ProyeccionStockCard } from '@/components/combustible/proyeccion-stock-card'
 
 function Section({
   icon: Icon,
@@ -242,6 +243,9 @@ export default function ReporteDiarioPage() {
               </div>
             )}
           </Section>
+
+          {/* ── Combustible: stock + alcance (despachos a empresas) ── */}
+          <ProyeccionStockCard titulo="Combustible — Stock y alcance (despachos MYG + LISSET)" />
 
           {/* ── OEE ── */}
           <Section icon={Activity} title="OEE del Mes" color="text-green-600">
