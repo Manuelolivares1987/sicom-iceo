@@ -10,6 +10,7 @@ import type {
   ReporteEmailPayload,
   EquipoReporte,
   EstanqueReporte,
+  MantenimientoItem,
 } from '@/lib/email/reporte-flota-email'
 
 type ReporteRpc = {
@@ -55,6 +56,23 @@ async function armarPayload(): Promise<ReporteEmailPayload> {
       ultimo_cliente: e.ultimo_cliente,
     }))
 
+  let mantenimiento: MantenimientoItem[] = []
+  try {
+    const { data: mant, error: mantErr } = await supabase.rpc('fn_flota_en_mantenimiento')
+    if (!mantErr && Array.isArray(mant)) {
+      mantenimiento = mant.map((m: any) => ({
+        patente: m.patente,
+        equipamiento: m.equipamiento,
+        estado_codigo: m.estado_codigo,
+        dias_mantencion: m.dias_mantencion,
+        ultimo_contrato: m.ultimo_contrato,
+        motivo: m.motivo,
+      }))
+    }
+  } catch {
+    mantenimiento = []
+  }
+
   return {
     fecha: r.fecha,
     total: r.total,
@@ -64,6 +82,7 @@ async function armarPayload(): Promise<ReporteEmailPayload> {
     por_operacion: r.por_operacion,
     disponibles,
     combustible,
+    mantenimiento,
     reporteUrl:
       typeof window !== 'undefined'
         ? `${window.location.origin}/reporte-flota`

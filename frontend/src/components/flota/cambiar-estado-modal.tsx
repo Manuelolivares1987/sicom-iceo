@@ -118,6 +118,8 @@ export function CambiarEstadoModal({ open, onClose, activo }: CambiarEstadoModal
   const [contratos, setContratos] = useState<ContratoOption[]>([])
   const [nuevoContratoId, setNuevoContratoId] = useState<string>('')
   const [razonContrato, setRazonContrato] = useState('')
+  // ¿Mantiene el contrato actual o cambia a otro? (pregunta explícita)
+  const [cambiarContrato, setCambiarContrato] = useState(false)
   useEffect(() => {
     if (!open) return
     cargarContratosActivos().then(setContratos).catch(() => { /* skip */ })
@@ -127,8 +129,15 @@ export function CambiarEstadoModal({ open, onClose, activo }: CambiarEstadoModal
     if (open && activo) {
       setNuevoContratoId(activo.contrato_id ?? '')
       setRazonContrato('')
+      setCambiarContrato(false)
     }
   }, [open, activo?.id, activo?.contrato_id])
+
+  // Etiqueta del contrato actual (último contrato del activo)
+  const contratoActual = useMemo(() => {
+    const c = contratos.find((x) => x.id === activo?.contrato_id)
+    return c ? `${c.codigo} · ${c.cliente}` : (activo?.cliente_actual || 'Sin contrato asignado')
+  }, [contratos, activo?.contrato_id, activo?.cliente_actual])
 
   // ── Reset del formulario: SOLO al abrir o cambiar de activo.
   //    Si dependiera de estadoHoy, el refetch post-mutación borraría el errorMsg.
@@ -212,9 +221,9 @@ export function CambiarEstadoModal({ open, onClose, activo }: CambiarEstadoModal
         ot_descripcion: otDescripcion.trim() || undefined,
       })
 
-      // Si el usuario cambio el contrato en el selector -> aplicarlo
+      // Contrato: solo se aplica si el usuario eligió "Cambiar a otro contrato"
       const contratoOriginal = activo.contrato_id ?? null
-      const contratoNuevo    = nuevoContratoId || null
+      const contratoNuevo    = cambiarContrato ? (nuevoContratoId || null) : contratoOriginal
       if (contratoNuevo !== contratoOriginal) {
         try {
           await cambiarContratoActivo({
@@ -367,36 +376,74 @@ export function CambiarEstadoModal({ open, onClose, activo }: CambiarEstadoModal
           <div className="mt-1 text-xs text-gray-400 text-right">{motivo.length}/500</div>
         </div>
 
-        {/* ── Contrato (opcional, en el mismo flujo) ── */}
-        <div className="rounded-lg border border-blue-200 bg-blue-50/40 p-3 space-y-2">
+        {/* ── Contrato: pregunta explícita mantener vs cambiar ── */}
+        <div className="rounded-lg border border-blue-200 bg-blue-50/40 p-3 space-y-2.5">
           <label className="flex items-center gap-1.5 text-sm font-medium text-gray-700">
             <Building2 className="h-4 w-4 text-blue-600" />
-            Contrato del activo (opcional)
+            Contrato del equipo
           </label>
-          <Select
-            value={nuevoContratoId}
-            onChange={(e) => setNuevoContratoId(e.target.value)}
-            helperText={
-              !activo?.contrato_id && nuevoContratoId
-                ? 'Se ASIGNARÁ este contrato al activo.'
-                : activo?.contrato_id && !nuevoContratoId
-                ? 'Se QUITARÁ el contrato actual.'
-                : nuevoContratoId !== (activo?.contrato_id ?? '')
-                ? 'Se CAMBIARÁ del contrato actual al seleccionado.'
-                : 'Sin cambios al contrato (queda igual).'
-            }
-          >
-            <option value="">— Sin contrato —</option>
-            {contratos.map((c) => (
-              <option key={c.id} value={c.id}>{c.codigo} · {c.cliente}</option>
-            ))}
-          </Select>
-          {nuevoContratoId !== (activo?.contrato_id ?? '') && (
-            <Input
-              placeholder="Razón del cambio de contrato (opcional)"
-              value={razonContrato}
-              onChange={(e) => setRazonContrato(e.target.value)}
-            />
+
+          {/* Último contrato — siempre visible, clave al pasar a mantención */}
+          <div className="rounded-md border border-blue-100 bg-white px-3 py-2 text-xs">
+            <span className="text-gray-500">Último contrato:</span>{' '}
+            <span className="font-semibold text-gray-800">{contratoActual}</span>
+            {requiereOT && (
+              <div className="mt-1 text-[11px] text-amber-700">
+                Pasa a mantención — se conserva este contrato como referencia para cuando vuelva a operar.
+              </div>
+            )}
+          </div>
+
+          {/* ¿Mantiene o cambia? */}
+          <div className="space-y-1.5">
+            <p className="text-xs font-medium text-gray-600">¿Qué pasa con el contrato?</p>
+            <label className="flex items-start gap-2 text-sm text-gray-700 cursor-pointer">
+              <input
+                type="radio"
+                name="opcion-contrato"
+                checked={!cambiarContrato}
+                onChange={() => { setCambiarContrato(false); setNuevoContratoId(activo?.contrato_id ?? '') }}
+                className="mt-0.5"
+              />
+              <span>Se mantiene en el <strong>mismo contrato</strong></span>
+            </label>
+            <label className="flex items-start gap-2 text-sm text-gray-700 cursor-pointer">
+              <input
+                type="radio"
+                name="opcion-contrato"
+                checked={cambiarContrato}
+                onChange={() => setCambiarContrato(true)}
+                className="mt-0.5"
+              />
+              <span>Cambia a <strong>otro contrato</strong></span>
+            </label>
+          </div>
+
+          {cambiarContrato && (
+            <div className="space-y-2 pl-6">
+              <Select
+                label="Nuevo contrato"
+                value={nuevoContratoId}
+                onChange={(e) => setNuevoContratoId(e.target.value)}
+                helperText={
+                  !nuevoContratoId
+                    ? 'Se QUITARÁ el contrato actual (queda sin contrato).'
+                    : nuevoContratoId !== (activo?.contrato_id ?? '')
+                    ? 'Se CAMBIARÁ al contrato seleccionado.'
+                    : 'Es el mismo contrato actual.'
+                }
+              >
+                <option value="">— Sin contrato —</option>
+                {contratos.map((c) => (
+                  <option key={c.id} value={c.id}>{c.codigo} · {c.cliente}</option>
+                ))}
+              </Select>
+              <Input
+                placeholder="Razón del cambio de contrato (opcional)"
+                value={razonContrato}
+                onChange={(e) => setRazonContrato(e.target.value)}
+              />
+            </div>
           )}
         </div>
 

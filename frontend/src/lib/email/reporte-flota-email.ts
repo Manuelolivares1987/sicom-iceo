@@ -21,6 +21,15 @@ export type EstanqueReporte = {
   severidad: 'agotado' | 'critico' | 'urgente' | 'atencion' | 'ok'
 }
 
+export type MantenimientoItem = {
+  patente: string | null
+  equipamiento: string | null
+  estado_codigo: string
+  dias_mantencion: number
+  ultimo_contrato: string | null
+  motivo: string | null
+}
+
 export type ReporteEmailPayload = {
   fecha: string | null
   total: number
@@ -30,6 +39,7 @@ export type ReporteEmailPayload = {
   por_operacion: Record<string, number> | null
   disponibles: EquipoReporte[]
   combustible: EstanqueReporte[]
+  mantenimiento: MantenimientoItem[]
   reporteUrl: string
 }
 
@@ -125,6 +135,20 @@ export function buildReporteFlotaEmail(p: ReporteEmailPayload): string {
     `<tr><td style="font-size:12px;color:#374151;padding:3px 0;">${esc(k)}</td><td style="font-size:12px;font-weight:700;color:${NAVY};text-align:right;">${v}</td></tr>`
   ).join('')
 
+  const mantRows = p.mantenimiento.length === 0
+    ? `<tr><td colspan="6" style="padding:10px;font-size:12px;color:#9ca3af;text-align:center;">Ningún equipo en mantención.</td></tr>`
+    : p.mantenimiento.map((m) => `
+      <tr>
+        <td style="padding:6px 8px;font-size:12px;font-weight:700;color:${NAVY};text-align:center;border-bottom:1px solid #f3f4f6;white-space:nowrap;">${m.dias_mantencion}d</td>
+        <td style="padding:6px 8px;font-family:monospace;font-weight:700;font-size:12px;color:${NAVY};border-bottom:1px solid #f3f4f6;">${esc(m.patente ?? '—')}</td>
+        <td style="padding:6px 8px;font-size:11px;color:#6b7280;border-bottom:1px solid #f3f4f6;">${esc(m.equipamiento ?? '—')}</td>
+        <td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;text-align:center;">
+          <span style="display:inline-block;background:${COLOR[m.estado_codigo] ?? '#9ca3af'};color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;white-space:nowrap;">${esc(LABEL[m.estado_codigo] ?? m.estado_codigo)}</span>
+        </td>
+        <td style="padding:6px 8px;font-size:11px;color:#374151;border-bottom:1px solid #f3f4f6;">${esc(m.ultimo_contrato ?? 'Sin contrato')}</td>
+        <td style="padding:6px 8px;font-size:11px;color:#6b7280;border-bottom:1px solid #f3f4f6;">${esc(m.motivo ?? '—')}</td>
+      </tr>`).join('')
+
   return `<!DOCTYPE html>
 <html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
 <body style="margin:0;padding:0;background:#f3f4f6;font-family:Arial,Helvetica,sans-serif;">
@@ -193,6 +217,27 @@ export function buildReporteFlotaEmail(p: ReporteEmailPayload): string {
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0">${operRows}</table>
             </td>
           </tr></table>
+        </td></tr>
+
+        <!-- Patentes en mantención -->
+        <tr><td style="background:#ffffff;padding:6px 18px 14px;">
+          <div style="font-size:14px;font-weight:700;color:${NAVY};border-bottom:2px solid #F59E0B;padding-bottom:5px;margin-bottom:6px;">
+            🔧 Patentes en mantención (${p.mantenimiento.length})
+          </div>
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+            <tr>
+              <th align="center" style="font-size:10px;text-transform:uppercase;color:#9ca3af;padding:0 8px 4px;">Días</th>
+              <th align="left" style="font-size:10px;text-transform:uppercase;color:#9ca3af;padding:0 8px 4px;">Patente</th>
+              <th align="left" style="font-size:10px;text-transform:uppercase;color:#9ca3af;padding:0 8px 4px;">Equipo</th>
+              <th align="center" style="font-size:10px;text-transform:uppercase;color:#9ca3af;padding:0 8px 4px;">Estado</th>
+              <th align="left" style="font-size:10px;text-transform:uppercase;color:#9ca3af;padding:0 8px 4px;">Último contrato</th>
+              <th align="left" style="font-size:10px;text-transform:uppercase;color:#9ca3af;padding:0 8px 4px;">Motivo</th>
+            </tr>
+            ${mantRows}
+          </table>
+          <div style="font-size:11px;color:#6b7280;margin-top:8px;text-align:center;">
+            ¿Necesitas más detalle? <a href="${esc(p.reporteUrl)}" style="color:#2563eb;font-weight:600;text-decoration:none;">Ver el reporte interactivo →</a>
+          </div>
         </td></tr>
 
         <!-- Footer -->
