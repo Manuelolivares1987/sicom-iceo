@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, MapPin, Check, CheckCheck, RefreshCw } from 'lucide-react'
+import { ArrowLeft, MapPin, Check, CheckCheck, RefreshCw, Building2 } from 'lucide-react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
@@ -10,6 +10,20 @@ import { useRequireAuth } from '@/hooks/use-require-auth'
 import { useToast } from '@/contexts/toast-context'
 import { errorMessage, todayISO } from '@/lib/utils'
 import { useSugerenciasEstado, useConfirmarEstado } from '@/hooks/use-sugerencias-estado'
+import { CambiarEstadoModal } from '@/components/flota/cambiar-estado-modal'
+import { supabase } from '@/lib/supabase'
+
+type EstadoCodigo = 'A' | 'D' | 'H' | 'R' | 'M' | 'T' | 'F' | 'V' | 'U' | 'L'
+type ActivoModal = {
+  id: string
+  patente?: string | null
+  codigo?: string | null
+  nombre?: string | null
+  estado_comercial?: string | null
+  operacion?: string | null
+  cliente_actual?: string | null
+  contrato_id?: string | null
+}
 
 const COLOR: Record<string, string> = {
   A: '#16A34A', C: '#15803D', L: '#4F46E5', U: '#0891B2', D: '#2563EB',
@@ -39,6 +53,29 @@ export default function SugerenciasEstadoPage() {
 
   const { data: sugerencias = [], isLoading, refetch, isFetching } = useSugerenciasEstado(fecha)
   const confirmar = useConfirmarEstado()
+
+  // ── Modal Cambiar Estado (con contrato) desde una sugerencia ──
+  const [modalActivo, setModalActivo] = useState<ActivoModal | null>(null)
+  const [modalEstado, setModalEstado] = useState<EstadoCodigo | undefined>(undefined)
+  const [abriendoModal, setAbriendoModal] = useState<string | null>(null)
+
+  const abrirConContrato = async (activoId: string, estadoSugerido: string | null) => {
+    setAbriendoModal(activoId)
+    try {
+      const { data, error } = await supabase
+        .from('activos')
+        .select('id, patente, codigo, nombre, estado_comercial, operacion, cliente_actual, contrato_id')
+        .eq('id', activoId)
+        .single()
+      if (error) throw error
+      setModalActivo(data as ActivoModal)
+      setModalEstado((estadoSugerido as EstadoCodigo) || undefined)
+    } catch (e) {
+      toast.error(errorMessage(e, 'No se pudo abrir el equipo'))
+    } finally {
+      setAbriendoModal(null)
+    }
+  }
 
   const filtradas = useMemo(
     () => (soloCambios ? sugerencias.filter((s) => !s.coincide && s.estado_sugerido) : sugerencias),
@@ -142,10 +179,19 @@ export default function SugerenciasEstadoPage() {
                         </select>
                       </td>
                       <td className="px-2 py-1.5">
-                        <Button size="sm" variant="outline" disabled={confirmar.isPending || !sel}
-                          onClick={() => confirmarUno(s.activo_id, sel)}>
-                          <Check className="mr-1 h-4 w-4" /> Confirmar
-                        </Button>
+                        <div className="flex items-center gap-1.5">
+                          <Button size="sm" variant="outline" disabled={confirmar.isPending || !sel}
+                            onClick={() => confirmarUno(s.activo_id, sel)}>
+                            <Check className="mr-1 h-4 w-4" /> Confirmar
+                          </Button>
+                          <Button size="sm" variant="ghost" title="Confirmar y gestionar contrato (mantener / cambiar / asignar)"
+                            disabled={abriendoModal === s.activo_id}
+                            onClick={() => abrirConContrato(s.activo_id, sel)}>
+                            {abriendoModal === s.activo_id
+                              ? <Spinner className="h-4 w-4" />
+                              : <><Building2 className="mr-1 h-4 w-4" /> Contrato</>}
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   )
@@ -162,6 +208,19 @@ export default function SugerenciasEstadoPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Modal Cambiar Estado con gestión de contrato (mantener / cambiar / asignar) */}
+      <CambiarEstadoModal
+        open={!!modalActivo}
+        onClose={() => {
+          setModalActivo(null)
+          setModalEstado(undefined)
+          refetch()
+        }}
+        activo={modalActivo}
+        estadoInicial={modalEstado}
+        fechaInicial={fecha}
+      />
     </div>
   )
 }

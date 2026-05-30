@@ -45,6 +45,10 @@ interface CambiarEstadoModalProps {
     cliente_actual?: string | null
     contrato_id?: string | null
   } | null
+  /** Estado pre-seleccionado al abrir (ej. la sugerencia GPS). */
+  estadoInicial?: EstadoCodigo
+  /** Fecha pre-seleccionada del cambio (ej. la fecha que se planifica). */
+  fechaInicial?: string
 }
 
 const ESTADO_OPTIONS: Array<{
@@ -65,7 +69,7 @@ const ESTADO_OPTIONS: Array<{
   { value: 'F', label: 'F — Fuera de Servicio', group: 'mantencion',     helpText: 'Equipo no operativo: documentación vencida, falla mayor o restricción normativa' },
 ]
 
-export function CambiarEstadoModal({ open, onClose, activo }: CambiarEstadoModalProps) {
+export function CambiarEstadoModal({ open, onClose, activo, estadoInicial, fechaInicial }: CambiarEstadoModalProps) {
   const today = todayISO()
   const { isAdmin } = usePermissions()
 
@@ -73,7 +77,7 @@ export function CambiarEstadoModal({ open, onClose, activo }: CambiarEstadoModal
 
   // Fecha del cambio: por defecto hoy. Se permite programar a futuro.
   // Solo administradores pueden corregir días pasados.
-  const [fechaCambio, setFechaCambio] = useState<string>(today)
+  const [fechaCambio, setFechaCambio] = useState<string>(fechaInicial ?? today)
   const esFuturo = fechaCambio > today
   const esPasado = fechaCambio < today
   const fechaInvalida = esPasado && !isAdmin()
@@ -143,7 +147,7 @@ export function CambiarEstadoModal({ open, onClose, activo }: CambiarEstadoModal
   //    Si dependiera de estadoHoy, el refetch post-mutación borraría el errorMsg.
   useEffect(() => {
     if (open && activo) {
-      setFechaCambio(today)
+      setFechaCambio(fechaInicial ?? today)
       setMotivo('')
       setCrearOT(false)
       setOtTipo('correctivo')
@@ -157,9 +161,10 @@ export function CambiarEstadoModal({ open, onClose, activo }: CambiarEstadoModal
   // ── Sincroniza el estado seleccionado con el estado del día cargado.
   useEffect(() => {
     if (open) {
-      setNuevoEstado((estadoHoy?.estado_codigo as EstadoCodigo) || 'A')
+      // Prioridad: estado sugerido (estadoInicial) > estado del día > 'A'
+      setNuevoEstado(estadoInicial ?? (estadoHoy?.estado_codigo as EstadoCodigo) ?? 'A')
     }
-  }, [open, activo?.id, estadoHoy?.estado_codigo])
+  }, [open, activo?.id, estadoHoy?.estado_codigo, estadoInicial])
 
   // ── Pre-marcar Crear OT cuando se selecciona M, T o F ──
   useEffect(() => {
