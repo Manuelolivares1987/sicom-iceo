@@ -63,6 +63,7 @@ export default function ReporteFiabilidadPublicoPage() {
   const [cargando, setCargando] = useState(true)
   const [equipoSel, setEquipoSel] = useState<string | null>(null)
   const [filtroEstado, setFiltroEstado] = useState<string | null>(null)
+  const [msg, setMsg] = useState<string | null>(null)
 
   // Permitir fijar el período por URL (?desde=...&hasta=...) desde el correo
   useEffect(() => {
@@ -141,6 +142,63 @@ export default function ReporteFiabilidadPublicoPage() {
     return { det, estados }
   }, [equipoSel, matriz, equipos])
 
+  // ── Reporte para correo: arma un HTML con formato y lo deja en el portapapeles
+  // (o lo abre en otra pestaña como respaldo) para pegar directo en Outlook. ──
+  function buildEmailHtml(): string {
+    const k = kpi!
+    const cats = data?.categorias ?? []
+    const link = `${window.location.origin}/reporte-fiabilidad?desde=${desde}&hasta=${hasta}`
+    const peores = [...equipos].sort((a, b) => Number(a.disponibilidad_inherente) - Number(b.disponibilidad_inherente)).slice(0, 5)
+    const esc = (s: unknown) => String(s ?? '').replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c] as string))
+    const td = (t: string, r = false) => `<td style="padding:8px;border:1px solid #e5e7eb;text-align:${r ? 'right' : 'left'}">${t}</td>`
+    const th = (t: string, r = false) => `<th style="padding:8px;border:1px solid #e5e7eb;text-align:${r ? 'right' : 'left'};background:#f1f5f9;color:#475569">${t}</th>`
+    const kpiTd = (label: string, val: string) => `<td style="padding:10px;border:1px solid #e5e7eb;text-align:center;background:#f8fafc"><div style="font-size:11px;color:#64748b;text-transform:uppercase">${label}</div><div style="font-size:20px;font-weight:700;color:#0b2a4a">${val}</div></td>`
+    return `<div style="max-width:780px;font-family:Segoe UI,Arial,sans-serif;color:#1f2937">
+  <div style="background:#0b2a4a;color:#fff;padding:18px 22px;border-radius:8px 8px 0 0">
+    <div style="font-size:19px;font-weight:700">Análisis de Fiabilidad de Flota — Pillado</div>
+    <div style="font-size:12px;opacity:.85">MTBF · MTTR · Disponibilidad Inherente · ${esc(desde)} a ${esc(hasta)}</div>
+  </div>
+  <div style="padding:16px 22px;border:1px solid #e5e7eb;border-top:none">
+    <table style="width:100%;border-collapse:separate;border-spacing:5px"><tr>
+      ${kpiTd('Equipos', String(k.equipos))}${kpiTd('Disp. física', fmtPct(k.dispFis))}${kpiTd('Disp. inherente', fmtPct(k.dispInh))}${kpiTd('MTBF', fmtNum(k.mtbf) + ' d')}${kpiTd('MTTR', fmtNum(k.mttr) + ' d')}
+    </tr></table>
+    <div style="text-align:center;margin:16px 0 6px">
+      <a href="${link}" style="display:inline-block;background:#16a34a;color:#fff;text-decoration:none;font-weight:700;font-size:14px;padding:12px 24px;border-radius:8px">▶ Ver reporte interactivo — click en cada patente para su historial</a>
+    </div>
+    <h3 style="color:#0b2a4a;font-size:14px;margin:16px 0 6px">KPIs por categoría</h3>
+    <table style="width:100%;border-collapse:collapse;font-size:13px"><tr>${th('Categoría')}${th('Equipos', true)}${th('Disp. física', true)}${th('N° fallas', true)}${th('MTBF', true)}${th('MTTR', true)}</tr>
+      ${cats.map((c) => `<tr>${td(esc(c.categoria ?? 'Sin categoría'))}${td(String(c.total_equipos), true)}${td(fmtPct(c.disponibilidad_fisica), true)}${td(String(c.eventos_falla_total), true)}${td(Number(c.mtbf_agregado).toFixed(1), true)}${td(Number(c.mttr_agregado).toFixed(1), true)}</tr>`).join('')}
+    </table>
+    <h3 style="color:#0b2a4a;font-size:14px;margin:16px 0 6px">Stock de combustible</h3>
+    <table style="width:100%;border-collapse:collapse;font-size:13px"><tr>${th('Estanque')}${th('Capacidad', true)}${th('Stock', true)}${th('% lleno', true)}</tr>
+      ${combustible.map((e) => { const cap = Number(e.capacidad_lt || 0), st = Number(e.stock_actual || 0); return `<tr>${td(esc(e.estanque_codigo))}${td(lt(cap) + ' L', true)}${td(lt(st) + ' L', true)}${td((cap > 0 ? Math.round(st / cap * 100) : 0) + '%', true)}</tr>` }).join('')}
+      <tr style="background:#0b2a4a;color:#fff;font-weight:700">${td('CONSOLIDADO')}${td(lt(combTot.cap) + ' L', true)}${td(lt(combTot.st) + ' L', true)}${td((combTot.cap > 0 ? Math.round(combTot.st / combTot.cap * 100) : 0) + '%', true)}</tr>
+    </table>
+    <h3 style="color:#0b2a4a;font-size:14px;margin:16px 0 6px">Menor disponibilidad inherente</h3>
+    <table style="width:100%;border-collapse:collapse;font-size:13px"><tr>${th('Patente')}${th('Equipo')}${th('Días fuera', true)}${th('Disp. inherente', true)}</tr>
+      ${peores.map((e) => `<tr>${td('<b>' + esc(e.patente) + '</b>')}${td(esc(e.equipamiento))}${td(String(e.dias_down), true)}${td(fmtPct(e.disponibilidad_inherente), true)}</tr>`).join('')}
+    </table>
+    <p style="font-size:11px;color:#94a3b8;margin-top:12px">El detalle por patente y el historial diario están en el reporte interactivo (botón verde). Disp. inherente = MTBF ÷ (MTBF + MTTR).</p>
+  </div>
+</div>`
+  }
+
+  async function copiarParaCorreo() {
+    setMsg(null)
+    const html = buildEmailHtml()
+    try {
+      await navigator.clipboard.write([new ClipboardItem({
+        'text/html': new Blob([html], { type: 'text/html' }),
+        'text/plain': new Blob([`Reporte de Fiabilidad de Flota (${desde} a ${hasta}) — ${window.location.origin}/reporte-fiabilidad?desde=${desde}&hasta=${hasta}`], { type: 'text/plain' }),
+      })])
+      setMsg('Copiado ✓ — ahora pega en Outlook (Ctrl+V)')
+    } catch {
+      const w = window.open('', '_blank')
+      if (w) { w.document.write(html); w.document.close() }
+      setMsg('Se abrió en otra pestaña: Ctrl+A → Ctrl+C → pega en Outlook')
+    }
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 py-8">
       <div className="mx-auto max-w-5xl px-4">
@@ -161,8 +219,17 @@ export default function ReporteFiabilidadPublicoPage() {
               <label className="block text-[10px] uppercase text-gray-400">Hasta</label>
               <input type="date" className="h-9 rounded border border-gray-300 px-2 text-sm" value={hasta} onChange={(e) => setHasta(e.target.value)} />
             </div>
+            <button
+              onClick={copiarParaCorreo}
+              disabled={!kpi}
+              className="h-9 rounded-lg bg-[#0b2a4a] px-4 text-sm font-semibold text-white hover:bg-[#0e3458] disabled:opacity-50"
+              title="Copia el reporte con formato para pegarlo en Outlook"
+            >
+              📋 Copiar para correo
+            </button>
           </div>
         </div>
+        {msg && <div className="mb-3 rounded-lg bg-green-50 px-3 py-2 text-sm text-green-800">{msg}</div>}
 
         {error && <div className="rounded-lg bg-red-50 p-4 text-sm text-red-700">No se pudo cargar: {error}</div>}
         {cargando && <div className="py-20 text-center text-gray-400">Cargando…</div>}
