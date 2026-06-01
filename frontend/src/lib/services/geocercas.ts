@@ -109,3 +109,18 @@ export async function cargarContratosActivos(): Promise<ContratoOption[]> {
   if (error) throw error
   return (data ?? []) as ContratoOption[]
 }
+
+// Crea un contrato mínimo al vuelo (código + cliente) y devuelve la opción
+// lista para seleccionar. Si el código ya existe, devuelve ese contrato.
+export async function crearContratoRapido(input: {
+  codigo: string
+  cliente?: string
+}): Promise<ContratoOption & { ya_existia: boolean }> {
+  const { data, error } = await supabase.rpc('rpc_crear_contrato_rapido', {
+    p_codigo: input.codigo,
+    p_cliente: input.cliente ?? null,
+  })
+  if (error) throw error
+  const r = data as { id: string; codigo: string; cliente: string | null; ya_existia: boolean }
+  return { id: r.id, codigo: r.codigo, cliente: r.cliente ?? '', ya_existia: r.ya_existia }
+}

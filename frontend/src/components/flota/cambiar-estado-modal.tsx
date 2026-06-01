@@ -25,8 +25,8 @@ import {
 } from '@/lib/services/flota'
 import { supabase } from '@/lib/supabase'
 import { cambiarContratoActivo } from '@/lib/services/contrato-activo'
-import { cargarContratosActivos, type ContratoOption } from '@/lib/services/geocercas'
-import { Building2 } from 'lucide-react'
+import { cargarContratosActivos, crearContratoRapido, type ContratoOption } from '@/lib/services/geocercas'
+import { Building2, Plus } from 'lucide-react'
 
 type EstadoCodigo = 'A' | 'D' | 'H' | 'R' | 'M' | 'T' | 'F' | 'V' | 'U' | 'L'
 type TipoOT = 'preventivo' | 'correctivo' | 'inspeccion' | 'lubricacion'
@@ -124,6 +124,11 @@ export function CambiarEstadoModal({ open, onClose, activo, estadoInicial, fecha
   const [razonContrato, setRazonContrato] = useState('')
   // ¿Mantiene el contrato actual o cambia a otro? (pregunta explícita)
   const [cambiarContrato, setCambiarContrato] = useState(false)
+  // Crear contrato nuevo al vuelo
+  const [creandoContrato, setCreandoContrato] = useState(false)
+  const [nuevoContratoCodigo, setNuevoContratoCodigo] = useState('')
+  const [nuevoContratoCliente, setNuevoContratoCliente] = useState('')
+  const [guardandoContrato, setGuardandoContrato] = useState(false)
   useEffect(() => {
     if (!open) return
     cargarContratosActivos().then(setContratos).catch(() => { /* skip */ })
@@ -134,8 +139,38 @@ export function CambiarEstadoModal({ open, onClose, activo, estadoInicial, fecha
       setNuevoContratoId(activo.contrato_id ?? '')
       setRazonContrato('')
       setCambiarContrato(false)
+      setCreandoContrato(false)
+      setNuevoContratoCodigo('')
+      setNuevoContratoCliente('')
     }
   }, [open, activo?.id, activo?.contrato_id])
+
+  const handleCrearContrato = async () => {
+    if (!nuevoContratoCodigo.trim()) {
+      setErrorMsg('Indica el código del contrato nuevo.')
+      return
+    }
+    setGuardandoContrato(true)
+    setErrorMsg(null)
+    try {
+      const nuevo = await crearContratoRapido({
+        codigo: nuevoContratoCodigo.trim(),
+        cliente: nuevoContratoCliente.trim() || undefined,
+      })
+      // Agregar a la lista (si no estaba) y seleccionarlo
+      setContratos((prev) =>
+        prev.some((c) => c.id === nuevo.id) ? prev : [...prev, nuevo].sort((a, b) => a.codigo.localeCompare(b.codigo)),
+      )
+      setNuevoContratoId(nuevo.id)
+      setCreandoContrato(false)
+      setNuevoContratoCodigo('')
+      setNuevoContratoCliente('')
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'No se pudo crear el contrato')
+    } finally {
+      setGuardandoContrato(false)
+    }
+  }
 
   // Etiqueta del contrato actual (último contrato del activo)
   const contratoActual = useMemo(() => {
@@ -426,23 +461,75 @@ export function CambiarEstadoModal({ open, onClose, activo, estadoInicial, fecha
 
           {cambiarContrato && (
             <div className="space-y-2 pl-6">
-              <Select
-                label="Nuevo contrato"
-                value={nuevoContratoId}
-                onChange={(e) => setNuevoContratoId(e.target.value)}
-                helperText={
-                  !nuevoContratoId
-                    ? 'Se QUITARÁ el contrato actual (queda sin contrato).'
-                    : nuevoContratoId !== (activo?.contrato_id ?? '')
-                    ? 'Se CAMBIARÁ al contrato seleccionado.'
-                    : 'Es el mismo contrato actual.'
-                }
-              >
-                <option value="">— Sin contrato —</option>
-                {contratos.map((c) => (
-                  <option key={c.id} value={c.id}>{c.codigo} · {c.cliente}</option>
-                ))}
-              </Select>
+              {!creandoContrato ? (
+                <>
+                  <Select
+                    label="Nuevo contrato"
+                    value={nuevoContratoId}
+                    onChange={(e) => setNuevoContratoId(e.target.value)}
+                    helperText={
+                      !nuevoContratoId
+                        ? 'Se QUITARÁ el contrato actual (queda sin contrato).'
+                        : nuevoContratoId !== (activo?.contrato_id ?? '')
+                        ? 'Se CAMBIARÁ al contrato seleccionado.'
+                        : 'Es el mismo contrato actual.'
+                    }
+                  >
+                    <option value="">— Sin contrato —</option>
+                    {contratos.map((c) => (
+                      <option key={c.id} value={c.id}>{c.codigo} · {c.cliente}</option>
+                    ))}
+                  </Select>
+                  <button
+                    type="button"
+                    onClick={() => setCreandoContrato(true)}
+                    className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:underline"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    ¿El contrato no está en la lista? Crear uno nuevo
+                  </button>
+                </>
+              ) : (
+                <div className="rounded-md border border-blue-200 bg-white p-3 space-y-2">
+                  <div className="text-xs font-semibold text-gray-700">Nuevo contrato</div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <Input
+                      placeholder="Código * (ej. CTR-FAENA-2026)"
+                      value={nuevoContratoCodigo}
+                      onChange={(e) => setNuevoContratoCodigo(e.target.value)}
+                    />
+                    <Input
+                      placeholder="Cliente / faena"
+                      value={nuevoContratoCliente}
+                      onChange={(e) => setNuevoContratoCliente(e.target.value)}
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={handleCrearContrato}
+                      loading={guardandoContrato}
+                      disabled={!nuevoContratoCodigo.trim()}
+                    >
+                      <Plus className="h-4 w-4" /> Crear y seleccionar
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => { setCreandoContrato(false); setNuevoContratoCodigo(''); setNuevoContratoCliente('') }}
+                      disabled={guardandoContrato}
+                    >
+                      Cancelar
+                    </Button>
+                  </div>
+                  <p className="text-[11px] text-gray-400">
+                    Se crea un contrato mínimo (activo). Luego puedes completar fechas, valor y SLA en Contratos.
+                  </p>
+                </div>
+              )}
+
               <Input
                 placeholder="Razón del cambio de contrato (opcional)"
                 value={razonContrato}
