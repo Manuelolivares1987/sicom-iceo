@@ -62,6 +62,7 @@ export default function ReporteFiabilidadPublicoPage() {
   const [error, setError] = useState<string | null>(null)
   const [cargando, setCargando] = useState(true)
   const [equipoSel, setEquipoSel] = useState<string | null>(null)
+  const [filtroEstado, setFiltroEstado] = useState<string | null>(null)
 
   // Permitir fijar el período por URL (?desde=...&hasta=...) desde el correo
   useEffect(() => {
@@ -127,6 +128,11 @@ export default function ReporteFiabilidadPublicoPage() {
     return { ...s, dispFis, util, mtbf, mttr, dispInh }
   }, [data])
 
+  const equiposFiltrados = useMemo(
+    () => filtroEstado ? equipos.filter((e) => estadoActual.get(e.activo_id) === filtroEstado) : equipos,
+    [equipos, filtroEstado, estadoActual],
+  )
+
   const histSel = useMemo(() => {
     if (!equipoSel) return null
     const estados: Record<string, string> = {}
@@ -174,13 +180,17 @@ export default function ReporteFiabilidadPublicoPage() {
             </div>
 
             {/* Distribución por estado */}
-            <Card title={`Distribución por estado${diasUnicos.length ? ` · ${diasUnicos[diasUnicos.length - 1]}` : ''}`}>
+            <Card title={`Distribución por estado${diasUnicos.length ? ` · ${diasUnicos[diasUnicos.length - 1]}` : ''} — click para filtrar`}>
               <div className="grid items-center gap-4 sm:grid-cols-2">
                 <div className="h-56">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
-                      <Pie data={distEstado} cx="50%" cy="50%" innerRadius={48} outerRadius={88} paddingAngle={2} dataKey="value" label={({ value }) => `${value}`}>
-                        {distEstado.map((e) => (<Cell key={e.key} fill={e.color} />))}
+                      <Pie data={distEstado} cx="50%" cy="50%" innerRadius={48} outerRadius={88} paddingAngle={2}
+                        dataKey="value" cursor="pointer" label={({ value }) => `${value}`}
+                        onClick={(d: { key?: string }) => d?.key && setFiltroEstado(filtroEstado === d.key ? null : d.key)}>
+                        {distEstado.map((e) => (
+                          <Cell key={e.key} fill={e.color} opacity={filtroEstado && filtroEstado !== e.key ? 0.3 : 1} />
+                        ))}
                       </Pie>
                       <Tooltip formatter={(v: number, n: string) => [`${v} equipos`, n]} />
                     </PieChart>
@@ -188,13 +198,15 @@ export default function ReporteFiabilidadPublicoPage() {
                 </div>
                 <div className="space-y-1">
                   {distEstado.map((e) => (
-                    <div key={e.key} className="flex items-center justify-between text-sm">
+                    <button key={e.key} onClick={() => setFiltroEstado(filtroEstado === e.key ? null : e.key)}
+                      className="flex w-full items-center justify-between rounded px-1 text-sm hover:bg-gray-50"
+                      style={{ opacity: filtroEstado && filtroEstado !== e.key ? 0.4 : 1 }}>
                       <span className="flex items-center gap-2">
                         <span className="inline-block h-3 w-3 rounded-sm" style={{ background: e.color }} />
                         {e.name} <span className="text-gray-400">({e.key})</span>
                       </span>
                       <b>{e.value}</b>
-                    </div>
+                    </button>
                   ))}
                 </div>
               </div>
@@ -202,6 +214,14 @@ export default function ReporteFiabilidadPublicoPage() {
 
             {/* Detalle por equipo (clickable) */}
             <Card title="Detalle por equipo — click en la patente para ver su historial">
+              {filtroEstado && (
+                <div className="mb-2 flex items-center gap-2 text-xs">
+                  <span className="rounded bg-blue-50 px-2 py-1 text-blue-700">
+                    Filtro: {LABEL[filtroEstado] ?? filtroEstado} ({equiposFiltrados.length})
+                  </span>
+                  <button onClick={() => setFiltroEstado(null)} className="text-blue-600 hover:underline">Limpiar filtro</button>
+                </div>
+              )}
               <div className="overflow-x-auto">
                 <table className="w-full text-xs whitespace-nowrap">
                   <thead>
@@ -220,7 +240,7 @@ export default function ReporteFiabilidadPublicoPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {equipos.map((d) => (
+                    {equiposFiltrados.map((d) => (
                       <tr key={d.activo_id} className="border-b hover:bg-blue-50">
                         <td className="px-2 py-1.5">
                           <button onClick={() => setEquipoSel(d.activo_id)} className="font-mono font-semibold text-blue-700 hover:underline">
@@ -239,8 +259,8 @@ export default function ReporteFiabilidadPublicoPage() {
                         <td className={`px-2 py-1.5 text-right ${colorDisp(Number(d.disponibilidad_fisica))}`}>{fmtPct(d.disponibilidad_fisica, 0)}</td>
                       </tr>
                     ))}
-                    {equipos.length === 0 && (
-                      <tr><td colSpan={11} className="py-6 text-center text-gray-400">Sin datos en el período.</td></tr>
+                    {equiposFiltrados.length === 0 && (
+                      <tr><td colSpan={11} className="py-6 text-center text-gray-400">Sin equipos en ese estado.</td></tr>
                     )}
                   </tbody>
                 </table>
