@@ -10,6 +10,7 @@ import {
   BarChart3,
   Shield,
   RefreshCw,
+  CalendarCheck,
 } from 'lucide-react'
 import {
   Tooltip,
@@ -277,6 +278,10 @@ export default function FlotaPage() {
           <a href="/dashboard/flota/dashboard"
              className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 inline-flex items-center gap-1">
             <Truck className="h-4 w-4" /> Dashboard unificado
+          </a>
+          <a href="/dashboard/flota/cierre-diario"
+             className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 inline-flex items-center gap-1">
+            <CalendarCheck className="h-4 w-4" /> Cierre diario
           </a>
           <select
             className="rounded-md border border-gray-300 px-3 py-2 text-sm"
