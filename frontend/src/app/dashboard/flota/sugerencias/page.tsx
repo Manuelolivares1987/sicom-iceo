@@ -94,7 +94,20 @@ export default function SugerenciasEstadoPage() {
       const est = elegido[s.activo_id] ?? s.estado_sugerido!
       try { await confirmar.mutateAsync({ activoId: s.activo_id, fecha, estado: est }) } catch { /* sigue */ }
     }
-    toast.success(`${cambios.length} estados confirmados`)
+    toast.success(`${cambios.length} cambios confirmados`)
+    refetch()
+  }
+  // Cierra TODA la flota para la fecha: escribe los 55 (los que no cambian
+  // quedan con su mismo estado del día anterior). Así el informe muestra la
+  // flota completa, no solo los que cambiaron.
+  const confirmarDiaCompleto = async () => {
+    for (const s of sugerencias) {
+      const est = elegido[s.activo_id] ?? s.estado_sugerido ?? s.estado_actual
+      if (!est) continue
+      try { await confirmar.mutateAsync({ activoId: s.activo_id, fecha, estado: est }) } catch { /* sigue */ }
+    }
+    toast.success(`Día ${fecha} cerrado: ${sugerencias.length} equipos`)
+    refetch()
   }
 
   return (
@@ -125,15 +138,19 @@ export default function SugerenciasEstadoPage() {
       <Card>
         <CardHeader className="flex flex-col gap-2 pb-2 sm:flex-row sm:items-center sm:justify-between">
           <CardTitle className="text-base text-gray-700">
-            {cambios.length} cambios sugeridos · {sugerencias.length} equipos con GPS
+            {cambios.length} cambios sugeridos · {sugerencias.length} equipos de flota
           </CardTitle>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <label className="flex items-center gap-1 text-xs text-gray-600">
               <input type="checkbox" checked={soloCambios} onChange={(e) => setSoloCambios(e.target.checked)} />
               Solo cambios
             </label>
-            <Button size="sm" onClick={confirmarTodas} disabled={confirmar.isPending || cambios.length === 0}>
-              <CheckCheck className="mr-1 h-4 w-4" /> Confirmar todas
+            <Button size="sm" variant="outline" onClick={confirmarTodas} disabled={confirmar.isPending || cambios.length === 0}>
+              <CheckCheck className="mr-1 h-4 w-4" /> Confirmar cambios ({cambios.length})
+            </Button>
+            <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700"
+              onClick={confirmarDiaCompleto} disabled={confirmar.isPending || sugerencias.length === 0}>
+              <CheckCheck className="mr-1 h-4 w-4" /> Cerrar día · toda la flota ({sugerencias.length})
             </Button>
           </div>
         </CardHeader>
@@ -142,7 +159,7 @@ export default function SugerenciasEstadoPage() {
             <div className="flex justify-center py-10"><Spinner className="h-6 w-6" /></div>
           ) : filtradas.length === 0 ? (
             <p className="py-8 text-center text-sm text-gray-400">
-              {soloCambios ? 'No hay cambios sugeridos: todos los equipos coinciden con su ubicación.' : 'Sin equipos con GPS.'}
+              {soloCambios ? 'No hay cambios sugeridos: todos los equipos coinciden con su ubicación.' : 'Sin equipos de flota.'}
             </p>
           ) : (
             <table className="w-full text-xs">
