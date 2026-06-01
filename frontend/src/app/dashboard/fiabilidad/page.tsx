@@ -225,12 +225,15 @@ export default function FiabilidadPage() {
         .slice(0, 5),
     [oeeRanking],
   )
-  const bottom5OEE = useMemo(
+  // Bottom 5 por Disponibilidad Inherente (peor confiabilidad): toda la flota
+  // con datos, los 5 de menor disponibilidad inherente.
+  const bottom5DispInh = useMemo(
     () =>
-      [...oeeRanking]
-        .sort((a, b) => (a.oee_total ?? 0) - (b.oee_total ?? 0))
+      [...detalles]
+        .filter((d) => d.dias_observados > 0)
+        .sort((a, b) => a.disponibilidad_inherente - b.disponibilidad_inherente)
         .slice(0, 5),
-    [oeeRanking],
+    [detalles],
   )
 
   // ─── Distribución diaria de estados ──
@@ -563,13 +566,13 @@ export default function FiabilidadPage() {
               labelUnit="%"
             />
             <RankingBarCard
-              title="Bottom 5 OEE"
+              title="Bottom 5 Disponibilidad Inherente"
               icon={<TrendingDown className="h-4 w-4 text-amber-600" />}
               borderClass="border-amber-200"
-              data={bottom5OEE.map((d) => ({
+              data={bottom5DispInh.map((d) => ({
                 patente: d.patente,
-                valor: Math.round((Number(d.oee_total) ?? 0) * 100),
-                color: colorOEEBar(Number(d.oee_total) ?? 0),
+                valor: Math.round(d.disponibilidad_inherente * 100),
+                color: colorOEEBar(d.disponibilidad_inherente),
               }))}
               labelUnit="%"
             />
