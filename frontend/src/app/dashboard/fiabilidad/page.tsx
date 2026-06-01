@@ -160,11 +160,12 @@ export default function FiabilidadPage() {
     return sumTotal > 0 ? sumAL / sumTotal : 0
   }, [detalles])
 
-  const oeeGlobal = useMemo(() => {
-    const conOEE = detalles.filter((d) => d.oee_total != null)
-    if (conOEE.length === 0) return null
-    return conOEE.reduce((s, d) => s + Number(d.oee_total), 0) / conOEE.length
-  }, [detalles])
+  // Disponibilidad Inherente de la flota = MTBF / (MTBF + MTTR) agregado.
+  const dispInhFlota = useMemo(() => {
+    if (!kpiGlobal) return 0
+    const denom = kpiGlobal.mtbf + kpiGlobal.mttr
+    return denom > 0 ? kpiGlobal.mtbf / denom : 1
+  }, [kpiGlobal])
 
 
   // ─── Días con datos + estado actual por activo (último día) ──
@@ -438,11 +439,11 @@ export default function FiabilidadPage() {
               description="(Días A + C + L) ÷ días totales · Meta ≥ 70%"
             />
             <GaugeCard
-              title="OEE Flota"
-              value={(oeeGlobal ?? 0) * 100}
-              target={85}
+              title="Disponibilidad Inherente"
+              value={dispInhFlota * 100}
+              target={90}
               unit="%"
-              description="Disponibilidad × Rendimiento × Calidad · Meta ≥ 85%"
+              description="MTBF ÷ (MTBF + MTTR) · confiabilidad de la flota · Meta ≥ 90%"
             />
           </div>
 
