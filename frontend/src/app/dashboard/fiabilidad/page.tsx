@@ -24,6 +24,7 @@ import {
   type ActivoFiabilidadDetalle,
 } from '@/lib/services/fiabilidad'
 import { todayISO } from '@/lib/utils'
+import { copiarReporteFiabilidad } from '@/lib/reporte-fiabilidad-email'
 
 // ─── Paleta ─────────────────────────────────────────────
 // ─── Estados diarios de flota (Confiabilidad) ───────────
@@ -97,6 +98,13 @@ export default function FiabilidadPage() {
   const [filtroCat, setFiltroCat] = useState<CategoriaUso | 'todas'>('todas')
   const [equipoSel, setEquipoSel] = useState<string | null>(null)
   const [filtroEstado, setFiltroEstado] = useState<string | null>(null)
+  const [copiaMsg, setCopiaMsg] = useState<string | null>(null)
+
+  const copiarParaCorreo = async () => {
+    setCopiaMsg(null)
+    try { setCopiaMsg(await copiarReporteFiabilidad(fechaInicio, fechaFin)) }
+    catch (e) { setCopiaMsg((e as Error).message) }
+  }
 
   const { data: porCategoria = [], isLoading: loadingCat } =
     useFiabilidadFlota(fechaInicio, fechaFin)
@@ -328,8 +336,20 @@ export default function FiabilidadPage() {
                 onChange={(e) => setFechaFin(e.target.value)}
               />
             </div>
+            <div className="flex items-end">
+              <button
+                onClick={copiarParaCorreo}
+                className="h-9 rounded-lg bg-white/95 px-3 text-sm font-semibold text-indigo-700 hover:bg-white"
+                title="Copia el reporte con formato para pegarlo en Outlook"
+              >
+                📋 Copiar para correo
+              </button>
+            </div>
           </div>
         </div>
+        {copiaMsg && (
+          <div className="mt-3 rounded-lg bg-white/15 px-3 py-2 text-sm text-white">{copiaMsg}</div>
+        )}
       </div>
 
       {isLoading && (
