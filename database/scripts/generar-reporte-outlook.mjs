@@ -88,6 +88,12 @@ async function main() {
     ok: ['OK', '#16a34a', '#f0fdf4'],
   }
   const fdate = (d) => d ? String(d).slice(0, 10) : '—'
+  const combTot = comb.reduce((a, e) => ({
+    cap: a.cap + Number(e.capacidad_lt || 0),
+    st: a.st + Number(e.stock_actual || 0),
+    min: a.min + Number(e.stock_minimo || 0),
+  }), { cap: 0, st: 0, min: 0 })
+  const lt = (v) => Math.round(Number(v || 0)).toLocaleString('es-CL')
 
   const estadoBadge = (c, n) => `
     <span style="display:inline-block;margin:2px 4px 2px 0;padding:3px 8px;border-radius:6px;font-size:12px;
@@ -234,6 +240,14 @@ async function main() {
         </tr>`
       }).join('')}
       </tbody>
+      <tfoot><tr style="background:#0b2a4a;color:#fff;font-weight:700">
+        <td style="padding:9px;border:1px solid #0b2a4a">CONSOLIDADO (${comb.length} estanques)</td>
+        <td style="padding:9px;border:1px solid #0b2a4a;text-align:right">${lt(combTot.cap)} L</td>
+        <td style="padding:9px;border:1px solid #0b2a4a;text-align:right">${lt(combTot.st)} L</td>
+        <td style="padding:9px;border:1px solid #0b2a4a;text-align:right">${combTot.cap > 0 ? Math.round(combTot.st / combTot.cap * 100) : 0}%</td>
+        <td style="padding:9px;border:1px solid #0b2a4a;text-align:right">${lt(combTot.min)} L</td>
+        <td style="padding:9px;border:1px solid #0b2a4a;text-align:center" colspan="3">Stock total disponible en sistema</td>
+      </tr></tfoot>
     </table>
     <div style="font-size:11px;color:#94a3b8;margin-top:8px">
       Cobertura = días estimados de stock al ritmo de consumo reciente. "Agotamiento est." proyecta cuándo se llega al stock mínimo.
