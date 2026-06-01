@@ -53,6 +53,12 @@ async function main() {
   const rep = (await client.query(`SELECT fn_reporte_flota_publico() j`)).rows[0].j
   const mant = (await client.query(`SELECT to_jsonb(m) j FROM fn_flota_en_mantenimiento() m`)).rows.map((r) => r.j)
 
+  const comb = (await client.query(
+    `SELECT estanque_codigo, estanque_nombre, capacidad_lt, stock_actual, stock_minimo,
+            dias_cobertura, fecha_agotamiento_estimada, severidad
+       FROM v_combustible_proyeccion_stock ORDER BY severidad, estanque_codigo`,
+  )).rows
+
   await client.end()
 
   // ── Agregados del mes ──
@@ -75,6 +81,13 @@ async function main() {
       <div style="font-size:22px;font-weight:700;color:#0b2a4a;margin-top:2px">${val}</div>
       ${sub ? `<div style="font-size:10px;color:#94a3b8">${sub}</div>` : ''}
     </td>`
+
+  const SEV = {
+    agotado: ['Agotado', '#7f1d1d', '#fef2f2'], critico: ['Crítico', '#dc2626', '#fef2f2'],
+    urgente: ['Urgente', '#ea580c', '#fff7ed'], atencion: ['Atención', '#d97706', '#fffbeb'],
+    ok: ['OK', '#16a34a', '#f0fdf4'],
+  }
+  const fdate = (d) => d ? String(d).slice(0, 10) : '—'
 
   const estadoBadge = (c, n) => `
     <span style="display:inline-block;margin:2px 4px 2px 0;padding:3px 8px;border-radius:6px;font-size:12px;
@@ -184,6 +197,47 @@ async function main() {
       </tr>`).join('') : `<tr><td colspan="4" style="padding:10px;border:1px solid #e5e7eb;color:#94a3b8;text-align:center">Sin equipos en mantención</td></tr>`}
       </tbody>
     </table>
+  </div>
+
+  <!-- ── Stock de combustible ── -->
+  <div style="padding:6px 26px 24px">
+    <div style="font-size:16px;font-weight:700;color:#0b2a4a;border-bottom:2px solid #e5e7eb;padding-bottom:6px">
+      3 · Stock de combustible
+    </div>
+    <table style="width:100%;border-collapse:collapse;margin-top:12px;font-size:13px">
+      <thead><tr style="background:#f1f5f9;text-align:left;color:#475569">
+        <th style="padding:8px;border:1px solid #e5e7eb">Estanque</th>
+        <th style="padding:8px;border:1px solid #e5e7eb;text-align:right">Capacidad</th>
+        <th style="padding:8px;border:1px solid #e5e7eb;text-align:right">Stock actual</th>
+        <th style="padding:8px;border:1px solid #e5e7eb;text-align:right">% lleno</th>
+        <th style="padding:8px;border:1px solid #e5e7eb;text-align:right">Mínimo</th>
+        <th style="padding:8px;border:1px solid #e5e7eb;text-align:right">Cobertura</th>
+        <th style="padding:8px;border:1px solid #e5e7eb">Agotamiento est.</th>
+        <th style="padding:8px;border:1px solid #e5e7eb;text-align:center">Estado</th>
+      </tr></thead><tbody>
+      ${comb.map((e) => {
+        const cap = Number(e.capacidad_lt || 0), st = Number(e.stock_actual || 0)
+        const llen = cap > 0 ? Math.round(st / cap * 100) : 0
+        const sev = SEV[e.severidad] || SEV.ok
+        const fmt = (v) => Math.round(Number(v || 0)).toLocaleString('es-CL')
+        return `<tr style="background:${sev[2]}">
+          <td style="padding:8px;border:1px solid #e5e7eb"><b>${esc(e.estanque_codigo)}</b><div style="font-size:10px;color:#94a3b8">${esc(e.estanque_nombre)}</div></td>
+          <td style="padding:8px;border:1px solid #e5e7eb;text-align:right">${fmt(cap)} L</td>
+          <td style="padding:8px;border:1px solid #e5e7eb;text-align:right"><b>${fmt(st)} L</b></td>
+          <td style="padding:8px;border:1px solid #e5e7eb;text-align:right">${llen}%</td>
+          <td style="padding:8px;border:1px solid #e5e7eb;text-align:right;color:#94a3b8">${fmt(e.stock_minimo)} L</td>
+          <td style="padding:8px;border:1px solid #e5e7eb;text-align:right">${e.dias_cobertura != null ? Number(e.dias_cobertura).toFixed(1) + ' d' : '—'}</td>
+          <td style="padding:8px;border:1px solid #e5e7eb">${fdate(e.fecha_agotamiento_estimada)}</td>
+          <td style="padding:8px;border:1px solid #e5e7eb;text-align:center">
+            <span style="display:inline-block;padding:3px 8px;border-radius:6px;font-size:11px;font-weight:600;color:#fff;background:${sev[1]}">${sev[0]}</span>
+          </td>
+        </tr>`
+      }).join('')}
+      </tbody>
+    </table>
+    <div style="font-size:11px;color:#94a3b8;margin-top:8px">
+      Cobertura = días estimados de stock al ritmo de consumo reciente. "Agotamiento est." proyecta cuándo se llega al stock mínimo.
+    </div>
   </div>
 
   <div style="background:#0b2a4a;color:#cbd5e1;padding:14px 26px;font-size:11px">
