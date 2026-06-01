@@ -38,3 +38,4 @@ frontend/public/workbox-*.js
 frontend/public/workbox-*.js.map
 frontend/public/fallback-*.js
 frontend/public/swe-worker-*.js
+reportes/
