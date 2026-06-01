@@ -29,7 +29,21 @@ type Equipo = {
   disponibilidad_inherente: number; disponibilidad_fisica: number
 }
 type Celda = { activo_id: string; fecha: string; estado: string }
-type Reporte = { desde: string; hasta: string; categorias: Categoria[]; equipos: Equipo[]; matriz: Celda[] }
+type Estanque = {
+  estanque_codigo: string; estanque_nombre: string; capacidad_lt: number
+  stock_actual: number; stock_minimo: number; dias_cobertura: number | null
+  fecha_agotamiento_estimada: string | null; severidad: string
+}
+type Reporte = {
+  desde: string; hasta: string; categorias: Categoria[]; equipos: Equipo[]
+  matriz: Celda[]; combustible: Estanque[]
+}
+
+const SEV: Record<string, [string, string]> = {
+  agotado: ['Agotado', '#7f1d1d'], critico: ['Crítico', '#dc2626'],
+  urgente: ['Urgente', '#ea580c'], atencion: ['Atención', '#d97706'], ok: ['OK', '#16a34a'],
+}
+const lt = (v: number | null | undefined) => Math.round(Number(v || 0)).toLocaleString('es-CL')
 
 const fmtPct = (v: number | null | undefined, d = 1) => v == null ? '—' : `${(Number(v) * 100).toFixed(d)}%`
 const fmtNum = (v: number | null | undefined, d = 1) => v == null ? '—' : Number(v).toFixed(d)
@@ -71,6 +85,11 @@ export default function ReporteFiabilidadPublicoPage() {
 
   const equipos = data?.equipos ?? []
   const matriz = data?.matriz ?? []
+  const combustible = data?.combustible ?? []
+  const combTot = combustible.reduce((a, e) => ({
+    cap: a.cap + Number(e.capacidad_lt || 0), st: a.st + Number(e.stock_actual || 0),
+    min: a.min + Number(e.stock_minimo || 0),
+  }), { cap: 0, st: 0, min: 0 })
 
   const diasUnicos = useMemo(
     () => Array.from(new Set(matriz.map((c) => c.fecha.slice(0, 10)))).sort(),
@@ -227,6 +246,59 @@ export default function ReporteFiabilidadPublicoPage() {
                 </table>
               </div>
             </Card>
+
+            {/* Stock de combustible */}
+            {combustible.length > 0 && (
+              <Card title="Stock de combustible">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b bg-gray-50 text-left uppercase text-gray-500">
+                        <th className="px-2 py-2">Estanque</th>
+                        <th className="px-2 py-2 text-right">Capacidad</th>
+                        <th className="px-2 py-2 text-right">Stock</th>
+                        <th className="px-2 py-2 text-right">% lleno</th>
+                        <th className="px-2 py-2 text-right">Mínimo</th>
+                        <th className="px-2 py-2 text-right">Cobertura</th>
+                        <th className="px-2 py-2">Agotamiento est.</th>
+                        <th className="px-2 py-2 text-center">Estado</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {combustible.map((e) => {
+                        const cap = Number(e.capacidad_lt || 0), st = Number(e.stock_actual || 0)
+                        const llen = cap > 0 ? Math.round(st / cap * 100) : 0
+                        const sev = SEV[e.severidad] ?? SEV.ok
+                        return (
+                          <tr key={e.estanque_codigo} className="border-b">
+                            <td className="px-2 py-1.5"><b>{e.estanque_codigo}</b><div className="text-[10px] text-gray-400">{e.estanque_nombre}</div></td>
+                            <td className="px-2 py-1.5 text-right">{lt(cap)} L</td>
+                            <td className="px-2 py-1.5 text-right font-semibold">{lt(st)} L</td>
+                            <td className="px-2 py-1.5 text-right">{llen}%</td>
+                            <td className="px-2 py-1.5 text-right text-gray-400">{lt(e.stock_minimo)} L</td>
+                            <td className="px-2 py-1.5 text-right">{e.dias_cobertura != null ? `${Number(e.dias_cobertura).toFixed(1)} d` : '—'}</td>
+                            <td className="px-2 py-1.5">{e.fecha_agotamiento_estimada ? e.fecha_agotamiento_estimada.slice(0, 10) : '—'}</td>
+                            <td className="px-2 py-1.5 text-center">
+                              <span className="inline-block rounded px-2 py-0.5 text-[10px] font-semibold text-white" style={{ background: sev[1] }}>{sev[0]}</span>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                    <tfoot>
+                      <tr className="font-bold text-white" style={{ background: '#0b2a4a' }}>
+                        <td className="px-2 py-2">CONSOLIDADO ({combustible.length} estanques)</td>
+                        <td className="px-2 py-2 text-right">{lt(combTot.cap)} L</td>
+                        <td className="px-2 py-2 text-right">{lt(combTot.st)} L</td>
+                        <td className="px-2 py-2 text-right">{combTot.cap > 0 ? Math.round(combTot.st / combTot.cap * 100) : 0}%</td>
+                        <td className="px-2 py-2 text-right">{lt(combTot.min)} L</td>
+                        <td className="px-2 py-2 text-center" colSpan={3}>Stock total disponible</td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </Card>
+            )}
 
             <p className="pt-2 text-center text-xs text-gray-400">Pillado · SICOM-ICEO · Disp. Inherente = MTBF ÷ (MTBF + MTTR)</p>
           </div>
