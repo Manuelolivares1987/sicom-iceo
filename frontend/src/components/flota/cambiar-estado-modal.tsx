@@ -240,7 +240,14 @@ export function CambiarEstadoModal({ open, onClose, activo, estadoInicial, fecha
       setErrorMsg('Debe ingresar una descripción para la OT')
       return
     }
-    if (bloqueadoPorVerificacion) {
+    // ¿El estado realmente cambia? Si solo se cambia el contrato (mismo estado),
+    // NO reaplicamos el estado → no se dispara el gate de checklist/verificación.
+    const estadoExistente = (estadoHoy?.estado_codigo as string) || null
+    const debeActualizarEstado =
+      nuevoEstado !== estadoExistente || (crearOT && requiereOT) || estadoExistente === null
+
+    // El gate de verificación (Disponible) solo aplica si vamos a (re)marcar el estado.
+    if (debeActualizarEstado && bloqueadoPorVerificacion) {
       setErrorMsg(
         'Para marcar "Disponible" se requiere una verificación ready-to-rent aprobada y vigente. ' +
         'Usa el botón "Iniciar verificación" arriba.',
@@ -249,19 +256,22 @@ export function CambiarEstadoModal({ open, onClose, activo, estadoInicial, fecha
     }
 
     try {
-      const result = await mutation.mutateAsync({
-        activo_id: activo.id,
-        fecha: fechaCambio,
-        nuevo_estado: nuevoEstado,
-        motivo: motivo.trim(),
-        crear_ot: crearOT && requiereOT,
-        ot_tipo: requiereOT && crearOT ? otTipo : undefined,
-        ot_prioridad: requiereOT && crearOT ? otPrioridad : undefined,
-        ot_responsable_id: otResponsableId || undefined,
-        ot_descripcion: otDescripcion.trim() || undefined,
-      })
+      let result: Awaited<ReturnType<typeof mutation.mutateAsync>> | null = null
+      if (debeActualizarEstado) {
+        result = await mutation.mutateAsync({
+          activo_id: activo.id,
+          fecha: fechaCambio,
+          nuevo_estado: nuevoEstado,
+          motivo: motivo.trim(),
+          crear_ot: crearOT && requiereOT,
+          ot_tipo: requiereOT && crearOT ? otTipo : undefined,
+          ot_prioridad: requiereOT && crearOT ? otPrioridad : undefined,
+          ot_responsable_id: otResponsableId || undefined,
+          ot_descripcion: otDescripcion.trim() || undefined,
+        })
+      }
 
-      // Contrato: solo se aplica si el usuario eligió "Cambiar a otro contrato"
+      // Contrato: independiente del estado. Se aplica si el usuario eligió cambiarlo.
       const contratoOriginal = activo.contrato_id ?? null
       const contratoNuevo    = cambiarContrato ? (nuevoContratoId || null) : contratoOriginal
       if (contratoNuevo !== contratoOriginal) {
@@ -269,17 +279,17 @@ export function CambiarEstadoModal({ open, onClose, activo, estadoInicial, fecha
           await cambiarContratoActivo({
             activoId: activo.id,
             nuevoContratoId: contratoNuevo,
-            razon: razonContrato.trim() || `Cambio de contrato junto a cambio de estado a ${nuevoEstado}. Motivo: ${motivo.trim()}`,
+            razon: razonContrato.trim() || `Cambio de contrato (estado ${nuevoEstado}). Motivo: ${motivo.trim()}`,
           })
         } catch (err) {
           const msg = err instanceof Error ? err.message : 'Error al cambiar contrato'
-          setErrorMsg(`Estado aplicado, pero el contrato no se pudo cambiar: ${msg}`)
+          setErrorMsg(`No se pudo cambiar el contrato: ${msg}`)
           return
         }
       }
 
-      if (result?.success) {
-        // Si se pidió crear OT pero falló, avisamos sin cerrar el modal
+      // Si se aplicó estado y se pidió crear OT pero falló, avisar sin cerrar
+      if (debeActualizarEstado && result?.success) {
         const pedidoOT = crearOT && requiereOT
         const r = result as unknown as {
           success: boolean
@@ -293,8 +303,8 @@ export function CambiarEstadoModal({ open, onClose, activo, estadoInicial, fecha
           )
           return
         }
-        onClose()
       }
+      onClose()
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Error al actualizar estado'
       setErrorMsg(message)
