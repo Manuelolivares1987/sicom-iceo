@@ -6,6 +6,7 @@ export interface SugerenciaEstado {
   equipamiento: string | null
   estado_actual: string | null
   estado_sugerido: string | null
+  estado_guardado: string | null
   zona: string | null
   gps_ts: string | null
   coincide: boolean

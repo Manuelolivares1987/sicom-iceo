@@ -102,7 +102,7 @@ export default function SugerenciasEstadoPage() {
   // flota completa, no solo los que cambiaron.
   const confirmarDiaCompleto = async () => {
     for (const s of sugerencias) {
-      const est = elegido[s.activo_id] ?? s.estado_sugerido ?? s.estado_actual
+      const est = elegido[s.activo_id] ?? s.estado_guardado ?? s.estado_sugerido ?? s.estado_actual
       if (!est) continue
       try { await confirmar.mutateAsync({ activoId: s.activo_id, fecha, estado: est }) } catch { /* sigue */ }
     }
@@ -170,13 +170,15 @@ export default function SugerenciasEstadoPage() {
                   <th className="px-2 py-2">Zona GPS</th>
                   <th className="px-2 py-2">Estado actual (día previo)</th>
                   <th className="px-2 py-2">Sugerido</th>
+                  <th className="px-2 py-2">Confirmado ese día</th>
                   <th className="px-2 py-2">Confirmar como</th>
                   <th className="px-2 py-2"></th>
                 </tr>
               </thead>
               <tbody>
                 {filtradas.map((s) => {
-                  const sel = elegido[s.activo_id] ?? s.estado_sugerido ?? ''
+                  const sel = elegido[s.activo_id] ?? s.estado_guardado ?? s.estado_sugerido ?? ''
+                  const editado = s.estado_guardado != null && sel !== s.estado_guardado
                   return (
                     <tr key={s.activo_id} className="border-b hover:bg-gray-50">
                       <td className="px-2 py-1.5 font-mono font-semibold">{s.patente}</td>
@@ -184,6 +186,10 @@ export default function SugerenciasEstadoPage() {
                       <td className="px-2 py-1.5 text-gray-600">{s.zona ?? 'Fuera de zona'}</td>
                       <td className="px-2 py-1.5"><Pill e={s.estado_actual} /></td>
                       <td className="px-2 py-1.5"><Pill e={s.estado_sugerido} /></td>
+                      <td className="px-2 py-1.5">
+                        <Pill e={s.estado_guardado} />
+                        {editado && <span className="ml-1 text-[10px] font-semibold text-amber-600">editado</span>}
+                      </td>
                       <td className="px-2 py-1.5">
                         <select
                           className="h-8 rounded border border-gray-300 px-1 text-xs"
