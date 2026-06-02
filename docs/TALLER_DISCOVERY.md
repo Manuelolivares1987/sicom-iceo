@@ -142,14 +142,17 @@ La Maestra agrega modelos que la base NO tiene como pauta: **Scania, Mitsubishi
 Canter/L200, Toyota Hilux/Grúa, Yale GDP30TK, Maxus V80, Citroën Jumpy,
 Chevrolet, RAM 1500, IMT Pluma 20-138**. Priorizar los que están en flota activa.
 
-### Propuesta de limpieza (validar con jefe de taller)
-1. **Dedup** `pautas_fabricante` (83→54) **con cuidado de FK**: hay planes que
-   referencian `pauta_fabricante_id` → conservar la referenciada, borrar huérfanas.
-2. **Completar HH faltantes** (Mack, Renault, genéricas) por analogía al nivel de
-   servicio (SL≈2.7 · SM1≈4.2 · SM2≈6.4 · SM3≈10.8) — marcar "estimado, validar".
-3. **Cargar el detalle de tareas Mack** (y los demás modelos) como subtareas para
-   la ejecución en taller.
-4. Pendiente: `detalle de tareas.xlsx` (OneDrive apagado → Manuel lo habilita).
+### Resultado de la limpieza (2026-06-02)
+1. **NO había duplicados.** Las "copias" (83 vs 54) eran el mismo servicio para
+   **modelos distintos** (Actros 3336K vs 3341, Axor 2633 vs 2633/45, Mack
+   autom/Allison/Mec). Cada pauta tiene su `modelo_id`. **No se borró nada.**
+2. **HH faltantes completados (MIG114)**: las 29 pautas sin tiempo se llenaron por
+   analogía (SL 2.7 · SM1 4.2 · SM2 6.4 · SM3 10.8; Renault/genéricas estimadas) y
+   se marcaron `duracion_es_estimada=true`. **0 pautas sin tiempo.** El jefe valida
+   las 29 estimadas (columna "Tiempo estimado?" en el Excel de validación).
+3. Pendiente: **cargar el detalle de tareas Mack** (y demás) como subtareas de OT
+   para la ejecución; y procesar `detalle de tareas.xlsx` (OneDrive apagado →
+   Manuel lo habilita).
 
 ## 7. Próximos pasos propuestos
 1. **Validar con jefe de taller**: ítems de checklists + tiempos (HH) por pauta.

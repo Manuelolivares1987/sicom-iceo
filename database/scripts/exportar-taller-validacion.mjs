@@ -45,10 +45,11 @@ async function main() {
      ORDER BY t.nombre, i.seccion, i.orden`)).rows
 
   const pautas = (await client.query(`
-    SELECT DISTINCT ON (nombre) nombre, tipo_plan, frecuencia_dias, frecuencia_km,
-           frecuencia_horas, duracion_estimada_hrs,
-           jsonb_array_length(COALESCE(items_checklist,'[]'::jsonb)) AS n_items
-      FROM pautas_fabricante ORDER BY nombre, id`)).rows
+    SELECT pf.nombre, m.nombre AS modelo, pf.tipo_plan, pf.frecuencia_dias, pf.frecuencia_km,
+           pf.frecuencia_horas, pf.duracion_estimada_hrs, pf.duracion_es_estimada,
+           jsonb_array_length(COALESCE(pf.items_checklist,'[]'::jsonb)) AS n_items
+      FROM pautas_fabricante pf LEFT JOIN modelos m ON m.id = pf.modelo_id
+     ORDER BY pf.nombre, m.nombre`)).rows
 
   await client.end()
 
@@ -106,15 +107,15 @@ async function main() {
   // ── Pautas con tiempos ──
   const wsp = wb.addWorksheet('Pautas y tiempos')
   wsp.columns = [
-    { header: 'Pauta', width: 44 }, { header: 'Tipo plan', width: 16 },
+    { header: 'Pauta', width: 44 }, { header: 'Modelo', width: 20 }, { header: 'Tipo plan', width: 14 },
     { header: 'Frec. días', width: 11 }, { header: 'Frec. km', width: 12 }, { header: 'Frec. horas', width: 12 },
-    { header: 'Duración (hrs)', width: 14 }, { header: 'N° ítems', width: 9 },
+    { header: 'Duración (hrs)', width: 13 }, { header: 'Tiempo estimado?', width: 15 }, { header: 'N° ítems', width: 9 },
     { header: 'VALIDACIÓN tiempo / ajuste', width: 36 },
   ]
   styleHeader(wsp)
   for (const r of pautas) {
-    wsp.addRow([r.nombre, r.tipo_plan, r.frecuencia_dias, r.frecuencia_km, r.frecuencia_horas,
-      r.duracion_estimada_hrs, r.n_items, r.duracion_estimada_hrs == null ? 'FALTA TIEMPO' : ''])
+    wsp.addRow([r.nombre, r.modelo, r.tipo_plan, r.frecuencia_dias, r.frecuencia_km, r.frecuencia_horas,
+      r.duracion_estimada_hrs, r.duracion_es_estimada ? 'ESTIMADO — validar' : 'fabricante', r.n_items, ''])
   }
 
   const outDir = resolve(__dirname, '../../reportes')
