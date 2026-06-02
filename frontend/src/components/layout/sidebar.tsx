@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
@@ -10,7 +10,6 @@ import {
   LayoutDashboard,
   FileText,
   Share2,
-  Cog,
   ClipboardList,
   Wrench,
   Package,
@@ -25,6 +24,7 @@ import {
   LogOut,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   Truck,
   Timer,
   HardHat,
@@ -76,7 +76,7 @@ const navGroups: NavGroup[] = [
     items: [
       { label: 'Mis OTs', href: '/dashboard/mis-ots', icon: ClipboardCheck, module: 'ordenes_trabajo' as Module },
       { label: 'Órdenes de Trabajo', href: '/dashboard/ordenes-trabajo', icon: ClipboardList, module: 'ordenes_trabajo' },
-      { label: 'Mantenimiento', href: '/dashboard/mantenimiento', icon: Wrench, module: 'mantenimiento' },
+      { label: 'Mantenimiento (Taller)', href: '/dashboard/mantenimiento', icon: Wrench, module: 'mantenimiento' },
       { label: 'Plan semanal taller', href: '/dashboard/mantenimiento/plan-semanal-taller', icon: CalendarClock, module: 'mantenimiento', badge: 'Nuevo' },
     ],
   },
@@ -100,10 +100,9 @@ const navGroups: NavGroup[] = [
   {
     label: 'Mantención QR',
     items: [
-      { label: 'Mantención',         href: '/dashboard/mantencion',         icon: Wrench,        extendedModule: 'mantencion_qr' },
-      { label: 'Alertas tempranas',  href: '/dashboard/mantencion/alertas', icon: AlertTriangle, extendedModule: 'mantencion_qr' },
-      { label: 'Equipos / QR',       href: '/dashboard/activos',            icon: QrCode,        module: 'activos' },
-      { label: 'Plantillas QR',      href: '/dashboard/admin/checklist-templates', icon: ClipboardCheck, module: 'admin' },
+      { label: 'Panel Mantención QR', href: '/dashboard/mantencion',         icon: Wrench,        extendedModule: 'mantencion_qr' },
+      { label: 'Alertas tempranas',   href: '/dashboard/mantencion/alertas', icon: AlertTriangle, extendedModule: 'mantencion_qr' },
+      { label: 'Plantillas QR',       href: '/dashboard/admin/checklist-templates', icon: ClipboardCheck, module: 'admin' },
     ],
   },
   // Flota
@@ -119,7 +118,7 @@ const navGroups: NavGroup[] = [
       { label: 'Check-List Entrega', href: '/dashboard/flota/checklist-salida', icon: ClipboardCheck, module: 'flota', badge: 'V02' },
       { label: 'Plan Preventivo', href: '/dashboard/flota/plan-preventivo', icon: CalendarClock, module: 'flota', badge: 'Nuevo' },
       { label: 'Estado Flota', href: '/dashboard/flota/estado-flota', icon: ShieldCheck, module: 'flota', badge: 'Nuevo' },
-      { label: 'Activos', href: '/dashboard/activos', icon: Cog, module: 'activos' },
+      { label: 'Activos / Equipos (QR)', href: '/dashboard/activos', icon: QrCode, module: 'activos' },
     ],
   },
   // Negocio
@@ -190,6 +189,38 @@ export default function Sidebar({ collapsed, onToggle, onClose }: SidebarProps) 
   const operadorCalamaSolo = esOperadorCalamaSolo()
   const supervisorCalamaSolo = esSupervisorCalamaSolo()
 
+  // ── Acordeón: grupos colapsables, persistido en localStorage ──
+  const [openGroups, setOpenGroups] = useState<Set<string>>(new Set())
+  const [hydrated, setHydrated] = useState(false)
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('sidebar-open-groups')
+      if (saved) setOpenGroups(new Set(JSON.parse(saved) as string[]))
+    } catch { /* ignore */ }
+    setHydrated(true)
+  }, [])
+  useEffect(() => {
+    if (hydrated) localStorage.setItem('sidebar-open-groups', JSON.stringify(Array.from(openGroups)))
+  }, [openGroups, hydrated])
+
+  const toggleGroup = (label: string) =>
+    setOpenGroups((prev) => {
+      const next = new Set(prev)
+      if (next.has(label)) next.delete(label); else next.add(label)
+      return next
+    })
+
+  // Grupo que contiene la ruta activa: se fuerza abierto.
+  const activeGroupLabel = useMemo(() => {
+    const match = (href: string) =>
+      href === '/dashboard' ? pathname === '/dashboard' : pathname.startsWith(href)
+    for (const g of navGroups) {
+      const items = [...(g.items ?? []), ...((g.subsections ?? []).flatMap((s) => s.items))]
+      if (g.label && items.some((it) => match(it.href))) return g.label
+    }
+    return undefined
+  }, [pathname])
+
   // Filtrado por permisos se hace dentro del render por grupo.
   // navItems se mantiene exportado por compatibilidad interna.
   void navItems
@@ -230,7 +261,7 @@ export default function Sidebar({ collapsed, onToggle, onClose }: SidebarProps) 
         />
         {!collapsed && (
           <span className="truncate text-sm font-bold tracking-wide">
-            SICOM-ICEO
+            PILLADO
           </span>
         )}
         {/* Collapse toggle — visible only on desktop */}
@@ -272,15 +303,26 @@ export default function Sidebar({ collapsed, onToggle, onClose }: SidebarProps) 
 
           if (itemsVisibles.length === 0 && subsectionsVisibles.length === 0) return null
 
+          // Acordeón: abierto si la barra está colapsada (modo iconos), si el
+          // grupo no tiene label, si el usuario lo abrió, o si contiene la ruta activa.
+          const isOpen =
+            collapsed || !group.label ||
+            openGroups.has(group.label) || group.label === activeGroupLabel
+
           return (
             <div key={idx}>
               {!collapsed && group.label && (
-                <div className="mb-1 px-3 text-[10px] font-semibold uppercase tracking-wider text-gray-500">
-                  {group.label}
-                </div>
+                <button
+                  onClick={() => toggleGroup(group.label!)}
+                  className="mb-1 flex w-full items-center justify-between rounded px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-gray-500 transition-colors hover:bg-white/5 hover:text-gray-300"
+                  aria-expanded={isOpen}
+                >
+                  <span>{group.label}</span>
+                  <ChevronDown className={cn('h-3 w-3 transition-transform', isOpen ? '' : '-rotate-90')} />
+                </button>
               )}
               {/* Items planos del grupo (compat) */}
-              {itemsVisibles.length > 0 && (
+              {isOpen && itemsVisibles.length > 0 && (
                 <div className="space-y-0.5">
                   {itemsVisibles.map((item) => (
                     <SidebarLink
@@ -294,7 +336,7 @@ export default function Sidebar({ collapsed, onToggle, onClose }: SidebarProps) 
                 </div>
               )}
               {/* Subsections con subheaders pequenos */}
-              {subsectionsVisibles.map((sub, si) => (
+              {isOpen && subsectionsVisibles.map((sub, si) => (
                 <div key={si} className={si > 0 || itemsVisibles.length > 0 ? 'mt-2' : ''}>
                   {!collapsed && (
                     <div className="mb-0.5 px-3 text-[9px] font-medium uppercase tracking-wider text-gray-600/80">
