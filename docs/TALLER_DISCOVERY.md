@@ -109,6 +109,48 @@ Planificación semanal de taller ya existe: `taller_planes_semanales`,
 
 ---
 
+## 6b. Procesamiento de `Pautas Mantencion Maestro.xlsx` (2026-06-02)
+
+La Maestra (local) tiene 7 hojas: tabla maestra (22 modelos) + Actros, Mack,
+Volvo, Renault, Nissan + Fuentes/Supuestos.
+
+### Estándar de TIEMPOS HH (hoja Actros — fuente Kaufmann/MB)
+| Servicio | Descripción | HH |
+|---|---|---|
+| SI | Servicio inicial (100h) | **1.2** |
+| SL* | Lubricación (200h) | **2.7** |
+| SM1 | Mantenimiento 1 (400h) | **4.2** |
+| SM2 | Mantenimiento 2 (800h) | **6.4** |
+| SM3 | Mantenimiento 3 (1600h) | **10.8** |
+| SM4 | Mantenimiento 4 (3200h) | **12.6** |
+| SM5 | Mantenimiento 5 (4800h) | **13.2** |
+| SM6 | Mantenimiento 6 (9600h) | **15.0** |
+
+→ Coincide con lo que ya está en la base para Actros/Atego/Axor. **Este estándar
+sirve para estimar los HH faltantes por nivel de servicio (SL/SM1/SM2/SM3).**
+
+### Mack GU813E — detalle de 24 tareas (hoja Mack) — *sin HH explícito*
+Categorías: Lubricantes, Filtros, Correas, Niveles, Motor, Transmisión. Cada
+tarea indica spec/cantidad y a qué servicio aplica (SL/SM1/SM2/SM3).
+Intervalos: SL c/250h · SM1 c/500h · SM2 c/1000h · SM3 c/3000h.
+Ej.: Aceite Motor 15W40 38 L (todos) · Diferenciales 80W90 (SM1+) · Caja Allison
+TES295 48 L (SM3) · Juego válvulas (SM3) · etc.
+→ Este detalle es ideal como **subtareas de la OT** (ejecución de tareas).
+
+### Cobertura de modelos: Maestra (22) vs base
+La Maestra agrega modelos que la base NO tiene como pauta: **Scania, Mitsubishi
+Canter/L200, Toyota Hilux/Grúa, Yale GDP30TK, Maxus V80, Citroën Jumpy,
+Chevrolet, RAM 1500, IMT Pluma 20-138**. Priorizar los que están en flota activa.
+
+### Propuesta de limpieza (validar con jefe de taller)
+1. **Dedup** `pautas_fabricante` (83→54) **con cuidado de FK**: hay planes que
+   referencian `pauta_fabricante_id` → conservar la referenciada, borrar huérfanas.
+2. **Completar HH faltantes** (Mack, Renault, genéricas) por analogía al nivel de
+   servicio (SL≈2.7 · SM1≈4.2 · SM2≈6.4 · SM3≈10.8) — marcar "estimado, validar".
+3. **Cargar el detalle de tareas Mack** (y los demás modelos) como subtareas para
+   la ejecución en taller.
+4. Pendiente: `detalle de tareas.xlsx` (OneDrive apagado → Manuel lo habilita).
+
 ## 7. Próximos pasos propuestos
 1. **Validar con jefe de taller**: ítems de checklists + tiempos (HH) por pauta.
 2. **Limpiar pautas** (dedup + completar tiempos).
