@@ -153,6 +153,65 @@ export async function getPreventivasDue(diasAdelante = 15): Promise<PreventivaDu
     }))
 }
 
+// ── Equipos auxiliares (jerarquía) ──────────────────────────────────────────
+export interface EquipoSimple { id: string; patente: string | null; codigo: string | null; nombre: string | null }
+
+export async function getEquiposPadre(): Promise<EquipoSimple[]> {
+  const { data, error } = await supabase
+    .from('activos')
+    .select('id, patente, codigo, nombre')
+    .in('tipo', ['camion_cisterna', 'camion', 'camioneta', 'lubrimovil', 'equipo_menor'])
+    .is('activo_padre_id', null)
+    .neq('estado', 'dado_baja')
+    .order('patente')
+  if (error) throw error
+  return (data ?? []) as EquipoSimple[]
+}
+
+export interface Auxiliar {
+  id: string; codigo: string | null; nombre: string | null; tipo: string
+  planes: { id: string; pauta_nombre: string | null; duracion_estimada_hrs: number | null }[]
+}
+
+export async function getAuxiliares(padreId: string): Promise<Auxiliar[]> {
+  const { data, error } = await supabase
+    .from('activos')
+    .select('id, codigo, nombre, tipo, planes:planes_mantenimiento(id, pauta:pautas_fabricante(nombre, duracion_estimada_hrs))')
+    .eq('activo_padre_id', padreId)
+    .order('codigo')
+  if (error) throw error
+  type Raw = { id: string; codigo: string | null; nombre: string | null; tipo: string
+    planes: { id: string; pauta: { nombre: string; duracion_estimada_hrs: number | null } | null }[] }
+  return ((data ?? []) as unknown as Raw[]).map((a) => ({
+    id: a.id, codigo: a.codigo, nombre: a.nombre, tipo: a.tipo,
+    planes: (a.planes ?? []).map((p) => ({ id: p.id, pauta_nombre: p.pauta?.nombre ?? null, duracion_estimada_hrs: p.pauta?.duracion_estimada_hrs ?? null })),
+  }))
+}
+
+export interface PautaOpcion { id: string; nombre: string; duracion_estimada_hrs: number | null }
+
+export async function getPautasTodas(): Promise<PautaOpcion[]> {
+  const { data, error } = await supabase
+    .from('pautas_fabricante')
+    .select('id, nombre, duracion_estimada_hrs')
+    .order('nombre')
+  if (error) throw error
+  return (data ?? []) as PautaOpcion[]
+}
+
+export type TipoAuxiliar = 'estanque' | 'bomba' | 'manguera' | 'equipo_menor'
+
+export async function crearAuxiliar(padreId: string, nombre: string, tipo: TipoAuxiliar): Promise<{ id: string; codigo: string }> {
+  const { data, error } = await supabase.rpc('rpc_crear_auxiliar', { p_padre_id: padreId, p_nombre: nombre, p_tipo: tipo })
+  if (error) throw error
+  return data as { id: string; codigo: string }
+}
+
+export async function asignarPauta(activoId: string, pautaId: string): Promise<void> {
+  const { error } = await supabase.rpc('rpc_asignar_pauta', { p_activo_id: activoId, p_pauta_id: pautaId })
+  if (error) throw error
+}
+
 export type TipoOtTaller = 'correctivo' | 'preventivo' | 'inspeccion'
 export type PrioridadTaller = 'emergencia' | 'alta' | 'normal' | 'baja'
 

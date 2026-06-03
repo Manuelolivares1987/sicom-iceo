@@ -78,6 +78,7 @@ const navGroups: NavGroup[] = [
       { label: 'Órdenes de Trabajo', href: '/dashboard/ordenes-trabajo', icon: ClipboardList, module: 'ordenes_trabajo' },
       { label: 'Mantenimiento (Taller)', href: '/dashboard/mantenimiento', icon: Wrench, module: 'mantenimiento' },
       { label: 'Planificación Taller', href: '/dashboard/mantenimiento/planificacion', icon: HardHat, module: 'mantenimiento', badge: 'Nuevo' },
+      { label: 'Equipos auxiliares', href: '/dashboard/mantenimiento/auxiliares', icon: Layers, module: 'mantenimiento', badge: 'Nuevo' },
       { label: 'Plan semanal taller', href: '/dashboard/mantenimiento/plan-semanal-taller', icon: CalendarClock, module: 'mantenimiento', badge: 'Nuevo' },
     ],
   },
