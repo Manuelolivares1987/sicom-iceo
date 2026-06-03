@@ -11,9 +11,9 @@ import { Spinner } from '@/components/ui/spinner'
 import { useRequireAuth } from '@/hooks/use-require-auth'
 import {
   getEquiposEnTaller, getOtsAbiertasActivo, getTecnicos, getPlanesActivo, programarOtTaller,
-  getTareasRecepcion, programarOtRecepcion,
+  getTareasRecepcion, programarOtRecepcion, getPreventivasDue,
   type EquipoEnTaller, type OtAbierta, type Tecnico, type PlanActivo,
-  type TipoOtTaller, type PrioridadTaller, type TareaRecepcion,
+  type TipoOtTaller, type PrioridadTaller, type TareaRecepcion, type PreventivaDue,
 } from '@/lib/services/taller-planificacion'
 import { todayISO } from '@/lib/utils'
 
@@ -28,6 +28,7 @@ export default function PlanificacionTallerPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [sel, setSel] = useState<string | null>(null)
+  const [tab, setTab] = useState<'taller' | 'preventiva'>('taller')
 
   const cargar = async () => {
     setError(null)
@@ -68,8 +69,22 @@ export default function PlanificacionTallerPage() {
         </CardContent></Card>
       )}
 
+      {/* Tabs */}
+      <div className="flex flex-wrap gap-2 border-b">
+        <button onClick={() => setTab('taller')}
+          className={`rounded-t-md px-3 py-2 text-sm transition-colors ${tab === 'taller' ? 'border-b-2 border-amber-600 bg-amber-50 font-semibold text-amber-700' : 'text-gray-600 hover:bg-gray-50'}`}>
+          En taller ({equipos.length})
+        </button>
+        <button onClick={() => setTab('preventiva')}
+          className={`rounded-t-md px-3 py-2 text-sm transition-colors ${tab === 'preventiva' ? 'border-b-2 border-blue-600 bg-blue-50 font-semibold text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}>
+          Preventivas por pauta
+        </button>
+      </div>
+
       {loading ? (
         <div className="flex h-64 items-center justify-center"><Spinner /></div>
+      ) : tab === 'preventiva' ? (
+        <PreventivasTab tecnicos={tecnicos} onProgramada={cargar} />
       ) : (
         <div className="grid gap-4 lg:grid-cols-[320px_1fr]">
           {/* ── Izquierda: patentes en taller ── */}
@@ -305,6 +320,87 @@ function PanelProgramar({ equipo, tecnicos, onProgramada }: {
             </Button>
           </div>
         </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+// ── Pestaña Preventivas: patentes que deben entrar a PM según su pauta ──
+function PreventivasTab({ tecnicos, onProgramada }: { tecnicos: Tecnico[]; onProgramada: () => void }) {
+  void tecnicos
+  const [filas, setFilas] = useState<PreventivaDue[]>([])
+  const [cargando, setCargando] = useState(true)
+  const [programando, setProgramando] = useState<string | null>(null)
+  const [msg, setMsg] = useState<string | null>(null)
+
+  const cargar = async () => {
+    setCargando(true)
+    try { setFilas(await getPreventivasDue(15)) } finally { setCargando(false) }
+  }
+  useEffect(() => { cargar() }, [])
+
+  const programar = async (f: PreventivaDue) => {
+    setProgramando(f.plan_id); setMsg(null)
+    try {
+      const r = await programarOtTaller({
+        activoId: f.activo_id, tipo: 'preventivo', prioridad: 'normal',
+        fecha: todayISO(), responsableId: null, planId: f.plan_id,
+      })
+      setMsg(`OT ${r.folio} preventiva programada para ${f.patente}.`)
+      await cargar(); onProgramada()
+    } catch (e) { setMsg((e as Error).message) }
+    finally { setProgramando(null) }
+  }
+
+  if (cargando) return <div className="flex h-48 items-center justify-center"><Spinner /></div>
+
+  return (
+    <Card>
+      <CardContent className="p-4">
+        <div className="mb-2 text-sm text-gray-600">
+          Patentes que deben entrar a <b>mantención preventiva</b> según su pauta (vencidas y próximas 15 días).
+        </div>
+        {msg && <div className="mb-2 rounded bg-green-50 px-2 py-1.5 text-sm text-green-700">{msg}</div>}
+        {filas.length === 0 ? (
+          <p className="py-8 text-center text-sm text-gray-400">No hay pautas vencidas ni próximas.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b bg-gray-50 text-left text-xs uppercase text-gray-500">
+                  <th className="px-2 py-2">Patente</th>
+                  <th className="px-2 py-2">Equipo</th>
+                  <th className="px-2 py-2">Pauta</th>
+                  <th className="px-2 py-2">Próxima</th>
+                  <th className="px-2 py-2 text-right">Estado</th>
+                  <th className="px-2 py-2 text-right">Duración</th>
+                  <th className="px-2 py-2"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {filas.map((f) => (
+                  <tr key={f.plan_id} className={`border-b hover:bg-gray-50 ${f.dias_vencido > 0 ? 'bg-red-50/40' : ''}`}>
+                    <td className="px-2 py-1.5 font-mono font-semibold">{f.patente}</td>
+                    <td className="px-2 py-1.5 text-gray-500 max-w-[150px] truncate">{f.equipamiento ?? '—'}</td>
+                    <td className="px-2 py-1.5">{f.pauta_nombre ?? '—'}</td>
+                    <td className="px-2 py-1.5 text-gray-500">{f.proxima_fecha ?? '—'}</td>
+                    <td className="px-2 py-1.5 text-right">
+                      {f.dias_vencido > 0
+                        ? <span className="font-semibold text-red-600">vencida {f.dias_vencido} d</span>
+                        : <span className="text-amber-600">en {Math.abs(f.dias_vencido)} d</span>}
+                    </td>
+                    <td className="px-2 py-1.5 text-right">{f.duracion_estimada_hrs != null ? `${f.duracion_estimada_hrs} h` : '—'}</td>
+                    <td className="px-2 py-1.5 text-right">
+                      <Button size="sm" className="gap-1 bg-blue-600 hover:bg-blue-700" disabled={programando === f.plan_id} onClick={() => programar(f)}>
+                        <CalendarClock className="h-4 w-4" /> {programando === f.plan_id ? '…' : 'Programar'}
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </CardContent>
     </Card>
   )

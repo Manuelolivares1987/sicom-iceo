@@ -110,6 +110,49 @@ export async function programarOtRecepcion(params: {
   return data as { id: string; folio: string; tareas_cargadas: number }
 }
 
+// Patentes que deben entrar a mantención preventiva según su pauta (vencidas/próximas)
+export interface PreventivaDue {
+  plan_id: string
+  activo_id: string
+  patente: string | null
+  equipamiento: string | null
+  pauta_nombre: string | null
+  duracion_estimada_hrs: number | null
+  proxima_fecha: string | null
+  dias_vencido: number          // >0 vencida, <0 faltan días
+}
+
+export async function getPreventivasDue(diasAdelante = 15): Promise<PreventivaDue[]> {
+  const limite = new Date(Date.now() + diasAdelante * 86400000).toISOString().slice(0, 10)
+  const { data, error } = await supabase
+    .from('planes_mantenimiento')
+    .select('id, proxima_ejecucion_fecha, activo:activos(id, patente, codigo, nombre), pauta:pautas_fabricante(nombre, duracion_estimada_hrs)')
+    .eq('activo_plan', true)
+    .lte('proxima_ejecucion_fecha', limite)
+    .order('proxima_ejecucion_fecha', { ascending: true })
+  if (error) throw error
+  const hoy = Date.now()
+  type Raw = {
+    id: string; proxima_ejecucion_fecha: string | null
+    activo: { id: string; patente: string | null; codigo: string | null; nombre: string | null } | null
+    pauta: { nombre: string | null; duracion_estimada_hrs: number | null } | null
+  }
+  return ((data ?? []) as unknown as Raw[])
+    .filter((r) => r.activo)
+    .map((r) => ({
+      plan_id: r.id,
+      activo_id: r.activo!.id,
+      patente: r.activo!.patente ?? r.activo!.codigo ?? '—',
+      equipamiento: r.activo!.nombre ?? null,
+      pauta_nombre: r.pauta?.nombre ?? null,
+      duracion_estimada_hrs: r.pauta?.duracion_estimada_hrs ?? null,
+      proxima_fecha: r.proxima_ejecucion_fecha,
+      dias_vencido: r.proxima_ejecucion_fecha
+        ? Math.round((hoy - new Date(r.proxima_ejecucion_fecha + 'T00:00:00').getTime()) / 86400000)
+        : 0,
+    }))
+}
+
 export type TipoOtTaller = 'correctivo' | 'preventivo' | 'inspeccion'
 export type PrioridadTaller = 'emergencia' | 'alta' | 'normal' | 'baja'
 
