@@ -75,6 +75,41 @@ export async function getPlanesActivo(activoId: string): Promise<PlanActivo[]> {
   }))
 }
 
+// Tareas (ítems no_ok) del checklist de recepción del equipo
+export interface TareaRecepcion {
+  instance_id: string
+  fecha_recepcion: string | null
+  item_id: string
+  bloque: string | null
+  orden: number
+  descripcion: string
+  observacion: string | null
+  costo_estimado: number | null
+  cobrable: string | null
+}
+
+export async function getTareasRecepcion(activoId: string): Promise<TareaRecepcion[]> {
+  const { data, error } = await supabase.rpc('fn_tareas_recepcion_activo', { p_activo_id: activoId })
+  if (error) throw error
+  return (data ?? []) as TareaRecepcion[]
+}
+
+export async function programarOtRecepcion(params: {
+  activoId: string
+  prioridad: 'emergencia' | 'alta' | 'normal' | 'baja'
+  fecha: string | null
+  responsableId: string | null
+}): Promise<{ id: string; folio: string; tareas_cargadas: number }> {
+  const { data, error } = await supabase.rpc('rpc_programar_ot_recepcion', {
+    p_activo_id: params.activoId,
+    p_prioridad: params.prioridad,
+    p_fecha: params.fecha,
+    p_responsable_id: params.responsableId,
+  })
+  if (error) throw error
+  return data as { id: string; folio: string; tareas_cargadas: number }
+}
+
 export type TipoOtTaller = 'correctivo' | 'preventivo' | 'inspeccion'
 export type PrioridadTaller = 'emergencia' | 'alta' | 'normal' | 'baja'
 

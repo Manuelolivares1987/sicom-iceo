@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import {
-  ArrowLeft, Wrench, AlertTriangle, CalendarClock, RefreshCw, Check, ClipboardList,
+  ArrowLeft, Wrench, AlertTriangle, CalendarClock, RefreshCw, Check, ClipboardList, ClipboardCheck,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -11,8 +11,9 @@ import { Spinner } from '@/components/ui/spinner'
 import { useRequireAuth } from '@/hooks/use-require-auth'
 import {
   getEquiposEnTaller, getOtsAbiertasActivo, getTecnicos, getPlanesActivo, programarOtTaller,
+  getTareasRecepcion, programarOtRecepcion,
   type EquipoEnTaller, type OtAbierta, type Tecnico, type PlanActivo,
-  type TipoOtTaller, type PrioridadTaller,
+  type TipoOtTaller, type PrioridadTaller, type TareaRecepcion,
 } from '@/lib/services/taller-planificacion'
 import { todayISO } from '@/lib/utils'
 
@@ -126,7 +127,10 @@ function PanelProgramar({ equipo, tecnicos, onProgramada }: {
 }) {
   const [ots, setOts] = useState<OtAbierta[]>([])
   const [planes, setPlanes] = useState<PlanActivo[]>([])
+  const [tareasRec, setTareasRec] = useState<TareaRecepcion[]>([])
   const [cargandoDet, setCargandoDet] = useState(true)
+  const [progRec, setProgRec] = useState(false)
+  const [msgRec, setMsgRec] = useState<string | null>(null)
 
   const [tipo, setTipo] = useState<TipoOtTaller>('correctivo')
   const [prioridad, setPrioridad] = useState<PrioridadTaller>('normal')
@@ -140,11 +144,25 @@ function PanelProgramar({ equipo, tecnicos, onProgramada }: {
   const cargarDet = async () => {
     setCargandoDet(true)
     try {
-      const [o, p] = await Promise.all([getOtsAbiertasActivo(equipo.activo_id), getPlanesActivo(equipo.activo_id)])
-      setOts(o); setPlanes(p)
+      const [o, p, tr] = await Promise.all([
+        getOtsAbiertasActivo(equipo.activo_id),
+        getPlanesActivo(equipo.activo_id),
+        getTareasRecepcion(equipo.activo_id),
+      ])
+      setOts(o); setPlanes(p); setTareasRec(tr)
     } finally { setCargandoDet(false) }
   }
   useEffect(() => { cargarDet() }, [equipo.activo_id])
+
+  const programarRecepcion = async () => {
+    setProgRec(true); setMsgRec(null)
+    try {
+      const r = await programarOtRecepcion({ activoId: equipo.activo_id, prioridad: 'alta', fecha: todayISO(), responsableId: null })
+      setMsgRec(`OT ${r.folio} creada con ${r.tareas_cargadas} tareas del checklist de recepción.`)
+      await cargarDet(); onProgramada()
+    } catch (e) { setMsgRec((e as Error).message) }
+    finally { setProgRec(false) }
+  }
 
   // Si elige una pauta preventiva, fijar tipo preventivo
   useEffect(() => { if (planId) setTipo('preventivo') }, [planId])
@@ -174,6 +192,37 @@ function PanelProgramar({ equipo, tecnicos, onProgramada }: {
             <div className="text-lg font-bold">{equipo.patente} <span className="text-sm font-normal text-gray-500">· {equipo.equipamiento ?? '—'}</span></div>
             <div className="text-xs text-gray-500">{equipo.ultimo_contrato ?? 'Sin contrato'} · motivo: {equipo.motivo ?? '—'}</div>
           </div>
+        </div>
+
+        {/* Tareas desde checklist de recepción */}
+        <div className="rounded-lg border border-blue-200 bg-blue-50/40 p-3">
+          <div className="mb-1 flex items-center justify-between">
+            <div className="flex items-center gap-1 text-xs font-semibold uppercase text-blue-700">
+              <ClipboardCheck className="h-3.5 w-3.5" /> Tareas del checklist de recepción ({tareasRec.length})
+            </div>
+            {tareasRec.length > 0 && (
+              <Button size="sm" className="gap-1 bg-blue-600 hover:bg-blue-700" disabled={progRec} onClick={programarRecepcion}>
+                <CalendarClock className="h-4 w-4" /> {progRec ? 'Creando…' : `Programar OT con estas ${tareasRec.length} tareas`}
+              </Button>
+            )}
+          </div>
+          {cargandoDet ? <Spinner className="h-4 w-4" /> : tareasRec.length === 0 ? (
+            <p className="text-xs text-gray-500">Sin checklist de recepción con fallas. (Las tareas salen de los ítems <b>no_ok</b> de la recepción del equipo.)</p>
+          ) : (
+            <ul className="space-y-1">
+              {tareasRec.map((t) => (
+                <li key={t.item_id} className="flex items-start gap-2 rounded bg-white px-2 py-1 text-xs">
+                  <span className="mt-0.5 inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-red-500" />
+                  <span className="flex-1">
+                    <b>{t.descripcion}</b>
+                    {t.observacion && <span className="text-gray-500"> — {t.observacion}</span>}
+                    <span className="ml-1 text-[10px] text-gray-400">[{t.bloque}]</span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+          {msgRec && <div className="mt-2 rounded bg-green-50 px-2 py-1 text-xs text-green-700">{msgRec}</div>}
         </div>
 
         {/* OTs abiertas */}
