@@ -122,7 +122,7 @@ export function useQuitarJornadaTaller(planId: string | null) {
 export function useAsignarResponsableTaller(planId: string | null) {
   const invalidate = useInvalidatePlan(planId)
   return useMutation({
-    mutationFn: ({ planOtId, responsableId, cuadrilla }: { planOtId: string; responsableId: string; cuadrilla?: string | null }) =>
+    mutationFn: ({ planOtId, responsableId, cuadrilla }: { planOtId: string; responsableId: string | null; cuadrilla?: string | null }) =>
       rpcAsignarResponsable(planOtId, responsableId, cuadrilla),
     onSuccess: () => invalidate(),
   })

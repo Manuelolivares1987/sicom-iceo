@@ -255,7 +255,7 @@ export async function rpcQuitarJornada(planOtId: string) {
   return data as { success: boolean }
 }
 
-export async function rpcAsignarResponsable(planOtId: string, responsableId: string, cuadrilla?: string | null) {
+export async function rpcAsignarResponsable(planOtId: string, responsableId: string | null, cuadrilla?: string | null) {
   const { data, error } = await supabase.rpc('rpc_taller_asignar_responsable', {
     p_plan_ot_id: planOtId,
     p_responsable_id: responsableId,

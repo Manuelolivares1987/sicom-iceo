@@ -8,7 +8,7 @@ import {
 import {
   Calendar, ArrowLeft, ChevronLeft, ChevronRight, Lock, AlertTriangle, Trash2, User,
   Play, Pause, CheckCircle2, BarChart3, ShieldAlert, RefreshCw, Wrench, Layers, FileSpreadsheet,
-  Truck, Clock,
+  Truck,
 } from 'lucide-react'
 import { exportarPlanSemanalExcel, descargarBlob } from '@/lib/export/plan-semanal-excel'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
@@ -22,7 +22,7 @@ import { useQuery } from '@tanstack/react-query'
 import {
   useGetOrCreatePlanSemanalTaller, useDiasPlanSemanalTaller, useJornadasPlanSemanalTaller,
   useKpiSemanalTaller, useCumplimientoPmMesTaller,
-  useUsuariosAsignablesTaller, useCoberturaPm, useActivosSinPlan,
+  useCoberturaPm, useActivosSinPlan,
   useAgregarJornadaTaller, useMoverJornadaTaller, useQuitarJornadaTaller,
   useAsignarResponsableTaller, useConfirmarPlanSemanalTaller,
   useIniciarEjecucionTaller, usePausarEjecucionTaller, useFinalizarEjecucionTaller,
@@ -55,6 +55,10 @@ const ORDEN_ESTADO: Record<string, number> = { M: 0, F: 1, T: 2 }
 function ordenEstado(cod: string | null): number {
   return cod && cod in ORDEN_ESTADO ? ORDEN_ESTADO[cod] : 9
 }
+
+// Mecánicos del taller (hasta 2 por jornada). Se guardan en el campo `cuadrilla`.
+const MECANICOS = ['Yusedl', 'Joel', 'Sergio', 'Marco', 'Felipe L', 'Felipe'] as const
+const MAX_MECANICOS = 2
 
 // Objetivo de drop pendiente: patente/preventiva soltada en un día.
 type DropTarget = {
@@ -129,6 +133,17 @@ export default function PlanSemanalTallerPage() {
         return (a.patente ?? a.activo_codigo).localeCompare(b.patente ?? b.activo_codigo)
       })
   }, [flota, fleetIds, filtroPatente])
+
+  // Preventivas sugeridas: una por patente (la más vencida), solo flota real.
+  const preventivasPatentes = useMemo(() => {
+    const m = new Map<string, PreventivaDue>()
+    for (const p of preventivas ?? []) {
+      if (fleetIds.size > 0 && !fleetIds.has(p.activo_id)) continue
+      const prev = m.get(p.activo_id)
+      if (!prev || p.dias_vencido > prev.dias_vencido) m.set(p.activo_id, p)
+    }
+    return Array.from(m.values()).sort((a, b) => b.dias_vencido - a.dias_vencido)
+  }, [preventivas, fleetIds])
 
   // Resolver/crear plan al cambiar de semana
   useEffect(() => {
@@ -359,7 +374,7 @@ export default function PlanSemanalTallerPage() {
               </div>
 
               {/* Preventivas sugeridas (arrástralas a un día) */}
-              <PreventivasSugeridas items={preventivas ?? []} />
+              <PreventivasSugeridas items={preventivasPatentes} />
             </div>
           </div>
         </DndContext>
@@ -412,6 +427,7 @@ export default function PlanSemanalTallerPage() {
         <ProgramarOtDialog
           target={dropTarget}
           planSemanalId={planSemanalId}
+          dias={(dias ?? []).map((d) => ({ fecha: d.fecha, nombre: d.nombre_dia }))}
           onClose={() => setDropTarget(null)}
           onDone={() => { setDropTarget(null) }}
           agregarJornada={agregarJornada}
@@ -531,23 +547,19 @@ function PreventivaCard({ p }: { p: PreventivaDue }) {
 
   return (
     <div ref={setNodeRef} style={style} {...listeners} {...attributes}
-         className={`min-w-[160px] max-w-[160px] rounded border p-2 cursor-grab active:cursor-grabbing shadow-sm ${
-           vencida ? 'border-red-300 bg-red-50' : 'border-amber-200 bg-amber-50'
+         title={vencida ? `Vencida ${p.dias_vencido}d` : `Vence en ${Math.abs(p.dias_vencido)}d`}
+         className={`rounded border px-2.5 py-1.5 cursor-grab active:cursor-grabbing shadow-sm font-mono text-[12px] font-bold ${
+           vencida ? 'border-red-300 bg-red-50 text-red-800' : 'border-amber-200 bg-amber-50 text-amber-800'
          }`}>
-      <div className="text-[11px] font-mono font-bold">{p.patente}</div>
-      <div className="text-[10px] text-blue-700 line-clamp-2 min-h-[26px]">{p.pauta_nombre ?? 'PM'}</div>
-      <div className={`text-[9px] mt-0.5 flex items-center gap-1 ${vencida ? 'text-red-600' : 'text-amber-700'}`}>
-        <Clock className="h-3 w-3" />
-        {vencida ? `Vencida ${p.dias_vencido}d` : `En ${Math.abs(p.dias_vencido)}d`}
-        {p.duracion_estimada_hrs ? ` · ${p.duracion_estimada_hrs}h` : ''}
-      </div>
+      {p.patente}
     </div>
   )
 }
 
-function ProgramarOtDialog({ target, planSemanalId, onClose, onDone, agregarJornada }: {
+function ProgramarOtDialog({ target, planSemanalId, dias, onClose, onDone, agregarJornada }: {
   target: DropTarget
   planSemanalId: string
+  dias: { fecha: string; nombre: string }[]
   onClose: () => void
   onDone: () => void
   agregarJornada: ReturnType<typeof useAgregarJornadaTaller>
@@ -557,12 +569,12 @@ function ProgramarOtDialog({ target, planSemanalId, onClose, onDone, agregarJorn
     queryKey: ['planes-activo', target.activoId],
     queryFn: () => getPlanesActivo(target.activoId),
   })
-  const { data: usuarios } = useUsuariosAsignablesTaller()
   const [tipo, setTipo] = useState<TipoOtTaller>(target.tipoPre)
   const [planId, setPlanId] = useState<string>(target.planIdPre ?? '')
   const [prioridad, setPrioridad] = useState<PrioridadTaller>('normal')
-  const [responsableId, setResponsableId] = useState('')
-  const [fecha, setFecha] = useState(target.fecha)
+  const [mecanicos, setMecanicos] = useState<string[]>([])
+  // Un equipo se puede programar para VARIOS días (multidía): el día soltado viene marcado.
+  const [fechasSel, setFechasSel] = useState<Set<string>>(new Set([target.fecha]))
   const [enviando, setEnviando] = useState(false)
 
   // Preseleccionar la primera pauta cuando cargan los planes (si no vino preset).
@@ -573,16 +585,28 @@ function ProgramarOtDialog({ target, planSemanalId, onClose, onDone, agregarJorn
   /* eslint-disable-next-line react-hooks/exhaustive-deps */
   }, [planes])
 
+  const toggleDia = (f: string) => setFechasSel((prev) => {
+    const next = new Set(prev)
+    if (next.has(f)) next.delete(f); else next.add(f)
+    return next
+  })
+
   const submit = async () => {
+    if (fechasSel.size === 0) return
     setEnviando(true)
     try {
+      const fechas = Array.from(fechasSel).sort()
+      const cuadrilla = mecanicos.length ? mecanicos.join(', ') : null
+      // Una sola OT (con su checklist desde la pauta); se agrega como jornada en cada día.
       const r = await programarOtTaller({
-        activoId: target.activoId, tipo, prioridad, fecha,
-        responsableId: responsableId || null,
+        activoId: target.activoId, tipo, prioridad, fecha: fechas[0],
+        responsableId: null,
         planId: tipo === 'preventivo' ? (planId || null) : null,
       })
-      await agregarJornada.mutateAsync({ planSemanalId, otId: r.id, fecha })
-      toast.success(`OT ${r.folio} programada en el día`)
+      for (const f of fechas) {
+        await agregarJornada.mutateAsync({ planSemanalId, otId: r.id, fecha: f, cuadrilla })
+      }
+      toast.success(`OT ${r.folio} programada (${fechas.length} día${fechas.length > 1 ? 's' : ''})`)
       onDone()
     } catch (e) {
       toast.error((e as Error).message)
@@ -622,42 +646,75 @@ function ProgramarOtDialog({ target, planSemanalId, onClose, onDone, agregarJorn
           </div>
         )}
 
-        <div className="grid grid-cols-2 gap-2">
-          <div>
-            <label className="text-xs font-medium">Día</label>
-            <Input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} />
-          </div>
-          <div>
-            <label className="text-xs font-medium">Prioridad</label>
-            <select value={prioridad} onChange={(e) => setPrioridad(e.target.value as PrioridadTaller)}
-                    className="w-full rounded border px-2 py-1.5 text-sm">
-              <option value="emergencia">Emergencia</option>
-              <option value="alta">Alta</option>
-              <option value="normal">Normal</option>
-              <option value="baja">Baja</option>
-            </select>
+        {/* Días (multidía) */}
+        <div>
+          <label className="text-xs font-medium">Días (puede ser más de uno)</label>
+          <div className="mt-1 grid grid-cols-4 gap-1">
+            {dias.map((d) => {
+              const on = fechasSel.has(d.fecha)
+              return (
+                <button key={d.fecha} type="button" onClick={() => toggleDia(d.fecha)}
+                        className={`rounded border px-1.5 py-1 text-[11px] capitalize transition-colors ${
+                          on ? 'border-blue-500 bg-blue-500 text-white' : 'border-gray-200 bg-white text-gray-600 hover:bg-blue-50'
+                        }`}>
+                  {d.nombre.slice(0, 3)} {fmtFecha(d.fecha)}
+                </button>
+              )
+            })}
           </div>
         </div>
 
+        {/* Mecánicos a cargo (hasta 2) */}
         <div>
-          <label className="text-xs font-medium">Responsable (opcional)</label>
-          <select value={responsableId} onChange={(e) => setResponsableId(e.target.value)}
+          <label className="text-xs font-medium">Mecánicos a cargo (hasta {MAX_MECANICOS})</label>
+          <MecanicosPicker value={mecanicos} onChange={setMecanicos} />
+        </div>
+
+        <div>
+          <label className="text-xs font-medium">Prioridad</label>
+          <select value={prioridad} onChange={(e) => setPrioridad(e.target.value as PrioridadTaller)}
                   className="w-full rounded border px-2 py-1.5 text-sm">
-            <option value="">— Sin asignar —</option>
-            {(usuarios ?? []).map((u) => (
-              <option key={u.id} value={u.id}>{u.nombre_completo}{u.rol ? ` (${u.rol})` : ''}</option>
-            ))}
+            <option value="emergencia">Emergencia</option>
+            <option value="alta">Alta</option>
+            <option value="normal">Normal</option>
+            <option value="baja">Baja</option>
           </select>
         </div>
       </div>
       <ModalFooter>
         <Button variant="outline" onClick={onClose}>Cancelar</Button>
-        <Button disabled={enviando || !fecha} onClick={submit}>
+        <Button disabled={enviando || fechasSel.size === 0} onClick={submit}>
           {enviando ? <Spinner className="h-4 w-4 mr-1" /> : null}
-          Programar en el día
+          Programar
         </Button>
       </ModalFooter>
     </Modal>
+  )
+}
+
+// Selector de mecánicos (hasta 2). Devuelve nombres; se guardan en `cuadrilla`.
+function MecanicosPicker({ value, onChange }: { value: string[]; onChange: (v: string[]) => void }) {
+  const toggle = (m: string) => {
+    if (value.includes(m)) onChange(value.filter((x) => x !== m))
+    else if (value.length < MAX_MECANICOS) onChange([...value, m])
+  }
+  return (
+    <div className="mt-1 flex flex-wrap gap-1">
+      {MECANICOS.map((m) => {
+        const on = value.includes(m)
+        const bloqueado = !on && value.length >= MAX_MECANICOS
+        return (
+          <button key={m} type="button" onClick={() => toggle(m)} disabled={bloqueado}
+                  className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${
+                    on ? 'border-blue-500 bg-blue-500 text-white'
+                       : bloqueado ? 'border-gray-100 bg-gray-50 text-gray-300 cursor-not-allowed'
+                       : 'border-gray-200 bg-white text-gray-700 hover:bg-blue-50'
+                  }`}>
+            {m}
+          </button>
+        )
+      })}
+    </div>
   )
 }
 
@@ -749,7 +806,9 @@ function JornadaCard({ jornada, onAsignar, onQuitar, onIniciar, onPausar, onFina
         )}
         <div className="flex items-center gap-1 mt-1">
           <User className="h-3 w-3 text-gray-400" />
-          <span className="text-[10px] text-gray-600 truncate">{jornada.responsable ?? 'Sin asignar'}</span>
+          <span className="text-[10px] text-gray-600 truncate">
+            {jornada.cuadrilla ?? jornada.responsable ?? 'Sin asignar'}
+          </span>
         </div>
         {jornada.avance_objetivo_pct && (
           <div className="text-[9px] text-gray-500 mt-0.5">Meta {jornada.avance_objetivo_pct}%</div>
@@ -810,40 +869,33 @@ function AsignarResponsableModal({ jornada, planId, onClose }: {
   onClose: () => void
 }) {
   const toast = useToast()
-  const { data: usuarios } = useUsuariosAsignablesTaller()
   const asignar = useAsignarResponsableTaller(planId)
-  const [respId, setRespId] = useState(jornada.responsable_id ?? '')
-  const [cuadrilla, setCuadrilla] = useState(jornada.cuadrilla ?? '')
+  // Mecánicos iniciales a partir de la cuadrilla guardada.
+  const inicial = (jornada.cuadrilla ?? '')
+    .split(',').map((s) => s.trim())
+    .filter((s) => (MECANICOS as readonly string[]).includes(s))
+    .slice(0, MAX_MECANICOS)
+  const [mecanicos, setMecanicos] = useState<string[]>(inicial)
 
   return (
-    <Modal open={true} onClose={onClose} title={`Asignar responsable · ${jornada.ot_folio}`}>
+    <Modal open={true} onClose={onClose} title={`Mecánicos a cargo · ${jornada.ot_folio}`}>
       <div className="space-y-3">
         <div>
-          <label className="text-xs font-medium">Responsable</label>
-          <select value={respId} onChange={(e) => setRespId(e.target.value)}
-                  className="w-full rounded border px-2 py-1.5 text-sm">
-            <option value="">— Seleccionar —</option>
-            {(usuarios ?? []).map((u) => (
-              <option key={u.id} value={u.id}>{u.nombre_completo} {u.rol && `(${u.rol})`}</option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="text-xs font-medium">Cuadrilla (opcional)</label>
-          <Input value={cuadrilla} onChange={(e) => setCuadrilla(e.target.value)} placeholder="ej: Equipo A" />
+          <label className="text-xs font-medium">Mecánicos a cargo (hasta {MAX_MECANICOS})</label>
+          <MecanicosPicker value={mecanicos} onChange={setMecanicos} />
         </div>
       </div>
       <ModalFooter>
         <Button variant="outline" onClick={onClose}>Cancelar</Button>
-        <Button disabled={!respId || asignar.isPending}
+        <Button disabled={asignar.isPending}
                 onClick={() => asignar.mutate({
-                  planOtId: jornada.plan_ot_id, responsableId: respId, cuadrilla: cuadrilla.trim() || null,
+                  planOtId: jornada.plan_ot_id, responsableId: null, cuadrilla: mecanicos.join(', '),
                 }, {
-                  onSuccess: () => { toast.success('Responsable asignado'); onClose() },
+                  onSuccess: () => { toast.success('Mecánicos asignados'); onClose() },
                   onError: (err) => toast.error((err as Error).message),
                 })}>
           {asignar.isPending ? <Spinner className="h-4 w-4 mr-1" /> : null}
-          Asignar
+          Guardar
         </Button>
       </ModalFooter>
     </Modal>
