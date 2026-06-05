@@ -9,7 +9,7 @@ import type { CombustibleProyeccion } from '@/lib/services/combustible-proyeccio
 interface Props {
   /** Si true, muestra modo compacto (1 fila por estanque). Default false (1 card por estanque). */
   compacto?: boolean
-  /** Encabezado custom. Default: "Proyección de stock combustible (demanda MYG + LISSET)" */
+  /** Encabezado custom. Default: "Proyección de stock combustible (demanda real — ventas a clientes)" */
   titulo?: string
 }
 
@@ -35,7 +35,7 @@ function fechaCorta(iso: string | null): string {
 
 export function ProyeccionStockCard({ compacto = false, titulo }: Props) {
   const { data, isLoading } = useCombustibleProyeccion()
-  const heading = titulo ?? 'Proyección de stock — demanda real (MYG + LISSET)'
+  const heading = titulo ?? 'Proyección de stock — demanda real (ventas a clientes)'
 
   if (isLoading) {
     return <Card><CardContent className="flex justify-center py-8"><Spinner /></CardContent></Card>
@@ -64,7 +64,7 @@ export function ProyeccionStockCard({ compacto = false, titulo }: Props) {
               <tr>
                 <th className="px-3 py-2 text-left">Estanque</th>
                 <th className="px-3 py-2 text-right">Stock actual</th>
-                <th className="px-3 py-2 text-right">Hoy (MYG+LISSET)</th>
+                <th className="px-3 py-2 text-right">Hoy (ventas)</th>
                 <th className="px-3 py-2 text-right">Prom. 7d</th>
                 <th className="px-3 py-2 text-right">Días cobertura</th>
                 <th className="px-3 py-2 text-right">Agotam. estimado</th>

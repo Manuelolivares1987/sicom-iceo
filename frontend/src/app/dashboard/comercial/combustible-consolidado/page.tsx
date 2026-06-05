@@ -159,7 +159,7 @@ export default function ComercialCombustibleConsolidadoPage() {
         </div>
       </div>
 
-      {/* Proyeccion de stock con demanda real MYG + LISSET */}
+      {/* Proyeccion de stock con demanda real — todas las ventas a clientes */}
       <ProyeccionStockCard compacto />
 
       {/* STOCK ACTUAL DE ESTANQUES (siempre visible — info crítica para comercial) */}
