@@ -31,7 +31,7 @@ import {
 import { lunesDeIso, type TallerPlanOTFull } from '@/lib/services/taller-plan-semanal'
 import { getFlotaDashboard, type FlotaDashboardActivo } from '@/lib/services/flota-dashboard'
 import {
-  getPlanesActivo, getPreventivasDue, programarOtTaller,
+  getPlanesActivo, getPreventivasDue, programarOtTaller, getEquiposPadre,
   type PlanActivo, type PreventivaDue, type TipoOtTaller, type PrioridadTaller,
 } from '@/lib/services/taller-planificacion'
 
@@ -92,6 +92,8 @@ export default function PlanSemanalTallerPage() {
   const { data: dias } = useDiasPlanSemanalTaller(planSemanalId || null)
   const { data: jornadas, isLoading: loadJornadas } = useJornadasPlanSemanalTaller(planSemanalId || null)
   const { data: flota } = useQuery({ queryKey: ['flota-dashboard'], queryFn: getFlotaDashboard, staleTime: 60_000 })
+  // Solo la flota real (55): tipo móvil, sin activo_padre_id, no dada de baja. Excluye auxiliares.
+  const { data: fleet } = useQuery({ queryKey: ['equipos-padre'], queryFn: getEquiposPadre, staleTime: 60_000 })
   const { data: preventivas } = useQuery({ queryKey: ['preventivas-due', 15], queryFn: () => getPreventivasDue(15), staleTime: 60_000 })
   const { data: kpi } = useKpiSemanalTaller(planSemanalId || null)
   const { data: cobertura } = useCoberturaPm()
@@ -111,10 +113,14 @@ export default function PlanSemanalTallerPage() {
   const [dropTarget, setDropTarget] = useState<DropTarget | null>(null)
   const [filtroPatente, setFiltroPatente] = useState('')
 
+  // Solo las 55 patentes de la flota (excluye auxiliares y otros activos de la vista).
+  const fleetIds = useMemo(() => new Set((fleet ?? []).map((e) => e.id)), [fleet])
+
   // Patentes ordenadas: Mantención y Fuera de servicio primero (luego Taller, luego resto).
   const patentesOrdenadas = useMemo(() => {
     const q = filtroPatente.trim().toLowerCase()
     return (flota ?? [])
+      .filter((a) => fleetIds.has(a.activo_id))
       .filter((a) => !q || (a.patente ?? '').toLowerCase().includes(q) || a.activo_codigo.toLowerCase().includes(q) || a.activo_nombre.toLowerCase().includes(q))
       .slice()
       .sort((a, b) => {
@@ -122,7 +128,7 @@ export default function PlanSemanalTallerPage() {
         if (da !== db) return da - db
         return (a.patente ?? a.activo_codigo).localeCompare(b.patente ?? b.activo_codigo)
       })
-  }, [flota, filtroPatente])
+  }, [flota, fleetIds, filtroPatente])
 
   // Resolver/crear plan al cambiar de semana
   useEffect(() => {
@@ -316,7 +322,7 @@ export default function PlanSemanalTallerPage() {
             {/* Patentes izq */}
             <PatentesPanel
               items={patentesOrdenadas}
-              total={flota?.length ?? 0}
+              total={fleet?.length ?? 0}
               filtro={filtroPatente}
               onFiltro={setFiltroPatente}
             />
