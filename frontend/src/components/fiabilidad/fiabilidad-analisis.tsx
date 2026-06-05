@@ -847,6 +847,21 @@ export function FiabilidadAnalisis({ readOnly = false }: { readOnly?: boolean } 
               )}
             </div>
 
+            {/* Ficha técnica (planilla Data Equipo) */}
+            {equipoHistoria.det && (
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 rounded-lg border bg-gray-50 p-3 text-xs sm:grid-cols-3">
+                <FichaCampo label="Patente"      value={equipoHistoria.det.patente} mono />
+                <FichaCampo label="Marca"        value={equipoHistoria.det.marca} />
+                <FichaCampo label="Modelo"       value={equipoHistoria.det.modelo} />
+                <FichaCampo label="Equipamiento" value={equipoHistoria.det.equipamiento} />
+                <FichaCampo label="Capacidad"    value={equipoHistoria.det.capacidad} />
+                <FichaCampo label="Año"          value={equipoHistoria.det.anio_fabricacion != null ? String(equipoHistoria.det.anio_fabricacion) : null} />
+                <FichaCampo label="Potencia (CV)" value={equipoHistoria.det.potencia} />
+                <FichaCampo label="VIN (Chasis)" value={equipoHistoria.det.vin_chasis} mono />
+                <FichaCampo label="N° Motor"     value={equipoHistoria.det.numero_motor} mono />
+              </div>
+            )}
+
             <div className="flex flex-wrap gap-0.5">
               {diasUnicos.map((f) => {
                 const e = equipoHistoria.estados[f]
@@ -893,6 +908,15 @@ export function FiabilidadAnalisis({ readOnly = false }: { readOnly?: boolean } 
 }
 
 // ─── Subcomponentes ──────────────────────────────────────
+function FichaCampo({ label, value, mono }: { label: string; value: string | null | undefined; mono?: boolean }) {
+  return (
+    <div>
+      <div className="text-[10px] uppercase tracking-wide text-gray-400">{label}</div>
+      <div className={`text-gray-800 ${mono ? 'font-mono' : 'font-medium'}`}>{value || '—'}</div>
+    </div>
+  )
+}
+
 function CompTile({
   label, actual, prev, unit, betterUp,
 }: {

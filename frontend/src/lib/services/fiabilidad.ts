@@ -120,6 +120,11 @@ export interface ActivoFiabilidadDetalle extends FiabilidadActivo {
   anio_fabricacion?: number | null
   cliente_actual?: string | null
   codigo_ceco?: string | null
+  // Ficha técnica (planilla Data Equipo)
+  capacidad?: string | null
+  potencia?: string | null
+  vin_chasis?: string | null
+  numero_motor?: string | null
   oee_a: number | null
   oee_p: number | null
   oee_q: number | null
@@ -144,7 +149,7 @@ export async function getDetalleFiabilidadFlota(
   const { data: activos, error: errActivos } = await supabase
     .from('activos')
     .select(
-      'id, patente, codigo, nombre, tipo, anio_fabricacion, categoria_uso, cliente_actual, modelo:modelos(nombre, marca:marcas(nombre))',
+      'id, patente, codigo, nombre, tipo, anio_fabricacion, categoria_uso, cliente_actual, capacidad, potencia, vin_chasis, numero_motor, modelo:modelos(nombre, marca:marcas(nombre))',
     )
     .in('tipo', ['camion_cisterna', 'camion', 'camioneta', 'lubrimovil', 'equipo_menor'])
     .neq('estado', 'dado_baja')
@@ -169,6 +174,10 @@ export async function getDetalleFiabilidadFlota(
         anio_fabricacion: a.anio_fabricacion ?? null,
         cliente_actual: a.cliente_actual ?? null,
         codigo_ceco: a.codigo ?? null,
+        capacidad: a.capacidad ?? null,
+        potencia: a.potencia ?? null,
+        vin_chasis: a.vin_chasis ?? null,
+        numero_motor: a.numero_motor ?? null,
         dias_observados: fiab.data?.dias_observados ?? 0,
         dias_up: fiab.data?.dias_up ?? 0,
         dias_down: fiab.data?.dias_down ?? 0,
