@@ -130,6 +130,7 @@ const navGroups: NavGroup[] = [
       { label: 'Contratos', href: '/dashboard/contratos', icon: FileText, module: 'contratos' },
       { label: 'Comercial', href: '/dashboard/comercial', icon: Briefcase, module: 'comercial' },
       { label: 'Consolidado Combustible', href: '/dashboard/comercial/combustible-consolidado', icon: Fuel, module: 'comercial', badge: 'Nuevo' },
+      { label: 'Fiabilidad de flota', href: '/dashboard/comercial/fiabilidad', icon: Activity, module: 'comercial', badge: 'Nuevo' },
     ],
   },
   // Bodega — UNA sola entrada. El Panel Bodega centraliza TODAS las acciones

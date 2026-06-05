@@ -11,6 +11,7 @@ import {
   MapPin,
   AlertCircle,
   Fuel,
+  Activity,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -234,6 +235,11 @@ export default function ComercialPage() {
               <DollarSign className="h-4 w-4 mr-1" /> Precios combustible
             </Button>
           </Link>
+          <Link href="/dashboard/comercial/fiabilidad">
+            <Button variant="outline" size="sm">
+              <Activity className="h-4 w-4 mr-1" /> Fiabilidad de flota
+            </Button>
+          </Link>
         </div>
       </div>
 
@@ -298,7 +304,7 @@ export default function ComercialPage() {
         <CardHeader className="pb-2">
           <CardTitle className="flex items-center justify-between gap-2 text-base">
             <span className="flex items-center gap-2"><TrendingUp className="h-5 w-5 text-emerald-600" /> Realidad operativa (panel de Fiabilidad)</span>
-            <Link href="/dashboard/fiabilidad" className="text-xs text-blue-600 hover:underline">Ver fiabilidad →</Link>
+            <Link href="/dashboard/comercial/fiabilidad" className="text-xs text-blue-600 hover:underline">Ver análisis completo →</Link>
           </CardTitle>
         </CardHeader>
         <CardContent>
