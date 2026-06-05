@@ -119,22 +119,24 @@ const PERMISSIONS: Record<RolUsuario, Record<Module, Permission[]>> = {
     reporte_diario: ['view','export'],
   },
   comercial: {
+    // El perfil comercial SOLO ve la pestaña Negocio: Contratos, Comercial y
+    // Consolidado Combustible (estos dos últimos bajo el módulo 'comercial').
     contratos: ['view','export'],
-    activos: [],                  // comercial NO ve apartado Flota ni Activos sueltos
+    activos: [],
     ordenes_trabajo: [],
     inventario: [],
     mantenimiento: [],
-    abastecimiento: ['view','export'],
+    abastecimiento: [],
     cumplimiento: [],
     kpi: [],
     iceo: [],
-    reportes: ['view','export'],
+    reportes: [],
     auditoria: [],
     admin: [],
-    flota: [],                    // comercial NO ve apartado Flota
+    flota: [],
     prevencion: [],
     comercial: ['view','create','edit','export'],
-    reporte_diario: ['view','export'],
+    reporte_diario: [],
   },
   prevencionista: {
     contratos: [],
@@ -339,6 +341,12 @@ export function usePermissions() {
     return esOperadorCalamaSolo() || esSupervisorCalamaSolo()
   }
 
+  // Perfil comercial: solo ve la pestaña Negocio (Contratos, Comercial,
+  // Consolidado Combustible). El sidebar oculta el resto de grupos.
+  function esComercialSolo(): boolean {
+    return rol === 'comercial'
+  }
+
   function tieneRolCalama(): boolean { return rolCalama !== null }
   function tieneAccesoDashboardCalama(): boolean {
     return !!rolCalama && ROLES_CALAMA_DASHBOARD.includes(rolCalama)
@@ -389,6 +397,7 @@ export function usePermissions() {
     getVisibleModules,
     rol, rolCalama,
     esOperadorCalamaSolo, esSupervisorCalamaSolo, esRestringidoCalama,
+    esComercialSolo,
     tieneRolCalama, tieneAccesoDashboardCalama,
   }
 }

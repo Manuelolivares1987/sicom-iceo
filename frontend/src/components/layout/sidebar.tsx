@@ -187,9 +187,10 @@ interface SidebarProps {
 export default function Sidebar({ collapsed, onToggle, onClose }: SidebarProps) {
   const pathname = usePathname()
   const { perfil, signOut } = useAuth()
-  const { canView, canViewExtended, esOperadorCalamaSolo, esSupervisorCalamaSolo } = usePermissions()
+  const { canView, canViewExtended, esOperadorCalamaSolo, esSupervisorCalamaSolo, esComercialSolo } = usePermissions()
   const operadorCalamaSolo = esOperadorCalamaSolo()
   const supervisorCalamaSolo = esSupervisorCalamaSolo()
+  const comercialSolo = esComercialSolo()
 
   // ── Acordeón: grupos colapsables, persistido en localStorage ──
   const [openGroups, setOpenGroups] = useState<Set<string>>(new Set())
@@ -285,6 +286,8 @@ export default function Sidebar({ collapsed, onToggle, onClose }: SidebarProps) 
         {navGroups.map((group, idx) => {
           // Restringidos a Calama: solo mostrar grupo Operacion Calama.
           if ((operadorCalamaSolo || supervisorCalamaSolo) && group.label !== 'Operación Calama') return null
+          // Perfil comercial: solo el grupo Negocio (Contratos, Comercial, Consolidado).
+          if (comercialSolo && group.label !== 'Negocio') return null
 
           // Filtro de visibilidad: aplica las mismas reglas de permisos a items
           // planos y a items dentro de subsections.
