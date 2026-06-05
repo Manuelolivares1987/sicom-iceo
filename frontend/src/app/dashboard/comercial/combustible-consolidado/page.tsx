@@ -73,7 +73,7 @@ export default function ComercialCombustibleConsolidadoPage() {
   // Solo despachos con empresa cliente identificada (excluye consumos internos
   // o despachos sin clasificar). Todas las agregaciones usan este subset.
   const rowsConEmpresa = useMemo(
-    () => rows.filter((r) => (r.externo_empresa ?? r.activo_cliente) != null),
+    () => rows.filter((r) => (r.externo_empresa ?? r.cliente_nombre_manual ?? r.activo_cliente) != null),
     [rows],
   )
   const excluidas = rows.length - rowsConEmpresa.length

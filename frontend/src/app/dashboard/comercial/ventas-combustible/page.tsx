@@ -13,9 +13,15 @@ import { Spinner } from '@/components/ui/spinner'
 import { Modal } from '@/components/ui/modal'
 import { useRequireAuth } from '@/hooks/use-require-auth'
 import {
-  cargarVentasExternasComercial,
+  cargarVentasExternasComercial, nombreClienteVenta,
 } from '@/lib/services/combustible-comercial'
 import type { TransaccionCombustibleCliente } from '@/lib/services/portal-cliente'
+
+// Patente del despacho: vehiculo externo o activo propio (las ventas a cliente
+// manual pueden no tener patente registrada).
+function patenteVenta(r: TransaccionCombustibleCliente): string | null {
+  return r.externo_patente ?? r.activo_patente ?? null
+}
 
 function fmtCLP(n: number | null) {
   if (n == null) return '—'
@@ -70,8 +76,9 @@ export default function ComercialVentasCombustiblePage() {
       totalVenta += Number(r.total_venta_clp ?? 0)
       costoCpp   += Number(r.costo_total_clp ?? 0)
       if (r.precio_venta_clp_lt == null) sinPrecio++
-      if (r.externo_empresa) empresas.add(r.externo_empresa)
-      if (r.externo_patente) patentes.add(r.externo_patente)
+      empresas.add(nombreClienteVenta(r))
+      const pat = patenteVenta(r)
+      if (pat) patentes.add(pat)
     }
     return {
       despachos: rows.length,
@@ -89,7 +96,7 @@ export default function ComercialVentasCombustiblePage() {
   const porEmpresa = useMemo(() => {
     const m = new Map<string, { despachos: number; litros: number; total: number; sin_precio: number }>()
     for (const r of rows) {
-      const e = r.externo_empresa ?? '(sin empresa)'
+      const e = nombreClienteVenta(r)
       if (!m.has(e)) m.set(e, { despachos: 0, litros: 0, total: 0, sin_precio: 0 })
       const g = m.get(e)!
       g.despachos += 1
@@ -114,7 +121,7 @@ export default function ComercialVentasCombustiblePage() {
       n == null ? '' : String(n).replace('.', ',')
 
     const headers = [
-      'Fecha', 'Empresa', 'Patente', 'Estanque', 'Litros',
+      'Fecha', 'Guia/Folio', 'Documento', 'Cliente', 'Patente', 'Estanque', 'Litros',
       'Lectura inicial', 'Lectura final',
       'Precio venta CLP/lt', 'Total a cobrar CLP', 'Costo CPP CLP', 'Margen CLP',
       'Receptor', 'RUT', 'Kilometraje',
@@ -128,8 +135,10 @@ export default function ComercialVentasCombustiblePage() {
         const cpp = Number(r.costo_total_clp ?? 0)
         return [
           new Date(r.fecha).toLocaleString('es-CL'),
-          r.externo_empresa ?? '',
-          r.externo_patente ?? '',
+          r.folio_movimiento ?? '',
+          r.documento_numero ?? '',
+          nombreClienteVenta(r),
+          patenteVenta(r) ?? '',
           r.estanque_codigo ?? '',
           fmtNum(Number(r.litros)),
           fmtNum(r.lectura_inicial_lt != null ? Number(r.lectura_inicial_lt) : null),
@@ -181,10 +190,10 @@ export default function ComercialVentasCombustiblePage() {
           <div>
             <h1 className="flex items-center gap-2 text-2xl font-bold">
               <DollarSign className="h-6 w-6 text-pillado-green-600" />
-              Ventas combustible a externos
+              Ventas combustible a clientes
             </h1>
             <p className="text-sm text-muted-foreground">
-              Detalle de cada despacho a vehículos externos autorizados. Lista para cobrar y exportable a facturación.
+              Detalle de cada venta a clientes (vehículos externos autorizados y clientes registrados), con guía/folio y evidencia. Lista para cobrar y exportable a facturación.
             </p>
           </div>
         </div>
@@ -342,7 +351,8 @@ export default function ComercialVentasCombustiblePage() {
                 <thead className="sticky top-0 bg-gray-50">
                   <tr>
                     <th className="px-2 py-2 text-left">Fecha</th>
-                    <th className="px-2 py-2 text-left">Empresa</th>
+                    <th className="px-2 py-2 text-left">Guía / Folio</th>
+                    <th className="px-2 py-2 text-left">Cliente</th>
                     <th className="px-2 py-2 text-left">Patente</th>
                     <th className="px-2 py-2 text-right">Litros</th>
                     <th className="px-2 py-2 text-right">Precio/lt</th>
@@ -361,11 +371,17 @@ export default function ComercialVentasCombustiblePage() {
                         <td className="px-2 py-1.5 text-gray-500 whitespace-nowrap">
                           {new Date(r.fecha).toLocaleString('es-CL')}
                         </td>
+                        <td className="px-2 py-1.5 font-mono text-gray-600 whitespace-nowrap">
+                          {r.folio_movimiento ?? '—'}
+                          {r.documento_numero && (
+                            <span className="ml-1 text-[10px] text-gray-400">({r.documento_numero})</span>
+                          )}
+                        </td>
                         <td className="px-2 py-1.5 text-gray-700 font-medium">
-                          {r.externo_empresa ?? '—'}
+                          {nombreClienteVenta(r)}
                         </td>
                         <td className="px-2 py-1.5 font-mono">
-                          {r.externo_patente ?? '—'}
+                          {patenteVenta(r) ?? '—'}
                         </td>
                         <td className="px-2 py-1.5 text-right font-mono">{fmtLt(r.litros)}</td>
                         <td className="px-2 py-1.5 text-right text-gray-600">
@@ -429,10 +445,12 @@ function DetalleModal({ trx, onClose }: { trx: TransaccionCombustibleCliente; on
     <Modal open={true} onClose={onClose} title={`Despacho ${new Date(trx.fecha).toLocaleString('es-CL')}`}>
       <div className="space-y-3">
         <div className="grid grid-cols-2 gap-2 text-sm">
-          <Field icon={<Building2 className="h-3 w-3" />} label="Empresa"
-                 value={trx.externo_empresa ?? '—'} />
+          <Field icon={<Building2 className="h-3 w-3" />} label="Cliente"
+                 value={nombreClienteVenta(trx)} />
           <Field icon={<Truck className="h-3 w-3" />} label="Patente"
-                 value={trx.externo_patente ?? '—'} highlight />
+                 value={patenteVenta(trx) ?? '—'} highlight />
+          <Field label="Guía / Folio" value={trx.folio_movimiento ?? '—'} />
+          {trx.documento_numero && <Field label="Documento" value={trx.documento_numero} />}
           <Field icon={<Calendar className="h-3 w-3" />} label="Fecha"
                  value={new Date(trx.fecha).toLocaleString('es-CL')} />
           <Field icon={<Fuel className="h-3 w-3" />} label="Litros"

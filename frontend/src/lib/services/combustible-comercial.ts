@@ -69,14 +69,21 @@ export async function cargarConsolidadoComercial(
   return (data ?? []) as TransaccionCombustibleCliente[]
 }
 
-// Carga solo ventas a vehiculos EXTERNOS (subcontratistas autorizados).
-// Es lo que comercial necesita para cobrar. La vista ya viene enriquecida con
-// precio_venta y total_venta_clp (MIG73).
+// Carga TODAS las ventas a clientes para cobrar: despachos a vehiculos externos
+// autorizados (salida_externa, p.ej. MYG/LISSET) Y ventas a clientes registrados
+// manualmente (salida_venta, p.ej. TPC/ECOMAC). Ambos quedan con
+// destino_tipo='venta_externa' en la vista. Excluye consumo propio (equipo/despacho).
+// La vista viene enriquecida con precio_venta y total_venta_clp (MIG73/123).
 export type FiltrosVentasExternas = {
   fechaDesde?: string
   fechaHasta?: string
   empresa?:    string
   patente?:    string
+}
+
+// Nombre del cliente a cobrar: empresa externa autorizada o cliente manual.
+export function nombreClienteVenta(r: TransaccionCombustibleCliente): string {
+  return r.externo_empresa ?? r.cliente_nombre_manual ?? '(sin cliente)'
 }
 
 export async function cargarVentasExternasComercial(
@@ -85,7 +92,7 @@ export async function cargarVentasExternasComercial(
   let q = supabase
     .from('v_combustible_movimientos_cliente')
     .select('*')
-    .not('vehiculo_externo_id', 'is', null)
+    .eq('destino_tipo', 'venta_externa')
     .order('fecha', { ascending: false })
     .limit(5000)
   if (filtros.fechaDesde) q = q.gte('fecha', filtros.fechaDesde + 'T00:00:00')
@@ -95,11 +102,13 @@ export async function cargarVentasExternasComercial(
   let rows = (data ?? []) as TransaccionCombustibleCliente[]
   if (filtros.empresa) {
     const q2 = filtros.empresa.toLowerCase()
-    rows = rows.filter((r) => (r.externo_empresa ?? '').toLowerCase().includes(q2))
+    rows = rows.filter((r) => nombreClienteVenta(r).toLowerCase().includes(q2))
   }
   if (filtros.patente) {
     const q2 = filtros.patente.toLowerCase()
-    rows = rows.filter((r) => (r.externo_patente ?? '').toLowerCase().includes(q2))
+    rows = rows.filter((r) =>
+      (r.externo_patente ?? '').toLowerCase().includes(q2) ||
+      (r.activo_patente ?? '').toLowerCase().includes(q2))
   }
   return rows
 }
@@ -131,6 +140,8 @@ export function agruparPorEmpresa(rows: TransaccionCombustibleCliente[]): Resume
     let origen: Agg['origen']
     if (r.externo_empresa) {
       empresa = r.externo_empresa; origen = 'externa'
+    } else if (r.cliente_nombre_manual) {
+      empresa = r.cliente_nombre_manual; origen = 'externa'
     } else if (r.activo_cliente) {
       empresa = r.activo_cliente;  origen = 'contrato'
     } else {
@@ -174,7 +185,7 @@ export function gruparApiladoPorDia(rows: TransaccionCombustibleCliente[], empre
   const matriz = new Map<string, Map<string, number>>()  // fecha -> empresa -> litros
   for (const r of rows) {
     const fecha = r.fecha.slice(0, 10)
-    const emp = r.externo_empresa ?? r.activo_cliente ?? '(sin clasificar)'
+    const emp = r.externo_empresa ?? r.cliente_nombre_manual ?? r.activo_cliente ?? '(sin clasificar)'
     if (!matriz.has(fecha)) matriz.set(fecha, new Map())
     const f = matriz.get(fecha)!
     f.set(emp, (f.get(emp) ?? 0) + Number(r.litros))
@@ -204,7 +215,7 @@ export function rankearPatentes(rows: TransaccionCombustibleCliente[]): PatenteR
   for (const r of rows) {
     const pat = r.activo_patente ?? r.externo_patente
     if (!pat) continue
-    const empresa = r.externo_empresa ?? r.activo_cliente ?? '—'
+    const empresa = r.externo_empresa ?? r.cliente_nombre_manual ?? r.activo_cliente ?? '—'
     if (!m.has(pat)) m.set(pat, { empresa, litros: 0, despachos: 0, costo: 0 })
     const g = m.get(pat)!
     g.litros    += Number(r.litros)

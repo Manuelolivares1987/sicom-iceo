@@ -104,6 +104,10 @@ export type TransaccionCombustibleCliente = {
   firma_receptor_url:          string | null
   horometro_vehiculo:          number | null
   kilometraje_vehiculo:        number | null
+  // MIG123: venta a cliente manual (sin vehiculo externo) + trazabilidad documental
+  cliente_nombre_manual:       string | null
+  folio_movimiento:            string | null
+  documento_numero:            string | null
 }
 
 export type FiltrosPortal = {
