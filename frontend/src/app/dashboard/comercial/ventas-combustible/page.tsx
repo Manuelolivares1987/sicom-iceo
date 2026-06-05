@@ -35,6 +35,13 @@ function todayISO()       { return new Date().toISOString().slice(0, 10) }
 function hace30diasISO()  {
   const d = new Date(); d.setDate(d.getDate() - 30); return d.toISOString().slice(0, 10)
 }
+// fecha_movimiento se guarda como fecha-solo a medianoche UTC. Formatear el día
+// calendario en UTC para NO restar la zona horaria (Chile UTC-4 corría el día anterior).
+function fmtFecha(iso: string) {
+  return new Date(iso).toLocaleDateString('es-CL', {
+    timeZone: 'UTC', day: '2-digit', month: '2-digit', year: 'numeric',
+  })
+}
 
 export default function ComercialVentasCombustiblePage() {
   useRequireAuth()
@@ -134,7 +141,7 @@ export default function ComercialVentasCombustiblePage() {
         const total = Number(r.total_venta_clp ?? 0)
         const cpp = Number(r.costo_total_clp ?? 0)
         return [
-          new Date(r.fecha).toLocaleString('es-CL'),
+          fmtFecha(r.fecha),
           r.folio_movimiento ?? '',
           r.documento_numero ?? '',
           nombreClienteVenta(r),
@@ -369,7 +376,7 @@ export default function ComercialVentasCombustiblePage() {
                       <tr key={r.id} className="border-t cursor-pointer hover:bg-gray-50"
                           onClick={() => setSeleccion(r)}>
                         <td className="px-2 py-1.5 text-gray-500 whitespace-nowrap">
-                          {new Date(r.fecha).toLocaleString('es-CL')}
+                          {fmtFecha(r.fecha)}
                         </td>
                         <td className="px-2 py-1.5 font-mono text-gray-600 whitespace-nowrap">
                           {r.folio_movimiento ?? '—'}
@@ -442,7 +449,7 @@ function DetalleModal({ trx, onClose }: { trx: TransaccionCombustibleCliente; on
   ].filter((f) => f.url)
 
   return (
-    <Modal open={true} onClose={onClose} title={`Despacho ${new Date(trx.fecha).toLocaleString('es-CL')}`}>
+    <Modal open={true} onClose={onClose} title={`Despacho ${fmtFecha(trx.fecha)}`}>
       <div className="space-y-3">
         <div className="grid grid-cols-2 gap-2 text-sm">
           <Field icon={<Building2 className="h-3 w-3" />} label="Cliente"
@@ -452,7 +459,7 @@ function DetalleModal({ trx, onClose }: { trx: TransaccionCombustibleCliente; on
           <Field label="Guía / Folio" value={trx.folio_movimiento ?? '—'} />
           {trx.documento_numero && <Field label="Documento" value={trx.documento_numero} />}
           <Field icon={<Calendar className="h-3 w-3" />} label="Fecha"
-                 value={new Date(trx.fecha).toLocaleString('es-CL')} />
+                 value={fmtFecha(trx.fecha)} />
           <Field icon={<Fuel className="h-3 w-3" />} label="Litros"
                  value={fmtLt(trx.litros)} highlight />
           <Field label="Precio CLP/lt"
