@@ -155,7 +155,9 @@ export function DespachoSellosForm() {
       foto_medidor_inicial_url: evidencia.foto_medidor_inicial_url ?? '',
       foto_medidor_final_url:   evidencia.foto_medidor_final_url ?? '',
       firma_receptor_url:       evidencia.firma_receptor_url ?? '',
-      fecha_movimiento:       fecha ? `${fecha}T00:00:00Z` : null,
+      // Si es hoy, enviamos null para que el RPC use NOW() y quede la HORA real.
+      // Si está retrofechada, se guarda como fecha-solo (sin hora inventada).
+      fecha_movimiento:       !fecha || fecha === todayISO() ? null : `${fecha}T00:00:00Z`,
       observacion:            observacion.trim() || null,
       kilometraje_vehiculo:   esExterno && typeof kilometraje === 'number' ? kilometraje : null,
     }

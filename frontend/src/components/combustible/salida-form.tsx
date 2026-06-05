@@ -234,7 +234,9 @@ export function SalidaCombustibleForm() {
         ceco_id: requiereCECO ? cecoId : null,
         faena_id: requiereFaena ? faenaId : null,
         cliente_nombre: requiereCliente ? clienteNombre.trim() : null,
-        fecha_movimiento: fecha ? `${fecha}T00:00:00Z` : null,
+        // Si es hoy, enviamos null para que el RPC use NOW() y quede la HORA real.
+        // Si está retrofechada, se guarda como fecha-solo (sin hora inventada).
+        fecha_movimiento: !fecha || fecha === todayISO() ? null : `${fecha}T00:00:00Z`,
         observacion: observacion.trim() || null,
         vehiculo_externo_id: esExterno ? vehiculoExternoId : null,
         foto_medidor_inicial_url: fotoInicial?.url ?? null,

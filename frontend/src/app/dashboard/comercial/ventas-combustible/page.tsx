@@ -35,11 +35,21 @@ function todayISO()       { return new Date().toISOString().slice(0, 10) }
 function hace30diasISO()  {
   const d = new Date(); d.setDate(d.getDate() - 30); return d.toISOString().slice(0, 10)
 }
-// fecha_movimiento se guarda como fecha-solo a medianoche UTC. Formatear el día
-// calendario en UTC para NO restar la zona horaria (Chile UTC-4 corría el día anterior).
+// Registros antiguos se guardaban como fecha-solo a medianoche UTC (sin hora real);
+// para esos mostramos el día calendario en UTC y NO restamos la zona horaria
+// (Chile UTC-4 corría el día anterior). Los registros nuevos llevan hora real
+// (NOW()): para esos mostramos fecha + hora en horario de Chile.
 function fmtFecha(iso: string) {
-  return new Date(iso).toLocaleDateString('es-CL', {
-    timeZone: 'UTC', day: '2-digit', month: '2-digit', year: 'numeric',
+  const d = new Date(iso)
+  const esFechaSolo = d.getUTCHours() === 0 && d.getUTCMinutes() === 0 && d.getUTCSeconds() === 0
+  if (esFechaSolo) {
+    return d.toLocaleDateString('es-CL', {
+      timeZone: 'UTC', day: '2-digit', month: '2-digit', year: 'numeric',
+    })
+  }
+  return d.toLocaleString('es-CL', {
+    timeZone: 'America/Santiago',
+    day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
   })
 }
 
