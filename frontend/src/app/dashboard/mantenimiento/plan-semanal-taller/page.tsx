@@ -8,6 +8,7 @@ import {
 import {
   Calendar, ArrowLeft, ChevronLeft, ChevronRight, Lock, AlertTriangle, Trash2, User,
   Play, Pause, CheckCircle2, BarChart3, ShieldAlert, RefreshCw, Wrench, Layers, FileSpreadsheet,
+  Truck, Clock,
 } from 'lucide-react'
 import { exportarPlanSemanalExcel, descargarBlob } from '@/lib/export/plan-semanal-excel'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
@@ -17,19 +18,52 @@ import { Modal, ModalFooter } from '@/components/ui/modal'
 import { Input } from '@/components/ui/input'
 import { useToast } from '@/contexts/toast-context'
 import { useRequireAuth } from '@/hooks/use-require-auth'
+import { useQuery } from '@tanstack/react-query'
 import {
   useGetOrCreatePlanSemanalTaller, useDiasPlanSemanalTaller, useJornadasPlanSemanalTaller,
-  useBacklogTaller, useKpiSemanalTaller, useCumplimientoPmMesTaller,
+  useKpiSemanalTaller, useCumplimientoPmMesTaller,
   useUsuariosAsignablesTaller, useCoberturaPm, useActivosSinPlan,
   useAgregarJornadaTaller, useMoverJornadaTaller, useQuitarJornadaTaller,
   useAsignarResponsableTaller, useConfirmarPlanSemanalTaller,
   useIniciarEjecucionTaller, usePausarEjecucionTaller, useFinalizarEjecucionTaller,
   useAdminSembrarPlanesFaltantes,
 } from '@/hooks/use-taller-plan-semanal'
-import { lunesDeIso, type TallerPlanOTFull, type TallerOTBacklog } from '@/lib/services/taller-plan-semanal'
+import { lunesDeIso, type TallerPlanOTFull } from '@/lib/services/taller-plan-semanal'
+import { getFlotaDashboard, type FlotaDashboardActivo } from '@/lib/services/flota-dashboard'
+import {
+  getPlanesActivo, getPreventivasDue, programarOtTaller,
+  type PlanActivo, type PreventivaDue, type TipoOtTaller, type PrioridadTaller,
+} from '@/lib/services/taller-planificacion'
 
-const BACKLOG_ID = 'backlog'
 type Tab = 'kanban' | 'cobertura' | 'cumplimiento'
+
+// Estados de flota: M/F (y T) primero en el panel de patentes.
+const ESTADO_INFO: Record<string, { label: string; cls: string }> = {
+  M: { label: 'Mantención',     cls: 'bg-amber-100 text-amber-800' },
+  F: { label: 'Fuera servicio', cls: 'bg-red-100 text-red-800' },
+  T: { label: 'Taller',         cls: 'bg-orange-100 text-orange-800' },
+  A: { label: 'Arrendado',      cls: 'bg-green-100 text-green-700' },
+  C: { label: 'En contrato',    cls: 'bg-green-100 text-green-700' },
+  D: { label: 'Disponible',     cls: 'bg-blue-100 text-blue-700' },
+  R: { label: 'Tránsito',       cls: 'bg-cyan-100 text-cyan-700' },
+  U: { label: 'Uso interno',    cls: 'bg-sky-100 text-sky-700' },
+  L: { label: 'Leasing',        cls: 'bg-indigo-100 text-indigo-700' },
+  V: { label: 'En venta',       cls: 'bg-purple-100 text-purple-700' },
+  H: { label: 'Sin clasificar', cls: 'bg-gray-100 text-gray-600' },
+}
+const ORDEN_ESTADO: Record<string, number> = { M: 0, F: 1, T: 2 }
+function ordenEstado(cod: string | null): number {
+  return cod && cod in ORDEN_ESTADO ? ORDEN_ESTADO[cod] : 9
+}
+
+// Objetivo de drop pendiente: patente/preventiva soltada en un día.
+type DropTarget = {
+  activoId: string
+  label: string          // patente · código
+  fecha: string
+  planIdPre: string | null
+  tipoPre: TipoOtTaller
+}
 
 function fmtFecha(iso: string) {
   const d = new Date(iso + 'T12:00:00')
@@ -46,14 +80,6 @@ function colorTipo(tipo: string): string {
   }
 }
 
-function colorPrioridad(p: string): string {
-  if (p === 'emergencia') return 'bg-red-600 text-white'
-  if (p === 'urgente')    return 'bg-orange-500 text-white'
-  if (p === 'alta')       return 'bg-amber-500 text-white'
-  if (p === 'normal')     return 'bg-gray-300 text-gray-800'
-  return 'bg-gray-100 text-gray-600'
-}
-
 export default function PlanSemanalTallerPage() {
   useRequireAuth()
   const toast = useToast()
@@ -65,7 +91,8 @@ export default function PlanSemanalTallerPage() {
   const getOrCreate = useGetOrCreatePlanSemanalTaller()
   const { data: dias } = useDiasPlanSemanalTaller(planSemanalId || null)
   const { data: jornadas, isLoading: loadJornadas } = useJornadasPlanSemanalTaller(planSemanalId || null)
-  const { data: backlog } = useBacklogTaller()
+  const { data: flota } = useQuery({ queryKey: ['flota-dashboard'], queryFn: getFlotaDashboard, staleTime: 60_000 })
+  const { data: preventivas } = useQuery({ queryKey: ['preventivas-due', 15], queryFn: () => getPreventivasDue(15), staleTime: 60_000 })
   const { data: kpi } = useKpiSemanalTaller(planSemanalId || null)
   const { data: cobertura } = useCoberturaPm()
 
@@ -81,6 +108,21 @@ export default function PlanSemanalTallerPage() {
   const [finalizarOpen, setFinalizarOpen] = useState<TallerPlanOTFull | null>(null)
   const [finAvance, setFinAvance] = useState<number>(100)
   const [finObs, setFinObs] = useState<string>('')
+  const [dropTarget, setDropTarget] = useState<DropTarget | null>(null)
+  const [filtroPatente, setFiltroPatente] = useState('')
+
+  // Patentes ordenadas: Mantención y Fuera de servicio primero (luego Taller, luego resto).
+  const patentesOrdenadas = useMemo(() => {
+    const q = filtroPatente.trim().toLowerCase()
+    return (flota ?? [])
+      .filter((a) => !q || (a.patente ?? '').toLowerCase().includes(q) || a.activo_codigo.toLowerCase().includes(q) || a.activo_nombre.toLowerCase().includes(q))
+      .slice()
+      .sort((a, b) => {
+        const da = ordenEstado(a.estado_codigo_hoy), db = ordenEstado(b.estado_codigo_hoy)
+        if (da !== db) return da - db
+        return (a.patente ?? a.activo_codigo).localeCompare(b.patente ?? b.activo_codigo)
+      })
+  }, [flota, filtroPatente])
 
   // Resolver/crear plan al cambiar de semana
   useEffect(() => {
@@ -98,36 +140,39 @@ export default function PlanSemanalTallerPage() {
     setSemanaIso(lunesDeIso(d))
   }
 
-  // OTs ya asignadas al plan (para filtrar el backlog y no duplicar)
-  const otsEnPlan = useMemo(() => new Set((jornadas ?? []).map((j) => j.ot_id)), [jornadas])
-  const backlogFiltrado = useMemo(
-    () => (backlog ?? []).filter((b) => !otsEnPlan.has(b.ot_id)),
-    [backlog, otsEnPlan],
-  )
-
   // Drag & drop
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
 
   const handleDragEnd = (e: DragEndEvent) => {
     const aOver = e.over?.id?.toString()
     const aActive = e.active?.id?.toString()
-    if (!aOver || !aActive) return
-
-    const isFromBacklog = aActive.startsWith('backlog:')
-    const isFromJornada = aActive.startsWith('jornada:')
-    if (!aOver.startsWith('dia:')) return
-
+    if (!aOver || !aActive || !aOver.startsWith('dia:')) return
     const fechaDestino = aOver.replace('dia:', '')
 
-    if (isFromBacklog) {
-      const otId = aActive.replace('backlog:', '')
-      agregarJornada.mutate({
-        planSemanalId, otId, fecha: fechaDestino,
-      }, {
-        onSuccess: () => toast.success('OT agregada al plan'),
-        onError: (err) => toast.error((err as Error).message),
+    if (aActive.startsWith('patente:')) {
+      // patente:<activoId> -> abrir diálogo para elegir tipo + pauta (actividades)
+      const activoId = aActive.replace('patente:', '')
+      const a = (flota ?? []).find((x) => x.activo_id === activoId)
+      if (!a) return
+      setDropTarget({
+        activoId,
+        label: a.patente ? `${a.patente} · ${a.activo_codigo}` : a.activo_codigo,
+        fecha: fechaDestino,
+        planIdPre: null,
+        tipoPre: 'preventivo',
       })
-    } else if (isFromJornada) {
+    } else if (aActive.startsWith('preventiva:')) {
+      // preventiva:<activoId>:<planId> -> diálogo con la pauta vencida preseleccionada
+      const [, activoId, planId] = aActive.split(':')
+      const p = (preventivas ?? []).find((x) => x.activo_id === activoId && x.plan_id === planId)
+      setDropTarget({
+        activoId,
+        label: p ? `${p.patente} · ${p.pauta_nombre ?? 'PM'}` : activoId,
+        fecha: fechaDestino,
+        planIdPre: planId,
+        tipoPre: 'preventivo',
+      })
+    } else if (aActive.startsWith('jornada:')) {
       const planOtId = aActive.replace('jornada:', '')
       moverJornada.mutate({ planOtId, fechaDestino }, {
         onSuccess: () => toast.success('Jornada movida'),
@@ -149,7 +194,7 @@ export default function PlanSemanalTallerPage() {
               Plan semanal del taller
             </h1>
             <p className="text-sm text-muted-foreground">
-              Programa preventivas y correctivas. Drag &amp; drop entre días.
+              Arrastra una patente a un día y elige las actividades (pauta). Drag &amp; drop entre días.
             </p>
           </div>
         </div>
@@ -268,37 +313,47 @@ export default function PlanSemanalTallerPage() {
       {tab === 'kanban' && (
         <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
           <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-3">
-            {/* Backlog izq */}
-            <BacklogPanel items={backlogFiltrado} />
+            {/* Patentes izq */}
+            <PatentesPanel
+              items={patentesOrdenadas}
+              total={flota?.length ?? 0}
+              filtro={filtroPatente}
+              onFiltro={setFiltroPatente}
+            />
 
-            {/* 7 días */}
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-7 gap-2">
-              {loadJornadas ? (
-                <div className="col-span-7 flex justify-center py-10"><Spinner /></div>
-              ) : (
-                (dias ?? []).map((dia) => (
-                  <DiaColumna
-                    key={dia.id}
-                    fecha={dia.fecha}
-                    nombre={dia.nombre_dia}
-                    jornadas={(jornadas ?? []).filter((j) => j.plan_dia_id === dia.id)}
-                    onAsignar={(j) => setAsignarOpen(j)}
-                    onQuitar={(j) => quitarJornada.mutate(j.plan_ot_id, {
-                      onSuccess: () => toast.success('Jornada quitada'),
-                      onError: (err) => toast.error((err as Error).message),
-                    })}
-                    onIniciar={(j) => iniciarEjec.mutate({ otId: j.ot_id }, {
-                      onSuccess: () => toast.success('OT iniciada'),
-                      onError: (err) => toast.error((err as Error).message),
-                    })}
-                    onPausar={(j) => j.ejecucion_activa_id && pausarEjec.mutate({ ejecucionId: j.ejecucion_activa_id }, {
-                      onSuccess: () => toast.success('OT pausada'),
-                      onError: (err) => toast.error((err as Error).message),
-                    })}
-                    onFinalizar={(j) => { setFinalizarOpen(j); setFinAvance(100); setFinObs('') }}
-                  />
-                ))
-              )}
+            {/* Días + preventivas sugeridas */}
+            <div className="space-y-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-7 gap-2">
+                {loadJornadas ? (
+                  <div className="col-span-7 flex justify-center py-10"><Spinner /></div>
+                ) : (
+                  (dias ?? []).map((dia) => (
+                    <DiaColumna
+                      key={dia.id}
+                      fecha={dia.fecha}
+                      nombre={dia.nombre_dia}
+                      jornadas={(jornadas ?? []).filter((j) => j.plan_dia_id === dia.id)}
+                      onAsignar={(j) => setAsignarOpen(j)}
+                      onQuitar={(j) => quitarJornada.mutate(j.plan_ot_id, {
+                        onSuccess: () => toast.success('Jornada quitada'),
+                        onError: (err) => toast.error((err as Error).message),
+                      })}
+                      onIniciar={(j) => iniciarEjec.mutate({ otId: j.ot_id }, {
+                        onSuccess: () => toast.success('OT iniciada'),
+                        onError: (err) => toast.error((err as Error).message),
+                      })}
+                      onPausar={(j) => j.ejecucion_activa_id && pausarEjec.mutate({ ejecucionId: j.ejecucion_activa_id }, {
+                        onSuccess: () => toast.success('OT pausada'),
+                        onError: (err) => toast.error((err as Error).message),
+                      })}
+                      onFinalizar={(j) => { setFinalizarOpen(j); setFinAvance(100); setFinObs('') }}
+                    />
+                  ))
+                )}
+              </div>
+
+              {/* Preventivas sugeridas (arrástralas a un día) */}
+              <PreventivasSugeridas items={preventivas ?? []} />
             </div>
           </div>
         </DndContext>
@@ -345,6 +400,17 @@ export default function PlanSemanalTallerPage() {
           </ModalFooter>
         </Modal>
       )}
+
+      {/* Diálogo: programar patente en el día (elige tipo + pauta) */}
+      {dropTarget && (
+        <ProgramarOtDialog
+          target={dropTarget}
+          planSemanalId={planSemanalId}
+          onClose={() => setDropTarget(null)}
+          onDone={() => { setDropTarget(null) }}
+          agregarJornada={agregarJornada}
+        />
+      )}
     </div>
   )
 }
@@ -375,60 +441,217 @@ function KpiCard({ label, valor, color }: { label: string; valor: string | numbe
   )
 }
 
-function BacklogPanel({ items }: { items: TallerOTBacklog[] }) {
-  const { setNodeRef, isOver } = useDroppable({ id: BACKLOG_ID })
+function PatentesPanel({ items, total, filtro, onFiltro }: {
+  items: FlotaDashboardActivo[]
+  total: number
+  filtro: string
+  onFiltro: (v: string) => void
+}) {
   return (
-    <Card ref={setNodeRef} className={isOver ? 'ring-2 ring-blue-300' : ''}>
+    <Card>
       <CardHeader className="pb-2">
         <CardTitle className="text-sm flex items-center gap-2">
-          <Layers className="h-4 w-4" /> OTs pendientes ({items.length})
+          <Truck className="h-4 w-4" /> Patentes ({items.length}/{total})
         </CardTitle>
       </CardHeader>
-      <CardContent className="p-2 max-h-[70vh] overflow-y-auto space-y-1.5">
+      <CardContent className="p-2 space-y-2">
+        <Input value={filtro} onChange={(e) => onFiltro(e.target.value)}
+               placeholder="Buscar patente / código…" className="h-8 text-xs" />
+        <div className="text-[10px] text-gray-400">Mantención y fuera de servicio primero. Arrastra a un día →</div>
+        <div className="max-h-[64vh] overflow-y-auto space-y-1.5">
+          {items.length === 0 ? (
+            <div className="text-xs text-gray-400 p-4 text-center">Sin patentes</div>
+          ) : (
+            items.map((a) => <PatenteCard key={a.activo_id} a={a} />)
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+function PatenteCard({ a }: { a: FlotaDashboardActivo }) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: `patente:${a.activo_id}` })
+  const style = transform
+    ? { transform: `translate3d(${transform.x}px,${transform.y}px,0)`, opacity: isDragging ? 0.5 : 1 }
+    : undefined
+  const est = a.estado_codigo_hoy ? ESTADO_INFO[a.estado_codigo_hoy] : undefined
+
+  return (
+    <div ref={setNodeRef} style={style} {...listeners} {...attributes}
+         className="rounded border bg-white p-2 cursor-grab active:cursor-grabbing hover:border-blue-400 shadow-sm">
+      <div className="flex items-center justify-between gap-1">
+        <span className="text-[11px] font-mono font-bold">{a.patente ?? a.activo_codigo}</span>
+        {est && <span className={`text-[8px] px-1 py-0.5 rounded font-bold ${est.cls}`}>{est.label}</span>}
+      </div>
+      <div className="text-[10px] text-gray-500 truncate">{a.activo_codigo} · {a.activo_nombre}</div>
+      {a.pm_status === 'vencido' && (
+        <div className="text-[9px] text-red-600 mt-0.5 font-semibold">PM vencido</div>
+      )}
+    </div>
+  )
+}
+
+function PreventivasSugeridas({ items }: { items: PreventivaDue[] }) {
+  return (
+    <Card className="border-amber-200">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm flex items-center gap-2 text-amber-800">
+          <ShieldAlert className="h-4 w-4" /> Preventivas sugeridas ({items.length})
+          <span className="text-[10px] font-normal text-gray-400">— vencidas o próximas (15 días). Arrástralas a un día.</span>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="p-2">
         {items.length === 0 ? (
-          <div className="text-xs text-gray-400 p-4 text-center">Sin OTs pendientes</div>
+          <div className="text-xs text-gray-400 p-3 text-center">Sin preventivas vencidas ni próximas.</div>
         ) : (
-          items.map((b) => <BacklogCard key={b.ot_id} item={b} />)
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {items.map((p) => <PreventivaCard key={`${p.activo_id}:${p.plan_id}`} p={p} />)}
+          </div>
         )}
       </CardContent>
     </Card>
   )
 }
 
-function BacklogCard({ item }: { item: TallerOTBacklog }) {
+function PreventivaCard({ p }: { p: PreventivaDue }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
-    id: `backlog:${item.ot_id}`,
+    id: `preventiva:${p.activo_id}:${p.plan_id}`,
   })
   const style = transform
     ? { transform: `translate3d(${transform.x}px,${transform.y}px,0)`, opacity: isDragging ? 0.5 : 1 }
     : undefined
+  const vencida = p.dias_vencido > 0
 
   return (
     <div ref={setNodeRef} style={style} {...listeners} {...attributes}
-         className="rounded border bg-white p-2 cursor-grab active:cursor-grabbing hover:border-blue-400 shadow-sm">
-      <div className="flex items-center gap-1.5">
-        <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold ${colorTipo(item.ot_tipo)}`}>
-          {item.ot_tipo.toUpperCase().slice(0, 4)}
-        </span>
-        <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold ${colorPrioridad(item.ot_prioridad)}`}>
-          {item.ot_prioridad}
-        </span>
+         className={`min-w-[160px] max-w-[160px] rounded border p-2 cursor-grab active:cursor-grabbing shadow-sm ${
+           vencida ? 'border-red-300 bg-red-50' : 'border-amber-200 bg-amber-50'
+         }`}>
+      <div className="text-[11px] font-mono font-bold">{p.patente}</div>
+      <div className="text-[10px] text-blue-700 line-clamp-2 min-h-[26px]">{p.pauta_nombre ?? 'PM'}</div>
+      <div className={`text-[9px] mt-0.5 flex items-center gap-1 ${vencida ? 'text-red-600' : 'text-amber-700'}`}>
+        <Clock className="h-3 w-3" />
+        {vencida ? `Vencida ${p.dias_vencido}d` : `En ${Math.abs(p.dias_vencido)}d`}
+        {p.duracion_estimada_hrs ? ` · ${p.duracion_estimada_hrs}h` : ''}
       </div>
-      <div className="text-[11px] font-mono font-bold mt-1">{item.ot_folio}</div>
-      {item.activo_codigo && (
-        <div className="text-[10px] text-gray-600">
-          {item.activo_codigo} {item.activo_patente && `· ${item.activo_patente}`}
-        </div>
-      )}
-      {item.pm_nombre && (
-        <div className="text-[10px] text-blue-700 mt-0.5 line-clamp-2">{item.pm_nombre}</div>
-      )}
-      {item.proxima_ejecucion_fecha && (
-        <div className="text-[9px] text-gray-400 mt-0.5">
-          PM vence: {fmtFecha(item.proxima_ejecucion_fecha)}
-        </div>
-      )}
     </div>
+  )
+}
+
+function ProgramarOtDialog({ target, planSemanalId, onClose, onDone, agregarJornada }: {
+  target: DropTarget
+  planSemanalId: string
+  onClose: () => void
+  onDone: () => void
+  agregarJornada: ReturnType<typeof useAgregarJornadaTaller>
+}) {
+  const toast = useToast()
+  const { data: planes } = useQuery({
+    queryKey: ['planes-activo', target.activoId],
+    queryFn: () => getPlanesActivo(target.activoId),
+  })
+  const { data: usuarios } = useUsuariosAsignablesTaller()
+  const [tipo, setTipo] = useState<TipoOtTaller>(target.tipoPre)
+  const [planId, setPlanId] = useState<string>(target.planIdPre ?? '')
+  const [prioridad, setPrioridad] = useState<PrioridadTaller>('normal')
+  const [responsableId, setResponsableId] = useState('')
+  const [fecha, setFecha] = useState(target.fecha)
+  const [enviando, setEnviando] = useState(false)
+
+  // Preseleccionar la primera pauta cuando cargan los planes (si no vino preset).
+  useEffect(() => {
+    if (!target.planIdPre && tipo === 'preventivo' && !planId && planes && planes.length > 0) {
+      setPlanId(planes[0].id)
+    }
+  /* eslint-disable-next-line react-hooks/exhaustive-deps */
+  }, [planes])
+
+  const submit = async () => {
+    setEnviando(true)
+    try {
+      const r = await programarOtTaller({
+        activoId: target.activoId, tipo, prioridad, fecha,
+        responsableId: responsableId || null,
+        planId: tipo === 'preventivo' ? (planId || null) : null,
+      })
+      await agregarJornada.mutateAsync({ planSemanalId, otId: r.id, fecha })
+      toast.success(`OT ${r.folio} programada en el día`)
+      onDone()
+    } catch (e) {
+      toast.error((e as Error).message)
+    } finally {
+      setEnviando(false)
+    }
+  }
+
+  return (
+    <Modal open onClose={onClose} title={`Programar · ${target.label}`}>
+      <div className="space-y-3">
+        <div>
+          <label className="text-xs font-medium">Tipo de trabajo</label>
+          <select value={tipo} onChange={(e) => setTipo(e.target.value as TipoOtTaller)}
+                  className="w-full rounded border px-2 py-1.5 text-sm">
+            <option value="preventivo">Preventivo (actividades desde pauta)</option>
+            <option value="correctivo">Correctivo</option>
+            <option value="inspeccion">Inspección</option>
+          </select>
+        </div>
+
+        {tipo === 'preventivo' && (
+          <div>
+            <label className="text-xs font-medium">Pauta / actividades</label>
+            <select value={planId} onChange={(e) => setPlanId(e.target.value)}
+                    className="w-full rounded border px-2 py-1.5 text-sm">
+              <option value="">— Sin pauta (checklist genérico) —</option>
+              {(planes ?? []).map((pl: PlanActivo) => (
+                <option key={pl.id} value={pl.id}>
+                  {pl.pauta_nombre ?? pl.nombre ?? 'Pauta'}{pl.duracion_estimada_hrs ? ` (${pl.duracion_estimada_hrs}h)` : ''}
+                </option>
+              ))}
+            </select>
+            {planes && planes.length === 0 && (
+              <p className="text-[10px] text-amber-600 mt-1">Este equipo no tiene pautas cargadas; se usará el checklist genérico del tipo de OT.</p>
+            )}
+          </div>
+        )}
+
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="text-xs font-medium">Día</label>
+            <Input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} />
+          </div>
+          <div>
+            <label className="text-xs font-medium">Prioridad</label>
+            <select value={prioridad} onChange={(e) => setPrioridad(e.target.value as PrioridadTaller)}
+                    className="w-full rounded border px-2 py-1.5 text-sm">
+              <option value="emergencia">Emergencia</option>
+              <option value="alta">Alta</option>
+              <option value="normal">Normal</option>
+              <option value="baja">Baja</option>
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <label className="text-xs font-medium">Responsable (opcional)</label>
+          <select value={responsableId} onChange={(e) => setResponsableId(e.target.value)}
+                  className="w-full rounded border px-2 py-1.5 text-sm">
+            <option value="">— Sin asignar —</option>
+            {(usuarios ?? []).map((u) => (
+              <option key={u.id} value={u.id}>{u.nombre_completo}{u.rol ? ` (${u.rol})` : ''}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+      <ModalFooter>
+        <Button variant="outline" onClick={onClose}>Cancelar</Button>
+        <Button disabled={enviando || !fecha} onClick={submit}>
+          {enviando ? <Spinner className="h-4 w-4 mr-1" /> : null}
+          Programar en el día
+        </Button>
+      </ModalFooter>
+    </Modal>
   )
 }
 
