@@ -69,10 +69,13 @@ export async function cargarConsolidadoComercial(
   return (data ?? []) as TransaccionCombustibleCliente[]
 }
 
-// Carga TODAS las ventas a clientes para cobrar: despachos a vehiculos externos
-// autorizados (salida_externa, p.ej. MYG/LISSET) Y ventas a clientes registrados
-// manualmente (salida_venta, p.ej. TPC/ECOMAC). Ambos quedan con
-// destino_tipo='venta_externa' en la vista. Excluye consumo propio (equipo/despacho).
+// Carga TODAS las ventas a clientes para cobrar:
+//   - despachos a vehículos externos autorizados (salida_externa, p.ej. MYG/LISSET)
+//   - ventas a clientes registrados manualmente (salida_venta, p.ej. TPC/ECOMAC)
+//     -> ambos quedan con destino_tipo='venta_externa' en la vista.
+//   - combustible cargado a vehículos ARRENDADOS a un cliente (activo bajo contrato,
+//     p.ej. el aljibe de "Mina Ra, La Higuera") -> activo_contrato_id NOT NULL.
+// Excluye el consumo interno de equipos propios sin contrato.
 // La vista viene enriquecida con precio_venta y total_venta_clp (MIG73/123).
 export type FiltrosVentasExternas = {
   fechaDesde?: string
@@ -81,9 +84,10 @@ export type FiltrosVentasExternas = {
   patente?:    string
 }
 
-// Nombre del cliente a cobrar: empresa externa autorizada o cliente manual.
+// Nombre del cliente a cobrar: empresa externa autorizada, cliente manual o
+// cliente del contrato (vehículo arrendado).
 export function nombreClienteVenta(r: TransaccionCombustibleCliente): string {
-  return r.externo_empresa ?? r.cliente_nombre_manual ?? '(sin cliente)'
+  return r.externo_empresa ?? r.cliente_nombre_manual ?? r.activo_cliente ?? '(sin cliente)'
 }
 
 export async function cargarVentasExternasComercial(
@@ -92,7 +96,7 @@ export async function cargarVentasExternasComercial(
   let q = supabase
     .from('v_combustible_movimientos_cliente')
     .select('*')
-    .eq('destino_tipo', 'venta_externa')
+    .or('destino_tipo.eq.venta_externa,activo_contrato_id.not.is.null')
     .order('fecha', { ascending: false })
     .limit(5000)
   if (filtros.fechaDesde) q = q.gte('fecha', filtros.fechaDesde + 'T00:00:00')
