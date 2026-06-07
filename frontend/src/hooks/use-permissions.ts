@@ -21,6 +21,7 @@ const EXTENDED_VIEW: Record<ExtendedModule, RolUsuario[]> = {
   mantencion_qr: [
     'administrador', 'gerencia', 'subgerente_operaciones', 'jefe_operaciones',
     'jefe_mantenimiento', 'planificador', 'supervisor', 'tecnico_mantenimiento', 'auditor',
+    'auditor_calidad',
   ],
 }
 
@@ -299,6 +300,27 @@ const PERMISSIONS: Record<RolUsuario, Record<Module, Permission[]>> = {
     prevencion: [],
     comercial: [],
     reporte_diario: [],
+  },
+  // Auditor de Calidad: control de calidad del taller (Gate 1 chequeo cruzado,
+  // Gate 2 auditoria pre-operativo, diferidos). 'approve' en mantenimiento
+  // habilita la liberacion a operativo.
+  auditor_calidad: {
+    contratos: [],
+    activos: ['view','edit'],
+    ordenes_trabajo: ['view','edit'],
+    inventario: ['view'],
+    mantenimiento: ['view','create','edit','approve','export'],
+    abastecimiento: [],
+    cumplimiento: ['view'],
+    kpi: ['view'],
+    iceo: [],
+    reportes: ['view','export'],
+    auditoria: ['view','export'],
+    admin: [],
+    flota: ['view','edit'],
+    prevencion: ['view'],
+    comercial: [],
+    reporte_diario: ['view'],
   },
 }
 

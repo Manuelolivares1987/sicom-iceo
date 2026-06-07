@@ -77,6 +77,7 @@ const rolBadgeColors: Record<RolUsuario, string> = {
   prevencionista: 'bg-red-100 text-red-700',
   colaborador: 'bg-gray-100 text-gray-700',
   auditor: 'bg-gray-100 text-gray-700',
+  auditor_calidad: 'bg-emerald-100 text-emerald-700',
   rrhh_incentivos: 'bg-pink-100 text-pink-700',
 }
 
@@ -95,6 +96,7 @@ const rolLabels: Record<RolUsuario, string> = {
   prevencionista: 'Prevencionista',
   colaborador: 'Colaborador',
   auditor: 'Auditor',
+  auditor_calidad: 'Auditor de Calidad',
   rrhh_incentivos: 'RRHH Incentivos',
 }
 

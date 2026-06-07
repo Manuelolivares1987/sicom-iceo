@@ -80,6 +80,8 @@ const navGroups: NavGroup[] = [
       { label: 'Planificación Taller', href: '/dashboard/mantenimiento/planificacion', icon: HardHat, module: 'mantenimiento', badge: 'Nuevo' },
       { label: 'Equipos auxiliares', href: '/dashboard/mantenimiento/auxiliares', icon: Layers, module: 'mantenimiento', badge: 'Nuevo' },
       { label: 'Plan semanal taller', href: '/dashboard/mantenimiento/plan-semanal-taller', icon: CalendarClock, module: 'mantenimiento', badge: 'Nuevo' },
+      { label: 'Chequeo cruzado (calidad)', href: '/dashboard/mantenimiento/chequeo-cruzado', icon: ClipboardCheck, module: 'mantenimiento', badge: 'Nuevo' },
+      { label: 'Auditoría de calidad', href: '/dashboard/mantenimiento/auditoria-calidad', icon: ShieldCheck, module: 'mantenimiento', badge: 'Nuevo' },
     ],
   },
   // Operación Calama (planificación + ejecución para faenas Calama)
