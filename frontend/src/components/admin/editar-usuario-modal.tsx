@@ -43,6 +43,7 @@ const rolOptions: Array<{ value: RolUsuario; label: string }> = [
   { value: 'prevencionista', label: 'Prevencionista' },
   { value: 'colaborador', label: 'Colaborador' },
   { value: 'auditor', label: 'Auditor' },
+  { value: 'auditor_calidad', label: 'Auditor de Calidad' },
   { value: 'rrhh_incentivos', label: 'RRHH Incentivos' },
 ]
 

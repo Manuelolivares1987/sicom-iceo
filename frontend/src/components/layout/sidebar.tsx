@@ -167,6 +167,7 @@ const navGroups: NavGroup[] = [
     items: [
       { label: 'Auditoría', href: '/dashboard/auditoria', icon: Eye, module: 'auditoria' },
       { label: 'Administración', href: '/dashboard/admin', icon: Settings, module: 'admin' },
+      { label: 'Perfiles y Roles', href: '/dashboard/admin/perfiles-roles', icon: ShieldCheck, module: 'admin', badge: 'Nuevo' },
       { label: 'GPS', href: '/dashboard/admin/gps', icon: Truck, module: 'admin' },
       { label: 'Geocercas', href: '/dashboard/admin/geocercas', icon: AlertTriangle, module: 'admin', badge: 'Nuevo' },
       { label: 'Portal Cliente', href: '/dashboard/admin/portal-usuarios', icon: Briefcase, module: 'admin', badge: 'Nuevo' },

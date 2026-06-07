@@ -1,6 +1,8 @@
 'use client'
 
+import { useQuery } from '@tanstack/react-query'
 import { useAuth, type RolCalama } from '@/contexts/auth-context'
+import { supabase } from '@/lib/supabase'
 import type { RolUsuario } from '@/types/database'
 
 export type Module = 'contratos' | 'activos' | 'ordenes_trabajo' | 'inventario' | 'mantenimiento' | 'abastecimiento' | 'cumplimiento' | 'kpi' | 'iceo' | 'reportes' | 'auditoria' | 'admin' | 'flota' | 'prevencion' | 'comercial' | 'reporte_diario'
@@ -336,9 +338,77 @@ const ADMIN_GLOBAL_ROLES: RolUsuario[] = [
   'administrador', 'gerencia', 'subgerente_operaciones',
 ]
 
+// ── Overrides de permisos configurables por el admin (MIG 126) ──────────────
+// Capa sobre los defaults hardcodeados. Mapa rol -> modulo -> permisos[].
+export type PermisosOverrides = Record<string, Record<string, Permission[]>>
+
+export function useRolPermisosOverrides() {
+  return useQuery({
+    queryKey: ['rol-permisos-overrides'],
+    queryFn: async (): Promise<PermisosOverrides> => {
+      const { data, error } = await supabase
+        .from('rol_permisos_modulo')
+        .select('rol, modulo, permisos')
+      if (error) throw error
+      const map: PermisosOverrides = {}
+      for (const row of (data ?? []) as Array<{ rol: string; modulo: string; permisos: string[] }>) {
+        ;(map[row.rol] ??= {})[row.modulo] = (row.permisos ?? []) as Permission[]
+      }
+      return map
+    },
+    staleTime: 300_000,
+  })
+}
+
+// Metadatos para la pagina de administracion de permisos.
+export const ALL_PERMISSIONS: Permission[] = ['view', 'create', 'edit', 'delete', 'approve', 'export']
+
+export const PERMISSION_LABELS: Record<Permission, string> = {
+  view: 'Ver', create: 'Crear', edit: 'Editar', delete: 'Eliminar', approve: 'Aprobar', export: 'Exportar',
+}
+
+export const MODULE_CATALOG: { key: string; label: string; extendido?: boolean }[] = [
+  { key: 'contratos', label: 'Contratos' },
+  { key: 'activos', label: 'Activos' },
+  { key: 'ordenes_trabajo', label: 'Órdenes de Trabajo' },
+  { key: 'inventario', label: 'Inventario' },
+  { key: 'mantenimiento', label: 'Mantenimiento (Taller)' },
+  { key: 'abastecimiento', label: 'Abastecimiento' },
+  { key: 'cumplimiento', label: 'Cumplimiento' },
+  { key: 'kpi', label: 'KPI' },
+  { key: 'iceo', label: 'ICEO' },
+  { key: 'reportes', label: 'Reportes' },
+  { key: 'auditoria', label: 'Auditoría' },
+  { key: 'admin', label: 'Administración' },
+  { key: 'flota', label: 'Flota' },
+  { key: 'prevencion', label: 'Prevención' },
+  { key: 'comercial', label: 'Comercial' },
+  { key: 'reporte_diario', label: 'Reporte Diario' },
+  { key: 'operacion_calama', label: 'Operación Calama', extendido: true },
+  { key: 'bodega', label: 'Bodega', extendido: true },
+  { key: 'mantencion_qr', label: 'Mantención QR', extendido: true },
+]
+
+export const ALL_ROLES: RolUsuario[] = Object.keys(PERMISSIONS) as RolUsuario[]
+
+/** Permisos default (hardcodeados) para un (rol, modulo), incluyendo extendidos. */
+export function defaultPermsForRole(rol: RolUsuario, modulo: string): Permission[] {
+  const ext = MODULE_CATALOG.find((m) => m.key === modulo)?.extendido
+  if (ext) return EXTENDED_VIEW[modulo as ExtendedModule]?.includes(rol) ? ['view'] : []
+  return (PERMISSIONS[rol] as Record<string, Permission[]>)?.[modulo] ?? []
+}
+
 export function usePermissions() {
   const { perfil, rolCalama } = useAuth()
   const rol = perfil?.rol as RolUsuario | undefined
+  const { data: overrides } = useRolPermisosOverrides()
+
+  // Permisos efectivos = override de BD si existe, si no el default hardcodeado.
+  function effectivePerms(r: RolUsuario, modulo: string): Permission[] {
+    const ov = overrides?.[r]?.[modulo]
+    if (ov) return ov
+    return defaultPermsForRole(r, modulo)
+  }
 
   function isAdminGlobal(): boolean {
     return !!rol && ADMIN_GLOBAL_ROLES.includes(rol)
@@ -380,8 +450,7 @@ export function usePermissions() {
     // generales. La excepcion para supervisor_calama es el modulo extendido,
     // que se concede via canViewExtended('operacion_calama').
     if (esRestringidoCalama()) return false
-    const modulePerms = PERMISSIONS[rol]?.[module]
-    return modulePerms?.includes(permission) ?? false
+    return effectivePerms(rol, module).includes(permission)
   }
 
   function canView(module: Module): boolean { return can(module, 'view') }
@@ -398,13 +467,16 @@ export function usePermissions() {
   function getVisibleModules(): Module[] {
     if (!rol) return []
     if (esRestringidoCalama()) return []
-    return (Object.keys(PERMISSIONS[rol]) as Module[]).filter(m => PERMISSIONS[rol][m].includes('view'))
+    return (Object.keys(PERMISSIONS[rol]) as Module[]).filter(m => effectivePerms(rol, m).includes('view'))
   }
 
   function canViewExtended(mod: ExtendedModule): boolean {
     if (!rol) return false
     // Restringidos: solo modulo Operacion Calama; nunca bodega ni mantencion_qr.
     if (esRestringidoCalama()) return mod === 'operacion_calama'
+    // Override de BD (si el admin configuro el modulo extendido para el rol).
+    const ov = overrides?.[rol]?.[mod]
+    if (ov) return ov.includes('view')
     // Acceso por rol global (matriz EXTENDED_VIEW).
     if (EXTENDED_VIEW[mod]?.includes(rol)) return true
     // Acceso por rol Calama del proyecto: cualquier rol_calama da acceso al dashboard Calama.
