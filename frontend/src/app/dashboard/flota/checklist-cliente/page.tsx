@@ -52,12 +52,13 @@ export default function ChecklistClientePanelPage() {
           <ClipboardList className="h-6 w-6 text-blue-600" /> Checklist semanal del cliente
         </h1>
         <p className="text-sm text-muted-foreground">
-          Cumplimiento del checklist de estado que ejecuta el cliente (vía QR) en cada equipo arrendado.
+          Cumplimiento del checklist de estado que ejecuta el cliente (vía QR) en cada equipo fuera de
+          nuestras instalaciones: arrendado, leasing o bajo contrato.
         </p>
       </div>
 
       <div className="grid gap-3 grid-cols-2 md:grid-cols-5">
-        <Kpi label="Equipos arrendados" value={kpi.total} icon={ClipboardList} />
+        <Kpi label="Equipos en terreno" value={kpi.total} icon={ClipboardList} />
         <Kpi label="Cumplimiento" value={`${kpi.pct}%`} icon={CheckCircle2} />
         <Kpi label="Atrasados" value={kpi.atras} icon={Clock} warn={kpi.atras > 0} />
         <Kpi label="Sin check" value={kpi.sin} icon={XCircle} warn={kpi.sin > 0} />
