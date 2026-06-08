@@ -115,13 +115,18 @@ const navGroups: NavGroup[] = [
       { label: 'Aceptaciones',     href: '/dashboard/operacion-calama/aceptaciones',    icon: ClipboardCheck,  extendedModule: 'operacion_calama' },
     ],
   },
-  // Mantención QR (checklist preoperacional de equipos / flota Pillado)
+  // Checklists de estado + Alertas — misma familia: chequeo del equipo -> alerta.
+  // Preoperacional (nuestros conductores) y Cliente (semanal) detectan fallas
+  // temprano; ambos alimentan "Alertas tempranas".
   {
-    label: 'Mantención QR',
+    label: 'Checklists & Alertas',
     items: [
-      { label: 'Panel Mantención QR', href: '/dashboard/mantencion',         icon: Wrench,        extendedModule: 'mantencion_qr' },
-      { label: 'Alertas tempranas',   href: '/dashboard/mantencion/alertas', icon: AlertTriangle, extendedModule: 'mantencion_qr' },
-      { label: 'Plantillas QR',       href: '/dashboard/admin/checklist-templates', icon: ClipboardCheck, module: 'admin' },
+      { label: 'Checklist preoperacional', href: '/dashboard/mantencion', icon: ClipboardCheck, extendedModule: 'mantencion_qr',
+        tooltip: 'Checklist por QR de nuestros conductores, antes de operar el equipo' },
+      { label: 'Checklist Cliente (semanal)', href: '/dashboard/flota/checklist-cliente', icon: ClipboardList, module: 'flota',
+        tooltip: 'Checklist semanal que ejecuta el cliente del equipo arrendado' },
+      { label: 'Alertas tempranas', href: '/dashboard/mantencion/alertas', icon: AlertTriangle, extendedModule: 'mantencion_qr',
+        tooltip: 'Fallas detectadas por ambos checklists, antes de que sean graves' },
     ],
   },
   // Flota
@@ -135,10 +140,10 @@ const navGroups: NavGroup[] = [
       { label: 'Mapa GPS', href: '/dashboard/flota/mapa', icon: Satellite, module: 'flota', badge: 'Nuevo' },
       { label: 'Sugerencias estado (GPS)', href: '/dashboard/flota/sugerencias', icon: Satellite, module: 'flota', badge: 'Nuevo' },
       { label: 'Check-List Entrega', href: '/dashboard/flota/checklist-salida', icon: ClipboardCheck, module: 'flota', badge: 'V02' },
-      { label: 'Checklist Cliente (semanal)', href: '/dashboard/flota/checklist-cliente', icon: ClipboardList, module: 'flota', badge: 'Nuevo' },
-      { label: 'Plan Preventivo', href: '/dashboard/flota/plan-preventivo', icon: CalendarClock, module: 'flota', badge: 'Nuevo' },
+      { label: 'Plan Preventivo', href: '/dashboard/flota/plan-preventivo', icon: CalendarClock, module: 'flota' },
       { label: 'Estado Flota', href: '/dashboard/flota/estado-flota', icon: ShieldCheck, module: 'flota', badge: 'Nuevo' },
-      { label: 'Activos / Equipos (QR)', href: '/dashboard/activos', icon: QrCode, module: 'activos' },
+      { label: 'Equipos y Bitácora (QR)', href: '/dashboard/activos', icon: QrCode, module: 'activos',
+        tooltip: 'Listado de equipos; entra a uno para ver su QR y la bitácora completa' },
     ],
   },
   // Negocio
@@ -186,6 +191,7 @@ const navGroups: NavGroup[] = [
       { label: 'Auditoría', href: '/dashboard/auditoria', icon: Eye, module: 'auditoria' },
       { label: 'Administración', href: '/dashboard/admin', icon: Settings, module: 'admin' },
       { label: 'Perfiles y Roles', href: '/dashboard/admin/perfiles-roles', icon: ShieldCheck, module: 'admin', badge: 'Nuevo' },
+      { label: 'Plantillas de checklist (OT)', href: '/dashboard/admin/checklist-templates', icon: ClipboardCheck, module: 'admin' },
       { label: 'GPS', href: '/dashboard/admin/gps', icon: Truck, module: 'admin' },
       { label: 'Geocercas', href: '/dashboard/admin/geocercas', icon: AlertTriangle, module: 'admin', badge: 'Nuevo' },
       { label: 'Portal Cliente', href: '/dashboard/admin/portal-usuarios', icon: Briefcase, module: 'admin', badge: 'Nuevo' },
