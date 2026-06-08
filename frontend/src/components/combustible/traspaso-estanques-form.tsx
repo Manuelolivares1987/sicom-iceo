@@ -160,7 +160,9 @@ export function TraspasoEstanquesForm() {
         router.push('/dashboard/combustible')
       },
       onError: (err: unknown) => {
-        toast.error(err instanceof Error ? err.message : 'Error al registrar traspaso')
+        toast.error(err instanceof Error ? err.message
+          : (err && typeof err === 'object' && 'message' in err) ? String((err as { message: unknown }).message)
+          : 'Error al registrar traspaso')
       },
     })
   }

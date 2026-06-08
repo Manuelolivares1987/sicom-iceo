@@ -169,7 +169,9 @@ export function DespachoSellosForm() {
         router.push('/dashboard/combustible')
       },
       onError: (err: unknown) => {
-        const msg = err instanceof Error ? err.message : 'Error al registrar despacho'
+        const msg = err instanceof Error ? err.message
+          : (err && typeof err === 'object' && 'message' in err) ? String((err as { message: unknown }).message)
+          : 'Error al registrar despacho'
         toast.error(msg)
       },
     })

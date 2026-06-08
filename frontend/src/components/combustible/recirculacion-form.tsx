@@ -132,7 +132,13 @@ export function RecirculacionForm() {
         router.push('/dashboard/combustible')
       },
       onError: (err: unknown) => {
-        toast.error(err instanceof Error ? err.message : 'Error al registrar recirculación')
+        // Supabase devuelve PostgrestError (no es instancia de Error): extraer .message igual.
+        const msg = err instanceof Error
+          ? err.message
+          : (err && typeof err === 'object' && 'message' in err)
+            ? String((err as { message: unknown }).message)
+            : 'Error al registrar recirculación'
+        toast.error(msg)
       },
     })
   }
