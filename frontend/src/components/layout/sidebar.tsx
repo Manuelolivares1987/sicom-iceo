@@ -70,18 +70,33 @@ const navGroups: NavGroup[] = [
       { label: 'Reporte Flota (público)', href: '/reporte-flota', icon: Share2, badge: 'Link' },
     ],
   },
-  // Trabajo diario
+  // Trabajo diario — agrupado en subsecciones para evitar enredo.
   {
     label: 'Operación',
-    items: [
-      { label: 'Mis OTs', href: '/dashboard/mis-ots', icon: ClipboardCheck, module: 'ordenes_trabajo' as Module },
-      { label: 'Órdenes de Trabajo', href: '/dashboard/ordenes-trabajo', icon: ClipboardList, module: 'ordenes_trabajo' },
-      { label: 'Mantenimiento (Taller)', href: '/dashboard/mantenimiento', icon: Wrench, module: 'mantenimiento' },
-      { label: 'Planificación Taller', href: '/dashboard/mantenimiento/planificacion', icon: HardHat, module: 'mantenimiento', badge: 'Nuevo' },
-      { label: 'Equipos auxiliares', href: '/dashboard/mantenimiento/auxiliares', icon: Layers, module: 'mantenimiento', badge: 'Nuevo' },
-      { label: 'Plan semanal taller', href: '/dashboard/mantenimiento/plan-semanal-taller', icon: CalendarClock, module: 'mantenimiento', badge: 'Nuevo' },
-      { label: 'Chequeo cruzado (calidad)', href: '/dashboard/mantenimiento/chequeo-cruzado', icon: ClipboardCheck, module: 'mantenimiento', badge: 'Nuevo' },
-      { label: 'Auditoría de calidad', href: '/dashboard/mantenimiento/auditoria-calidad', icon: ShieldCheck, module: 'mantenimiento', badge: 'Nuevo' },
+    subsections: [
+      {
+        label: 'Órdenes de Trabajo',
+        items: [
+          { label: 'Mis OTs', href: '/dashboard/mis-ots', icon: ClipboardCheck, module: 'ordenes_trabajo' as Module },
+          { label: 'Todas las OTs', href: '/dashboard/ordenes-trabajo', icon: ClipboardList, module: 'ordenes_trabajo' },
+        ],
+      },
+      {
+        label: 'Taller',
+        items: [
+          { label: 'Panel Taller', href: '/dashboard/mantenimiento', icon: Wrench, module: 'mantenimiento' },
+          { label: 'Plan semanal', href: '/dashboard/mantenimiento/plan-semanal-taller', icon: CalendarClock, module: 'mantenimiento' },
+          { label: 'Planificación (pautas)', href: '/dashboard/mantenimiento/planificacion', icon: HardHat, module: 'mantenimiento' },
+          { label: 'Equipos auxiliares', href: '/dashboard/mantenimiento/auxiliares', icon: Layers, module: 'mantenimiento' },
+        ],
+      },
+      {
+        label: 'Calidad',
+        items: [
+          { label: 'Chequeo cruzado', href: '/dashboard/mantenimiento/chequeo-cruzado', icon: ClipboardCheck, module: 'mantenimiento' },
+          { label: 'Auditoría de calidad', href: '/dashboard/mantenimiento/auditoria-calidad', icon: ShieldCheck, module: 'mantenimiento' },
+        ],
+      },
     ],
   },
   // Operación Calama (planificación + ejecución para faenas Calama)
