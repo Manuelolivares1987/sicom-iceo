@@ -87,7 +87,8 @@ export default function ReporteFiabilidadPublicoPage() {
 
   const equipos = data?.equipos ?? []
   const matriz = data?.matriz ?? []
-  const combustible = data?.combustible ?? []
+  // Excluir camiones Franke (codigo CAM-*): solo se ven en la sección Franke.
+  const combustible = (data?.combustible ?? []).filter((e) => !e.estanque_codigo?.startsWith('CAM-'))
   const combTot = combustible.reduce((a, e) => ({
     cap: a.cap + Number(e.capacidad_lt || 0), st: a.st + Number(e.stock_actual || 0),
     min: a.min + Number(e.stock_minimo || 0),

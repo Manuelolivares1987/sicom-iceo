@@ -28,7 +28,8 @@ const esc = (s: unknown) => String(s ?? '').replace(/[&<>]/g, (c) => ({ '&': '&a
 export function buildFiabilidadEmailHtml(data: Reporte, desde: string, hasta: string, origin: string): string {
   const cats = data.categorias ?? []
   const equipos = data.equipos ?? []
-  const combustible = data.combustible ?? []
+  // Excluir camiones Franke (codigo CAM-*): solo se ven en la sección Franke.
+  const combustible = (data.combustible ?? []).filter((e) => !e.estanque_codigo?.startsWith('CAM-'))
   const n = (v: number | null | undefined) => Number(v || 0)
   const s = cats.reduce((a, c) => ({
     eq: a.eq + n(c.total_equipos), dias: a.dias + n(c.dias_equipo),
