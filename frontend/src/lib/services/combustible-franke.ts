@@ -43,6 +43,23 @@ export async function getComprasPuntoFranke() {
   return { data: data ?? [], error }
 }
 
+export async function getVentasFranke() {
+  const { data, error } = await supabase
+    .from('v_ventas_franke')
+    .select('*')
+    .order('fecha', { ascending: false })
+    .limit(200)
+  return { data: data ?? [], error }
+}
+
+export async function getVentasFrankeCliente() {
+  const { data, error } = await supabase
+    .from('v_ventas_franke_cliente')
+    .select('*')
+    .order('monto_total', { ascending: false })
+  return { data: data ?? [], error }
+}
+
 export async function registrarCargaCamion(p: {
   estanque_movil_id: string
   punto_carga_id: string | null

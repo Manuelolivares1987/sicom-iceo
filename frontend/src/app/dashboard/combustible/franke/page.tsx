@@ -14,7 +14,7 @@ import { SignaturePad } from '@/components/ui/signature-pad'
 import { useRequireAuth } from '@/hooks/use-require-auth'
 import {
   getCamionesFranke, getPuntosCargaFranke, getCuadreDiarioFranke, getComprasPuntoFranke,
-  registrarCargaCamion,
+  registrarCargaCamion, getVentasFranke, getVentasFrankeCliente,
 } from '@/lib/services/combustible-franke'
 import { uploadEvidenciaCombustible, uploadBlobEvidenciaCombustible } from '@/lib/services/combustible'
 import { cn } from '@/lib/utils'
@@ -23,12 +23,14 @@ const nf = (n: any) => Number(n ?? 0).toLocaleString('es-CL')
 
 export default function CombustibleFrankePage() {
   useRequireAuth()
-  const [tab, setTab] = useState<'camiones' | 'cuadre' | 'compras'>('camiones')
+  const [tab, setTab] = useState<'camiones' | 'cuadre' | 'compras' | 'ventas'>('camiones')
   const [cargaOpen, setCargaOpen] = useState(false)
 
   const { data: camiones = [], isLoading: lc } = useQuery({ queryKey: ['franke-camiones'], queryFn: async () => (await getCamionesFranke()).data })
   const { data: cuadre = [] } = useQuery({ queryKey: ['franke-cuadre'], queryFn: async () => (await getCuadreDiarioFranke()).data })
   const { data: compras = [] } = useQuery({ queryKey: ['franke-compras'], queryFn: async () => (await getComprasPuntoFranke()).data })
+  const { data: ventas = [] } = useQuery({ queryKey: ['franke-ventas'], queryFn: async () => (await getVentasFranke()).data })
+  const { data: ventasCli = [] } = useQuery({ queryKey: ['franke-ventas-cli'], queryFn: async () => (await getVentasFrankeCliente()).data })
 
   return (
     <div className="space-y-6">
@@ -44,14 +46,15 @@ export default function CombustibleFrankePage() {
         <div className="flex gap-2">
           <Button onClick={() => setCargaOpen((o) => !o)}><PlusCircle className="h-4 w-4 mr-1" /> Registrar carga</Button>
           <Link href="/dashboard/combustible/traspaso"><Button variant="outline"><ArrowLeftRight className="h-4 w-4 mr-1" /> Trasvasije</Button></Link>
-          <Link href="/dashboard/combustible/despacho"><Button variant="outline"><Send className="h-4 w-4 mr-1" /> Despacho/Venta</Button></Link>
+          <Link href="/dashboard/combustible/despacho"><Button variant="outline"><Send className="h-4 w-4 mr-1" /> Despacho</Button></Link>
+          <Link href="/m/franke-venta"><Button variant="outline"><Truck className="h-4 w-4 mr-1" /> App vendedor</Button></Link>
         </div>
       </div>
 
       {cargaOpen && <CargaForm camiones={camiones} onClose={() => setCargaOpen(false)} />}
 
       <div className="flex gap-2 border-b">
-        {([['camiones', 'Camiones'], ['cuadre', 'Cuadre diario'], ['compras', 'Compras por punto']] as const).map(([k, l]) => (
+        {([['camiones', 'Camiones'], ['cuadre', 'Cuadre diario'], ['compras', 'Compras por punto'], ['ventas', 'Ventas']] as const).map(([k, l]) => (
           <button key={k} onClick={() => setTab(k)}
             className={cn('px-4 py-2 text-sm border-b-2 -mb-px', tab === k ? 'border-orange-600 text-orange-700 font-medium' : 'border-transparent text-muted-foreground')}>
             {l}
@@ -132,6 +135,41 @@ export default function CombustibleFrankePage() {
             </table>
           </CardContent>
         </Card>
+      )}
+
+      {tab === 'ventas' && (
+        <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
+          <Card><CardHeader><CardTitle className="text-base">Ventas (últimas 200)</CardTitle></CardHeader>
+            <CardContent className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead><tr className="text-xs text-muted-foreground"><th className="text-left py-1">Fecha</th><th className="text-left">Cliente</th><th className="text-left">Equipo</th><th className="text-left">Camión</th><th className="text-right">Litros</th><th className="text-right">$/L</th><th className="text-right">Total</th><th></th></tr></thead>
+                <tbody>
+                  {ventas.map((v: any) => (
+                    <tr key={v.id} className="border-t">
+                      <td className="py-1.5">{new Date(v.fecha).toLocaleDateString('es-CL')}</td>
+                      <td>{v.cliente_nombre}</td><td className="text-muted-foreground">{v.equipo_codigo ?? '—'}</td>
+                      <td>{v.camion}</td><td className="text-right">{nf(v.litros)}</td>
+                      <td className="text-right">{v.precio_clp_lt ? '$' + nf(v.precio_clp_lt) : '—'}</td>
+                      <td className="text-right">{v.total_clp ? '$' + nf(v.total_clp) : '—'}</td>
+                      <td>{v.origen === 'offline' && <Badge variant="default" className="text-[9px]">offline</Badge>}</td>
+                    </tr>
+                  ))}
+                  {ventas.length === 0 && <tr><td colSpan={8} className="py-6 text-center text-muted-foreground">Sin ventas registradas. Usa la App vendedor en terreno.</td></tr>}
+                </tbody>
+              </table>
+            </CardContent>
+          </Card>
+          <Card><CardHeader><CardTitle className="text-base">Por cliente</CardTitle></CardHeader>
+            <CardContent className="space-y-1">
+              {ventasCli.map((c: any) => (
+                <div key={c.cliente_nombre} className="flex items-center justify-between text-sm border-b last:border-0 py-1.5">
+                  <span>{c.cliente_nombre} <span className="text-xs text-muted-foreground">({c.n_ventas})</span></span>
+                  <span className="text-right"><div>{nf(c.litros_total)} L</div><div className="text-xs text-muted-foreground">${nf(c.monto_total)}</div></span>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        </div>
       )}
     </div>
   )
