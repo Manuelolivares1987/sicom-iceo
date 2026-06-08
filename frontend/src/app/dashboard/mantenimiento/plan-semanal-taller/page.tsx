@@ -8,9 +8,10 @@ import {
 import {
   Calendar, ArrowLeft, ChevronLeft, ChevronRight, Lock, AlertTriangle, Trash2, User,
   Play, Pause, CheckCircle2, BarChart3, ShieldAlert, RefreshCw, Wrench, Layers, FileSpreadsheet,
-  Truck,
+  Truck, Mail,
 } from 'lucide-react'
 import { exportarPlanSemanalExcel, descargarBlob } from '@/lib/export/plan-semanal-excel'
+import { buildPlanSemanalTallerEmailHtml } from '@/lib/email/plan-semanal-taller-email'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
@@ -279,6 +280,35 @@ export default function PlanSemanalTallerPage() {
             }}
           >
             <FileSpreadsheet className="h-4 w-4 mr-1" /> Excel
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!jornadas || jornadas.length === 0}
+            onClick={async () => {
+              const html = buildPlanSemanalTallerEmailHtml({
+                dias: dias ?? [],
+                jornadas: jornadas ?? [],
+                kpi: kpi ?? null,
+                semanaInicio: semanaIso,
+                semanaFin: dias?.[6]?.fecha ?? semanaIso,
+                faena: jornadas?.[0]?.faena_nombre ?? null,
+                link: `${window.location.origin}/dashboard/mantenimiento/plan-semanal-taller`,
+              })
+              try {
+                await navigator.clipboard.write([new ClipboardItem({
+                  'text/html': new Blob([html], { type: 'text/html' }),
+                  'text/plain': new Blob([`Plan Semanal de Taller — ${semanaIso}`], { type: 'text/plain' }),
+                })])
+                toast.success('Copiado ✓ — pega en Outlook/Gmail (Ctrl+V)')
+              } catch {
+                const w = window.open('', '_blank')
+                if (w) { w.document.write(html); w.document.close() }
+                toast.success('Se abrió en otra pestaña: Ctrl+A → Ctrl+C → pega en el correo')
+              }
+            }}
+          >
+            <Mail className="h-4 w-4 mr-1" /> Copiar para correo
           </Button>
           <Button
             size="sm"
