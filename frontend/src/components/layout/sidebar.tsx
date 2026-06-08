@@ -144,6 +144,8 @@ const navGroups: NavGroup[] = [
     items: [
       { label: 'Panel Bodega', href: '/dashboard/inventario', icon: Package, extendedModule: 'bodega',
         tooltip: 'Stock, compras, salidas, combustible y reportes — todo en un solo panel' },
+      { label: 'Combustible Franke', href: '/dashboard/combustible/franke', icon: Fuel, extendedModule: 'bodega', badge: 'Nuevo',
+        tooltip: 'Camiones petroleros, cargas, trasvasije y cuadre diario — operación Franke' },
     ],
   },
   // Compliance
