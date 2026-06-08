@@ -75,7 +75,10 @@ export default function AuditoriaCalidadPage() {
                 <div key={e.id} className="flex items-center justify-between rounded border p-2 text-sm">
                   <div>
                     <div className="font-medium">{e.patente ?? e.codigo}</div>
-                    <div className="text-xs text-muted-foreground">{e.estado}</div>
+                    <div className="text-xs text-muted-foreground flex items-center gap-1">
+                      {e.estado}
+                      {e.estado_comercial === 'disponible' && <Badge variant="operativo" className="text-[9px]">disponible</Badge>}
+                    </div>
                   </div>
                   <Button size="sm" variant="outline" disabled={!puedeAuditar || iniciar.isPending}
                     onClick={async () => {

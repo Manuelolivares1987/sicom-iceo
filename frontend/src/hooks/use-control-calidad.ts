@@ -132,10 +132,12 @@ export function useEquiposParaAuditar() {
   return useQuery({
     queryKey: ['equipos-para-auditar'],
     queryFn: async () => {
+      // Auditar: equipos en mantención/fuera de servicio/tránsito, y también
+      // (primera instancia) los que están comercialmente 'disponible'.
       const { data, error } = await supabase
         .from('activos')
-        .select('id, codigo, patente, nombre, estado')
-        .in('estado', ['en_mantenimiento', 'fuera_servicio', 'en_transito'])
+        .select('id, codigo, patente, nombre, estado, estado_comercial')
+        .or('estado.in.(en_mantenimiento,fuera_servicio,en_transito),estado_comercial.eq.disponible')
         .order('patente')
       if (error) throw error
       return data ?? []
