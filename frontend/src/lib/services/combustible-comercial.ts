@@ -22,6 +22,7 @@ export async function cargarStockEstanques(): Promise<EstanqueStock[]> {
       id, codigo, nombre, capacidad_lt, stock_teorico_lt, stock_minimo_alerta_lt,
       faena:faenas!faena_id ( nombre )
     `)
+    .eq('tipo', 'fijo')  // excluir camiones Franke (estanques moviles) — solo en sección Franke
     .order('codigo')
   if (error) throw error
   type Raw = Omit<EstanqueStock, 'faena_nombre' | 'porcentaje' | 'estado'> & {
@@ -60,6 +61,7 @@ export async function cargarConsolidadoComercial(
   let q = supabase
     .from('v_combustible_movimientos_cliente')
     .select('*')
+    .not('estanque_codigo', 'like', 'CAM-%')  // excluir movimientos de camiones Franke
     .order('fecha', { ascending: false })
     .limit(5000)
   if (filtros.fechaDesde) q = q.gte('fecha', filtros.fechaDesde + 'T00:00:00')
@@ -96,6 +98,7 @@ export async function cargarVentasExternasComercial(
   let q = supabase
     .from('v_combustible_movimientos_cliente')
     .select('*')
+    .not('estanque_codigo', 'like', 'CAM-%')  // excluir ventas de camiones Franke
     .or('destino_tipo.eq.venta_externa,activo_contrato_id.not.is.null')
     .order('fecha', { ascending: false })
     .limit(5000)
