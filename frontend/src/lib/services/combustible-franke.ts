@@ -8,12 +8,26 @@ import { supabase } from '@/lib/supabase'
 export async function getCamionesFranke() {
   const { data, error } = await supabase
     .from('combustible_estanques')
-    .select('id, codigo, nombre, patente, capacidad_lt, stock_teorico_lt, costo_promedio_lt, activo_id')
+    .select('id, codigo, nombre, patente, capacidad_lt, stock_teorico_lt, costo_promedio_lt, activo_id, es_demo')
     .eq('tipo', 'movil')
     .eq('operacion', 'Franke')
     .eq('activo', true)
+    .order('es_demo')
     .order('codigo')
   return { data: data ?? [], error }
+}
+
+export async function getHistoricoAbastecimientoCliente() {
+  const { data, error } = await supabase
+    .from('v_abastecimiento_historico_cliente')
+    .select('*')
+    .order('litros_total', { ascending: false })
+  return { data: data ?? [], error }
+}
+
+export async function limpiarDemosFranke() {
+  const { data, error } = await supabase.rpc('rpc_limpiar_demos_franke')
+  return { data, error }
 }
 
 export async function getPuntosCargaFranke() {

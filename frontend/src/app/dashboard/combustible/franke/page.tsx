@@ -15,6 +15,7 @@ import { useRequireAuth } from '@/hooks/use-require-auth'
 import {
   getCamionesFranke, getPuntosCargaFranke, getCuadreDiarioFranke, getComprasPuntoFranke,
   registrarCargaCamion, getVentasFranke, getVentasFrankeCliente,
+  getHistoricoAbastecimientoCliente, limpiarDemosFranke,
 } from '@/lib/services/combustible-franke'
 import { uploadEvidenciaCombustible, uploadBlobEvidenciaCombustible } from '@/lib/services/combustible'
 import { cn } from '@/lib/utils'
@@ -23,8 +24,25 @@ const nf = (n: any) => Number(n ?? 0).toLocaleString('es-CL')
 
 export default function CombustibleFrankePage() {
   useRequireAuth()
-  const [tab, setTab] = useState<'camiones' | 'cuadre' | 'compras' | 'ventas'>('camiones')
+  const [tab, setTab] = useState<'camiones' | 'cuadre' | 'compras' | 'ventas' | 'historico'>('camiones')
   const [cargaOpen, setCargaOpen] = useState(false)
+  const qc = useQueryClient()
+  const [limpiando, setLimpiando] = useState(false)
+  const [demoMsg, setDemoMsg] = useState<string | null>(null)
+
+  const { data: historico = [] } = useQuery({ queryKey: ['franke-historico'], queryFn: async () => (await getHistoricoAbastecimientoCliente()).data })
+
+  const borrarDemos = async () => {
+    if (!confirm('¿Borrar TODOS los datos demo (cargas, trasvasijes, despachos, ventas en camiones DEMO)? Los camiones DEMO se resetean a 20.000 L.')) return
+    setLimpiando(true); setDemoMsg(null)
+    try {
+      const { data, error } = await limpiarDemosFranke()
+      if (error) throw error
+      const d: any = data
+      setDemoMsg(`Listo: ${d?.kardex ?? 0} mov. kardex, ${d?.ventas ?? 0} ventas, ${d?.cargas ?? 0} cargas, ${d?.traspasos ?? 0} trasvasijes borrados. Camiones DEMO reseteados.`)
+      ;['franke-camiones', 'franke-cuadre', 'franke-compras', 'franke-ventas', 'franke-ventas-cli'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }))
+    } catch (e) { setDemoMsg(e instanceof Error ? e.message : 'Error') } finally { setLimpiando(false) }
+  }
 
   const { data: camiones = [], isLoading: lc } = useQuery({ queryKey: ['franke-camiones'], queryFn: async () => (await getCamionesFranke()).data })
   const { data: cuadre = [] } = useQuery({ queryKey: ['franke-cuadre'], queryFn: async () => (await getCuadreDiarioFranke()).data })
@@ -48,13 +66,16 @@ export default function CombustibleFrankePage() {
           <Link href="/dashboard/combustible/traspaso"><Button variant="outline"><ArrowLeftRight className="h-4 w-4 mr-1" /> Trasvasije</Button></Link>
           <Link href="/dashboard/combustible/despacho"><Button variant="outline"><Send className="h-4 w-4 mr-1" /> Despacho</Button></Link>
           <Link href="/m/franke-venta"><Button variant="outline"><Truck className="h-4 w-4 mr-1" /> App vendedor</Button></Link>
+          <Button variant="danger" disabled={limpiando} onClick={borrarDemos}>{limpiando ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : null} Borrar datos demo</Button>
         </div>
       </div>
+      {demoMsg && <div className="rounded-lg bg-amber-50 border border-amber-200 p-2 text-sm text-amber-800">{demoMsg}</div>}
+      <p className="text-xs text-muted-foreground -mt-2">Los camiones <b>DEMO-01/02</b> son para pruebas: haz cargas, trasvasijes, despachos y ventas sobre ellos sin afectar lo real, y bórralos con «Borrar datos demo».</p>
 
       {cargaOpen && <CargaForm camiones={camiones} onClose={() => setCargaOpen(false)} />}
 
       <div className="flex gap-2 border-b">
-        {([['camiones', 'Camiones'], ['cuadre', 'Cuadre diario'], ['compras', 'Compras por punto'], ['ventas', 'Ventas']] as const).map(([k, l]) => (
+        {([['camiones', 'Camiones'], ['cuadre', 'Cuadre diario'], ['compras', 'Compras por punto'], ['ventas', 'Ventas'], ['historico', 'Histórico']] as const).map(([k, l]) => (
           <button key={k} onClick={() => setTab(k)}
             className={cn('px-4 py-2 text-sm border-b-2 -mb-px', tab === k ? 'border-orange-600 text-orange-700 font-medium' : 'border-transparent text-muted-foreground')}>
             {l}
@@ -70,9 +91,10 @@ export default function CombustibleFrankePage() {
             return (
               <Card key={c.id}>
                 <CardContent className="p-4 space-y-2">
-                  <div className="flex items-center gap-2"><Truck className="h-5 w-5 text-blue-600" />
+                  <div className="flex items-center gap-2"><Truck className={cn('h-5 w-5', c.es_demo ? 'text-amber-500' : 'text-blue-600')} />
                     <span className="font-semibold">{c.patente}</span>
-                    <Badge variant="default" className="text-[10px]">{c.codigo}</Badge></div>
+                    <Badge variant="default" className="text-[10px]">{c.codigo}</Badge>
+                    {c.es_demo && <Badge variant="alta" className="text-[10px]">DEMO</Badge>}</div>
                   <div className="text-sm text-muted-foreground">{c.nombre}</div>
                   <div className="text-2xl font-bold">{nf(c.stock_teorico_lt)} <span className="text-sm font-normal text-muted-foreground">/ {nf(c.capacidad_lt)} L</span></div>
                   <div className="h-2 rounded bg-gray-100 overflow-hidden">
@@ -170,6 +192,29 @@ export default function CombustibleFrankePage() {
             </CardContent>
           </Card>
         </div>
+      )}
+
+      {tab === 'historico' && (
+        <Card><CardHeader><CardTitle className="text-base">Histórico de abastecimiento por cliente (auditoría forense)</CardTitle></CardHeader>
+          <CardContent className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead><tr className="text-xs text-muted-foreground"><th className="text-left py-1">Cliente</th><th className="text-right">N° equipos</th><th className="text-right">Litros</th><th className="text-right">Despachos</th></tr></thead>
+              <tbody>
+                {historico.map((h: any) => (
+                  <tr key={h.cliente} className="border-t">
+                    <td className="py-1.5">{h.cliente}</td>
+                    <td className="text-right">{nf(h.n_equipos)}</td>
+                    <td className="text-right">{nf(h.litros_total)}</td>
+                    <td className="text-right">{nf(h.despachos_total)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot><tr className="border-t font-semibold"><td className="py-1.5">TOTAL</td><td></td>
+                <td className="text-right">{nf(historico.reduce((a: number, h: any) => a + Number(h.litros_total), 0))}</td><td></td></tr></tfoot>
+            </table>
+            <p className="text-xs text-muted-foreground mt-2">Cargado del Excel de auditoría forense. {historico.length} clientes.</p>
+          </CardContent>
+        </Card>
       )}
     </div>
   )
