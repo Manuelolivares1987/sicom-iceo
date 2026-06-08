@@ -30,7 +30,9 @@ async function armarPayload(): Promise<ReporteEmailPayload> {
 
   let combustible: EstanqueReporte[] = []
   try {
-    const proy = await getCombustibleProyeccion()
+    // Excluir camiones Franke (codigo CAM-*) del reporte: solo se ven en Franke.
+    const proy = (await getCombustibleProyeccion())
+      .filter((e) => !e.estanque_codigo?.startsWith('CAM-'))
     combustible = proy.map((e) => ({
       estanque_codigo: e.estanque_codigo,
       estanque_nombre: e.estanque_nombre,
