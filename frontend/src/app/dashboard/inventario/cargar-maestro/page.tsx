@@ -32,6 +32,24 @@ const CAMPOS_OPCIONALES = [
   'stock_minimo', 'stock_maximo', 'bodega_nombre', 'stock_inicial',
 ]
 
+// Categorías válidas en la BD (CHECK chk_productos_categoria).
+const CATEGORIAS_VALIDAS = ['combustible', 'lubricante', 'filtro', 'repuesto', 'consumible', 'epp']
+// Sinónimos frecuentes del Excel → categoría válida.
+const SINONIMOS_CATEGORIA: Record<string, string> = {
+  aceite: 'lubricante', aceites: 'lubricante', grasa: 'lubricante', grasas: 'lubricante', lubricantes: 'lubricante',
+  filtros: 'filtro',
+  repuestos: 'repuesto', neumatico: 'repuesto', neumaticos: 'repuesto', bateria: 'repuesto', baterias: 'repuesto',
+  herramienta: 'repuesto', herramientas: 'repuesto', electrico: 'repuesto', electricos: 'repuesto', ferreteria: 'repuesto',
+  consumibles: 'consumible', insumo: 'consumible', insumos: 'consumible',
+  combustibles: 'combustible',
+  epps: 'epp', seguridad: 'epp',
+}
+// Normaliza la categoría: minúsculas, sin acentos, mapea sinónimos.
+function normCategoria(raw: string): string {
+  const base = raw.trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+  return SINONIMOS_CATEGORIA[base] ?? base
+}
+
 export default function CargarMaestroPage() {
   useRequireAuth()
 
@@ -89,7 +107,7 @@ export default function CargarMaestroPage() {
           codigo,
           codigo_barras: strOrNull(get('codigo_barras')),
           nombre: String(get('nombre') ?? '').trim(),
-          categoria: String(get('categoria') ?? '').trim(),
+          categoria: normCategoria(String(get('categoria') ?? '')),
           subcategoria: strOrNull(get('subcategoria')),
           unidad_medida: String(get('unidad_medida') ?? '').trim(),
           costo_unitario_actual: numOrUndef(get('costo_unitario_actual')),
@@ -101,6 +119,7 @@ export default function CargarMaestroPage() {
         // Validación básica
         if (!fila.nombre) fila.error = 'Sin nombre'
         else if (!fila.categoria) fila.error = 'Sin categoría'
+        else if (!CATEGORIAS_VALIDAS.includes(fila.categoria)) fila.error = `Categoría "${fila.categoria}" no válida (use: ${CATEGORIAS_VALIDAS.join(', ')})`
         else if (!fila.unidad_medida) fila.error = 'Sin unidad_medida'
 
         parsed.push(fila)
