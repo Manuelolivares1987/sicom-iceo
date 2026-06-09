@@ -34,8 +34,9 @@ import { getFlotaDashboard, type FlotaDashboardActivo } from '@/lib/services/flo
 import {
   getPlanesActivo, getPreventivasDue, programarOtTaller, getEquiposPadre, getRtPorVencer,
   subirDocumentoRt, renovarRevisionTecnica, getRecepcionesPorPlanificar, programarRecepcion,
+  getNcOtsPorAgendar,
   type PlanActivo, type PreventivaDue, type TipoOtTaller, type PrioridadTaller, type RtPorVencer,
-  type RecepcionPorPlanificar,
+  type RecepcionPorPlanificar, type NcOtPorAgendar,
 } from '@/lib/services/taller-planificacion'
 
 type Tab = 'kanban' | 'cobertura' | 'cumplimiento'
@@ -104,6 +105,7 @@ export default function PlanSemanalTallerPage() {
   const { data: preventivas } = useQuery({ queryKey: ['preventivas-due', 15], queryFn: () => getPreventivasDue(15), staleTime: 60_000 })
   const { data: rtDue } = useQuery({ queryKey: ['rt-por-vencer', 30], queryFn: () => getRtPorVencer(30), staleTime: 60_000 })
   const { data: recepciones } = useQuery({ queryKey: ['recepciones-por-planificar'], queryFn: getRecepcionesPorPlanificar, staleTime: 60_000 })
+  const { data: ncOts } = useQuery({ queryKey: ['nc-ot-por-agendar'], queryFn: getNcOtsPorAgendar, staleTime: 60_000 })
   const { data: kpi } = useKpiSemanalTaller(planSemanalId || null)
   const { data: cobertura } = useCoberturaPm()
 
@@ -201,6 +203,17 @@ export default function PlanSemanalTallerPage() {
         planIdPre: planId,
         tipoPre: 'preventivo',
       })
+    } else if (aActive.startsWith('ncot:')) {
+      // ncot:<otId> -> agendar la OT correctiva (NC ya planificada) directo, con su grupo
+      const otId = aActive.replace('ncot:', '')
+      const n = (ncOts ?? []).find((x) => x.ot_id === otId)
+      agregarJornada.mutate(
+        { planSemanalId, otId, fecha: fechaDestino, cuadrilla: n?.grupo_trabajo ?? null },
+        {
+          onSuccess: () => { toast.success('Correctivo de recepción agendado'); qc.invalidateQueries({ queryKey: ['nc-ot-por-agendar'] }) },
+          onError: (err) => toast.error((err as Error).message),
+        },
+      )
     } else if (aActive.startsWith('recepcion:')) {
       // recepcion:<activoId> -> al soltar en un día se crea la OT de inspección de recepción
       const activoId = aActive.replace('recepcion:', '')
@@ -418,6 +431,9 @@ export default function PlanSemanalTallerPage() {
               {/* Recepción por planificar (marcadas 'R' en Sugerencias de estado) */}
               <RecepcionPorPlanificarCard items={recepciones ?? []} />
 
+              {/* Correctivos de recepción por agendar (NC ya planificadas) */}
+              <NcOtPorAgendarCard items={ncOts ?? []} />
+
               {/* Preventivas sugeridas (arrástralas a un día) */}
               <PreventivasSugeridas items={preventivasPatentes} />
 
@@ -624,6 +640,46 @@ function PreventivaCard({ p }: { p: PreventivaDue }) {
            vencida ? 'border-red-300 bg-red-50 text-red-800' : 'border-amber-200 bg-amber-50 text-amber-800'
          }`}>
       {p.patente}
+    </div>
+  )
+}
+
+function NcOtPorAgendarCard({ items }: { items: NcOtPorAgendar[] }) {
+  return (
+    <Card className="border-orange-200">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm flex items-center gap-2 text-orange-800">
+          <AlertTriangle className="h-4 w-4" /> Correctivos de recepción por agendar ({items.length})
+          <span className="text-[10px] font-normal text-gray-400">— No Conformidades ya planificadas (con recursos). Arrástralas a un día.</span>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="p-2">
+        {items.length === 0 ? (
+          <div className="text-xs text-gray-400 p-3 text-center">Sin correctivos de recepción pendientes de agendar.</div>
+        ) : (
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {items.map((n) => <NcOtCard key={n.ot_id} n={n} />)}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+function NcOtCard({ n }: { n: NcOtPorAgendar }) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: `ncot:${n.ot_id}` })
+  const style = transform
+    ? { transform: `translate3d(${transform.x}px,${transform.y}px,0)`, opacity: isDragging ? 0.5 : 1 }
+    : undefined
+  return (
+    <div ref={setNodeRef} style={style} {...listeners} {...attributes}
+         title={`${n.descripcion}${n.grupo_trabajo ? ' · ' + n.grupo_trabajo : ''}${n.horas_estimadas ? ' · ' + n.horas_estimadas + 'h' : ''}`}
+         className="shrink-0 w-[140px] rounded border border-orange-300 bg-orange-50 text-orange-900 px-2.5 py-1.5 cursor-grab active:cursor-grabbing shadow-sm text-[12px] text-center">
+      <div className="font-mono font-bold">{n.patente ?? n.codigo}</div>
+      <div className="text-[10px] truncate">{n.descripcion}</div>
+      {(n.grupo_trabajo || n.horas_estimadas) && (
+        <div className="text-[9px] text-orange-700">{n.grupo_trabajo ?? ''}{n.horas_estimadas ? ` · ${n.horas_estimadas}h` : ''}</div>
+      )}
     </div>
   )
 }

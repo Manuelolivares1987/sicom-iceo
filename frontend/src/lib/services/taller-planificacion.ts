@@ -247,6 +247,19 @@ export async function programarRecepcion(activoId: string): Promise<{ ot_id: str
   return { ot_id: d?.ot_id, informe_id: d?.informe_id }
 }
 
+// ── Correctivos de recepción por agendar (NC planificadas, OT sin día) ──────
+export type NcOtPorAgendar = {
+  nc_id: string; ot_id: string; ot_folio: string; activo_id: string
+  patente: string | null; codigo: string | null; descripcion: string; severidad: string
+  grupo_trabajo: string | null; horas_estimadas: number | null; tiempo_estimado_dias: number | null
+}
+
+export async function getNcOtsPorAgendar(): Promise<NcOtPorAgendar[]> {
+  const { data, error } = await supabase.from('v_nc_ot_por_agendar').select('*').order('severidad', { ascending: true })
+  if (error) throw error
+  return (data ?? []) as NcOtPorAgendar[]
+}
+
 // ── Equipos auxiliares (jerarquía) ──────────────────────────────────────────
 export interface EquipoSimple { id: string; patente: string | null; codigo: string | null; nombre: string | null }
 
