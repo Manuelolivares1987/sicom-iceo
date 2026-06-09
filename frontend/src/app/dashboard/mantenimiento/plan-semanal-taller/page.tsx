@@ -19,7 +19,7 @@ import { Modal, ModalFooter } from '@/components/ui/modal'
 import { Input } from '@/components/ui/input'
 import { useToast } from '@/contexts/toast-context'
 import { useRequireAuth } from '@/hooks/use-require-auth'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   useGetOrCreatePlanSemanalTaller, useDiasPlanSemanalTaller, useJornadasPlanSemanalTaller,
   useKpiSemanalTaller, useCumplimientoPmMesTaller,
@@ -33,6 +33,7 @@ import { lunesDeIso, type TallerPlanOTFull } from '@/lib/services/taller-plan-se
 import { getFlotaDashboard, type FlotaDashboardActivo } from '@/lib/services/flota-dashboard'
 import {
   getPlanesActivo, getPreventivasDue, programarOtTaller, getEquiposPadre, getRtPorVencer,
+  subirDocumentoRt, renovarRevisionTecnica,
   type PlanActivo, type PreventivaDue, type TipoOtTaller, type PrioridadTaller, type RtPorVencer,
 } from '@/lib/services/taller-planificacion'
 
@@ -117,6 +118,8 @@ export default function PlanSemanalTallerPage() {
   const [finAvance, setFinAvance] = useState<number>(100)
   const [finObs, setFinObs] = useState<string>('')
   const [dropTarget, setDropTarget] = useState<DropTarget | null>(null)
+  const [renovarRt, setRenovarRt] = useState<RtPorVencer | null>(null)
+  const qc = useQueryClient()
   const [filtroPatente, setFiltroPatente] = useState('')
 
   // Solo las 55 patentes de la flota (excluye auxiliares y otros activos de la vista).
@@ -419,7 +422,7 @@ export default function PlanSemanalTallerPage() {
               <PreventivasSugeridas items={preventivasPatentes} />
 
               {/* Revisión Técnica por vencer (arrástralas a un día → inspección) */}
-              <RtPorVencerCard items={rtDue ?? []} />
+              <RtPorVencerCard items={rtDue ?? []} onRenovar={setRenovarRt} />
             </div>
           </div>
         </DndContext>
@@ -476,6 +479,15 @@ export default function PlanSemanalTallerPage() {
           onClose={() => setDropTarget(null)}
           onDone={() => { setDropTarget(null) }}
           agregarJornada={agregarJornada}
+        />
+      )}
+
+      {/* Diálogo: renovar Revisión Técnica (subir doc + nuevo vencimiento) */}
+      {renovarRt && (
+        <RenovarRtDialog
+          rt={renovarRt}
+          onClose={() => setRenovarRt(null)}
+          onDone={() => { setRenovarRt(null); qc.invalidateQueries({ queryKey: ['rt-por-vencer'] }) }}
         />
       )}
     </div>
@@ -601,13 +613,13 @@ function PreventivaCard({ p }: { p: PreventivaDue }) {
   )
 }
 
-function RtPorVencerCard({ items }: { items: RtPorVencer[] }) {
+function RtPorVencerCard({ items, onRenovar }: { items: RtPorVencer[]; onRenovar: (r: RtPorVencer) => void }) {
   return (
     <Card className="border-purple-200">
       <CardHeader className="pb-2">
         <CardTitle className="text-sm flex items-center gap-2 text-purple-800">
           <ShieldAlert className="h-4 w-4" /> Revisión Técnica por vencer ({items.length})
-          <span className="text-[10px] font-normal text-gray-400">— vencida o ≤ 30 días. Arrástrala a un día (crea inspección).</span>
+          <span className="text-[10px] font-normal text-gray-400">— arrástrala a un día (inspección) o pulsa «Renovar RT» para subir el documento nuevo.</span>
         </CardTitle>
       </CardHeader>
       <CardContent className="p-2">
@@ -615,7 +627,7 @@ function RtPorVencerCard({ items }: { items: RtPorVencer[] }) {
           <div className="text-xs text-gray-400 p-3 text-center">Sin RT vencidas ni próximas.</div>
         ) : (
           <div className="flex gap-2 overflow-x-auto pb-1">
-            {items.map((r) => <RtCard key={r.activo_id} r={r} />)}
+            {items.map((r) => <RtCard key={r.activo_id} r={r} onRenovar={onRenovar} />)}
           </div>
         )}
       </CardContent>
@@ -623,21 +635,87 @@ function RtPorVencerCard({ items }: { items: RtPorVencer[] }) {
   )
 }
 
-function RtCard({ r }: { r: RtPorVencer }) {
+function RtCard({ r, onRenovar }: { r: RtPorVencer; onRenovar: (r: RtPorVencer) => void }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: `rt:${r.activo_id}` })
   const style = transform
     ? { transform: `translate3d(${transform.x}px,${transform.y}px,0)`, opacity: isDragging ? 0.5 : 1 }
     : undefined
   const vencida = r.dias_restantes < 0
   return (
-    <div ref={setNodeRef} style={style} {...listeners} {...attributes}
-         title={vencida ? `RT vencida hace ${Math.abs(r.dias_restantes)}d (vence ${r.fecha_vencimiento})` : `RT vence en ${r.dias_restantes}d (${r.fecha_vencimiento})`}
-         className={`shrink-0 rounded border px-2.5 py-1.5 cursor-grab active:cursor-grabbing shadow-sm text-[12px] font-bold text-center ${
-           vencida ? 'border-red-300 bg-red-50 text-red-800' : 'border-purple-200 bg-purple-50 text-purple-800'
-         }`}>
-      <div className="font-mono">{r.patente ?? r.codigo}</div>
-      <div className="text-[10px] font-normal">{vencida ? `vencida ${Math.abs(r.dias_restantes)}d` : `en ${r.dias_restantes}d`}</div>
+    <div className="shrink-0 flex flex-col gap-1 items-stretch">
+      <div ref={setNodeRef} style={style} {...listeners} {...attributes}
+           title={vencida ? `RT vencida hace ${Math.abs(r.dias_restantes)}d (venció ${r.fecha_vencimiento})` : `RT vence en ${r.dias_restantes}d (${r.fecha_vencimiento})`}
+           className={`rounded border px-2.5 py-1.5 cursor-grab active:cursor-grabbing shadow-sm text-[12px] font-bold text-center ${
+             vencida ? 'border-red-300 bg-red-50 text-red-800' : 'border-purple-200 bg-purple-50 text-purple-800'
+           }`}>
+        <div className="font-mono">{r.patente ?? r.codigo}</div>
+        <div className="text-[10px] font-normal">{vencida ? `vencida ${Math.abs(r.dias_restantes)}d` : `en ${r.dias_restantes}d`}</div>
+      </div>
+      <button type="button" onClick={() => onRenovar(r)}
+        className="text-[10px] text-purple-700 underline hover:text-purple-900">Renovar RT</button>
     </div>
+  )
+}
+
+function RenovarRtDialog({ rt, onClose, onDone }: { rt: RtPorVencer; onClose: () => void; onDone: () => void }) {
+  const toast = useToast()
+  const [file, setFile] = useState<File | null>(null)
+  const [emision, setEmision] = useState<string>(() => new Date().toISOString().slice(0, 10))
+  const [venc, setVenc] = useState<string>('')
+  const [numero, setNumero] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  const submit = async () => {
+    if (!venc) { toast.error('Indica el nuevo vencimiento de la RT'); return }
+    if (venc < emision) { toast.error('El vencimiento no puede ser anterior a la emisión'); return }
+    setSaving(true)
+    try {
+      let url: string | null = null
+      if (file) url = await subirDocumentoRt(rt.activo_id, file)
+      await renovarRevisionTecnica({
+        activoId: rt.activo_id, fechaEmision: emision, fechaVencimiento: venc,
+        archivoUrl: url, numero: numero || null,
+      })
+      toast.success(`RT renovada: ${rt.patente ?? rt.codigo} vence ${venc}`)
+      onDone()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Error al renovar la RT')
+    } finally { setSaving(false) }
+  }
+
+  return (
+    <Modal open onClose={onClose} title={`Renovar Revisión Técnica · ${rt.patente ?? rt.codigo}`}>
+      <div className="space-y-3">
+        <p className="text-xs text-gray-500">
+          RT actual {rt.dias_restantes < 0 ? `vencida hace ${Math.abs(rt.dias_restantes)} días` : `vence en ${rt.dias_restantes} días`} ({rt.fecha_vencimiento}).
+        </p>
+        <div>
+          <label className="text-xs font-medium">Documento de la nueva RT (PDF/imagen)</label>
+          <input type="file" accept="application/pdf,image/*"
+            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+            className="w-full rounded border px-2 py-1.5 text-sm" />
+          {file && <p className="text-[10px] text-green-600 mt-0.5">✓ {file.name}</p>}
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <label className="text-xs font-medium">Fecha de emisión
+            <input type="date" value={emision} onChange={(e) => setEmision(e.target.value)}
+              className="mt-0.5 w-full rounded border px-2 py-1.5 text-sm" />
+          </label>
+          <label className="text-xs font-medium">Nuevo vencimiento*
+            <input type="date" value={venc} onChange={(e) => setVenc(e.target.value)}
+              className="mt-0.5 w-full rounded border px-2 py-1.5 text-sm" />
+          </label>
+        </div>
+        <label className="text-xs font-medium block">N° certificado (opcional)
+          <input value={numero} onChange={(e) => setNumero(e.target.value)}
+            className="mt-0.5 w-full rounded border px-2 py-1.5 text-sm" />
+        </label>
+      </div>
+      <ModalFooter>
+        <Button variant="outline" onClick={onClose} disabled={saving}>Cancelar</Button>
+        <Button onClick={submit} disabled={saving}>{saving ? 'Guardando…' : 'Registrar RT renovada'}</Button>
+      </ModalFooter>
+    </Modal>
   )
 }
 

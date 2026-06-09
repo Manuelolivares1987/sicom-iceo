@@ -197,6 +197,34 @@ export async function getRtPorVencer(diasAdelante = 30): Promise<RtPorVencer[]> 
   return out.sort((x, y) => x.dias_restantes - y.dias_restantes)
 }
 
+// Sube el documento de la nueva RT a 'documentos/rt/<activoId>/'.
+export async function subirDocumentoRt(activoId: string, file: File): Promise<string> {
+  const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+  const path = `rt/${activoId}/${Date.now()}-${safe}`
+  const { error } = await supabase.storage.from('documentos').upload(path, file, { upsert: false })
+  if (error) throw error
+  const { data } = supabase.storage.from('documentos').getPublicUrl(path)
+  return data.publicUrl
+}
+
+// Registra la RT renovada (nuevo doc + nuevo vencimiento) -> certificaciones.
+export async function renovarRevisionTecnica(p: {
+  activoId: string; fechaEmision: string; fechaVencimiento: string
+  archivoUrl?: string | null; numero?: string | null; entidad?: string | null; otId?: string | null
+}) {
+  const { data, error } = await supabase.rpc('rpc_renovar_revision_tecnica', {
+    p_activo_id: p.activoId,
+    p_fecha_emision: p.fechaEmision,
+    p_fecha_vencimiento: p.fechaVencimiento,
+    p_archivo_url: p.archivoUrl ?? null,
+    p_numero: p.numero ?? null,
+    p_entidad: p.entidad ?? null,
+    p_ot_id: p.otId ?? null,
+  })
+  if (error) throw error
+  return data
+}
+
 // ── Equipos auxiliares (jerarquía) ──────────────────────────────────────────
 export interface EquipoSimple { id: string; patente: string | null; codigo: string | null; nombre: string | null }
 
