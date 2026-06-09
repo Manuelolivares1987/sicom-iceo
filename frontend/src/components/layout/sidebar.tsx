@@ -86,6 +86,7 @@ const navGroups: NavGroup[] = [
         items: [
           { label: 'Panel Taller', href: '/dashboard/mantenimiento', icon: Wrench, module: 'mantenimiento' },
           { label: 'Plan semanal', href: '/dashboard/mantenimiento/plan-semanal-taller', icon: CalendarClock, module: 'mantenimiento' },
+          { label: 'No Conformidades', href: '/dashboard/mantenimiento/no-conformidades', icon: AlertTriangle, module: 'mantenimiento', badge: 'Nuevo' },
           { label: 'Equipos auxiliares', href: '/dashboard/mantenimiento/auxiliares', icon: Layers, module: 'mantenimiento' },
         ],
       },
