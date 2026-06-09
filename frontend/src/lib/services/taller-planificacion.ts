@@ -225,6 +225,28 @@ export async function renovarRevisionTecnica(p: {
   return data
 }
 
+// ── Recepción por planificar (gatillo desde Sugerencias de estado) ──────────
+export type RecepcionPorPlanificar = {
+  activo_id: string; patente: string | null; codigo: string | null
+  nombre: string | null; fecha_recepcion: string | null
+}
+
+export async function getRecepcionesPorPlanificar(): Promise<RecepcionPorPlanificar[]> {
+  const { data, error } = await supabase
+    .from('v_recepciones_por_planificar').select('*')
+    .order('fecha_recepcion', { ascending: true })
+  if (error) throw error
+  return (data ?? []) as RecepcionPorPlanificar[]
+}
+
+// Crea la OT de inspección de recepción (+ informe + checklist) y devuelve la OT.
+export async function programarRecepcion(activoId: string): Promise<{ ot_id: string; informe_id: string }> {
+  const { data, error } = await supabase.rpc('fn_iniciar_informe_recepcion', { p_activo_id: activoId })
+  if (error) throw error
+  const d = data as { ot_id: string; informe_id: string }
+  return { ot_id: d?.ot_id, informe_id: d?.informe_id }
+}
+
 // ── Equipos auxiliares (jerarquía) ──────────────────────────────────────────
 export interface EquipoSimple { id: string; patente: string | null; codigo: string | null; nombre: string | null }
 

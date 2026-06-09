@@ -33,8 +33,9 @@ import { lunesDeIso, type TallerPlanOTFull } from '@/lib/services/taller-plan-se
 import { getFlotaDashboard, type FlotaDashboardActivo } from '@/lib/services/flota-dashboard'
 import {
   getPlanesActivo, getPreventivasDue, programarOtTaller, getEquiposPadre, getRtPorVencer,
-  subirDocumentoRt, renovarRevisionTecnica,
+  subirDocumentoRt, renovarRevisionTecnica, getRecepcionesPorPlanificar, programarRecepcion,
   type PlanActivo, type PreventivaDue, type TipoOtTaller, type PrioridadTaller, type RtPorVencer,
+  type RecepcionPorPlanificar,
 } from '@/lib/services/taller-planificacion'
 
 type Tab = 'kanban' | 'cobertura' | 'cumplimiento'
@@ -102,6 +103,7 @@ export default function PlanSemanalTallerPage() {
   const { data: fleet } = useQuery({ queryKey: ['equipos-padre'], queryFn: getEquiposPadre, staleTime: 60_000 })
   const { data: preventivas } = useQuery({ queryKey: ['preventivas-due', 15], queryFn: () => getPreventivasDue(15), staleTime: 60_000 })
   const { data: rtDue } = useQuery({ queryKey: ['rt-por-vencer', 30], queryFn: () => getRtPorVencer(30), staleTime: 60_000 })
+  const { data: recepciones } = useQuery({ queryKey: ['recepciones-por-planificar'], queryFn: getRecepcionesPorPlanificar, staleTime: 60_000 })
   const { data: kpi } = useKpiSemanalTaller(planSemanalId || null)
   const { data: cobertura } = useCoberturaPm()
 
@@ -119,6 +121,7 @@ export default function PlanSemanalTallerPage() {
   const [finObs, setFinObs] = useState<string>('')
   const [dropTarget, setDropTarget] = useState<DropTarget | null>(null)
   const [renovarRt, setRenovarRt] = useState<RtPorVencer | null>(null)
+  const [recepTarget, setRecepTarget] = useState<{ activoId: string; label: string; fecha: string } | null>(null)
   const qc = useQueryClient()
   const [filtroPatente, setFiltroPatente] = useState('')
 
@@ -198,6 +201,11 @@ export default function PlanSemanalTallerPage() {
         planIdPre: planId,
         tipoPre: 'preventivo',
       })
+    } else if (aActive.startsWith('recepcion:')) {
+      // recepcion:<activoId> -> al soltar en un día se crea la OT de inspección de recepción
+      const activoId = aActive.replace('recepcion:', '')
+      const r = (recepciones ?? []).find((x) => x.activo_id === activoId)
+      setRecepTarget({ activoId, label: r ? `${r.patente ?? r.codigo}` : activoId, fecha: fechaDestino })
     } else if (aActive.startsWith('jornada:')) {
       const planOtId = aActive.replace('jornada:', '')
       moverJornada.mutate({ planOtId, fechaDestino }, {
@@ -407,6 +415,9 @@ export default function PlanSemanalTallerPage() {
                 )}
               </div>
 
+              {/* Recepción por planificar (marcadas 'R' en Sugerencias de estado) */}
+              <RecepcionPorPlanificarCard items={recepciones ?? []} />
+
               {/* Preventivas sugeridas (arrástralas a un día) */}
               <PreventivasSugeridas items={preventivasPatentes} />
 
@@ -477,6 +488,21 @@ export default function PlanSemanalTallerPage() {
           rt={renovarRt}
           onClose={() => setRenovarRt(null)}
           onDone={() => { setRenovarRt(null); qc.invalidateQueries({ queryKey: ['rt-por-vencer'] }) }}
+        />
+      )}
+
+      {/* Diálogo: planificar inspección de recepción (asigna grupo + día) */}
+      {recepTarget && (
+        <RecepcionDialog
+          target={recepTarget}
+          planSemanalId={planSemanalId}
+          dias={(dias ?? []).map((d) => ({ fecha: d.fecha, nombre: d.nombre_dia }))}
+          agregarJornada={agregarJornada}
+          onClose={() => setRecepTarget(null)}
+          onDone={() => {
+            setRecepTarget(null)
+            qc.invalidateQueries({ queryKey: ['recepciones-por-planificar'] })
+          }}
         />
       )}
     </div>
@@ -599,6 +625,113 @@ function PreventivaCard({ p }: { p: PreventivaDue }) {
          }`}>
       {p.patente}
     </div>
+  )
+}
+
+function RecepcionPorPlanificarCard({ items }: { items: RecepcionPorPlanificar[] }) {
+  return (
+    <Card className="border-cyan-200">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm flex items-center gap-2 text-cyan-800">
+          <Truck className="h-4 w-4" /> Recepción por planificar ({items.length})
+          <span className="text-[10px] font-normal text-gray-400">— marcadas «R» en Sugerencias. Arrástrala a un día → crea la inspección de recepción.</span>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="p-2">
+        {items.length === 0 ? (
+          <div className="text-xs text-gray-400 p-3 text-center">Sin recepciones marcadas.</div>
+        ) : (
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {items.map((r) => <RecepcionCard key={r.activo_id} r={r} />)}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+function RecepcionCard({ r }: { r: RecepcionPorPlanificar }) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: `recepcion:${r.activo_id}` })
+  const style = transform
+    ? { transform: `translate3d(${transform.x}px,${transform.y}px,0)`, opacity: isDragging ? 0.5 : 1 }
+    : undefined
+  return (
+    <div ref={setNodeRef} style={style} {...listeners} {...attributes}
+         title={`Recepción marcada ${r.fecha_recepcion ?? ''}`}
+         className="shrink-0 rounded border border-cyan-300 bg-cyan-50 text-cyan-800 px-2.5 py-1.5 cursor-grab active:cursor-grabbing shadow-sm text-[12px] font-bold text-center font-mono">
+      {r.patente ?? r.codigo}
+    </div>
+  )
+}
+
+function RecepcionDialog({ target, planSemanalId, dias, agregarJornada, onClose, onDone }: {
+  target: { activoId: string; label: string; fecha: string }
+  planSemanalId: string
+  dias: { fecha: string; nombre: string }[]
+  agregarJornada: ReturnType<typeof useAgregarJornadaTaller>
+  onClose: () => void
+  onDone: () => void
+}) {
+  const toast = useToast()
+  const [mecanicos, setMecanicos] = useState<string[]>([])
+  const [fechasSel, setFechasSel] = useState<Set<string>>(new Set([target.fecha]))
+  const [enviando, setEnviando] = useState(false)
+  const toggleDia = (f: string) => setFechasSel((prev) => { const n = new Set(prev); n.has(f) ? n.delete(f) : n.add(f); return n })
+
+  const submit = async () => {
+    if (fechasSel.size === 0) return
+    setEnviando(true)
+    try {
+      const fechas = Array.from(fechasSel).sort()
+      const cuadrilla = mecanicos.length ? mecanicos.join(', ') : null
+      const { ot_id } = await programarRecepcion(target.activoId)
+      for (const f of fechas) await agregarJornada.mutateAsync({ planSemanalId, otId: ot_id, fecha: f, cuadrilla })
+      toast.success(`Recepción de ${target.label} planificada (${fechas.length} día${fechas.length > 1 ? 's' : ''})`)
+      onDone()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Error al planificar recepción')
+    } finally { setEnviando(false) }
+  }
+
+  return (
+    <Modal open onClose={onClose} title={`Planificar recepción · ${target.label}`}>
+      <div className="space-y-3">
+        <p className="text-xs text-gray-500">Se crea la OT de inspección de recepción (checklist profundo) y se asigna al grupo en el/los día(s) elegidos.</p>
+        <div>
+          <label className="text-xs font-medium">Días (puede ser más de uno)</label>
+          <div className="mt-1 grid grid-cols-4 gap-1">
+            {dias.map((d) => {
+              const on = fechasSel.has(d.fecha)
+              return (
+                <button key={d.fecha} type="button" onClick={() => toggleDia(d.fecha)}
+                        className={`rounded border px-1.5 py-1 text-[11px] capitalize ${on ? 'border-cyan-500 bg-cyan-500 text-white' : 'border-gray-200 bg-white text-gray-600 hover:bg-cyan-50'}`}>
+                  {d.nombre.slice(0, 3)} {fmtFecha(d.fecha)}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+        <div>
+          <label className="text-xs font-medium">Grupo de trabajo (hasta {MAX_MECANICOS})</label>
+          <div className="mt-1 flex flex-wrap gap-1">
+            {MECANICOS.map((m) => {
+              const on = mecanicos.includes(m)
+              return (
+                <button key={m} type="button"
+                        onClick={() => setMecanicos((prev) => on ? prev.filter((x) => x !== m) : prev.length < MAX_MECANICOS ? [...prev, m] : prev)}
+                        className={`rounded border px-2 py-1 text-[11px] ${on ? 'border-blue-500 bg-blue-500 text-white' : 'border-gray-200 bg-white text-gray-600'}`}>
+                  {m}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      </div>
+      <ModalFooter>
+        <Button variant="outline" onClick={onClose} disabled={enviando}>Cancelar</Button>
+        <Button onClick={submit} disabled={enviando}>{enviando ? 'Creando…' : 'Planificar recepción'}</Button>
+      </ModalFooter>
+    </Modal>
   )
 }
 
