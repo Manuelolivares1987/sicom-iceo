@@ -128,6 +128,16 @@ export async function cerrarInspeccionRecepcion(
   return { data, error }
 }
 
+// Cierre parcial del día: genera las NC evaluadas hasta ahora (idempotente),
+// sin cerrar el informe. Para inspecciones de recepción que duran varios días.
+export async function cierreParcialRecepcion(informeId: string, observacion?: string) {
+  const { data, error } = await supabase.rpc('fn_cierre_parcial_recepcion', {
+    p_informe_id: informeId,
+    p_observacion: observacion ?? null,
+  })
+  return { data, error }
+}
+
 export async function emitirInformeRecepcion(args: {
   informeId: string
   firmaEncargadoUrl: string

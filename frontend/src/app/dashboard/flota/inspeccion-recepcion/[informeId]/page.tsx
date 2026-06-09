@@ -30,7 +30,7 @@ import {
   useCerrarInspeccionRecepcion,
 } from '@/hooks/use-informe-recepcion'
 import {
-  subirFotoHallazgo, subirFirmaInforme,
+  subirFotoHallazgo, subirFirmaInforme, cierreParcialRecepcion,
   type GravedadHallazgo, type TipoCostoRecepcion,
 } from '@/lib/services/informe-recepcion'
 import {
@@ -50,6 +50,21 @@ export default function InspeccionRecepcionPage() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [firmaDataUrl, setFirmaDataUrl] = useState<string | null>(null)
+  const [cierreMsg, setCierreMsg] = useState<string | null>(null)
+  const [cierreBusy, setCierreBusy] = useState(false)
+
+  const hacerCierreParcial = async () => {
+    if (!informeId) return
+    setCierreBusy(true); setCierreMsg(null); setErrorMsg(null)
+    try {
+      const { data, error } = await cierreParcialRecepcion(informeId)
+      if (error) throw error
+      const n = (data as { nc_generadas?: number } | null)?.nc_generadas ?? 0
+      setCierreMsg(`Cierre parcial del día guardado · ${n} No Conformidad(es) nueva(s) generada(s) para el Jefe de Taller.`)
+    } catch (e) {
+      setErrorMsg(e instanceof Error ? e.message : 'Error en el cierre parcial')
+    } finally { setCierreBusy(false) }
+  }
 
   const { data: informe, isLoading: loadingInf } = useInformeRecepcion(informeId)
   const { data: checklist = [], isLoading: loadingCL } = useChecklistOT(informe?.ot_inspeccion_id ?? undefined)
@@ -157,10 +172,21 @@ export default function InspeccionRecepcionPage() {
             </button>
           ))}
         </div>
+        {informe.estado === 'en_inspeccion' && (
+          <div className="mt-3 flex items-center justify-between gap-3 rounded-lg bg-white/10 px-3 py-2">
+            <span className="text-[11px] text-white/85">La inspección puede durar varios días. Haz el «cierre parcial del día» para enviar al Jefe de Taller las No Conformidades evaluadas hasta ahora (sin cerrar el informe).</span>
+            <Button size="sm" className="bg-white text-orange-700 hover:bg-white/90 shrink-0" disabled={cierreBusy} onClick={hacerCierreParcial}>
+              {cierreBusy ? 'Guardando…' : 'Cierre parcial del día'}
+            </Button>
+          </div>
+        )}
       </div>
 
       {errorMsg && (
         <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{errorMsg}</div>
+      )}
+      {cierreMsg && (
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">{cierreMsg}</div>
       )}
 
       {/* ─── Step 1 — Checklist + hallazgos ─── */}
