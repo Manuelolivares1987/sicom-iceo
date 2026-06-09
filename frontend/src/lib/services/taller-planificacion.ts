@@ -153,6 +153,50 @@ export async function getPreventivasDue(diasAdelante = 15): Promise<PreventivaDu
     }))
 }
 
+// ── Revisión Técnica por vencer ─────────────────────────────────────────────
+export type RtPorVencer = {
+  activo_id: string
+  patente: string | null
+  codigo: string | null
+  nombre: string | null
+  fecha_vencimiento: string
+  dias_restantes: number   // negativo = ya vencida
+}
+
+// Equipos cuya RT (revisión técnica) está vencida o vence dentro de N días.
+// Toma la RT MÁS RECIENTE por equipo (la vigente) y filtra las que ya vencen.
+export async function getRtPorVencer(diasAdelante = 30): Promise<RtPorVencer[]> {
+  const { data, error } = await supabase
+    .from('certificaciones')
+    .select('fecha_vencimiento, activo:activos(id, patente, codigo, nombre, estado)')
+    .eq('tipo', 'revision_tecnica')
+    .order('fecha_vencimiento', { ascending: false })
+  if (error) throw error
+  const limite = Date.now() + diasAdelante * 86400000
+  const hoy = Date.now()
+  const seen = new Set<string>()
+  type Raw = {
+    fecha_vencimiento: string | null
+    activo: { id: string; patente: string | null; codigo: string | null; nombre: string | null; estado: string } | null
+  }
+  const out: RtPorVencer[] = []
+  for (const row of ((data ?? []) as unknown as Raw[])) {
+    const a = row.activo
+    if (!a?.id || seen.has(a.id)) continue
+    seen.add(a.id)  // 1ª fila por activo = RT más reciente (orden desc)
+    if (a.estado === 'dado_baja' || !row.fecha_vencimiento) continue
+    const fv = new Date(row.fecha_vencimiento + 'T00:00:00').getTime()
+    if (fv <= limite) {
+      out.push({
+        activo_id: a.id, patente: a.patente, codigo: a.codigo, nombre: a.nombre,
+        fecha_vencimiento: row.fecha_vencimiento,
+        dias_restantes: Math.ceil((fv - hoy) / 86400000),
+      })
+    }
+  }
+  return out.sort((x, y) => x.dias_restantes - y.dias_restantes)
+}
+
 // ── Equipos auxiliares (jerarquía) ──────────────────────────────────────────
 export interface EquipoSimple { id: string; patente: string | null; codigo: string | null; nombre: string | null }
 

@@ -86,7 +86,6 @@ const navGroups: NavGroup[] = [
         items: [
           { label: 'Panel Taller', href: '/dashboard/mantenimiento', icon: Wrench, module: 'mantenimiento' },
           { label: 'Plan semanal', href: '/dashboard/mantenimiento/plan-semanal-taller', icon: CalendarClock, module: 'mantenimiento' },
-          { label: 'Planificación (pautas)', href: '/dashboard/mantenimiento/planificacion', icon: HardHat, module: 'mantenimiento' },
           { label: 'Equipos auxiliares', href: '/dashboard/mantenimiento/auxiliares', icon: Layers, module: 'mantenimiento' },
         ],
       },
@@ -140,7 +139,6 @@ const navGroups: NavGroup[] = [
       { label: 'Mapa GPS', href: '/dashboard/flota/mapa', icon: Satellite, module: 'flota', badge: 'Nuevo' },
       { label: 'Sugerencias estado (GPS)', href: '/dashboard/flota/sugerencias', icon: Satellite, module: 'flota', badge: 'Nuevo' },
       { label: 'Check-List Entrega', href: '/dashboard/flota/checklist-salida', icon: ClipboardCheck, module: 'flota', badge: 'V02' },
-      { label: 'Plan Preventivo', href: '/dashboard/flota/plan-preventivo', icon: CalendarClock, module: 'flota' },
       { label: 'Estado Flota', href: '/dashboard/flota/estado-flota', icon: ShieldCheck, module: 'flota', badge: 'Nuevo' },
       { label: 'Equipos y Bitácora (QR)', href: '/dashboard/activos', icon: QrCode, module: 'activos',
         tooltip: 'Listado de equipos; entra a uno para ver su QR y la bitácora completa' },

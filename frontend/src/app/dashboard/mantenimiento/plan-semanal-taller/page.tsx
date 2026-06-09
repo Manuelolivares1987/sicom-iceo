@@ -32,8 +32,8 @@ import {
 import { lunesDeIso, type TallerPlanOTFull } from '@/lib/services/taller-plan-semanal'
 import { getFlotaDashboard, type FlotaDashboardActivo } from '@/lib/services/flota-dashboard'
 import {
-  getPlanesActivo, getPreventivasDue, programarOtTaller, getEquiposPadre,
-  type PlanActivo, type PreventivaDue, type TipoOtTaller, type PrioridadTaller,
+  getPlanesActivo, getPreventivasDue, programarOtTaller, getEquiposPadre, getRtPorVencer,
+  type PlanActivo, type PreventivaDue, type TipoOtTaller, type PrioridadTaller, type RtPorVencer,
 } from '@/lib/services/taller-planificacion'
 
 type Tab = 'kanban' | 'cobertura' | 'cumplimiento'
@@ -100,6 +100,7 @@ export default function PlanSemanalTallerPage() {
   // Solo la flota real (55): tipo móvil, sin activo_padre_id, no dada de baja. Excluye auxiliares.
   const { data: fleet } = useQuery({ queryKey: ['equipos-padre'], queryFn: getEquiposPadre, staleTime: 60_000 })
   const { data: preventivas } = useQuery({ queryKey: ['preventivas-due', 15], queryFn: () => getPreventivasDue(15), staleTime: 60_000 })
+  const { data: rtDue } = useQuery({ queryKey: ['rt-por-vencer', 30], queryFn: () => getRtPorVencer(30), staleTime: 60_000 })
   const { data: kpi } = useKpiSemanalTaller(planSemanalId || null)
   const { data: cobertura } = useCoberturaPm()
 
@@ -193,6 +194,17 @@ export default function PlanSemanalTallerPage() {
         fecha: fechaDestino,
         planIdPre: planId,
         tipoPre: 'preventivo',
+      })
+    } else if (aActive.startsWith('rt:')) {
+      // rt:<activoId> -> programar inspección de Revisión Técnica
+      const activoId = aActive.replace('rt:', '')
+      const r = (rtDue ?? []).find((x) => x.activo_id === activoId)
+      setDropTarget({
+        activoId,
+        label: r ? `${r.patente ?? r.codigo} · Revisión Técnica` : activoId,
+        fecha: fechaDestino,
+        planIdPre: null,
+        tipoPre: 'inspeccion',
       })
     } else if (aActive.startsWith('jornada:')) {
       const planOtId = aActive.replace('jornada:', '')
@@ -405,6 +417,9 @@ export default function PlanSemanalTallerPage() {
 
               {/* Preventivas sugeridas (arrástralas a un día) */}
               <PreventivasSugeridas items={preventivasPatentes} />
+
+              {/* Revisión Técnica por vencer (arrástralas a un día → inspección) */}
+              <RtPorVencerCard items={rtDue ?? []} />
             </div>
           </div>
         </DndContext>
@@ -582,6 +597,46 @@ function PreventivaCard({ p }: { p: PreventivaDue }) {
            vencida ? 'border-red-300 bg-red-50 text-red-800' : 'border-amber-200 bg-amber-50 text-amber-800'
          }`}>
       {p.patente}
+    </div>
+  )
+}
+
+function RtPorVencerCard({ items }: { items: RtPorVencer[] }) {
+  return (
+    <Card className="border-purple-200">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm flex items-center gap-2 text-purple-800">
+          <ShieldAlert className="h-4 w-4" /> Revisión Técnica por vencer ({items.length})
+          <span className="text-[10px] font-normal text-gray-400">— vencida o ≤ 30 días. Arrástrala a un día (crea inspección).</span>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="p-2">
+        {items.length === 0 ? (
+          <div className="text-xs text-gray-400 p-3 text-center">Sin RT vencidas ni próximas.</div>
+        ) : (
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {items.map((r) => <RtCard key={r.activo_id} r={r} />)}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+function RtCard({ r }: { r: RtPorVencer }) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: `rt:${r.activo_id}` })
+  const style = transform
+    ? { transform: `translate3d(${transform.x}px,${transform.y}px,0)`, opacity: isDragging ? 0.5 : 1 }
+    : undefined
+  const vencida = r.dias_restantes < 0
+  return (
+    <div ref={setNodeRef} style={style} {...listeners} {...attributes}
+         title={vencida ? `RT vencida hace ${Math.abs(r.dias_restantes)}d (vence ${r.fecha_vencimiento})` : `RT vence en ${r.dias_restantes}d (${r.fecha_vencimiento})`}
+         className={`shrink-0 rounded border px-2.5 py-1.5 cursor-grab active:cursor-grabbing shadow-sm text-[12px] font-bold text-center ${
+           vencida ? 'border-red-300 bg-red-50 text-red-800' : 'border-purple-200 bg-purple-50 text-purple-800'
+         }`}>
+      <div className="font-mono">{r.patente ?? r.codigo}</div>
+      <div className="text-[10px] font-normal">{vencida ? `vencida ${Math.abs(r.dias_restantes)}d` : `en ${r.dias_restantes}d`}</div>
     </div>
   )
 }
