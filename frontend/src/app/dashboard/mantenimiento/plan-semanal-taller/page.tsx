@@ -198,17 +198,6 @@ export default function PlanSemanalTallerPage() {
         planIdPre: planId,
         tipoPre: 'preventivo',
       })
-    } else if (aActive.startsWith('rt:')) {
-      // rt:<activoId> -> programar inspección de Revisión Técnica
-      const activoId = aActive.replace('rt:', '')
-      const r = (rtDue ?? []).find((x) => x.activo_id === activoId)
-      setDropTarget({
-        activoId,
-        label: r ? `${r.patente ?? r.codigo} · Revisión Técnica` : activoId,
-        fecha: fechaDestino,
-        planIdPre: null,
-        tipoPre: 'inspeccion',
-      })
     } else if (aActive.startsWith('jornada:')) {
       const planOtId = aActive.replace('jornada:', '')
       moverJornada.mutate({ planOtId, fechaDestino }, {
@@ -619,7 +608,7 @@ function RtPorVencerCard({ items, onRenovar }: { items: RtPorVencer[]; onRenovar
       <CardHeader className="pb-2">
         <CardTitle className="text-sm flex items-center gap-2 text-purple-800">
           <ShieldAlert className="h-4 w-4" /> Revisión Técnica por vencer ({items.length})
-          <span className="text-[10px] font-normal text-gray-400">— arrástrala a un día (inspección) o pulsa «Renovar RT» para subir el documento nuevo.</span>
+          <span className="text-[10px] font-normal text-gray-400">— pulsa «Renovar RT» para subir el documento nuevo y el nuevo vencimiento.</span>
         </CardTitle>
       </CardHeader>
       <CardContent className="p-2">
@@ -636,23 +625,18 @@ function RtPorVencerCard({ items, onRenovar }: { items: RtPorVencer[]; onRenovar
 }
 
 function RtCard({ r, onRenovar }: { r: RtPorVencer; onRenovar: (r: RtPorVencer) => void }) {
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: `rt:${r.activo_id}` })
-  const style = transform
-    ? { transform: `translate3d(${transform.x}px,${transform.y}px,0)`, opacity: isDragging ? 0.5 : 1 }
-    : undefined
   const vencida = r.dias_restantes < 0
   return (
-    <div className="shrink-0 flex flex-col gap-1 items-stretch">
-      <div ref={setNodeRef} style={style} {...listeners} {...attributes}
-           title={vencida ? `RT vencida hace ${Math.abs(r.dias_restantes)}d (venció ${r.fecha_vencimiento})` : `RT vence en ${r.dias_restantes}d (${r.fecha_vencimiento})`}
-           className={`rounded border px-2.5 py-1.5 cursor-grab active:cursor-grabbing shadow-sm text-[12px] font-bold text-center ${
+    <div className="shrink-0 flex flex-col gap-1 items-stretch w-[120px]">
+      <div title={vencida ? `RT vencida hace ${Math.abs(r.dias_restantes)}d (venció ${r.fecha_vencimiento})` : `RT vence en ${r.dias_restantes}d (${r.fecha_vencimiento})`}
+           className={`rounded border px-2.5 py-1.5 shadow-sm text-[12px] font-bold text-center ${
              vencida ? 'border-red-300 bg-red-50 text-red-800' : 'border-purple-200 bg-purple-50 text-purple-800'
            }`}>
         <div className="font-mono">{r.patente ?? r.codigo}</div>
         <div className="text-[10px] font-normal">{vencida ? `vencida ${Math.abs(r.dias_restantes)}d` : `en ${r.dias_restantes}d`}</div>
       </div>
       <button type="button" onClick={() => onRenovar(r)}
-        className="text-[10px] text-purple-700 underline hover:text-purple-900">Renovar RT</button>
+        className="text-[11px] text-white bg-purple-600 hover:bg-purple-700 rounded px-2 py-1 font-medium">📄 Renovar RT</button>
     </div>
   )
 }
