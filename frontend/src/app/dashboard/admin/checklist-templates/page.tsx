@@ -10,6 +10,7 @@ import {
   Save,
   Camera,
   CheckCircle,
+  Download,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -265,6 +266,27 @@ export default function ChecklistTemplatesPage() {
     }
   }
 
+  // Exportar todas las plantillas a CSV (se abre directo en Excel).
+  const exportarChecklists = () => {
+    const headers = ['Tipo OT', 'Plantilla', 'Orden', 'Ítem (descripción)', 'Obligatorio', 'Requiere foto']
+    const filas: (string | number)[][] = []
+    for (const t of templates) {
+      const label = tipoLabels[t.tipo_ot] || t.tipo_ot
+      for (const it of (t.items ?? []).slice().sort((a, b) => a.orden - b.orden)) {
+        filas.push([label, t.nombre, it.orden, it.descripcion, it.obligatorio ? 'Sí' : 'No', it.requiere_foto ? 'Sí' : 'No'])
+      }
+    }
+    const csv = [headers, ...filas]
+      .map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(','))
+      .join('\r\n')
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' })
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = `plantillas_checklist_${new Date().toISOString().slice(0, 10)}.csv`
+    a.click()
+    URL.revokeObjectURL(a.href)
+  }
+
   if (loading) {
     return (
       <div className="flex justify-center py-24">
@@ -285,12 +307,17 @@ export default function ChecklistTemplatesPage() {
       </Link>
 
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Plantillas de Checklist</h1>
-        <p className="mt-1 text-sm text-gray-500">
-          Defina los items de checklist por defecto para cada tipo de OT.
-          Estos se asignan automaticamente al crear OTs manuales (sin plan PM).
-        </p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Plantillas de Checklist</h1>
+          <p className="mt-1 text-sm text-gray-500">
+            Defina los items de checklist por defecto para cada tipo de OT.
+            Estos se asignan automaticamente al crear OTs manuales (sin plan PM).
+          </p>
+        </div>
+        <Button variant="outline" size="sm" onClick={exportarChecklists} disabled={templates.length === 0}>
+          <Download className="h-4 w-4 mr-1" /> Excel / CSV
+        </Button>
       </div>
 
       {/* Crear nueva plantilla */}
