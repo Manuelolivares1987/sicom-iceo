@@ -38,6 +38,7 @@ import {
   type PlanActivo, type PreventivaDue, type TipoOtTaller, type PrioridadTaller, type RtPorVencer,
   type RecepcionPorPlanificar, type NcOtPorAgendar,
 } from '@/lib/services/taller-planificacion'
+import { MECANICOS, MAX_MECANICOS } from '@/lib/taller-grupos'
 
 type Tab = 'kanban' | 'cobertura' | 'cumplimiento'
 
@@ -60,9 +61,7 @@ function ordenEstado(cod: string | null): number {
   return cod && cod in ORDEN_ESTADO ? ORDEN_ESTADO[cod] : 9
 }
 
-// Mecánicos del taller (hasta 2 por jornada). Se guardan en el campo `cuadrilla`.
-const MECANICOS = ['Yusedl', 'Joel', 'Sergio', 'Marco', 'Felipe L', 'Felipe'] as const
-const MAX_MECANICOS = 2
+// Mecánicos del taller (fuente única en lib/taller-grupos). Se guardan en `cuadrilla`.
 
 // Objetivo de drop pendiente: patente/preventiva soltada en un día.
 type DropTarget = {
