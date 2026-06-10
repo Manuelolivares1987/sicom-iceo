@@ -1,13 +1,16 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import Link from 'next/link'
 import ExcelJS from 'exceljs'
-import { Upload, Download, CheckCircle2, AlertTriangle, FileSpreadsheet } from 'lucide-react'
+import { Upload, Download, CheckCircle2, AlertTriangle, FileSpreadsheet, Settings } from 'lucide-react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
 import { useRequireAuth } from '@/hooks/use-require-auth'
 import { supabase } from '@/lib/supabase'
+import { getCategoriasProducto, normalizar } from '@/lib/services/producto-categorias'
 import { cn } from '@/lib/utils'
 
 type Fila = {
@@ -32,22 +35,14 @@ const CAMPOS_OPCIONALES = [
   'stock_minimo', 'stock_maximo', 'bodega_nombre', 'stock_inicial',
 ]
 
-// Categorías válidas en la BD (CHECK chk_productos_categoria).
-const CATEGORIAS_VALIDAS = ['combustible', 'lubricante', 'filtro', 'repuesto', 'consumible', 'epp']
-// Sinónimos frecuentes del Excel → categoría válida.
+// Sinónimos frecuentes del Excel → código de categoría (respaldo; el catálogo manda).
 const SINONIMOS_CATEGORIA: Record<string, string> = {
   aceite: 'lubricante', aceites: 'lubricante', grasa: 'lubricante', grasas: 'lubricante', lubricantes: 'lubricante',
   filtros: 'filtro',
-  repuestos: 'repuesto', neumatico: 'repuesto', neumaticos: 'repuesto', bateria: 'repuesto', baterias: 'repuesto',
-  herramienta: 'repuesto', herramientas: 'repuesto', electrico: 'repuesto', electricos: 'repuesto', ferreteria: 'repuesto',
+  repuestos: 'repuesto', bateria: 'repuesto', baterias: 'repuesto',
   consumibles: 'consumible', insumo: 'consumible', insumos: 'consumible',
   combustibles: 'combustible',
   epps: 'epp', seguridad: 'epp',
-}
-// Normaliza la categoría: minúsculas, sin acentos, mapea sinónimos.
-function normCategoria(raw: string): string {
-  const base = raw.trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
-  return SINONIMOS_CATEGORIA[base] ?? base
 }
 
 export default function CargarMaestroPage() {
@@ -58,6 +53,27 @@ export default function CargarMaestroPage() {
   const [uploading, setUploading] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [resultado, setResultado] = useState<{ insertados: number; actualizados: number; errores: number } | null>(null)
+
+  // Catálogo editable de categorías (producto_categorias).
+  const { data: categorias = [] } = useQuery({ queryKey: ['producto-categorias-activas'], queryFn: () => getCategoriasProducto(true), staleTime: 60_000 })
+  // Lookup: código o nombre normalizado → código válido.
+  const { lookup, validSet, etiquetas } = useMemo(() => {
+    const lk = new Map<string, string>()
+    const vs = new Set<string>()
+    for (const c of categorias) {
+      vs.add(c.codigo)
+      lk.set(normalizar(c.codigo), c.codigo)
+      lk.set(normalizar(c.nombre), c.codigo)
+    }
+    return { lookup: lk, validSet: vs, etiquetas: categorias.map((c) => c.nombre).join(', ') }
+  }, [categorias])
+
+  // Resuelve la categoría del Excel al código del catálogo (o '' si no calza).
+  const resolverCategoria = (raw: string): string => {
+    const base = normalizar(raw)
+    if (!base) return ''
+    return lookup.get(base) ?? SINONIMOS_CATEGORIA[base] ?? base
+  }
 
   const handleFile = async (file: File) => {
     setErrorMsg(null)
@@ -107,7 +123,7 @@ export default function CargarMaestroPage() {
           codigo,
           codigo_barras: strOrNull(get('codigo_barras')),
           nombre: String(get('nombre') ?? '').trim(),
-          categoria: normCategoria(String(get('categoria') ?? '')),
+          categoria: resolverCategoria(String(get('categoria') ?? '')),
           subcategoria: strOrNull(get('subcategoria')),
           unidad_medida: String(get('unidad_medida') ?? '').trim(),
           costo_unitario_actual: numOrUndef(get('costo_unitario_actual')),
@@ -119,7 +135,7 @@ export default function CargarMaestroPage() {
         // Validación básica
         if (!fila.nombre) fila.error = 'Sin nombre'
         else if (!fila.categoria) fila.error = 'Sin categoría'
-        else if (!CATEGORIAS_VALIDAS.includes(fila.categoria)) fila.error = `Categoría "${fila.categoria}" no válida (use: ${CATEGORIAS_VALIDAS.join(', ')})`
+        else if (!validSet.has(fila.categoria)) fila.error = `Categoría "${fila.categoria}" no existe (válidas: ${etiquetas}). Puedes crearla en «Gestionar categorías».`
         else if (!fila.unidad_medida) fila.error = 'Sin unidad_medida'
 
         parsed.push(fila)
@@ -264,6 +280,9 @@ export default function CargarMaestroPage() {
         <p className="text-sm text-white/80 mt-1">
           Sube tu Excel de productos. Las filas existentes (mismo código) se actualizan; las nuevas se crean.
         </p>
+        <Link href="/dashboard/inventario/categorias" className="mt-3 inline-flex items-center gap-1 rounded-md bg-white/15 px-3 py-1.5 text-xs font-medium hover:bg-white/25">
+          <Settings className="h-3.5 w-3.5" /> Gestionar categorías ({categorias.length})
+        </Link>
       </div>
 
       {/* Template download */}
