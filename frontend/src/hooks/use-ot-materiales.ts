@@ -92,7 +92,7 @@ export function useBuscarProductos(query: string) {
       if (error) throw error
       return data ?? []
     },
-    enabled: query.trim().length >= 2,
+    enabled: query.trim().length >= 1,
     staleTime: 30_000,
   })
 }

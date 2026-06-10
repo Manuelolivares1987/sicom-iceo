@@ -165,6 +165,22 @@ export async function getJornadasPlanSemanal(planSemanalId: string): Promise<Tal
   return (data ?? []) as TallerPlanOTFull[]
 }
 
+// Jornadas (días + cuadrilla) en que una OT está programada en el plan semanal.
+// Permite que al revisar la OT se vea el responsable/cuadrilla concordante con el plan.
+export type JornadaDeOT = {
+  dia_fecha: string; dia_nombre: string | null; cuadrilla: string | null
+  responsable: string | null; jornada_estado: string | null; horas_planificadas: number | null
+}
+export async function getJornadasDeOT(otId: string): Promise<JornadaDeOT[]> {
+  const { data, error } = await supabase
+    .from('v_taller_plan_semanal_ots_full')
+    .select('dia_fecha, dia_nombre, cuadrilla, responsable, jornada_estado, horas_planificadas')
+    .eq('ot_id', otId)
+    .order('dia_fecha', { ascending: true })
+  if (error) throw error
+  return (data ?? []) as JornadaDeOT[]
+}
+
 export async function getBacklog(): Promise<TallerOTBacklog[]> {
   const { data, error } = await supabase
     .from('v_taller_ot_backlog').select('*').limit(500)

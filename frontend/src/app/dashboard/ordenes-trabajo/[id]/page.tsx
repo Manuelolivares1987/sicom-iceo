@@ -1,9 +1,11 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { useAuth } from '@/contexts/auth-context'
+import { getJornadasDeOT } from '@/lib/services/taller-plan-semanal'
 import {
   ArrowLeft,
   Camera,
@@ -1122,6 +1124,29 @@ function EditarOTCard({ otData, otId }: { otData: any; otId: string }) {
 // ---------------------------------------------------------------------------
 // Main page
 // ---------------------------------------------------------------------------
+function PlanSemanalBanner({ otId }: { otId: string }) {
+  const { data: jornadas = [] } = useQuery({ queryKey: ['ot-jornadas', otId], queryFn: () => getJornadasDeOT(otId), enabled: !!otId, staleTime: 30_000 })
+  if (jornadas.length === 0) return null
+  const cuadrillas = Array.from(new Set(jornadas.map((j) => j.cuadrilla).filter(Boolean))) as string[]
+  const responsable = cuadrillas.length ? cuadrillas.join(' · ') : (jornadas.find((j) => j.responsable)?.responsable ?? 'Sin asignar')
+  return (
+    <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 p-3">
+      <div className="text-sm font-medium text-blue-800">
+        📅 Programada en el plan semanal — {jornadas.length} jornada{jornadas.length > 1 ? 's' : ''}
+      </div>
+      <div className="mt-1.5 flex flex-wrap gap-1.5">
+        {jornadas.map((j, i) => (
+          <span key={i} className="rounded border border-blue-200 bg-white px-2 py-0.5 text-xs capitalize text-blue-900">
+            {(j.dia_nombre ?? '').slice(0, 3)} {new Date(j.dia_fecha + 'T12:00:00').toLocaleDateString('es-CL', { day: '2-digit', month: 'short' })}
+            {j.horas_planificadas ? ` · ${j.horas_planificadas}h` : ''}
+          </span>
+        ))}
+      </div>
+      <div className="mt-1.5 text-xs text-blue-700">Responsable / cuadrilla del plan: <b>{responsable}</b></div>
+    </div>
+  )
+}
+
 export default function OrdenTrabajoDetailPage() {
   const params = useParams()
   const id = params?.id as string | undefined
@@ -1208,6 +1233,9 @@ export default function OrdenTrabajoDetailPage() {
 
       {/* Header + Info grid */}
       <OTInfoHeader ot={otData} />
+
+      {/* Concordancia con el plan semanal: días programados + cuadrilla */}
+      {id && <PlanSemanalBanner otId={id} />}
 
       {/* Editar OT — only visible for creada/asignada */}
       {(otData.estado === 'creada' || otData.estado === 'asignada') && id && (

@@ -189,7 +189,7 @@ export function PanelMateriales({ otId, otFolio, otCerrada, puedeDespachar }: Pr
                     {categorias.map((c) => <option key={c.codigo} value={c.codigo}>{c.nombre}</option>)}
                   </select>
                 </div>
-                {productos.length > 0 && query.length >= 2 && (
+                {productos.length > 0 && query.length >= 1 && (
                   <div className="absolute z-10 mt-1 max-h-56 w-full overflow-y-auto rounded border border-gray-200 bg-white shadow-lg">
                     {productos.map((p: any) => (
                       <button

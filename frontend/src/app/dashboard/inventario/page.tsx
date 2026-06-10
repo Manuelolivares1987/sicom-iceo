@@ -1,7 +1,9 @@
 'use client'
 
 import { useState, useMemo } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import Link from 'next/link'
+import { getCategoriasProducto } from '@/lib/services/producto-categorias'
 import {
   Search,
   DollarSign,
@@ -58,7 +60,6 @@ import { useEstanques } from '@/hooks/use-combustible'
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-const categorias = ['Todas', 'Combustible', 'Lubricante', 'Filtro', 'Repuesto']
 
 function getMovimientoIcon(tipo: string) {
   switch (tipo) {
@@ -153,6 +154,7 @@ export default function InventarioPage() {
   const [activeTab, setActiveTab] = useState('stock')
   const [search, setSearch] = useState('')
   const [categoriaFilter, setCategoriaFilter] = useState('Todas')
+  const { data: catalogoCategorias = [] } = useQuery({ queryKey: ['producto-categorias-activas'], queryFn: () => getCategoriasProducto(true), staleTime: 300_000 })
   const [bodegaFilter, setBodegaFilter] = useState('')
   const [movTipoFilter, setMovTipoFilter] = useState('')
 
@@ -382,8 +384,9 @@ export default function InventarioPage() {
                     onChange={(e) => setCategoriaFilter(e.target.value)}
                     className="h-10 w-full appearance-none rounded-lg border border-gray-300 bg-white px-3 pr-8 text-sm focus:border-pillado-green-500 focus:outline-none focus:ring-2 focus:ring-pillado-green-500/20"
                   >
-                    {categorias.map((c) => (
-                      <option key={c} value={c}>{c}</option>
+                    <option value="Todas">Todas las categorías</option>
+                    {catalogoCategorias.map((c) => (
+                      <option key={c.codigo} value={c.codigo}>{c.nombre}</option>
                     ))}
                   </select>
                   <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
