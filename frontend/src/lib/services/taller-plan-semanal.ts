@@ -181,6 +181,17 @@ export async function getJornadasDeOT(otId: string): Promise<JornadaDeOT[]> {
   return (data ?? []) as JornadaDeOT[]
 }
 
+// Jornadas de una semana (rango de fechas) — para repetir las OT por día en el Panel Taller.
+export async function getJornadasSemana(desde: string, hasta: string) {
+  const { data, error } = await supabase
+    .from('v_taller_plan_semanal_ots_full')
+    .select('ot_id, ot_folio, ot_tipo, ot_estado, ot_prioridad, activo_nombre, activo_codigo, activo_patente, cuadrilla, responsable, dia_fecha, horas_planificadas')
+    .gte('dia_fecha', desde).lte('dia_fecha', hasta)
+    .order('dia_fecha', { ascending: true })
+  if (error) throw error
+  return data ?? []
+}
+
 export async function getBacklog(): Promise<TallerOTBacklog[]> {
   const { data, error } = await supabase
     .from('v_taller_ot_backlog').select('*').limit(500)

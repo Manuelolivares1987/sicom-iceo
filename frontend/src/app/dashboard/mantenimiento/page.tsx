@@ -3,6 +3,7 @@
 import { useState, useMemo, useEffect, useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useRouter } from 'next/navigation'
+import { getJornadasSemana } from '@/lib/services/taller-plan-semanal'
 import {
   Wrench,
   Calendar,
@@ -573,6 +574,12 @@ function PlanSemanalTab() {
     [mondayISO, sundayISO]
   )
   const { data: weekOTs, isLoading: loadingOTs } = useOrdenesTrabajo(otFilters)
+  // Jornadas del plan semanal en la semana (para repetir las OT por día, con su cuadrilla).
+  const { data: jornadasSemana } = useQuery({
+    queryKey: ['jornadas-semana', mondayISO, sundayISO],
+    queryFn: () => getJornadasSemana(mondayISO, sundayISO),
+    staleTime: 30_000,
+  })
 
   // Generar OT mutation
   const generarOT = useGenerarOTDesdePlan()
@@ -624,8 +631,27 @@ function PlanSemanalTab() {
     for (const day of days) {
       map[toISODate(day)] = []
     }
+    // Jornadas del plan semanal: la misma OT se repite por cada día programado, con su cuadrilla.
+    const otConJornada = new Set<string>()
+    for (const j of (jornadasSemana ?? []) as any[]) {
+      const fecha = j.dia_fecha?.slice(0, 10)
+      if (fecha && map[fecha]) {
+        map[fecha].push({
+          id: j.ot_id,
+          folio: j.ot_folio,
+          tipo: j.ot_tipo,
+          prioridad: j.ot_prioridad,
+          estado: j.ot_estado,
+          activo: { nombre: j.activo_nombre, codigo: j.activo_codigo, patente: j.activo_patente },
+          responsable: { nombre_completo: j.cuadrilla ?? j.responsable ?? null },
+        })
+        otConJornada.add(j.ot_id)
+      }
+    }
+    // OTs sin jornada en el plan: se muestran una vez, en su fecha programada.
     if (weekOTs) {
       for (const ot of weekOTs) {
+        if (otConJornada.has((ot as any).id)) continue
         const fecha = (ot as any).fecha_programada?.slice(0, 10)
         if (fecha && map[fecha]) {
           map[fecha].push(ot)
@@ -633,7 +659,7 @@ function PlanSemanalTab() {
       }
     }
     return map
-  }, [weekOTs, days])
+  }, [jornadasSemana, weekOTs, days])
 
   // Accept PM suggestion -> create OT
   const handleAceptar = useCallback(
