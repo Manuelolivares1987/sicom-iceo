@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts'
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, BarChart, Bar, XAxis, YAxis } from 'recharts'
 import { supabase } from '@/lib/supabase'
 
 // ── Estados ────────────────────────────────────────────────
@@ -24,6 +24,8 @@ type Categoria = {
 type Equipo = {
   activo_id: string; patente: string; equipamiento: string | null
   categoria_uso: string | null; cliente: string | null
+  marca: string | null; modelo: string | null; anio: number | null
+  capacidad: string | null; potencia: string | null; vin_chasis: string | null; numero_motor: string | null
   dias_observados: number; dias_up: number; dias_down: number; eventos_falla: number
   mtbf_dias: number; mttr_dias: number
   disponibilidad_inherente: number; disponibilidad_fisica: number
@@ -111,6 +113,21 @@ export default function ReporteFiabilidadPublicoPage() {
     for (const e of Array.from(estadoActual.values())) counts[e] = (counts[e] ?? 0) + 1
     return ORDEN.filter((s) => counts[s]).map((s) => ({ key: s, name: LABEL[s], value: counts[s], color: COLOR[s] }))
   }, [estadoActual])
+
+  // Distribución DIARIA de estados de la flota (barras apiladas por día).
+  const distribucionDiaria = useMemo(() => {
+    const byDia: Record<string, Record<string, number>> = {}
+    for (const c of matriz) {
+      const dia = (byDia[c.fecha.slice(0, 10)] ??= {})
+      dia[c.estado] = (dia[c.estado] ?? 0) + 1
+    }
+    return diasUnicos.map((f) => ({ dia: f.slice(8, 10), ...byDia[f] }))
+  }, [matriz, diasUnicos])
+  const estadosPresentes = useMemo(() => {
+    const set = new Set<string>()
+    for (const c of matriz) set.add(c.estado)
+    return ORDEN.filter((s) => set.has(s))
+  }, [matriz])
 
   const kpi = useMemo(() => {
     const cats = data?.categorias ?? []
@@ -280,6 +297,31 @@ export default function ReporteFiabilidadPublicoPage() {
               </div>
             </Card>
 
+            {/* Distribución diaria de estados de la flota */}
+            {distribucionDiaria.length > 0 && (
+              <Card title="Distribución diaria de estados de la flota">
+                <div className="h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={distribucionDiaria} margin={{ top: 5, right: 8, left: -18, bottom: 0 }}>
+                      <XAxis dataKey="dia" tick={{ fontSize: 10 }} interval={0} />
+                      <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
+                      <Tooltip formatter={(v: number, n: string) => [`${v} equipos`, LABEL[n] ?? n]} labelFormatter={(d) => `Día ${d}`} />
+                      {estadosPresentes.map((s) => (
+                        <Bar key={s} dataKey={s} stackId="estados" fill={COLOR[s]} name={LABEL[s]} />
+                      ))}
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px]">
+                  {estadosPresentes.map((s) => (
+                    <span key={s} className="flex items-center gap-1 text-gray-600">
+                      <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: COLOR[s] }} />{LABEL[s]}
+                    </span>
+                  ))}
+                </div>
+              </Card>
+            )}
+
             {/* Stock de combustible (debajo de la torta) */}
             {combustible.length > 0 && (
               <Card title="Stock de combustible">
@@ -441,6 +483,23 @@ export default function ReporteFiabilidadPublicoPage() {
                 <div>MTBF / MTTR: <b>{fmtNum(histSel.det.mtbf_dias)} / {fmtNum(histSel.det.mttr_dias)} d</b></div>
               </div>
             )}
+
+            {/* Ficha técnica del equipo (como en la página) */}
+            {histSel.det && (
+              <div className="mt-4 border-t pt-3">
+                <div className="mb-2 text-xs font-semibold text-[#0b2a4a]">Ficha técnica</div>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs sm:grid-cols-3">
+                  <FichaCampo label="Marca" value={histSel.det.marca} />
+                  <FichaCampo label="Modelo" value={histSel.det.modelo} />
+                  <FichaCampo label="Año" value={histSel.det.anio} />
+                  <FichaCampo label="Capacidad" value={histSel.det.capacidad} />
+                  <FichaCampo label="Potencia (CV)" value={histSel.det.potencia} />
+                  <FichaCampo label="VIN / Chasis" value={histSel.det.vin_chasis} />
+                  <FichaCampo label="N° Motor" value={histSel.det.numero_motor} />
+                  <FichaCampo label="Cliente" value={histSel.det.cliente} />
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -453,6 +512,14 @@ function Kpi({ n, l }: { n: string; l: string }) {
     <div className="rounded-xl border bg-white p-3 text-center">
       <div className="text-xl font-bold text-[#0b2a4a]">{n}</div>
       <div className="mt-1 text-[10px] uppercase tracking-wide text-gray-500">{l}</div>
+    </div>
+  )
+}
+function FichaCampo({ label, value }: { label: string; value: string | number | null | undefined }) {
+  return (
+    <div>
+      <div className="text-[10px] uppercase tracking-wide text-gray-400">{label}</div>
+      <div className="font-medium text-gray-800">{value != null && value !== '' ? value : '—'}</div>
     </div>
   )
 }
