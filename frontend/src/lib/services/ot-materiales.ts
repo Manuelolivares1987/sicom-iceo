@@ -113,7 +113,7 @@ export async function buscarProductos(query: string, limit = 20) {
   if (!q) return { data: [], error: null }
   const { data, error } = await supabase
     .from('productos')
-    .select('id, codigo, nombre, unidad_medida, categoria')
+    .select('id, codigo, nombre, unidad_medida, categoria, costo_unitario_actual')
     .or(`codigo.ilike.%${q}%,nombre.ilike.%${q}%`)
     .limit(limit)
   return { data, error }

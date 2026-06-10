@@ -55,6 +55,7 @@ import {
   useUpdateOT,
 } from '@/hooks/use-ordenes-trabajo'
 import { PanelMateriales } from '@/components/ot/panel-materiales'
+import { useBuscarProductos } from '@/hooks/use-ot-materiales'
 import { useStockBodega, useBodegas, useRegistrarSalida } from '@/hooks/use-inventario'
 import { supabase } from '@/lib/supabase'
 import { calcularKPIs } from '@/lib/services/kpi-iceo'
@@ -580,12 +581,20 @@ function MaterialesMovimientos({ otId, faenaId, activoId, disabled, userId }: { 
   }, [bodegasList.length]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const stockItems = (stockData ?? []) as any[]
-  const filteredStock = searchTerm
-    ? stockItems.filter((s: any) =>
-        (s.producto?.nombre || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (s.producto?.codigo || '').toLowerCase().includes(searchTerm.toLowerCase())
-      )
-    : stockItems
+  const stockById = new Map<string, any>()
+  for (const s of stockItems) stockById.set(s.producto_id || s.producto?.id, s)
+  // Sugerencias sobre TODO el catálogo; el stock de la bodega se anexa por producto.
+  const { data: catalogo = [] } = useBuscarProductos(searchTerm)
+  const sugerencias = (catalogo as any[]).map((p) => {
+    const stk = stockById.get(p.id)
+    return {
+      producto_id: p.id,
+      producto: { id: p.id, nombre: p.nombre, codigo: p.codigo, unidad_medida: p.unidad_medida, costo_unitario_actual: p.costo_unitario_actual },
+      cantidad: stk?.cantidad ?? 0,
+      costo_promedio: stk?.costo_promedio ?? p.costo_unitario_actual ?? 0,
+      bodega_id: selectedBodega,
+    }
+  })
 
   function handleRegistrarConsumo() {
     if (!selectedProducto) { setFormError('Seleccione un producto'); return }
@@ -685,22 +694,24 @@ function MaterialesMovimientos({ otId, faenaId, activoId, disabled, userId }: { 
                           className="h-10 w-full rounded-lg border border-gray-300 pl-10 pr-3 text-sm"
                         />
                       </div>
-                      {searchTerm && filteredStock.length > 0 && (
+                      {searchTerm && sugerencias.length > 0 && (
                         <div className="max-h-40 overflow-y-auto rounded-lg border border-gray-200 bg-white">
-                          {filteredStock.slice(0, 8).map((s: any) => (
+                          {sugerencias.slice(0, 8).map((s: any) => (
                             <button
-                              key={s.id || `${s.producto_id}-${s.bodega_id}`}
+                              key={`${s.producto_id}-${s.bodega_id}`}
                               type="button"
                               onClick={() => { setSelectedProducto(s); setSearchTerm('') }}
                               className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-gray-50"
                             >
-                              <span className="font-medium">{s.producto?.nombre}</span>
-                              <span className="text-xs text-gray-500">{s.cantidad} {s.producto?.unidad_medida}</span>
+                              <span className="font-medium">{s.producto?.codigo} · {s.producto?.nombre}</span>
+                              <span className={`text-xs ${s.cantidad > 0 ? 'text-gray-500' : 'text-amber-600'}`}>
+                                {s.cantidad > 0 ? `${s.cantidad} ${s.producto?.unidad_medida}` : 'sin stock'}
+                              </span>
                             </button>
                           ))}
                         </div>
                       )}
-                      {searchTerm && filteredStock.length === 0 && (
+                      {searchTerm && sugerencias.length === 0 && (
                         <p className="text-xs text-gray-400">Sin resultados</p>
                       )}
                     </div>
