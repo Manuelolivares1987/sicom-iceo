@@ -1,16 +1,17 @@
 'use client'
 
-import { useMemo, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useEffect, useMemo, useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import Link from 'next/link'
 import ExcelJS from 'exceljs'
-import { Upload, Download, CheckCircle2, AlertTriangle, FileSpreadsheet, Settings } from 'lucide-react'
+import { Upload, Download, CheckCircle2, AlertTriangle, FileSpreadsheet, Settings, Plus, Tag } from 'lucide-react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
+import { useToast } from '@/contexts/toast-context'
 import { useRequireAuth } from '@/hooks/use-require-auth'
 import { supabase } from '@/lib/supabase'
-import { getCategoriasProducto, normalizar } from '@/lib/services/producto-categorias'
+import { getCategoriasProducto, crearCategoria, normalizar } from '@/lib/services/producto-categorias'
 import { cn } from '@/lib/utils'
 
 type Fila = {
@@ -18,6 +19,7 @@ type Fila = {
   codigo_barras?: string | null
   nombre: string
   categoria: string
+  categoria_raw?: string
   subcategoria?: string | null
   unidad_medida: string
   costo_unitario_actual?: number
@@ -68,11 +70,55 @@ export default function CargarMaestroPage() {
     return { lookup: lk, validSet: vs, etiquetas: categorias.map((c) => c.nombre).join(', ') }
   }, [categorias])
 
+  const qc = useQueryClient()
+  const toast = useToast()
+  const [creandoCat, setCreandoCat] = useState<string | null>(null)
+
   // Resuelve la categoría del Excel al código del catálogo (o '' si no calza).
   const resolverCategoria = (raw: string): string => {
     const base = normalizar(raw)
     if (!base) return ''
     return lookup.get(base) ?? SINONIMOS_CATEGORIA[base] ?? base
+  }
+
+  // Revalida las filas cuando cambia el catálogo (p.ej. tras crear una categoría),
+  // sin necesidad de re-subir el archivo.
+  useEffect(() => {
+    if (validSet.size === 0) return
+    setFilas((prev) => {
+      if (prev.length === 0) return prev
+      return prev.map((f) => {
+        const cat = resolverCategoria(f.categoria_raw ?? f.categoria)
+        let error: string | undefined
+        if (!f.nombre) error = 'Sin nombre'
+        else if (!cat) error = 'Sin categoría'
+        else if (!validSet.has(cat)) error = `Categoría "${cat}" no existe (válidas: ${etiquetas}). Puedes crearla en «Gestionar categorías».`
+        else if (!f.unidad_medida) error = 'Sin unidad_medida'
+        return { ...f, categoria: cat, error }
+      })
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [validSet])
+
+  // Categorías del Excel que el sistema no reconoció (para crearlas).
+  const categoriasNoReconocidas = useMemo(() => {
+    const map = new Map<string, string>()  // código normalizado → texto original del Excel
+    for (const f of filas) {
+      if (f.categoria && !validSet.has(f.categoria) && !map.has(f.categoria)) {
+        map.set(f.categoria, (f.categoria_raw || f.categoria).trim())
+      }
+    }
+    return Array.from(map.entries()).map(([norm, raw]) => ({ norm, raw }))
+  }, [filas, validSet])
+
+  const crearCategoriaRapida = async (raw: string, norm: string) => {
+    setCreandoCat(norm)
+    try {
+      await crearCategoria(raw)
+      await qc.invalidateQueries({ queryKey: ['producto-categorias-activas'] })
+      await qc.invalidateQueries({ queryKey: ['producto-categorias'] })
+      toast.success(`Categoría "${raw}" creada`)
+    } catch (e) { toast.error(e instanceof Error ? e.message : 'Error al crear categoría') } finally { setCreandoCat(null) }
   }
 
   const handleFile = async (file: File) => {
@@ -124,6 +170,7 @@ export default function CargarMaestroPage() {
           codigo_barras: strOrNull(get('codigo_barras')),
           nombre: String(get('nombre') ?? '').trim(),
           categoria: resolverCategoria(String(get('categoria') ?? '')),
+          categoria_raw: String(get('categoria') ?? '').trim(),
           subcategoria: strOrNull(get('subcategoria')),
           unidad_medida: String(get('unidad_medida') ?? '').trim(),
           costo_unitario_actual: numOrUndef(get('costo_unitario_actual')),
@@ -390,6 +437,35 @@ export default function CargarMaestroPage() {
                 Mostrando 50 de {filas.length} filas.
               </p>
             )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Categorías no reconocidas */}
+      {categoriasNoReconocidas.length > 0 && (
+        <Card className="border-amber-300">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center gap-2 text-amber-800">
+              <Tag className="h-5 w-5" /> Categorías no reconocidas ({categoriasNoReconocidas.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <p className="text-xs text-gray-500">
+              Estas categorías del Excel no existen en el sistema. Créalas aquí (o en «Gestionar categorías») y las filas se revalidan solas, sin volver a subir el archivo.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {categoriasNoReconocidas.map(({ raw, norm }) => (
+                <div key={norm} className="flex items-center gap-1 rounded-lg border border-amber-300 bg-amber-50 px-2 py-1">
+                  <span className="text-sm font-medium text-amber-900">{raw}</span>
+                  <Button size="sm" variant="outline" disabled={creandoCat === norm} onClick={() => crearCategoriaRapida(raw, norm)}>
+                    {creandoCat === norm ? <Spinner className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5 mr-1" />} Crear
+                  </Button>
+                </div>
+              ))}
+            </div>
+            <Link href="/dashboard/inventario/categorias" className="inline-flex items-center gap-1 text-xs text-indigo-600 hover:underline">
+              <Settings className="h-3.5 w-3.5" /> Gestionar categorías
+            </Link>
           </CardContent>
         </Card>
       )}
