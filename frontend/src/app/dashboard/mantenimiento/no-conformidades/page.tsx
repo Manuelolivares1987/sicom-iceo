@@ -17,6 +17,8 @@ import {
   getRecepcionesParaNc, getActivosParaNc, type NcRecepcion, type NcMaterial,
 } from '@/lib/services/no-conformidades'
 import { getProductos } from '@/lib/services/inventario'
+import { getCategoriasProducto } from '@/lib/services/producto-categorias'
+import { solicitarMaterialBodega } from '@/lib/services/bodega-solicitudes'
 import { MECANICOS } from '@/lib/taller-grupos'
 import { cn } from '@/lib/utils'
 
@@ -138,22 +140,27 @@ function Kpi({ label, value, warn }: { label: string; value: number; warn?: bool
 function AsignarRecursosModal({ nc, onClose, onDone }: { nc: NcRecepcion; onClose: () => void; onDone: () => void }) {
   const toast = useToast()
   const { data: prodRes } = useQuery({ queryKey: ['productos-nc'], queryFn: () => getProductos(), staleTime: 300_000 })
-  const productos = (prodRes?.data ?? []) as Array<{ id: string; codigo: string; nombre: string }>
+  const productos = (prodRes?.data ?? []) as Array<{ id: string; codigo: string; nombre: string; categoria: string }>
+  const { data: categorias = [] } = useQuery({ queryKey: ['producto-categorias-activas'], queryFn: () => getCategoriasProducto(true), staleTime: 300_000 })
 
+  type MatRow = NcMaterial & { solicitar?: boolean }
   const [mecanicos, setMecanicos] = useState<string[]>(() =>
     (nc.grupo_trabajo ?? '').split(',').map((s) => s.trim()).filter((s) => (MECANICOS as readonly string[]).includes(s)))
   const [horas, setHoras] = useState(nc.horas_estimadas?.toString() ?? '')
   const [dias, setDias] = useState(nc.tiempo_estimado_dias?.toString() ?? '')
-  const [mats, setMats] = useState<NcMaterial[]>([{ producto_id: '', descripcion: '', cantidad: 1 }])
+  const [catFiltro, setCatFiltro] = useState('')
+  const [mats, setMats] = useState<MatRow[]>([{ producto_id: '', descripcion: '', cantidad: 1 }])
   const [saving, setSaving] = useState(false)
 
+  const productosFiltrados = catFiltro ? productos.filter((p) => p.categoria === catFiltro) : productos
   const toggleMec = (m: string) => setMecanicos((prev) => prev.includes(m) ? prev.filter((x) => x !== m) : [...prev, m])
 
   const submit = async () => {
     setSaving(true)
     try {
+      // Materiales del catálogo -> recursos de la NC.
       const materiales = mats
-        .filter((m) => m.producto_id || (m.descripcion ?? '').trim())
+        .filter((m) => !m.solicitar && (m.producto_id || (m.descripcion ?? '').trim()))
         .map((m) => ({ producto_id: m.producto_id || null, descripcion: m.descripcion, cantidad: Number(m.cantidad) || 1 }))
       await asignarRecursosNc({
         ncId: nc.id,
@@ -162,7 +169,12 @@ function AsignarRecursosModal({ nc, onClose, onDone }: { nc: NcRecepcion; onClos
         tiempoDias: dias ? Number(dias) : null,
         materiales,
       })
-      toast.success('Recursos asignados')
+      // Materiales que NO están en bodega -> solicitud a bodega (con foto+obs de la NC).
+      const solicitudes = mats.filter((m) => m.solicitar && (m.descripcion ?? '').trim())
+      for (const s of solicitudes) {
+        await solicitarMaterialBodega({ descripcion: s.descripcion!, cantidad: Number(s.cantidad) || 1, ncId: nc.id })
+      }
+      toast.success(`Recursos asignados${solicitudes.length ? ` · ${solicitudes.length} solicitud(es) enviada(s) a bodega` : ''}`)
       onDone()
     } catch (e) { toast.error(e instanceof Error ? e.message : 'Error') } finally { setSaving(false) }
   }
@@ -192,25 +204,43 @@ function AsignarRecursosModal({ nc, onClose, onDone }: { nc: NcRecepcion; onClos
           </label>
         </div>
         <div>
-          <div className="text-xs font-medium mb-1 flex items-center gap-1"><Package className="h-3.5 w-3.5" /> Materiales (catálogo de bodega)</div>
+          <div className="text-xs font-medium mb-1 flex items-center justify-between">
+            <span className="flex items-center gap-1"><Package className="h-3.5 w-3.5" /> Materiales</span>
+            <select value={catFiltro} onChange={(e) => setCatFiltro(e.target.value)} className="rounded border px-1.5 py-0.5 text-[11px] text-gray-600">
+              <option value="">Todas las categorías</option>
+              {categorias.map((c) => <option key={c.codigo} value={c.codigo}>{c.nombre}</option>)}
+            </select>
+          </div>
           <div className="space-y-1">
             {mats.map((m, i) => (
-              <div key={i} className="flex gap-1">
-                <select value={m.producto_id ?? ''}
-                  onChange={(e) => {
-                    const p = productos.find((x) => x.id === e.target.value)
-                    setMats((s) => s.map((x, j) => j === i ? { ...x, producto_id: e.target.value, descripcion: p ? `${p.codigo} · ${p.nombre}` : '' } : x))
-                  }}
-                  className="flex-1 rounded border px-2 py-1 text-sm">
-                  <option value="">— Repuesto / material —</option>
-                  {productos.map((p) => <option key={p.id} value={p.id}>{p.codigo} · {p.nombre}</option>)}
-                </select>
-                <input type="number" value={m.cantidad} onChange={(e) => setMats((s) => s.map((x, j) => j === i ? { ...x, cantidad: Number(e.target.value) } : x))} className="w-16 rounded border px-2 py-1 text-sm" />
-                <button onClick={() => setMats((s) => s.filter((_, j) => j !== i))} className="text-red-500 px-1"><Trash2 className="h-4 w-4" /></button>
+              <div key={i} className="flex gap-1 items-center">
+                {m.solicitar ? (
+                  <input value={m.descripcion ?? ''} placeholder="Material que no está en bodega…"
+                    onChange={(e) => setMats((s) => s.map((x, j) => j === i ? { ...x, descripcion: e.target.value } : x))}
+                    className="flex-1 rounded border border-amber-300 bg-amber-50 px-2 py-1 text-sm" />
+                ) : (
+                  <select value={m.producto_id ?? ''}
+                    onChange={(e) => {
+                      const p = productos.find((x) => x.id === e.target.value)
+                      setMats((s) => s.map((x, j) => j === i ? { ...x, producto_id: e.target.value, descripcion: p ? `${p.codigo} · ${p.nombre}` : '' } : x))
+                    }}
+                    className="flex-1 rounded border px-2 py-1 text-sm">
+                    <option value="">— Repuesto / material —</option>
+                    {productosFiltrados.map((p) => <option key={p.id} value={p.id}>{p.codigo} · {p.nombre}</option>)}
+                  </select>
+                )}
+                <input type="number" value={m.cantidad} onChange={(e) => setMats((s) => s.map((x, j) => j === i ? { ...x, cantidad: Number(e.target.value) } : x))} className="w-14 rounded border px-2 py-1 text-sm" />
+                <button type="button" title="No está en bodega (solicitar)"
+                  onClick={() => setMats((s) => s.map((x, j) => j === i ? { ...x, solicitar: !x.solicitar, producto_id: '', descripcion: '' } : x))}
+                  className={`rounded border px-1.5 py-1 text-[10px] ${m.solicitar ? 'border-amber-400 bg-amber-100 text-amber-700' : 'border-gray-200 text-gray-500'}`}>
+                  {m.solicitar ? 'a bodega' : 'no hay'}
+                </button>
+                <button type="button" onClick={() => setMats((s) => s.filter((_, j) => j !== i))} className="text-red-500 px-1"><Trash2 className="h-4 w-4" /></button>
               </div>
             ))}
           </div>
-          <button onClick={() => setMats((s) => [...s, { producto_id: '', descripcion: '', cantidad: 1 }])} className="text-xs text-blue-600 mt-1">+ Agregar material</button>
+          <button type="button" onClick={() => setMats((s) => [...s, { producto_id: '', descripcion: '', cantidad: 1 }])} className="text-xs text-blue-600 mt-1">+ Agregar material</button>
+          <p className="text-[10px] text-gray-400 mt-1">Si un material no está en bodega, pulsa «no hay» → se envía una solicitud a bodega con la foto y observación de la NC.</p>
         </div>
       </div>
       <ModalFooter>

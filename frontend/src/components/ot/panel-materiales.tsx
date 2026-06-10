@@ -1,7 +1,9 @@
 'use client'
 
 import { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { Package, Plus, AlertTriangle, CheckCircle2, XCircle, Send } from 'lucide-react'
+import { getCategoriasProducto } from '@/lib/services/producto-categorias'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -26,13 +28,16 @@ interface Props {
 
 export function PanelMateriales({ otId, otFolio, otCerrada, puedeDespachar }: Props) {
   const [query, setQuery] = useState('')
+  const [catFiltro, setCatFiltro] = useState('')
   const [productoSel, setProductoSel] = useState<{ id: string; codigo: string; nombre: string; unidad_medida: string } | null>(null)
   const [cantidad, setCantidad] = useState('')
   const [comentario, setComentario] = useState('')
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
 
   const { data: materiales = [], isLoading } = useMaterialesPorOT(otId)
-  const { data: productos = [] } = useBuscarProductos(query)
+  const { data: productosRaw = [] } = useBuscarProductos(query)
+  const { data: categorias = [] } = useQuery({ queryKey: ['producto-categorias-activas'], queryFn: () => getCategoriasProducto(true), staleTime: 300_000 })
+  const productos = catFiltro ? (productosRaw as any[]).filter((p) => p.categoria === catFiltro) : productosRaw
   const addMat = useAgregarMaterialOT()
   const despMat = useDespacharMaterialOT()
   const canMat = useCancelarMaterialOT()
@@ -173,11 +178,17 @@ export function PanelMateriales({ otId, otFolio, otCerrada, puedeDespachar }: Pr
             {/* Búsqueda de producto */}
             {!productoSel ? (
               <div className="relative">
-                <Input
-                  placeholder="Buscar producto (código o nombre)…"
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                />
+                <div className="flex gap-1">
+                  <Input
+                    placeholder="Buscar producto (código o nombre)…"
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                  />
+                  <select value={catFiltro} onChange={(e) => setCatFiltro(e.target.value)} className="rounded border px-2 text-xs text-gray-600">
+                    <option value="">Categoría</option>
+                    {categorias.map((c) => <option key={c.codigo} value={c.codigo}>{c.nombre}</option>)}
+                  </select>
+                </div>
                 {productos.length > 0 && query.length >= 2 && (
                   <div className="absolute z-10 mt-1 max-h-56 w-full overflow-y-auto rounded border border-gray-200 bg-white shadow-lg">
                     {productos.map((p: any) => (
