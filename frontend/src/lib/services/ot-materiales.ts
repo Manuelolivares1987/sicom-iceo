@@ -115,7 +115,6 @@ export async function buscarProductos(query: string, limit = 20) {
     .from('productos')
     .select('id, codigo, nombre, unidad_medida, categoria')
     .or(`codigo.ilike.%${q}%,nombre.ilike.%${q}%`)
-    .eq('activo', true)
     .limit(limit)
   return { data, error }
 }
