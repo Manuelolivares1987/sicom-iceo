@@ -14,7 +14,7 @@ import { useToast } from '@/contexts/toast-context'
 import { useRequireAuth } from '@/hooks/use-require-auth'
 import {
   getNcRecepcion, asignarRecursosNc, planificarNc, registrarNcAdhoc, generarNcDesdeRecepcion,
-  getRecepcionesParaNc, getActivosParaNc, type NcRecepcion, type NcMaterial,
+  getRecepcionesParaNc, getActivosParaNc, subirFotoNc, type NcRecepcion, type NcMaterial,
 } from '@/lib/services/no-conformidades'
 import { getProductos } from '@/lib/services/inventario'
 import { getCategoriasProducto } from '@/lib/services/producto-categorias'
@@ -288,12 +288,15 @@ function RegistrarNcModal({ onClose, onDone }: { onClose: () => void; onDone: ()
   const [activoId, setActivoId] = useState('')
   const [desc, setDesc] = useState('')
   const [sev, setSev] = useState('media')
+  const [foto, setFoto] = useState<File | null>(null)
   const [saving, setSaving] = useState(false)
   const submit = async () => {
     if (!activoId || !desc.trim()) { toast.error('Equipo y descripción obligatorios'); return }
+    if (!foto) { toast.error('La foto es obligatoria para la NC del mecánico'); return }
     setSaving(true)
     try {
-      await registrarNcAdhoc({ activoId, descripcion: desc, severidad: sev })
+      const fotoUrl = await subirFotoNc(foto)
+      await registrarNcAdhoc({ activoId, descripcion: desc, severidad: sev, fotoUrl })
       toast.success('No Conformidad registrada')
       onDone()
     } catch (e) { toast.error(e instanceof Error ? e.message : 'Error') } finally { setSaving(false) }
@@ -315,6 +318,11 @@ function RegistrarNcModal({ onClose, onDone }: { onClose: () => void; onDone: ()
           <select value={sev} onChange={(e) => setSev(e.target.value)} className="mt-0.5 w-full rounded border px-2 py-1.5 text-sm">
             <option value="baja">Baja</option><option value="media">Media</option><option value="alta">Alta</option><option value="critica">Crítica</option>
           </select>
+        </label>
+        <label className="text-xs font-medium block">Foto <span className="text-red-500">*</span> (obligatoria)
+          <input type="file" accept="image/*" capture="environment" onChange={(e) => setFoto(e.target.files?.[0] ?? null)}
+            className="mt-0.5 w-full rounded border px-2 py-1.5 text-sm" />
+          {foto && <span className="text-[10px] text-green-600">✓ {foto.name}</span>}
         </label>
       </div>
       <ModalFooter>

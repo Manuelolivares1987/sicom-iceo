@@ -62,8 +62,18 @@ export async function planificarNc(ncId: string) {
   return data
 }
 
+// Sube la foto de la NC a 'evidencias-verificacion/nc/'.
+export async function subirFotoNc(file: File): Promise<string> {
+  const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+  const path = `nc/${Date.now()}-${safe}`
+  const { error } = await supabase.storage.from('evidencias-verificacion').upload(path, file, { upsert: false })
+  if (error) throw error
+  const { data } = supabase.storage.from('evidencias-verificacion').getPublicUrl(path)
+  return data.publicUrl
+}
+
 export async function registrarNcAdhoc(p: {
-  activoId: string; descripcion: string; severidad?: string; informeId?: string | null; observacion?: string | null
+  activoId: string; descripcion: string; severidad?: string; informeId?: string | null; observacion?: string | null; fotoUrl?: string | null
 }) {
   const { data, error } = await supabase.rpc('fn_registrar_nc_recepcion', {
     p_activo_id: p.activoId,
@@ -71,6 +81,7 @@ export async function registrarNcAdhoc(p: {
     p_severidad: p.severidad ?? 'media',
     p_informe_id: p.informeId ?? null,
     p_observacion: p.observacion ?? null,
+    p_foto: p.fotoUrl ?? null,
   })
   if (error) throw error
   return data
