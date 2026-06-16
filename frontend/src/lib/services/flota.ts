@@ -378,6 +378,8 @@ export interface ActualizarEstadoManualParams {
   ot_prioridad?: 'emergencia' | 'alta' | 'normal' | 'baja'
   ot_responsable_id?: string
   ot_descripcion?: string
+  /** Lugar físico en texto libre (ej. Salvador, Chuquicamata). */
+  ubicacion?: string
 }
 
 export interface ActualizarEstadoManualResult {
@@ -401,6 +403,7 @@ export async function actualizarEstadoDiarioManual(
     p_ot_prioridad: params.ot_prioridad ?? 'normal',
     p_ot_responsable_id: params.ot_responsable_id ?? null,
     p_ot_descripcion: params.ot_descripcion ?? null,
+    p_ubicacion: params.ubicacion ?? null,
   })
   return { data: data as ActualizarEstadoManualResult | null, error }
 }

@@ -26,7 +26,7 @@ import {
 import { supabase } from '@/lib/supabase'
 import { cambiarContratoActivo } from '@/lib/services/contrato-activo'
 import { cargarContratosActivos, crearContratoRapido, type ContratoOption } from '@/lib/services/geocercas'
-import { Building2, Plus } from 'lucide-react'
+import { Building2, Plus, MapPin } from 'lucide-react'
 
 type EstadoCodigo = 'A' | 'D' | 'H' | 'R' | 'M' | 'T' | 'F' | 'V' | 'U' | 'L'
 type TipoOT = 'preventivo' | 'correctivo' | 'inspeccion' | 'lubricacion'
@@ -44,6 +44,7 @@ interface CambiarEstadoModalProps {
     operacion?: string | null
     cliente_actual?: string | null
     contrato_id?: string | null
+    ubicacion_actual?: string | null
   } | null
   /** Estado pre-seleccionado al abrir (ej. la sugerencia GPS). */
   estadoInicial?: EstadoCodigo
@@ -129,11 +130,13 @@ export function CambiarEstadoModal({ open, onClose, activo, estadoInicial, fecha
   const [nuevoContratoCodigo, setNuevoContratoCodigo] = useState('')
   const [nuevoContratoCliente, setNuevoContratoCliente] = useState('')
   const [guardandoContrato, setGuardandoContrato] = useState(false)
+  // Lugar físico en texto libre (ej. Salvador, Chuquicamata)
+  const [ubicacion, setUbicacion] = useState('')
   useEffect(() => {
     if (!open) return
     cargarContratosActivos().then(setContratos).catch(() => { /* skip */ })
   }, [open])
-  // Pre-rellenar con el contrato actual al abrir/cambiar de activo
+  // Pre-rellenar con el contrato actual y el lugar físico al abrir/cambiar de activo
   useEffect(() => {
     if (open && activo) {
       setNuevoContratoId(activo.contrato_id ?? '')
@@ -142,8 +145,9 @@ export function CambiarEstadoModal({ open, onClose, activo, estadoInicial, fecha
       setCreandoContrato(false)
       setNuevoContratoCodigo('')
       setNuevoContratoCliente('')
+      setUbicacion(activo.ubicacion_actual ?? '')
     }
-  }, [open, activo?.id, activo?.contrato_id])
+  }, [open, activo?.id, activo?.contrato_id, activo?.ubicacion_actual])
 
   const handleCrearContrato = async () => {
     if (!nuevoContratoCodigo.trim()) {
@@ -256,6 +260,7 @@ export function CambiarEstadoModal({ open, onClose, activo, estadoInicial, fecha
     }
 
     try {
+      const lugarTrim = ubicacion.trim()
       let result: Awaited<ReturnType<typeof mutation.mutateAsync>> | null = null
       if (debeActualizarEstado) {
         result = await mutation.mutateAsync({
@@ -268,7 +273,15 @@ export function CambiarEstadoModal({ open, onClose, activo, estadoInicial, fecha
           ot_prioridad: requiereOT && crearOT ? otPrioridad : undefined,
           ot_responsable_id: otResponsableId || undefined,
           ot_descripcion: otDescripcion.trim() || undefined,
+          ubicacion: lugarTrim || undefined,
         })
+      } else if (lugarTrim !== (activo.ubicacion_actual ?? '')) {
+        // Solo cambió el lugar físico (sin cambio de estado): persistir directo
+        const { error: eUbic } = await supabase
+          .from('activos')
+          .update({ ubicacion_actual: lugarTrim || null })
+          .eq('id', activo.id)
+        if (eUbic) { setErrorMsg(`No se pudo guardar el lugar: ${eUbic.message}`); return }
       }
 
       // Contrato: independiente del estado. Se aplica si el usuario eligió cambiarlo.
@@ -442,6 +455,25 @@ export function CambiarEstadoModal({ open, onClose, activo, estadoInicial, fecha
                 Pasa a mantención — se conserva este contrato como referencia para cuando vuelva a operar.
               </div>
             )}
+          </div>
+
+          {/* Lugar físico (texto libre) — dónde se encuentra el equipo */}
+          <div className="space-y-1">
+            <label className="flex items-center gap-1.5 text-xs font-medium text-gray-600">
+              <MapPin className="h-3.5 w-3.5 text-blue-600" />
+              Lugar físico del equipo
+            </label>
+            <input
+              type="text"
+              value={ubicacion}
+              onChange={(e) => setUbicacion(e.target.value)}
+              placeholder="Ej. Salvador, Chuquicamata, Spence…"
+              className="w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:border-blue-500 focus:outline-none"
+              maxLength={200}
+            />
+            <p className="text-[11px] text-gray-400">
+              Dónde está físicamente el equipo. Queda en el historial de arriendos del equipo.
+            </p>
           </div>
 
           {/* ¿Mantiene o cambia? */}

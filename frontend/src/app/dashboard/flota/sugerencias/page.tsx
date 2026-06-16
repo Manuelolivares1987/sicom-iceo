@@ -23,6 +23,7 @@ type ActivoModal = {
   operacion?: string | null
   cliente_actual?: string | null
   contrato_id?: string | null
+  ubicacion_actual?: string | null
 }
 
 const COLOR: Record<string, string> = {
@@ -64,7 +65,7 @@ export default function SugerenciasEstadoPage() {
     try {
       const { data, error } = await supabase
         .from('activos')
-        .select('id, patente, codigo, nombre, estado_comercial, operacion, cliente_actual, contrato_id')
+        .select('id, patente, codigo, nombre, estado_comercial, operacion, cliente_actual, contrato_id, ubicacion_actual')
         .eq('id', activoId)
         .single()
       if (error) throw error
