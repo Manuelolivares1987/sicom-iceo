@@ -126,7 +126,7 @@ export function FiabilidadAnalisis({ readOnly = false }: { readOnly?: boolean } 
       { header: 'Potencia', key: 'potencia', width: 12 },
       { header: 'VIN / Chasis', key: 'vin_chasis', width: 22 },
       { header: 'N° Motor', key: 'numero_motor', width: 18 },
-      { header: 'Estado comercial', key: 'estado_comercial', width: 16 },
+      { header: 'Estado (GPS)', key: 'estado_dia', width: 20 },
       { header: 'Faena', key: 'faena', width: 18 },
       { header: 'Ubicación', key: 'ubicacion', width: 18 },
       { header: 'Lugar físico', key: 'lugar_fisico', width: 26 },
@@ -152,8 +152,10 @@ export function FiabilidadAnalisis({ readOnly = false }: { readOnly?: boolean } 
     ws.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } }
     ws.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A8A' } }
     for (const e of rows) {
+      const code = estadoActualPorActivo.get(e.activo_id)
       ws.addRow({
         ...e,
+        estado_dia: code ? `${code} — ${ESTADO_LABELS[code] ?? code}` : '—',
         contratos_dias_txt: (e.contratos_dias ?? []).map((c) => `${c.codigo}: ${c.dias} d`).join('; '),
         disp_inh: Math.round(Number(e.disponibilidad_inherente) * 100),
         disp_fis: Math.round(Number(e.disponibilidad_fisica) * 100),

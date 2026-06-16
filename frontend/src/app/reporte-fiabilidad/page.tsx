@@ -239,7 +239,7 @@ export default function ReporteFiabilidadPublicoPage() {
       { header: 'Potencia', key: 'potencia', width: 12 },
       { header: 'VIN / Chasis', key: 'vin_chasis', width: 22 },
       { header: 'N° Motor', key: 'numero_motor', width: 18 },
-      { header: 'Estado comercial', key: 'estado_comercial', width: 16 },
+      { header: 'Estado (GPS)', key: 'estado_dia', width: 20 },
       { header: 'Faena', key: 'faena', width: 18 },
       { header: 'Ubicación', key: 'ubicacion', width: 18 },
       { header: 'Lugar físico', key: 'lugar_fisico', width: 26 },
@@ -265,8 +265,10 @@ export default function ReporteFiabilidadPublicoPage() {
     ws.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0B2A4A' } }
     ws.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } }
     for (const e of equiposFiltrados) {
+      const code = estadoActual.get(e.activo_id)
       ws.addRow({
         ...e,
+        estado_dia: code ? `${code} — ${LABEL[code] ?? code}` : '—',
         contratos_dias_txt: (e.contratos_dias ?? []).map((c) => `${c.codigo}: ${c.dias} d`).join('; '),
         ult_desde: e.ult_desde ? String(e.ult_desde).slice(0, 10) : '',
         ult_hasta: e.ult_vigente ? 'vigente' : (e.ult_hasta ? String(e.ult_hasta).slice(0, 10) : ''),
