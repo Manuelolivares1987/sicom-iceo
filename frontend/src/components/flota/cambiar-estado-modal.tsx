@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { useRouter } from 'next/navigation'
 import { AlertTriangle, Wrench, ClipboardList, Info, ShieldCheck, Calendar } from 'lucide-react'
 import { Modal, ModalFooter } from '@/components/ui/modal'
@@ -73,6 +74,7 @@ const ESTADO_OPTIONS: Array<{
 export function CambiarEstadoModal({ open, onClose, activo, estadoInicial, fechaInicial }: CambiarEstadoModalProps) {
   const today = todayISO()
   const { isAdmin } = usePermissions()
+  const qc = useQueryClient()
 
   const router = useRouter()
 
@@ -317,6 +319,14 @@ export function CambiarEstadoModal({ open, onClose, activo, estadoInicial, fecha
           return
         }
       }
+      // Propagar a toda la app: invalidar cachés que dependen de contrato /
+      // cliente / lugar / estado del equipo (la mutación de estado ya invalida
+      // las suyas; esto cubre el cambio de contrato y de lugar).
+      ;['activo', 'ficha-activo', 'activos', 'flota-vehicular', 'sugerencias-estado',
+        'historial-arriendos', 'ultimo-arriendo', 'historico-contratos',
+        'matriz-estados-flota', 'reporte-flota', 'comercial-dashboard'].forEach((k) =>
+        qc.invalidateQueries({ queryKey: [k] }),
+      )
       onClose()
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Error al actualizar estado'

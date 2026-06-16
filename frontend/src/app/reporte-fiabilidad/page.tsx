@@ -27,6 +27,9 @@ type Equipo = {
   marca: string | null; modelo: string | null; anio: number | null
   capacidad: string | null; potencia: string | null; vin_chasis: string | null; numero_motor: string | null
   estado_comercial: string | null; faena: string | null; ubicacion: string | null; lugar_fisico: string | null
+  contrato_codigo: string | null; contrato_cliente: string | null
+  contratos_dias: Array<{ codigo: string; cliente: string | null; dias: number }> | null
+  dias_arriendo_total: number | null
   ult_tipo: string | null; ult_cliente: string | null; ult_lugar: string | null
   ult_desde: string | null; ult_hasta: string | null; ult_dias: number | null; ult_vigente: boolean | null
   dias_observados: number; dias_up: number; dias_down: number; eventos_falla: number
@@ -445,10 +448,18 @@ export default function ReporteFiabilidadPublicoPage() {
             <div className="mb-3 flex items-start justify-between">
               <div>
                 <h3 className="text-lg font-bold text-[#0b2a4a]">Historial · {histSel.det?.patente}</h3>
-                <p className="text-sm text-gray-500">{histSel.det?.equipamiento ?? ''}{histSel.det?.cliente ? ` · ${histSel.det.cliente}` : ''}</p>
-                {histSel.det?.lugar_fisico && (
-                  <p className="text-sm text-gray-600">📍 Lugar físico: <b>{histSel.det.lugar_fisico}</b></p>
+                <p className="text-sm text-gray-500">{histSel.det?.equipamiento ?? ''}</p>
+                {(histSel.det?.contrato_codigo || histSel.det?.contrato_cliente || histSel.det?.cliente) && (
+                  <p className="text-sm text-gray-700">
+                    📄 Último contrato: <b>
+                      {[histSel.det?.contrato_codigo, histSel.det?.contrato_cliente ?? histSel.det?.cliente]
+                        .filter(Boolean).join(' · ') || '—'}
+                    </b>
+                  </p>
                 )}
+                <p className="text-sm text-gray-700">
+                  📍 Dónde está: <b>{histSel.det?.lugar_fisico ?? histSel.det?.ubicacion ?? 'Sin registrar'}</b>
+                </p>
               </div>
               <button onClick={() => setEquipoSel(null)} className="rounded px-2 py-1 text-gray-400 hover:bg-gray-100">✕</button>
             </div>
@@ -487,6 +498,34 @@ export default function ReporteFiabilidadPublicoPage() {
                 <div>Disp. inherente: <b>{fmtPct(histSel.det.disponibilidad_inherente)}</b></div>
                 <div>Disp. física: <b>{fmtPct(histSel.det.disponibilidad_fisica)}</b></div>
                 <div>MTBF / MTTR: <b>{fmtNum(histSel.det.mtbf_dias)} / {fmtNum(histSel.det.mttr_dias)} d</b></div>
+              </div>
+            )}
+
+            {/* Días en arriendo por contrato */}
+            {histSel.det && histSel.det.contratos_dias && histSel.det.contratos_dias.length > 0 && (
+              <div className="mt-4 border-t pt-3">
+                <div className="mb-2 flex items-center justify-between text-xs font-semibold text-[#0b2a4a]">
+                  <span>Días en arriendo por contrato</span>
+                  <span className="text-gray-500">Total: {histSel.det.dias_arriendo_total ?? 0} d</span>
+                </div>
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b text-left uppercase text-gray-400">
+                      <th className="py-1">Contrato</th>
+                      <th className="py-1">Cliente</th>
+                      <th className="py-1 text-right">Días</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {histSel.det.contratos_dias.map((c, i) => (
+                      <tr key={i} className="border-b last:border-0">
+                        <td className="py-1 font-medium text-gray-800">{c.codigo}</td>
+                        <td className="py-1 text-gray-600">{c.cliente ?? '—'}</td>
+                        <td className="py-1 text-right font-semibold">{c.dias}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             )}
 
