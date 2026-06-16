@@ -223,6 +223,69 @@ export default function ReporteFiabilidadPublicoPage() {
     }
   }
 
+  // ── Exportar a Excel: TODA la información por patente ──
+  async function exportarExcel() {
+    const ExcelJS = (await import('exceljs')).default
+    const wb = new ExcelJS.Workbook()
+    const ws = wb.addWorksheet('Equipos')
+    ws.columns = [
+      { header: 'Patente', key: 'patente', width: 12 },
+      { header: 'Equipamiento', key: 'equipamiento', width: 28 },
+      { header: 'Categoría uso', key: 'categoria_uso', width: 18 },
+      { header: 'Marca', key: 'marca', width: 14 },
+      { header: 'Modelo', key: 'modelo', width: 18 },
+      { header: 'Año', key: 'anio', width: 8 },
+      { header: 'Capacidad', key: 'capacidad', width: 16 },
+      { header: 'Potencia', key: 'potencia', width: 12 },
+      { header: 'VIN / Chasis', key: 'vin_chasis', width: 22 },
+      { header: 'N° Motor', key: 'numero_motor', width: 18 },
+      { header: 'Estado comercial', key: 'estado_comercial', width: 16 },
+      { header: 'Faena', key: 'faena', width: 18 },
+      { header: 'Ubicación', key: 'ubicacion', width: 18 },
+      { header: 'Lugar físico', key: 'lugar_fisico', width: 26 },
+      { header: 'Último contrato', key: 'contrato_codigo', width: 18 },
+      { header: 'Cliente contrato', key: 'contrato_cliente', width: 26 },
+      { header: 'Cliente actual', key: 'cliente', width: 24 },
+      { header: 'Días arriendo (total)', key: 'dias_arriendo_total', width: 16 },
+      { header: 'Días por contrato', key: 'contratos_dias_txt', width: 44 },
+      { header: 'Últ. arriendo cliente', key: 'ult_cliente', width: 22 },
+      { header: 'Últ. arriendo lugar', key: 'ult_lugar', width: 20 },
+      { header: 'Últ. arriendo desde', key: 'ult_desde', width: 14 },
+      { header: 'Últ. arriendo hasta', key: 'ult_hasta', width: 14 },
+      { header: 'Días observados', key: 'dias_observados', width: 14 },
+      { header: 'Días UP', key: 'dias_up', width: 10 },
+      { header: 'Días DOWN', key: 'dias_down', width: 10 },
+      { header: 'Eventos falla', key: 'eventos_falla', width: 12 },
+      { header: 'MTBF (días)', key: 'mtbf_dias', width: 11 },
+      { header: 'MTTR (días)', key: 'mttr_dias', width: 11 },
+      { header: 'Disp. inherente %', key: 'disp_inh', width: 15 },
+      { header: 'Disp. física %', key: 'disp_fis', width: 14 },
+    ]
+    ws.getRow(1).font = { bold: true }
+    ws.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0B2A4A' } }
+    ws.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } }
+    for (const e of equiposFiltrados) {
+      ws.addRow({
+        ...e,
+        contratos_dias_txt: (e.contratos_dias ?? []).map((c) => `${c.codigo}: ${c.dias} d`).join('; '),
+        ult_desde: e.ult_desde ? String(e.ult_desde).slice(0, 10) : '',
+        ult_hasta: e.ult_vigente ? 'vigente' : (e.ult_hasta ? String(e.ult_hasta).slice(0, 10) : ''),
+        disp_inh: e.disponibilidad_inherente != null ? Math.round(Number(e.disponibilidad_inherente) * 100) : '',
+        disp_fis: e.disponibilidad_fisica != null ? Math.round(Number(e.disponibilidad_fisica) * 100) : '',
+      })
+    }
+    ws.autoFilter = { from: 'A1', to: { row: 1, column: ws.columnCount } }
+    ws.views = [{ state: 'frozen', ySplit: 1 }]
+    const buf = await wb.xlsx.writeBuffer()
+    const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `fiabilidad_equipos_${desde}_a_${hasta}.xlsx`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 py-8">
       <div className="mx-auto max-w-5xl px-4">
@@ -383,6 +446,16 @@ export default function ReporteFiabilidadPublicoPage() {
 
             {/* Detalle por equipo (clickable) */}
             <Card title="Detalle por equipo — click en la patente para ver su historial">
+              <div className="mb-2 flex justify-end">
+                <button
+                  onClick={exportarExcel}
+                  disabled={equiposFiltrados.length === 0}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-green-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-green-700 disabled:opacity-50"
+                  title="Exporta toda la información de cada patente a un Excel"
+                >
+                  ⬇ Exportar a Excel ({equiposFiltrados.length})
+                </button>
+              </div>
               {filtroEstado && (
                 <div className="mb-2 flex items-center gap-2 text-xs">
                   <span className="rounded bg-blue-50 px-2 py-1 text-blue-700">

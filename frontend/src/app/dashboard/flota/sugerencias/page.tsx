@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, MapPin, Check, CheckCheck, RefreshCw, Building2 } from 'lucide-react'
+import { ArrowLeft, MapPin, Check, CheckCheck, RefreshCw, Building2, Search } from 'lucide-react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
@@ -50,6 +50,7 @@ export default function SugerenciasEstadoPage() {
   const toast = useToast()
   const [fecha, setFecha] = useState(todayISO())
   const [soloCambios, setSoloCambios] = useState(true)
+  const [filtroPatente, setFiltroPatente] = useState('')
   const [elegido, setElegido] = useState<Record<string, string>>({}) // override del planificador
 
   const { data: sugerencias = [], isLoading, refetch, isFetching } = useSugerenciasEstado(fecha)
@@ -78,10 +79,16 @@ export default function SugerenciasEstadoPage() {
     }
   }
 
-  const filtradas = useMemo(
-    () => (soloCambios ? sugerencias.filter((s) => !s.coincide && s.estado_sugerido) : sugerencias),
-    [sugerencias, soloCambios],
-  )
+  const filtradas = useMemo(() => {
+    const q = filtroPatente.trim().toUpperCase().replace(/[^A-Z0-9]/g, '')
+    let base = soloCambios ? sugerencias.filter((s) => !s.coincide && s.estado_sugerido) : sugerencias
+    if (q) {
+      base = base.filter((s) =>
+        (s.patente ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '').includes(q),
+      )
+    }
+    return base
+  }, [sugerencias, soloCambios, filtroPatente])
   const cambios = useMemo(() => sugerencias.filter((s) => !s.coincide && s.estado_sugerido), [sugerencias])
 
   const confirmarUno = (activoId: string, estado: string) => {
@@ -142,6 +149,20 @@ export default function SugerenciasEstadoPage() {
             {cambios.length} cambios sugeridos · {sugerencias.length} equipos de flota
           </CardTitle>
           <div className="flex flex-wrap items-center gap-3">
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
+              <input
+                type="text"
+                value={filtroPatente}
+                onChange={(e) => setFiltroPatente(e.target.value)}
+                placeholder="Filtrar por patente…"
+                className="h-8 w-44 rounded border border-gray-300 pl-7 pr-2 text-xs focus:border-emerald-500 focus:outline-none"
+              />
+              {filtroPatente && (
+                <button onClick={() => setFiltroPatente('')}
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">✕</button>
+              )}
+            </div>
             <label className="flex items-center gap-1 text-xs text-gray-600">
               <input type="checkbox" checked={soloCambios} onChange={(e) => setSoloCambios(e.target.checked)} />
               Solo cambios
