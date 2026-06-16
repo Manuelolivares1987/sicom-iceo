@@ -55,10 +55,37 @@ Aplican por `tipo_equipamiento` del activo (filtro automático en
 
 Ambos gates tienen *fallback* a su plantilla legacy si el template no aportara ítems.
 
+## Gatillo: el checklist se activa al CREAR la OT (MIG 144)
+
+Flujo del usuario: **planifica → se arma la OT → se activa el checklist → nacen las NC.**
+
+- `checklist_v2_instance.ot_id` enlaza el checklist con su OT.
+- Trigger `trg_auto_checklist_ot` (AFTER INSERT en `ordenes_trabajo`): **toda OT**
+  crea el checklist de inspección V03 (filtrado por equipo). **Dedup**: si el
+  equipo ya tiene un checklist abierto (p.ej. de recepción), la OT se enlaza a ese
+  en vez de duplicar. Nunca bloquea la creación de la OT.
+- Se **mantiene** el gatillo de recepción (`estado_comercial='en_recepcion'`).
+- **NC**: al cerrar el checklist ligado a una OT, el trigger
+  `trg_nc_al_cerrar_checklist_ot` genera una NC por cada ítem `no_ok`
+  (origen `inspeccion_ot`, idempotente). También on-demand:
+  `fn_generar_nc_desde_checklist_ot(ot_id)`. Aparecen en el tablero `v_nc_recepcion`.
+- **Inspección interna sin cliente**: cerrar un checklist ligado a OT sin informe
+  de recepción **no exige firma de cliente** (sí la entrega y la recepción real).
+
+### Equipos disponibles → pasar por calidad
+
+`fn_crear_ot_inspeccion_disponibles()` crea una OT de inspección (que dispara el
+checklist) para cada equipo `estado_comercial='disponible'` con contrato/faena.
+Botón **"Pasar disponibles por calidad"** en `/dashboard/mantenimiento/auditoria-calidad`
+(requiere rol de jefatura; no corre desde el SQL editor porque necesita usuario
+autenticado).
+
 ## Orden de aplicación en producción
 
 1. `database/production_run/142_checklist_inspeccion_unificado_schema.sql`
 2. `database/production_run/143_checklist_inspeccion_unificado_seed.sql`
+3. `database/production_run/144_checklist_al_crear_ot.sql`
+   (luego, en la app, botón "Pasar disponibles por calidad" para el backfill)
 
 > Van en 2 archivos porque Postgres no permite usar valores de enum recién
 > agregados en la misma transacción. La query de validación al final de 143

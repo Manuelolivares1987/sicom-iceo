@@ -18,6 +18,7 @@ import {
   useDiferirItem, useGenerarOtPendientes, useKpiCalidadTaller,
 } from '@/hooks/use-control-calidad'
 import { subirFirma } from '@/lib/services/verificacion'
+import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
 
 type Res = 'ok' | 'no_ok' | 'na' | 'pendiente'
@@ -26,6 +27,23 @@ export default function AuditoriaCalidadPage() {
   useRequireAuth()
   const { rol, canApprove } = usePermissions()
   const puedeAuditar = rol === 'auditor_calidad' || rol === 'administrador' || canApprove('mantenimiento')
+
+  const [backfillRunning, setBackfillRunning] = useState(false)
+  const [backfillMsg, setBackfillMsg] = useState<string | null>(null)
+  const pasarDisponiblesPorCalidad = async () => {
+    if (!window.confirm('Se creará una OT de inspección (con su checklist de calidad) para cada equipo disponible. ¿Continuar?')) return
+    setBackfillRunning(true); setBackfillMsg(null)
+    try {
+      const { data, error } = await supabase.rpc('fn_crear_ot_inspeccion_disponibles')
+      if (error) throw error
+      const r = data as { ot_creadas: number; omitidos_ya_en_proceso: number; omitidos_sin_contrato_faena: number }
+      setBackfillMsg(`OT creadas: ${r.ot_creadas} · ya en proceso: ${r.omitidos_ya_en_proceso} · sin contrato/faena: ${r.omitidos_sin_contrato_faena}`)
+    } catch (e) {
+      setBackfillMsg(`Error: ${(e as Error).message}`)
+    } finally {
+      setBackfillRunning(false)
+    }
+  }
 
   const { data: kpi } = useKpiCalidadTaller()
   const { data: pendientes = [], isLoading: loadingPend } = useAuditoriasPendientes()
@@ -44,6 +62,16 @@ export default function AuditoriaCalidadPage() {
           Liberación a servicio. El auditor de calidad aprueba la calidad técnica + la
           documentación del equipo. Su firma es el visto bueno de calidad (ready-to-rent).
         </p>
+        {puedeAuditar && (
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <Button size="sm" variant="outline" disabled={backfillRunning}
+              onClick={pasarDisponiblesPorCalidad}>
+              <ClipboardList className="h-4 w-4 mr-1" />
+              {backfillRunning ? 'Generando…' : 'Pasar disponibles por calidad'}
+            </Button>
+            {backfillMsg && <span className="text-xs text-muted-foreground">{backfillMsg}</span>}
+          </div>
+        )}
       </div>
 
       {/* KPIs */}

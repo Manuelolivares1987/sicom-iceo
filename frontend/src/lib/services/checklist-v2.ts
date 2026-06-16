@@ -108,6 +108,8 @@ export type ChecklistV2Instance = {
   momento_uso: MomentoChecklist
   activo_id: string
   contrato_id: string | null
+  informe_recepcion_id: string | null
+  ot_id: string | null
   fecha_inicio: string
   fecha_cierre: string | null
   estado: EstadoInstance

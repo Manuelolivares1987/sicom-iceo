@@ -105,10 +105,20 @@ export function ChecklistV2Wizard({ instanceId, onClosed }: Props) {
     setItems((prev) => prev.map((i) => (i.id === updated.id ? updated : i)))
   }
 
+  // Firma del cliente: obligatoria solo en entrega o en recepción real del
+  // cliente (con informe). Una inspección interna ligada a OT no la requiere.
+  const requiereCliente =
+    instance?.momento_uso === 'entrega_arriendo' ||
+    (instance?.momento_uso === 'recepcion_devolucion' && !!instance?.informe_recepcion_id)
+
   const handleCerrar = async () => {
     if (!instance) return
-    if (!firmaOperadorDU || !firmaClienteDU) {
-      setError('Faltan firmas: operador y cliente son obligatorias.')
+    if (!firmaOperadorDU) {
+      setError('Falta la firma del operador.')
+      return
+    }
+    if (requiereCliente && !firmaClienteDU) {
+      setError('Falta la firma del cliente (obligatoria para entrega/recepción).')
       return
     }
     if (stats.obligPend > 0) {
@@ -121,10 +131,10 @@ export function ChecklistV2Wizard({ instanceId, onClosed }: Props) {
     }
     setSubmitting(true); setError(null)
     try {
-      const [urlOp, urlCli] = await Promise.all([
-        subirFirma(instance.id, 'operador', dataUrlToBlob(firmaOperadorDU)),
-        subirFirma(instance.id, 'cliente',  dataUrlToBlob(firmaClienteDU)),
-      ])
+      const urlOp = await subirFirma(instance.id, 'operador', dataUrlToBlob(firmaOperadorDU))
+      const urlCli = firmaClienteDU
+        ? await subirFirma(instance.id, 'cliente', dataUrlToBlob(firmaClienteDU))
+        : ''
       await cerrarChecklist({
         instanceId:        instance.id,
         firmaOperadorUrl:  urlOp,
@@ -248,7 +258,9 @@ export function ChecklistV2Wizard({ instanceId, onClosed }: Props) {
                 </div>
               </div>
               <div className="space-y-2">
-                <h3 className="text-sm font-semibold">Representante cliente</h3>
+                <h3 className="text-sm font-semibold">
+                  Representante cliente {requiereCliente ? '' : '(opcional)'}
+                </h3>
                 <Input placeholder="RUT cliente" value={clienteRut}
                        onChange={(e) => setClienteRut(e.target.value)} />
                 <Input placeholder="Nombre cliente" value={clienteNombre}
