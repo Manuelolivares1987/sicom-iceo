@@ -5,7 +5,7 @@ import { Check, X, Minus, Camera, Upload, AlertCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
-  actualizarItem, subirFotoItem,
+  actualizarItem, subirFotoItem, PRUEBA_LABELS,
   type ChecklistV2Item, type ResultadoItem,
 } from '@/lib/services/checklist-v2'
 
@@ -85,6 +85,16 @@ export function ChecklistV2ItemRow({ item, instanceId, bloqueado, onChange }: Pr
             {item.requiere_foto && (
               <span className="rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700">
                 FOTO
+              </span>
+            )}
+            {item.prueba_tipo && (
+              <span className="rounded bg-purple-100 px-1.5 py-0.5 text-[10px] font-semibold text-purple-700">
+                {PRUEBA_LABELS[item.prueba_tipo].toUpperCase()}
+              </span>
+            )}
+            {item.tiempo_min != null && (
+              <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600">
+                {item.tiempo_min} min
               </span>
             )}
             <span className={`rounded border px-2 py-0.5 text-[10px] font-semibold ${colorBadge}`}>

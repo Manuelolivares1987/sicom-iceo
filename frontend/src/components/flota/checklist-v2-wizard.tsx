@@ -85,7 +85,15 @@ export function ChecklistV2Wizard({ instanceId, onClosed }: Props) {
     const pendientes = items.filter((i) => i.resultado === 'pendiente').length
     const obligPend  = items.filter((i) => i.obligatorio && i.resultado === 'pendiente').length
     const fotoPend   = items.filter((i) => i.requiere_foto && i.obligatorio && !i.foto_url).length
-    return { total, ok, no_ok, na, pendientes, obligPend, fotoPend }
+    const minutos    = items.reduce((s, i) => s + (i.tiempo_min ?? 0), 0)
+    return { total, ok, no_ok, na, pendientes, obligPend, fotoPend, minutos }
+  }, [items])
+
+  /** Minutos estimados por bloque (subtotal Excel). */
+  const minutosBloque = useMemo(() => {
+    const m = new Map<BloqueChecklist, number>()
+    for (const i of items) m.set(i.bloque, (m.get(i.bloque) ?? 0) + (i.tiempo_min ?? 0))
+    return m
   }, [items])
 
   const itemsBloque = useMemo(
@@ -155,12 +163,13 @@ export function ChecklistV2Wizard({ instanceId, onClosed }: Props) {
   return (
     <div className="space-y-4">
       {/* Stats */}
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-6">
         <StatBox color="bg-green-50 text-green-700"  label="OK"        v={stats.ok} />
         <StatBox color="bg-red-50 text-red-700"      label="NO OK"     v={stats.no_ok} />
         <StatBox color="bg-gray-50 text-gray-700"    label="N/A"       v={stats.na} />
         <StatBox color="bg-amber-50 text-amber-700"  label="Pendientes" v={stats.pendientes} />
         <StatBox color="bg-blue-50 text-blue-700"    label="Total"     v={stats.total} />
+        <StatBox color="bg-slate-50 text-slate-700"  label="Tiempo (min)" v={stats.minutos} />
       </div>
 
       {/* Tabs de bloques */}
@@ -180,11 +189,22 @@ export function ChecklistV2Wizard({ instanceId, onClosed }: Props) {
               {BLOQUE_LABELS[b]}
               <span className="ml-1 text-xs text-gray-500">
                 {pend > 0 ? `(${pend}/${tot} pend)` : `(${tot})`}
+                {(minutosBloque.get(b) ?? 0) > 0 && ` · ${minutosBloque.get(b)} min`}
               </span>
             </button>
           )
         })}
       </div>
+
+      {/* Subtotal del bloque activo */}
+      {bloqueActivo && (
+        <div className="flex items-center justify-between rounded-md bg-slate-50 px-3 py-1.5 text-xs text-slate-600">
+          <span className="font-semibold">{BLOQUE_LABELS[bloqueActivo]}</span>
+          {(minutosBloque.get(bloqueActivo) ?? 0) > 0 && (
+            <span>Subtotal bloque: <strong>{minutosBloque.get(bloqueActivo)} min</strong></span>
+          )}
+        </div>
+      )}
 
       {/* Ítems del bloque activo */}
       <div className="space-y-2">

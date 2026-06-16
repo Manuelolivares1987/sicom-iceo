@@ -22,9 +22,14 @@ export type BloqueChecklist =
   | 'b1_documentacion'
   | 'b2_estado_exterior'
   | 'b3_motor_niveles'
+  | 'b_sistema_electrico'
+  | 'b_fugas'
   | 'b4_sistema_equipo'
   | 'b5_seguridad_activa'
   | 'b6_diagnostico_electronico'
+  | 'b_inventario_seguridad'
+  | 'b_kit_invierno'
+  | 'b_pruebas_operativas'
   | 'b7_cierre_recepcion'
   | 'a_trabajos_ot'
   | 'b_pruebas_funcionales'
@@ -38,18 +43,34 @@ export type InstrumentoMedicion =
 
 export type DefaultCobrable = 'cliente' | 'empresa' | 'compartido' | 'evaluar' | 'na'
 
+/** Tipo de prueba operativa (solo bloque Pruebas operativas). */
+export type PruebaTipo = 'ruta' | 'recirculacion' | 'regadio'
+
+export type CategoriaCalidad = 'tecnica' | 'documentacion'
+
 export const BLOQUE_LABELS: Record<BloqueChecklist, string> = {
-  b1_documentacion:         'B1. Documentación',
-  b2_estado_exterior:       'B2. Estado exterior',
-  b3_motor_niveles:         'B3. Motor y niveles',
-  b4_sistema_equipo:        'B4. Sistema del equipamiento',
-  b5_seguridad_activa:      'B5. Seguridad activa',
-  b6_diagnostico_electronico:'B6. Diagnóstico electrónico',
-  b7_cierre_recepcion:      'B7. Cierre',
-  a_trabajos_ot:            'A. Trabajos OT',
-  b_pruebas_funcionales:    'B. Pruebas funcionales',
-  c_estado_entrega:         'C. Estado entrega',
-  d_cierre_entrega:         'D. Cierre',
+  b1_documentacion:          'B1. Documentación y certificaciones',
+  b2_estado_exterior:        'B2. Estado exterior y cabina',
+  b3_motor_niveles:          'B3. Motor y niveles',
+  b_sistema_electrico:       'B4. Sistema eléctrico',
+  b_fugas:                   'B5. Revisión de fugas por componente',
+  b4_sistema_equipo:         'B6. Sistemas específicos del equipamiento',
+  b5_seguridad_activa:       'B7. Seguridad activa',
+  b6_diagnostico_electronico:'B8. Diagnóstico electrónico',
+  b_inventario_seguridad:    'B9. Inventario y elementos de seguridad',
+  b_kit_invierno:            'B10. Kit de invierno (opcional)',
+  b_pruebas_operativas:      'Pruebas operativas (ruta / recirculación / regadío)',
+  b7_cierre_recepcion:       'B11. Cierre y responsabilidades',
+  a_trabajos_ot:             'A. Trabajos OT',
+  b_pruebas_funcionales:     'B. Pruebas funcionales',
+  c_estado_entrega:          'C. Estado entrega',
+  d_cierre_entrega:          'D. Cierre',
+}
+
+export const PRUEBA_LABELS: Record<PruebaTipo, string> = {
+  ruta:          'Ruta',
+  recirculacion: 'Recirculación',
+  regadio:       'Regadío',
 }
 
 export type ChecklistV2Item = {
@@ -68,6 +89,10 @@ export type ChecklistV2Item = {
   requiere_foto: boolean
   default_cobrable: DefaultCobrable
   costo_referencial_clp: number | null
+  bloque_orden: number
+  tiempo_min: number | null
+  prueba_tipo: PruebaTipo | null
+  categoria_calidad: CategoriaCalidad
   // Estado actual del instance_item
   resultado: ResultadoItem
   valor_numerico: number | null
@@ -155,7 +180,7 @@ export async function cargarItemsInstance(instanceId: string): Promise<Checklist
       template:checklist_template_v2_item!template_item_id (
         bloque, orden, codigo, descripcion, ayuda, instrumento, unidad,
         rango_min, rango_max, obligatorio, requiere_foto, default_cobrable,
-        costo_referencial_clp
+        costo_referencial_clp, bloque_orden, tiempo_min, prueba_tipo, categoria_calidad
       )
     `)
     .eq('instance_id', instanceId)
@@ -187,13 +212,17 @@ export async function cargarItemsInstance(instanceId: string): Promise<Checklist
     requiere_foto:     Boolean(r.template.requiere_foto),
     default_cobrable:  r.template.default_cobrable as DefaultCobrable,
     costo_referencial_clp: (r.template.costo_referencial_clp as number | null) ?? null,
+    bloque_orden:      (r.template.bloque_orden as number | null) ?? 99,
+    tiempo_min:        (r.template.tiempo_min as number | null) ?? null,
+    prueba_tipo:       (r.template.prueba_tipo as PruebaTipo | null) ?? null,
+    categoria_calidad: (r.template.categoria_calidad as CategoriaCalidad | null) ?? 'tecnica',
     resultado:         r.resultado,
     valor_numerico:    r.valor_numerico,
     observacion:       r.observacion,
     foto_url:          r.foto_url,
     cobrable_override: r.cobrable_override,
     costo_estimado:    r.costo_estimado,
-  })).sort((a, b) => a.bloque.localeCompare(b.bloque) || a.orden - b.orden)
+  })).sort((a, b) => (a.bloque_orden - b.bloque_orden) || (a.orden - b.orden))
 }
 
 export async function actualizarItem(itemId: string, patch: Partial<ChecklistV2Item>) {
