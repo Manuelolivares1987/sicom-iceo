@@ -98,8 +98,11 @@ VALUES (
 
 -- ── 5. Validacion ────────────────────────────────────────────────────────────
 SELECT jsonb_build_object(
-    'enum_bloques_nuevos', (SELECT COUNT(*) FROM unnest(enum_range(NULL::bloque_checklist_enum)) e
-                            WHERE e::TEXT IN ('b_sistema_electrico','b_fugas','b_inventario_seguridad','b_kit_invierno','b_pruebas_operativas')),
+    -- Lee el catalogo pg_enum (texto) para NO construir los valores de enum
+    -- recien agregados en la misma transaccion (evita error 55P04).
+    'enum_bloques_nuevos', (SELECT COUNT(*) FROM pg_enum e JOIN pg_type t ON t.oid=e.enumtypid
+                            WHERE t.typname='bloque_checklist_enum'
+                              AND e.enumlabel IN ('b_sistema_electrico','b_fugas','b_inventario_seguridad','b_kit_invierno','b_pruebas_operativas')),
     'enum_prueba',         (SELECT EXISTS(SELECT 1 FROM pg_type WHERE typname='prueba_operativa_enum')),
     'col_tiempo_min',      (SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='checklist_template_v2_item' AND column_name='tiempo_min')),
     'col_bloque_orden',    (SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='checklist_template_v2_item' AND column_name='bloque_orden')),

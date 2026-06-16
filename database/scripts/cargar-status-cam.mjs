@@ -17,6 +17,11 @@
 
 import ExcelJS from 'exceljs'
 import pg from 'pg'
+import dotenv from 'dotenv'
+import { resolve, dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+dotenv.config({ path: resolve(dirname(fileURLToPath(import.meta.url)), '../../.env.supabase-admin.local') })
 
 const ARCHIVO = 'C:\\Users\\Manuel Olivares\\Desktop\\Status cam.xlsx'
 

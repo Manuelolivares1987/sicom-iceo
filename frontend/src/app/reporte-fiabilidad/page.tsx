@@ -26,6 +26,9 @@ type Equipo = {
   categoria_uso: string | null; cliente: string | null
   marca: string | null; modelo: string | null; anio: number | null
   capacidad: string | null; potencia: string | null; vin_chasis: string | null; numero_motor: string | null
+  estado_comercial: string | null; faena: string | null; ubicacion: string | null; lugar_fisico: string | null
+  ult_tipo: string | null; ult_cliente: string | null; ult_lugar: string | null
+  ult_desde: string | null; ult_hasta: string | null; ult_dias: number | null; ult_vigente: boolean | null
   dias_observados: number; dias_up: number; dias_down: number; eventos_falla: number
   mtbf_dias: number; mttr_dias: number
   disponibilidad_inherente: number; disponibilidad_fisica: number
@@ -443,6 +446,9 @@ export default function ReporteFiabilidadPublicoPage() {
               <div>
                 <h3 className="text-lg font-bold text-[#0b2a4a]">Historial · {histSel.det?.patente}</h3>
                 <p className="text-sm text-gray-500">{histSel.det?.equipamiento ?? ''}{histSel.det?.cliente ? ` · ${histSel.det.cliente}` : ''}</p>
+                {histSel.det?.lugar_fisico && (
+                  <p className="text-sm text-gray-600">📍 Lugar físico: <b>{histSel.det.lugar_fisico}</b></p>
+                )}
               </div>
               <button onClick={() => setEquipoSel(null)} className="rounded px-2 py-1 text-gray-400 hover:bg-gray-100">✕</button>
             </div>
@@ -484,6 +490,21 @@ export default function ReporteFiabilidadPublicoPage() {
               </div>
             )}
 
+            {/* Último arriendo: quién lo tuvo y dónde (útil al pasar a recepción/disponible) */}
+            {histSel.det && (histSel.det.ult_cliente || histSel.det.ult_lugar) && (
+              <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs">
+                <div className="mb-1 font-semibold text-[#0b2a4a]">Último arriendo</div>
+                <div className="text-gray-700">
+                  <b>{histSel.det.ult_cliente ?? 'Cliente s/d'}</b>
+                  {histSel.det.ult_lugar && <> en <b>{histSel.det.ult_lugar}</b></>}
+                  {' · '}
+                  {histSel.det.ult_desde ? String(histSel.det.ult_desde).slice(0, 10) : '—'}
+                  {histSel.det.ult_vigente ? ' → vigente' : (histSel.det.ult_hasta ? ` → ${String(histSel.det.ult_hasta).slice(0, 10)}` : '')}
+                  {histSel.det.ult_dias != null && ` · ${histSel.det.ult_dias} día(s)`}
+                </div>
+              </div>
+            )}
+
             {/* Ficha técnica del equipo (como en la página) */}
             {histSel.det && (
               <div className="mt-4 border-t pt-3">
@@ -497,6 +518,8 @@ export default function ReporteFiabilidadPublicoPage() {
                   <FichaCampo label="VIN / Chasis" value={histSel.det.vin_chasis} />
                   <FichaCampo label="N° Motor" value={histSel.det.numero_motor} />
                   <FichaCampo label="Cliente" value={histSel.det.cliente} />
+                  <FichaCampo label="Faena" value={histSel.det.faena} />
+                  <FichaCampo label="Ubicación" value={histSel.det.ubicacion} />
                 </div>
               </div>
             )}

@@ -179,12 +179,16 @@ CREATE TRIGGER trg_nc_al_cerrar_checklist_ot
 
 
 -- ── 5. Las NC de inspeccion-OT entran al tablero de NC ───────────────────────
-CREATE OR REPLACE VIEW v_nc_recepcion AS
+-- DROP + CREATE: agregamos columna ot_id (CREATE OR REPLACE no permite
+-- insertar columnas en medio del orden existente).
+DROP VIEW IF EXISTS v_nc_recepcion;
+CREATE VIEW v_nc_recepcion AS
 SELECT nc.id, nc.activo_id, a.patente, a.codigo, a.nombre AS equipo,
        nc.descripcion, nc.severidad, nc.origen, nc.estado_planificacion,
        nc.grupo_trabajo, nc.horas_estimadas, nc.tiempo_estimado_dias,
-       nc.informe_recepcion_id, nc.plan_ot_id, nc.ot_id, nc.resuelto, nc.created_at,
-       (SELECT count(*) FROM nc_materiales m WHERE m.no_conformidad_id = nc.id) AS n_materiales
+       nc.informe_recepcion_id, nc.plan_ot_id, nc.resuelto, nc.created_at,
+       (SELECT count(*) FROM nc_materiales m WHERE m.no_conformidad_id = nc.id) AS n_materiales,
+       nc.ot_id
 FROM no_conformidades nc
 JOIN activos a ON a.id = nc.activo_id
 WHERE nc.origen IN ('recepcion_checklist','recepcion_adhoc','inspeccion_ot');
