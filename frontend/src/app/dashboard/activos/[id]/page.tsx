@@ -77,6 +77,7 @@ import { HistorialEstadosChart } from '@/components/flota/historial-estados-char
 import { useHistorialOSLegacyByActivo } from '@/hooks/use-historial-os-legacy'
 import { CambiarContratoModal } from '@/components/activos/cambiar-contrato-modal'
 import { HistoricoContratosCard } from '@/components/activos/historico-contratos-card'
+import { useHistorialArriendos, useUltimoArriendo } from '@/hooks/use-arriendos'
 import { Building2 } from 'lucide-react'
 
 // ---------------------------------------------------------------------------
@@ -168,6 +169,7 @@ export default function ActivoDetailPage() {
 
   const { data: activo, isLoading, refetch: refetchActivo } = useActivo(id)
   const { data: certs } = useCertificacionesByActivo(id)
+  const { data: ultimoArriendo } = useUltimoArriendo(id)
   const updateActivo = useUpdateActivo()
 
   // OEE del mes actual
@@ -235,6 +237,16 @@ export default function ActivoDetailPage() {
               {a.operacion && <span>Op: <strong>{a.operacion}</strong></span>}
               {a.cliente_actual && <span>Cliente: <strong>{a.cliente_actual}</strong></span>}
             </div>
+            <div className="flex flex-wrap items-center gap-1.5 text-sm text-gray-600">
+              <MapPin className="h-4 w-4 text-gray-400" />
+              <span>Lugar físico:&nbsp;
+                <strong>
+                  {a.faena?.nombre || a.ubicacion_actual
+                    ? [a.faena?.nombre, a.ubicacion_actual].filter(Boolean).join(' · ')
+                    : <em className="text-gray-400">Sin registrar</em>}
+                </strong>
+              </span>
+            </div>
             <div className="flex flex-wrap items-center gap-2">
               <Building2 className="h-4 w-4 text-gray-400" />
               <span className="text-sm text-gray-600">
@@ -292,6 +304,24 @@ export default function ActivoDetailPage() {
                   </p>
                 ))}
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Último arriendo — visible al pasar a recepción / disponible */}
+        {(a.estado_comercial === 'en_recepcion' || a.estado_comercial === 'disponible') && ultimoArriendo && (
+          <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50 p-3 flex items-start gap-2">
+            <History className="h-5 w-5 mt-0.5 text-blue-600" />
+            <div className="text-sm">
+              <p className="font-semibold text-blue-800">Último arriendo</p>
+              <p className="text-gray-700">
+                <strong>{ultimoArriendo.cliente ?? 'Cliente s/d'}</strong>
+                {ultimoArriendo.lugar && <> en <strong>{ultimoArriendo.lugar}</strong></>}
+                {' · '}
+                {formatDate(ultimoArriendo.fecha_inicio)}
+                {ultimoArriendo.fecha_fin ? ` → ${formatDate(ultimoArriendo.fecha_fin)}` : ' → vigente'}
+                {` · ${ultimoArriendo.dias} día(s)`}
+              </p>
             </div>
           </div>
         )}
@@ -711,6 +741,7 @@ function TabCostos({ activoId }: { activoId: string }) {
 function TabHistorial({ activoId, contratoRefreshKey }: { activoId: string; contratoRefreshKey?: number }) {
   const { data: historial, isLoading } = useHistorialMantenimiento(activoId)
   const { data: legacy, isLoading: loadingLegacy } = useHistorialOSLegacyByActivo(activoId)
+  const { data: arriendos } = useHistorialArriendos(activoId)
 
   return (
     <div className="space-y-4">
@@ -722,6 +753,45 @@ function TabHistorial({ activoId, contratoRefreshKey }: { activoId: string; cont
 
       {/* Histórico de cambios de contrato (comercial) */}
       <HistoricoContratosCard activoId={activoId} refrescarKey={contratoRefreshKey} />
+
+      {/* Historial de arriendos (cliente + lugar físico por período) */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Building2 className="h-4 w-4 text-blue-700" /> Historial de arriendos
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-0 overflow-x-auto">
+          {!arriendos || arriendos.length === 0 ? (
+            <p className="p-4 text-sm text-muted-foreground">Sin arriendos registrados aún.</p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Cliente</TableHead>
+                  <TableHead>Lugar físico</TableHead>
+                  <TableHead>Tipo</TableHead>
+                  <TableHead>Desde</TableHead>
+                  <TableHead>Hasta</TableHead>
+                  <TableHead className="text-right">Días</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {arriendos.map((r, i) => (
+                  <TableRow key={i}>
+                    <TableCell className="font-medium">{r.cliente ?? '—'}</TableCell>
+                    <TableCell>{r.lugar ?? r.faena_nombre ?? '—'}</TableCell>
+                    <TableCell><Badge variant="default">{r.tipo_uso}</Badge></TableCell>
+                    <TableCell>{formatDate(r.fecha_inicio)}</TableCell>
+                    <TableCell>{r.vigente ? <span className="text-green-600 font-medium">vigente</span> : formatDate(r.fecha_fin!)}</TableCell>
+                    <TableCell className="text-right">{r.dias}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Gráfico histórico anual de estados (barras apiladas) */}
       <HistorialEstadosChart activoId={activoId} />
