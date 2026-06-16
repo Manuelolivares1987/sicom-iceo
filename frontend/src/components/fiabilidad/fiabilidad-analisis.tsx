@@ -110,6 +110,68 @@ export function FiabilidadAnalisis({ readOnly = false }: { readOnly?: boolean } 
     catch (e) { setCopiaMsg((e as Error).message) }
   }
 
+  // Exporta TODA la info por patente a Excel (lo visible en el detalle)
+  async function exportarExcel(rows: ActivoFiabilidadDetalle[]) {
+    const ExcelJS = (await import('exceljs')).default
+    const wb = new ExcelJS.Workbook()
+    const ws = wb.addWorksheet('Equipos')
+    ws.columns = [
+      { header: 'Patente', key: 'patente', width: 12 },
+      { header: 'Equipamiento', key: 'equipamiento', width: 28 },
+      { header: 'Categoría', key: 'categoria_uso', width: 18 },
+      { header: 'Marca', key: 'marca', width: 14 },
+      { header: 'Modelo', key: 'modelo', width: 18 },
+      { header: 'Año', key: 'anio_fabricacion', width: 8 },
+      { header: 'Capacidad', key: 'capacidad', width: 16 },
+      { header: 'Potencia', key: 'potencia', width: 12 },
+      { header: 'VIN / Chasis', key: 'vin_chasis', width: 22 },
+      { header: 'N° Motor', key: 'numero_motor', width: 18 },
+      { header: 'Estado comercial', key: 'estado_comercial', width: 16 },
+      { header: 'Faena', key: 'faena', width: 18 },
+      { header: 'Ubicación', key: 'ubicacion', width: 18 },
+      { header: 'Lugar físico', key: 'lugar_fisico', width: 26 },
+      { header: 'Último contrato', key: 'contrato_codigo', width: 18 },
+      { header: 'Cliente contrato', key: 'contrato_cliente', width: 26 },
+      { header: 'Cliente actual', key: 'cliente_actual', width: 24 },
+      { header: 'Días arriendo (total)', key: 'dias_arriendo_total', width: 16 },
+      { header: 'Días por contrato', key: 'contratos_dias_txt', width: 44 },
+      { header: 'Últ. arriendo cliente', key: 'ult_cliente', width: 22 },
+      { header: 'Últ. arriendo lugar', key: 'ult_lugar', width: 20 },
+      { header: 'Días observados', key: 'dias_observados', width: 14 },
+      { header: 'A', key: 'dias_a', width: 6 }, { header: 'D', key: 'dias_d', width: 6 },
+      { header: 'U', key: 'dias_u', width: 6 }, { header: 'L', key: 'dias_l', width: 6 },
+      { header: 'M', key: 'dias_m', width: 6 }, { header: 'T', key: 'dias_t', width: 6 },
+      { header: 'F', key: 'dias_f', width: 6 },
+      { header: 'Días UP', key: 'dias_up', width: 9 }, { header: 'Días DOWN', key: 'dias_down', width: 10 },
+      { header: 'N° Fallas', key: 'eventos_falla', width: 10 },
+      { header: 'MTBF (d)', key: 'mtbf_dias', width: 10 }, { header: 'MTTR (d)', key: 'mttr_dias', width: 10 },
+      { header: 'Disp. inherente %', key: 'disp_inh', width: 15 },
+      { header: 'Disp. física %', key: 'disp_fis', width: 14 },
+      { header: 'OEE %', key: 'oee_pct', width: 9 },
+    ]
+    ws.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } }
+    ws.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A8A' } }
+    for (const e of rows) {
+      ws.addRow({
+        ...e,
+        contratos_dias_txt: (e.contratos_dias ?? []).map((c) => `${c.codigo}: ${c.dias} d`).join('; '),
+        disp_inh: Math.round(Number(e.disponibilidad_inherente) * 100),
+        disp_fis: Math.round(Number(e.disponibilidad_fisica) * 100),
+        oee_pct: e.oee_total == null ? '' : Math.round(Number(e.oee_total) * 100),
+      })
+    }
+    ws.autoFilter = { from: 'A1', to: { row: 1, column: ws.columnCount } }
+    ws.views = [{ state: 'frozen', ySplit: 1 }]
+    const buf = await wb.xlsx.writeBuffer()
+    const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `fiabilidad_equipos_${fechaInicio}_a_${fechaFin}.xlsx`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   const { data: porCategoria = [], isLoading: loadingCat } =
     useFiabilidadFlota(fechaInicio, fechaFin)
   const { data: detalles = [], isLoading: loadingDetalle } =
@@ -702,17 +764,27 @@ export function FiabilidadAnalisis({ readOnly = false }: { readOnly?: boolean } 
                   </span>
                 )}
               </CardTitle>
-              <select
-                className="h-9 rounded border border-gray-300 px-2 text-sm"
-                value={filtroCat}
-                onChange={(e) => setFiltroCat(e.target.value as CategoriaUso | 'todas')}
-              >
-                <option value="todas">Todas las categorías</option>
-                <option value="arriendo_comercial">Arriendo Comercial</option>
-                <option value="leasing_operativo">Leasing Operativo</option>
-                <option value="uso_interno">Uso Interno</option>
-                <option value="venta">Venta</option>
-              </select>
+              <div className="flex items-center gap-2">
+                <select
+                  className="h-9 rounded border border-gray-300 px-2 text-sm"
+                  value={filtroCat}
+                  onChange={(e) => setFiltroCat(e.target.value as CategoriaUso | 'todas')}
+                >
+                  <option value="todas">Todas las categorías</option>
+                  <option value="arriendo_comercial">Arriendo Comercial</option>
+                  <option value="leasing_operativo">Leasing Operativo</option>
+                  <option value="uso_interno">Uso Interno</option>
+                  <option value="venta">Venta</option>
+                </select>
+                <button
+                  onClick={() => exportarExcel(detallesFiltrados)}
+                  disabled={detallesFiltrados.length === 0}
+                  className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-green-600 px-3 text-sm font-semibold text-white hover:bg-green-700 disabled:opacity-50"
+                  title="Exporta toda la información de cada patente a Excel"
+                >
+                  ⬇ Exportar a Excel ({detallesFiltrados.length})
+                </button>
+              </div>
             </CardHeader>
             <CardContent className="overflow-x-auto">
               <table className="w-full text-xs whitespace-nowrap">
@@ -842,10 +914,26 @@ export function FiabilidadAnalisis({ readOnly = false }: { readOnly?: boolean } 
             <div className="text-sm text-gray-600">
               {[equipoHistoria.det?.marca, equipoHistoria.det?.modelo, equipoHistoria.det?.equipamiento]
                 .filter(Boolean).join(' · ') || '—'}
-              {equipoHistoria.det?.cliente_actual && (
-                <span className="text-gray-400"> · Cliente: {equipoHistoria.det.cliente_actual}</span>
-              )}
             </div>
+
+            {/* Último contrato + dónde está */}
+            {equipoHistoria.det && (
+              <div className="grid gap-2 sm:grid-cols-2">
+                <div className="rounded-lg border border-blue-100 bg-blue-50/50 p-2.5 text-xs">
+                  <div className="text-[10px] uppercase tracking-wide text-gray-400">Último contrato</div>
+                  <div className="font-semibold text-gray-800">
+                    {[equipoHistoria.det.contrato_codigo, equipoHistoria.det.contrato_cliente ?? equipoHistoria.det.cliente_actual]
+                      .filter(Boolean).join(' · ') || '—'}
+                  </div>
+                </div>
+                <div className="rounded-lg border border-blue-100 bg-blue-50/50 p-2.5 text-xs">
+                  <div className="text-[10px] uppercase tracking-wide text-gray-400">📍 Dónde está</div>
+                  <div className="font-semibold text-gray-800">
+                    {equipoHistoria.det.lugar_fisico ?? equipoHistoria.det.ubicacion ?? 'Sin registrar'}
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Ficha técnica (planilla Data Equipo) */}
             {equipoHistoria.det && (
@@ -898,6 +986,34 @@ export function FiabilidadAnalisis({ readOnly = false }: { readOnly?: boolean } 
                 <div>OEE: <b className={colorOEE(equipoHistoria.det.oee_total)}>{equipoHistoria.det.oee_total == null ? 'N/A' : fmtPct(equipoHistoria.det.oee_total)}</b></div>
                 <div>Disp. física: <b>{fmtPct(equipoHistoria.det.disponibilidad_fisica)}</b></div>
                 <div>MTBF / MTTR: <b>{fmtNum(equipoHistoria.det.mtbf_dias)} / {fmtNum(equipoHistoria.det.mttr_dias)} d</b></div>
+              </div>
+            )}
+
+            {/* Días en arriendo por contrato */}
+            {equipoHistoria.det?.contratos_dias && equipoHistoria.det.contratos_dias.length > 0 && (
+              <div className="border-t pt-3">
+                <div className="mb-1.5 flex items-center justify-between text-xs font-semibold text-gray-700">
+                  <span>Días en arriendo por contrato</span>
+                  <span className="text-gray-500">Total: {equipoHistoria.det.dias_arriendo_total ?? 0} d</span>
+                </div>
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b text-left uppercase text-gray-400">
+                      <th className="py-1">Contrato</th>
+                      <th className="py-1">Cliente</th>
+                      <th className="py-1 text-right">Días</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {equipoHistoria.det.contratos_dias.map((c, i) => (
+                      <tr key={i} className="border-b last:border-0">
+                        <td className="py-1 font-medium text-gray-800">{c.codigo}</td>
+                        <td className="py-1 text-gray-600">{c.cliente ?? '—'}</td>
+                        <td className="py-1 text-right font-semibold">{c.dias}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             )}
           </div>

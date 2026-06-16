@@ -125,6 +125,21 @@ export interface ActivoFiabilidadDetalle extends FiabilidadActivo {
   potencia?: string | null
   vin_chasis?: string | null
   numero_motor?: string | null
+  // Contrato + lugar físico + arriendos
+  estado_comercial?: string | null
+  contrato_codigo?: string | null
+  contrato_cliente?: string | null
+  faena?: string | null
+  ubicacion?: string | null
+  lugar_fisico?: string | null
+  dias_arriendo_total?: number
+  contratos_dias?: Array<{ codigo: string; cliente: string | null; dias: number }>
+  ult_cliente?: string | null
+  ult_lugar?: string | null
+  ult_desde?: string | null
+  ult_hasta?: string | null
+  ult_dias?: number | null
+  ult_vigente?: boolean | null
   oee_a: number | null
   oee_p: number | null
   oee_q: number | null
@@ -149,13 +164,27 @@ export async function getDetalleFiabilidadFlota(
   const { data: activos, error: errActivos } = await supabase
     .from('activos')
     .select(
-      'id, patente, codigo, nombre, tipo, anio_fabricacion, categoria_uso, cliente_actual, capacidad, potencia, vin_chasis, numero_motor, modelo:modelos(nombre, marca:marcas(nombre))',
+      'id, patente, codigo, nombre, tipo, anio_fabricacion, categoria_uso, cliente_actual, capacidad, potencia, vin_chasis, numero_motor, estado_comercial, ubicacion_actual, contrato:contratos(codigo, cliente), faena:faenas(nombre), modelo:modelos(nombre, marca:marcas(nombre))',
     )
     .in('tipo', ['camion_cisterna', 'camion', 'camioneta', 'lubrimovil', 'equipo_menor'])
     .neq('estado', 'dado_baja')
     .order('patente')
 
   if (errActivos || !activos) return { data: [], error: errActivos }
+
+  // Último arriendo + días por contrato (una consulta cada uno)
+  const ids = (activos as any[]).map((a) => a.id)
+  const [{ data: ultimos }, { data: diasCont }] = await Promise.all([
+    supabase.from('v_activo_ultimo_arriendo').select('activo_id, cliente, lugar, fecha_inicio, fecha_fin, dias, vigente').in('activo_id', ids),
+    supabase.from('v_activo_dias_contrato').select('activo_id, codigo, cliente, dias').in('activo_id', ids),
+  ])
+  const ultMap = new Map<string, any>((ultimos ?? []).map((u: any) => [u.activo_id, u]))
+  const diasMap = new Map<string, Array<{ codigo: string; cliente: string | null; dias: number }>>()
+  for (const r of (diasCont ?? []) as any[]) {
+    const arr = diasMap.get(r.activo_id) ?? []
+    arr.push({ codigo: r.codigo, cliente: r.cliente, dias: r.dias })
+    diasMap.set(r.activo_id, arr)
+  }
 
   // 2) Para cada uno, pedir fiabilidad + oee-fiabilidad en paralelo
   const detalles = await Promise.all(
@@ -178,6 +207,20 @@ export async function getDetalleFiabilidadFlota(
         potencia: a.potencia ?? null,
         vin_chasis: a.vin_chasis ?? null,
         numero_motor: a.numero_motor ?? null,
+        estado_comercial: a.estado_comercial ?? null,
+        contrato_codigo: a.contrato?.codigo ?? null,
+        contrato_cliente: a.contrato?.cliente ?? null,
+        faena: a.faena?.nombre ?? null,
+        ubicacion: a.ubicacion_actual ?? null,
+        lugar_fisico: [a.faena?.nombre, a.ubicacion_actual].filter(Boolean).join(' · ') || null,
+        contratos_dias: (diasMap.get(a.id) ?? []).sort((x, y) => y.dias - x.dias),
+        dias_arriendo_total: (diasMap.get(a.id) ?? []).reduce((s, c) => s + c.dias, 0),
+        ult_cliente: ultMap.get(a.id)?.cliente ?? null,
+        ult_lugar: ultMap.get(a.id)?.lugar ?? null,
+        ult_desde: ultMap.get(a.id)?.fecha_inicio ?? null,
+        ult_hasta: ultMap.get(a.id)?.fecha_fin ?? null,
+        ult_dias: ultMap.get(a.id)?.dias ?? null,
+        ult_vigente: ultMap.get(a.id)?.vigente ?? null,
         dias_observados: fiab.data?.dias_observados ?? 0,
         dias_up: fiab.data?.dias_up ?? 0,
         dias_down: fiab.data?.dias_down ?? 0,
