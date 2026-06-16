@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, MapPin, Check, CheckCheck, RefreshCw, Building2, Search } from 'lucide-react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
@@ -51,7 +51,16 @@ export default function SugerenciasEstadoPage() {
   const [fecha, setFecha] = useState(todayISO())
   const [soloCambios, setSoloCambios] = useState(true)
   const [filtroPatente, setFiltroPatente] = useState('')
+  const [filtroOperacion, setFiltroOperacion] = useState('') // Calama / Coquimbo / ...
   const [elegido, setElegido] = useState<Record<string, string>>({}) // override del planificador
+
+  // Mapa activo_id -> operación (Calama / Coquimbo) para el filtro por zona
+  const [operacionPorActivo, setOperacionPorActivo] = useState<Record<string, string | null>>({})
+  useEffect(() => {
+    supabase.from('activos').select('id, operacion').then(({ data }) => {
+      if (data) setOperacionPorActivo(Object.fromEntries((data as { id: string; operacion: string | null }[]).map((a) => [a.id, a.operacion])))
+    })
+  }, [])
 
   const { data: sugerencias = [], isLoading, refetch, isFetching } = useSugerenciasEstado(fecha)
   const confirmar = useConfirmarEstado()
@@ -79,6 +88,12 @@ export default function SugerenciasEstadoPage() {
     }
   }
 
+  const operaciones = useMemo(() => {
+    const set = new Set<string>()
+    for (const s of sugerencias) { const op = operacionPorActivo[s.activo_id]; if (op) set.add(op) }
+    return Array.from(set).sort()
+  }, [sugerencias, operacionPorActivo])
+
   const filtradas = useMemo(() => {
     const q = filtroPatente.trim().toUpperCase().replace(/[^A-Z0-9]/g, '')
     let base = soloCambios ? sugerencias.filter((s) => !s.coincide && s.estado_sugerido) : sugerencias
@@ -87,8 +102,11 @@ export default function SugerenciasEstadoPage() {
         (s.patente ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '').includes(q),
       )
     }
+    if (filtroOperacion) {
+      base = base.filter((s) => (operacionPorActivo[s.activo_id] ?? '') === filtroOperacion)
+    }
     return base
-  }, [sugerencias, soloCambios, filtroPatente])
+  }, [sugerencias, soloCambios, filtroPatente, filtroOperacion, operacionPorActivo])
   const cambios = useMemo(() => sugerencias.filter((s) => !s.coincide && s.estado_sugerido), [sugerencias])
 
   const confirmarUno = (activoId: string, estado: string) => {
@@ -163,6 +181,17 @@ export default function SugerenciasEstadoPage() {
                   className="absolute right-1.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">✕</button>
               )}
             </div>
+            {operaciones.length > 0 && (
+              <select
+                value={filtroOperacion}
+                onChange={(e) => setFiltroOperacion(e.target.value)}
+                className="h-8 rounded border border-gray-300 px-2 text-xs focus:border-emerald-500 focus:outline-none"
+                title="Filtrar por operación / zona"
+              >
+                <option value="">Todas las operaciones</option>
+                {operaciones.map((op) => <option key={op} value={op}>{op}</option>)}
+              </select>
+            )}
             <label className="flex items-center gap-1 text-xs text-gray-600">
               <input type="checkbox" checked={soloCambios} onChange={(e) => setSoloCambios(e.target.checked)} />
               Solo cambios
