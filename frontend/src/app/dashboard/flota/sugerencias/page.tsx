@@ -56,11 +56,12 @@ export default function SugerenciasEstadoPage() {
 
   // Mapa activo_id -> operación (Calama / Coquimbo) para el filtro por zona
   const [operacionPorActivo, setOperacionPorActivo] = useState<Record<string, string | null>>({})
-  useEffect(() => {
+  const cargarOperaciones = () => {
     supabase.from('activos').select('id, operacion').then(({ data }) => {
       if (data) setOperacionPorActivo(Object.fromEntries((data as { id: string; operacion: string | null }[]).map((a) => [a.id, a.operacion])))
     })
-  }, [])
+  }
+  useEffect(() => { cargarOperaciones() }, [])
 
   const { data: sugerencias = [], isLoading, refetch, isFetching } = useSugerenciasEstado(fecha)
   const confirmar = useConfirmarEstado()
@@ -290,6 +291,7 @@ export default function SugerenciasEstadoPage() {
           setModalActivo(null)
           setModalEstado(undefined)
           refetch()
+          cargarOperaciones() // refresca la operación completada desde el contrato
         }}
         activo={modalActivo}
         estadoInicial={modalEstado}
