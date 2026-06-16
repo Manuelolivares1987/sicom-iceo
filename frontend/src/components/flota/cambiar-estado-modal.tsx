@@ -134,6 +134,22 @@ export function CambiarEstadoModal({ open, onClose, activo, estadoInicial, fecha
   const [guardandoContrato, setGuardandoContrato] = useState(false)
   // Lugar físico en texto libre (ej. Salvador, Chuquicamata)
   const [ubicacion, setUbicacion] = useState('')
+  // Operación / zona (Calama / Coquimbo). Selector manual.
+  const [operacion, setOperacion] = useState('')
+  // Historial de cambios (contrato / operación / lugar) — siempre visible
+  type HistCambio = { id: number; campo_label: string; valor_anterior: string | null; valor_nuevo: string | null; cambio_at: string }
+  const [historial, setHistorial] = useState<HistCambio[]>([])
+  const cargarHistorial = () => {
+    if (!activo?.id) { setHistorial([]); return }
+    supabase
+      .from('v_historico_equipo_atributo')
+      .select('id, campo_label, valor_anterior, valor_nuevo, cambio_at')
+      .eq('activo_id', activo.id)
+      .order('cambio_at', { ascending: false })
+      .limit(50)
+      .then(({ data }) => setHistorial((data ?? []) as HistCambio[]))
+  }
+  useEffect(() => { if (open) cargarHistorial() /* eslint-disable-line */ }, [open, activo?.id])
   useEffect(() => {
     if (!open) return
     cargarContratosActivos().then(setContratos).catch(() => { /* skip */ })
@@ -148,8 +164,9 @@ export function CambiarEstadoModal({ open, onClose, activo, estadoInicial, fecha
       setNuevoContratoCodigo('')
       setNuevoContratoCliente('')
       setUbicacion(activo.ubicacion_actual ?? '')
+      setOperacion(activo.operacion ?? '')
     }
-  }, [open, activo?.id, activo?.contrato_id, activo?.ubicacion_actual])
+  }, [open, activo?.id, activo?.contrato_id, activo?.ubicacion_actual, activo?.operacion])
 
   const handleCrearContrato = async () => {
     if (!nuevoContratoCodigo.trim()) {
@@ -319,6 +336,17 @@ export function CambiarEstadoModal({ open, onClose, activo, estadoInicial, fecha
           return
         }
       }
+      // Operación / zona: si el usuario la fijó y cambió, persistir (gana sobre
+      // el autocompletado desde el contrato).
+      const opTrim = operacion.trim()
+      if (opTrim !== (activo.operacion ?? '')) {
+        const { error: eOp } = await supabase
+          .from('activos')
+          .update({ operacion: opTrim || null })
+          .eq('id', activo.id)
+        if (eOp) { setErrorMsg(`No se pudo guardar la operación: ${eOp.message}`); return }
+      }
+
       // Propagar a toda la app: invalidar cachés que dependen de contrato /
       // cliente / lugar / estado del equipo (la mutación de estado ya invalida
       // las suyas; esto cubre el cambio de contrato y de lugar).
@@ -484,6 +512,47 @@ export function CambiarEstadoModal({ open, onClose, activo, estadoInicial, fecha
             <p className="text-[11px] text-gray-400">
               Dónde está físicamente el equipo. Queda en el historial de arriendos del equipo.
             </p>
+          </div>
+
+          {/* Operación / zona — se completa sola desde el contrato; si no hay, elígela aquí */}
+          <div className="space-y-1">
+            <label className="flex items-center gap-1.5 text-xs font-medium text-gray-600">
+              <MapPin className="h-3.5 w-3.5 text-emerald-600" />
+              Operación / zona
+            </label>
+            <Select value={operacion} onChange={(e) => setOperacion(e.target.value)}>
+              <option value="">— Sin asignar —</option>
+              <option value="Calama">Calama</option>
+              <option value="Coquimbo">Coquimbo</option>
+              {operacion && !['', 'Calama', 'Coquimbo'].includes(operacion) && (
+                <option value={operacion}>{operacion}</option>
+              )}
+            </Select>
+            <p className="text-[11px] text-gray-400">
+              Se completa automáticamente desde el contrato. Si el contrato no tiene zona aún, elígela aquí.
+            </p>
+          </div>
+
+          {/* Historial de cambios (contrato / operación / lugar) — siempre visible */}
+          <div className="rounded-md border border-gray-200 bg-white p-2.5">
+            <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+              Historial de cambios
+            </div>
+            {historial.length === 0 ? (
+              <p className="text-[11px] text-gray-400">Sin cambios registrados todavía.</p>
+            ) : (
+              <ul className="max-h-36 space-y-1 overflow-auto text-[11px]">
+                {historial.map((h) => (
+                  <li key={h.id} className="flex flex-wrap items-baseline gap-x-1.5 border-b border-gray-100 pb-1 last:border-0">
+                    <span className="text-gray-400">{h.cambio_at?.slice(0, 16).replace('T', ' ')}</span>
+                    <span className="font-medium text-gray-700">{h.campo_label}:</span>
+                    <span className="text-gray-500">{h.valor_anterior ?? '—'}</span>
+                    <span className="text-gray-400">→</span>
+                    <span className="font-semibold text-gray-800">{h.valor_nuevo ?? '—'}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
 
           {/* ¿Mantiene o cambia? */}
