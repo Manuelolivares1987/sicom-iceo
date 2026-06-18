@@ -1,11 +1,15 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { useAuth } from '@/contexts/auth-context'
-import { getJornadasDeOT, getChecklistV3OT, type ChecklistV3Item } from '@/lib/services/taller-plan-semanal'
+import {
+  getJornadasDeOT, getChecklistV3OT, type ChecklistV3Item,
+  rpcV3SetTiempo, rpcV3SetExcluido, rpcV3AgregarItem, rpcV3EliminarCustom,
+  rpcLiberarEjecucion, rpcReabrirPreparacion,
+} from '@/lib/services/taller-plan-semanal'
 import {
   actualizarItem as actualizarItemV3,
   subirFotoItem as subirFotoItemV3,
@@ -30,6 +34,10 @@ import {
   Search,
   Loader2,
   Pencil,
+  Clock,
+  Lock,
+  Unlock,
+  Trash2,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -178,92 +186,192 @@ function bloqueLabel(b: string): string {
   return t.charAt(0).toUpperCase() + t.slice(1)
 }
 
-function ChecklistTab({ otId, disabled }: { otId: string; disabled?: boolean; userId?: string }) {
+function ChecklistTab({
+  otId, mode, readOnly, liberadoAt, onLiberar, onReabrir, liberando, reabriendo,
+}: {
+  otId: string
+  mode: 'edit' | 'exec'
+  readOnly?: boolean
+  liberadoAt?: string | null
+  onLiberar: () => void
+  onReabrir: () => void
+  liberando?: boolean
+  reabriendo?: boolean
+}) {
   const qc = useQueryClient()
   const { data: items, isLoading } = useQuery({
     queryKey: ['checklist-v3', otId], queryFn: () => getChecklistV3OT(otId), enabled: !!otId,
   })
+  // estado ejecución
   const [observations, setObservations] = useState<Record<string, string>>({})
   const [savingId, setSavingId] = useState<string | null>(null)
   const [uploadingItemId, setUploadingItemId] = useState<string | null>(null)
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({})
+  // estado edición (jefe)
+  const [tiempos, setTiempos] = useState<Record<string, string>>({})
+  const [nuevaTarea, setNuevaTarea] = useState('')
+  const [nuevoTiempo, setNuevoTiempo] = useState('')
+  const [busy, setBusy] = useState(false)
 
   function invalidate() { qc.invalidateQueries({ queryKey: ['checklist-v3', otId] }) }
 
+  // — ejecución —
   async function setResultado(it: ChecklistV3Item, v: 'ok' | 'no_ok' | 'na') {
     setSavingId(it.instance_item_id)
     try {
       await actualizarItemV3(it.instance_item_id, {
-        resultado: v,
-        observacion: observations[it.instance_item_id] ?? it.observacion ?? undefined,
+        resultado: v, observacion: observations[it.instance_item_id] ?? it.observacion ?? undefined,
       })
       invalidate()
-    } catch { /* user can retry */ } finally { setSavingId(null) }
+    } catch { /* retry */ } finally { setSavingId(null) }
   }
-
   async function saveObs(it: ChecklistV3Item) {
     const o = observations[it.instance_item_id]
     if (o === undefined || o === (it.observacion ?? '')) return
     try { await actualizarItemV3(it.instance_item_id, { observacion: o }); invalidate() } catch { /* retry */ }
   }
-
   async function handlePhoto(it: ChecklistV3Item, file: File) {
     setUploadingItemId(it.instance_item_id)
     try {
       const url = await subirFotoItemV3(it.instance_id, it.instance_item_id, file)
       await actualizarItemV3(it.instance_item_id, { foto_url: url })
       invalidate()
-    } catch { /* user can retry */ } finally { setUploadingItemId(null) }
+    } catch { /* retry */ } finally { setUploadingItemId(null) }
+  }
+  // — edición (jefe) —
+  async function guardarTiempo(it: ChecklistV3Item) {
+    const raw = tiempos[it.instance_item_id]
+    if (raw === undefined) return
+    const nuevo = raw ? Number(raw) : null
+    if (nuevo === (it.tiempo_min ?? null)) return
+    try { await rpcV3SetTiempo(it.instance_item_id, nuevo); invalidate() } catch { /* retry */ }
+  }
+  async function toggleExcluido(it: ChecklistV3Item) {
+    try { await rpcV3SetExcluido(it.instance_item_id, !it.excluido); invalidate() } catch { /* retry */ }
+  }
+  async function eliminarCustom(it: ChecklistV3Item) {
+    try { await rpcV3EliminarCustom(it.instance_item_id); invalidate() } catch { /* retry */ }
+  }
+  async function agregarTarea() {
+    if (!nuevaTarea.trim()) return
+    setBusy(true)
+    try {
+      await rpcV3AgregarItem(otId, nuevaTarea.trim(), nuevoTiempo ? Number(nuevoTiempo) : null)
+      setNuevaTarea(''); setNuevoTiempo(''); invalidate()
+    } catch { /* retry */ } finally { setBusy(false) }
   }
 
   if (isLoading) {
-    return (
-      <div className="flex justify-center py-8">
-        <Spinner size="md" className="text-pillado-green-500" />
-      </div>
-    )
+    return <div className="flex justify-center py-8"><Spinner size="md" className="text-pillado-green-500" /></div>
   }
 
-  const visibles = (items ?? []).filter((i) => !i.excluido)
-  if (visibles.length === 0) {
+  const all = items ?? []
+  // edición: ver todo (incl. excluidos); ejecución: ocultar excluidos
+  const visibles = mode === 'edit' ? all : all.filter((i) => !i.excluido)
+  if (all.length === 0) {
     return <p className="py-8 text-center text-gray-400">Esta OT no tiene checklist</p>
   }
 
-  // Agrupar por bloque preservando el orden (la vista viene ordenada)
   const grupos: { bloque: string; items: ChecklistV3Item[] }[] = []
   for (const it of visibles) {
     let g = grupos.find((x) => x.bloque === it.bloque)
     if (!g) { g = { bloque: it.bloque, items: [] }; grupos.push(g) }
     g.items.push(it)
   }
-  const total = visibles.length
-  const hechos = visibles.filter((i) => i.resultado && i.resultado !== 'pendiente').length
-  const tiempoTotal = visibles.reduce((s, i) => s + (i.tiempo_min ?? 0), 0)
+  const activos = all.filter((i) => !i.excluido)
+  const hechos = activos.filter((i) => i.resultado && i.resultado !== 'pendiente').length
+  const tiempoTotal = activos.reduce((s, i) => s + (i.tiempo_min ?? 0), 0)
 
   return (
     <div className="space-y-4">
-      {disabled && (
-        <div className="flex items-center gap-2 rounded-lg bg-amber-50 border border-amber-200 p-3 text-sm text-amber-700">
-          <AlertTriangle className="h-4 w-4 shrink-0" />
-          Esta OT está cerrada. El checklist no puede modificarse.
+      {/* Banner de modo / handoff */}
+      {mode === 'edit' && (
+        <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-sm">
+          <div className="flex items-center gap-2 text-amber-800 font-medium">
+            <Pencil className="h-4 w-4 shrink-0" /> Preparación del jefe de taller
+          </div>
+          <p className="mt-1 text-amber-700 text-xs">
+            Ajusta los tiempos, marca las tareas que no aplican y agrega las que falten.
+            Cuando esté listo, libera a ejecución.
+          </p>
+          <div className="mt-2">
+            <Button variant="primary" onClick={onLiberar} disabled={liberando}>
+              {liberando ? <Spinner size="sm" className="mr-1" /> : <Unlock className="h-4 w-4 mr-1" />}
+              Liberar a ejecución
+            </Button>
+          </div>
         </div>
       )}
+      {mode === 'exec' && !readOnly && liberadoAt && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg bg-green-50 border border-green-200 p-3 text-sm text-green-700">
+          <CheckCircle2 className="h-4 w-4 shrink-0" />
+          <span>Liberado a ejecución el {formatDateTime(liberadoAt)}.</span>
+          <button onClick={onReabrir} disabled={reabriendo}
+                  className="ml-auto inline-flex items-center gap-1 rounded-lg border border-amber-300 bg-white px-2 py-1 text-xs text-amber-700 hover:bg-amber-50 disabled:opacity-50">
+            <Lock className="h-3.5 w-3.5" /> Reabrir preparación
+          </button>
+        </div>
+      )}
+      {readOnly && (
+        <div className="flex items-center gap-2 rounded-lg bg-amber-50 border border-amber-200 p-3 text-sm text-amber-700">
+          <AlertTriangle className="h-4 w-4 shrink-0" /> Esta OT está cerrada. El checklist no puede modificarse.
+        </div>
+      )}
+
       <div className="flex flex-wrap items-center gap-3 rounded-lg bg-blue-50 border border-blue-200 p-3 text-sm text-blue-700">
-        <span className="font-semibold">{hechos}/{total} tareas</span>
+        <span className="font-semibold">{hechos}/{activos.length} tareas</span>
         <span className="text-blue-400">|</span>
         <span>{tiempoTotal} min ({(tiempoTotal / 60).toFixed(1)} h) estimados</span>
       </div>
 
       {grupos.map((g) => {
-        const tBloque = g.items.reduce((s, i) => s + (i.tiempo_min ?? 0), 0)
+        const tBloque = g.items.filter((i) => !i.excluido).reduce((s, i) => s + (i.tiempo_min ?? 0), 0)
         return (
           <div key={g.bloque}>
             <div className="flex items-center justify-between rounded-t-lg bg-gray-100 px-3 py-2">
               <h4 className="text-sm font-semibold text-gray-700">{bloqueLabel(g.bloque)}</h4>
-              <span className="text-xs text-gray-500">{g.items.length} · {tBloque} min</span>
+              <span className="text-xs text-gray-500">{g.items.filter((i) => !i.excluido).length} · {tBloque} min</span>
             </div>
             <div className="space-y-2 pt-2">
-              {g.items.map((item, idx) => (
+              {g.items.map((item, idx) => mode === 'edit' ? (
+                /* ───── modo preparación (jefe) ───── */
+                <Card key={item.instance_item_id} className={item.excluido ? 'opacity-60' : ''}>
+                  <CardContent className="p-3">
+                    <div className="flex items-center gap-2">
+                      {item.codigo && <span className="text-[10px] font-mono text-gray-400 shrink-0">{item.codigo}</span>}
+                      <span className={`flex-1 text-sm ${item.excluido ? 'line-through text-gray-400' : 'text-gray-800'}`}>
+                        {item.descripcion}
+                        {item.requiere_foto && <Camera className="inline h-3 w-3 ml-1 text-blue-500" />}
+                        {item.critico && <span className="ml-1 text-[9px] px-1 rounded bg-red-100 text-red-700">crítica</span>}
+                        {item.es_custom && <span className="ml-1 text-[9px] px-1 rounded bg-purple-100 text-purple-700">añadida</span>}
+                      </span>
+                      <Clock className="h-3.5 w-3.5 text-gray-400 shrink-0" />
+                      <input
+                        type="number" min="0" placeholder="min" disabled={item.excluido}
+                        value={tiempos[item.instance_item_id] ?? (item.tiempo_min != null ? String(item.tiempo_min) : '')}
+                        onChange={(e) => setTiempos((p) => ({ ...p, [item.instance_item_id]: e.target.value }))}
+                        onBlur={() => guardarTiempo(item)}
+                        className="h-8 w-16 rounded-lg border border-gray-300 px-2 text-sm disabled:bg-gray-100"
+                      />
+                      {item.es_custom ? (
+                        <button onClick={() => eliminarCustom(item)} title="Eliminar tarea añadida"
+                                className="rounded-lg bg-red-50 px-1.5 py-1 text-red-600 hover:bg-red-100">
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      ) : (
+                        <button onClick={() => toggleExcluido(item)}
+                                title={item.excluido ? 'Incluir en esta OT' : 'No aplica a esta OT'}
+                                className={`rounded-lg px-2 py-1 text-xs ${item.excluido
+                                  ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+                          {item.excluido ? 'Incluir' : 'No aplica'}
+                        </button>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              ) : (
+                /* ───── modo ejecución (ejecutor) ───── */
                 <Card key={item.instance_item_id}>
                   <CardContent className="p-4">
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -274,25 +382,19 @@ function ChecklistTab({ otId, disabled }: { otId: string; disabled?: boolean; us
                           {item.requiere_foto && (
                             <span title="Requiere foto"><Camera className="h-3.5 w-3.5 text-blue-500 shrink-0" /></span>
                           )}
-                          {item.critico && (
-                            <span className="text-[9px] px-1 rounded bg-red-100 text-red-700 font-medium">crítica</span>
-                          )}
-                          {item.es_custom && (
-                            <span className="text-[9px] px-1 rounded bg-purple-100 text-purple-700">añadida</span>
-                          )}
-                          {item.tiempo_min != null && (
-                            <span className="text-[10px] text-gray-400">· {item.tiempo_min} min</span>
-                          )}
+                          {item.critico && <span className="text-[9px] px-1 rounded bg-red-100 text-red-700 font-medium">crítica</span>}
+                          {item.es_custom && <span className="text-[9px] px-1 rounded bg-purple-100 text-purple-700">añadida</span>}
+                          {item.tiempo_min != null && <span className="text-[10px] text-gray-400">· {item.tiempo_min} min</span>}
                         </div>
-                        {item.resultado === 'no_ok' && item.obligatorio && (
+                        {item.resultado === 'no_ok' && (
                           <p className="mt-1 text-xs font-medium text-red-600 flex items-center gap-1">
-                            <AlertTriangle className="h-3 w-3" /> Item obligatorio NO OK
+                            <AlertTriangle className="h-3 w-3" /> NO OK — generará No Conformidad
                           </p>
                         )}
                       </div>
                       <ResultRadio
                         value={item.resultado}
-                        disabled={disabled || savingId === item.instance_item_id}
+                        disabled={readOnly || savingId === item.instance_item_id}
                         onChange={(v) => setResultado(item, v as 'ok' | 'no_ok' | 'na')}
                       />
                     </div>
@@ -307,40 +409,26 @@ function ChecklistTab({ otId, disabled }: { otId: string; disabled?: boolean; us
 
                     <div className="mt-3 flex gap-2">
                       <input
-                        type="text"
-                        placeholder="Observación..."
-                        disabled={disabled}
+                        type="text" placeholder="Observación..." disabled={readOnly}
                         value={observations[item.instance_item_id] ?? item.observacion ?? ''}
                         onChange={(e) => setObservations((prev) => ({ ...prev, [item.instance_item_id]: e.target.value }))}
                         onBlur={() => saveObs(item)}
                         className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm placeholder:text-gray-400 focus:border-pillado-green-500 focus:outline-none disabled:bg-gray-100 disabled:opacity-50"
                       />
                       <button
-                        type="button"
-                        disabled={disabled || uploadingItemId === item.instance_item_id}
+                        type="button" disabled={readOnly || uploadingItemId === item.instance_item_id}
                         onClick={() => fileInputRefs.current[item.instance_item_id]?.click()}
                         className={`flex h-10 w-10 items-center justify-center rounded-lg border transition-colors disabled:opacity-50 ${
-                          item.foto_url
-                            ? 'border-green-300 bg-green-50 text-green-600'
-                            : item.requiere_foto
-                              ? 'border-blue-300 bg-blue-50 text-blue-600 hover:bg-blue-100'
-                              : 'border-gray-200 text-gray-500 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-300'
-                        }`}
+                          item.foto_url ? 'border-green-300 bg-green-50 text-green-600'
+                            : item.requiere_foto ? 'border-blue-300 bg-blue-50 text-blue-600 hover:bg-blue-100'
+                            : 'border-gray-200 text-gray-500 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-300'}`}
                       >
-                        {uploadingItemId === item.instance_item_id ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <Camera className="h-4 w-4" />
-                        )}
+                        {uploadingItemId === item.instance_item_id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
                       </button>
                       <input
                         ref={(el) => { fileInputRefs.current[item.instance_item_id] = el }}
                         type="file" accept="image/*" capture="environment" className="hidden"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0]
-                          if (file) handlePhoto(item, file)
-                          e.target.value = ''
-                        }}
+                        onChange={(e) => { const f = e.target.files?.[0]; if (f) handlePhoto(item, f); e.target.value = '' }}
                       />
                     </div>
                   </CardContent>
@@ -350,6 +438,29 @@ function ChecklistTab({ otId, disabled }: { otId: string; disabled?: boolean; us
           </div>
         )
       })}
+
+      {/* Agregar tarea (solo en preparación) */}
+      {mode === 'edit' && (
+        <div className="flex items-end gap-2 border-t pt-3">
+          <div className="flex-1">
+            <label className="mb-1 block text-xs font-medium text-gray-500">Agregar tarea a esta OT</label>
+            <input
+              type="text" value={nuevaTarea} onChange={(e) => setNuevaTarea(e.target.value)}
+              placeholder="Descripción de la tarea"
+              onKeyDown={(e) => { if (e.key === 'Enter') agregarTarea() }}
+              className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm"
+            />
+          </div>
+          <div className="w-20">
+            <label className="mb-1 block text-xs font-medium text-gray-500">Min</label>
+            <input type="number" min="0" value={nuevoTiempo} onChange={(e) => setNuevoTiempo(e.target.value)}
+                   className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm" />
+          </div>
+          <Button variant="secondary" onClick={agregarTarea} disabled={!nuevaTarea.trim() || busy}>
+            <Plus className="h-4 w-4 mr-1" /> Agregar
+          </Button>
+        </div>
+      )}
     </div>
   )
 }
@@ -1192,11 +1303,22 @@ export default function OrdenTrabajoDetailPage() {
   const [activeTab, setActiveTab] = useState('checklist')
 
   // Mutations
+  const qc = useQueryClient()
   const iniciarMut = useIniciarOT()
   const pausarMut = usePausarOT()
   const finalizarMut = useFinalizarOT()
   const noEjecutarMut = useNoEjecutarOT()
   const cerrarMut = useCerrarOTSupervisor()
+  const liberarMut = useMutation({
+    mutationFn: () => rpcLiberarEjecucion(id!),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['orden-trabajo', id] }); showSuccess('Checklist liberado a ejecución') },
+    onError: (e) => setActionError((e as Error).message),
+  })
+  const reabrirMut = useMutation({
+    mutationFn: () => rpcReabrirPreparacion(id!),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['orden-trabajo', id] }); showSuccess('Preparación reabierta') },
+    onError: (e) => setActionError((e as Error).message),
+  })
 
   // Confirmation dialogs
   const [showIniciar, setShowIniciar] = useState(false)
@@ -1250,6 +1372,11 @@ export default function OrdenTrabajoDetailPage() {
   const otData = ot as any
   const isOTClosed = isImmutableState(otData.estado)
   const awaitsClosure = isAwaitingClosure(otData.estado)
+
+  // Modo del checklist: el jefe prepara (edita) hasta liberar; luego ejecución.
+  const liberado = !!otData.preparacion_ok_at
+  const enEjecucionOMas = ['en_ejecucion', 'pausada', 'ejecutada_ok', 'ejecutada_con_observaciones', 'cerrada'].includes(otData.estado)
+  const checklistMode: 'edit' | 'exec' = (isOTClosed || liberado || enEjecucionOMas) ? 'exec' : 'edit'
 
   return (
     <div className="pb-24">
@@ -1314,7 +1441,18 @@ export default function OrdenTrabajoDetailPage() {
       {/* Tab content */}
       <Card>
         <CardContent className="p-4 sm:p-6">
-          {activeTab === 'checklist' && id && <ChecklistTab otId={id} disabled={isOTClosed} userId={userId} />}
+          {activeTab === 'checklist' && id && (
+            <ChecklistTab
+              otId={id}
+              mode={checklistMode}
+              readOnly={isOTClosed}
+              liberadoAt={otData.preparacion_ok_at}
+              onLiberar={() => liberarMut.mutate()}
+              onReabrir={() => reabrirMut.mutate()}
+              liberando={liberarMut.isPending}
+              reabriendo={reabrirMut.isPending}
+            />
+          )}
           {activeTab === 'evidencias' && id && <EvidenciasTab otId={id} disabled={isOTClosed} />}
           {activeTab === 'materiales' && id && <MaterialesTab otId={id} faenaId={otData.faena_id} activoId={otData.activo_id} disabled={isOTClosed} userId={userId} />}
           {activeTab === 'valorizacion' && id && <ValorizacionTab ot={otData} otId={id} userId={userId} disabled={isOTClosed} />}

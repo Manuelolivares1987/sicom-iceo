@@ -435,6 +435,19 @@ export async function rpcV3EliminarCustom(itemId: string) {
   return data as { success: boolean }
 }
 
+// Handoff jefe -> ejecutor: liberar / reabrir la preparación del checklist
+export async function rpcLiberarEjecucion(otId: string) {
+  const { data, error } = await supabase.rpc('rpc_taller_liberar_ejecucion', { p_ot_id: otId })
+  if (error) throw error
+  return data as { success: boolean; ot_id: string }
+}
+
+export async function rpcReabrirPreparacion(otId: string) {
+  const { data, error } = await supabase.rpc('rpc_taller_reabrir_preparacion', { p_ot_id: otId })
+  if (error) throw error
+  return data as { success: boolean; ot_id: string }
+}
+
 export async function rpcConfirmarPlanSemanal(planSemanalId: string) {
   const { data, error } = await supabase.rpc('rpc_taller_confirmar_plan_semanal', { p_plan_semanal_id: planSemanalId })
   if (error) throw error
