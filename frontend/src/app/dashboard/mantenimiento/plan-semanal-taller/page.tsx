@@ -28,10 +28,11 @@ import {
   useAsignarResponsableTaller, useConfirmarPlanSemanalTaller,
   useIniciarEjecucionTaller, usePausarEjecucionTaller, useFinalizarEjecucionTaller,
   useAdminSembrarPlanesFaltantes,
-  useChecklistOtTaller, useEditarJornadaTaller, useChecklistUpsertTaller,
-  useChecklistEliminarTaller, useUsuariosAsignablesTaller,
+  useEditarJornadaTaller, useUsuariosAsignablesTaller,
+  useChecklistV3Taller, useV3SetTiempoTaller, useV3SetExcluidoTaller,
+  useV3AgregarItemTaller, useV3EliminarCustomTaller,
 } from '@/hooks/use-taller-plan-semanal'
-import { lunesDeIso, type TallerPlanOTFull, type ChecklistOtItem } from '@/lib/services/taller-plan-semanal'
+import { lunesDeIso, type TallerPlanOTFull, type ChecklistV3Item } from '@/lib/services/taller-plan-semanal'
 import { getFlotaDashboard, type FlotaDashboardActivo } from '@/lib/services/flota-dashboard'
 import {
   getPlanesActivo, getPreventivasDue, programarOtTaller, getEquiposPadre, getRtPorVencer,
@@ -1266,6 +1267,12 @@ function AsignarResponsableModal({ jornada, planId, onClose }: {
 }
 
 // ── Detalle / edición de la OT (jefe de taller) ─────────────────────────────
+function prettyBloque(b: string): string {
+  const sinPrefijo = b.replace(/^b[0-9]*_?/i, '').replace(/_/g, ' ').trim()
+  const txt = sinPrefijo || b
+  return txt.charAt(0).toUpperCase() + txt.slice(1)
+}
+
 function JornadaDetalleModal({ jornada, planId, onClose }: {
   jornada: TallerPlanOTFull
   planId: string
@@ -1274,8 +1281,8 @@ function JornadaDetalleModal({ jornada, planId, onClose }: {
   const toast = useToast()
   const { data: usuarios } = useUsuariosAsignablesTaller()
   const editar = useEditarJornadaTaller(planId)
-  const { data: checklist, isLoading: loadCl } = useChecklistOtTaller(jornada.ot_id)
-  const upsert = useChecklistUpsertTaller(planId, jornada.ot_id)
+  const { data: checklist, isLoading: loadCl } = useChecklistV3Taller(jornada.ot_id)
+  const agregar = useV3AgregarItemTaller(planId, jornada.ot_id)
 
   const mecIniciales = (jornada.cuadrilla ?? '').split(',').map((s) => s.trim())
     .filter((s) => (MECANICOS as readonly string[]).includes(s)).slice(0, MAX_MECANICOS)
@@ -1303,9 +1310,9 @@ function JornadaDetalleModal({ jornada, planId, onClose }: {
 
   function agregarTarea() {
     if (!nuevaTarea.trim()) return
-    upsert.mutate({
+    agregar.mutate({
       otId: jornada.ot_id, descripcion: nuevaTarea.trim(),
-      tiempoEstimadoMin: nuevoTiempo ? Number(nuevoTiempo) : null,
+      tiempoMin: nuevoTiempo ? Number(nuevoTiempo) : null,
     }, {
       onSuccess: () => { setNuevaTarea(''); setNuevoTiempo('') },
       onError: (err) => toast.error((err as Error).message),
@@ -1313,7 +1320,15 @@ function JornadaDetalleModal({ jornada, planId, onClose }: {
   }
 
   const items = checklist ?? []
-  const tiempoTotal = items.reduce((s, i) => s + (i.tiempo_estimado_min ?? 0), 0)
+  const activos = items.filter((i) => !i.excluido)
+  const tiempoTotal = activos.reduce((s, i) => s + (i.tiempo_min ?? 0), 0)
+  // Agrupar por bloque preservando el orden (ya viene ordenado por bloque_orden, orden)
+  const grupos: { bloque: string; items: ChecklistV3Item[] }[] = []
+  for (const it of items) {
+    let g = grupos.find((x) => x.bloque === it.bloque)
+    if (!g) { g = { bloque: it.bloque, items: [] }; grupos.push(g) }
+    g.items.push(it)
+  }
 
   return (
     <Modal open onClose={onClose} title={`OT ${jornada.ot_folio} · ${jornada.activo_codigo ?? ''}`}>
@@ -1362,33 +1377,48 @@ function JornadaDetalleModal({ jornada, planId, onClose }: {
           </div>
         </div>
 
-        {/* Checklist de la OT */}
+        {/* Checklist V03 de la OT */}
         <div className="border-t pt-3">
           <div className="flex items-center justify-between mb-2">
             <h3 className="text-sm font-semibold flex items-center gap-1">
               <ListChecks className="h-4 w-4 text-blue-600" /> Checklist de la actividad
             </h3>
-            <span className="text-[11px] text-gray-500 flex items-center gap-1">
-              <Clock className="h-3 w-3" /> {tiempoTotal} min estimados
+            <span className="text-[11px] text-gray-500 flex items-center gap-3">
+              <span>{activos.length} tareas</span>
+              <span className="flex items-center gap-1"><Clock className="h-3 w-3" /> {tiempoTotal} min ({(tiempoTotal / 60).toFixed(1)} h)</span>
             </span>
           </div>
 
           {loadCl ? (
             <div className="flex justify-center py-4"><Spinner /></div>
           ) : items.length === 0 ? (
-            <div className="text-xs text-gray-400 py-2">Esta OT no tiene checklist. Agrega tareas abajo.</div>
+            <div className="text-xs text-gray-400 py-2">Esta OT aún no tiene checklist. Agrega tareas abajo.</div>
           ) : (
-            <div className="space-y-1.5">
-              {items.map((it) => (
-                <ChecklistItemRow key={it.id} item={it} otId={jornada.ot_id} planId={planId} />
-              ))}
+            <div className="space-y-3">
+              {grupos.map((g) => {
+                const tBloque = g.items.filter((i) => !i.excluido).reduce((s, i) => s + (i.tiempo_min ?? 0), 0)
+                const nBloque = g.items.filter((i) => !i.excluido).length
+                return (
+                  <div key={g.bloque}>
+                    <div className="flex items-center justify-between bg-gray-100 rounded px-2 py-1 mb-1">
+                      <span className="text-[11px] font-semibold text-gray-700">{prettyBloque(g.bloque)}</span>
+                      <span className="text-[10px] text-gray-500">{nBloque} · {tBloque} min</span>
+                    </div>
+                    <div className="space-y-1">
+                      {g.items.map((it) => (
+                        <ChecklistV3Row key={it.instance_item_id} item={it} otId={jornada.ot_id} planId={planId} />
+                      ))}
+                    </div>
+                  </div>
+                )
+              })}
             </div>
           )}
 
-          {/* Agregar tarea */}
+          {/* Agregar tarea a medida */}
           <div className="flex items-end gap-2 mt-3">
             <div className="flex-1">
-              <label className="text-[11px] font-medium text-gray-600">Nueva tarea</label>
+              <label className="text-[11px] font-medium text-gray-600">Agregar tarea a esta OT</label>
               <Input value={nuevaTarea} onChange={(e) => setNuevaTarea(e.target.value)}
                      placeholder="Descripción de la tarea"
                      onKeyDown={(e) => { if (e.key === 'Enter') agregarTarea() }} />
@@ -1397,7 +1427,7 @@ function JornadaDetalleModal({ jornada, planId, onClose }: {
               <label className="text-[11px] font-medium text-gray-600">Min</label>
               <Input type="number" min="0" value={nuevoTiempo} onChange={(e) => setNuevoTiempo(e.target.value)} />
             </div>
-            <Button variant="outline" disabled={!nuevaTarea.trim() || upsert.isPending} onClick={agregarTarea}>
+            <Button variant="outline" disabled={!nuevaTarea.trim() || agregar.isPending} onClick={agregarTarea}>
               <Plus className="h-4 w-4 mr-1" /> Agregar
             </Button>
           </div>
@@ -1415,67 +1445,63 @@ function JornadaDetalleModal({ jornada, planId, onClose }: {
   )
 }
 
-function ChecklistItemRow({ item, otId, planId }: {
-  item: ChecklistOtItem
+function ChecklistV3Row({ item, otId, planId }: {
+  item: ChecklistV3Item
   otId: string
   planId: string
 }) {
   const toast = useToast()
-  const upsert = useChecklistUpsertTaller(planId, otId)
-  const eliminar = useChecklistEliminarTaller(planId, otId)
-  const [desc, setDesc] = useState(item.descripcion)
-  const [tiempo, setTiempo] = useState(item.tiempo_estimado_min != null ? String(item.tiempo_estimado_min) : '')
-  const [oblig, setOblig] = useState(item.obligatorio)
-  const [foto, setFoto] = useState(item.requiere_foto)
+  const setTiempo = useV3SetTiempoTaller(planId, otId)
+  const setExcluido = useV3SetExcluidoTaller(planId, otId)
+  const eliminarCustom = useV3EliminarCustomTaller(planId, otId)
+  const [tiempo, setTiempoStr] = useState(item.tiempo_min != null ? String(item.tiempo_min) : '')
   const ejecutado = !!item.resultado && item.resultado !== 'pendiente'
 
-  function guardar() {
-    upsert.mutate({
-      otId, itemId: item.id, descripcion: desc, obligatorio: oblig,
-      requiereFoto: foto, tiempoEstimadoMin: tiempo ? Number(tiempo) : null,
-    }, {
-      onSuccess: () => toast.success('Tarea guardada'),
+  function guardarTiempo() {
+    const nuevo = tiempo ? Number(tiempo) : null
+    if (nuevo === (item.tiempo_min ?? null)) return
+    setTiempo.mutate({ itemId: item.instance_item_id, tiempoMin: nuevo }, {
       onError: (err) => toast.error((err as Error).message),
     })
   }
 
   return (
-    <div className="border rounded p-2 bg-gray-50">
+    <div className={`border rounded px-2 py-1.5 ${item.excluido ? 'bg-gray-100 opacity-60' : 'bg-white'}`}>
       <div className="flex items-center gap-2">
-        <span className="text-[10px] text-gray-400 w-5 text-right">{item.orden}</span>
-        <div className="flex-1">
-          <Input value={desc} onChange={(e) => setDesc(e.target.value)} className="h-8 text-sm" />
+        {item.codigo && <span className="text-[9px] text-gray-400 font-mono shrink-0">{item.codigo}</span>}
+        <span className={`flex-1 text-[12px] ${item.excluido ? 'line-through text-gray-400' : 'text-gray-800'}`}>
+          {item.descripcion}
+          {item.es_custom && <span className="ml-1 text-[9px] px-1 rounded bg-purple-100 text-purple-700">añadida</span>}
+          {item.critico && <span className="ml-1 text-[9px] px-1 rounded bg-red-100 text-red-700">crítica</span>}
+        </span>
+        {item.requiere_foto && <Camera className="h-3 w-3 text-gray-400 shrink-0" />}
+        <div className="w-16 shrink-0">
+          <Input type="number" min="0" value={tiempo} disabled={item.excluido}
+                 onChange={(e) => setTiempoStr(e.target.value)} onBlur={guardarTiempo}
+                 className="h-7 text-xs" placeholder="min" />
         </div>
-        <Clock className="h-3 w-3 text-gray-400 shrink-0" />
-        <div className="w-20 shrink-0">
-          <Input type="number" min="0" value={tiempo} onChange={(e) => setTiempo(e.target.value)}
-                 className="h-8 text-sm" placeholder="min" />
-        </div>
-      </div>
-      <div className="flex items-center gap-3 mt-1.5 text-[11px] pl-7">
-        <label className="flex items-center gap-1 cursor-pointer">
-          <input type="checkbox" checked={oblig} onChange={(e) => setOblig(e.target.checked)} /> Obligatoria
-        </label>
-        <label className="flex items-center gap-1 cursor-pointer">
-          <input type="checkbox" checked={foto} onChange={(e) => setFoto(e.target.checked)} />
-          <Camera className="h-3 w-3" /> Pide foto
-        </label>
         {ejecutado && (
-          <span className={`px-1.5 py-0.5 rounded font-medium ${
+          <span className={`text-[9px] px-1 rounded font-medium shrink-0 ${
             item.resultado === 'ok' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
           }`}>{item.resultado}</span>
         )}
-        <div className="ml-auto flex items-center gap-1">
-          <button onClick={guardar} disabled={upsert.isPending} title="Guardar tarea"
-                  className="px-1.5 py-0.5 rounded bg-blue-100 hover:bg-blue-200 text-blue-700">
-            <CheckCircle2 className="h-3.5 w-3.5" />
-          </button>
-          {!ejecutado && (
-            <button onClick={() => eliminar.mutate(item.id, {
+        <div className="flex items-center gap-1 shrink-0">
+          {item.es_custom ? (
+            <button onClick={() => eliminarCustom.mutate(item.instance_item_id, {
                       onError: (err) => toast.error((err as Error).message),
-                    })} disabled={eliminar.isPending} title="Eliminar tarea"
-                    className="px-1.5 py-0.5 rounded bg-red-50 hover:bg-red-100 text-red-600">
+                    })} disabled={eliminarCustom.isPending} title="Eliminar tarea añadida"
+                    className="px-1 py-0.5 rounded bg-red-50 hover:bg-red-100 text-red-600">
               <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          ) : (
+            <button onClick={() => setExcluido.mutate({ itemId: item.instance_item_id, excluido: !item.excluido }, {
+                      onError: (err) => toast.error((err as Error).message),
+                    })} disabled={setExcluido.isPending || ejecutado}
+                    title={item.excluido ? 'Incluir en esta OT' : 'No aplica a esta OT'}
+                    className={`px-1.5 py-0.5 rounded text-[10px] ${
+                      item.excluido ? 'bg-green-100 hover:bg-green-200 text-green-700'
+                                    : 'bg-gray-100 hover:bg-gray-200 text-gray-600'}`}>
+              {item.excluido ? 'Incluir' : 'No aplica'}
             </button>
           )}
         </div>

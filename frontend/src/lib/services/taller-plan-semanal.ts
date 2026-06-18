@@ -91,6 +91,30 @@ export type ChecklistOtItem = {
   seccion: string | null
 }
 
+// Checklist V03 efectivo de una OT (parte del maestro, con overrides a medida)
+export type ChecklistV3Item = {
+  instance_item_id: string
+  instance_id: string
+  ot_id: string
+  instance_estado: string | null
+  bloque: string
+  bloque_orden: number
+  orden: number
+  codigo: string | null
+  descripcion: string
+  tiempo_min: number | null
+  tiempo_editado: boolean
+  requiere_foto: boolean
+  obligatorio: boolean
+  critico: boolean
+  categoria_calidad: string | null
+  resultado: string | null
+  observacion: string | null
+  foto_url: string | null
+  excluido: boolean
+  es_custom: boolean
+}
+
 export type TallerOTBacklog = {
   ot_id: string
   ot_folio: string
@@ -369,6 +393,46 @@ export async function rpcChecklistEliminarItem(itemId: string) {
   const { data, error } = await supabase.rpc('rpc_taller_checklist_eliminar_item', { p_item_id: itemId })
   if (error) throw error
   return data as { success: boolean; item_id: string }
+}
+
+// ── Checklist V03 a medida por OT ───────────────────────────────────────────
+export async function getChecklistV3OT(otId: string): Promise<ChecklistV3Item[]> {
+  const { data, error } = await supabase
+    .from('v_taller_ot_checklist_v3').select('*')
+    .eq('ot_id', otId)
+    .order('bloque_orden').order('orden')
+  if (error) throw error
+  return (data ?? []) as ChecklistV3Item[]
+}
+
+export async function rpcV3SetTiempo(itemId: string, tiempoMin: number | null) {
+  const { data, error } = await supabase.rpc('rpc_taller_v3_set_tiempo', {
+    p_item_id: itemId, p_tiempo_min: tiempoMin,
+  })
+  if (error) throw error
+  return data as { success: boolean }
+}
+
+export async function rpcV3SetExcluido(itemId: string, excluido: boolean) {
+  const { data, error } = await supabase.rpc('rpc_taller_v3_set_excluido', {
+    p_item_id: itemId, p_excluido: excluido,
+  })
+  if (error) throw error
+  return data as { success: boolean }
+}
+
+export async function rpcV3AgregarItem(otId: string, descripcion: string, tiempoMin: number | null) {
+  const { data, error } = await supabase.rpc('rpc_taller_v3_agregar_item', {
+    p_ot_id: otId, p_descripcion: descripcion, p_tiempo_min: tiempoMin,
+  })
+  if (error) throw error
+  return data as { success: boolean; item_id: string; instance_id: string }
+}
+
+export async function rpcV3EliminarCustom(itemId: string) {
+  const { data, error } = await supabase.rpc('rpc_taller_v3_eliminar_custom', { p_item_id: itemId })
+  if (error) throw error
+  return data as { success: boolean }
 }
 
 export async function rpcConfirmarPlanSemanal(planSemanalId: string) {

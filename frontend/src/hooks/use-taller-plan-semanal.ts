@@ -2,10 +2,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   getPlanSemanalById, getDiasPlanSemanal, getJornadasPlanSemanal,
   getBacklog, getKpiSemanal, getCumplimientoPmMes, getUsuariosAsignables,
-  getCoberturaResumen, getActivosSinPlan, getChecklistOt,
+  getCoberturaResumen, getActivosSinPlan, getChecklistV3OT,
   rpcGetOrCreatePlanSemanal, rpcAgregarJornadaOT, rpcMoverJornada,
   rpcQuitarJornada, rpcAsignarResponsable, rpcConfirmarPlanSemanal,
-  rpcEditarJornada, rpcChecklistUpsertItem, rpcChecklistEliminarItem,
+  rpcEditarJornada, rpcV3SetTiempo, rpcV3SetExcluido, rpcV3AgregarItem, rpcV3EliminarCustom,
   rpcIniciarEjecucion, rpcPausarEjecucion, rpcReanudarEjecucion, rpcFinalizarEjecucion,
   rpcAdminSembrarPlanesFaltantes,
 } from '@/lib/services/taller-plan-semanal'
@@ -128,14 +128,6 @@ export function useAsignarResponsableTaller(planId: string | null) {
     onSuccess: () => invalidate(),
   })
 }
-export function useChecklistOtTaller(otId: string | null) {
-  return useQuery({
-    queryKey: KEY('checklist-ot', otId ?? 'none'),
-    enabled: !!otId,
-    queryFn: () => getChecklistOt(otId!),
-  })
-}
-
 export function useEditarJornadaTaller(planId: string | null) {
   const invalidate = useInvalidatePlan(planId)
   return useMutation({
@@ -144,27 +136,56 @@ export function useEditarJornadaTaller(planId: string | null) {
   })
 }
 
-export function useChecklistUpsertTaller(planId: string | null, otId: string | null) {
-  const qc = useQueryClient()
-  const invalidate = useInvalidatePlan(planId)
-  return useMutation({
-    mutationFn: rpcChecklistUpsertItem,
-    onSuccess: () => {
-      invalidate()
-      qc.invalidateQueries({ queryKey: KEY('checklist-ot', otId ?? 'none') })
-    },
+// ── Checklist V03 a medida por OT ───────────────────────────────────────────
+export function useChecklistV3Taller(otId: string | null) {
+  return useQuery({
+    queryKey: KEY('checklist-v3', otId ?? 'none'),
+    enabled: !!otId,
+    queryFn: () => getChecklistV3OT(otId!),
   })
 }
 
-export function useChecklistEliminarTaller(planId: string | null, otId: string | null) {
+function useInvalidateV3(planId: string | null, otId: string | null) {
   const qc = useQueryClient()
   const invalidate = useInvalidatePlan(planId)
+  return () => {
+    invalidate()
+    qc.invalidateQueries({ queryKey: KEY('checklist-v3', otId ?? 'none') })
+  }
+}
+
+export function useV3SetTiempoTaller(planId: string | null, otId: string | null) {
+  const inv = useInvalidateV3(planId, otId)
   return useMutation({
-    mutationFn: (itemId: string) => rpcChecklistEliminarItem(itemId),
-    onSuccess: () => {
-      invalidate()
-      qc.invalidateQueries({ queryKey: KEY('checklist-ot', otId ?? 'none') })
-    },
+    mutationFn: ({ itemId, tiempoMin }: { itemId: string; tiempoMin: number | null }) =>
+      rpcV3SetTiempo(itemId, tiempoMin),
+    onSuccess: () => inv(),
+  })
+}
+
+export function useV3SetExcluidoTaller(planId: string | null, otId: string | null) {
+  const inv = useInvalidateV3(planId, otId)
+  return useMutation({
+    mutationFn: ({ itemId, excluido }: { itemId: string; excluido: boolean }) =>
+      rpcV3SetExcluido(itemId, excluido),
+    onSuccess: () => inv(),
+  })
+}
+
+export function useV3AgregarItemTaller(planId: string | null, otId: string | null) {
+  const inv = useInvalidateV3(planId, otId)
+  return useMutation({
+    mutationFn: ({ otId: ot, descripcion, tiempoMin }: { otId: string; descripcion: string; tiempoMin: number | null }) =>
+      rpcV3AgregarItem(ot, descripcion, tiempoMin),
+    onSuccess: () => inv(),
+  })
+}
+
+export function useV3EliminarCustomTaller(planId: string | null, otId: string | null) {
+  const inv = useInvalidateV3(planId, otId)
+  return useMutation({
+    mutationFn: (itemId: string) => rpcV3EliminarCustom(itemId),
+    onSuccess: () => inv(),
   })
 }
 
