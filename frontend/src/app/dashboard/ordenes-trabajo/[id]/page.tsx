@@ -1,11 +1,16 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { useAuth } from '@/contexts/auth-context'
-import { getJornadasDeOT } from '@/lib/services/taller-plan-semanal'
+import { getJornadasDeOT, getChecklistV3OT, type ChecklistV3Item } from '@/lib/services/taller-plan-semanal'
+import {
+  actualizarItem as actualizarItemV3,
+  subirFotoItem as subirFotoItemV3,
+  BLOQUE_LABELS,
+} from '@/lib/services/checklist-v2'
 import {
   ArrowLeft,
   Camera,
@@ -41,7 +46,6 @@ import {
 import { formatCLP, formatDate, formatDateTime, getEstadoOTColor, getEstadoOTLabel } from '@/lib/utils'
 import {
   useOrdenTrabajo,
-  useChecklistOT,
   useEvidenciasOT,
   useMaterialesOT,
   useHistorialOT,
@@ -50,7 +54,6 @@ import {
   useFinalizarOT,
   useNoEjecutarOT,
   useCerrarOTSupervisor,
-  useUpdateChecklistItem,
   useAddEvidencia,
   useUpdateOT,
 } from '@/hooks/use-ordenes-trabajo'
@@ -168,38 +171,49 @@ function ResultRadio({
   )
 }
 
-function ChecklistTab({ otId, disabled, userId }: { otId: string; disabled?: boolean; userId?: string }) {
-  const { data: items, isLoading } = useChecklistOT(otId)
-  const updateItem = useUpdateChecklistItem()
+function bloqueLabel(b: string): string {
+  const known = (BLOQUE_LABELS as Record<string, string>)[b]
+  if (known) return known
+  const t = b.replace(/^b[0-9]*_?/i, '').replace(/_/g, ' ').trim() || b
+  return t.charAt(0).toUpperCase() + t.slice(1)
+}
+
+function ChecklistTab({ otId, disabled }: { otId: string; disabled?: boolean; userId?: string }) {
+  const qc = useQueryClient()
+  const { data: items, isLoading } = useQuery({
+    queryKey: ['checklist-v3', otId], queryFn: () => getChecklistV3OT(otId), enabled: !!otId,
+  })
   const [observations, setObservations] = useState<Record<string, string>>({})
+  const [savingId, setSavingId] = useState<string | null>(null)
   const [uploadingItemId, setUploadingItemId] = useState<string | null>(null)
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({})
 
-  async function handleChecklistPhoto(itemId: string, file: File) {
-    setUploadingItemId(itemId)
+  function invalidate() { qc.invalidateQueries({ queryKey: ['checklist-v3', otId] }) }
+
+  async function setResultado(it: ChecklistV3Item, v: 'ok' | 'no_ok' | 'na') {
+    setSavingId(it.instance_item_id)
     try {
-      const fileExt = file.name.split('.').pop()
-      const filePath = `${otId}/checklist/${itemId}_${Date.now()}.${fileExt}`
-      const { error: uploadError } = await supabase.storage
-        .from('evidencias-ot')
-        .upload(filePath, file)
-      if (uploadError) throw uploadError
-
-      const { data: { publicUrl } } = supabase.storage
-        .from('evidencias-ot')
-        .getPublicUrl(filePath)
-
-      updateItem.mutate({
-        otId,
-        itemId,
-        foto_url: publicUrl,
-        completado_por: userId || undefined,
+      await actualizarItemV3(it.instance_item_id, {
+        resultado: v,
+        observacion: observations[it.instance_item_id] ?? it.observacion ?? undefined,
       })
-    } catch {
-      // silently fail — user can retry
-    } finally {
-      setUploadingItemId(null)
-    }
+      invalidate()
+    } catch { /* user can retry */ } finally { setSavingId(null) }
+  }
+
+  async function saveObs(it: ChecklistV3Item) {
+    const o = observations[it.instance_item_id]
+    if (o === undefined || o === (it.observacion ?? '')) return
+    try { await actualizarItemV3(it.instance_item_id, { observacion: o }); invalidate() } catch { /* retry */ }
+  }
+
+  async function handlePhoto(it: ChecklistV3Item, file: File) {
+    setUploadingItemId(it.instance_item_id)
+    try {
+      const url = await subirFotoItemV3(it.instance_id, it.instance_item_id, file)
+      await actualizarItemV3(it.instance_item_id, { foto_url: url })
+      invalidate()
+    } catch { /* user can retry */ } finally { setUploadingItemId(null) }
   }
 
   if (isLoading) {
@@ -210,128 +224,132 @@ function ChecklistTab({ otId, disabled, userId }: { otId: string; disabled?: boo
     )
   }
 
-  if (!items || items.length === 0) {
-    return <p className="py-8 text-center text-gray-400">No hay items en el checklist</p>
+  const visibles = (items ?? []).filter((i) => !i.excluido)
+  if (visibles.length === 0) {
+    return <p className="py-8 text-center text-gray-400">Esta OT no tiene checklist</p>
   }
 
+  // Agrupar por bloque preservando el orden (la vista viene ordenada)
+  const grupos: { bloque: string; items: ChecklistV3Item[] }[] = []
+  for (const it of visibles) {
+    let g = grupos.find((x) => x.bloque === it.bloque)
+    if (!g) { g = { bloque: it.bloque, items: [] }; grupos.push(g) }
+    g.items.push(it)
+  }
+  const total = visibles.length
+  const hechos = visibles.filter((i) => i.resultado && i.resultado !== 'pendiente').length
+  const tiempoTotal = visibles.reduce((s, i) => s + (i.tiempo_min ?? 0), 0)
+
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       {disabled && (
         <div className="flex items-center gap-2 rounded-lg bg-amber-50 border border-amber-200 p-3 text-sm text-amber-700">
           <AlertTriangle className="h-4 w-4 shrink-0" />
           Esta OT está cerrada. El checklist no puede modificarse.
         </div>
       )}
-      {(items as any[]).map((item: any, idx: number) => (
-        <Card key={item.id}>
-          <CardContent className="p-4">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex-1">
-                <div className="flex items-center gap-1.5">
-                  <p className="text-sm font-medium text-gray-900">
-                    {idx + 1}. {item.descripcion}
-                  </p>
-                  {item.requiere_foto && (
-                    <span title="Requiere foto">
-                      <Camera className="h-3.5 w-3.5 text-blue-500 shrink-0" />
-                    </span>
-                  )}
-                </div>
-                {item.resultado === 'no_ok' && item.obligatorio && (
-                  <p className="mt-1 text-xs font-medium text-red-600 flex items-center gap-1">
-                    <AlertTriangle className="h-3 w-3" />
-                    Item obligatorio NO OK
-                  </p>
-                )}
-                {item.observacion && (
-                  <p className="mt-1 text-xs text-gray-500">{item.observacion}</p>
-                )}
-                {item.completado_en && (
-                  <p className="mt-1 text-xs text-gray-400">
-                    Completado: {formatDateTime(item.completado_en)}{item.completado_por ? ` por ${item.completado_por}` : ''}
-                  </p>
-                )}
-              </div>
-              <ResultRadio
-                value={item.resultado}
-                disabled={disabled || updateItem.isPending}
-                onChange={(v) => {
-                  updateItem.mutate({
-                    otId,
-                    itemId: item.id,
-                    resultado: v as 'ok' | 'no_ok' | 'na',
-                    observacion: observations[item.id] ?? item.observacion ?? undefined,
-                    completado_por: userId || undefined,
-                  })
-                }}
-              />
-            </div>
+      <div className="flex flex-wrap items-center gap-3 rounded-lg bg-blue-50 border border-blue-200 p-3 text-sm text-blue-700">
+        <span className="font-semibold">{hechos}/{total} tareas</span>
+        <span className="text-blue-400">|</span>
+        <span>{tiempoTotal} min ({(tiempoTotal / 60).toFixed(1)} h) estimados</span>
+      </div>
 
-            {/* Foto thumbnail */}
-            {item.foto_url && (
-              <div className="mt-2">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={item.foto_url}
-                  alt={`Foto checklist ${idx + 1}`}
-                  className="h-20 w-20 rounded-lg border border-gray-200 object-cover"
-                />
-              </div>
-            )}
-
-            <div className="mt-3 flex gap-2">
-              <input
-                type="text"
-                placeholder="Observación..."
-                disabled={disabled}
-                value={observations[item.id] ?? item.observacion ?? ''}
-                onChange={(e) =>
-                  setObservations((prev) => ({ ...prev, [item.id]: e.target.value }))
-                }
-                onBlur={() => {
-                  const obs = observations[item.id]
-                  if (obs !== undefined && obs !== (item.observacion ?? '')) {
-                    updateItem.mutate({
-                      otId,
-                      itemId: item.id,
-                      observacion: obs,
-                    })
-                  }
-                }}
-                className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm placeholder:text-gray-400 focus:border-pillado-green-500 focus:outline-none disabled:bg-gray-100 disabled:opacity-50"
-              />
-              <button
-                type="button"
-                disabled={disabled || uploadingItemId === item.id}
-                onClick={() => fileInputRefs.current[item.id]?.click()}
-                className={`flex h-10 w-10 items-center justify-center rounded-lg border transition-colors disabled:opacity-50 ${
-                  item.foto_url
-                    ? 'border-green-300 bg-green-50 text-green-600'
-                    : 'border-gray-200 text-gray-500 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-300'
-                }`}
-              >
-                {uploadingItemId === item.id ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Camera className="h-4 w-4" />
-                )}
-              </button>
-              <input
-                ref={(el) => { fileInputRefs.current[item.id] = el }}
-                type="file"
-                accept="image/*"
-                capture="environment"
-                className="hidden"
-                onChange={(e) => {
-                  const file = e.target.files?.[0]
-                  if (file) handleChecklistPhoto(item.id, file)
-                  e.target.value = ''
-                }}
-              />
+      {grupos.map((g) => {
+        const tBloque = g.items.reduce((s, i) => s + (i.tiempo_min ?? 0), 0)
+        return (
+          <div key={g.bloque}>
+            <div className="flex items-center justify-between rounded-t-lg bg-gray-100 px-3 py-2">
+              <h4 className="text-sm font-semibold text-gray-700">{bloqueLabel(g.bloque)}</h4>
+              <span className="text-xs text-gray-500">{g.items.length} · {tBloque} min</span>
             </div>
-          </CardContent>
-        </Card>
-      ))}
+            <div className="space-y-2 pt-2">
+              {g.items.map((item, idx) => (
+                <Card key={item.instance_item_id}>
+                  <CardContent className="p-4">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-1.5">
+                          {item.codigo && <span className="text-[10px] font-mono text-gray-400">{item.codigo}</span>}
+                          <p className="text-sm font-medium text-gray-900">{idx + 1}. {item.descripcion}</p>
+                          {item.requiere_foto && (
+                            <span title="Requiere foto"><Camera className="h-3.5 w-3.5 text-blue-500 shrink-0" /></span>
+                          )}
+                          {item.critico && (
+                            <span className="text-[9px] px-1 rounded bg-red-100 text-red-700 font-medium">crítica</span>
+                          )}
+                          {item.es_custom && (
+                            <span className="text-[9px] px-1 rounded bg-purple-100 text-purple-700">añadida</span>
+                          )}
+                          {item.tiempo_min != null && (
+                            <span className="text-[10px] text-gray-400">· {item.tiempo_min} min</span>
+                          )}
+                        </div>
+                        {item.resultado === 'no_ok' && item.obligatorio && (
+                          <p className="mt-1 text-xs font-medium text-red-600 flex items-center gap-1">
+                            <AlertTriangle className="h-3 w-3" /> Item obligatorio NO OK
+                          </p>
+                        )}
+                      </div>
+                      <ResultRadio
+                        value={item.resultado}
+                        disabled={disabled || savingId === item.instance_item_id}
+                        onChange={(v) => setResultado(item, v as 'ok' | 'no_ok' | 'na')}
+                      />
+                    </div>
+
+                    {item.foto_url && (
+                      <div className="mt-2">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={item.foto_url} alt={`Foto ${idx + 1}`}
+                             className="h-20 w-20 rounded-lg border border-gray-200 object-cover" />
+                      </div>
+                    )}
+
+                    <div className="mt-3 flex gap-2">
+                      <input
+                        type="text"
+                        placeholder="Observación..."
+                        disabled={disabled}
+                        value={observations[item.instance_item_id] ?? item.observacion ?? ''}
+                        onChange={(e) => setObservations((prev) => ({ ...prev, [item.instance_item_id]: e.target.value }))}
+                        onBlur={() => saveObs(item)}
+                        className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm placeholder:text-gray-400 focus:border-pillado-green-500 focus:outline-none disabled:bg-gray-100 disabled:opacity-50"
+                      />
+                      <button
+                        type="button"
+                        disabled={disabled || uploadingItemId === item.instance_item_id}
+                        onClick={() => fileInputRefs.current[item.instance_item_id]?.click()}
+                        className={`flex h-10 w-10 items-center justify-center rounded-lg border transition-colors disabled:opacity-50 ${
+                          item.foto_url
+                            ? 'border-green-300 bg-green-50 text-green-600'
+                            : item.requiere_foto
+                              ? 'border-blue-300 bg-blue-50 text-blue-600 hover:bg-blue-100'
+                              : 'border-gray-200 text-gray-500 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-300'
+                        }`}
+                      >
+                        {uploadingItemId === item.instance_item_id ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Camera className="h-4 w-4" />
+                        )}
+                      </button>
+                      <input
+                        ref={(el) => { fileInputRefs.current[item.instance_item_id] = el }}
+                        type="file" accept="image/*" capture="environment" className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0]
+                          if (file) handlePhoto(item, file)
+                          e.target.value = ''
+                        }}
+                      />
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -1165,7 +1183,9 @@ export default function OrdenTrabajoDetailPage() {
   const userId = user?.id ?? ''
 
   const { data: ot, isLoading, error } = useOrdenTrabajo(id)
-  const { data: checklistData } = useChecklistOT(id)
+  const { data: checklistData } = useQuery({
+    queryKey: ['checklist-v3', id], queryFn: () => getChecklistV3OT(id!), enabled: !!id,
+  })
   const { data: evidenciasData } = useEvidenciasOT(id)
   const { data: materialesData } = useMaterialesOT(id)
 
@@ -1386,7 +1406,7 @@ export default function OrdenTrabajoDetailPage() {
         onCancel={() => { setShowFinalizar(false); setFinalizarObs(''); setFinalizarError(null) }}
         onConfirm={() => {
           const pendingMandatory = (checklistData ?? []).filter(
-            (item: any) => item.obligatorio && !item.resultado
+            (item) => !item.excluido && item.obligatorio && (!item.resultado || item.resultado === 'pendiente')
           )
           if (pendingMandatory.length > 0) {
             setFinalizarError(`Hay ${pendingMandatory.length} items obligatorios sin completar en el checklist. Vaya a la tab "Checklist" y complete todos los ítems obligatorios.`)
@@ -1586,7 +1606,7 @@ export default function OrdenTrabajoDetailPage() {
             </div>
             <div className="rounded bg-blue-50 p-2">
               <div className="font-bold text-blue-700">
-                {(checklistData ?? []).filter((c: any) => c.resultado != null).length}/{(checklistData ?? []).length}
+                {(checklistData ?? []).filter((c) => !c.excluido && c.resultado && c.resultado !== 'pendiente').length}/{(checklistData ?? []).filter((c) => !c.excluido).length}
               </div>
               <div className="text-blue-600">Checklist</div>
             </div>
