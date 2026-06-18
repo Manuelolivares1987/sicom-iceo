@@ -1,13 +1,33 @@
--- Verificacion final: las 3 funciones resuelven el perfil por usuarios_perfil.id
--- (no por user_id). ok=true significa corregida.
-SELECT p.proname AS funcion,
-       (position('WHERE id = v_user' IN pg_get_functiondef(p.oid)) > 0) AS ok_id,
-       (pg_get_functiondef(p.oid) ILIKE '%where user_id%')             AS aun_buggy
-  FROM pg_proc p
-  JOIN pg_namespace n ON n.oid = p.pronamespace
- WHERE n.nspname = 'public' AND p.prokind = 'f'
-   AND p.proname IN (
-       'rpc_taller_iniciar_ejecucion_ot',
-       'rpc_registrar_recirculacion_combustible',
-       'rpc_registrar_traspaso_combustible')
- ORDER BY 1;
+-- Reproduce el play del taller en una transaccion que se hace ROLLBACK.
+-- Captura el mensaje y el CONTEXT (stack) del error real.
+DO $diag$
+DECLARE
+  v_ot   uuid;
+  v_user uuid;
+  v_err  text;
+  v_ctx  text;
+BEGIN
+  SELECT t.ot_id INTO v_ot
+    FROM taller_plan_semanal_ots t
+    JOIN taller_plan_semanal_dias d ON d.id = t.plan_dia_id
+   WHERE t.estado_plan IN ('planificada','asignada','liberada','pausada')
+   ORDER BY d.fecha DESC LIMIT 1;
+
+  SELECT id INTO v_user FROM usuarios_perfil WHERE activo = true ORDER BY 1 LIMIT 1;
+
+  RAISE NOTICE 'ot=% user=%', v_ot, v_user;
+
+  PERFORM set_config('request.jwt.claims', json_build_object('sub', v_user)::text, true);
+
+  BEGIN
+    PERFORM rpc_taller_iniciar_ejecucion_ot(v_ot, 'diag rollback');
+    RAISE NOTICE 'SIN ERROR: la funcion corrio OK';
+  EXCEPTION WHEN OTHERS THEN
+    GET STACKED DIAGNOSTICS v_err = MESSAGE_TEXT, v_ctx = PG_EXCEPTION_CONTEXT;
+    RAISE NOTICE 'ERROR_MSG: %', v_err;
+    RAISE NOTICE 'ERROR_CTX: %', v_ctx;
+  END;
+
+  RAISE EXCEPTION 'rollback diagnostico (intencional, no persistir)';
+END
+$diag$;
