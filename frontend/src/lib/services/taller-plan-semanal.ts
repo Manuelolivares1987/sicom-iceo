@@ -67,11 +67,28 @@ export type TallerPlanOTFull = {
   secuencia_jornada: number
   jornada_estado: EstadoJornadaTaller
   observaciones: string | null
+  checklist_total: number | null
+  checklist_completados: number | null
+  tiempo_estimado_total_min: number | null
   ejecucion_activa_id: string | null
   ejecucion_activa_estado: string | null
   ultima_ejecucion_avance: number | null
   created_at: string
   updated_at: string
+}
+
+export type ChecklistOtItem = {
+  id: string
+  ot_id: string
+  orden: number
+  descripcion: string
+  obligatorio: boolean
+  requiere_foto: boolean
+  tiempo_estimado_min: number | null
+  resultado: string | null
+  observacion: string | null
+  foto_url: string | null
+  seccion: string | null
 }
 
 export type TallerOTBacklog = {
@@ -290,6 +307,68 @@ export async function rpcAsignarResponsable(planOtId: string, responsableId: str
   })
   if (error) throw error
   return data as { success: boolean }
+}
+
+// Editar la jornada completa (jefe de taller): responsable, cuadrilla, horas,
+// meta de avance y observaciones. El responsable se sincroniza con la OT.
+export async function rpcEditarJornada(params: {
+  planOtId: string
+  responsableId?: string | null
+  cuadrilla?: string | null
+  horasPlanificadas?: number | null
+  avanceObjetivo?: number | null
+  observaciones?: string | null
+}) {
+  const { data, error } = await supabase.rpc('rpc_taller_editar_jornada', {
+    p_plan_ot_id: params.planOtId,
+    p_responsable_id: params.responsableId ?? null,
+    p_cuadrilla: params.cuadrilla ?? null,
+    p_horas_planificadas: params.horasPlanificadas ?? null,
+    p_avance_objetivo: params.avanceObjetivo ?? null,
+    p_observaciones: params.observaciones ?? null,
+  })
+  if (error) throw error
+  return data as { success: boolean; plan_ot_id: string; ot_id: string }
+}
+
+// Checklist de la OT (pauta o inspección)
+export async function getChecklistOt(otId: string): Promise<ChecklistOtItem[]> {
+  const { data, error } = await supabase
+    .from('checklist_ot')
+    .select('id, ot_id, orden, descripcion, obligatorio, requiere_foto, tiempo_estimado_min, resultado, observacion, foto_url, seccion')
+    .eq('ot_id', otId).order('orden')
+  if (error) throw error
+  return (data ?? []) as ChecklistOtItem[]
+}
+
+export async function rpcChecklistUpsertItem(params: {
+  otId: string
+  itemId?: string | null
+  descripcion?: string | null
+  orden?: number | null
+  obligatorio?: boolean
+  requiereFoto?: boolean
+  tiempoEstimadoMin?: number | null
+  seccion?: string | null
+}) {
+  const { data, error } = await supabase.rpc('rpc_taller_checklist_upsert_item', {
+    p_ot_id: params.otId,
+    p_item_id: params.itemId ?? null,
+    p_descripcion: params.descripcion ?? null,
+    p_orden: params.orden ?? null,
+    p_obligatorio: params.obligatorio ?? true,
+    p_requiere_foto: params.requiereFoto ?? false,
+    p_tiempo_estimado_min: params.tiempoEstimadoMin ?? null,
+    p_seccion: params.seccion ?? null,
+  })
+  if (error) throw error
+  return data as { success: boolean; item_id: string }
+}
+
+export async function rpcChecklistEliminarItem(itemId: string) {
+  const { data, error } = await supabase.rpc('rpc_taller_checklist_eliminar_item', { p_item_id: itemId })
+  if (error) throw error
+  return data as { success: boolean; item_id: string }
 }
 
 export async function rpcConfirmarPlanSemanal(planSemanalId: string) {

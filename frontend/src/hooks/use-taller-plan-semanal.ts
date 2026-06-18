@@ -2,9 +2,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   getPlanSemanalById, getDiasPlanSemanal, getJornadasPlanSemanal,
   getBacklog, getKpiSemanal, getCumplimientoPmMes, getUsuariosAsignables,
-  getCoberturaResumen, getActivosSinPlan,
+  getCoberturaResumen, getActivosSinPlan, getChecklistOt,
   rpcGetOrCreatePlanSemanal, rpcAgregarJornadaOT, rpcMoverJornada,
   rpcQuitarJornada, rpcAsignarResponsable, rpcConfirmarPlanSemanal,
+  rpcEditarJornada, rpcChecklistUpsertItem, rpcChecklistEliminarItem,
   rpcIniciarEjecucion, rpcPausarEjecucion, rpcReanudarEjecucion, rpcFinalizarEjecucion,
   rpcAdminSembrarPlanesFaltantes,
 } from '@/lib/services/taller-plan-semanal'
@@ -127,6 +128,46 @@ export function useAsignarResponsableTaller(planId: string | null) {
     onSuccess: () => invalidate(),
   })
 }
+export function useChecklistOtTaller(otId: string | null) {
+  return useQuery({
+    queryKey: KEY('checklist-ot', otId ?? 'none'),
+    enabled: !!otId,
+    queryFn: () => getChecklistOt(otId!),
+  })
+}
+
+export function useEditarJornadaTaller(planId: string | null) {
+  const invalidate = useInvalidatePlan(planId)
+  return useMutation({
+    mutationFn: rpcEditarJornada,
+    onSuccess: () => invalidate(),
+  })
+}
+
+export function useChecklistUpsertTaller(planId: string | null, otId: string | null) {
+  const qc = useQueryClient()
+  const invalidate = useInvalidatePlan(planId)
+  return useMutation({
+    mutationFn: rpcChecklistUpsertItem,
+    onSuccess: () => {
+      invalidate()
+      qc.invalidateQueries({ queryKey: KEY('checklist-ot', otId ?? 'none') })
+    },
+  })
+}
+
+export function useChecklistEliminarTaller(planId: string | null, otId: string | null) {
+  const qc = useQueryClient()
+  const invalidate = useInvalidatePlan(planId)
+  return useMutation({
+    mutationFn: (itemId: string) => rpcChecklistEliminarItem(itemId),
+    onSuccess: () => {
+      invalidate()
+      qc.invalidateQueries({ queryKey: KEY('checklist-ot', otId ?? 'none') })
+    },
+  })
+}
+
 export function useConfirmarPlanSemanalTaller(planId: string | null) {
   const invalidate = useInvalidatePlan(planId)
   return useMutation({

@@ -8,7 +8,7 @@ import {
 import {
   Calendar, ArrowLeft, ChevronLeft, ChevronRight, Lock, AlertTriangle, Trash2, User,
   Play, Pause, CheckCircle2, BarChart3, ShieldAlert, RefreshCw, Wrench, Layers, FileSpreadsheet,
-  Truck, Mail,
+  Truck, Mail, Pencil, Plus, Clock, Camera, ExternalLink, ListChecks,
 } from 'lucide-react'
 import { exportarPlanSemanalExcel, descargarBlob } from '@/lib/export/plan-semanal-excel'
 import { buildPlanSemanalTallerEmailHtml } from '@/lib/email/plan-semanal-taller-email'
@@ -28,8 +28,10 @@ import {
   useAsignarResponsableTaller, useConfirmarPlanSemanalTaller,
   useIniciarEjecucionTaller, usePausarEjecucionTaller, useFinalizarEjecucionTaller,
   useAdminSembrarPlanesFaltantes,
+  useChecklistOtTaller, useEditarJornadaTaller, useChecklistUpsertTaller,
+  useChecklistEliminarTaller, useUsuariosAsignablesTaller,
 } from '@/hooks/use-taller-plan-semanal'
-import { lunesDeIso, type TallerPlanOTFull } from '@/lib/services/taller-plan-semanal'
+import { lunesDeIso, type TallerPlanOTFull, type ChecklistOtItem } from '@/lib/services/taller-plan-semanal'
 import { getFlotaDashboard, type FlotaDashboardActivo } from '@/lib/services/flota-dashboard'
 import {
   getPlanesActivo, getPreventivasDue, programarOtTaller, getEquiposPadre, getRtPorVencer,
@@ -117,6 +119,7 @@ export default function PlanSemanalTallerPage() {
   const finalizarEjec = useFinalizarEjecucionTaller(planSemanalId)
 
   const [asignarOpen, setAsignarOpen] = useState<TallerPlanOTFull | null>(null)
+  const [detalleOpen, setDetalleOpen] = useState<TallerPlanOTFull | null>(null)
   const [finalizarOpen, setFinalizarOpen] = useState<TallerPlanOTFull | null>(null)
   const [finAvance, setFinAvance] = useState<number>(100)
   const [finObs, setFinObs] = useState<string>('')
@@ -409,6 +412,7 @@ export default function PlanSemanalTallerPage() {
                       nombre={dia.nombre_dia}
                       jornadas={(jornadas ?? []).filter((j) => j.plan_dia_id === dia.id)}
                       onAsignar={(j) => setAsignarOpen(j)}
+                      onDetalle={(j) => setDetalleOpen(j)}
                       onQuitar={(j) => quitarJornada.mutate(j.plan_ot_id, {
                         onSuccess: () => toast.success('Jornada quitada'),
                         onError: (err) => toast.error((err as Error).message),
@@ -451,6 +455,15 @@ export default function PlanSemanalTallerPage() {
         <AsignarResponsableModal
           jornada={asignarOpen}
           onClose={() => setAsignarOpen(null)}
+          planId={planSemanalId}
+        />
+      )}
+
+      {/* Modal detalle / edición de la OT (jefe de taller) */}
+      {detalleOpen && (
+        <JornadaDetalleModal
+          jornada={detalleOpen}
+          onClose={() => setDetalleOpen(null)}
           planId={planSemanalId}
         />
       )}
@@ -1053,11 +1066,12 @@ function MecanicosPicker({ value, onChange }: { value: string[]; onChange: (v: s
   )
 }
 
-function DiaColumna({ fecha, nombre, jornadas, onAsignar, onQuitar, onIniciar, onPausar, onFinalizar }: {
+function DiaColumna({ fecha, nombre, jornadas, onAsignar, onDetalle, onQuitar, onIniciar, onPausar, onFinalizar }: {
   fecha: string
   nombre: string
   jornadas: TallerPlanOTFull[]
   onAsignar: (j: TallerPlanOTFull) => void
+  onDetalle: (j: TallerPlanOTFull) => void
   onQuitar: (j: TallerPlanOTFull) => void
   onIniciar: (j: TallerPlanOTFull) => void
   onPausar: (j: TallerPlanOTFull) => void
@@ -1080,7 +1094,7 @@ function DiaColumna({ fecha, nombre, jornadas, onAsignar, onQuitar, onIniciar, o
         ) : (
           jornadas.map((j) => (
             <JornadaCard key={j.plan_ot_id} jornada={j}
-                         onAsignar={onAsignar} onQuitar={onQuitar}
+                         onAsignar={onAsignar} onDetalle={onDetalle} onQuitar={onQuitar}
                          onIniciar={onIniciar} onPausar={onPausar} onFinalizar={onFinalizar} />
           ))
         )}
@@ -1089,9 +1103,10 @@ function DiaColumna({ fecha, nombre, jornadas, onAsignar, onQuitar, onIniciar, o
   )
 }
 
-function JornadaCard({ jornada, onAsignar, onQuitar, onIniciar, onPausar, onFinalizar }: {
+function JornadaCard({ jornada, onAsignar, onDetalle, onQuitar, onIniciar, onPausar, onFinalizar }: {
   jornada: TallerPlanOTFull
   onAsignar: (j: TallerPlanOTFull) => void
+  onDetalle: (j: TallerPlanOTFull) => void
   onQuitar: (j: TallerPlanOTFull) => void
   onIniciar: (j: TallerPlanOTFull) => void
   onPausar: (j: TallerPlanOTFull) => void
@@ -1148,13 +1163,26 @@ function JornadaCard({ jornada, onAsignar, onQuitar, onIniciar, onPausar, onFina
         {jornada.avance_objetivo_pct && (
           <div className="text-[9px] text-gray-500 mt-0.5">Meta {jornada.avance_objetivo_pct}%</div>
         )}
+        {(jornada.checklist_total ?? 0) > 0 && (
+          <div className="flex items-center gap-1 mt-0.5 text-[9px] text-gray-500">
+            <ListChecks className="h-3 w-3" />
+            {jornada.checklist_completados ?? 0}/{jornada.checklist_total} tareas
+            {(jornada.tiempo_estimado_total_min ?? 0) > 0 && (
+              <span className="ml-1">· {Math.round((jornada.tiempo_estimado_total_min ?? 0))}min</span>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Acciones */}
       <div className="flex gap-1 mt-1.5">
+        <button onClick={() => onDetalle(jornada)} title="Ver / editar OT"
+                className="text-[9px] px-1.5 py-0.5 rounded bg-blue-100 hover:bg-blue-200 text-blue-700 flex items-center gap-1">
+          <Pencil className="h-3 w-3" />
+        </button>
         {!finalizada && (
           <>
-            <button onClick={() => onAsignar(jornada)}
+            <button onClick={() => onAsignar(jornada)} title="Mecánicos"
                     className="text-[9px] px-1.5 py-0.5 rounded bg-gray-100 hover:bg-gray-200 flex items-center gap-1">
               <User className="h-3 w-3" />
             </button>
@@ -1234,6 +1262,225 @@ function AsignarResponsableModal({ jornada, planId, onClose }: {
         </Button>
       </ModalFooter>
     </Modal>
+  )
+}
+
+// ── Detalle / edición de la OT (jefe de taller) ─────────────────────────────
+function JornadaDetalleModal({ jornada, planId, onClose }: {
+  jornada: TallerPlanOTFull
+  planId: string
+  onClose: () => void
+}) {
+  const toast = useToast()
+  const { data: usuarios } = useUsuariosAsignablesTaller()
+  const editar = useEditarJornadaTaller(planId)
+  const { data: checklist, isLoading: loadCl } = useChecklistOtTaller(jornada.ot_id)
+  const upsert = useChecklistUpsertTaller(planId, jornada.ot_id)
+
+  const mecIniciales = (jornada.cuadrilla ?? '').split(',').map((s) => s.trim())
+    .filter((s) => (MECANICOS as readonly string[]).includes(s)).slice(0, MAX_MECANICOS)
+  const [mecanicos, setMecanicos] = useState<string[]>(mecIniciales)
+  const [responsableId, setResponsableId] = useState<string>(jornada.responsable_id ?? '')
+  const [horas, setHoras] = useState<string>(jornada.horas_planificadas != null ? String(jornada.horas_planificadas) : '')
+  const [meta, setMeta] = useState<string>(jornada.avance_objetivo_pct != null ? String(jornada.avance_objetivo_pct) : '')
+  const [obs, setObs] = useState<string>(jornada.observaciones ?? '')
+  const [nuevaTarea, setNuevaTarea] = useState('')
+  const [nuevoTiempo, setNuevoTiempo] = useState('')
+
+  function guardarCabecera() {
+    editar.mutate({
+      planOtId: jornada.plan_ot_id,
+      responsableId: responsableId || null,
+      cuadrilla: mecanicos.join(', '),
+      horasPlanificadas: horas ? Number(horas) : null,
+      avanceObjetivo: meta ? Number(meta) : null,
+      observaciones: obs.trim() || null,
+    }, {
+      onSuccess: () => { toast.success('Jornada actualizada'); onClose() },
+      onError: (err) => toast.error((err as Error).message),
+    })
+  }
+
+  function agregarTarea() {
+    if (!nuevaTarea.trim()) return
+    upsert.mutate({
+      otId: jornada.ot_id, descripcion: nuevaTarea.trim(),
+      tiempoEstimadoMin: nuevoTiempo ? Number(nuevoTiempo) : null,
+    }, {
+      onSuccess: () => { setNuevaTarea(''); setNuevoTiempo('') },
+      onError: (err) => toast.error((err as Error).message),
+    })
+  }
+
+  const items = checklist ?? []
+  const tiempoTotal = items.reduce((s, i) => s + (i.tiempo_estimado_min ?? 0), 0)
+
+  return (
+    <Modal open onClose={onClose} title={`OT ${jornada.ot_folio} · ${jornada.activo_codigo ?? ''}`}>
+      <div className="space-y-4 max-h-[72vh] overflow-y-auto pr-1">
+        {/* Cabecera de la OT */}
+        <div className="flex flex-wrap items-center gap-2 text-[11px]">
+          <span className={`px-1.5 py-0.5 rounded font-bold ${colorTipo(jornada.ot_tipo)}`}>
+            {jornada.ot_tipo.toUpperCase()}
+          </span>
+          <span className="px-1.5 py-0.5 rounded bg-gray-100 text-gray-700">{jornada.ot_estado}</span>
+          <span className="text-gray-600">{jornada.activo_nombre} {jornada.activo_patente && `· ${jornada.activo_patente}`}</span>
+          {jornada.pm_nombre && <span className="text-blue-700">· {jornada.pm_nombre}</span>}
+          <Link href={`/dashboard/ordenes-trabajo/${jornada.ot_id}`}
+                className="ml-auto text-blue-600 hover:underline flex items-center gap-1">
+            <ExternalLink className="h-3 w-3" /> Ficha completa
+          </Link>
+        </div>
+
+        {/* Campos editables de la actividad */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label className="text-xs font-medium">Responsable</label>
+            <select value={responsableId} onChange={(e) => setResponsableId(e.target.value)}
+                    className="w-full border rounded px-2 py-1.5 text-sm">
+              <option value="">Sin asignar</option>
+              {(usuarios ?? []).map((u) => (
+                <option key={u.id} value={u.id}>{u.nombre_completo ?? u.id} {u.rol ? `(${u.rol})` : ''}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs font-medium">Horas planificadas</label>
+            <Input type="number" min="0" step="0.5" value={horas} onChange={(e) => setHoras(e.target.value)} />
+          </div>
+          <div className="sm:col-span-2">
+            <label className="text-xs font-medium">Mecánicos a cargo (hasta {MAX_MECANICOS})</label>
+            <MecanicosPicker value={mecanicos} onChange={setMecanicos} />
+          </div>
+          <div>
+            <label className="text-xs font-medium">Meta de avance (%)</label>
+            <Input type="number" min="0" max="100" value={meta} onChange={(e) => setMeta(e.target.value)} />
+          </div>
+          <div>
+            <label className="text-xs font-medium">Observaciones</label>
+            <Input value={obs} onChange={(e) => setObs(e.target.value)} placeholder="opcional" />
+          </div>
+        </div>
+
+        {/* Checklist de la OT */}
+        <div className="border-t pt-3">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-sm font-semibold flex items-center gap-1">
+              <ListChecks className="h-4 w-4 text-blue-600" /> Checklist de la actividad
+            </h3>
+            <span className="text-[11px] text-gray-500 flex items-center gap-1">
+              <Clock className="h-3 w-3" /> {tiempoTotal} min estimados
+            </span>
+          </div>
+
+          {loadCl ? (
+            <div className="flex justify-center py-4"><Spinner /></div>
+          ) : items.length === 0 ? (
+            <div className="text-xs text-gray-400 py-2">Esta OT no tiene checklist. Agrega tareas abajo.</div>
+          ) : (
+            <div className="space-y-1.5">
+              {items.map((it) => (
+                <ChecklistItemRow key={it.id} item={it} otId={jornada.ot_id} planId={planId} />
+              ))}
+            </div>
+          )}
+
+          {/* Agregar tarea */}
+          <div className="flex items-end gap-2 mt-3">
+            <div className="flex-1">
+              <label className="text-[11px] font-medium text-gray-600">Nueva tarea</label>
+              <Input value={nuevaTarea} onChange={(e) => setNuevaTarea(e.target.value)}
+                     placeholder="Descripción de la tarea"
+                     onKeyDown={(e) => { if (e.key === 'Enter') agregarTarea() }} />
+            </div>
+            <div className="w-20">
+              <label className="text-[11px] font-medium text-gray-600">Min</label>
+              <Input type="number" min="0" value={nuevoTiempo} onChange={(e) => setNuevoTiempo(e.target.value)} />
+            </div>
+            <Button variant="outline" disabled={!nuevaTarea.trim() || upsert.isPending} onClick={agregarTarea}>
+              <Plus className="h-4 w-4 mr-1" /> Agregar
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      <ModalFooter>
+        <Button variant="outline" onClick={onClose}>Cerrar</Button>
+        <Button disabled={editar.isPending} onClick={guardarCabecera}>
+          {editar.isPending ? <Spinner className="h-4 w-4 mr-1" /> : null}
+          Guardar cambios
+        </Button>
+      </ModalFooter>
+    </Modal>
+  )
+}
+
+function ChecklistItemRow({ item, otId, planId }: {
+  item: ChecklistOtItem
+  otId: string
+  planId: string
+}) {
+  const toast = useToast()
+  const upsert = useChecklistUpsertTaller(planId, otId)
+  const eliminar = useChecklistEliminarTaller(planId, otId)
+  const [desc, setDesc] = useState(item.descripcion)
+  const [tiempo, setTiempo] = useState(item.tiempo_estimado_min != null ? String(item.tiempo_estimado_min) : '')
+  const [oblig, setOblig] = useState(item.obligatorio)
+  const [foto, setFoto] = useState(item.requiere_foto)
+  const ejecutado = !!item.resultado && item.resultado !== 'pendiente'
+
+  function guardar() {
+    upsert.mutate({
+      otId, itemId: item.id, descripcion: desc, obligatorio: oblig,
+      requiereFoto: foto, tiempoEstimadoMin: tiempo ? Number(tiempo) : null,
+    }, {
+      onSuccess: () => toast.success('Tarea guardada'),
+      onError: (err) => toast.error((err as Error).message),
+    })
+  }
+
+  return (
+    <div className="border rounded p-2 bg-gray-50">
+      <div className="flex items-center gap-2">
+        <span className="text-[10px] text-gray-400 w-5 text-right">{item.orden}</span>
+        <div className="flex-1">
+          <Input value={desc} onChange={(e) => setDesc(e.target.value)} className="h-8 text-sm" />
+        </div>
+        <Clock className="h-3 w-3 text-gray-400 shrink-0" />
+        <div className="w-20 shrink-0">
+          <Input type="number" min="0" value={tiempo} onChange={(e) => setTiempo(e.target.value)}
+                 className="h-8 text-sm" placeholder="min" />
+        </div>
+      </div>
+      <div className="flex items-center gap-3 mt-1.5 text-[11px] pl-7">
+        <label className="flex items-center gap-1 cursor-pointer">
+          <input type="checkbox" checked={oblig} onChange={(e) => setOblig(e.target.checked)} /> Obligatoria
+        </label>
+        <label className="flex items-center gap-1 cursor-pointer">
+          <input type="checkbox" checked={foto} onChange={(e) => setFoto(e.target.checked)} />
+          <Camera className="h-3 w-3" /> Pide foto
+        </label>
+        {ejecutado && (
+          <span className={`px-1.5 py-0.5 rounded font-medium ${
+            item.resultado === 'ok' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+          }`}>{item.resultado}</span>
+        )}
+        <div className="ml-auto flex items-center gap-1">
+          <button onClick={guardar} disabled={upsert.isPending} title="Guardar tarea"
+                  className="px-1.5 py-0.5 rounded bg-blue-100 hover:bg-blue-200 text-blue-700">
+            <CheckCircle2 className="h-3.5 w-3.5" />
+          </button>
+          {!ejecutado && (
+            <button onClick={() => eliminar.mutate(item.id, {
+                      onError: (err) => toast.error((err as Error).message),
+                    })} disabled={eliminar.isPending} title="Eliminar tarea"
+                    className="px-1.5 py-0.5 rounded bg-red-50 hover:bg-red-100 text-red-600">
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
   )
 }
 
