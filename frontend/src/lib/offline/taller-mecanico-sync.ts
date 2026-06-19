@@ -1,0 +1,210 @@
+// Lógica offline-first de la app del mecánico de taller.
+// - Cache de OTs liberadas y de su checklist V03 (para operar sin internet).
+// - Cola de cambios pendientes (resultado/observación/foto/cronómetro).
+// - Overlay: aplica lo pendiente sobre la cache para que la UI refleje lo local.
+// - Sync: sube fotos y aplica los cambios contra Supabase al reconectar.
+
+import { supabase } from '@/lib/supabase'
+import { getChecklistV3OT, type ChecklistV3Item } from '@/lib/services/taller-plan-semanal'
+import { actualizarItem, subirFotoItem } from '@/lib/services/checklist-v2'
+import { iniciarOT, pausarOT, finalizarOT } from '@/lib/services/ordenes-trabajo'
+import { tallerDB, newId, type TallerPending } from './taller-db'
+
+export type MecanicoOT = {
+  ot_id: string
+  ot_folio: string
+  ot_tipo: string
+  ot_estado: string
+  ot_prioridad: string
+  preparacion_ok_at: string | null
+  fecha_programada: string | null
+  activo_id: string | null
+  activo_codigo: string | null
+  activo_nombre: string | null
+  activo_patente: string | null
+  cuadrilla: string | null
+  responsable: string | null
+  checklist_total: number | null
+  checklist_completados: number | null
+  tiempo_estimado_total_min: number | null
+}
+
+const isOnline = () => (typeof navigator === 'undefined' ? true : navigator.onLine)
+
+// ── OTs ─────────────────────────────────────────────────────────────────────
+export async function fetchAndCacheOTs(): Promise<MecanicoOT[]> {
+  const { data, error } = await supabase.from('v_taller_mecanico_ots').select('*')
+  if (error) throw error
+  const list = (data ?? []) as MecanicoOT[]
+  await tallerDB().cache.put({ key: 'ots', value: list, updated_at: new Date().toISOString() })
+  return list
+}
+
+export async function getCachedOTs(): Promise<MecanicoOT[]> {
+  const row = await tallerDB().cache.get('ots')
+  return (row?.value as MecanicoOT[]) ?? []
+}
+
+export async function getOTs(): Promise<MecanicoOT[]> {
+  if (isOnline()) { try { return await fetchAndCacheOTs() } catch { return getCachedOTs() } }
+  return getCachedOTs()
+}
+
+// ── Checklist ────────────────────────────────────────────────────────────────
+async function fetchAndCacheChecklist(otId: string): Promise<ChecklistV3Item[]> {
+  const items = await getChecklistV3OT(otId)
+  await tallerDB().cache.put({ key: `checklist:${otId}`, value: items, updated_at: new Date().toISOString() })
+  return items
+}
+
+async function getCachedChecklist(otId: string): Promise<ChecklistV3Item[]> {
+  const row = await tallerDB().cache.get(`checklist:${otId}`)
+  return (row?.value as ChecklistV3Item[]) ?? []
+}
+
+/** Checklist con lo pendiente aplicado encima (para la UI). */
+export async function getChecklistMecanico(otId: string): Promise<ChecklistV3Item[]> {
+  let base: ChecklistV3Item[]
+  if (isOnline()) {
+    try { base = await fetchAndCacheChecklist(otId) } catch { base = await getCachedChecklist(otId) }
+  } else {
+    base = await getCachedChecklist(otId)
+  }
+
+  const pend = (await tallerDB().pending.where('ot_id').equals(otId).toArray())
+    .filter((p) => p.kind === 'item')
+    .sort((a, b) => a.created_at.localeCompare(b.created_at))
+  if (pend.length === 0) return base
+
+  // Acumular pendientes por ítem (en orden cronológico).
+  const acc = new Map<string, { resultado?: string; observacion?: string | null; foto_blob_id?: string | null }>()
+  for (const p of pend) {
+    if (!p.instance_item_id) continue
+    const cur = acc.get(p.instance_item_id) ?? {}
+    if (p.resultado !== undefined) cur.resultado = p.resultado
+    if (p.observacion !== undefined) cur.observacion = p.observacion
+    if (p.foto_blob_id) cur.foto_blob_id = p.foto_blob_id
+    acc.set(p.instance_item_id, cur)
+  }
+
+  return Promise.all(base.map(async (it) => {
+    const a = acc.get(it.instance_item_id)
+    if (!a) return it
+    let foto = it.foto_url
+    if (a.foto_blob_id) {
+      const b = await tallerDB().blobs.get(a.foto_blob_id)
+      if (b) foto = URL.createObjectURL(b.blob)
+    }
+    return {
+      ...it,
+      resultado: (a.resultado as ChecklistV3Item['resultado']) ?? it.resultado,
+      observacion: a.observacion !== undefined ? a.observacion : it.observacion,
+      foto_url: foto,
+    }
+  }))
+}
+
+// ── Encolar cambios ──────────────────────────────────────────────────────────
+export async function queueItem(params: {
+  otId: string
+  instanceItemId: string
+  instanceId: string
+  resultado?: 'ok' | 'no_ok' | 'na'
+  observacion?: string | null
+  file?: File | null
+}): Promise<void> {
+  const db = tallerDB()
+  let blobId: string | null = null
+  if (params.file) {
+    blobId = newId()
+    await db.blobs.put({ blob_id: blobId, blob: params.file, mime: params.file.type || 'image/jpeg' })
+  }
+  const row: TallerPending = {
+    local_id: newId(), client_uuid: newId(), ot_id: params.otId, kind: 'item',
+    instance_item_id: params.instanceItemId, instance_id: params.instanceId,
+    resultado: params.resultado,
+    observacion: params.observacion,
+    foto_blob_id: blobId,
+    sync_status: 'pending', retries: 0, last_error: null, created_at: new Date().toISOString(),
+  }
+  await db.pending.put(row)
+  if (isOnline()) { try { await syncTallerPending() } catch { /* queda en cola */ } }
+}
+
+export async function queueTiming(
+  otId: string, accion: 'iniciar' | 'pausar' | 'finalizar', userId: string, observaciones?: string | null,
+): Promise<void> {
+  const row: TallerPending = {
+    local_id: newId(), client_uuid: newId(), ot_id: otId, kind: 'timing',
+    accion, user_id: userId, observaciones: observaciones ?? null,
+    sync_status: 'pending', retries: 0, last_error: null, created_at: new Date().toISOString(),
+  }
+  await tallerDB().pending.put(row)
+
+  // Optimista: reflejar el cambio de estado en la cache local de OTs.
+  const cacheRow = await tallerDB().cache.get('ots')
+  if (cacheRow) {
+    let list = (cacheRow.value as MecanicoOT[]) ?? []
+    if (accion === 'finalizar') {
+      list = list.filter((o) => o.ot_id !== otId)
+    } else {
+      const nuevo = accion === 'iniciar' ? 'en_ejecucion' : 'pausada'
+      list = list.map((o) => (o.ot_id === otId ? { ...o, ot_estado: nuevo } : o))
+    }
+    await tallerDB().cache.put({ key: 'ots', value: list, updated_at: new Date().toISOString() })
+  }
+
+  if (isOnline()) { try { await syncTallerPending() } catch { /* queda en cola */ } }
+}
+
+// ── Sync ─────────────────────────────────────────────────────────────────────
+export async function syncTallerPending(): Promise<{ ok: number; failed: number }> {
+  if (!isOnline()) return { ok: 0, failed: 0 }
+  const db = tallerDB()
+  const items = (await db.pending.toArray()).sort((a, b) => a.created_at.localeCompare(b.created_at))
+  let ok = 0, failed = 0
+  for (const p of items) {
+    try {
+      if (p.kind === 'item') {
+        let fotoUrl: string | undefined
+        if (p.foto_blob_id && p.instance_id && p.instance_item_id) {
+          const b = await db.blobs.get(p.foto_blob_id)
+          if (b) fotoUrl = await subirFotoItem(p.instance_id, p.instance_item_id, b.blob)
+        }
+        await actualizarItem(p.instance_item_id!, {
+          resultado: p.resultado,
+          observacion: p.observacion ?? undefined,
+          foto_url: fotoUrl,
+        })
+        if (p.foto_blob_id) await db.blobs.delete(p.foto_blob_id)
+      } else {
+        const r = p.accion === 'iniciar' ? await iniciarOT(p.ot_id, p.user_id!)
+          : p.accion === 'pausar' ? await pausarOT(p.ot_id, p.user_id!, p.observaciones ?? undefined)
+          : await finalizarOT(p.ot_id, p.user_id!, p.observaciones ?? undefined)
+        if (r.error) throw r.error
+      }
+      await db.pending.delete(p.local_id)
+      ok++
+    } catch (e) {
+      failed++
+      await db.pending.update(p.local_id, {
+        sync_status: 'error', retries: (p.retries || 0) + 1, last_error: (e as Error).message,
+      })
+    }
+  }
+  return { ok, failed }
+}
+
+export async function getPendingCount(): Promise<number> {
+  return tallerDB().pending.count()
+}
+
+/** Pre-cachea la lista y el checklist de cada OT para operar sin internet. */
+export async function prepareTallerOffline(otIds: string[]): Promise<number> {
+  await fetchAndCacheOTs().catch(() => undefined)
+  let n = 0
+  for (const id of otIds) {
+    try { await fetchAndCacheChecklist(id); n++ } catch { /* sigue con las demás */ }
+  }
+  return n
+}
