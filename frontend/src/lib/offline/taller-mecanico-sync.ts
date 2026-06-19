@@ -7,8 +7,16 @@
 import { supabase } from '@/lib/supabase'
 import { getChecklistV3OT, type ChecklistV3Item } from '@/lib/services/taller-plan-semanal'
 import { actualizarItem, subirFotoItem } from '@/lib/services/checklist-v2'
-import { iniciarOT, pausarOT, finalizarOT } from '@/lib/services/ordenes-trabajo'
+import { iniciarOT, pausarOT } from '@/lib/services/ordenes-trabajo'
 import { tallerDB, newId, type TallerPending } from './taller-db'
+
+const FIRMA_BUCKET = 'calama-firmas'
+async function subirFirmaMecanico(blob: Blob): Promise<string> {
+  const path = `taller-mecanico-firmas/${newId()}.png`
+  const { error } = await supabase.storage.from(FIRMA_BUCKET).upload(path, blob, { contentType: 'image/png' })
+  if (error) throw error
+  return supabase.storage.from(FIRMA_BUCKET).getPublicUrl(path).data.publicUrl
+}
 
 export type MecanicoOT = {
   ot_id: string
@@ -132,14 +140,22 @@ export async function queueItem(params: {
 }
 
 export async function queueTiming(
-  otId: string, accion: 'iniciar' | 'pausar' | 'finalizar', userId: string, observaciones?: string | null,
+  otId: string, accion: 'iniciar' | 'pausar' | 'finalizar', userId: string,
+  opts?: { observaciones?: string | null; conObservaciones?: boolean; firma?: File | Blob | null },
 ): Promise<void> {
+  const db = tallerDB()
+  let firmaBlobId: string | null = null
+  if (opts?.firma) {
+    firmaBlobId = newId()
+    await db.blobs.put({ blob_id: firmaBlobId, blob: opts.firma, mime: 'image/png' })
+  }
   const row: TallerPending = {
     local_id: newId(), client_uuid: newId(), ot_id: otId, kind: 'timing',
-    accion, user_id: userId, observaciones: observaciones ?? null,
+    accion, user_id: userId, observaciones: opts?.observaciones ?? null,
+    con_observaciones: opts?.conObservaciones ?? false, firma_blob_id: firmaBlobId,
     sync_status: 'pending', retries: 0, last_error: null, created_at: new Date().toISOString(),
   }
-  await tallerDB().pending.put(row)
+  await db.pending.put(row)
 
   // Optimista: reflejar el cambio de estado en la cache local de OTs.
   const cacheRow = await tallerDB().cache.get('ots')
@@ -177,10 +193,22 @@ export async function syncTallerPending(): Promise<{ ok: number; failed: number 
           foto_url: fotoUrl,
         })
         if (p.foto_blob_id) await db.blobs.delete(p.foto_blob_id)
+      } else if (p.accion === 'finalizar') {
+        // Finalizar requiere firma del técnico → setea firma y transiciona vía RPC.
+        let firmaUrl: string | null = null
+        if (p.firma_blob_id) {
+          const b = await db.blobs.get(p.firma_blob_id)
+          if (b) firmaUrl = await subirFirmaMecanico(b.blob)
+        }
+        const { error } = await supabase.rpc('rpc_taller_finalizar_mecanico', {
+          p_ot_id: p.ot_id, p_firma_tecnico_url: firmaUrl,
+          p_con_observaciones: p.con_observaciones ?? false, p_observaciones: p.observaciones ?? null,
+        })
+        if (error) throw error
+        if (p.firma_blob_id) await db.blobs.delete(p.firma_blob_id)
       } else {
         const r = p.accion === 'iniciar' ? await iniciarOT(p.ot_id, p.user_id!)
-          : p.accion === 'pausar' ? await pausarOT(p.ot_id, p.user_id!, p.observaciones ?? undefined)
-          : await finalizarOT(p.ot_id, p.user_id!, p.observaciones ?? undefined)
+          : await pausarOT(p.ot_id, p.user_id!, p.observaciones ?? undefined)
         if (r.error) throw r.error
       }
       await db.pending.delete(p.local_id)

@@ -61,8 +61,12 @@ export function useTimingMecanico(otId: string) {
   const qc = useQueryClient()
   return useMutation({
     networkMode: 'always',
-    mutationFn: (p: { accion: 'iniciar' | 'pausar' | 'finalizar'; userId: string; observaciones?: string | null }) =>
-      queueTiming(otId, p.accion, p.userId, p.observaciones),
+    mutationFn: (p: {
+      accion: 'iniciar' | 'pausar' | 'finalizar'; userId: string
+      observaciones?: string | null; conObservaciones?: boolean; firma?: File | Blob | null
+    }) => queueTiming(otId, p.accion, p.userId, {
+      observaciones: p.observaciones, conObservaciones: p.conObservaciones, firma: p.firma,
+    }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: keyChecklist(otId) })
       qc.invalidateQueries({ queryKey: KEY_OTS })

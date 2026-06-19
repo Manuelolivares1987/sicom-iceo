@@ -7,6 +7,9 @@ import {
   ArrowLeft, Camera, Check, X, Minus, Play, Pause, CheckCircle2, Loader2, WifiOff, AlertTriangle, Clock,
 } from 'lucide-react'
 import { Spinner } from '@/components/ui/spinner'
+import { Button } from '@/components/ui/button'
+import { Modal, ModalFooter } from '@/components/ui/modal'
+import { SignaturePad } from '@/components/ui/signature-pad'
 import { useAuth } from '@/contexts/auth-context'
 import { BLOQUE_LABELS } from '@/lib/services/checklist-v2'
 import type { ChecklistV3Item } from '@/lib/services/taller-plan-semanal'
@@ -14,6 +17,15 @@ import {
   useMecanicoOTs, useMecanicoChecklist, useMarcarItem, useTimingMecanico,
   useAutoSyncTaller, useNetworkStatus,
 } from '@/hooks/use-taller-mecanico'
+
+function dataUrlToBlob(dataUrl: string): Blob {
+  const [meta, b64] = dataUrl.split(',')
+  const mime = meta.match(/:(.*?);/)?.[1] ?? 'image/png'
+  const bin = atob(b64)
+  const arr = new Uint8Array(bin.length)
+  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i)
+  return new Blob([arr], { type: mime })
+}
 
 function bloqueLabel(b: string): string {
   const known = (BLOQUE_LABELS as Record<string, string>)[b]
@@ -63,6 +75,10 @@ export default function MecanicoOTPage() {
 
   const [observations, setObservations] = useState<Record<string, string>>({})
   const fileRefs = useRef<Record<string, HTMLInputElement | null>>({})
+  const [finalizar, setFinalizar] = useState(false)
+  const [firma, setFirma] = useState('')
+  const [conObs, setConObs] = useState(false)
+  const [obsFin, setObsFin] = useState('')
 
   const estado = ot?.ot_estado ?? 'asignada'
 
@@ -81,11 +97,19 @@ export default function MecanicoOTPage() {
   const hechos = visibles.filter((i) => i.resultado && i.resultado !== 'pendiente').length
   const pendientesOblig = visibles.filter((i) => i.obligatorio && (!i.resultado || i.resultado === 'pendiente')).length
 
-  function doTiming(accion: 'iniciar' | 'pausar' | 'finalizar') {
-    if (accion === 'finalizar' && pendientesOblig > 0) {
-      if (!confirm(`Quedan ${pendientesOblig} tareas obligatorias sin marcar. ¿Finalizar igual?`)) return
-    }
+  function doTiming(accion: 'iniciar' | 'pausar') {
     timing.mutate({ accion, userId })
+  }
+  function abrirFinalizar() {
+    if (pendientesOblig > 0 && !confirm(`Quedan ${pendientesOblig} tareas obligatorias sin marcar. ¿Finalizar igual?`)) return
+    setFirma(''); setConObs(false); setObsFin(''); setFinalizar(true)
+  }
+  function confirmFinalizar() {
+    if (!firma) return
+    timing.mutate(
+      { accion: 'finalizar', userId, firma: dataUrlToBlob(firma), conObservaciones: conObs, observaciones: obsFin.trim() || null },
+      { onSuccess: () => setFinalizar(false) },
+    )
   }
 
   function setResultado(it: ChecklistV3Item, v: 'ok' | 'no_ok' | 'na') {
@@ -147,7 +171,7 @@ export default function MecanicoOTPage() {
           </button>
         )}
         {(estado === 'en_ejecucion' || estado === 'pausada') && (
-          <button onClick={() => doTiming('finalizar')} disabled={timing.isPending}
+          <button onClick={abrirFinalizar} disabled={timing.isPending}
                   className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-blue-600 py-3 text-sm font-semibold text-white disabled:opacity-50">
             <CheckCircle2 className="h-4 w-4" /> Finalizar
           </button>
@@ -214,6 +238,33 @@ export default function MecanicoOTPage() {
             </div>
           </div>
         ))
+      )}
+
+      {/* Modal finalizar con firma del técnico */}
+      {finalizar && (
+        <Modal open onClose={() => setFinalizar(false)} title="Finalizar OT">
+          <div className="space-y-3">
+            <p className="text-sm text-gray-600">
+              Firma para cerrar tu trabajo. Las tareas NO OK ya se reportaron como No Conformidad.
+            </p>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={conObs} onChange={(e) => setConObs(e.target.checked)} />
+              Finalizar con observaciones
+            </label>
+            {conObs && (
+              <textarea value={obsFin} onChange={(e) => setObsFin(e.target.value)} rows={2}
+                        placeholder="Observaciones…" className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
+            )}
+            <SignaturePad label="Firma del técnico (obligatoria)" onCapture={setFirma} />
+          </div>
+          <ModalFooter>
+            <Button variant="outline" onClick={() => setFinalizar(false)}>Cancelar</Button>
+            <Button disabled={!firma || (conObs && !obsFin.trim()) || timing.isPending} onClick={confirmFinalizar}>
+              {timing.isPending ? <Spinner className="h-4 w-4 mr-1" /> : <CheckCircle2 className="h-4 w-4 mr-1" />}
+              Finalizar
+            </Button>
+          </ModalFooter>
+        </Modal>
       )}
     </div>
   )

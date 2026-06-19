@@ -26,6 +26,8 @@ export type TallerPending = {
   accion?: 'iniciar' | 'pausar' | 'finalizar'
   user_id?: string
   observaciones?: string | null
+  con_observaciones?: boolean
+  firma_blob_id?: string | null   // firma del técnico para finalizar
   // control
   sync_status: 'pending' | 'error'
   retries: number
