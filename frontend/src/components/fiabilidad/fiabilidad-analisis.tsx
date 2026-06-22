@@ -127,6 +127,7 @@ export function FiabilidadAnalisis({ readOnly = false }: { readOnly?: boolean } 
       { header: 'VIN / Chasis', key: 'vin_chasis', width: 22 },
       { header: 'N° Motor', key: 'numero_motor', width: 18 },
       { header: 'Estado (GPS)', key: 'estado_dia', width: 20 },
+      { header: 'Zona', key: 'zona', width: 16 },
       { header: 'Faena', key: 'faena', width: 18 },
       { header: 'Ubicación', key: 'ubicacion', width: 18 },
       { header: 'Lugar físico', key: 'lugar_fisico', width: 26 },
@@ -138,11 +139,11 @@ export function FiabilidadAnalisis({ readOnly = false }: { readOnly?: boolean } 
       { header: 'Últ. arriendo cliente', key: 'ult_cliente', width: 22 },
       { header: 'Últ. arriendo lugar', key: 'ult_lugar', width: 20 },
       { header: 'Días observados', key: 'dias_observados', width: 14 },
-      { header: 'A', key: 'dias_a', width: 6 }, { header: 'D', key: 'dias_d', width: 6 },
-      { header: 'U', key: 'dias_u', width: 6 }, { header: 'L', key: 'dias_l', width: 6 },
-      { header: 'M', key: 'dias_m', width: 6 }, { header: 'T', key: 'dias_t', width: 6 },
-      { header: 'F', key: 'dias_f', width: 6 },
       { header: 'Días UP', key: 'dias_up', width: 9 }, { header: 'Días DOWN', key: 'dias_down', width: 10 },
+      // Desglose de días por estado (todas las letras), calculado desde la matriz.
+      ...ESTADO_ORDEN.map((s) => ({ header: `${s} — ${ESTADO_LABELS[s]}`, key: `dias_${s.toLowerCase()}`, width: 14 })),
+      { header: 'Total letras (=Días obs)', key: 'dias_letras_total', width: 18 },
+      { header: 'Cuadre (letras = días obs)', key: 'cuadre', width: 18 },
       { header: 'N° Fallas', key: 'eventos_falla', width: 10 },
       { header: 'MTBF (d)', key: 'mtbf_dias', width: 10 }, { header: 'MTTR (d)', key: 'mttr_dias', width: 10 },
       { header: 'Disp. inherente %', key: 'disp_inh', width: 15 },
@@ -151,10 +152,30 @@ export function FiabilidadAnalisis({ readOnly = false }: { readOnly?: boolean } 
     ]
     ws.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } }
     ws.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A8A' } }
+    // Días por letra desde la matriz diaria (incluye todas las letras: A..V).
+    // UP = A,C,L,U,D,V ; DOWN = M,T,F,R,H (down operacional, incluye recepción
+    // y habilitación). Suma de letras = días observados.
+    const cuentaPorActivo = new Map<string, Record<string, number>>()
+    for (const c of matriz) {
+      const r = cuentaPorActivo.get(c.activo_id) ?? {}
+      r[c.estado_codigo] = (r[c.estado_codigo] ?? 0) + 1
+      cuentaPorActivo.set(c.activo_id, r)
+    }
+    const DOWN_LETRAS = new Set(['M', 'T', 'F', 'R', 'H'])
     for (const e of rows) {
       const code = estadoActualPorActivo.get(e.activo_id)
+      const cuenta = cuentaPorActivo.get(e.activo_id) ?? {}
+      const porLetra = Object.fromEntries(ESTADO_ORDEN.map((s) => [`dias_${s.toLowerCase()}`, cuenta[s] ?? 0]))
+      const upCalc = ESTADO_ORDEN.reduce((a, s) => a + (DOWN_LETRAS.has(s) ? 0 : (cuenta[s] ?? 0)), 0)
+      const downCalc = ESTADO_ORDEN.reduce((a, s) => a + (DOWN_LETRAS.has(s) ? (cuenta[s] ?? 0) : 0), 0)
+      const totalLetras = upCalc + downCalc
       ws.addRow({
         ...e,
+        ...porLetra,
+        dias_up: upCalc,
+        dias_down: downCalc,
+        dias_letras_total: totalLetras,
+        cuadre: totalLetras === Number(e.dias_observados) ? 'OK' : `≠ (${totalLetras}/${e.dias_observados})`,
         estado_dia: code ? `${code} — ${ESTADO_LABELS[code] ?? code}` : '—',
         contratos_dias_txt: (e.contratos_dias ?? []).map((c) => `${c.codigo}: ${c.dias} d`).join('; '),
         disp_inh: Math.round(Number(e.disponibilidad_inherente) * 100),

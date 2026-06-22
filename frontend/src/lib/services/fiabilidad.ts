@@ -132,6 +132,7 @@ export interface ActivoFiabilidadDetalle extends FiabilidadActivo {
   faena?: string | null
   ubicacion?: string | null
   lugar_fisico?: string | null
+  zona?: string | null
   dias_arriendo_total?: number
   contratos_dias?: Array<{ codigo: string; cliente: string | null; dias: number }>
   ult_cliente?: string | null
@@ -164,7 +165,7 @@ export async function getDetalleFiabilidadFlota(
   const { data: activos, error: errActivos } = await supabase
     .from('activos')
     .select(
-      'id, patente, codigo, nombre, tipo, anio_fabricacion, categoria_uso, cliente_actual, capacidad, potencia, vin_chasis, numero_motor, estado_comercial, ubicacion_actual, contrato:contratos(codigo, cliente), faena:faenas(nombre), modelo:modelos(nombre, marca:marcas(nombre))',
+      'id, patente, codigo, nombre, tipo, anio_fabricacion, categoria_uso, cliente_actual, capacidad, potencia, vin_chasis, numero_motor, estado_comercial, ubicacion_actual, operacion, contrato:contratos(codigo, cliente), faena:faenas(nombre), modelo:modelos(nombre, marca:marcas(nombre))',
     )
     .in('tipo', ['camion_cisterna', 'camion', 'camioneta', 'lubrimovil', 'equipo_menor'])
     .neq('estado', 'dado_baja')
@@ -213,6 +214,7 @@ export async function getDetalleFiabilidadFlota(
         faena: a.faena?.nombre ?? null,
         ubicacion: a.ubicacion_actual ?? null,
         lugar_fisico: [a.faena?.nombre, a.ubicacion_actual].filter(Boolean).join(' · ') || null,
+        zona: a.operacion ?? null,
         contratos_dias: (diasMap.get(a.id) ?? []).sort((x, y) => y.dias - x.dias),
         dias_arriendo_total: (diasMap.get(a.id) ?? []).reduce((s, c) => s + c.dias, 0),
         ult_cliente: ultMap.get(a.id)?.cliente ?? null,
