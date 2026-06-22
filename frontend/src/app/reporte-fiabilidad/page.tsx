@@ -273,7 +273,7 @@ export default function ReporteFiabilidadPublicoPage() {
       // Desglose de días por estado (letra). UP = todo salvo M/T/F; DOWN = M+T+F.
       ...ORDEN.map((s) => ({ header: `${s} — ${LABEL[s]}`, key: `dias_${s}`, width: 14 })),
       { header: 'Total letras (=Días obs)', key: 'dias_letras_total', width: 18 },
-      { header: 'Cuadre UP/DOWN', key: 'cuadre', width: 16 },
+      { header: 'Cuadre (letras = días obs)', key: 'cuadre', width: 18 },
       { header: 'Eventos falla', key: 'eventos_falla', width: 12 },
       { header: 'MTBF (días)', key: 'mtbf_dias', width: 11 },
       { header: 'MTTR (días)', key: 'mttr_dias', width: 11 },
@@ -283,20 +283,24 @@ export default function ReporteFiabilidadPublicoPage() {
     ws.getRow(1).font = { bold: true }
     ws.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0B2A4A' } }
     ws.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } }
-    const DOWN_LETRAS = new Set(['M', 'T', 'F'])
+    // DOWN operacional = M,T,F (fallas) + R (recepción) + H (habilitación).
+    // UP = A,C,L,U,D,V. (Difiere del UP/DOWN del backend, que solo cuenta M,T,F
+    // para MTBF/MTTR; aquí se recalcula desde la matriz para el Excel.)
+    const DOWN_LETRAS = new Set(['M', 'T', 'F', 'R', 'H'])
     for (const e of equiposFiltrados) {
       const code = estadoActual.get(e.activo_id)
       const cuenta = diasPorLetra.get(e.activo_id) ?? {}
       const porLetra = Object.fromEntries(ORDEN.map((s) => [`dias_${s}`, cuenta[s] ?? 0]))
-      const totalLetras = ORDEN.reduce((a, s) => a + (cuenta[s] ?? 0), 0)
       const upCalc = ORDEN.reduce((a, s) => a + (DOWN_LETRAS.has(s) ? 0 : (cuenta[s] ?? 0)), 0)
       const downCalc = ORDEN.reduce((a, s) => a + (DOWN_LETRAS.has(s) ? (cuenta[s] ?? 0) : 0), 0)
-      const cuadra = upCalc === Number(e.dias_up) && downCalc === Number(e.dias_down)
+      const totalLetras = upCalc + downCalc
       ws.addRow({
         ...e,
+        dias_up: upCalc,
+        dias_down: downCalc,
         ...porLetra,
         dias_letras_total: totalLetras,
-        cuadre: cuadra ? 'OK' : `≠ (UP ${upCalc}/${e.dias_up}, DOWN ${downCalc}/${e.dias_down})`,
+        cuadre: totalLetras === Number(e.dias_observados) ? 'OK' : `≠ (${totalLetras}/${e.dias_observados})`,
         estado_dia: code ? `${code} — ${LABEL[code] ?? code}` : '—',
         contratos_dias_txt: (e.contratos_dias ?? []).map((c) => `${c.codigo}: ${c.dias} d`).join('; '),
         ult_desde: e.ult_desde ? String(e.ult_desde).slice(0, 10) : '',
