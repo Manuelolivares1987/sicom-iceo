@@ -171,3 +171,12 @@ export async function getCamionesCacheFranke(): Promise<any[]> {
   const r = await frankeDB().cache.get('camiones')
   return (r?.value as any[]) ?? []
 }
+
+// Cache del catálogo de despacho (empresa → equipo) para operar offline.
+export async function cacheCatalogoFranke(catalogo: unknown[]): Promise<void> {
+  await frankeDB().cache.put({ key: 'catalogo_despacho', value: catalogo, updated_at: new Date().toISOString() })
+}
+export async function getCatalogoCacheFranke(): Promise<any[]> {
+  const r = await frankeDB().cache.get('catalogo_despacho')
+  return (r?.value as any[]) ?? []
+}

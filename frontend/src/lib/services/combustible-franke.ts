@@ -17,6 +17,17 @@ export async function getCamionesFranke() {
   return { data: data ?? [], error }
 }
 
+// Catálogo de despacho: empresas + sus equipos (desde el histórico cargado).
+// Alimenta el selector en cascada de la app del despachador (empresa → equipo).
+export async function getCatalogoDespachoFranke() {
+  const { data, error } = await supabase
+    .from('combustible_abastecimiento_historico')
+    .select('cliente, equipo_codigo, equipo_tipo')
+    .order('cliente')
+    .order('equipo_codigo')
+  return { data: data ?? [], error }
+}
+
 export async function getHistoricoAbastecimientoCliente() {
   const { data, error } = await supabase
     .from('v_abastecimiento_historico_cliente')

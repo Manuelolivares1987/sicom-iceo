@@ -7,16 +7,21 @@ import {
 } from 'lucide-react'
 import { SignaturePad } from '@/components/ui/signature-pad'
 import { useAuth } from '@/contexts/auth-context'
-import { getCamionesFranke } from '@/lib/services/combustible-franke'
+import { getCamionesFranke, getCatalogoDespachoFranke } from '@/lib/services/combustible-franke'
 import {
   smartRegistrarVentaFranke, syncFrankePending, getFrankeCounters, getFrankeVentasLocales,
-  cacheCamionesFranke, getCamionesCacheFranke, type VentaFrankeInput,
+  cacheCamionesFranke, getCamionesCacheFranke,
+  cacheCatalogoFranke, getCatalogoCacheFranke, type VentaFrankeInput,
 } from '@/lib/offline/franke-ventas-sync'
+
+type CatalogoItem = { cliente: string; equipo_codigo: string | null; equipo_tipo: string | null }
 
 export default function FrankeVentaPage() {
   const { perfil } = useAuth()
   const [online, setOnline] = useState(true)
   const [camiones, setCamiones] = useState<any[]>([])
+  const [catalogo, setCatalogo] = useState<CatalogoItem[]>([])
+  const [manual, setManual] = useState(false)
   const [counters, setCounters] = useState({ pendientes: 0, errores: 0, sincronizadas: 0 })
   const [locales, setLocales] = useState<any[]>([])
   const [syncing, setSyncing] = useState(false)
@@ -58,10 +63,14 @@ export default function FrankeVentaPage() {
         const { data } = await getCamionesFranke()
         if (data?.length) { setCamiones(data); await cacheCamionesFranke(data) }
         else setCamiones(await getCamionesCacheFranke())
+        const { data: cat } = await getCatalogoDespachoFranke()
+        if (cat?.length) { setCatalogo(cat as CatalogoItem[]); await cacheCatalogoFranke(cat) }
+        else setCatalogo(await getCatalogoCacheFranke())
         const c = await getFrankeCounters()
         if (c.pendientes > 0 || c.errores > 0) await syncFrankePending()
       } else {
         setCamiones(await getCamionesCacheFranke())
+        setCatalogo(await getCatalogoCacheFranke())
       }
       await refresh()
     })()
@@ -71,6 +80,24 @@ export default function FrankeVentaPage() {
     (p) => setCoords({ lat: p.coords.latitude, lng: p.coords.longitude }), () => {}, { enableHighAccuracy: true, timeout: 8000 })
 
   const total = useMemo(() => (litros && precio ? Number(litros) * Number(precio) : 0), [litros, precio])
+
+  // Empresas (únicas) y equipos asociados a la empresa elegida.
+  const empresas = useMemo(
+    () => Array.from(new Set(catalogo.map((c) => c.cliente).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'es')),
+    [catalogo],
+  )
+  const equiposEmpresa = useMemo(
+    () => catalogo.filter((c) => c.cliente === cliente && (c.equipo_codigo || c.equipo_tipo)),
+    [catalogo, cliente],
+  )
+  // value del <select> de equipo = código (o tipo si no hay código); al elegir, fija código y tipo.
+  const equipoVal = (e: CatalogoItem) => e.equipo_codigo || e.equipo_tipo || ''
+  const equipoLabel = (e: CatalogoItem) => [e.equipo_codigo, e.equipo_tipo].filter(Boolean).join(' · ') || '—'
+  const onEmpresa = (v: string) => { setCliente(v); setEquipoCod(''); setEquipoTipo('') }
+  const onEquipo = (v: string) => {
+    const e = equiposEmpresa.find((x) => equipoVal(x) === v)
+    setEquipoCod(e?.equipo_codigo ?? ''); setEquipoTipo(e?.equipo_tipo ?? '')
+  }
 
   const fileToBlob = (f: File | null) => f as Blob | null
 
@@ -126,11 +153,32 @@ export default function FrankeVentaPage() {
       <div className="p-3 space-y-3 max-w-xl mx-auto">
         <Box>
           <Sel label="Camión*" value={camion} onChange={setCamion} options={camiones.map((c) => [c.id, `${c.patente ?? c.codigo} (${Number(c.stock_teorico_lt).toLocaleString('es-CL')} L)`])} />
-          <In label="Cliente*" value={cliente} onChange={setCliente} />
-          <div className="grid grid-cols-2 gap-2">
-            <In label="Código equipo" value={equipoCod} onChange={setEquipoCod} />
-            <In label="Tipo equipo" value={equipoTipo} onChange={setEquipoTipo} />
-          </div>
+
+          {!manual && empresas.length > 0 ? (
+            <>
+              <Sel label="Empresa*" value={cliente} onChange={onEmpresa}
+                options={empresas.map((e) => [e, e])} />
+              <Sel label="Equipo" value={equipoVal({ cliente, equipo_codigo: equipoCod || null, equipo_tipo: equipoTipo || null })}
+                onChange={onEquipo}
+                options={equiposEmpresa.map((e) => [equipoVal(e), equipoLabel(e)])} />
+              <button type="button" onClick={() => setManual(true)} className="text-xs text-blue-600">
+                ✏️ La empresa o el equipo no están en la lista
+              </button>
+            </>
+          ) : (
+            <>
+              <In label="Empresa*" value={cliente} onChange={setCliente} />
+              <div className="grid grid-cols-2 gap-2">
+                <In label="Código equipo" value={equipoCod} onChange={setEquipoCod} />
+                <In label="Tipo equipo" value={equipoTipo} onChange={setEquipoTipo} />
+              </div>
+              {empresas.length > 0 && (
+                <button type="button" onClick={() => { setManual(false); setCliente(''); setEquipoCod(''); setEquipoTipo('') }} className="text-xs text-blue-600">
+                  ↩ Volver a elegir de la lista
+                </button>
+              )}
+            </>
+          )}
           <div className="grid grid-cols-2 gap-2">
             <In label="Litros*" value={litros} onChange={setLitros} type="number" />
             <In label="Precio CLP/L" value={precio} onChange={setPrecio} type="number" />
