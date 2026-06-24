@@ -39,21 +39,10 @@ const ESTADO_LABELS: Record<string, string> = {
 }
 const ESTADO_ORDEN = ['A', 'C', 'L', 'U', 'D', 'H', 'R', 'M', 'T', 'F', 'V']
 
-// ─── Categorías para la distribución por estado (cada estado = una categoría) ──
-const ESTADO_A_CATEGORIA: Record<string, string> = {
-  A: 'Arriendo comercial', C: 'Contratos', D: 'Disponible', L: 'Leasing operativo',
-  U: 'Uso interno', V: 'Venta', M: 'Mantención', T: 'Taller', F: 'Fuera de servicio',
-  H: 'Habilitación', R: 'Recepción',
-}
-const CATEGORIA_ORDEN = [
-  'Arriendo comercial', 'Contratos', 'Leasing operativo', 'Uso interno', 'Disponible',
-  'Mantención', 'Taller', 'Fuera de servicio', 'Habilitación', 'Recepción', 'Venta',
-]
-const CATEGORIA_COLOR: Record<string, string> = {
-  'Arriendo comercial': '#16A34A', 'Contratos': '#15803D', 'Leasing operativo': '#4F46E5',
-  'Uso interno': '#0891B2', 'Disponible': '#2563EB', 'Mantención': '#F59E0B',
-  'Taller': '#FB923C', 'Fuera de servicio': '#DC2626', 'Habilitación': '#A855F7',
-  'Recepción': '#06B6D4', 'Venta': '#9333EA',
+// Color por categoria_uso (para la torta, que comparte fuente con la tabla).
+const CAT_HEX: Record<string, string> = {
+  arriendo_comercial: '#16A34A', leasing_operativo: '#4F46E5',
+  uso_interno: '#0891B2', venta: '#9333EA', sin: '#9CA3AF',
 }
 
 // ─── Helpers ───────────────────────────────────────────
@@ -101,7 +90,6 @@ export function FiabilidadAnalisis({ readOnly = false }: { readOnly?: boolean } 
   const [fechaFin, setFechaFin] = useState(todayISO())
   const [filtroCat, setFiltroCat] = useState<CategoriaUso | 'todas'>('todas')
   const [equipoSel, setEquipoSel] = useState<string | null>(null)
-  const [filtroEstado, setFiltroEstado] = useState<string | null>(null)
   const [copiaMsg, setCopiaMsg] = useState<string | null>(null)
 
   const copiarParaCorreo = async () => {
@@ -289,13 +277,8 @@ export function FiabilidadAnalisis({ readOnly = false }: { readOnly?: boolean } 
   const detallesFiltrados = useMemo(() => {
     let rows = detalles
     if (filtroCat !== 'todas') rows = rows.filter((d) => d.categoria_uso === filtroCat)
-    if (filtroEstado) {
-      rows = rows.filter(
-        (d) => ESTADO_A_CATEGORIA[estadoActualPorActivo.get(d.activo_id) ?? ''] === filtroEstado,
-      )
-    }
     return rows
-  }, [detalles, filtroCat, filtroEstado, estadoActualPorActivo])
+  }, [detalles, filtroCat])
 
   // ─── Rankings ──────────────────────────────────────────
   const top5Criticos = useMemo(
@@ -346,17 +329,23 @@ export function FiabilidadAnalisis({ readOnly = false }: { readOnly?: boolean } 
     return diasUnicos.map((f) => ({ dia: f.slice(8, 10), ...byDia[f] }))
   }, [matriz, diasUnicos, idsFlota])
 
-  // ─── Distribución por categoría (estado actual) ──
+  // ─── Distribución por categoría ──
+  // MISMA fuente que la tabla "KPIs por Categoría" (porCategoria), para que el
+  // recuento de equipos por categoría coincida exactamente con la tabla.
   const distribucionCategoria = useMemo(() => {
-    const counts: Record<string, number> = {}
-    for (const est of Array.from(estadoActualPorActivo.values())) {
-      const cat = ESTADO_A_CATEGORIA[est]
-      if (cat) counts[cat] = (counts[cat] ?? 0) + 1
-    }
-    return CATEGORIA_ORDEN.filter((c) => counts[c]).map((c) => ({
-      key: c, name: c, value: counts[c], color: CATEGORIA_COLOR[c],
-    }))
-  }, [estadoActualPorActivo])
+    return porCategoria
+      .filter((c) => Number(c.total_equipos) > 0)
+      .map((c) => ({
+        key: (c.categoria ?? 'sin') as string,
+        name: c.categoria ? CATEGORIA_LABELS[c.categoria] : 'Sin categoría',
+        value: Number(c.total_equipos),
+        color: CAT_HEX[c.categoria ?? 'sin'] ?? '#9CA3AF',
+      }))
+  }, [porCategoria])
+  const togglePieCat = (key: string) => {
+    if (key === 'sin') return
+    setFiltroCat((prev) => (prev === key ? 'todas' : (key as CategoriaUso)))
+  }
 
   // ─── Ranking por marca (según indicadores) ──
   const rankingMarcas = useMemo(() => {
@@ -565,12 +554,12 @@ export function FiabilidadAnalisis({ readOnly = false }: { readOnly?: boolean } 
               <CardHeader className="flex flex-col gap-2 pb-2 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <CardTitle className="text-base text-gray-700">
-                    Distribución por estado{diasUnicos.length > 0 ? ` · ${diasUnicos[diasUnicos.length - 1]}` : ''}
+                    Distribución por categoría
                   </CardTitle>
-                  <p className="text-[11px] text-gray-400">Click en una categoría para filtrar la tabla detalle</p>
+                  <p className="text-[11px] text-gray-400">Mismo recuento que la tabla “KPIs por Categoría”. Click para filtrar el detalle.</p>
                 </div>
-                {filtroEstado && (
-                  <button className="text-xs text-blue-600 hover:underline" onClick={() => setFiltroEstado(null)}>
+                {filtroCat !== 'todas' && (
+                  <button className="text-xs text-blue-600 hover:underline" onClick={() => setFiltroCat('todas')}>
                     Limpiar filtro
                   </button>
                 )}
@@ -587,11 +576,11 @@ export function FiabilidadAnalisis({ readOnly = false }: { readOnly?: boolean } 
                         dataKey="value"
                         cursor="pointer"
                         label={({ value }) => `${value}`}
-                        onClick={(d: any) => d?.key && setFiltroEstado(filtroEstado === d.key ? null : d.key)}
+                        onClick={(d: any) => d?.key && togglePieCat(d.key)}
                       >
                         {distribucionCategoria.map((e) => (
                           <Cell key={e.key} fill={e.color}
-                            opacity={filtroEstado && filtroEstado !== e.key ? 0.3 : 1} />
+                            opacity={filtroCat !== 'todas' && filtroCat !== e.key ? 0.3 : 1} />
                         ))}
                       </Pie>
                       <Tooltip formatter={(v: number, n: string) => [`${v} equipos`, n]} />
@@ -602,9 +591,9 @@ export function FiabilidadAnalisis({ readOnly = false }: { readOnly?: boolean } 
                   {distribucionCategoria.map((e) => (
                     <button
                       key={e.key}
-                      onClick={() => setFiltroEstado(filtroEstado === e.key ? null : e.key)}
+                      onClick={() => togglePieCat(e.key)}
                       className="flex items-center gap-1 text-[11px] text-gray-700 hover:underline"
-                      style={{ opacity: filtroEstado && filtroEstado !== e.key ? 0.4 : 1 }}
+                      style={{ opacity: filtroCat !== 'todas' && filtroCat !== e.key ? 0.4 : 1 }}
                     >
                       <span className="inline-block h-3 w-3 rounded-sm" style={{ background: e.color }} />
                       {e.name}: <b>{e.value}</b>
@@ -897,10 +886,20 @@ export function FiabilidadAnalisis({ readOnly = false }: { readOnly?: boolean } 
                   )}
                 </tbody>
               </table>
-              <p className="mt-2 text-[11px] text-gray-400">
-                Columnas día-estado: A=Arrendado · D=Disponible · U=Uso Interno · L=Leasing · M=Mantención (&gt;1d) · T=Taller (&lt;1d) · F=Fuera Servicio ·
-                UP=días operativos · DOWN=días no disponibles. OEE: A=Disp · P=Rendimiento · Q=Calidad · OEE = A × P × Q.
-              </p>
+              <div className="mt-2 space-y-1 text-[11px] text-gray-400">
+                <p>
+                  Columnas día-estado (nº de días): A=Arrendado · D=Disponible · U=Uso Interno · L=Leasing · M=Mantención (&gt;1d) · T=Taller (&lt;1d) · F=Fuera de Servicio ·
+                  UP=días operativos (no M/T/F) · DOWN=días no disponibles (M/T/F).
+                </p>
+                <p>
+                  <b className="text-gray-600">OEE = A × P × Q</b> (las 3 últimas columnas), donde:
+                </p>
+                <ul className="ml-3 list-disc space-y-0.5">
+                  <li><b className="text-gray-600">A — Disponibilidad</b>: días operativos ÷ días totales = (Total − M − T − F) ÷ Total.</li>
+                  <li><b className="text-gray-600">P — Rendimiento (utilización)</b>: días productivos ÷ días comercialmente utilizables = (A + L) ÷ (A + D + V + H + R + L). “N/A” si el equipo no tuvo días comercialmente utilizables.</li>
+                  <li><b className="text-gray-600">Q — Calidad</b>: 1 − (días Fuera de Servicio ÷ días totales) = 1 − (F ÷ Total).</li>
+                </ul>
+              </div>
             </CardContent>
           </Card>
 
@@ -916,7 +915,10 @@ export function FiabilidadAnalisis({ readOnly = false }: { readOnly?: boolean } 
                 <div><b className="text-gray-800">Días DOWN</b> — días en que el equipo NO estuvo disponible.<br /><span className="text-gray-400">Estados M, T, F</span></div>
                 <div><b className="text-gray-800">Disponibilidad Física</b> — % del tiempo operativo.<br /><span className="text-gray-400">= Días UP ÷ Días-Equipo</span></div>
                 <div><b className="text-gray-800">Utilización Bruta</b> — % del tiempo generando ingreso.<br /><span className="text-gray-400">= (Días A + C + L) ÷ Días-Equipo</span></div>
-                <div><b className="text-gray-800">OEE</b> — eficiencia global del equipo.<br /><span className="text-gray-400">= Disponibilidad × Rendimiento × Calidad</span></div>
+                <div><b className="text-gray-800">OEE</b> — eficiencia global del equipo.<br /><span className="text-gray-400">= A × P × Q (Disponibilidad × Rendimiento × Calidad)</span></div>
+                <div><b className="text-gray-800">A — Disponibilidad (OEE)</b> — % de días operativos.<br /><span className="text-gray-400">= (Total − M − T − F) ÷ Total</span></div>
+                <div><b className="text-gray-800">P — Rendimiento (OEE)</b> — % de uso comercial productivo.<br /><span className="text-gray-400">= (A + L) ÷ (A + D + V + H + R + L)</span></div>
+                <div><b className="text-gray-800">Q — Calidad (OEE)</b> — % de días sin fuera de servicio.<br /><span className="text-gray-400">= 1 − (F ÷ Total)</span></div>
                 <div><b className="text-gray-800">MTBF</b> — días operativo promedio entre fallas.<br /><span className="text-gray-400">= Días UP ÷ nº de fallas</span></div>
                 <div><b className="text-gray-800">MTTR</b> — días promedio para reparar una falla.<br /><span className="text-gray-400">= Días DOWN ÷ nº de fallas</span></div>
                 <div><b className="text-gray-800">Disponibilidad Inherente</b> — disponibilidad teórica por confiabilidad.<br /><span className="text-gray-400">= MTBF ÷ (MTBF + MTTR)</span></div>
