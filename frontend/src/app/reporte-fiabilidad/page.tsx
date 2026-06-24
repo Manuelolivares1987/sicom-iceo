@@ -255,7 +255,6 @@ export default function ReporteFiabilidadPublicoPage() {
       { header: 'N° Motor', key: 'numero_motor', width: 18 },
       { header: 'Estado (GPS)', key: 'estado_dia', width: 20 },
       { header: 'Zona', key: 'zona', width: 16 },
-      { header: 'Faena', key: 'faena', width: 18 },
       { header: 'Ubicación', key: 'ubicacion', width: 18 },
       { header: 'Lugar físico', key: 'lugar_fisico', width: 26 },
       { header: 'Último contrato', key: 'contrato_codigo', width: 18 },
@@ -665,8 +664,8 @@ export default function ReporteFiabilidadPublicoPage() {
                   <FichaCampo label="VIN / Chasis" value={histSel.det.vin_chasis} />
                   <FichaCampo label="N° Motor" value={histSel.det.numero_motor} />
                   <FichaCampo label="Cliente" value={histSel.det.cliente} />
-                  <FichaCampo label="Faena" value={histSel.det.faena} />
-                  <FichaCampo label="Ubicación" value={histSel.det.ubicacion} />
+                  <FichaCampo label="Zona" value={histSel.det.zona} />
+                  <FichaCampo label="Lugar físico" value={histSel.det.ubicacion} />
                 </div>
               </div>
             )}

@@ -213,7 +213,8 @@ export async function getDetalleFiabilidadFlota(
         contrato_cliente: a.contrato?.cliente ?? null,
         faena: a.faena?.nombre ?? null,
         ubicacion: a.ubicacion_actual ?? null,
-        lugar_fisico: [a.faena?.nombre, a.ubicacion_actual].filter(Boolean).join(' · ') || null,
+        // Lugar físico = ubicación libre (se descontinúa la faena por incoherencia).
+        lugar_fisico: a.ubicacion_actual ?? null,
         zona: a.operacion ?? null,
         contratos_dias: (diasMap.get(a.id) ?? []).sort((x, y) => y.dias - x.dias),
         dias_arriendo_total: (diasMap.get(a.id) ?? []).reduce((s, c) => s + c.dias, 0),

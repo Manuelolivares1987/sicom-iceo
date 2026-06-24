@@ -131,7 +131,6 @@ export function FiabilidadAnalisis({ readOnly = false }: { readOnly?: boolean } 
       { header: 'N° Motor', key: 'numero_motor', width: 18 },
       { header: 'Estado (GPS)', key: 'estado_dia', width: 20 },
       { header: 'Zona', key: 'zona', width: 16 },
-      { header: 'Faena', key: 'faena', width: 18 },
       { header: 'Ubicación', key: 'ubicacion', width: 18 },
       { header: 'Lugar físico', key: 'lugar_fisico', width: 26 },
       { header: 'Último contrato', key: 'contrato_codigo', width: 18 },
