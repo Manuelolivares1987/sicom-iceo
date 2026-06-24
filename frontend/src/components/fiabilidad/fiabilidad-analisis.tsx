@@ -238,7 +238,9 @@ export function FiabilidadAnalisis({ readOnly = false }: { readOnly?: boolean } 
     )
     const disp = acc.dias_equipo > 0 ? acc.dias_up / acc.dias_equipo : 0
     const mtbf = acc.eventos_falla_total > 0 ? acc.dias_up / acc.eventos_falla_total : acc.dias_up
-    const mttr = acc.eventos_falla_total > 0 ? acc.dias_down / acc.eventos_falla_total : 0
+    // MTTR agregado = Σ(días M+T) / Σeventos = Σ(mttr_cat × eventos_cat) / Σeventos
+    const mttrW = porCategoria.reduce((s, c) => s + Number(c.mttr_agregado) * Number(c.eventos_falla_total), 0)
+    const mttr = acc.eventos_falla_total > 0 ? mttrW / acc.eventos_falla_total : 0
     return { ...acc, disp_fisica: disp, mtbf, mttr }
   }, [porCategoria])
 
@@ -256,7 +258,8 @@ export function FiabilidadAnalisis({ readOnly = false }: { readOnly?: boolean } 
     )
     const disp = acc.dias_equipo > 0 ? acc.dias_up / acc.dias_equipo : 0
     const mtbf = acc.eventos > 0 ? acc.dias_up / acc.eventos : acc.dias_up
-    const mttr = acc.eventos > 0 ? acc.dias_down / acc.eventos : 0
+    const mttrW = porCategoriaComp.reduce((s, c) => s + Number(c.mttr_agregado) * Number(c.eventos_falla_total), 0)
+    const mttr = acc.eventos > 0 ? mttrW / acc.eventos : 0
     return { disp_fisica: disp, mtbf, mttr, dias_up: acc.dias_up, dias_down: acc.dias_down }
   }, [porCategoriaComp])
 
@@ -334,16 +337,16 @@ export function FiabilidadAnalisis({ readOnly = false }: { readOnly?: boolean } 
   // La Utilización (A+L+C) es comercial → se muestra aparte, NO entra al OEE.
   const detallesCalc = useMemo(() => detalles.map((d) => {
     const diasC = diasCporActivo.get(d.activo_id) ?? 0
-    const dispTec = Number(d.oee_a ?? 0)                 // (Total − M − T − F) / Total
+    const dispFis = Number(d.disponibilidad_fisica ?? 0) // UP / Total (servidor, nueva def)
     const util = d.dias_observados > 0 ? (d.dias_a + d.dias_l + diasC) / d.dias_observados : 0
     const t = tallerPorActivo.get(d.activo_id)
     const calidadTaller = t?.calidad ?? 1
     return {
-      ...d, dias_c: diasC, disp_tecnica: dispTec, utilizacion: util,
+      ...d, dias_c: diasC, utilizacion: util,
       fallas_taller: t?.fallas ?? 0,
       reincidencias: t?.reincidencias ?? 0,
       calidad_taller: calidadTaller,
-      oee: dispTec * calidadTaller,
+      oee: dispFis * calidadTaller,
     }
   }), [detalles, diasCporActivo, tallerPorActivo])
 
@@ -424,17 +427,17 @@ export function FiabilidadAnalisis({ readOnly = false }: { readOnly?: boolean } 
   // ─── KPIs por Categoría — MISMA fuente que la torta: agrupa por el estado del
   // último día. Así el recuento de equipos coincide 1:1 con la torta. ──
   const kpisPorBucket = useMemo(() => {
-    type Agg = { equipos: number; dias: number; up: number; down: number; eventos: number; util: number }
+    type Agg = { equipos: number; dias: number; up: number; mt: number; eventos: number; util: number }
     const g: Record<string, Agg> = {}
     for (const d of detallesCalc) {
       const est = estadoActualPorActivo.get(d.activo_id)
       const bucket = est ? ESTADO_A_CATEGORIA[est] : null
       if (!bucket) continue
-      const a = (g[bucket] ??= { equipos: 0, dias: 0, up: 0, down: 0, eventos: 0, util: 0 })
+      const a = (g[bucket] ??= { equipos: 0, dias: 0, up: 0, mt: 0, eventos: 0, util: 0 })
       a.equipos += 1
       a.dias += d.dias_observados
-      a.up += d.dias_up
-      a.down += d.dias_down
+      a.up += d.dias_up                       // UP = A,C,L,U,D,V (servidor, nueva def)
+      a.mt += d.dias_m + d.dias_t             // reparación con HH (para MTTR)
       a.eventos += d.eventos_falla
       a.util += d.dias_a + d.dias_l + d.dias_c
     }
@@ -449,7 +452,7 @@ export function FiabilidadAnalisis({ readOnly = false }: { readOnly?: boolean } 
         utilizacion: a.dias > 0 ? a.util / a.dias : 0,
         eventos: a.eventos,
         mtbf: a.eventos > 0 ? a.up / a.eventos : a.up,
-        mttr: a.eventos > 0 ? a.down / a.eventos : 0,
+        mttr: a.eventos > 0 ? a.mt / a.eventos : 0,
       }
     })
   }, [detallesCalc, estadoActualPorActivo])
@@ -930,7 +933,8 @@ export function FiabilidadAnalisis({ readOnly = false }: { readOnly?: boolean } 
                     <th className="px-2 py-2 text-right">N°Fal</th>
                     <th className="px-2 py-2 text-right">MTBF</th>
                     <th className="px-2 py-2 text-right">MTTR</th>
-                    <th className="px-2 py-2 text-right">Disp.Inh</th>
+                    <th className="px-2 py-2 text-right" title="Disponibilidad Física = UP ÷ Total (UP = A,C,L,U,D,V)">Disp.Fís</th>
+                    <th className="px-2 py-2 text-right" title="Disponibilidad Inherente = MTBF ÷ (MTBF+MTTR)">Disp.Inh</th>
                     <th className="px-2 py-2 text-right" title="Utilización comercial = (A+L+C)/Total — informativa, NO entra al OEE">Util</th>
                     <th className="px-2 py-2 text-right" title="Fallas repetidas en el mismo mes (reincidencia)">Rep/mes</th>
                     <th className="px-2 py-2 text-right" title="Calidad del trabajo (penaliza reincidencia)">Cal.T</th>
@@ -975,7 +979,10 @@ export function FiabilidadAnalisis({ readOnly = false }: { readOnly?: boolean } 
                       <td className="px-2 py-1.5 text-right">{d.eventos_falla}</td>
                       <td className="px-2 py-1.5 text-right">{fmtNum(d.mtbf_dias)}</td>
                       <td className="px-2 py-1.5 text-right">{fmtNum(d.mttr_dias)}</td>
-                      <td className={`px-2 py-1.5 text-right font-semibold ${colorDispTxt(d.disponibilidad_inherente)}`}>
+                      <td className={`px-2 py-1.5 text-right font-semibold ${colorDispTxt(d.disponibilidad_fisica)}`}>
+                        {fmtPct(d.disponibilidad_fisica, 0)}
+                      </td>
+                      <td className={`px-2 py-1.5 text-right ${colorDispTxt(d.disponibilidad_inherente)}`}>
                         {fmtPct(d.disponibilidad_inherente, 0)}
                       </td>
                       <td className="px-2 py-1.5 text-right text-gray-500">{fmtPct(d.utilizacion, 0)}</td>
@@ -994,7 +1001,7 @@ export function FiabilidadAnalisis({ readOnly = false }: { readOnly?: boolean } 
                   ))}
                   {detallesFiltrados.length === 0 && (
                     <tr>
-                      <td colSpan={22} className="py-6 text-center text-gray-400">
+                      <td colSpan={23} className="py-6 text-center text-gray-400">
                         Sin equipos en esa categoría con datos en el período
                       </td>
                     </tr>
@@ -1003,18 +1010,18 @@ export function FiabilidadAnalisis({ readOnly = false }: { readOnly?: boolean } 
               </table>
               <div className="mt-2 space-y-1 text-[11px] text-gray-400">
                 <p>
-                  Columnas día-estado (nº de días): A=Arrendado · D=Disponible · U=Uso Interno · L=Leasing · M=Mantención (&gt;1d) · T=Taller (&lt;1d) · F=Fuera de Servicio ·
-                  UP=días operativos (no M/T/F) · DOWN=días no disponibles (M/T/F).
+                  Columnas día-estado (nº de días): A=Arrendado · D=Disponible · U=Uso Interno · L=Leasing · M=Mantención (&gt;1d) · T=Taller (&lt;1d) · F=Fuera de Servicio.
+                  <b className="text-gray-600"> UP (operativo)</b> = A,C,L,U,D,V · <b className="text-gray-600">DOWN (no disponible)</b> = M,T,F,R,H (Habilitación y Recepción bajan la disponibilidad).
                 </p>
                 <p>
-                  <b className="text-gray-600">OEE = Disp. Técnica × Calidad del trabajo</b> (lente del taller; la utilización es comercial y NO entra al OEE):
+                  <b className="text-gray-600">OEE = Disponibilidad Física × Calidad del trabajo</b> (la utilización es comercial y NO entra al OEE):
                 </p>
                 <ul className="ml-3 list-disc space-y-0.5">
-                  <li><b className="text-gray-600">Disp. Técnica</b> = días operativos ÷ días totales = (Total − M − T − F) ÷ Total.</li>
+                  <li><b className="text-gray-600">Disp. Física</b> = UP ÷ Total.</li>
+                  <li><b className="text-gray-600">MTBF</b> = UP ÷ nº fallas · <b className="text-gray-600">MTTR</b> = (M + T) ÷ nº fallas (solo reparación con HH; F no es reparación) · <b className="text-gray-600">Disp. Inherente</b> = MTBF ÷ (MTBF+MTTR).</li>
                   <li><b className="text-gray-600">Cal.T — Calidad del trabajo</b> = fallas primarias ÷ fallas totales. Cada reincidencia la baja.</li>
                   <li><b className="text-gray-600">Rep/mes</b> = fallas que se repiten dentro del mismo mes (cada episodio M/T/F extra en un mes).</li>
                   <li><b className="text-gray-600">Util</b> = utilización comercial = (A + L + C) ÷ Total. Informativa, no afecta el OEE.</li>
-                  <li>Confiabilidad y mantenibilidad se ven en <b className="text-gray-600">MTBF</b> y <b className="text-gray-600">MTTR</b>.</li>
                 </ul>
               </div>
             </CardContent>
@@ -1028,16 +1035,15 @@ export function FiabilidadAnalisis({ readOnly = false }: { readOnly?: boolean } 
             <CardContent>
               <div className="grid gap-3 text-xs text-gray-600 sm:grid-cols-2 lg:grid-cols-3">
                 <div><b className="text-gray-800">Días-Equipo</b> — total de días observados sumando todos los equipos.<br /><span className="text-gray-400">= Σ (equipos × días del período)</span></div>
-                <div><b className="text-gray-800">Días UP</b> — días en que el equipo estuvo operativo (trabajando o disponible).<br /><span className="text-gray-400">Estados A, C, D, L, U</span></div>
-                <div><b className="text-gray-800">Días DOWN</b> — días en que el equipo NO estuvo disponible.<br /><span className="text-gray-400">Estados M, T, F</span></div>
+                <div><b className="text-gray-800">Días UP (operativo)</b> — días en que el equipo pudo operar.<br /><span className="text-gray-400">Estados A, C, L, U, D, V</span></div>
+                <div><b className="text-gray-800">Días DOWN (no disponible)</b> — días detenido o en preparación.<br /><span className="text-gray-400">Estados M, T, F, R, H</span></div>
                 <div><b className="text-gray-800">Disponibilidad Física</b> — % del tiempo operativo.<br /><span className="text-gray-400">= Días UP ÷ Días-Equipo</span></div>
                 <div><b className="text-gray-800">Utilización Bruta</b> — % del tiempo generando ingreso.<br /><span className="text-gray-400">= (Días A + C + L) ÷ Días-Equipo</span></div>
-                <div><b className="text-gray-800">OEE</b> — eficiencia del equipo desde la gestión del taller.<br /><span className="text-gray-400">= Disp. Técnica × Calidad del trabajo</span></div>
-                <div><b className="text-gray-800">Disp. Técnica</b> — % de días operativos.<br /><span className="text-gray-400">= (Total − M − T − F) ÷ Total</span></div>
+                <div><b className="text-gray-800">OEE</b> — eficiencia del equipo desde la gestión del taller.<br /><span className="text-gray-400">= Disp. Física × Calidad del trabajo</span></div>
                 <div><b className="text-gray-800">Utilización</b> — % de días en arriendo (comercial, no entra al OEE).<br /><span className="text-gray-400">= (A + L + C) ÷ Total</span></div>
-                <div><b className="text-gray-800">MTBF</b> — días operativo promedio entre fallas.<br /><span className="text-gray-400">= Días UP ÷ nº de fallas</span></div>
-                <div><b className="text-gray-800">MTTR</b> — días promedio para reparar una falla.<br /><span className="text-gray-400">= Días DOWN ÷ nº de fallas</span></div>
-                <div><b className="text-gray-800">Disponibilidad Inherente</b> — disponibilidad teórica por confiabilidad.<br /><span className="text-gray-400">= MTBF ÷ (MTBF + MTTR). Con falla = M+T+F coincide con la Disp. Física.</span></div>
+                <div><b className="text-gray-800">MTBF</b> — días operativo promedio entre fallas.<br /><span className="text-gray-400">= Días UP ÷ nº de fallas (falla = M/T/F)</span></div>
+                <div><b className="text-gray-800">MTTR</b> — días promedio de reparación (con HH).<br /><span className="text-gray-400">= (M + T) ÷ nº de fallas. F (sin HH) no es reparación.</span></div>
+                <div><b className="text-gray-800">Disponibilidad Inherente</b> — disponibilidad por confiabilidad (solo reparación activa).<br /><span className="text-gray-400">= MTBF ÷ (MTBF + MTTR)</span></div>
                 <div><b className="text-gray-800">Calidad del trabajo (Cal.T)</b> — castiga fallas repetidas en el mismo mes.<br /><span className="text-gray-400">= fallas primarias ÷ fallas totales</span></div>
                 <div><b className="text-gray-800">Rep/mes</b> — fallas que se repiten dentro del mismo mes (reincidencia). Cada episodio M/T/F extra en un mes.</div>
               </div>
