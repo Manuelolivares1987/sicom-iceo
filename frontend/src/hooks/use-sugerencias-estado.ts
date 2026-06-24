@@ -19,6 +19,12 @@ export function useConfirmarEstado() {
       qc.invalidateQueries({ queryKey: ['sugerencias-estado'] })
       qc.invalidateQueries({ queryKey: ['matriz-estados-flota'] })
       qc.invalidateQueries({ queryKey: ['fiabilidad-detalle'] })
+      // La categoría del activo cambió → refrescar agregados por categoría.
+      qc.invalidateQueries({ queryKey: ['fiabilidad-flota'] })
+      qc.invalidateQueries({ queryKey: ['fiabilidad-activo'] })
+      qc.invalidateQueries({ queryKey: ['oee-fiabilidad-activo'] })
+      qc.invalidateQueries({ queryKey: ['activos'] })
+      qc.invalidateQueries({ queryKey: ['flota-vehicular'] })
     },
   })
 }
