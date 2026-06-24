@@ -39,10 +39,22 @@ const ESTADO_LABELS: Record<string, string> = {
 }
 const ESTADO_ORDEN = ['A', 'C', 'L', 'U', 'D', 'H', 'R', 'M', 'T', 'F', 'V']
 
-// Color por categoria_uso (para la torta, que comparte fuente con la tabla).
-const CAT_HEX: Record<string, string> = {
-  arriendo_comercial: '#16A34A', leasing_operativo: '#4F46E5',
-  uso_interno: '#0891B2', venta: '#9333EA', sin: '#9CA3AF',
+// ─── Categorías de la torta/tabla: cada equipo se clasifica por su ESTADO del
+// último día (un estado = una categoría). Es la vista que ve la organización. ──
+const ESTADO_A_CATEGORIA: Record<string, string> = {
+  A: 'Arriendo comercial', C: 'Contratos', D: 'Disponible', L: 'Leasing operativo',
+  U: 'Uso interno', V: 'Venta', M: 'Mantención', T: 'Taller', F: 'Fuera de servicio',
+  H: 'Habilitación', R: 'Recepción',
+}
+const CATEGORIA_ORDEN = [
+  'Arriendo comercial', 'Contratos', 'Leasing operativo', 'Uso interno', 'Disponible',
+  'Mantención', 'Taller', 'Fuera de servicio', 'Habilitación', 'Recepción', 'Venta',
+]
+const CATEGORIA_COLOR: Record<string, string> = {
+  'Arriendo comercial': '#16A34A', 'Contratos': '#15803D', 'Leasing operativo': '#4F46E5',
+  'Uso interno': '#0891B2', 'Disponible': '#2563EB', 'Mantención': '#F59E0B',
+  'Taller': '#FB923C', 'Fuera de servicio': '#DC2626', 'Habilitación': '#A855F7',
+  'Recepción': '#06B6D4', 'Venta': '#9333EA',
 }
 
 // ─── Helpers ───────────────────────────────────────────
@@ -89,6 +101,7 @@ export function FiabilidadAnalisis({ readOnly = false }: { readOnly?: boolean } 
   const [fechaInicio, setFechaInicio] = useState(primerDiaMes)
   const [fechaFin, setFechaFin] = useState(todayISO())
   const [filtroCat, setFiltroCat] = useState<CategoriaUso | 'todas'>('todas')
+  const [filtroEstado, setFiltroEstado] = useState<string | null>(null) // bucket de la torta
   const [equipoSel, setEquipoSel] = useState<string | null>(null)
   const [copiaMsg, setCopiaMsg] = useState<string | null>(null)
 
@@ -99,7 +112,9 @@ export function FiabilidadAnalisis({ readOnly = false }: { readOnly?: boolean } 
   }
 
   // Exporta TODA la info por patente a Excel (lo visible en el detalle)
-  async function exportarExcel(rows: ActivoFiabilidadDetalle[]) {
+  async function exportarExcel(
+    rows: Array<ActivoFiabilidadDetalle & { calc_a?: number; calc_p?: number; calc_q?: number; calc_oee?: number }>,
+  ) {
     const ExcelJS = (await import('exceljs')).default
     const wb = new ExcelJS.Workbook()
     const ws = wb.addWorksheet('Equipos')
@@ -136,6 +151,9 @@ export function FiabilidadAnalisis({ readOnly = false }: { readOnly?: boolean } 
       { header: 'MTBF (d)', key: 'mtbf_dias', width: 10 }, { header: 'MTTR (d)', key: 'mttr_dias', width: 10 },
       { header: 'Disp. inherente %', key: 'disp_inh', width: 15 },
       { header: 'Disp. física %', key: 'disp_fis', width: 14 },
+      { header: 'OEE A — Disp %', key: 'oee_a_pct', width: 14 },
+      { header: 'OEE P — Util (A+L+C) %', key: 'oee_p_pct', width: 18 },
+      { header: 'OEE Q — Calidad %', key: 'oee_q_pct', width: 16 },
       { header: 'OEE %', key: 'oee_pct', width: 9 },
     ]
     ws.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } }
@@ -168,7 +186,10 @@ export function FiabilidadAnalisis({ readOnly = false }: { readOnly?: boolean } 
         contratos_dias_txt: (e.contratos_dias ?? []).map((c) => `${c.codigo}: ${c.dias} d`).join('; '),
         disp_inh: Math.round(Number(e.disponibilidad_inherente) * 100),
         disp_fis: Math.round(Number(e.disponibilidad_fisica) * 100),
-        oee_pct: e.oee_total == null ? '' : Math.round(Number(e.oee_total) * 100),
+        oee_a_pct: e.calc_a != null ? Math.round(e.calc_a * 100) : '',
+        oee_p_pct: e.calc_p != null ? Math.round(e.calc_p * 100) : '',
+        oee_q_pct: e.calc_q != null ? Math.round(e.calc_q * 100) : '',
+        oee_pct: e.calc_oee != null ? Math.round(e.calc_oee * 100) : '',
       })
     }
     ws.autoFilter = { from: 'A1', to: { row: 1, column: ws.columnCount } }
@@ -238,13 +259,6 @@ export function FiabilidadAnalisis({ readOnly = false }: { readOnly?: boolean } 
     return { disp_fisica: disp, mtbf, mttr, dias_up: acc.dias_up, dias_down: acc.dias_down }
   }, [porCategoriaComp])
 
-  const utilBruta = useMemo(() => {
-    if (detalles.length === 0) return 0
-    const sumTotal = detalles.reduce((s, d) => s + d.dias_observados, 0)
-    const sumAL = detalles.reduce((s, d) => s + d.dias_a + d.dias_l, 0)
-    return sumTotal > 0 ? sumAL / sumTotal : 0
-  }, [detalles])
-
   // Disponibilidad Inherente de la flota = MTBF / (MTBF + MTTR) agregado.
   const dispInhFlota = useMemo(() => {
     if (!kpiGlobal) return 0
@@ -273,12 +287,50 @@ export function FiabilidadAnalisis({ readOnly = false }: { readOnly?: boolean } 
     return m
   }, [matriz, diasUnicos, idsFlota])
 
-  // ─── Filtrado por categoría / estado ───────────────────
+  // Días en estado 'C' (en contrato) por activo — no viene en el detalle (OEE),
+  // se cuenta desde la matriz. Cuenta como utilización (A + L + C).
+  const diasCporActivo = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const c of matriz) {
+      if (c.estado_codigo === 'C' && idsFlota.has(c.activo_id)) {
+        m.set(c.activo_id, (m.get(c.activo_id) ?? 0) + 1)
+      }
+    }
+    return m
+  }, [matriz, idsFlota])
+
+  // OEE por equipo con la definición acordada:
+  //   A = Disponibilidad física (= oee_a, días operativos / total)
+  //   P = Utilización = (días A + L + C) / días observados
+  //   Q = Calidad = MTBF / (MTBF + MTTR) = disponibilidad inherente
+  //   OEE = A × P × Q
+  const detallesCalc = useMemo(() => detalles.map((d) => {
+    const diasC = diasCporActivo.get(d.activo_id) ?? 0
+    const a = Number(d.oee_a ?? 0)
+    const p = d.dias_observados > 0 ? (d.dias_a + d.dias_l + diasC) / d.dias_observados : 0
+    const q = Number(d.disponibilidad_inherente ?? 0)
+    return { ...d, dias_c: diasC, calc_a: a, calc_p: p, calc_q: q, calc_oee: a * p * q }
+  }), [detalles, diasCporActivo])
+
+  // Utilización bruta de la flota = (A + L + C) ÷ días totales.
+  const utilBruta = useMemo(() => {
+    if (detallesCalc.length === 0) return 0
+    const sumTotal = detallesCalc.reduce((s, d) => s + d.dias_observados, 0)
+    const sumALC = detallesCalc.reduce((s, d) => s + d.dias_a + d.dias_l + d.dias_c, 0)
+    return sumTotal > 0 ? sumALC / sumTotal : 0
+  }, [detallesCalc])
+
+  // ─── Filtrado por categoría (dropdown) / bucket de la torta (estado actual) ──
   const detallesFiltrados = useMemo(() => {
-    let rows = detalles
+    let rows = detallesCalc
     if (filtroCat !== 'todas') rows = rows.filter((d) => d.categoria_uso === filtroCat)
+    if (filtroEstado) {
+      rows = rows.filter(
+        (d) => ESTADO_A_CATEGORIA[estadoActualPorActivo.get(d.activo_id) ?? ''] === filtroEstado,
+      )
+    }
     return rows
-  }, [detalles, filtroCat])
+  }, [detallesCalc, filtroCat, filtroEstado, estadoActualPorActivo])
 
   // ─── Rankings ──────────────────────────────────────────
   const top5Criticos = useMemo(
@@ -292,17 +344,16 @@ export function FiabilidadAnalisis({ readOnly = false }: { readOnly?: boolean } 
 
   const oeeRanking = useMemo(
     () =>
-      detalles.filter(
+      detallesCalc.filter(
         (d) =>
-          d.oee_total != null &&
-          (d.categoria_uso === 'arriendo_comercial' || d.categoria_uso === 'leasing_operativo'),
+          d.categoria_uso === 'arriendo_comercial' || d.categoria_uso === 'leasing_operativo',
       ),
-    [detalles],
+    [detallesCalc],
   )
   const top5OEE = useMemo(
     () =>
       [...oeeRanking]
-        .sort((a, b) => (b.oee_total ?? 0) - (a.oee_total ?? 0))
+        .sort((a, b) => b.calc_oee - a.calc_oee)
         .slice(0, 5),
     [oeeRanking],
   )
@@ -329,23 +380,52 @@ export function FiabilidadAnalisis({ readOnly = false }: { readOnly?: boolean } 
     return diasUnicos.map((f) => ({ dia: f.slice(8, 10), ...byDia[f] }))
   }, [matriz, diasUnicos, idsFlota])
 
-  // ─── Distribución por categoría ──
-  // MISMA fuente que la tabla "KPIs por Categoría" (porCategoria), para que el
-  // recuento de equipos por categoría coincida exactamente con la tabla.
+  // ─── Distribución por estado (torta) — cada equipo en el bucket de su estado
+  // del último día. Es la vista correcta para la organización. ──
   const distribucionCategoria = useMemo(() => {
-    return porCategoria
-      .filter((c) => Number(c.total_equipos) > 0)
-      .map((c) => ({
-        key: (c.categoria ?? 'sin') as string,
-        name: c.categoria ? CATEGORIA_LABELS[c.categoria] : 'Sin categoría',
-        value: Number(c.total_equipos),
-        color: CAT_HEX[c.categoria ?? 'sin'] ?? '#9CA3AF',
-      }))
-  }, [porCategoria])
-  const togglePieCat = (key: string) => {
-    if (key === 'sin') return
-    setFiltroCat((prev) => (prev === key ? 'todas' : (key as CategoriaUso)))
-  }
+    const counts: Record<string, number> = {}
+    for (const est of Array.from(estadoActualPorActivo.values())) {
+      const cat = ESTADO_A_CATEGORIA[est]
+      if (cat) counts[cat] = (counts[cat] ?? 0) + 1
+    }
+    return CATEGORIA_ORDEN.filter((c) => counts[c]).map((c) => ({
+      key: c, name: c, value: counts[c], color: CATEGORIA_COLOR[c],
+    }))
+  }, [estadoActualPorActivo])
+
+  // ─── KPIs por Categoría — MISMA fuente que la torta: agrupa por el estado del
+  // último día. Así el recuento de equipos coincide 1:1 con la torta. ──
+  const kpisPorBucket = useMemo(() => {
+    type Agg = { equipos: number; dias: number; up: number; down: number; eventos: number; util: number }
+    const g: Record<string, Agg> = {}
+    for (const d of detallesCalc) {
+      const est = estadoActualPorActivo.get(d.activo_id)
+      const bucket = est ? ESTADO_A_CATEGORIA[est] : null
+      if (!bucket) continue
+      const a = (g[bucket] ??= { equipos: 0, dias: 0, up: 0, down: 0, eventos: 0, util: 0 })
+      a.equipos += 1
+      a.dias += d.dias_observados
+      a.up += d.dias_up
+      a.down += d.dias_down
+      a.eventos += d.eventos_falla
+      a.util += d.dias_a + d.dias_l + d.dias_c
+    }
+    return CATEGORIA_ORDEN.filter((b) => g[b]).map((b) => {
+      const a = g[b]
+      return {
+        bucket: b,
+        color: CATEGORIA_COLOR[b],
+        equipos: a.equipos,
+        dias: a.dias,
+        disp_fisica: a.dias > 0 ? a.up / a.dias : 0,
+        utilizacion: a.dias > 0 ? a.util / a.dias : 0,
+        eventos: a.eventos,
+        mtbf: a.eventos > 0 ? a.up / a.eventos : a.up,
+        mttr: a.eventos > 0 ? a.down / a.eventos : 0,
+      }
+    })
+  }, [detallesCalc, estadoActualPorActivo])
+  const toggleBucket = (key: string) => setFiltroEstado((prev) => (prev === key ? null : key))
 
   // ─── Ranking por marca (según indicadores) ──
   const rankingMarcas = useMemo(() => {
@@ -554,12 +634,12 @@ export function FiabilidadAnalisis({ readOnly = false }: { readOnly?: boolean } 
               <CardHeader className="flex flex-col gap-2 pb-2 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <CardTitle className="text-base text-gray-700">
-                    Distribución por categoría
+                    Distribución por estado{diasUnicos.length > 0 ? ` · ${diasUnicos[diasUnicos.length - 1]}` : ''}
                   </CardTitle>
-                  <p className="text-[11px] text-gray-400">Mismo recuento que la tabla “KPIs por Categoría”. Click para filtrar el detalle.</p>
+                  <p className="text-[11px] text-gray-400">Equipos por estado del último día. Click para filtrar el detalle.</p>
                 </div>
-                {filtroCat !== 'todas' && (
-                  <button className="text-xs text-blue-600 hover:underline" onClick={() => setFiltroCat('todas')}>
+                {filtroEstado && (
+                  <button className="text-xs text-blue-600 hover:underline" onClick={() => setFiltroEstado(null)}>
                     Limpiar filtro
                   </button>
                 )}
@@ -576,11 +656,11 @@ export function FiabilidadAnalisis({ readOnly = false }: { readOnly?: boolean } 
                         dataKey="value"
                         cursor="pointer"
                         label={({ value }) => `${value}`}
-                        onClick={(d: any) => d?.key && togglePieCat(d.key)}
+                        onClick={(d: any) => d?.key && toggleBucket(d.key)}
                       >
                         {distribucionCategoria.map((e) => (
                           <Cell key={e.key} fill={e.color}
-                            opacity={filtroCat !== 'todas' && filtroCat !== e.key ? 0.3 : 1} />
+                            opacity={filtroEstado && filtroEstado !== e.key ? 0.3 : 1} />
                         ))}
                       </Pie>
                       <Tooltip formatter={(v: number, n: string) => [`${v} equipos`, n]} />
@@ -591,9 +671,9 @@ export function FiabilidadAnalisis({ readOnly = false }: { readOnly?: boolean } 
                   {distribucionCategoria.map((e) => (
                     <button
                       key={e.key}
-                      onClick={() => togglePieCat(e.key)}
+                      onClick={() => toggleBucket(e.key)}
                       className="flex items-center gap-1 text-[11px] text-gray-700 hover:underline"
-                      style={{ opacity: filtroCat !== 'todas' && filtroCat !== e.key ? 0.4 : 1 }}
+                      style={{ opacity: filtroEstado && filtroEstado !== e.key ? 0.4 : 1 }}
                     >
                       <span className="inline-block h-3 w-3 rounded-sm" style={{ background: e.color }} />
                       {e.name}: <b>{e.value}</b>
@@ -661,8 +741,8 @@ export function FiabilidadAnalisis({ readOnly = false }: { readOnly?: boolean } 
               borderClass="border-green-200"
               data={top5OEE.map((d) => ({
                 patente: d.patente,
-                valor: Math.round((Number(d.oee_total) ?? 0) * 100),
-                color: colorOEEBar(Number(d.oee_total) ?? 0),
+                valor: Math.round(d.calc_oee * 100),
+                color: colorOEEBar(d.calc_oee),
               }))}
               labelUnit="%"
             />
@@ -718,10 +798,13 @@ export function FiabilidadAnalisis({ readOnly = false }: { readOnly?: boolean } 
             </CardContent>
           </Card>
 
-          {/* ─── KPIs por Categoría ─── */}
+          {/* ─── KPIs por Categoría (mismo recuento que la torta: por estado actual) ─── */}
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-base text-gray-700">KPIs por Categoría</CardTitle>
+              <p className="text-[11px] text-gray-400">
+                Cada equipo se cuenta en la categoría de su estado del último día (coincide con la torta).
+              </p>
             </CardHeader>
             <CardContent className="overflow-x-auto">
               <table className="w-full text-xs">
@@ -731,35 +814,35 @@ export function FiabilidadAnalisis({ readOnly = false }: { readOnly?: boolean } 
                     <th className="px-2 py-2 text-right">Equipos</th>
                     <th className="px-2 py-2 text-right">Días-Eq</th>
                     <th className="px-2 py-2 text-right">Disp. Física</th>
-                    <th className="px-2 py-2 text-right">Util. Bruta</th>
+                    <th className="px-2 py-2 text-right">Util. (A+L+C)</th>
                     <th className="px-2 py-2 text-right">N° Fallas</th>
                     <th className="px-2 py-2 text-right">MTBF (d)</th>
                     <th className="px-2 py-2 text-right">MTTR (d)</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {porCategoria.map((c) => (
-                    <tr key={c.categoria ?? 'sin'} className="border-b hover:bg-gray-50">
+                  {kpisPorBucket.map((c) => (
+                    <tr key={c.bucket} className="border-b hover:bg-gray-50">
                       <td className="px-2 py-2">
-                        {c.categoria ? (
-                          <Badge className={CATEGORIA_COLORS[c.categoria]}>
-                            {CATEGORIA_LABELS[c.categoria]}
-                          </Badge>
-                        ) : (
-                          <span className="text-gray-400 italic">Sin categoría</span>
-                        )}
+                        <span className="inline-flex items-center gap-1.5">
+                          <span className="inline-block h-3 w-3 rounded-sm" style={{ background: c.color }} />
+                          {c.bucket}
+                        </span>
                       </td>
-                      <td className="px-2 py-2 text-right">{c.total_equipos}</td>
-                      <td className="px-2 py-2 text-right">{c.dias_equipo}</td>
-                      <td className={`px-2 py-2 text-right font-semibold ${colorDispTxt(Number(c.disponibilidad_fisica))}`}>
-                        {fmtPct(Number(c.disponibilidad_fisica))}
+                      <td className="px-2 py-2 text-right font-semibold">{c.equipos}</td>
+                      <td className="px-2 py-2 text-right">{c.dias}</td>
+                      <td className={`px-2 py-2 text-right font-semibold ${colorDispTxt(c.disp_fisica)}`}>
+                        {fmtPct(c.disp_fisica)}
                       </td>
-                      <td className="px-2 py-2 text-right">{fmtPct(Number(c.utilizacion_bruta))}</td>
-                      <td className="px-2 py-2 text-right">{c.eventos_falla_total}</td>
-                      <td className="px-2 py-2 text-right">{fmtNum(Number(c.mtbf_agregado))}</td>
-                      <td className="px-2 py-2 text-right">{fmtNum(Number(c.mttr_agregado))}</td>
+                      <td className="px-2 py-2 text-right">{fmtPct(c.utilizacion)}</td>
+                      <td className="px-2 py-2 text-right">{c.eventos}</td>
+                      <td className="px-2 py-2 text-right">{fmtNum(c.mtbf)}</td>
+                      <td className="px-2 py-2 text-right">{fmtNum(c.mttr)}</td>
                     </tr>
                   ))}
+                  {kpisPorBucket.length === 0 && (
+                    <tr><td colSpan={8} className="py-6 text-center text-gray-400">Sin datos en el período</td></tr>
+                  )}
                 </tbody>
               </table>
             </CardContent>
@@ -867,13 +950,11 @@ export function FiabilidadAnalisis({ readOnly = false }: { readOnly?: boolean } 
                       <td className={`px-2 py-1.5 text-right font-semibold ${colorDispTxt(d.disponibilidad_inherente)}`}>
                         {fmtPct(d.disponibilidad_inherente, 0)}
                       </td>
-                      <td className="px-2 py-1.5 text-right">{fmtPct(d.oee_a)}</td>
-                      <td className="px-2 py-1.5 text-right">
-                        {d.oee_p == null ? 'N/A' : fmtPct(d.oee_p)}
-                      </td>
-                      <td className="px-2 py-1.5 text-right">{fmtPct(d.oee_q)}</td>
-                      <td className={`px-2 py-1.5 text-right ${colorOEE(d.oee_total)}`}>
-                        {d.oee_total == null ? 'N/A' : fmtPct(d.oee_total)}
+                      <td className="px-2 py-1.5 text-right">{fmtPct(d.calc_a)}</td>
+                      <td className="px-2 py-1.5 text-right">{fmtPct(d.calc_p)}</td>
+                      <td className="px-2 py-1.5 text-right">{fmtPct(d.calc_q)}</td>
+                      <td className={`px-2 py-1.5 text-right ${colorOEE(d.calc_oee)}`}>
+                        {fmtPct(d.calc_oee)}
                       </td>
                     </tr>
                   ))}
@@ -896,8 +977,8 @@ export function FiabilidadAnalisis({ readOnly = false }: { readOnly?: boolean } 
                 </p>
                 <ul className="ml-3 list-disc space-y-0.5">
                   <li><b className="text-gray-600">A — Disponibilidad</b>: días operativos ÷ días totales = (Total − M − T − F) ÷ Total.</li>
-                  <li><b className="text-gray-600">P — Rendimiento (utilización)</b>: días productivos ÷ días comercialmente utilizables = (A + L) ÷ (A + D + V + H + R + L). “N/A” si el equipo no tuvo días comercialmente utilizables.</li>
-                  <li><b className="text-gray-600">Q — Calidad</b>: 1 − (días Fuera de Servicio ÷ días totales) = 1 − (F ÷ Total).</li>
+                  <li><b className="text-gray-600">P — Utilización</b>: días en arriendo ÷ días totales = (A + L + C) ÷ Total.</li>
+                  <li><b className="text-gray-600">Q — Calidad</b>: confiabilidad por tiempo de reparación = MTBF ÷ (MTBF + MTTR). Mientras más alto el MTTR, más baja la Q.</li>
                 </ul>
               </div>
             </CardContent>
@@ -917,8 +998,8 @@ export function FiabilidadAnalisis({ readOnly = false }: { readOnly?: boolean } 
                 <div><b className="text-gray-800">Utilización Bruta</b> — % del tiempo generando ingreso.<br /><span className="text-gray-400">= (Días A + C + L) ÷ Días-Equipo</span></div>
                 <div><b className="text-gray-800">OEE</b> — eficiencia global del equipo.<br /><span className="text-gray-400">= A × P × Q (Disponibilidad × Rendimiento × Calidad)</span></div>
                 <div><b className="text-gray-800">A — Disponibilidad (OEE)</b> — % de días operativos.<br /><span className="text-gray-400">= (Total − M − T − F) ÷ Total</span></div>
-                <div><b className="text-gray-800">P — Rendimiento (OEE)</b> — % de uso comercial productivo.<br /><span className="text-gray-400">= (A + L) ÷ (A + D + V + H + R + L)</span></div>
-                <div><b className="text-gray-800">Q — Calidad (OEE)</b> — % de días sin fuera de servicio.<br /><span className="text-gray-400">= 1 − (F ÷ Total)</span></div>
+                <div><b className="text-gray-800">P — Utilización (OEE)</b> — % de días en arriendo.<br /><span className="text-gray-400">= (A + L + C) ÷ Total</span></div>
+                <div><b className="text-gray-800">Q — Calidad (OEE)</b> — confiabilidad según tiempo de reparación.<br /><span className="text-gray-400">= MTBF ÷ (MTBF + MTTR)</span></div>
                 <div><b className="text-gray-800">MTBF</b> — días operativo promedio entre fallas.<br /><span className="text-gray-400">= Días UP ÷ nº de fallas</span></div>
                 <div><b className="text-gray-800">MTTR</b> — días promedio para reparar una falla.<br /><span className="text-gray-400">= Días DOWN ÷ nº de fallas</span></div>
                 <div><b className="text-gray-800">Disponibilidad Inherente</b> — disponibilidad teórica por confiabilidad.<br /><span className="text-gray-400">= MTBF ÷ (MTBF + MTTR)</span></div>
