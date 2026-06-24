@@ -524,7 +524,7 @@ export default function ReporteFiabilidadPublicoPage() {
                           </button>
                         </td>
                         <td className="px-2 py-1.5 text-gray-600">{d.equipamiento ?? '—'}</td>
-                        <td className="px-2 py-1.5 text-gray-500 max-w-[150px] truncate">{d.cliente ?? '—'}</td>
+                        <td className="px-2 py-1.5 text-gray-500 max-w-[150px] truncate">{d.contrato_cliente ?? d.cliente ?? '—'}</td>
                         <td className="px-2 py-1.5 text-right">{d.dias_observados}</td>
                         <td className="px-2 py-1.5 text-right text-green-700">{d.dias_up}</td>
                         <td className="px-2 py-1.5 text-right text-red-700">{d.dias_down}</td>
