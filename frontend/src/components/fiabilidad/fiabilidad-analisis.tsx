@@ -263,11 +263,11 @@ export function FiabilidadAnalisis({ readOnly = false }: { readOnly?: boolean } 
     return { disp_fisica: disp, mtbf, mttr, dias_up: acc.dias_up, dias_down: acc.dias_down }
   }, [porCategoriaComp])
 
-  // Disponibilidad Inherente de la flota = MTBF / (MTBF + MTTR) agregado.
+  // Disponibilidad Inherente de la flota — CONGELADA = Disp. Física mientras se
+  // validan los indicadores (la fórmula real sería MTBF/(MTBF+MTTR)).
   const dispInhFlota = useMemo(() => {
     if (!kpiGlobal) return 0
-    const denom = kpiGlobal.mtbf + kpiGlobal.mttr
-    return denom > 0 ? kpiGlobal.mtbf / denom : 1
+    return kpiGlobal.disp_fisica
   }, [kpiGlobal])
 
 
@@ -1018,7 +1018,8 @@ export function FiabilidadAnalisis({ readOnly = false }: { readOnly?: boolean } 
                 </p>
                 <ul className="ml-3 list-disc space-y-0.5">
                   <li><b className="text-gray-600">Disp. Física</b> = UP ÷ Total.</li>
-                  <li><b className="text-gray-600">MTBF</b> = UP ÷ nº fallas · <b className="text-gray-600">MTTR</b> = (M + T) ÷ nº fallas (solo reparación con HH; F no es reparación) · <b className="text-gray-600">Disp. Inherente</b> = MTBF ÷ (MTBF+MTTR).</li>
+                  <li><b className="text-gray-600">MTBF</b> = UP ÷ nº fallas · <b className="text-gray-600">MTTR</b> = (M + T) ÷ nº fallas (solo reparación con HH; F no es reparación).</li>
+                  <li><b className="text-gray-600">Disp. Inherente</b> = <b>Disp. Física</b> (congelada en validación; la fórmula real será MTBF ÷ (MTBF+MTTR)).</li>
                   <li><b className="text-gray-600">Cal.T — Calidad del trabajo</b> = fallas primarias ÷ fallas totales. Cada reincidencia la baja.</li>
                   <li><b className="text-gray-600">Rep/mes</b> = fallas que se repiten dentro del mismo mes (cada episodio M/T/F extra en un mes).</li>
                   <li><b className="text-gray-600">Util</b> = utilización comercial = (A + L + C) ÷ Total. Informativa, no afecta el OEE.</li>
@@ -1043,7 +1044,7 @@ export function FiabilidadAnalisis({ readOnly = false }: { readOnly?: boolean } 
                 <div><b className="text-gray-800">Utilización</b> — % de días en arriendo (comercial, no entra al OEE).<br /><span className="text-gray-400">= (A + L + C) ÷ Total</span></div>
                 <div><b className="text-gray-800">MTBF</b> — días operativo promedio entre fallas.<br /><span className="text-gray-400">= Días UP ÷ nº de fallas (falla = M/T/F)</span></div>
                 <div><b className="text-gray-800">MTTR</b> — días promedio de reparación (con HH).<br /><span className="text-gray-400">= (M + T) ÷ nº de fallas. F (sin HH) no es reparación.</span></div>
-                <div><b className="text-gray-800">Disponibilidad Inherente</b> — disponibilidad por confiabilidad (solo reparación activa).<br /><span className="text-gray-400">= MTBF ÷ (MTBF + MTTR)</span></div>
+                <div><b className="text-gray-800">Disponibilidad Inherente</b> — congelada (en validación): igual a la Disp. Física.<br /><span className="text-gray-400">Fórmula real pendiente = MTBF ÷ (MTBF + MTTR)</span></div>
                 <div><b className="text-gray-800">Calidad del trabajo (Cal.T)</b> — castiga fallas repetidas en el mismo mes.<br /><span className="text-gray-400">= fallas primarias ÷ fallas totales</span></div>
                 <div><b className="text-gray-800">Rep/mes</b> — fallas que se repiten dentro del mismo mes (reincidencia). Cada episodio M/T/F extra en un mes.</div>
               </div>
