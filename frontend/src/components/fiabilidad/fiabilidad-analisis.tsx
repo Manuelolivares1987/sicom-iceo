@@ -114,8 +114,7 @@ export function FiabilidadAnalisis({ readOnly = false }: { readOnly?: boolean } 
   // Exporta TODA la info por patente a Excel (lo visible en el detalle)
   async function exportarExcel(
     rows: Array<ActivoFiabilidadDetalle & {
-      calc_a?: number; calc_p?: number; calc_q?: number; calc_oee?: number
-      reincidencias?: number; calidad_taller?: number; oee_taller?: number
+      utilizacion?: number; reincidencias?: number; calidad_taller?: number; oee?: number
     }>,
   ) {
     const ExcelJS = (await import('exceljs')).default
@@ -153,13 +152,10 @@ export function FiabilidadAnalisis({ readOnly = false }: { readOnly?: boolean } 
       { header: 'MTBF (d)', key: 'mtbf_dias', width: 10 }, { header: 'MTTR (d)', key: 'mttr_dias', width: 10 },
       { header: 'Disp. inherente %', key: 'disp_inh', width: 15 },
       { header: 'Disp. física %', key: 'disp_fis', width: 14 },
-      { header: 'OEE A — Disp %', key: 'oee_a_pct', width: 14 },
-      { header: 'OEE P — Util (A+L+C) %', key: 'oee_p_pct', width: 18 },
-      { header: 'OEE Q — Calidad %', key: 'oee_q_pct', width: 16 },
-      { header: 'OEE Comercial %', key: 'oee_pct', width: 14 },
+      { header: 'Utilización (A+L+C) %', key: 'util_pct', width: 18 },
       { header: 'Fallas repetidas (mes)', key: 'reincidencias', width: 18 },
-      { header: 'Calidad taller %', key: 'cal_taller_pct', width: 14 },
-      { header: 'OEE Taller %', key: 'oee_taller_pct', width: 12 },
+      { header: 'Calidad del trabajo %', key: 'cal_taller_pct', width: 18 },
+      { header: 'OEE %', key: 'oee_pct', width: 10 },
     ]
     ws.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } }
     ws.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A8A' } }
@@ -191,13 +187,10 @@ export function FiabilidadAnalisis({ readOnly = false }: { readOnly?: boolean } 
         contratos_dias_txt: (e.contratos_dias ?? []).map((c) => `${c.codigo}: ${c.dias} d`).join('; '),
         disp_inh: Math.round(Number(e.disponibilidad_inherente) * 100),
         disp_fis: Math.round(Number(e.disponibilidad_fisica) * 100),
-        oee_a_pct: e.calc_a != null ? Math.round(e.calc_a * 100) : '',
-        oee_p_pct: e.calc_p != null ? Math.round(e.calc_p * 100) : '',
-        oee_q_pct: e.calc_q != null ? Math.round(e.calc_q * 100) : '',
-        oee_pct: e.calc_oee != null ? Math.round(e.calc_oee * 100) : '',
+        util_pct: e.utilizacion != null ? Math.round(e.utilizacion * 100) : '',
         reincidencias: e.reincidencias ?? 0,
         cal_taller_pct: e.calidad_taller != null ? Math.round(e.calidad_taller * 100) : '',
-        oee_taller_pct: e.oee_taller != null ? Math.round(e.oee_taller * 100) : '',
+        oee_pct: e.oee != null ? Math.round(e.oee * 100) : '',
       })
     }
     ws.autoFilter = { from: 'A1', to: { row: 1, column: ws.columnCount } }
@@ -337,22 +330,20 @@ export function FiabilidadAnalisis({ readOnly = false }: { readOnly?: boolean } 
     return res
   }, [matriz, idsFlota])
 
-  // OEE por equipo — dos lentes:
-  //   COMERCIAL: A=Disp física · P=Utilización (A+L+C)/total · Q=MTBF/(MTBF+MTTR)
-  //   TALLER:    Disp. Técnica × Calidad del trabajo (penaliza reincidencia).
+  // OEE (único, lente del taller) = Disp. Técnica × Calidad del trabajo.
+  // La Utilización (A+L+C) es comercial → se muestra aparte, NO entra al OEE.
   const detallesCalc = useMemo(() => detalles.map((d) => {
     const diasC = diasCporActivo.get(d.activo_id) ?? 0
-    const a = Number(d.oee_a ?? 0)                       // disp física = disp técnica
-    const p = d.dias_observados > 0 ? (d.dias_a + d.dias_l + diasC) / d.dias_observados : 0
-    const q = Number(d.disponibilidad_inherente ?? 0)
+    const dispTec = Number(d.oee_a ?? 0)                 // (Total − M − T − F) / Total
+    const util = d.dias_observados > 0 ? (d.dias_a + d.dias_l + diasC) / d.dias_observados : 0
     const t = tallerPorActivo.get(d.activo_id)
     const calidadTaller = t?.calidad ?? 1
     return {
-      ...d, dias_c: diasC, calc_a: a, calc_p: p, calc_q: q, calc_oee: a * p * q,
+      ...d, dias_c: diasC, disp_tecnica: dispTec, utilizacion: util,
       fallas_taller: t?.fallas ?? 0,
       reincidencias: t?.reincidencias ?? 0,
       calidad_taller: calidadTaller,
-      oee_taller: a * calidadTaller,
+      oee: dispTec * calidadTaller,
     }
   }), [detalles, diasCporActivo, tallerPorActivo])
 
@@ -386,20 +377,13 @@ export function FiabilidadAnalisis({ readOnly = false }: { readOnly?: boolean } 
     [detalles],
   )
 
-  const oeeRanking = useMemo(
-    () =>
-      detallesCalc.filter(
-        (d) =>
-          d.categoria_uso === 'arriendo_comercial' || d.categoria_uso === 'leasing_operativo',
-      ),
-    [detallesCalc],
-  )
   const top5OEE = useMemo(
     () =>
-      [...oeeRanking]
-        .sort((a, b) => b.calc_oee - a.calc_oee)
+      [...detallesCalc]
+        .filter((d) => d.dias_observados > 0)
+        .sort((a, b) => b.oee - a.oee)
         .slice(0, 5),
-    [oeeRanking],
+    [detallesCalc],
   )
   // Bottom 5 por Disponibilidad Inherente (peor confiabilidad): toda la flota
   // con datos, los 5 de menor disponibilidad inherente.
@@ -785,8 +769,8 @@ export function FiabilidadAnalisis({ readOnly = false }: { readOnly?: boolean } 
               borderClass="border-green-200"
               data={top5OEE.map((d) => ({
                 patente: d.patente,
-                valor: Math.round(d.calc_oee * 100),
-                color: colorOEEBar(d.calc_oee),
+                valor: Math.round(d.oee * 100),
+                color: colorOEEBar(d.oee),
               }))}
               labelUnit="%"
             />
@@ -947,13 +931,10 @@ export function FiabilidadAnalisis({ readOnly = false }: { readOnly?: boolean } 
                     <th className="px-2 py-2 text-right">MTBF</th>
                     <th className="px-2 py-2 text-right">MTTR</th>
                     <th className="px-2 py-2 text-right">Disp.Inh</th>
-                    <th className="px-2 py-2 text-right" title="OEE Comercial: A (Disp) × P (Utilización) × Q (Calidad)">A</th>
-                    <th className="px-2 py-2 text-right">P</th>
-                    <th className="px-2 py-2 text-right">Q</th>
-                    <th className="px-2 py-2 text-right">OEE Com</th>
+                    <th className="px-2 py-2 text-right" title="Utilización comercial = (A+L+C)/Total — informativa, NO entra al OEE">Util</th>
                     <th className="px-2 py-2 text-right" title="Fallas repetidas en el mismo mes (reincidencia)">Rep/mes</th>
-                    <th className="px-2 py-2 text-right" title="Calidad del trabajo del taller (penaliza reincidencia)">Cal.T</th>
-                    <th className="px-2 py-2 text-right" title="OEE Taller = Disp. Técnica × Calidad del trabajo">OEE Tall</th>
+                    <th className="px-2 py-2 text-right" title="Calidad del trabajo (penaliza reincidencia)">Cal.T</th>
+                    <th className="px-2 py-2 text-right" title="OEE = Disp. Técnica × Calidad del trabajo">OEE</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -997,12 +978,7 @@ export function FiabilidadAnalisis({ readOnly = false }: { readOnly?: boolean } 
                       <td className={`px-2 py-1.5 text-right font-semibold ${colorDispTxt(d.disponibilidad_inherente)}`}>
                         {fmtPct(d.disponibilidad_inherente, 0)}
                       </td>
-                      <td className="px-2 py-1.5 text-right">{fmtPct(d.calc_a)}</td>
-                      <td className="px-2 py-1.5 text-right">{fmtPct(d.calc_p)}</td>
-                      <td className="px-2 py-1.5 text-right">{fmtPct(d.calc_q)}</td>
-                      <td className={`px-2 py-1.5 text-right ${colorOEE(d.calc_oee)}`}>
-                        {fmtPct(d.calc_oee)}
-                      </td>
+                      <td className="px-2 py-1.5 text-right text-gray-500">{fmtPct(d.utilizacion, 0)}</td>
                       <td className="px-2 py-1.5 text-right">
                         {d.reincidencias > 0
                           ? <span className="font-semibold text-red-600">{d.reincidencias}</span>
@@ -1011,14 +987,14 @@ export function FiabilidadAnalisis({ readOnly = false }: { readOnly?: boolean } 
                       <td className={`px-2 py-1.5 text-right ${d.calidad_taller < 1 ? 'text-amber-700 font-medium' : ''}`}>
                         {fmtPct(d.calidad_taller, 0)}
                       </td>
-                      <td className={`px-2 py-1.5 text-right font-semibold ${colorOEE(d.oee_taller)}`}>
-                        {fmtPct(d.oee_taller)}
+                      <td className={`px-2 py-1.5 text-right font-semibold ${colorOEE(d.oee)}`}>
+                        {fmtPct(d.oee)}
                       </td>
                     </tr>
                   ))}
                   {detallesFiltrados.length === 0 && (
                     <tr>
-                      <td colSpan={25} className="py-6 text-center text-gray-400">
+                      <td colSpan={22} className="py-6 text-center text-gray-400">
                         Sin equipos en esa categoría con datos en el período
                       </td>
                     </tr>
@@ -1031,20 +1007,14 @@ export function FiabilidadAnalisis({ readOnly = false }: { readOnly?: boolean } 
                   UP=días operativos (no M/T/F) · DOWN=días no disponibles (M/T/F).
                 </p>
                 <p>
-                  <b className="text-gray-600">OEE Comercial = A × P × Q</b>, donde:
+                  <b className="text-gray-600">OEE = Disp. Técnica × Calidad del trabajo</b> (lente del taller; la utilización es comercial y NO entra al OEE):
                 </p>
                 <ul className="ml-3 list-disc space-y-0.5">
-                  <li><b className="text-gray-600">A — Disponibilidad</b>: días operativos ÷ días totales = (Total − M − T − F) ÷ Total.</li>
-                  <li><b className="text-gray-600">P — Utilización (comercial)</b>: días en arriendo ÷ días totales = (A + L + C) ÷ Total.</li>
-                  <li><b className="text-gray-600">Q — Calidad</b>: confiabilidad por tiempo de reparación = MTBF ÷ (MTBF + MTTR).</li>
-                </ul>
-                <p className="pt-1">
-                  <b className="text-gray-600">OEE Taller = Disp. Técnica × Calidad del trabajo</b> (sin la utilización comercial, que no controla el taller):
-                </p>
-                <ul className="ml-3 list-disc space-y-0.5">
-                  <li><b className="text-gray-600">Disp. Técnica</b> = (Total − M − T − F) ÷ Total.</li>
-                  <li><b className="text-gray-600">Rep/mes</b> = fallas que se repiten dentro del mismo mes (cada episodio M/T/F extra en un mes cuenta como reincidencia).</li>
-                  <li><b className="text-gray-600">Cal.T — Calidad del trabajo</b> = fallas primarias ÷ fallas totales (cada reincidencia la baja). Confiabilidad/mantenibilidad se ven en MTBF y MTTR.</li>
+                  <li><b className="text-gray-600">Disp. Técnica</b> = días operativos ÷ días totales = (Total − M − T − F) ÷ Total.</li>
+                  <li><b className="text-gray-600">Cal.T — Calidad del trabajo</b> = fallas primarias ÷ fallas totales. Cada reincidencia la baja.</li>
+                  <li><b className="text-gray-600">Rep/mes</b> = fallas que se repiten dentro del mismo mes (cada episodio M/T/F extra en un mes).</li>
+                  <li><b className="text-gray-600">Util</b> = utilización comercial = (A + L + C) ÷ Total. Informativa, no afecta el OEE.</li>
+                  <li>Confiabilidad y mantenibilidad se ven en <b className="text-gray-600">MTBF</b> y <b className="text-gray-600">MTTR</b>.</li>
                 </ul>
               </div>
             </CardContent>
@@ -1062,14 +1032,12 @@ export function FiabilidadAnalisis({ readOnly = false }: { readOnly?: boolean } 
                 <div><b className="text-gray-800">Días DOWN</b> — días en que el equipo NO estuvo disponible.<br /><span className="text-gray-400">Estados M, T, F</span></div>
                 <div><b className="text-gray-800">Disponibilidad Física</b> — % del tiempo operativo.<br /><span className="text-gray-400">= Días UP ÷ Días-Equipo</span></div>
                 <div><b className="text-gray-800">Utilización Bruta</b> — % del tiempo generando ingreso.<br /><span className="text-gray-400">= (Días A + C + L) ÷ Días-Equipo</span></div>
-                <div><b className="text-gray-800">OEE</b> — eficiencia global del equipo.<br /><span className="text-gray-400">= A × P × Q (Disponibilidad × Rendimiento × Calidad)</span></div>
-                <div><b className="text-gray-800">A — Disponibilidad (OEE)</b> — % de días operativos.<br /><span className="text-gray-400">= (Total − M − T − F) ÷ Total</span></div>
-                <div><b className="text-gray-800">P — Utilización (OEE)</b> — % de días en arriendo.<br /><span className="text-gray-400">= (A + L + C) ÷ Total</span></div>
-                <div><b className="text-gray-800">Q — Calidad (OEE)</b> — confiabilidad según tiempo de reparación.<br /><span className="text-gray-400">= MTBF ÷ (MTBF + MTTR)</span></div>
+                <div><b className="text-gray-800">OEE</b> — eficiencia del equipo desde la gestión del taller.<br /><span className="text-gray-400">= Disp. Técnica × Calidad del trabajo</span></div>
+                <div><b className="text-gray-800">Disp. Técnica</b> — % de días operativos.<br /><span className="text-gray-400">= (Total − M − T − F) ÷ Total</span></div>
+                <div><b className="text-gray-800">Utilización</b> — % de días en arriendo (comercial, no entra al OEE).<br /><span className="text-gray-400">= (A + L + C) ÷ Total</span></div>
                 <div><b className="text-gray-800">MTBF</b> — días operativo promedio entre fallas.<br /><span className="text-gray-400">= Días UP ÷ nº de fallas</span></div>
                 <div><b className="text-gray-800">MTTR</b> — días promedio para reparar una falla.<br /><span className="text-gray-400">= Días DOWN ÷ nº de fallas</span></div>
                 <div><b className="text-gray-800">Disponibilidad Inherente</b> — disponibilidad teórica por confiabilidad.<br /><span className="text-gray-400">= MTBF ÷ (MTBF + MTTR). Con falla = M+T+F coincide con la Disp. Física.</span></div>
-                <div><b className="text-gray-800">OEE Taller</b> — eficiencia desde la gestión del taller (sin la utilización comercial).<br /><span className="text-gray-400">= Disp. Técnica × Calidad del trabajo</span></div>
                 <div><b className="text-gray-800">Calidad del trabajo (Cal.T)</b> — castiga fallas repetidas en el mismo mes.<br /><span className="text-gray-400">= fallas primarias ÷ fallas totales</span></div>
                 <div><b className="text-gray-800">Rep/mes</b> — fallas que se repiten dentro del mismo mes (reincidencia). Cada episodio M/T/F extra en un mes.</div>
               </div>
