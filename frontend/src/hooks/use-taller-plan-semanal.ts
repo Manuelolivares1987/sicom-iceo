@@ -108,8 +108,8 @@ export function useAgregarJornadaTaller(planId: string | null) {
 export function useMoverJornadaTaller(planId: string | null) {
   const invalidate = useInvalidatePlan(planId)
   return useMutation({
-    mutationFn: ({ planOtId, fechaDestino, responsableId }: { planOtId: string; fechaDestino: string; responsableId?: string | null }) =>
-      rpcMoverJornada(planOtId, fechaDestino, responsableId),
+    mutationFn: ({ planOtId, fechaDestino, responsableId, motivo }: { planOtId: string; fechaDestino: string; responsableId?: string | null; motivo?: string | null }) =>
+      rpcMoverJornada(planOtId, fechaDestino, responsableId, motivo),
     onSuccess: () => invalidate(),
   })
 }
@@ -123,8 +123,8 @@ export function useQuitarJornadaTaller(planId: string | null) {
 export function useAsignarResponsableTaller(planId: string | null) {
   const invalidate = useInvalidatePlan(planId)
   return useMutation({
-    mutationFn: ({ planOtId, responsableId, cuadrilla }: { planOtId: string; responsableId: string | null; cuadrilla?: string | null }) =>
-      rpcAsignarResponsable(planOtId, responsableId, cuadrilla),
+    mutationFn: ({ planOtId, responsableId, cuadrilla, motivo }: { planOtId: string; responsableId: string | null; cuadrilla?: string | null; motivo?: string | null }) =>
+      rpcAsignarResponsable(planOtId, responsableId, cuadrilla, motivo),
     onSuccess: () => invalidate(),
   })
 }

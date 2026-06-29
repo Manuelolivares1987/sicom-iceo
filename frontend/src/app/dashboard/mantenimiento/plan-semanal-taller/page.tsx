@@ -32,7 +32,7 @@ import {
   useChecklistV3Taller, useV3SetTiempoTaller, useV3SetExcluidoTaller,
   useV3AgregarItemTaller, useV3EliminarCustomTaller,
 } from '@/hooks/use-taller-plan-semanal'
-import { lunesDeIso, type TallerPlanOTFull, type ChecklistV3Item } from '@/lib/services/taller-plan-semanal'
+import { lunesDeIso, getJornadaEventos, type TallerPlanOTFull, type ChecklistV3Item, type TallerJornadaEvento } from '@/lib/services/taller-plan-semanal'
 import { getFlotaDashboard, type FlotaDashboardActivo } from '@/lib/services/flota-dashboard'
 import {
   getPlanesActivo, getPreventivasDue, programarOtTaller, getEquiposPadre, getRtPorVencer,
@@ -127,6 +127,9 @@ export default function PlanSemanalTallerPage() {
   const [dropTarget, setDropTarget] = useState<DropTarget | null>(null)
   const [renovarRt, setRenovarRt] = useState<RtPorVencer | null>(null)
   const [recepTarget, setRecepTarget] = useState<{ activoId: string; label: string; fecha: string } | null>(null)
+  // Control de cambios: reprogramación de jornada en plan confirmado exige motivo.
+  const [reprogTarget, setReprogTarget] = useState<{ planOtId: string; fechaDestino: string; label: string; diaActual: string } | null>(null)
+  const [reprogMotivo, setReprogMotivo] = useState('')
   const qc = useQueryClient()
   const [filtroPatente, setFiltroPatente] = useState('')
 
@@ -224,6 +227,19 @@ export default function PlanSemanalTallerPage() {
       setRecepTarget({ activoId, label: r ? `${r.patente ?? r.codigo}` : activoId, fecha: fechaDestino })
     } else if (aActive.startsWith('jornada:')) {
       const planOtId = aActive.replace('jornada:', '')
+      const j = (jornadas ?? []).find((x) => x.plan_ot_id === planOtId)
+      if (!j || j.dia_fecha === fechaDestino) return // mismo día: nada que mover
+      // Plan confirmado → exigir motivo del cambio (control de cambios).
+      if (j.plan_estado !== 'borrador') {
+        setReprogMotivo('')
+        setReprogTarget({
+          planOtId,
+          fechaDestino,
+          label: `${j.activo_patente ?? j.activo_codigo ?? ''} · OT ${j.ot_folio}`,
+          diaActual: j.dia_fecha,
+        })
+        return
+      }
       moverJornada.mutate({ planOtId, fechaDestino }, {
         onSuccess: () => toast.success('Jornada movida'),
         onError: (err) => toast.error((err as Error).message),
@@ -495,6 +511,46 @@ export default function PlanSemanalTallerPage() {
                 onError: (err) => toast.error((err as Error).message),
               })
             }}>Finalizar</Button>
+          </ModalFooter>
+        </Modal>
+      )}
+
+      {/* Control de cambios: motivo al reprogramar una jornada de un plan confirmado */}
+      {reprogTarget && (
+        <Modal open={true} onClose={() => setReprogTarget(null)}
+               title="Reprogramar jornada (plan confirmado)">
+          <div className="space-y-3">
+            <div className="text-xs text-gray-600">
+              <p className="font-medium text-gray-800">{reprogTarget.label}</p>
+              <p>Mueves de <b>{fmtFecha(reprogTarget.diaActual)}</b> a <b>{fmtFecha(reprogTarget.fechaDestino)}</b>.</p>
+            </div>
+            <div className="flex items-start gap-2 rounded bg-amber-50 border border-amber-200 px-2 py-1.5 text-[11px] text-amber-800">
+              <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+              <span>El plan ya está confirmado. Indica el motivo del cambio: quedará registrado en el control de cambios.</span>
+            </div>
+            <div>
+              <label className="text-xs font-medium">Motivo de la reprogramación <span className="text-red-500">*</span></label>
+              <textarea value={reprogMotivo} onChange={(e) => setReprogMotivo(e.target.value)}
+                        rows={3} autoFocus
+                        className="w-full border rounded px-2 py-1.5 text-sm"
+                        placeholder="Ej: falta de repuesto, equipo no llegó a taller, prioridad de cliente…" />
+            </div>
+          </div>
+          <ModalFooter>
+            <Button variant="outline" onClick={() => setReprogTarget(null)}>Cancelar</Button>
+            <Button disabled={moverJornada.isPending || !reprogMotivo.trim()}
+                    onClick={() => {
+                      moverJornada.mutate(
+                        { planOtId: reprogTarget.planOtId, fechaDestino: reprogTarget.fechaDestino, motivo: reprogMotivo.trim() },
+                        {
+                          onSuccess: () => { toast.success('Jornada reprogramada'); setReprogTarget(null) },
+                          onError: (err) => toast.error((err as Error).message),
+                        },
+                      )
+                    }}>
+              {moverJornada.isPending ? <Spinner className="h-4 w-4 mr-1" /> : null}
+              Reprogramar
+            </Button>
           </ModalFooter>
         </Modal>
       )}
@@ -1240,6 +1296,11 @@ function AsignarResponsableModal({ jornada, planId, onClose }: {
     .filter((s) => (MECANICOS as readonly string[]).includes(s))
     .slice(0, MAX_MECANICOS)
   const [mecanicos, setMecanicos] = useState<string[]>(inicial)
+  const [motivo, setMotivo] = useState('')
+
+  const confirmado = jornada.plan_estado !== 'borrador'
+  const cuadrillaCambia = mecanicos.join(', ') !== (jornada.cuadrilla ?? '')
+  const requiereMotivo = confirmado && cuadrillaCambia
 
   return (
     <Modal open={true} onClose={onClose} title={`Mecánicos a cargo · ${jornada.ot_folio}`}>
@@ -1248,12 +1309,22 @@ function AsignarResponsableModal({ jornada, planId, onClose }: {
           <label className="text-xs font-medium">Mecánicos a cargo (hasta {MAX_MECANICOS})</label>
           <MecanicosPicker value={mecanicos} onChange={setMecanicos} />
         </div>
+        {requiereMotivo && (
+          <div>
+            <label className="text-xs font-medium text-amber-800">
+              Motivo del cambio <span className="text-red-500">*</span>
+            </label>
+            <Input value={motivo} onChange={(e) => setMotivo(e.target.value)}
+                   placeholder="El plan está confirmado: por qué cambian los mecánicos" />
+          </div>
+        )}
       </div>
       <ModalFooter>
         <Button variant="outline" onClick={onClose}>Cancelar</Button>
-        <Button disabled={asignar.isPending}
+        <Button disabled={asignar.isPending || (requiereMotivo && !motivo.trim())}
                 onClick={() => asignar.mutate({
-                  planOtId: jornada.plan_ot_id, responsableId: null, cuadrilla: mecanicos.join(', '),
+                  planOtId: jornada.plan_ot_id, responsableId: jornada.responsable_id ?? null,
+                  cuadrilla: mecanicos.join(', '), motivo: motivo.trim() || null,
                 }, {
                   onSuccess: () => { toast.success('Mecánicos asignados'); onClose() },
                   onError: (err) => toast.error((err as Error).message),
@@ -1293,8 +1364,20 @@ function JornadaDetalleModal({ jornada, planId, onClose }: {
   const [obs, setObs] = useState<string>(jornada.observaciones ?? '')
   const [nuevaTarea, setNuevaTarea] = useState('')
   const [nuevoTiempo, setNuevoTiempo] = useState('')
+  const [motivo, setMotivo] = useState('')
+
+  // Control de cambios: si el plan está confirmado y cambia el personal, exigir motivo.
+  const confirmado = jornada.plan_estado !== 'borrador'
+  const personalCambia =
+    (responsableId !== (jornada.responsable_id ?? '')) ||
+    (mecanicos.join(', ') !== (jornada.cuadrilla ?? ''))
+  const requiereMotivo = confirmado && personalCambia
 
   function guardarCabecera() {
+    if (requiereMotivo && !motivo.trim()) {
+      toast.error('El plan está confirmado: indica el motivo del cambio de personal.')
+      return
+    }
     editar.mutate({
       planOtId: jornada.plan_ot_id,
       responsableId: responsableId || null,
@@ -1302,6 +1385,7 @@ function JornadaDetalleModal({ jornada, planId, onClose }: {
       horasPlanificadas: horas ? Number(horas) : null,
       avanceObjetivo: meta ? Number(meta) : null,
       observaciones: obs.trim() || null,
+      motivo: motivo.trim() || null,
     }, {
       onSuccess: () => { toast.success('Jornada actualizada'); onClose() },
       onError: (err) => toast.error((err as Error).message),
@@ -1375,6 +1459,15 @@ function JornadaDetalleModal({ jornada, planId, onClose }: {
             <label className="text-xs font-medium">Observaciones</label>
             <Input value={obs} onChange={(e) => setObs(e.target.value)} placeholder="opcional" />
           </div>
+          {requiereMotivo && (
+            <div className="sm:col-span-2">
+              <label className="text-xs font-medium text-amber-800">
+                Motivo del cambio de personal <span className="text-red-500">*</span>
+              </label>
+              <Input value={motivo} onChange={(e) => setMotivo(e.target.value)}
+                     placeholder="El plan está confirmado: por qué cambia el personal" />
+            </div>
+          )}
         </div>
 
         {/* Checklist V03 de la OT */}
@@ -1432,6 +1525,9 @@ function JornadaDetalleModal({ jornada, planId, onClose }: {
             </Button>
           </div>
         </div>
+
+        {/* Control de cambios: bitácora de reprogramaciones y cambios de personal */}
+        <JornadaEventosTimeline planOtId={jornada.plan_ot_id} />
       </div>
 
       <ModalFooter>
@@ -1442,6 +1538,72 @@ function JornadaDetalleModal({ jornada, planId, onClose }: {
         </Button>
       </ModalFooter>
     </Modal>
+  )
+}
+
+// ── Control de cambios: línea de tiempo de eventos de la jornada ────────────
+const TIPO_EVENTO_LABEL: Record<TallerJornadaEvento['tipo'], string> = {
+  reprogramacion: 'Reprogramación',
+  cambio_responsable: 'Cambio de responsable',
+  cambio_cuadrilla: 'Cambio de mecánicos',
+  cambio_horas: 'Cambio de horas',
+  cambio_avance: 'Cambio de meta',
+  creacion: 'Creación',
+  eliminacion: 'Eliminación',
+  otro: 'Cambio',
+}
+
+function JornadaEventosTimeline({ planOtId }: { planOtId: string }) {
+  const { data: eventos, isLoading } = useQuery({
+    queryKey: ['taller', 'jornada-eventos', planOtId],
+    queryFn: () => getJornadaEventos(planOtId),
+    staleTime: 10_000,
+  })
+
+  function detalle(e: TallerJornadaEvento): string {
+    if (e.tipo === 'reprogramacion' && e.dia_anterior && e.dia_nuevo)
+      return `${fmtFecha(e.dia_anterior)} → ${fmtFecha(e.dia_nuevo)}`
+    if (e.tipo === 'cambio_responsable')
+      return `${e.responsable_anterior_nombre ?? 'Sin asignar'} → ${e.responsable_nuevo_nombre ?? 'Sin asignar'}`
+    if (e.tipo === 'cambio_cuadrilla')
+      return `${e.cuadrilla_anterior ?? '—'} → ${e.cuadrilla_nueva ?? '—'}`
+    if (e.valor_anterior != null || e.valor_nuevo != null)
+      return `${e.valor_anterior ?? '—'} → ${e.valor_nuevo ?? '—'}`
+    return ''
+  }
+
+  return (
+    <div className="border-t pt-3">
+      <h3 className="text-sm font-semibold flex items-center gap-1 mb-2">
+        <RefreshCw className="h-4 w-4 text-gray-500" /> Control de cambios
+      </h3>
+      {isLoading ? (
+        <div className="flex justify-center py-3"><Spinner className="h-4 w-4" /></div>
+      ) : !eventos || eventos.length === 0 ? (
+        <p className="text-[11px] text-gray-400 py-1">Sin cambios registrados en esta jornada.</p>
+      ) : (
+        <ul className="space-y-2">
+          {eventos.map((e) => (
+            <li key={e.id} className="flex gap-2 text-[11px]">
+              <div className="mt-1 h-1.5 w-1.5 rounded-full bg-gray-400 shrink-0" />
+              <div className="flex-1">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="font-semibold text-gray-800">{TIPO_EVENTO_LABEL[e.tipo]}</span>
+                  <span className="text-gray-600">{detalle(e)}</span>
+                  {e.plan_confirmado && (
+                    <span className="text-[9px] px-1 rounded bg-amber-100 text-amber-700">plan confirmado</span>
+                  )}
+                </div>
+                {e.motivo && <p className="text-gray-600 italic">«{e.motivo}»</p>}
+                <p className="text-gray-400">
+                  {e.autor_nombre ?? '—'} · {new Date(e.created_at).toLocaleString('es-CL', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                </p>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   )
 }
 

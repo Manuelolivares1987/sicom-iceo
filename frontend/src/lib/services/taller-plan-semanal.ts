@@ -307,14 +307,15 @@ export async function rpcAgregarJornadaOT(params: {
   return data as { success: boolean; plan_ot_id: string; secuencia: number }
 }
 
-export async function rpcMoverJornada(planOtId: string, fechaDestino: string, responsableId?: string | null) {
+export async function rpcMoverJornada(planOtId: string, fechaDestino: string, responsableId?: string | null, motivo?: string | null) {
   const { data, error } = await supabase.rpc('rpc_taller_mover_jornada', {
     p_plan_ot_id: planOtId,
     p_fecha_destino: fechaDestino,
     p_responsable_id: responsableId ?? null,
+    p_motivo: motivo ?? null,
   })
   if (error) throw error
-  return data as { success: boolean }
+  return data as { success: boolean; reprogramada?: boolean }
 }
 
 export async function rpcQuitarJornada(planOtId: string) {
@@ -323,11 +324,12 @@ export async function rpcQuitarJornada(planOtId: string) {
   return data as { success: boolean }
 }
 
-export async function rpcAsignarResponsable(planOtId: string, responsableId: string | null, cuadrilla?: string | null) {
+export async function rpcAsignarResponsable(planOtId: string, responsableId: string | null, cuadrilla?: string | null, motivo?: string | null) {
   const { data, error } = await supabase.rpc('rpc_taller_asignar_responsable', {
     p_plan_ot_id: planOtId,
     p_responsable_id: responsableId,
     p_cuadrilla: cuadrilla ?? null,
+    p_motivo: motivo ?? null,
   })
   if (error) throw error
   return data as { success: boolean }
@@ -342,6 +344,7 @@ export async function rpcEditarJornada(params: {
   horasPlanificadas?: number | null
   avanceObjetivo?: number | null
   observaciones?: string | null
+  motivo?: string | null
 }) {
   const { data, error } = await supabase.rpc('rpc_taller_editar_jornada', {
     p_plan_ot_id: params.planOtId,
@@ -350,9 +353,42 @@ export async function rpcEditarJornada(params: {
     p_horas_planificadas: params.horasPlanificadas ?? null,
     p_avance_objetivo: params.avanceObjetivo ?? null,
     p_observaciones: params.observaciones ?? null,
+    p_motivo: params.motivo ?? null,
   })
   if (error) throw error
   return data as { success: boolean; plan_ot_id: string; ot_id: string }
+}
+
+// ── Control de cambios: bitácora de eventos de una jornada ──────────────────
+export type TallerJornadaEvento = {
+  id: string
+  plan_ot_id: string
+  ot_id: string | null
+  ot_folio: string | null
+  tipo: 'reprogramacion' | 'cambio_responsable' | 'cambio_cuadrilla' | 'cambio_horas' | 'cambio_avance' | 'creacion' | 'eliminacion' | 'otro'
+  dia_anterior: string | null
+  dia_nuevo: string | null
+  responsable_anterior_nombre: string | null
+  responsable_nuevo_nombre: string | null
+  cuadrilla_anterior: string | null
+  cuadrilla_nueva: string | null
+  campo: string | null
+  valor_anterior: string | null
+  valor_nuevo: string | null
+  motivo: string | null
+  plan_confirmado: boolean
+  autor_nombre: string | null
+  created_at: string
+}
+
+export async function getJornadaEventos(planOtId: string): Promise<TallerJornadaEvento[]> {
+  const { data, error } = await supabase
+    .from('v_taller_jornada_eventos')
+    .select('*')
+    .eq('plan_ot_id', planOtId)
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return (data ?? []) as TallerJornadaEvento[]
 }
 
 // Checklist de la OT (pauta o inspección)
