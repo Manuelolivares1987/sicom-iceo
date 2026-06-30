@@ -3,6 +3,7 @@ import {
   getPlanSemanalById, getDiasPlanSemanal, getJornadasPlanSemanal,
   getBacklog, getKpiSemanal, getCumplimientoPmMes, getUsuariosAsignables,
   getCoberturaResumen, getActivosSinPlan, getChecklistV3OT, getTallerTecnicos,
+  crearTallerTecnico, desactivarTallerTecnico,
   rpcAgregarTareaLibre, rpcEliminarTarea,
   rpcGetOrCreatePlanSemanal, rpcAgregarJornadaOT, rpcMoverJornada,
   rpcQuitarJornada, rpcAsignarResponsable, rpcConfirmarPlanSemanal,
@@ -68,6 +69,20 @@ export function useTallerTecnicos(operacion?: string | null) {
     queryKey: KEY('tecnicos', operacion),
     queryFn: () => getTallerTecnicos(operacion),
     staleTime: 5 * 60_000,
+  })
+}
+export function useCrearTecnico() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: crearTallerTecnico,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['taller', 'tecnicos'] }),
+  })
+}
+export function useDesactivarTecnico() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => desactivarTallerTecnico(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['taller', 'tecnicos'] }),
   })
 }
 export function useCoberturaPm() {

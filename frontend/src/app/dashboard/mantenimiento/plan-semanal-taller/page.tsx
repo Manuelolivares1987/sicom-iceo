@@ -32,6 +32,7 @@ import {
   useChecklistV3Taller, useV3SetTiempoTaller, useV3SetExcluidoTaller,
   useV3AgregarItemTaller, useV3EliminarCustomTaller,
   useTallerTecnicos, useAgregarTareaLibreTaller,
+  useCrearTecnico, useDesactivarTecnico,
 } from '@/hooks/use-taller-plan-semanal'
 import {
   lunesDeIso, getJornadaEventos,
@@ -157,6 +158,7 @@ export default function PlanSemanalTallerPage() {
   // Filtro por operación/zona (Coquimbo / Calama). '' = todas.
   const [filtroOperacion, setFiltroOperacion] = useState('')
   const [tareaLibreOpen, setTareaLibreOpen] = useState(false)
+  const [gestionTecnicosOpen, setGestionTecnicosOpen] = useState(false)
   const { data: tecnicos } = useTallerTecnicos(filtroOperacion || null)
   const agregarTareaLibre = useAgregarTareaLibreTaller(planSemanalId)
 
@@ -417,6 +419,14 @@ export default function PlanSemanalTallerPage() {
             <Plus className="h-4 w-4 mr-1" /> Programar tarea
           </Button>
           <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setGestionTecnicosOpen(true)}
+            title="Agregar o quitar técnicos del taller"
+          >
+            <User className="h-4 w-4 mr-1" /> Técnicos
+          </Button>
+          <Button
             size="sm"
             disabled={!planSemanalId || confirmarPlan.isPending || planConfirmado}
             onClick={() => confirmarPlan.mutate(planSemanalId, {
@@ -546,6 +556,14 @@ export default function PlanSemanalTallerPage() {
           jornada={detalleOpen}
           onClose={() => setDetalleOpen(null)}
           planId={planSemanalId}
+        />
+      )}
+
+      {/* Modal gestionar técnicos (agregar / quitar) */}
+      {gestionTecnicosOpen && (
+        <GestionarTecnicosDialog
+          operacionInicial={filtroOperacion || null}
+          onClose={() => setGestionTecnicosOpen(false)}
         />
       )}
 
@@ -1207,6 +1225,102 @@ function MecanicosPicker({ value, onChange, opciones }: {
         )
       })}
     </div>
+  )
+}
+
+const ESPECIALIDADES = ['MECANICO', 'SOLDADURA', 'TRASLADOS', 'ELECTRICO', 'HIDRAULICA', 'OTRO'] as const
+
+// Diálogo: gestionar técnicos del taller (agregar / quitar).
+function GestionarTecnicosDialog({ operacionInicial, onClose }: {
+  operacionInicial: string | null
+  onClose: () => void
+}) {
+  const toast = useToast()
+  const [verOperacion, setVerOperacion] = useState(operacionInicial ?? '')
+  const { data: tecnicos, isLoading } = useTallerTecnicos(verOperacion || null)
+  const crear = useCrearTecnico()
+  const desactivar = useDesactivarTecnico()
+
+  const [nombre, setNombre] = useState('')
+  const [especialidad, setEspecialidad] = useState<string>('MECANICO')
+  const [operacion, setOperacion] = useState(operacionInicial ?? 'Coquimbo')
+
+  const agregar = () => {
+    if (!nombre.trim()) { toast.error('Indica el nombre del técnico'); return }
+    crear.mutate({ nombre, especialidad, operacion: operacion || null }, {
+      onSuccess: () => { toast.success('Técnico agregado'); setNombre('') },
+      onError: (e) => toast.error((e as Error).message),
+    })
+  }
+
+  return (
+    <Modal open onClose={onClose} title="Técnicos del taller" className="sm:max-w-lg">
+      <div className="space-y-4">
+        {/* Agregar */}
+        <div className="rounded-lg border border-blue-200 bg-blue-50/40 p-3 space-y-2">
+          <div className="text-xs font-semibold text-gray-700">Agregar técnico</div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <Input value={nombre} onChange={(e) => setNombre(e.target.value)}
+                   placeholder="Nombre y apellido"
+                   onKeyDown={(e) => { if (e.key === 'Enter') agregar() }} />
+            <select value={especialidad} onChange={(e) => setEspecialidad(e.target.value)}
+                    className="rounded border border-gray-300 px-2 py-1.5 text-sm">
+              {ESPECIALIDADES.map((e) => <option key={e} value={e}>{e}</option>)}
+            </select>
+            <select value={operacion} onChange={(e) => setOperacion(e.target.value)}
+                    className="rounded border border-gray-300 px-2 py-1.5 text-sm">
+              <option value="Coquimbo">Coquimbo</option>
+              <option value="Calama">Calama</option>
+              <option value="">Sin operación</option>
+            </select>
+            <Button size="sm" onClick={agregar} disabled={crear.isPending || !nombre.trim()}>
+              <Plus className="h-4 w-4 mr-1" /> Agregar
+            </Button>
+          </div>
+        </div>
+
+        {/* Filtro de lista */}
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-semibold text-gray-700">Técnicos registrados</span>
+          <select value={verOperacion} onChange={(e) => setVerOperacion(e.target.value)}
+                  className="h-7 rounded border border-gray-300 px-2 text-xs">
+            <option value="">Todas las operaciones</option>
+            <option value="Coquimbo">Coquimbo</option>
+            <option value="Calama">Calama</option>
+          </select>
+        </div>
+
+        {/* Lista */}
+        <div className="max-h-72 overflow-auto rounded-lg border border-gray-200 divide-y">
+          {isLoading ? (
+            <div className="flex justify-center py-6"><Spinner className="h-5 w-5" /></div>
+          ) : (tecnicos ?? []).length === 0 ? (
+            <p className="py-6 text-center text-xs text-gray-400">Sin técnicos para esta operación.</p>
+          ) : (
+            (tecnicos ?? []).map((t) => (
+              <div key={t.id} className="flex items-center gap-2 px-3 py-2 text-sm">
+                <span className="font-medium text-gray-800">{t.nombre}</span>
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">{t.especialidad}</span>
+                {t.operacion && <span className="text-[10px] text-gray-400">{t.operacion}</span>}
+                <button
+                  onClick={() => desactivar.mutate(t.id, {
+                    onSuccess: () => toast.success('Técnico quitado'),
+                    onError: (e) => toast.error((e as Error).message),
+                  })}
+                  disabled={desactivar.isPending}
+                  className="ml-auto text-[11px] inline-flex items-center gap-1 rounded border border-red-200 bg-white px-2 py-1 text-red-600 hover:bg-red-50 disabled:opacity-50"
+                  title="Quitar técnico">
+                  <Trash2 className="h-3.5 w-3.5" /> Quitar
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+      <ModalFooter>
+        <Button variant="outline" onClick={onClose}>Cerrar</Button>
+      </ModalFooter>
+    </Modal>
   )
 }
 

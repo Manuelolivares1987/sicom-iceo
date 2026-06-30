@@ -319,6 +319,40 @@ export async function getTallerTecnicos(operacion?: string | null): Promise<Tall
   return (data ?? []) as TallerTecnico[]
 }
 
+// Agregar un técnico (reactiva si ya existía con el mismo nombre+operación).
+export async function crearTallerTecnico(input: {
+  nombre: string; especialidad: string; operacion?: string | null
+}): Promise<TallerTecnico> {
+  const nombre = input.nombre.trim()
+  const especialidad = (input.especialidad || 'MECANICO').trim()
+  const operacion = input.operacion?.trim() || null
+  const cols = 'id, nombre, especialidad, operacion, activo'
+  const { data, error } = await supabase
+    .from('taller_tecnicos')
+    .insert({ nombre, especialidad, operacion })
+    .select(cols).single()
+  if (error) {
+    // Ya existe (quizá desactivado): reactivar y actualizar especialidad.
+    if ((error as { code?: string }).code === '23505') {
+      let q = supabase.from('taller_tecnicos')
+        .update({ activo: true, especialidad }).ilike('nombre', nombre)
+      q = operacion ? q.eq('operacion', operacion) : q.is('operacion', null)
+      const { data: up, error: e2 } = await q.select(cols).single()
+      if (e2) throw e2
+      return up as TallerTecnico
+    }
+    throw error
+  }
+  return data as TallerTecnico
+}
+
+// Quitar un técnico: lo desactiva (no se borra, para no romper jornadas que lo
+// referencian). Desaparece del selector porque éste filtra activos.
+export async function desactivarTallerTecnico(id: string): Promise<void> {
+  const { error } = await supabase.from('taller_tecnicos').update({ activo: false }).eq('id', id)
+  if (error) throw error
+}
+
 // ============================================================================
 // Mutations / RPCs
 // ============================================================================
