@@ -5,6 +5,7 @@ import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { useAuth } from '@/contexts/auth-context'
+import { usePermissions } from '@/hooks/use-permissions'
 import {
   getJornadasDeOT, getChecklistV3OT, type ChecklistV3Item,
   rpcV3SetTiempo, rpcV3SetExcluido, rpcV3AgregarItem, rpcV3EliminarCustom,
@@ -188,6 +189,7 @@ function bloqueLabel(b: string): string {
 
 function ChecklistTab({
   otId, mode, readOnly, liberadoAt, onLiberar, onReabrir, liberando, reabriendo,
+  canPrepare, prepActive, onTogglePrep,
 }: {
   otId: string
   mode: 'edit' | 'exec'
@@ -197,6 +199,9 @@ function ChecklistTab({
   onReabrir: () => void
   liberando?: boolean
   reabriendo?: boolean
+  canPrepare?: boolean
+  prepActive?: boolean
+  onTogglePrep?: () => void
 }) {
   const qc = useQueryClient()
   const { data: items, isLoading } = useQuery({
@@ -292,13 +297,19 @@ function ChecklistTab({
           </div>
           <p className="mt-1 text-amber-700 text-xs">
             Ajusta los tiempos, marca las tareas que no aplican y agrega las que falten.
-            Cuando esté listo, libera a ejecución.
+            {prepActive ? ' Los cambios se guardan al instante.' : ' Cuando esté listo, libera a ejecución.'}
           </p>
           <div className="mt-2">
-            <Button variant="primary" onClick={onLiberar} disabled={liberando}>
-              {liberando ? <Spinner size="sm" className="mr-1" /> : <Unlock className="h-4 w-4 mr-1" />}
-              Liberar a ejecución
-            </Button>
+            {prepActive ? (
+              <Button variant="secondary" onClick={onTogglePrep}>
+                <CheckCircle2 className="h-4 w-4 mr-1" /> Listo, volver a ejecución
+              </Button>
+            ) : (
+              <Button variant="primary" onClick={onLiberar} disabled={liberando}>
+                {liberando ? <Spinner size="sm" className="mr-1" /> : <Unlock className="h-4 w-4 mr-1" />}
+                Liberar a ejecución
+              </Button>
+            )}
           </div>
         </div>
       )}
@@ -309,6 +320,16 @@ function ChecklistTab({
           <button onClick={onReabrir} disabled={reabriendo}
                   className="ml-auto inline-flex items-center gap-1 rounded-lg border border-amber-300 bg-white px-2 py-1 text-xs text-amber-700 hover:bg-amber-50 disabled:opacity-50">
             <Lock className="h-3.5 w-3.5" /> Reabrir preparación
+          </button>
+        </div>
+      )}
+      {mode === 'exec' && !readOnly && !liberadoAt && canPrepare && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg bg-blue-50 border border-blue-200 p-3 text-sm text-blue-700">
+          <Pencil className="h-4 w-4 shrink-0" />
+          <span>¿Necesitas ajustar el checklist (tiempos, tareas que no aplican o agregar tareas)?</span>
+          <button onClick={onTogglePrep}
+                  className="ml-auto inline-flex items-center gap-1 rounded-lg border border-blue-300 bg-white px-2 py-1 text-xs text-blue-700 hover:bg-blue-100">
+            <Pencil className="h-3.5 w-3.5" /> Editar checklist (preparación)
           </button>
         </div>
       )}
@@ -1292,6 +1313,11 @@ export default function OrdenTrabajoDetailPage() {
   const id = params?.id as string | undefined
   const { user } = useAuth()
   const userId = user?.id ?? ''
+  const { rol } = usePermissions()
+  // El jefe de taller (y roles superiores) puede reabrir la preparación del
+  // checklist para editar su estructura aunque la OT ya esté en ejecución.
+  const puedePreparar = ['administrador', 'subgerente_operaciones', 'jefe_mantenimiento', 'supervisor'].includes(rol ?? '')
+  const [modoPreparacion, setModoPreparacion] = useState(false)
 
   const { data: ot, isLoading, error } = useOrdenTrabajo(id)
   const { data: checklistData } = useQuery({
@@ -1376,7 +1402,12 @@ export default function OrdenTrabajoDetailPage() {
   // Modo del checklist: el jefe prepara (edita) hasta liberar; luego ejecución.
   const liberado = !!otData.preparacion_ok_at
   const enEjecucionOMas = ['en_ejecucion', 'pausada', 'ejecutada_ok', 'ejecutada_con_observaciones', 'cerrada'].includes(otData.estado)
-  const checklistMode: 'edit' | 'exec' = (isOTClosed || liberado || enEjecucionOMas) ? 'exec' : 'edit'
+  // El jefe de taller puede forzar modo preparación en cualquier OT no cerrada
+  // (override manual), para editar la estructura del checklist tras iniciar.
+  const prepActive = !isOTClosed && puedePreparar && modoPreparacion
+  const checklistMode: 'edit' | 'exec' = prepActive
+    ? 'edit'
+    : (isOTClosed || liberado || enEjecucionOMas) ? 'exec' : 'edit'
 
   return (
     <div className="pb-24">
@@ -1451,6 +1482,9 @@ export default function OrdenTrabajoDetailPage() {
               onReabrir={() => reabrirMut.mutate()}
               liberando={liberarMut.isPending}
               reabriendo={reabrirMut.isPending}
+              canPrepare={puedePreparar}
+              prepActive={prepActive}
+              onTogglePrep={() => setModoPreparacion((v) => !v)}
             />
           )}
           {activeTab === 'evidencias' && id && <EvidenciasTab otId={id} disabled={isOTClosed} />}
