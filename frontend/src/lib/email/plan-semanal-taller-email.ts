@@ -69,19 +69,20 @@ export function buildPlanSemanalTallerEmailHtml(args: {
 
   // ── Fila de OT ──
   const filaOT = (j: TallerPlanOTFull, zebra: boolean) => {
-    const tipoCol = TIPO_COLOR[j.ot_tipo] ?? '#6b7280'
+    const tipoCol = TIPO_COLOR[j.ot_tipo ?? ''] ?? '#6b7280'
     const estCol = ESTADO_COLOR[j.jornada_estado] ?? '#6b7280'
     const bg = zebra ? '#f8fafc' : '#ffffff'
     const resp = j.responsable || j.cuadrilla || '—'
-    const trabajo = j.pm_nombre || j.ot_folio || ''
+    const trabajo = j.pm_nombre || j.ot_folio || j.titulo || ''
+    const tipoTxt = j.ot_tipo ?? (j.categoria ?? 'Tarea')
     const horas = j.horas_planificadas != null ? `${j.horas_planificadas} h` : ''
     return `<tr bgcolor="${bg}">
       <td style="${FONT};font-size:13px;padding:6px 10px;border-bottom:1px solid #eef2f7">
-        <b style="color:${NAVY}">${esc(j.activo_patente || j.activo_codigo || '—')}</b>
+        <b style="color:${NAVY}">${esc(j.activo_patente || j.activo_codigo || j.equipo_externo || j.titulo || '—')}</b>
         ${j.activo_tipo ? `<span style="color:#94a3b8;font-size:11px">&nbsp;${esc(j.activo_tipo)}</span>` : ''}
       </td>
       <td style="${FONT};font-size:12px;padding:6px 10px;border-bottom:1px solid #eef2f7">
-        <b style="color:${tipoCol}">${esc(cap1(j.ot_tipo))}</b>${trabajo ? `<span style="color:#475569">&nbsp;· ${esc(trabajo)}</span>` : ''}
+        <b style="color:${tipoCol}">${esc(cap1(tipoTxt))}</b>${trabajo ? `<span style="color:#475569">&nbsp;· ${esc(trabajo)}</span>` : ''}
       </td>
       <td style="${FONT};font-size:12px;padding:6px 10px;border-bottom:1px solid #eef2f7;color:#334155">${esc(resp)}</td>
       <td align="center" style="${FONT};font-size:12px;padding:6px 10px;border-bottom:1px solid #eef2f7;color:#64748b">${esc(horas)}</td>

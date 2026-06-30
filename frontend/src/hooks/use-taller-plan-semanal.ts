@@ -2,7 +2,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   getPlanSemanalById, getDiasPlanSemanal, getJornadasPlanSemanal,
   getBacklog, getKpiSemanal, getCumplimientoPmMes, getUsuariosAsignables,
-  getCoberturaResumen, getActivosSinPlan, getChecklistV3OT,
+  getCoberturaResumen, getActivosSinPlan, getChecklistV3OT, getTallerTecnicos,
+  rpcAgregarTareaLibre, rpcEliminarTarea,
   rpcGetOrCreatePlanSemanal, rpcAgregarJornadaOT, rpcMoverJornada,
   rpcQuitarJornada, rpcAsignarResponsable, rpcConfirmarPlanSemanal,
   rpcEditarJornada, rpcV3SetTiempo, rpcV3SetExcluido, rpcV3AgregarItem, rpcV3EliminarCustom,
@@ -62,6 +63,13 @@ export function useUsuariosAsignablesTaller() {
     staleTime: 5 * 60_000,
   })
 }
+export function useTallerTecnicos(operacion?: string | null) {
+  return useQuery({
+    queryKey: KEY('tecnicos', operacion),
+    queryFn: () => getTallerTecnicos(operacion),
+    staleTime: 5 * 60_000,
+  })
+}
 export function useCoberturaPm() {
   return useQuery({
     queryKey: KEY('cobertura-pm'),
@@ -102,6 +110,20 @@ export function useAgregarJornadaTaller(planId: string | null) {
   const invalidate = useInvalidatePlan(planId)
   return useMutation({
     mutationFn: rpcAgregarJornadaOT,
+    onSuccess: () => invalidate(),
+  })
+}
+export function useAgregarTareaLibreTaller(planId: string | null) {
+  const invalidate = useInvalidatePlan(planId)
+  return useMutation({
+    mutationFn: rpcAgregarTareaLibre,
+    onSuccess: () => invalidate(),
+  })
+}
+export function useEliminarTareaTaller(planId: string | null) {
+  const invalidate = useInvalidatePlan(planId)
+  return useMutation({
+    mutationFn: (planOtId: string) => rpcEliminarTarea(planOtId),
     onSuccess: () => invalidate(),
   })
 }

@@ -31,8 +31,14 @@ import {
   useEditarJornadaTaller, useUsuariosAsignablesTaller,
   useChecklistV3Taller, useV3SetTiempoTaller, useV3SetExcluidoTaller,
   useV3AgregarItemTaller, useV3EliminarCustomTaller,
+  useTallerTecnicos, useAgregarTareaLibreTaller,
 } from '@/hooks/use-taller-plan-semanal'
-import { lunesDeIso, getJornadaEventos, type TallerPlanOTFull, type ChecklistV3Item, type TallerJornadaEvento } from '@/lib/services/taller-plan-semanal'
+import {
+  lunesDeIso, getJornadaEventos,
+  CATEGORIA_TAREA_LABEL, CATEGORIAS_TAREA_LIBRE,
+  type TallerPlanOTFull, type ChecklistV3Item, type TallerJornadaEvento,
+  type TallerTecnico, type CategoriaTareaTaller,
+} from '@/lib/services/taller-plan-semanal'
 import { getFlotaDashboard, type FlotaDashboardActivo } from '@/lib/services/flota-dashboard'
 import {
   getPlanesActivo, getPreventivasDue, programarOtTaller, getEquiposPadre, getRtPorVencer,
@@ -41,7 +47,7 @@ import {
   type PlanActivo, type PreventivaDue, type TipoOtTaller, type PrioridadTaller, type RtPorVencer,
   type RecepcionPorPlanificar, type NcOtPorAgendar,
 } from '@/lib/services/taller-planificacion'
-import { MECANICOS, MAX_MECANICOS } from '@/lib/taller-grupos'
+import { MAX_MECANICOS } from '@/lib/taller-grupos'
 
 type Tab = 'kanban' | 'cobertura' | 'cumplimiento'
 
@@ -80,7 +86,7 @@ function fmtFecha(iso: string) {
   return d.toLocaleDateString('es-CL', { day: '2-digit', month: 'short' })
 }
 
-function colorTipo(tipo: string): string {
+function colorTipo(tipo: string | null): string {
   switch (tipo) {
     case 'preventivo':  return 'bg-blue-100 text-blue-800 border-blue-300'
     case 'correctivo':  return 'bg-red-100 text-red-800 border-red-300'
@@ -88,6 +94,22 @@ function colorTipo(tipo: string): string {
     case 'lubricacion': return 'bg-purple-100 text-purple-800 border-purple-300'
     default:            return 'bg-gray-100 text-gray-800 border-gray-300'
   }
+}
+
+// Color/etiqueta corta por categoría de tarea (MIG182).
+function colorCategoria(cat: CategoriaTareaTaller | null): string {
+  switch (cat) {
+    case 'soldadura':          return 'bg-orange-100 text-orange-800 border-orange-300'
+    case 'equipo_externo':     return 'bg-teal-100 text-teal-800 border-teal-300'
+    case 'asistencia_terreno': return 'bg-cyan-100 text-cyan-800 border-cyan-300'
+    case 'calibracion':        return 'bg-indigo-100 text-indigo-800 border-indigo-300'
+    case 'preventiva':         return 'bg-blue-100 text-blue-800 border-blue-300'
+    default:                   return 'bg-gray-100 text-gray-700 border-gray-300'
+  }
+}
+const CATEGORIA_CORTA: Record<string, string> = {
+  preventiva: 'PREV', calibracion: 'CALIB', equipo_flota: 'FLOTA',
+  asistencia_terreno: 'TERRENO', equipo_externo: 'EXTERNO', soldadura: 'SOLD.',
 }
 
 export default function PlanSemanalTallerPage() {
@@ -132,6 +154,11 @@ export default function PlanSemanalTallerPage() {
   const [reprogMotivo, setReprogMotivo] = useState('')
   const qc = useQueryClient()
   const [filtroPatente, setFiltroPatente] = useState('')
+  // Filtro por operación/zona (Coquimbo / Calama). '' = todas.
+  const [filtroOperacion, setFiltroOperacion] = useState('')
+  const [tareaLibreOpen, setTareaLibreOpen] = useState(false)
+  const { data: tecnicos } = useTallerTecnicos(filtroOperacion || null)
+  const agregarTareaLibre = useAgregarTareaLibreTaller(planSemanalId)
 
   // Solo las 55 patentes de la flota (excluye auxiliares y otros activos de la vista).
   const fleetIds = useMemo(() => new Set((fleet ?? []).map((e) => e.id)), [fleet])
@@ -160,6 +187,19 @@ export default function PlanSemanalTallerPage() {
     }
     return Array.from(m.values()).sort((a, b) => b.criticidad - a.criticidad)
   }, [preventivas, fleetIds])
+
+  // Operaciones/zonas presentes (para el filtro Coquimbo/Calama).
+  const operaciones = useMemo(() => {
+    const set = new Set<string>(['Coquimbo', 'Calama'])
+    for (const j of jornadas ?? []) if (j.operacion) set.add(j.operacion)
+    return Array.from(set).sort()
+  }, [jornadas])
+
+  // Jornadas visibles según el filtro de operación.
+  const jornadasVisibles = useMemo(
+    () => (jornadas ?? []).filter((j) => !filtroOperacion || (j.operacion ?? '') === filtroOperacion),
+    [jornadas, filtroOperacion],
+  )
 
   // Estado real del plan (para no permitir re-confirmar uno ya confirmado).
   const planEstado = kpi?.plan_estado ?? jornadas?.[0]?.plan_estado ?? null
@@ -291,9 +331,9 @@ export default function PlanSemanalTallerPage() {
                   jornadas: (jornadas ?? []).map((j) => ({
                     fecha: j.dia_fecha,
                     dia_nombre: j.dia_nombre,
-                    folio: j.ot_folio,
-                    tipo: j.ot_tipo,
-                    prioridad: j.ot_prioridad,
+                    folio: j.ot_folio ?? j.titulo ?? '(tarea)',
+                    tipo: j.ot_tipo ?? (j.categoria ?? ''),
+                    prioridad: j.ot_prioridad ?? '',
                     activo: j.activo_codigo ? `${j.activo_codigo}${j.activo_patente ? ' · ' + j.activo_patente : ''}` : null,
                     pm_nombre: j.pm_nombre,
                     responsable: j.responsable,
@@ -357,6 +397,24 @@ export default function PlanSemanalTallerPage() {
             }}
           >
             <Mail className="h-4 w-4 mr-1" /> Copiar para correo
+          </Button>
+          <select
+            value={filtroOperacion}
+            onChange={(e) => setFiltroOperacion(e.target.value)}
+            className="h-8 rounded border border-gray-300 px-2 text-xs focus:border-blue-500 focus:outline-none"
+            title="Filtrar por operación / zona"
+          >
+            <option value="">Todas las operaciones</option>
+            {operaciones.map((op) => <option key={op} value={op}>{op}</option>)}
+          </select>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!planSemanalId}
+            onClick={() => setTareaLibreOpen(true)}
+            title="Programar una tarea (asistencia en terreno, equipo externo, soldadura, etc.)"
+          >
+            <Plus className="h-4 w-4 mr-1" /> Programar tarea
           </Button>
           <Button
             size="sm"
@@ -433,14 +491,14 @@ export default function PlanSemanalTallerPage() {
                       key={dia.id}
                       fecha={dia.fecha}
                       nombre={dia.nombre_dia}
-                      jornadas={(jornadas ?? []).filter((j) => j.plan_dia_id === dia.id)}
+                      jornadas={jornadasVisibles.filter((j) => j.plan_dia_id === dia.id)}
                       onAsignar={(j) => setAsignarOpen(j)}
                       onDetalle={(j) => setDetalleOpen(j)}
                       onQuitar={(j) => quitarJornada.mutate(j.plan_ot_id, {
                         onSuccess: () => toast.success('Jornada quitada'),
                         onError: (err) => toast.error((err as Error).message),
                       })}
-                      onIniciar={(j) => iniciarEjec.mutate({ otId: j.ot_id }, {
+                      onIniciar={(j) => j.ot_id && iniciarEjec.mutate({ otId: j.ot_id }, {
                         onSuccess: () => toast.success('OT iniciada'),
                         onError: (err) => toast.error((err as Error).message),
                       })}
@@ -491,9 +549,27 @@ export default function PlanSemanalTallerPage() {
         />
       )}
 
+      {/* Modal programar tarea libre (sin equipo de flota) */}
+      {tareaLibreOpen && planSemanalId && (
+        <TareaLibreDialog
+          dias={dias ?? []}
+          tecnicos={tecnicos ?? []}
+          operacionInicial={filtroOperacion || null}
+          enviando={agregarTareaLibre.isPending}
+          onClose={() => setTareaLibreOpen(false)}
+          onSubmit={(payload) => agregarTareaLibre.mutate(
+            { planSemanalId, ...payload },
+            {
+              onSuccess: () => { toast.success('Tarea programada'); setTareaLibreOpen(false) },
+              onError: (err) => toast.error((err as Error).message),
+            },
+          )}
+        />
+      )}
+
       {/* Modal finalizar ejecución */}
       {finalizarOpen && finalizarOpen.ejecucion_activa_id && (
-        <Modal open={true} onClose={() => setFinalizarOpen(null)} title={`Finalizar ${finalizarOpen.ot_folio}`}>
+        <Modal open={true} onClose={() => setFinalizarOpen(null)} title={`Finalizar ${finalizarOpen.ot_folio ?? finalizarOpen.titulo ?? ''}`}>
           <div className="space-y-3">
             <div>
               <label className="text-xs font-medium">Avance final (%)</label>
@@ -809,6 +885,7 @@ function RecepcionDialog({ target, planSemanalId, dias, agregarJornada, onClose,
   onDone: () => void
 }) {
   const toast = useToast()
+  const { data: tecnicos } = useTallerTecnicos()
   const [mecanicos, setMecanicos] = useState<string[]>([])
   const [fechasSel, setFechasSel] = useState<Set<string>>(new Set([target.fecha]))
   const [enviando, setEnviando] = useState(false)
@@ -849,18 +926,7 @@ function RecepcionDialog({ target, planSemanalId, dias, agregarJornada, onClose,
         </div>
         <div>
           <label className="text-xs font-medium">Grupo de trabajo (hasta {MAX_MECANICOS})</label>
-          <div className="mt-1 flex flex-wrap gap-1">
-            {MECANICOS.map((m) => {
-              const on = mecanicos.includes(m)
-              return (
-                <button key={m} type="button"
-                        onClick={() => setMecanicos((prev) => on ? prev.filter((x) => x !== m) : prev.length < MAX_MECANICOS ? [...prev, m] : prev)}
-                        className={`rounded border px-2 py-1 text-[11px] ${on ? 'border-blue-500 bg-blue-500 text-white' : 'border-gray-200 bg-white text-gray-600'}`}>
-                  {m}
-                </button>
-              )
-            })}
-          </div>
+          <MecanicosPicker value={mecanicos} onChange={setMecanicos} opciones={tecnicos ?? []} />
         </div>
       </div>
       <ModalFooter>
@@ -985,6 +1051,7 @@ function ProgramarOtDialog({ target, planSemanalId, dias, onClose, onDone, agreg
     queryKey: ['planes-activo', target.activoId],
     queryFn: () => getPlanesActivo(target.activoId),
   })
+  const { data: tecnicos } = useTallerTecnicos()
   const [tipo, setTipo] = useState<TipoOtTaller>(target.tipoPre)
   const [planId, setPlanId] = useState<string>(target.planIdPre ?? '')
   const [prioridad, setPrioridad] = useState<PrioridadTaller>('normal')
@@ -1082,8 +1149,8 @@ function ProgramarOtDialog({ target, planSemanalId, dias, onClose, onDone, agreg
 
         {/* Mecánicos a cargo (hasta 2) */}
         <div>
-          <label className="text-xs font-medium">Mecánicos a cargo (hasta {MAX_MECANICOS})</label>
-          <MecanicosPicker value={mecanicos} onChange={setMecanicos} />
+          <label className="text-xs font-medium">Técnicos a cargo (hasta {MAX_MECANICOS})</label>
+          <MecanicosPicker value={mecanicos} onChange={setMecanicos} opciones={tecnicos ?? []} />
         </div>
 
         <div>
@@ -1108,29 +1175,158 @@ function ProgramarOtDialog({ target, planSemanalId, dias, onClose, onDone, agreg
   )
 }
 
-// Selector de mecánicos (hasta 2). Devuelve nombres; se guardan en `cuadrilla`.
-function MecanicosPicker({ value, onChange }: { value: string[]; onChange: (v: string[]) => void }) {
+// Selector de técnicos (hasta 2). Devuelve nombres; se guardan en `cuadrilla`.
+function MecanicosPicker({ value, onChange, opciones }: {
+  value: string[]
+  onChange: (v: string[]) => void
+  opciones: TallerTecnico[]
+}) {
   const toggle = (m: string) => {
     if (value.includes(m)) onChange(value.filter((x) => x !== m))
     else if (value.length < MAX_MECANICOS) onChange([...value, m])
   }
+  if (opciones.length === 0) {
+    return <p className="mt-1 text-xs text-gray-400">No hay técnicos registrados para esta operación.</p>
+  }
   return (
     <div className="mt-1 flex flex-wrap gap-1">
-      {MECANICOS.map((m) => {
-        const on = value.includes(m)
+      {opciones.map((t) => {
+        const on = value.includes(t.nombre)
         const bloqueado = !on && value.length >= MAX_MECANICOS
         return (
-          <button key={m} type="button" onClick={() => toggle(m)} disabled={bloqueado}
+          <button key={t.id} type="button" onClick={() => toggle(t.nombre)} disabled={bloqueado}
+                  title={t.especialidad}
                   className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${
                     on ? 'border-blue-500 bg-blue-500 text-white'
                        : bloqueado ? 'border-gray-100 bg-gray-50 text-gray-300 cursor-not-allowed'
                        : 'border-gray-200 bg-white text-gray-700 hover:bg-blue-50'
                   }`}>
-            {m}
+            {t.nombre}
+            <span className={`ml-1 text-[9px] ${on ? 'text-blue-100' : 'text-gray-400'}`}>{t.especialidad}</span>
           </button>
         )
       })}
     </div>
+  )
+}
+
+// Diálogo: programar una tarea sin equipo de flota (terreno / externo / soldadura).
+function TareaLibreDialog({ dias, tecnicos, operacionInicial, enviando, onClose, onSubmit }: {
+  dias: { fecha: string; nombre_dia: string }[]
+  tecnicos: TallerTecnico[]
+  operacionInicial: string | null
+  enviando: boolean
+  onClose: () => void
+  onSubmit: (payload: {
+    fecha: string
+    categoria: CategoriaTareaTaller
+    titulo: string
+    descripcion?: string | null
+    equipoExterno?: string | null
+    operacion?: string | null
+    tecnicoId?: string | null
+    cuadrilla?: string | null
+    horas?: number | null
+  }) => void
+}) {
+  const [categoria, setCategoria] = useState<CategoriaTareaTaller>(CATEGORIAS_TAREA_LIBRE[0])
+  const [titulo, setTitulo] = useState('')
+  const [equipoExterno, setEquipoExterno] = useState('')
+  const [descripcion, setDescripcion] = useState('')
+  const [operacion, setOperacion] = useState(operacionInicial ?? '')
+  const [fecha, setFecha] = useState(dias[0]?.fecha ?? '')
+  const [tecnicoId, setTecnicoId] = useState('')
+  const [horas, setHoras] = useState('')
+
+  const tecnico = tecnicos.find((t) => t.id === tecnicoId)
+
+  return (
+    <Modal open onClose={onClose} title="Programar tarea">
+      <div className="space-y-3">
+        <div>
+          <label className="text-xs font-medium">Tipo de trabajo</label>
+          <select value={categoria} onChange={(e) => setCategoria(e.target.value as CategoriaTareaTaller)}
+                  className="mt-0.5 w-full rounded border border-gray-300 px-2 py-1.5 text-sm">
+            {CATEGORIAS_TAREA_LIBRE.map((c) => (
+              <option key={c} value={c}>{CATEGORIA_TAREA_LABEL[c]}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="text-xs font-medium">Título <span className="text-red-500">*</span></label>
+          <Input value={titulo} onChange={(e) => setTitulo(e.target.value)}
+                 placeholder="Ej. Soldadura de estanque, asistencia generador faena X" />
+        </div>
+        <div>
+          <label className="text-xs font-medium">Equipo / cliente / lugar</label>
+          <Input value={equipoExterno} onChange={(e) => setEquipoExterno(e.target.value)}
+                 placeholder="Ej. Generador Cliente ACME — Faena La Negra" />
+        </div>
+        <div>
+          <label className="text-xs font-medium">Descripción</label>
+          <textarea value={descripcion} onChange={(e) => setDescripcion(e.target.value)}
+                    className="mt-0.5 w-full rounded border border-gray-300 px-2 py-1.5 text-sm min-h-[60px]"
+                    placeholder="Detalle del trabajo" maxLength={800} />
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="text-xs font-medium">Día</label>
+            <select value={fecha} onChange={(e) => setFecha(e.target.value)}
+                    className="mt-0.5 w-full rounded border border-gray-300 px-2 py-1.5 text-sm">
+              {dias.map((d) => (
+                <option key={d.fecha} value={d.fecha}>{d.nombre_dia} · {fmtFecha(d.fecha)}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs font-medium">Operación / zona</label>
+            <select value={operacion} onChange={(e) => setOperacion(e.target.value)}
+                    className="mt-0.5 w-full rounded border border-gray-300 px-2 py-1.5 text-sm">
+              <option value="">— Sin asignar —</option>
+              <option value="Coquimbo">Coquimbo</option>
+              <option value="Calama">Calama</option>
+              {operacion && !['', 'Coquimbo', 'Calama'].includes(operacion) && (
+                <option value={operacion}>{operacion}</option>
+              )}
+            </select>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="text-xs font-medium">Técnico a cargo</label>
+            <select value={tecnicoId} onChange={(e) => setTecnicoId(e.target.value)}
+                    className="mt-0.5 w-full rounded border border-gray-300 px-2 py-1.5 text-sm">
+              <option value="">— Sin asignar —</option>
+              {tecnicos.map((t) => (
+                <option key={t.id} value={t.id}>{t.nombre} · {t.especialidad}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs font-medium">Horas estimadas</label>
+            <Input type="number" min="0" value={horas} onChange={(e) => setHoras(e.target.value)} placeholder="opcional" />
+          </div>
+        </div>
+      </div>
+      <ModalFooter>
+        <Button variant="outline" onClick={onClose}>Cancelar</Button>
+        <Button disabled={enviando || !titulo.trim() || !fecha}
+                onClick={() => onSubmit({
+                  fecha,
+                  categoria,
+                  titulo: titulo.trim(),
+                  descripcion: descripcion.trim() || null,
+                  equipoExterno: equipoExterno.trim() || null,
+                  operacion: operacion || null,
+                  tecnicoId: tecnicoId || null,
+                  cuadrilla: tecnico?.nombre ?? null,
+                  horas: horas ? Number(horas) : null,
+                })}>
+          {enviando ? <Spinner className="h-4 w-4 mr-1" /> : null}
+          Programar
+        </Button>
+      </ModalFooter>
+    </Modal>
   )
 }
 
@@ -1191,6 +1387,7 @@ function JornadaCard({ jornada, onAsignar, onDetalle, onQuitar, onIniciar, onPau
   const enEjec = jornada.ejecucion_activa_estado === 'en_ejecucion'
   const pausada = jornada.ejecucion_activa_estado === 'pausada'
   const finalizada = jornada.jornada_estado === 'finalizada'
+  const libre = jornada.es_tarea_libre
 
   return (
     <div ref={setNodeRef} style={style}
@@ -1201,9 +1398,15 @@ function JornadaCard({ jornada, onAsignar, onDetalle, onQuitar, onIniciar, onPau
          }`}>
       <div {...listeners} {...attributes} className="cursor-grab active:cursor-grabbing">
         <div className="flex items-center gap-1">
-          <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold ${colorTipo(jornada.ot_tipo)}`}>
-            {jornada.ot_tipo.toUpperCase().slice(0, 4)}
-          </span>
+          {libre ? (
+            <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold border ${colorCategoria(jornada.categoria)}`}>
+              {jornada.categoria ? (CATEGORIA_CORTA[jornada.categoria] ?? 'TAREA') : 'TAREA'}
+            </span>
+          ) : (
+            <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold ${colorTipo(jornada.ot_tipo)}`}>
+              {(jornada.ot_tipo ?? 'OT').toUpperCase().slice(0, 4)}
+            </span>
+          )}
           {jornada.secuencia_jornada > 1 && (
             <span className="text-[9px] px-1 py-0.5 rounded bg-purple-100 text-purple-700 font-bold">
               J{jornada.secuencia_jornada}
@@ -1213,14 +1416,28 @@ function JornadaCard({ jornada, onAsignar, onDetalle, onQuitar, onIniciar, onPau
             <span className="text-[9px] text-gray-500 ml-auto">{jornada.horas_planificadas}h</span>
           )}
         </div>
-        <div className="font-mono font-bold mt-0.5">{jornada.ot_folio}</div>
-        {jornada.activo_codigo && (
-          <div className="text-[10px] text-gray-600">
-            {jornada.activo_codigo} {jornada.activo_patente && `· ${jornada.activo_patente}`}
-          </div>
-        )}
-        {jornada.pm_nombre && (
-          <div className="text-[10px] text-blue-700 mt-0.5 line-clamp-1">{jornada.pm_nombre}</div>
+        {libre ? (
+          <>
+            <div className="font-semibold mt-0.5 line-clamp-2">{jornada.titulo}</div>
+            {jornada.equipo_externo && (
+              <div className="text-[10px] text-teal-700 mt-0.5 line-clamp-1">🔧 {jornada.equipo_externo}</div>
+            )}
+            {jornada.tarea_descripcion && (
+              <div className="text-[10px] text-gray-500 mt-0.5 line-clamp-2">{jornada.tarea_descripcion}</div>
+            )}
+          </>
+        ) : (
+          <>
+            <div className="font-mono font-bold mt-0.5">{jornada.ot_folio}</div>
+            {jornada.activo_codigo && (
+              <div className="text-[10px] text-gray-600">
+                {jornada.activo_codigo} {jornada.activo_patente && `· ${jornada.activo_patente}`}
+              </div>
+            )}
+            {jornada.pm_nombre && (
+              <div className="text-[10px] text-blue-700 mt-0.5 line-clamp-1">{jornada.pm_nombre}</div>
+            )}
+          </>
         )}
         <div className="flex items-center gap-1 mt-1">
           <User className="h-3 w-3 text-gray-400" />
@@ -1244,6 +1461,20 @@ function JornadaCard({ jornada, onAsignar, onDetalle, onQuitar, onIniciar, onPau
 
       {/* Acciones */}
       <div className="flex gap-1 mt-1.5">
+        {libre ? (
+          /* Tarea libre: asignar técnicos + quitar (sin ejecución de OT) */
+          <>
+            <button onClick={() => onAsignar(jornada)} title="Técnicos a cargo"
+                    className="text-[9px] px-1.5 py-0.5 rounded bg-gray-100 hover:bg-gray-200 flex items-center gap-1">
+              <User className="h-3 w-3" />
+            </button>
+            <button onClick={() => onQuitar(jornada)} title="Quitar del plan"
+                    className="text-[9px] px-1.5 py-0.5 rounded bg-red-50 hover:bg-red-100 text-red-600 ml-auto">
+              <Trash2 className="h-3 w-3" />
+            </button>
+          </>
+        ) : (
+        <>
         <button onClick={() => onDetalle(jornada)} title="Ver / editar OT"
                 className="text-[9px] px-1.5 py-0.5 rounded bg-blue-100 hover:bg-blue-200 text-blue-700 flex items-center gap-1">
           <Pencil className="h-3 w-3" />
@@ -1289,6 +1520,8 @@ function JornadaCard({ jornada, onAsignar, onDetalle, onQuitar, onIniciar, onPau
             <CheckCircle2 className="h-3 w-3" /> {jornada.ultima_ejecucion_avance ?? 100}% completada
           </div>
         )}
+        </>
+        )}
       </div>
     </div>
   )
@@ -1301,10 +1534,11 @@ function AsignarResponsableModal({ jornada, planId, onClose }: {
 }) {
   const toast = useToast()
   const asignar = useAsignarResponsableTaller(planId)
+  const { data: tecnicos } = useTallerTecnicos(jornada.operacion)
   // Mecánicos iniciales a partir de la cuadrilla guardada.
   const inicial = (jornada.cuadrilla ?? '')
     .split(',').map((s) => s.trim())
-    .filter((s) => (MECANICOS as readonly string[]).includes(s))
+    .filter(Boolean)
     .slice(0, MAX_MECANICOS)
   const [mecanicos, setMecanicos] = useState<string[]>(inicial)
   const [motivo, setMotivo] = useState('')
@@ -1314,11 +1548,11 @@ function AsignarResponsableModal({ jornada, planId, onClose }: {
   const requiereMotivo = confirmado && cuadrillaCambia
 
   return (
-    <Modal open={true} onClose={onClose} title={`Mecánicos a cargo · ${jornada.ot_folio}`}>
+    <Modal open={true} onClose={onClose} title={`Técnicos a cargo · ${jornada.titulo ?? jornada.ot_folio ?? 'Tarea'}`}>
       <div className="space-y-3">
         <div>
-          <label className="text-xs font-medium">Mecánicos a cargo (hasta {MAX_MECANICOS})</label>
-          <MecanicosPicker value={mecanicos} onChange={setMecanicos} />
+          <label className="text-xs font-medium">Técnicos a cargo (hasta {MAX_MECANICOS})</label>
+          <MecanicosPicker value={mecanicos} onChange={setMecanicos} opciones={tecnicos ?? []} />
         </div>
         {requiereMotivo && (
           <div>
@@ -1362,12 +1596,13 @@ function JornadaDetalleModal({ jornada, planId, onClose }: {
 }) {
   const toast = useToast()
   const { data: usuarios } = useUsuariosAsignablesTaller()
+  const { data: tecnicos } = useTallerTecnicos(jornada.operacion)
   const editar = useEditarJornadaTaller(planId)
   const { data: checklist, isLoading: loadCl } = useChecklistV3Taller(jornada.ot_id)
   const agregar = useV3AgregarItemTaller(planId, jornada.ot_id)
 
   const mecIniciales = (jornada.cuadrilla ?? '').split(',').map((s) => s.trim())
-    .filter((s) => (MECANICOS as readonly string[]).includes(s)).slice(0, MAX_MECANICOS)
+    .filter(Boolean).slice(0, MAX_MECANICOS)
   const [mecanicos, setMecanicos] = useState<string[]>(mecIniciales)
   const [responsableId, setResponsableId] = useState<string>(jornada.responsable_id ?? '')
   const [horas, setHoras] = useState<string>(jornada.horas_planificadas != null ? String(jornada.horas_planificadas) : '')
@@ -1406,7 +1641,7 @@ function JornadaDetalleModal({ jornada, planId, onClose }: {
   function agregarTarea() {
     if (!nuevaTarea.trim()) return
     agregar.mutate({
-      otId: jornada.ot_id, descripcion: nuevaTarea.trim(),
+      otId: jornada.ot_id ?? '', descripcion: nuevaTarea.trim(),
       tiempoMin: nuevoTiempo ? Number(nuevoTiempo) : null,
     }, {
       onSuccess: () => { setNuevaTarea(''); setNuevoTiempo('') },
@@ -1431,7 +1666,7 @@ function JornadaDetalleModal({ jornada, planId, onClose }: {
         {/* Cabecera de la OT */}
         <div className="flex flex-wrap items-center gap-2 text-[11px]">
           <span className={`px-1.5 py-0.5 rounded font-bold ${colorTipo(jornada.ot_tipo)}`}>
-            {jornada.ot_tipo.toUpperCase()}
+            {(jornada.ot_tipo ?? 'OT').toUpperCase()}
           </span>
           <span className="px-1.5 py-0.5 rounded bg-gray-100 text-gray-700">{jornada.ot_estado}</span>
           <span className="text-gray-600">{jornada.activo_nombre} {jornada.activo_patente && `· ${jornada.activo_patente}`}</span>
@@ -1460,7 +1695,7 @@ function JornadaDetalleModal({ jornada, planId, onClose }: {
           </div>
           <div className="sm:col-span-2">
             <label className="text-xs font-medium">Mecánicos a cargo (hasta {MAX_MECANICOS})</label>
-            <MecanicosPicker value={mecanicos} onChange={setMecanicos} />
+            <MecanicosPicker value={mecanicos} onChange={setMecanicos} opciones={tecnicos ?? []} />
           </div>
           <div>
             <label className="text-xs font-medium">Meta de avance (%)</label>
@@ -1510,7 +1745,7 @@ function JornadaDetalleModal({ jornada, planId, onClose }: {
                     </div>
                     <div className="space-y-1">
                       {g.items.map((it) => (
-                        <ChecklistV3Row key={it.instance_item_id} item={it} otId={jornada.ot_id} planId={planId} />
+                        <ChecklistV3Row key={it.instance_item_id} item={it} otId={jornada.ot_id ?? ''} planId={planId} />
                       ))}
                     </div>
                   </div>

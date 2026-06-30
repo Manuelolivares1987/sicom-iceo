@@ -40,11 +40,11 @@ export type TallerPlanOTFull = {
   fecha_inicio_semana: string
   fecha_fin_semana: string
   plan_estado: EstadoPlanSemanal
-  ot_id: string
-  ot_folio: string
-  ot_tipo: string
-  ot_estado: string
-  ot_prioridad: string
+  ot_id: string | null
+  ot_folio: string | null
+  ot_tipo: string | null
+  ot_estado: string | null
+  ot_prioridad: string | null
   ot_fecha_programada: string | null
   plan_mantenimiento_id: string | null
   pm_nombre: string | null
@@ -73,8 +73,44 @@ export type TallerPlanOTFull = {
   ejecucion_activa_id: string | null
   ejecucion_activa_estado: string | null
   ultima_ejecucion_avance: number | null
+  // MIG182: categoría / tarea libre / técnico / operación
+  categoria: CategoriaTareaTaller | null
+  es_tarea_libre: boolean
+  titulo: string | null
+  tarea_descripcion: string | null
+  equipo_externo: string | null
+  operacion: string | null
+  tecnico_id: string | null
+  tecnico_nombre: string | null
+  tecnico_especialidad: string | null
   created_at: string
   updated_at: string
+}
+
+export type CategoriaTareaTaller =
+  | 'preventiva' | 'calibracion' | 'equipo_flota'
+  | 'asistencia_terreno' | 'equipo_externo' | 'soldadura'
+
+export const CATEGORIA_TAREA_LABEL: Record<CategoriaTareaTaller, string> = {
+  preventiva: 'Preventiva (flota)',
+  calibracion: 'Calibración (flota)',
+  equipo_flota: 'Trabajo a equipo de flota',
+  asistencia_terreno: 'Asistencia en terreno',
+  equipo_externo: 'Equipo externo (fuera de flota)',
+  soldadura: 'Soldadura',
+}
+
+// Categorías que NO van sobre un equipo de la flota (tarea libre, sin OT)
+export const CATEGORIAS_TAREA_LIBRE: CategoriaTareaTaller[] = [
+  'asistencia_terreno', 'equipo_externo', 'soldadura',
+]
+
+export type TallerTecnico = {
+  id: string
+  nombre: string
+  especialidad: string
+  operacion: string | null
+  activo: boolean
 }
 
 export type ChecklistOtItem = {
@@ -270,6 +306,19 @@ export async function getUsuariosAsignables(): Promise<UsuarioAsignable[]> {
   return (data ?? []) as UsuarioAsignable[]
 }
 
+// Técnicos de taller (maestro con especialidad). Opcionalmente por operación.
+export async function getTallerTecnicos(operacion?: string | null): Promise<TallerTecnico[]> {
+  let q = supabase
+    .from('taller_tecnicos')
+    .select('id, nombre, especialidad, operacion, activo')
+    .eq('activo', true)
+    .order('especialidad').order('nombre')
+  if (operacion) q = q.eq('operacion', operacion)
+  const { data, error } = await q
+  if (error) throw error
+  return (data ?? []) as TallerTecnico[]
+}
+
 // ============================================================================
 // Mutations / RPCs
 // ============================================================================
@@ -305,6 +354,40 @@ export async function rpcAgregarJornadaOT(params: {
   })
   if (error) throw error
   return data as { success: boolean; plan_ot_id: string; secuencia: number }
+}
+
+export async function rpcAgregarTareaLibre(params: {
+  planSemanalId: string
+  fecha: string
+  categoria: CategoriaTareaTaller
+  titulo: string
+  descripcion?: string | null
+  equipoExterno?: string | null
+  operacion?: string | null
+  tecnicoId?: string | null
+  cuadrilla?: string | null
+  horas?: number | null
+}) {
+  const { data, error } = await supabase.rpc('rpc_taller_agregar_tarea_libre', {
+    p_plan_semanal_id: params.planSemanalId,
+    p_fecha: params.fecha,
+    p_categoria: params.categoria,
+    p_titulo: params.titulo,
+    p_descripcion: params.descripcion ?? null,
+    p_equipo_externo: params.equipoExterno ?? null,
+    p_operacion: params.operacion ?? null,
+    p_tecnico_id: params.tecnicoId ?? null,
+    p_cuadrilla: params.cuadrilla ?? null,
+    p_horas: params.horas ?? null,
+  })
+  if (error) throw error
+  return data as { success: boolean; plan_ot_id: string }
+}
+
+export async function rpcEliminarTarea(planOtId: string) {
+  const { data, error } = await supabase.rpc('rpc_taller_eliminar_tarea', { p_plan_ot_id: planOtId })
+  if (error) throw error
+  return data as { success: boolean; plan_ot_id: string }
 }
 
 export async function rpcMoverJornada(planOtId: string, fechaDestino: string, responsableId?: string | null, motivo?: string | null) {
