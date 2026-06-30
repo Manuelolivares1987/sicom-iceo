@@ -156,9 +156,9 @@ export default function PlanSemanalTallerPage() {
     for (const p of preventivas ?? []) {
       if (fleetIds.size > 0 && !fleetIds.has(p.activo_id)) continue
       const prev = m.get(p.activo_id)
-      if (!prev || p.dias_vencido > prev.dias_vencido) m.set(p.activo_id, p)
+      if (!prev || p.criticidad > prev.criticidad) m.set(p.activo_id, p)
     }
-    return Array.from(m.values()).sort((a, b) => b.dias_vencido - a.dias_vencido)
+    return Array.from(m.values()).sort((a, b) => b.criticidad - a.criticidad)
   }, [preventivas, fleetIds])
 
   // Resolver/crear plan al cambiar de semana
@@ -700,15 +700,20 @@ function PreventivaCard({ p }: { p: PreventivaDue }) {
   const style = transform
     ? { transform: `translate3d(${transform.x}px,${transform.y}px,0)`, opacity: isDragging ? 0.5 : 1 }
     : undefined
-  const vencida = p.dias_vencido > 0
+  const vencida = p.vencida
+  const ejeIcon = p.eje_critico === 'km' ? '🛣' : p.eje_critico === 'horas' ? '⏱' : '📅'
 
   return (
     <div ref={setNodeRef} style={style} {...listeners} {...attributes}
-         title={vencida ? `Vencida ${p.dias_vencido}d` : `Vence en ${Math.abs(p.dias_vencido)}d`}
-         className={`rounded border px-2.5 py-1.5 cursor-grab active:cursor-grabbing shadow-sm font-mono text-[12px] font-bold ${
+         title={`${p.detalle}${p.pauta_nombre ? ` · ${p.pauta_nombre}` : ''}${!p.baseline_confiable ? ' · ⚠ revisar lectura km/h del plan' : ''}`}
+         className={`rounded border px-2.5 py-1.5 cursor-grab active:cursor-grabbing shadow-sm min-w-[120px] ${
            vencida ? 'border-red-300 bg-red-50 text-red-800' : 'border-amber-200 bg-amber-50 text-amber-800'
          }`}>
-      {p.patente}
+      <div className="font-mono text-[12px] font-bold flex items-center gap-1">
+        {p.patente}
+        {!p.baseline_confiable && <AlertTriangle className="h-3 w-3 text-orange-500" />}
+      </div>
+      <div className="text-[10px] font-normal opacity-80">{ejeIcon} {p.detalle}</div>
     </div>
   )
 }

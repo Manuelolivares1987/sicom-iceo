@@ -110,7 +110,8 @@ export async function programarOtRecepcion(params: {
   return data as { id: string; folio: string; tareas_cargadas: number }
 }
 
-// Patentes que deben entrar a mantención preventiva según su pauta (vencidas/próximas)
+// Patentes que deben entrar a mantención preventiva según su pauta (vencidas/próximas).
+// Multi-eje (fecha + km + horas) vía v_taller_preventivas_due (MIG174).
 export interface PreventivaDue {
   plan_id: string
   activo_id: string
@@ -119,37 +120,51 @@ export interface PreventivaDue {
   pauta_nombre: string | null
   duracion_estimada_hrs: number | null
   proxima_fecha: string | null
-  dias_vencido: number          // >0 vencida, <0 faltan días
+  vencida: boolean
+  eje_critico: 'fecha' | 'km' | 'horas'
+  detalle: string                 // texto legible del eje crítico (ej. "Vencida por 800 km")
+  criticidad: number              // mayor = más urgente
+  baseline_confiable: boolean     // false = la lectura km/h del plan está desfasada
+  dias_restante: number | null
+  dias_vencido: number            // compat: >0 vencida (por fecha), <0 faltan días
 }
 
 export async function getPreventivasDue(diasAdelante = 15): Promise<PreventivaDue[]> {
-  const limite = new Date(Date.now() + diasAdelante * 86400000).toISOString().slice(0, 10)
   const { data, error } = await supabase
-    .from('planes_mantenimiento')
-    .select('id, proxima_ejecucion_fecha, activo:activos(id, patente, codigo, nombre), pauta:pautas_fabricante(nombre, duracion_estimada_hrs)')
-    .eq('activo_plan', true)
-    .lte('proxima_ejecucion_fecha', limite)
-    .order('proxima_ejecucion_fecha', { ascending: true })
+    .from('v_taller_preventivas_due')
+    .select('*')
+    .order('criticidad', { ascending: false })
   if (error) throw error
-  const hoy = Date.now()
   type Raw = {
-    id: string; proxima_ejecucion_fecha: string | null
-    activo: { id: string; patente: string | null; codigo: string | null; nombre: string | null } | null
-    pauta: { nombre: string | null; duracion_estimada_hrs: number | null } | null
+    plan_id: string; activo_id: string
+    patente: string | null; codigo: string | null; equipamiento: string | null
+    pauta_nombre: string | null; duracion_estimada_hrs: number | null
+    proxima_fecha: string | null
+    dias_restante: number | null; frac_min: number | null
+    vencida: boolean; eje_critico: 'fecha' | 'km' | 'horas'
+    detalle: string; criticidad: number; baseline_confiable: boolean
   }
   return ((data ?? []) as unknown as Raw[])
-    .filter((r) => r.activo)
+    .filter((r) =>
+      r.vencida ||
+      (r.frac_min != null && r.frac_min <= 0.25) ||
+      (r.dias_restante != null && r.dias_restante <= diasAdelante),
+    )
     .map((r) => ({
-      plan_id: r.id,
-      activo_id: r.activo!.id,
-      patente: r.activo!.patente ?? r.activo!.codigo ?? '—',
-      equipamiento: r.activo!.nombre ?? null,
-      pauta_nombre: r.pauta?.nombre ?? null,
-      duracion_estimada_hrs: r.pauta?.duracion_estimada_hrs ?? null,
-      proxima_fecha: r.proxima_ejecucion_fecha,
-      dias_vencido: r.proxima_ejecucion_fecha
-        ? Math.round((hoy - new Date(r.proxima_ejecucion_fecha + 'T00:00:00').getTime()) / 86400000)
-        : 0,
+      plan_id: r.plan_id,
+      activo_id: r.activo_id,
+      patente: r.patente ?? r.codigo ?? '—',
+      equipamiento: r.equipamiento ?? null,
+      pauta_nombre: r.pauta_nombre ?? null,
+      duracion_estimada_hrs: r.duracion_estimada_hrs ?? null,
+      proxima_fecha: r.proxima_fecha,
+      vencida: r.vencida,
+      eje_critico: r.eje_critico,
+      detalle: r.detalle,
+      criticidad: Number(r.criticidad ?? 0),
+      baseline_confiable: r.baseline_confiable !== false,
+      dias_restante: r.dias_restante,
+      dias_vencido: r.dias_restante != null ? -r.dias_restante : (r.vencida ? 1 : 0),
     }))
 }
 

@@ -379,15 +379,23 @@ function PreventivasTab({ tecnicos, onProgramada }: { tecnicos: Tecnico[]; onPro
               </thead>
               <tbody>
                 {filas.map((f) => (
-                  <tr key={f.plan_id} className={`border-b hover:bg-gray-50 ${f.dias_vencido > 0 ? 'bg-red-50/40' : ''}`}>
-                    <td className="px-2 py-1.5 font-mono font-semibold">{f.patente}</td>
+                  <tr key={f.plan_id} className={`border-b hover:bg-gray-50 ${f.vencida ? 'bg-red-50/40' : ''}`}>
+                    <td className="px-2 py-1.5 font-mono font-semibold">
+                      <span className="inline-flex items-center gap-1">
+                        {f.patente}
+                        {!f.baseline_confiable && (
+                          <span title="Revisar la última lectura de km/horas del plan: está desfasada"
+                                className="text-orange-500">⚠</span>
+                        )}
+                      </span>
+                    </td>
                     <td className="px-2 py-1.5 text-gray-500 max-w-[150px] truncate">{f.equipamiento ?? '—'}</td>
                     <td className="px-2 py-1.5">{f.pauta_nombre ?? '—'}</td>
                     <td className="px-2 py-1.5 text-gray-500">{f.proxima_fecha ?? '—'}</td>
                     <td className="px-2 py-1.5 text-right">
-                      {f.dias_vencido > 0
-                        ? <span className="font-semibold text-red-600">vencida {f.dias_vencido} d</span>
-                        : <span className="text-amber-600">en {Math.abs(f.dias_vencido)} d</span>}
+                      <span className={f.vencida ? 'font-semibold text-red-600' : 'text-amber-600'}>
+                        {f.eje_critico === 'km' ? '🛣 ' : f.eje_critico === 'horas' ? '⏱ ' : '📅 '}{f.detalle}
+                      </span>
                     </td>
                     <td className="px-2 py-1.5 text-right">{f.duracion_estimada_hrs != null ? `${f.duracion_estimada_hrs} h` : '—'}</td>
                     <td className="px-2 py-1.5 text-right">
