@@ -161,6 +161,10 @@ export default function PlanSemanalTallerPage() {
     return Array.from(m.values()).sort((a, b) => b.criticidad - a.criticidad)
   }, [preventivas, fleetIds])
 
+  // Estado real del plan (para no permitir re-confirmar uno ya confirmado).
+  const planEstado = kpi?.plan_estado ?? jornadas?.[0]?.plan_estado ?? null
+  const planConfirmado = planEstado != null && planEstado !== 'borrador'
+
   // Resolver/crear plan al cambiar de semana
   useEffect(() => {
     if (!semanaIso) return
@@ -356,14 +360,16 @@ export default function PlanSemanalTallerPage() {
           </Button>
           <Button
             size="sm"
-            disabled={!planSemanalId || confirmarPlan.isPending}
+            disabled={!planSemanalId || confirmarPlan.isPending || planConfirmado}
             onClick={() => confirmarPlan.mutate(planSemanalId, {
               onSuccess: (d) => toast.success(`Plan confirmado: ${d.ots_confirmadas} jornadas`),
               onError: (err) => toast.error((err as Error).message),
             })}
-            className="bg-pillado-green-600 hover:bg-pillado-green-700"
+            className="bg-pillado-green-600 hover:bg-pillado-green-700 disabled:opacity-100"
+            title={planConfirmado ? 'El plan de esta semana ya está confirmado' : undefined}
           >
-            <Lock className="h-4 w-4 mr-1" /> Confirmar plan
+            <Lock className="h-4 w-4 mr-1" />
+            {planConfirmado ? 'Plan confirmado ✓' : 'Confirmar plan'}
           </Button>
         </div>
       </div>
