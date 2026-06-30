@@ -294,14 +294,10 @@ export function CambiarEstadoModal({ open, onClose, activo, estadoInicial, fecha
           ot_descripcion: otDescripcion.trim() || undefined,
           ubicacion: lugarTrim || undefined,
         })
-      } else if (lugarTrim !== (activo.ubicacion_actual ?? '')) {
-        // Solo cambió el lugar físico (sin cambio de estado): persistir directo
-        const { error: eUbic } = await supabase
-          .from('activos')
-          .update({ ubicacion_actual: lugarTrim || null })
-          .eq('id', activo.id)
-        if (eUbic) { setErrorMsg(`No se pudo guardar el lugar: ${eUbic.message}`); return }
       }
+      // El lugar físico (cuando NO cambia el estado) y la operación se guardan
+      // más abajo vía RPC. NO con .update directo: la RLS de `activos` es
+      // admin-only y un update directo se perdería en silencio (0 filas).
 
       // Contrato: independiente del estado. Se aplica si el usuario eligió cambiarlo.
       const contratoOriginal = activo.contrato_id ?? null
@@ -336,15 +332,22 @@ export function CambiarEstadoModal({ open, onClose, activo, estadoInicial, fecha
           return
         }
       }
-      // Operación / zona: si el usuario la fijó y cambió, persistir (gana sobre
-      // el autocompletado desde el contrato).
+      // Lugar físico y operación → RPC SECURITY DEFINER (sortea la RLS admin-only
+      // de `activos`). El lugar solo se aplica aquí si el estado NO cambió (si
+      // cambió, ya lo guardó el RPC de estado). La operación gana sobre el
+      // autocompletado desde el contrato.
       const opTrim = operacion.trim()
-      if (opTrim !== (activo.operacion ?? '')) {
-        const { error: eOp } = await supabase
-          .from('activos')
-          .update({ operacion: opTrim || null })
-          .eq('id', activo.id)
-        if (eOp) { setErrorMsg(`No se pudo guardar la operación: ${eOp.message}`); return }
+      const aplicarUbic = !debeActualizarEstado && lugarTrim !== (activo.ubicacion_actual ?? '')
+      const aplicarOp = opTrim !== (activo.operacion ?? '')
+      if (aplicarUbic || aplicarOp) {
+        const { error: eAttr } = await supabase.rpc('rpc_actualizar_atributos_activo', {
+          p_activo_id: activo.id,
+          p_aplicar_ubicacion: aplicarUbic,
+          p_ubicacion: aplicarUbic ? (lugarTrim || null) : null,
+          p_aplicar_operacion: aplicarOp,
+          p_operacion: aplicarOp ? (opTrim || null) : null,
+        })
+        if (eAttr) { setErrorMsg(`No se pudo guardar lugar/operación: ${eAttr.message}`); return }
       }
 
       // Propagar a toda la app: invalidar cachés que dependen de contrato /
