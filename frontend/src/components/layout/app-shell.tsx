@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import Sidebar from './sidebar'
 import Header from './header'
+import SugerenciaWidget from '@/components/sugerencias/sugerencia-widget'
 import { cn } from '@/lib/utils'
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
@@ -58,6 +59,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           {children}
         </main>
       </div>
+
+      {/* Ampolleta de sugerencias (flotante, todas las pantallas del dashboard) */}
+      <SugerenciaWidget />
     </div>
   )
 }

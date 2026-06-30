@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import {
   Menu,
   Search,
@@ -13,7 +13,17 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/contexts/auth-context'
-import { useConteoNoLeidas } from '@/hooks/use-alertas'
+import { useConteoNoLeidas, useAlertasNoLeidas, useMarcarLeida } from '@/hooks/use-alertas'
+
+// Adónde lleva una alerta según su entidad.
+function rutaAlerta(entidadTipo: string | null): string {
+  switch (entidadTipo) {
+    case 'no_conformidad': return '/dashboard/mantenimiento/no-conformidades'
+    case 'activo':         return '/dashboard/flota/gps'
+    case 'ot':             return '/dashboard/ordenes-trabajo'
+    default:               return '/dashboard'
+  }
+}
 
 const breadcrumbMap: Record<string, string> = {
   '/dashboard': 'Dashboard',
@@ -37,9 +47,24 @@ interface HeaderProps {
 
 export default function Header({ onMenuToggle }: HeaderProps) {
   const pathname = usePathname()
+  const router = useRouter()
   const [showUserMenu, setShowUserMenu] = useState(false)
+  const [showNotif, setShowNotif] = useState(false)
   const { perfil, signOut } = useAuth()
   const { data: unreadCount = 0 } = useConteoNoLeidas()
+  const { data: alertasData } = useAlertasNoLeidas()
+  const alertas = alertasData ?? []
+  const marcarLeida = useMarcarLeida()
+
+  const sevDot: Record<string, string> = {
+    critical: 'bg-red-500', warning: 'bg-amber-500', info: 'bg-blue-500',
+  }
+
+  function abrirAlerta(id: string, entidadTipo: string | null) {
+    marcarLeida.mutate(id)
+    setShowNotif(false)
+    router.push(rutaAlerta(entidadTipo))
+  }
 
   const displayName = perfil?.nombre_completo ?? 'Usuario'
   const displayEmail = perfil?.email ?? ''
@@ -90,14 +115,51 @@ export default function Header({ onMenuToggle }: HeaderProps) {
       </div>
 
       {/* Notifications */}
-      <button className="relative rounded-md p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-700">
-        <Bell className="h-5 w-5" />
-        {unreadCount > 0 && (
-          <span className="absolute -right-0.5 -top-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-pillado-orange-500 text-[10px] font-bold text-white">
-            {unreadCount}
-          </span>
+      <div className="relative">
+        <button
+          onClick={() => setShowNotif((v) => !v)}
+          className="relative rounded-md p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+          aria-label="Notificaciones"
+        >
+          <Bell className="h-5 w-5" />
+          {unreadCount > 0 && (
+            <span className="absolute -right-0.5 -top-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-pillado-orange-500 text-[10px] font-bold text-white">
+              {unreadCount}
+            </span>
+          )}
+        </button>
+
+        {showNotif && (
+          <>
+            <div className="fixed inset-0 z-40" onClick={() => setShowNotif(false)} />
+            <div className="absolute right-0 top-12 z-50 w-80 rounded-lg border border-gray-200 bg-white shadow-lg">
+              <div className="flex items-center justify-between border-b border-gray-100 px-4 py-2.5">
+                <p className="text-sm font-semibold text-gray-900">Notificaciones</p>
+                <span className="text-xs text-gray-400">{unreadCount} sin leer</span>
+              </div>
+              <div className="max-h-96 overflow-y-auto">
+                {alertas.length === 0 ? (
+                  <p className="px-4 py-6 text-center text-sm text-gray-400">Sin notificaciones nuevas.</p>
+                ) : (
+                  alertas.slice(0, 20).map((a) => (
+                    <button
+                      key={a.id}
+                      onClick={() => abrirAlerta(a.id, a.entidad_tipo)}
+                      className="flex w-full items-start gap-2 border-b border-gray-50 px-4 py-2.5 text-left hover:bg-gray-50"
+                    >
+                      <span className={cn('mt-1.5 h-2 w-2 shrink-0 rounded-full', sevDot[a.severidad] ?? 'bg-gray-400')} />
+                      <span className="flex-1">
+                        <span className="block text-sm font-medium text-gray-800">{a.titulo}</span>
+                        {a.mensaje && <span className="block text-xs text-gray-500 line-clamp-2">{a.mensaje}</span>}
+                      </span>
+                    </button>
+                  ))
+                )}
+              </div>
+            </div>
+          </>
         )}
-      </button>
+      </div>
 
       {/* User avatar dropdown */}
       <div className="relative">
