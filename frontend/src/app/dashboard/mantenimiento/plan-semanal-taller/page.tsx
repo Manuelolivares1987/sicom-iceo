@@ -1114,43 +1114,42 @@ function DocumentosPorVencerCard({ items, onRenovar }: {
         {grupos.length === 0 ? (
           <div className="text-xs text-gray-400 p-3 text-center">Sin documentos vencidos ni próximos a vencer.</div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+          <div className="flex flex-wrap gap-2">
             {grupos.map((docs) => {
               const g = docs[0]
               const gVencidos = docs.filter((d) => d.dias_restantes < 0).length
               return (
-                <div key={g.activo_id} className="rounded-lg border border-gray-200 overflow-hidden">
+                <div key={g.activo_id} className="w-full sm:w-[340px] shrink-0 rounded-lg border border-gray-200 overflow-hidden">
                   <div className="flex items-center gap-2 bg-gray-50 px-2.5 py-1.5 border-b">
                     <span className="font-mono font-bold text-sm text-gray-800">{g.patente ?? g.codigo ?? '—'}</span>
                     {g.patente && g.codigo && <span className="text-[10px] text-gray-400">{g.codigo}</span>}
                     {g.operacion && <span className="text-[10px] text-gray-400">· {g.operacion}</span>}
-                    <span className="ml-auto text-[10px] text-gray-500">{docs.length} doc{docs.length > 1 ? 's' : ''}</span>
                     {gVencidos > 0 && (
-                      <span className="text-[9px] font-bold px-1 rounded bg-red-100 text-red-700">{gVencidos} venc.</span>
+                      <span className="ml-auto text-[9px] font-bold px-1 rounded bg-red-100 text-red-700">{gVencidos} venc.</span>
                     )}
                   </div>
                   <div className="divide-y">
                     {docs.map((d) => {
                       const vencido = d.dias_restantes < 0
                       return (
-                        <div key={d.tipo} className="flex items-center gap-2 px-2.5 py-1.5 text-xs hover:bg-amber-50/40">
-                          <div className="min-w-0">
-                            <div className="truncate font-medium text-gray-700">
-                              {TIPO_DOC_LABEL[d.tipo] ?? d.tipo}
-                              {d.bloqueante && <span className="ml-1 text-[9px] px-1 rounded bg-red-100 text-red-700">bloqueante</span>}
-                            </div>
-                            <div className="text-[10px] text-gray-400">vence {d.fecha_vencimiento}</div>
+                        <div key={d.tipo} className="px-2.5 py-2 text-xs hover:bg-amber-50/40">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-medium text-gray-700">{TIPO_DOC_LABEL[d.tipo] ?? d.tipo}</span>
+                            {d.bloqueante && <span className="text-[9px] px-1 rounded bg-red-100 text-red-700">bloqueante</span>}
+                            <span className={`ml-auto text-[10px] font-semibold px-1.5 py-0.5 rounded ${
+                              vencido ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-800'
+                            }`}>
+                              {vencido ? `vencido ${Math.abs(d.dias_restantes)}d` : `en ${d.dias_restantes}d`}
+                            </span>
                           </div>
-                          <span className={`ml-auto shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded ${
-                            vencido ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-800'
-                          }`}>
-                            {vencido ? `vencido ${Math.abs(d.dias_restantes)}d` : `en ${d.dias_restantes}d`}
-                          </span>
-                          <button type="button" onClick={() => onRenovar(d)}
-                            title="Subir el documento y registrar el nuevo vencimiento"
-                            className="shrink-0 inline-flex items-center gap-1 text-[11px] text-white bg-amber-600 hover:bg-amber-700 rounded px-2.5 py-1 font-semibold shadow-sm">
-                            <Upload className="h-3.5 w-3.5" /> Subir documento
-                          </button>
+                          <div className="mt-1.5 flex items-center justify-between gap-2">
+                            <span className="text-[10px] text-gray-400">vence {d.fecha_vencimiento}</span>
+                            <button type="button" onClick={() => onRenovar(d)}
+                              title="Subir el documento y registrar el nuevo vencimiento"
+                              className="inline-flex items-center gap-1 text-[11px] text-white bg-amber-600 hover:bg-amber-700 rounded px-2.5 py-1 font-semibold shadow-sm">
+                              <Upload className="h-3.5 w-3.5" /> Subir documento
+                            </button>
+                          </div>
                         </div>
                       )
                     })}
