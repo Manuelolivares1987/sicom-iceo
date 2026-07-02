@@ -1081,66 +1081,82 @@ function RenovarRtDialog({ rt, onClose, onDone }: { rt: RtPorVencer; onClose: ()
 }
 
 // ── Patentes con problemas de documentos (RT, SOAP, permiso, hermeticidad, …) ──
+// Agrupado por equipo: cada patente muestra juntos sus documentos con problema.
 function DocumentosPorVencerCard({ items, onRenovar }: {
   items: DocumentoPorVencer[]
   onRenovar: (d: DocumentoPorVencer) => void
 }) {
   const vencidos = items.filter((d) => d.dias_restantes < 0).length
+  const grupos = useMemo(() => {
+    const m = new Map<string, DocumentoPorVencer[]>()
+    for (const d of items) {
+      const arr = m.get(d.activo_id) ?? []
+      arr.push(d)
+      m.set(d.activo_id, arr)
+    }
+    return Array.from(m.values())
+      .map((docs) => docs.slice().sort((a, b) => a.dias_restantes - b.dias_restantes))
+      .sort((a, b) => a[0].dias_restantes - b[0].dias_restantes) // peor equipo primero
+  }, [items])
+
   return (
     <Card className="border-amber-300">
       <CardHeader className="pb-2">
         <CardTitle className="text-sm flex flex-wrap items-center gap-2 text-amber-800">
-          <ShieldAlert className="h-4 w-4" /> Documentos con problemas ({items.length})
+          <ShieldAlert className="h-4 w-4" /> Documentos con problemas · {grupos.length} equipos ({items.length} docs)
           {vencidos > 0 && (
             <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-red-100 text-red-700">{vencidos} vencidos</span>
           )}
-          <span className="text-[10px] font-normal text-gray-400">— RT, SOAP, permiso de circulación, hermeticidad, etc. Pulsa «Renovar» para subir el documento y el nuevo vencimiento.</span>
+          <span className="text-[10px] font-normal text-gray-400">— RT, SOAP, permiso de circulación, hermeticidad, etc. Pulsa «Renovar» para subir el archivo y el nuevo vencimiento.</span>
         </CardTitle>
       </CardHeader>
       <CardContent className="p-2">
-        {items.length === 0 ? (
+        {grupos.length === 0 ? (
           <div className="text-xs text-gray-400 p-3 text-center">Sin documentos vencidos ni próximos a vencer.</div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="text-left text-gray-500 border-b">
-                  <th className="px-2 py-1 font-medium">Patente</th>
-                  <th className="px-2 py-1 font-medium">Documento</th>
-                  <th className="px-2 py-1 font-medium">Vence</th>
-                  <th className="px-2 py-1 font-medium">Estado</th>
-                  <th className="px-2 py-1"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((d) => {
-                  const vencido = d.dias_restantes < 0
-                  return (
-                    <tr key={`${d.activo_id}:${d.tipo}`} className="border-b last:border-0 hover:bg-amber-50/40">
-                      <td className="px-2 py-1 font-mono font-semibold">{d.patente ?? d.codigo ?? '—'}</td>
-                      <td className="px-2 py-1">
-                        {TIPO_DOC_LABEL[d.tipo] ?? d.tipo}
-                        {d.bloqueante && <span className="ml-1 text-[9px] px-1 rounded bg-red-100 text-red-700">bloqueante</span>}
-                      </td>
-                      <td className="px-2 py-1 text-gray-600">{d.fecha_vencimiento}</td>
-                      <td className="px-2 py-1">
-                        <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
-                          vencido ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-800'
-                        }`}>
-                          {vencido ? `vencido ${Math.abs(d.dias_restantes)}d` : `en ${d.dias_restantes}d`}
-                        </span>
-                      </td>
-                      <td className="px-2 py-1 text-right">
-                        <button type="button" onClick={() => onRenovar(d)}
-                          className="text-[11px] text-white bg-amber-600 hover:bg-amber-700 rounded px-2 py-1 font-medium">
-                          📄 Renovar
-                        </button>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+            {grupos.map((docs) => {
+              const g = docs[0]
+              const gVencidos = docs.filter((d) => d.dias_restantes < 0).length
+              return (
+                <div key={g.activo_id} className="rounded-lg border border-gray-200 overflow-hidden">
+                  <div className="flex items-center gap-2 bg-gray-50 px-2.5 py-1.5 border-b">
+                    <span className="font-mono font-bold text-sm text-gray-800">{g.patente ?? g.codigo ?? '—'}</span>
+                    {g.patente && g.codigo && <span className="text-[10px] text-gray-400">{g.codigo}</span>}
+                    {g.operacion && <span className="text-[10px] text-gray-400">· {g.operacion}</span>}
+                    <span className="ml-auto text-[10px] text-gray-500">{docs.length} doc{docs.length > 1 ? 's' : ''}</span>
+                    {gVencidos > 0 && (
+                      <span className="text-[9px] font-bold px-1 rounded bg-red-100 text-red-700">{gVencidos} venc.</span>
+                    )}
+                  </div>
+                  <div className="divide-y">
+                    {docs.map((d) => {
+                      const vencido = d.dias_restantes < 0
+                      return (
+                        <div key={d.tipo} className="flex items-center gap-2 px-2.5 py-1.5 text-xs hover:bg-amber-50/40">
+                          <div className="min-w-0">
+                            <div className="truncate font-medium text-gray-700">
+                              {TIPO_DOC_LABEL[d.tipo] ?? d.tipo}
+                              {d.bloqueante && <span className="ml-1 text-[9px] px-1 rounded bg-red-100 text-red-700">bloqueante</span>}
+                            </div>
+                            <div className="text-[10px] text-gray-400">vence {d.fecha_vencimiento}</div>
+                          </div>
+                          <span className={`ml-auto shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded ${
+                            vencido ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-800'
+                          }`}>
+                            {vencido ? `vencido ${Math.abs(d.dias_restantes)}d` : `en ${d.dias_restantes}d`}
+                          </span>
+                          <button type="button" onClick={() => onRenovar(d)}
+                            className="shrink-0 text-[11px] text-white bg-amber-600 hover:bg-amber-700 rounded px-2 py-1 font-medium">
+                            📄 Renovar
+                          </button>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )
+            })}
           </div>
         )}
       </CardContent>
