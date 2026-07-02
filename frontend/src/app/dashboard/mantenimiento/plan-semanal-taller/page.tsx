@@ -45,8 +45,9 @@ import {
   getPlanesActivo, getPreventivasDue, programarOtTaller, getEquiposPadre, getRtPorVencer,
   subirDocumentoRt, renovarRevisionTecnica, getRecepcionesPorPlanificar, programarRecepcion,
   getNcOtsPorAgendar,
+  getDocumentosPorVencer, subirDocumentoCert, renovarCertificacion, TIPO_DOC_LABEL,
   type PlanActivo, type PreventivaDue, type TipoOtTaller, type PrioridadTaller, type RtPorVencer,
-  type RecepcionPorPlanificar, type NcOtPorAgendar,
+  type RecepcionPorPlanificar, type NcOtPorAgendar, type DocumentoPorVencer,
 } from '@/lib/services/taller-planificacion'
 import { MAX_MECANICOS } from '@/lib/taller-grupos'
 
@@ -129,6 +130,7 @@ export default function PlanSemanalTallerPage() {
   const { data: fleet } = useQuery({ queryKey: ['equipos-padre'], queryFn: getEquiposPadre, staleTime: 60_000 })
   const { data: preventivas } = useQuery({ queryKey: ['preventivas-due', 15], queryFn: () => getPreventivasDue(15), staleTime: 60_000 })
   const { data: rtDue } = useQuery({ queryKey: ['rt-por-vencer', 30], queryFn: () => getRtPorVencer(30), staleTime: 60_000 })
+  const { data: docsDue } = useQuery({ queryKey: ['documentos-por-vencer', 30], queryFn: () => getDocumentosPorVencer(30), staleTime: 60_000 })
   const { data: recepciones } = useQuery({ queryKey: ['recepciones-por-planificar'], queryFn: getRecepcionesPorPlanificar, staleTime: 60_000 })
   const { data: ncOts } = useQuery({ queryKey: ['nc-ot-por-agendar'], queryFn: getNcOtsPorAgendar, staleTime: 60_000 })
   const { data: kpi } = useKpiSemanalTaller(planSemanalId || null)
@@ -149,6 +151,7 @@ export default function PlanSemanalTallerPage() {
   const [finObs, setFinObs] = useState<string>('')
   const [dropTarget, setDropTarget] = useState<DropTarget | null>(null)
   const [renovarRt, setRenovarRt] = useState<RtPorVencer | null>(null)
+  const [renovarDoc, setRenovarDoc] = useState<DocumentoPorVencer | null>(null)
   const [recepTarget, setRecepTarget] = useState<{ activoId: string; label: string; fecha: string } | null>(null)
   // Control de cambios: reprogramación de jornada en plan confirmado exige motivo.
   const [reprogTarget, setReprogTarget] = useState<{ planOtId: string; fechaDestino: string; label: string; diaActual: string } | null>(null)
@@ -533,6 +536,12 @@ export default function PlanSemanalTallerPage() {
 
               {/* Revisión Técnica por vencer (arrástralas a un día → inspección) */}
               <RtPorVencerCard items={rtDue ?? []} onRenovar={setRenovarRt} />
+
+              {/* Patentes con problemas de documentos (todos los tipos con vencimiento) */}
+              <DocumentosPorVencerCard
+                items={(docsDue ?? []).filter((d) => !filtroOperacion || (d.operacion ?? '') === filtroOperacion)}
+                onRenovar={setRenovarDoc}
+              />
             </div>
           </div>
         </DndContext>
@@ -668,6 +677,18 @@ export default function PlanSemanalTallerPage() {
       )}
 
       {/* Diálogo: renovar Revisión Técnica (subir doc + nuevo vencimiento) */}
+      {renovarDoc && (
+        <RenovarDocumentoDialog
+          doc={renovarDoc}
+          onClose={() => setRenovarDoc(null)}
+          onDone={() => {
+            setRenovarDoc(null)
+            qc.invalidateQueries({ queryKey: ['documentos-por-vencer'] })
+            qc.invalidateQueries({ queryKey: ['rt-por-vencer'] })
+          }}
+        />
+      )}
+
       {renovarRt && (
         <RenovarRtDialog
           rt={renovarRt}
@@ -1051,6 +1072,139 @@ function RenovarRtDialog({ rt, onClose, onDone }: { rt: RtPorVencer; onClose: ()
       <ModalFooter>
         <Button variant="outline" onClick={onClose} disabled={saving}>Cancelar</Button>
         <Button onClick={submit} disabled={saving}>{saving ? 'Guardando…' : 'Registrar RT renovada'}</Button>
+      </ModalFooter>
+    </Modal>
+  )
+}
+
+// ── Patentes con problemas de documentos (RT, SOAP, permiso, hermeticidad, …) ──
+function DocumentosPorVencerCard({ items, onRenovar }: {
+  items: DocumentoPorVencer[]
+  onRenovar: (d: DocumentoPorVencer) => void
+}) {
+  const vencidos = items.filter((d) => d.dias_restantes < 0).length
+  return (
+    <Card className="border-amber-300">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm flex flex-wrap items-center gap-2 text-amber-800">
+          <ShieldAlert className="h-4 w-4" /> Documentos con problemas ({items.length})
+          {vencidos > 0 && (
+            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-red-100 text-red-700">{vencidos} vencidos</span>
+          )}
+          <span className="text-[10px] font-normal text-gray-400">— RT, SOAP, permiso de circulación, hermeticidad, etc. Pulsa «Renovar» para subir el documento y el nuevo vencimiento.</span>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="p-2">
+        {items.length === 0 ? (
+          <div className="text-xs text-gray-400 p-3 text-center">Sin documentos vencidos ni próximos a vencer.</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-left text-gray-500 border-b">
+                  <th className="px-2 py-1 font-medium">Patente</th>
+                  <th className="px-2 py-1 font-medium">Documento</th>
+                  <th className="px-2 py-1 font-medium">Vence</th>
+                  <th className="px-2 py-1 font-medium">Estado</th>
+                  <th className="px-2 py-1"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((d) => {
+                  const vencido = d.dias_restantes < 0
+                  return (
+                    <tr key={`${d.activo_id}:${d.tipo}`} className="border-b last:border-0 hover:bg-amber-50/40">
+                      <td className="px-2 py-1 font-mono font-semibold">{d.patente ?? d.codigo ?? '—'}</td>
+                      <td className="px-2 py-1">
+                        {TIPO_DOC_LABEL[d.tipo] ?? d.tipo}
+                        {d.bloqueante && <span className="ml-1 text-[9px] px-1 rounded bg-red-100 text-red-700">bloqueante</span>}
+                      </td>
+                      <td className="px-2 py-1 text-gray-600">{d.fecha_vencimiento}</td>
+                      <td className="px-2 py-1">
+                        <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
+                          vencido ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-800'
+                        }`}>
+                          {vencido ? `vencido ${Math.abs(d.dias_restantes)}d` : `en ${d.dias_restantes}d`}
+                        </span>
+                      </td>
+                      <td className="px-2 py-1 text-right">
+                        <button type="button" onClick={() => onRenovar(d)}
+                          className="text-[11px] text-white bg-amber-600 hover:bg-amber-700 rounded px-2 py-1 font-medium">
+                          📄 Renovar
+                        </button>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+function RenovarDocumentoDialog({ doc, onClose, onDone }: {
+  doc: DocumentoPorVencer; onClose: () => void; onDone: () => void
+}) {
+  const toast = useToast()
+  const [file, setFile] = useState<File | null>(null)
+  const [emision, setEmision] = useState<string>(() => new Date().toISOString().slice(0, 10))
+  const [venc, setVenc] = useState<string>('')
+  const [numero, setNumero] = useState('')
+  const [saving, setSaving] = useState(false)
+  const label = TIPO_DOC_LABEL[doc.tipo] ?? doc.tipo
+
+  const submit = async () => {
+    if (!venc) { toast.error('Indica el nuevo vencimiento'); return }
+    if (venc < emision) { toast.error('El vencimiento no puede ser anterior a la emisión'); return }
+    setSaving(true)
+    try {
+      let url: string | null = null
+      if (file) url = await subirDocumentoCert(doc.activo_id, doc.tipo, file)
+      await renovarCertificacion({
+        activoId: doc.activo_id, tipo: doc.tipo, fechaEmision: emision, fechaVencimiento: venc,
+        archivoUrl: url, numero: numero || null,
+      })
+      toast.success(`${label} renovado: ${doc.patente ?? doc.codigo} vence ${venc}`)
+      onDone()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Error al renovar el documento')
+    } finally { setSaving(false) }
+  }
+
+  return (
+    <Modal open onClose={onClose} title={`Renovar ${label} · ${doc.patente ?? doc.codigo}`}>
+      <div className="space-y-3">
+        <p className="text-xs text-gray-500">
+          {label} {doc.dias_restantes < 0 ? `vencido hace ${Math.abs(doc.dias_restantes)} días` : `vence en ${doc.dias_restantes} días`} ({doc.fecha_vencimiento}).
+        </p>
+        <div>
+          <label className="text-xs font-medium">Documento nuevo (PDF/imagen)</label>
+          <input type="file" accept="application/pdf,image/*"
+            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+            className="w-full rounded border px-2 py-1.5 text-sm" />
+          {file && <p className="text-[10px] text-green-600 mt-0.5">✓ {file.name}</p>}
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <label className="text-xs font-medium">Fecha de emisión
+            <input type="date" value={emision} onChange={(e) => setEmision(e.target.value)}
+              className="mt-0.5 w-full rounded border px-2 py-1.5 text-sm" />
+          </label>
+          <label className="text-xs font-medium">Nuevo vencimiento*
+            <input type="date" value={venc} onChange={(e) => setVenc(e.target.value)}
+              className="mt-0.5 w-full rounded border px-2 py-1.5 text-sm" />
+          </label>
+        </div>
+        <label className="text-xs font-medium block">N° / folio (opcional)
+          <input value={numero} onChange={(e) => setNumero(e.target.value)}
+            className="mt-0.5 w-full rounded border px-2 py-1.5 text-sm" />
+        </label>
+      </div>
+      <ModalFooter>
+        <Button variant="outline" onClick={onClose} disabled={saving}>Cancelar</Button>
+        <Button onClick={submit} disabled={saving}>{saving ? 'Guardando…' : 'Registrar documento renovado'}</Button>
       </ModalFooter>
     </Modal>
   )

@@ -240,6 +240,78 @@ export async function renovarRevisionTecnica(p: {
   return data
 }
 
+// ── Documentos por vencer / vencidos (todos los tipos) ──────────────────────
+export type DocumentoPorVencer = {
+  activo_id: string
+  patente: string | null
+  codigo: string | null
+  nombre: string | null
+  operacion: string | null
+  tipo: string
+  fecha_vencimiento: string
+  dias_restantes: number   // negativo = vencido
+  bloqueante: boolean
+  archivo_url: string | null
+}
+
+export const TIPO_DOC_LABEL: Record<string, string> = {
+  revision_tecnica: 'Revisión Técnica',
+  soap: 'SOAP',
+  permiso_circulacion: 'Permiso de Circulación',
+  permiso_municipal: 'Permiso Municipal',
+  hermeticidad: 'Hermeticidad',
+  tc8_sec: 'TC8 SEC',
+  inscripcion_sec: 'Inscripción SEC',
+  sec: 'SEC',
+  seremi: 'SEREMI',
+  siss: 'SISS',
+  seguro_rc: 'Seguro RC',
+  fops_rops: 'FOPS/ROPS',
+  cert_gancho: 'Certificación Gancho',
+  calibracion: 'Calibración',
+  licencia_especial: 'Licencia Especial',
+  otra: 'Otro',
+}
+
+// Equipos con documentos vencidos o que vencen dentro de N días (todos los tipos).
+export async function getDocumentosPorVencer(diasAdelante = 30): Promise<DocumentoPorVencer[]> {
+  const { data, error } = await supabase
+    .from('v_documentos_equipo_estado')
+    .select('activo_id, patente, codigo, nombre, operacion, tipo, fecha_vencimiento, dias_restantes, bloqueante, archivo_url')
+    .lte('dias_restantes', diasAdelante)
+    .order('dias_restantes', { ascending: true })
+  if (error) throw error
+  return (data ?? []) as DocumentoPorVencer[]
+}
+
+// Sube el documento renovado a 'documentos/cert/<tipo>/<activoId>/'.
+export async function subirDocumentoCert(activoId: string, tipo: string, file: File): Promise<string> {
+  const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+  const path = `cert/${tipo}/${activoId}/${Date.now()}-${safe}`
+  const { error } = await supabase.storage.from('documentos').upload(path, file, { upsert: false })
+  if (error) throw error
+  const { data } = supabase.storage.from('documentos').getPublicUrl(path)
+  return data.publicUrl
+}
+
+// Registra la renovación de cualquier documento -> certificaciones.
+export async function renovarCertificacion(p: {
+  activoId: string; tipo: string; fechaEmision: string; fechaVencimiento: string
+  archivoUrl?: string | null; numero?: string | null; entidad?: string | null
+}) {
+  const { data, error } = await supabase.rpc('rpc_renovar_certificacion', {
+    p_activo_id: p.activoId,
+    p_tipo: p.tipo,
+    p_fecha_emision: p.fechaEmision,
+    p_fecha_vencimiento: p.fechaVencimiento,
+    p_archivo_url: p.archivoUrl ?? null,
+    p_numero: p.numero ?? null,
+    p_entidad: p.entidad ?? null,
+  })
+  if (error) throw error
+  return data
+}
+
 // ── Recepción por planificar (gatillo desde Sugerencias de estado) ──────────
 export type RecepcionPorPlanificar = {
   activo_id: string; patente: string | null; codigo: string | null
