@@ -537,9 +537,12 @@ export default function PlanSemanalTallerPage() {
               {/* Revisión Técnica por vencer (arrástralas a un día → inspección) */}
               <RtPorVencerCard items={rtDue ?? []} onRenovar={setRenovarRt} />
 
-              {/* Patentes con problemas de documentos (todos los tipos con vencimiento) */}
+              {/* Patentes con problemas de documentos (solo flota rodante) */}
               <DocumentosPorVencerCard
-                items={(docsDue ?? []).filter((d) => !filtroOperacion || (d.operacion ?? '') === filtroOperacion)}
+                items={(docsDue ?? []).filter((d) =>
+                  fleetIds.has(d.activo_id) &&
+                  (!filtroOperacion || (d.operacion ?? '') === filtroOperacion),
+                )}
                 onRenovar={setRenovarDoc}
               />
             </div>
