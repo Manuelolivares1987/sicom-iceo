@@ -8,7 +8,7 @@ import {
 import {
   Calendar, ArrowLeft, ChevronLeft, ChevronRight, Lock, AlertTriangle, Trash2, User,
   Play, Pause, CheckCircle2, BarChart3, ShieldAlert, RefreshCw, Wrench, Layers, FileSpreadsheet,
-  Truck, Mail, Pencil, Plus, Clock, Camera, ExternalLink, ListChecks,
+  Truck, Mail, Pencil, Plus, Clock, Camera, ExternalLink, ListChecks, Upload,
 } from 'lucide-react'
 import { exportarPlanSemanalExcel, descargarBlob } from '@/lib/export/plan-semanal-excel'
 import { buildPlanSemanalTallerEmailHtml } from '@/lib/email/plan-semanal-taller-email'
@@ -1147,8 +1147,9 @@ function DocumentosPorVencerCard({ items, onRenovar }: {
                             {vencido ? `vencido ${Math.abs(d.dias_restantes)}d` : `en ${d.dias_restantes}d`}
                           </span>
                           <button type="button" onClick={() => onRenovar(d)}
-                            className="shrink-0 text-[11px] text-white bg-amber-600 hover:bg-amber-700 rounded px-2 py-1 font-medium">
-                            📄 Renovar
+                            title="Subir el documento y registrar el nuevo vencimiento"
+                            className="shrink-0 inline-flex items-center gap-1 text-[11px] text-white bg-amber-600 hover:bg-amber-700 rounded px-2.5 py-1 font-semibold shadow-sm">
+                            <Upload className="h-3.5 w-3.5" /> Subir documento
                           </button>
                         </div>
                       )
@@ -1200,11 +1201,17 @@ function RenovarDocumentoDialog({ doc, onClose, onDone }: {
           {label} {doc.dias_restantes < 0 ? `vencido hace ${Math.abs(doc.dias_restantes)} días` : `vence en ${doc.dias_restantes} días`} ({doc.fecha_vencimiento}).
         </p>
         <div>
-          <label className="text-xs font-medium">Documento nuevo (PDF/imagen)</label>
-          <input type="file" accept="application/pdf,image/*"
-            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-            className="w-full rounded border px-2 py-1.5 text-sm" />
-          {file && <p className="text-[10px] text-green-600 mt-0.5">✓ {file.name}</p>}
+          <label className="text-xs font-medium block mb-1">Archivo del documento (PDF o foto)</label>
+          <label className="flex cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed border-amber-300 bg-amber-50 px-3 py-5 text-center hover:bg-amber-100">
+            <Upload className="h-6 w-6 text-amber-600" />
+            <span className="text-sm font-semibold text-amber-800">
+              {file ? file.name : 'Haz clic para subir el archivo'}
+            </span>
+            <span className="text-[11px] text-amber-600">PDF o foto de la {label.toLowerCase()}</span>
+            <input type="file" accept="application/pdf,image/*" className="hidden"
+              onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+          </label>
+          {file && <p className="text-[11px] text-green-600 mt-1">✓ {file.name} seleccionado</p>}
         </div>
         <div className="grid grid-cols-2 gap-2">
           <label className="text-xs font-medium">Fecha de emisión
