@@ -38,6 +38,7 @@ import {
   AlertTriangle,
   Scale,
   Satellite,
+  Lightbulb,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -200,6 +201,7 @@ const navGroups: NavGroup[] = [
       { label: 'GPS', href: '/dashboard/admin/gps', icon: Truck, module: 'admin' },
       { label: 'Geocercas', href: '/dashboard/admin/geocercas', icon: AlertTriangle, module: 'admin', badge: 'Nuevo' },
       { label: 'Portal Cliente', href: '/dashboard/admin/portal-usuarios', icon: Briefcase, module: 'admin', badge: 'Nuevo' },
+      { label: 'Sugerencias', href: '/dashboard/admin/sugerencias', icon: Lightbulb, module: 'admin', badge: 'Nuevo' },
     ],
   },
 ]
