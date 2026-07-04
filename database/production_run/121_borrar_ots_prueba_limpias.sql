@@ -1,5 +1,17 @@
 -- ============================================================================
--- SICOM-ICEO | 121 — Borrar OTs de prueba "limpias" (conservar las con bodega)
+-- SICOM-ICEO | 121 — Borrar OTs de prueba "limpias"  [ONE-SHOT CERRADO]
+-- ============================================================================
+-- ⛔ GUARD MIG-FASE-0 (auditoría 2026-07-03): one-shot ya ejecutado; borra la
+--    mayoría de las OTs (conserva solo las con movimientos de bodega). Una
+--    re-ejecución hoy eliminaría OTs reales. Bloqueado permanentemente.
+-- destructivo-ok: one-shot histórico neutralizado con guard (auditoría Fase 0)
+-- ============================================================================
+DO $$
+BEGIN
+    RAISE EXCEPTION 'MIG121 es un one-shot YA CERRADO: borra OTs de producción. '
+        'Ejecución bloqueada por guard de auditoría Fase 0 (2026-07-03).';
+END $$;
+
 -- ============================================================================
 -- Se borran las 32 OTs de prueba SIN salidas de bodega. Se CONSERVAN las 3 que
 -- tienen movimientos de inventario (salidas) para no tocar el kardex.

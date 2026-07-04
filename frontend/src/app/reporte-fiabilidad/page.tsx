@@ -73,6 +73,16 @@ export default function ReporteFiabilidadPublicoPage() {
   const [equipoSel, setEquipoSel] = useState<string | null>(null)
   const [filtroEstado, setFiltroEstado] = useState<string | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
+  // null = verificando sesión; false = sin sesión (el reporte es interno desde MIG186)
+  const [sesionOk, setSesionOk] = useState<boolean | null>(null)
+
+  useEffect(() => {
+    let cancel = false
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!cancel) setSesionOk(!!session)
+    })
+    return () => { cancel = true }
+  }, [])
 
   // Permitir fijar el período por URL (?desde=...&hasta=...) desde el correo
   useEffect(() => {
@@ -82,17 +92,29 @@ export default function ReporteFiabilidadPublicoPage() {
   }, [])
 
   useEffect(() => {
+    if (sesionOk !== true) return
     let cancel = false
     setCargando(true); setError(null)
     ;(async () => {
       const { data, error } = await supabase.rpc('fn_reporte_fiabilidad_publico', { p_ini: desde, p_fin: hasta })
       if (cancel) return
-      if (error) setError(error.message)
-      else setData(data as Reporte)
+      if (error) {
+        setError(error.message)
+      } else {
+        // Contrato RPC↔frontend: estas claves deben venir siempre (MIG186).
+        // Su ausencia es un error real (regresión tipo MIG146), no "sin datos".
+        const faltantes = (['categorias', 'equipos', 'matriz', 'combustible'] as const)
+          .filter((k) => !Array.isArray((data as Record<string, unknown>)?.[k]))
+        if (faltantes.length > 0) {
+          setError(`Respuesta del reporte incompleta: falta ${faltantes.join(', ')}. Avisar a soporte (contrato fn_reporte_fiabilidad_publico).`)
+        } else {
+          setData(data as Reporte)
+        }
+      }
       setCargando(false)
     })()
     return () => { cancel = true }
-  }, [desde, hasta])
+  }, [desde, hasta, sesionOk])
 
   const equipos = data?.equipos ?? []
   const matriz = data?.matriz ?? []
@@ -318,6 +340,29 @@ export default function ReporteFiabilidadPublicoPage() {
     a.download = `fiabilidad_equipos_${desde}_a_${hasta}.xlsx`
     a.click()
     URL.revokeObjectURL(url)
+  }
+
+  // El reporte es de uso interno (MIG186): sin sesión no se consulta ni renderiza.
+  if (sesionOk === null) {
+    return <div className="min-h-screen bg-gray-50 py-20 text-center text-gray-400">Verificando sesión…</div>
+  }
+  if (sesionOk === false) {
+    return (
+      <div className="min-h-screen bg-gray-50 py-20">
+        <div className="mx-auto max-w-md rounded-lg border border-gray-200 bg-white p-8 text-center shadow-sm">
+          <h1 className="text-lg font-bold text-[#0b2a4a]">Informe de Fiabilidad — Pillado</h1>
+          <p className="mt-3 text-sm text-gray-600">
+            Este informe es de uso interno y requiere iniciar sesión.
+          </p>
+          <a
+            href={`/login?next=${encodeURIComponent('/reporte-fiabilidad')}`}
+            className="mt-5 inline-block rounded-lg bg-[#0b2a4a] px-5 py-2 text-sm font-semibold text-white hover:bg-[#0e3458]"
+          >
+            Iniciar sesión
+          </a>
+        </div>
+      </div>
+    )
   }
 
   return (
