@@ -5,21 +5,20 @@
 
 ---
 
-## A. VEREDICTO: **GO CON CONDICIONES**
+## A. VEREDICTO: **NO-GO** (rev. 2 · 2026-07-04)
 
-Las migraciones **185, 186 y 187 están aprobadas para despliegue**: se ejecutan limpio de forma individual, cierran las vulnerabilidades C1/C3/C5, no rompen crons/portal/correo, y su rollback es reversible (probado). Reducen la superficie anónima, no la aumentan.
+> **Actualización rev. 2:** MIG189 fue **rediseñada** — pasó de "REVOKE anon + GRANT authenticated" (insuficiente: `authenticated` no es autorización de negocio) a **autorización real por función**. Las 11 P0 de usuario tienen **guard interno fail-closed**; las 7 P0 internas quedan sin acceso PostgREST. Probado en preprod: **42/42 tests** (ver sección G). Aun así el veredicto se mantiene **NO-GO** hasta cerrar los bloqueadores de la sección C (esquema completo, backup, ratificación).
 
-**Pero el SISTEMA no puede declararse listo para producción** hasta cerrar las condiciones de la sección C, la principal: existen **19 funciones P0 explotables por anónimos** (preexistentes, no introducidas por Fase 0; una verificada explotable en vivo). La regla del gate prohíbe declarar GO pleno mientras exista una P0 anónima. Por eso el despliegue debe hacerse como **bundle 185+186+187+189** (189 = Fase 0.1, generada en esta revisión) y satisfacer las demás condiciones.
-
-Desglose:
+Las migraciones **185, 186 y 187 están verificadas** (24/24) y **MIG189 v2** cierra la autorización de las 19 P0 con guards internos (probado individualmente). Pero el SISTEMA **no** puede recibir `APLICAR EN PRODUCCIÓN` mientras queden abiertos:
 
 | Entregable | Estado |
 |---|---|
-| MIG185 / 186 / 187 | ✅ GO (ejecutadas y probadas en preprod, 24/24 tests) |
-| MIG189 (Fase 0.1, cierre anónimo) | ⚠️ generada + mecanismo validado; **falta** su pase en preprod de esquema completo |
-| MIG188 (regularización) | ⛔ permanece **desautorizada** (correcto); rediseñada para excluir demo |
-| Backup end-to-end | ⛔ **no ejecutado** (sin `pg_dump` en este entorno) → precondición bloqueante |
+| MIG185 / 186 / 187 | ✅ ejecutadas y probadas en preprod (24/24 tests) |
+| **MIG189 v2 (autorización P0 real)** | ✅ guards fail-closed en las 11 P0 de usuario + 7 internas cerradas; **42/42 tests** en preprod P0. ⛔ falta pase de **esquema completo** (P1/P2 + cuerpos reales sobre todas las tablas) |
+| MIG188 (regularización) | ⛔ **desautorizada** (correcto); demo excluido, precondiciones + backup trazado (probado) |
+| Backup end-to-end | ⛔ **no ejecutado** (sin `pg_dump`) → bloqueante |
 | Ratificación negocio (roles cierre diario) | ⛔ pendiente decisión empresa |
+| Scope por faena/contrato (IDOR) | ⛔ **no implementado** (los guards son por rol); decisión de negocio |
 
 ---
 
@@ -175,3 +174,123 @@ Se puede autorizar **cuando** se cierren los 3 bloqueadores de la sección C:
 3. La empresa ratifica quién puede confirmar el cierre diario.
 
 Cerrados esos tres, el bundle **185+186+187+189** queda listo para `APLICAR EN PRODUCCIÓN`, seguido de MIG188 en ventana separada. Las migraciones 185/186/187 en sí ya están verificadas y aprobadas; el condicionamiento es del **sistema**, por las P0 anónimas preexistentes que 189 cierra.
+
+---
+
+# REV. 2 — Rediseño de autorización de las 19 P0 (MIG189 v2)
+
+## G. Matriz de las 19 P0 (sección 2 del pedido)
+
+Clasificación por **quién las llama** (verificado: grep frontend + `cron.job`):
+- **Grupo A (11)** = llamadas por el frontend ⇒ **guard interno fail-closed** + `GRANT authenticated`.
+- **Grupo B (7)** = solo cron/trigger (corren como `postgres`) ⇒ **REVOKE de anon, authenticated y PUBLIC** (sin PostgREST). No se les pone guard `auth.uid()` porque **rompería el cron**.
+- La 19ª (`rpc_confirmar_cierre_diario`) ya quedó con guard en MIG185.
+
+| Función | Grupo | Tablas | Módulo/Acción | Llamador | Riesgo original |
+|---|---|---|---|---|---|
+| `rpc_cambiar_contrato_activo` | A | activos | contratos/edit | frontend | **verificado explotable**: cambia contrato de cualquier activo sin login |
+| `rpc_crear_ot` | A | ordenes_trabajo | ordenes_trabajo/create | frontend | crear OT anónima |
+| `rpc_transicion_ot` | A | ordenes_trabajo | ordenes_trabajo/edit | frontend | cambiar estado de OT ajena |
+| `rpc_cerrar_ot_supervisor` | A | ordenes_trabajo | ordenes_trabajo/approve | frontend | cerrar OT sin ser supervisor |
+| `rpc_registrar_salida_inventario` | A | ordenes_trabajo, inventario | inventario/create | frontend | salida de inventario anónima |
+| `rpc_confirmar_estado_dia` | A | activos, estado_diario_flota | flota/approve | frontend | reescribir estado de flota |
+| `rpc_actualizar_metricas_activo` | A | activos | activos/edit | frontend | alterar km/horas |
+| `rpc_asignar_pauta` | A | planes_mantenimiento | mantenimiento/edit | frontend | reasignar pauta PM |
+| `rpc_crear_auxiliar` | A | activos | activos/create | frontend | crear activo auxiliar |
+| `rpc_generar_qr_activo` | A | activos | activos/edit | frontend | regenerar QR |
+| `rpc_validar_sugerencia` | A | activos | flota/edit | frontend | validar sugerencia GPS |
+| `generar_ots_preventivas` | B | ordenes_trabajo, planes | (interno) | **cron** | generar OTs masivas |
+| `verificar_certificaciones` | B | activos | (interno) | **cron** | tocar disponibilidad por cert. |
+| `fn_auto_crear_planes_activo` | B | planes_mantenimiento | (interno) | trigger | crear planes duplicados |
+| `fn_generar_nc_desde_checklist_ot` | B | no_conformidades | (interno) | trigger | crear NC |
+| `fn_generar_nc_desde_v3_ot` | B | no_conformidades | (interno) | trigger | crear NC |
+| `fn_reconciliar_estado_ficha_desde_matriz` | B | activos | (interno) | manual/admin | reescribir ficha |
+| `fn_reconciliar_comercial_ficha_desde_matriz` | B | activos | (interno) | manual/admin | reescribir comercial |
+
+## H. Guard fail-closed (secciones 3, 6, 8)
+
+Cada P0 del Grupo A abre con (inyectado tras `BEGIN`, antes de tocar tablas):
+```sql
+IF NOT public.fn_tiene_permiso_modulo('<modulo>', '<accion>', ARRAY[<roles_default>]) THEN
+    RAISE EXCEPTION 'No autorizado …' USING ERRCODE = '42501';
+END IF;
+```
+`fn_tiene_permiso_modulo` (endurecida en MIG185) es **fail-closed**: retorna `false` si falta módulo/acción (no canónicos), si `auth.uid()` es NULL (anon), si no hay fila en `usuarios_perfil` (**portal cliente** — verificado 0 overlap con `cliente_portal_perfil`), si el usuario está inactivo, o si el rol no tiene el permiso (override negativo incluido). El `GRANT authenticated` solo abre la puerta; **el guard decide**.
+
+**SECURITY DEFINER (sección 8):** `search_path = public, pg_temp` con `pg_temp` **al final** — verificado en prod que `has_schema_privilege` de CREATE en `public` es **false** para `anon`, `authenticated` y `PUBLIC`, por lo que no hay shadowing posible. Referencias calificadas con `public.`.
+
+## I. ¿Quién recibiría cada permiso? (secciones 4 y 12)
+
+Roles default = los que el frontend ya usa para mostrar el botón (`use-permissions.ts`); MIG126 los sobreescribe por rol vía Admin. Usuarios activos por rol: administrador 2, supervisor 4, tecnico_mantenimiento 3, bodeguero 2, planificador 2, colaborador 1, auditor_calidad 1, comercial 1.
+
+| Función | Roles con acceso por defecto |
+|---|---|
+| `rpc_cambiar_contrato_activo` | **administrador** (solo) |
+| `rpc_crear_auxiliar` | **administrador** (solo) |
+| `rpc_confirmar_estado_dia` | **administrador** (solo — anti-lockout; ningún otro rol tiene flota/approve) |
+| `rpc_crear_ot` | administrador, jefe_mantenimiento, jefe_operaciones, planificador, supervisor |
+| `rpc_transicion_ot` | + auditor_calidad, tecnico_mantenimiento |
+| `rpc_cerrar_ot_supervisor` | administrador, jefe_mantenimiento, jefe_operaciones, subgerente_operaciones, supervisor |
+| `rpc_registrar_salida_inventario` | administrador, bodeguero, operador_abastecimiento |
+| `rpc_actualizar_metricas_activo` | administrador, auditor_calidad, jefe_mantenimiento, jefe_operaciones |
+| `rpc_asignar_pauta` | administrador, auditor_calidad, jefe_mantenimiento, planificador |
+| `rpc_generar_qr_activo` | administrador, auditor_calidad, jefe_mantenimiento, jefe_operaciones |
+| `rpc_validar_sugerencia` | administrador, auditor_calidad, jefe_mantenimiento, jefe_operaciones, planificador, subgerente_operaciones, supervisor |
+
+**Hallazgo de consistencia:** `rpc_confirmar_estado_dia` (flota/approve) queda **admin-only** por defecto, mientras `rpc_confirmar_cierre_diario` (MIG185) usa una lista hardcodeada que incluye supervisor. Ambas confirman estado de flota. Recomendación: **alinear ambas a admin-only por defecto** (fail-closed, como pide la sección 14) y conceder supervisor por **override en Admin** tras ratificación.
+
+## J. Pruebas ejecutadas por función (sección 10) — 42/42 OK
+
+Preprod P0: stubs con firma exacta (granted anon) → aplicar MIG189 v2 → las 11 P0 de usuario reciben su **cuerpo real guardado**. Contextos reales (`authenticator`→`SET ROLE`):
+
+| Contexto | Grupo A (11 fn) | Grupo B (7 fn) |
+|---|---|---|
+| anon | **DENEGADO** (11/11) | **DENEGADO** (7/7, sin EXECUTE) |
+| sin perfil (= **portal cliente**) | DENEGADO (11/11) | n/a |
+| usuario deshabilitado | DENEGADO (11/11) | n/a |
+| authenticated sin permiso | DENEGADO (11/11) | n/a |
+| administrador (con permiso) | **PASA el guard** (11/11; el cuerpo real corre) | n/a |
+| authenticated (cualquiera) | — | **DENEGADO** (7/7) |
+
+Método: para denegación, el guard hace `RAISE 42501` **antes** de tocar tablas (por eso no requiere esquema completo). Para el caso autorizado, el guard pasa y el cuerpo real intenta ejecutarse (falla luego por tablas ausentes en el preprod acotado = autorización concedida). Evidencia: `database/preprod/gate_out_evidencia.txt`.
+
+## K. Scope por entidad / IDOR (sección 6)
+
+Los guards validan **rol/permiso**, no **alcance por entidad** (faena/contrato/cliente):
+- **Portal cliente → activo interno: DENEGADO** ✅ (sin fila en `usuarios_perfil`).
+- **Supervisor de faena A → activo de faena B: PERMITIDO** ⚠️ — no hay scope por faena. El sistema no modela hoy alcance por faena para staff interno (todos operan sobre toda la flota); implementarlo sería una **regla de negocio nueva**. **Decisión pendiente de la empresa**: ¿el staff interno debe restringirse por faena? Si sí, es trabajo de Fase 1 (agregar `usuarios_perfil.faena_id` al guard de las funciones con `faena_id`). Riesgo aceptado temporal, no bloqueante de seguridad anónima.
+
+## L. P1/P2 (sección 11)
+
+MIG189 v2 cierra las **28 P1/P2** con `REVOKE anon + GRANT authenticated`. Allowlist QR intacta: `rpc_guardar_checklist_publico`, `rpc_checklist_cliente_guardar`. **Pendiente Fase 1** para la allowlist: tamaño máximo de payload, tipos/tamaño de archivo, ID de QR difícil de adivinar, expiración, rate-limit por token/IP, idempotencia. Riesgo aceptado temporal: inserción anónima acotada; **no** permiten modificar datos críticos (solo checklists de cliente).
+
+## M. Tabla final de criterios (sección 15)
+
+| Condición | Estado | Evidencia | Bloqueante |
+|---|---|---|---|
+| 1. Las 19 P0 con guards internos + pruebas individuales | ✅ (preprod acotado) | §G–J, 42/42 tests | — |
+| 2. MIG189 pasa sobre **esquema completo** | ⛔ NO | solo preprod P0 (stubs+cuerpos guardados) | **SÍ** |
+| 3. Portal cliente no ejecuta ninguna P0 | ✅ | 0 overlap + tests denegados | — |
+| 4. Accesos por entidad/faena probados | ⚠️ por rol OK; por faena **no aplicado** | §K | decisión negocio |
+| 5. Backup restaurado | ⛔ NO (sin `pg_dump`) | §C.2 | **SÍ** |
+| 6. Roles del cierre diario ratificados | ⛔ pendiente | §N | **SÍ** |
+| 7. MIG188 separada y desautorizada | ✅ | guard v_autorizado=false | — |
+
+## N. Ratificación del cierre diario (sección 14)
+
+Con la lista default de MIG185, recibirían el permiso **6 usuarios activos**:
+
+| Correo | Rol | Alcance | Recomendación |
+|---|---|---|---|
+| admin@pillado.cl | administrador | total | mantener |
+| admin@sicom-iceo.cl | administrador | total | mantener |
+| supcalama@pillado.cl | supervisor | Calama | **ratificar** |
+| supervisor.mp@sicom-iceo.cl | supervisor | — | **ratificar** |
+| supervisor.pc@sicom-iceo.cl | supervisor | — | **ratificar** |
+| supervisor.pe@sicom-iceo.cl | supervisor | — | **ratificar** |
+
+**Recomendación técnica (fail-closed):** para una operación que reescribe toda la flota, **sin fallback amplio** — dejar el default en **admin-only** y conceder a supervisores por **override explícito en Admin** (MIG126) tras decisión de la empresa. **No se modifica hasta recibir la decisión.**
+
+## Veredicto rev. 2: **NO-GO**
+
+No recomiendo `APLICAR EN PRODUCCIÓN` mientras: (2) MIG189 no pase un preprod de esquema completo, (5) el backup no esté restaurado y verificado, y (6) no se ratifiquen los roles del cierre diario. Las P0 ya tienen autorización real (guards fail-closed probados) y **ninguna P0 puede ejecutarse por un usuario autenticado sin permiso específico** — pero esos tres bloqueadores impiden el GO del sistema.

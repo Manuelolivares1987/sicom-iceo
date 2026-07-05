@@ -1,6 +1,6 @@
 import EmbeddedPostgres from 'embedded-postgres'
 import pg from 'pg'
-import { readFileSync } from 'node:fs'
+import { readFileSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 const REPO = 'C:/Users/Manuel Olivares/sicom-iceo'
@@ -97,7 +97,87 @@ log('MIG188 tocaría estas filas (nótese demo mezclado): ' + JSON.stringify(d18
 await runTests()
 await rollbackCycle()
 await test188v2()
+await testP0Authz()
 await finish()
+
+// ── FASE 7: autorización de las 18 P0 (MIG189 v2) ──────────────────────────
+async function testP0Authz() {
+  section('FASE 7 · MIG189 v2 — autorización real de las 18 P0')
+  // 1) cargar stubs P0 (firmas exactas, granted anon) y aplicar el 189 solo-P0.
+  await runFileAs(admin, 'prod_owner', resolve('./preprod_p0_stubs.sql'), 'stubs P0 (18, granted anon)')
+  const full = readFileSync(resolve(REPO, 'database/production_run/189_fase01_revocar_anon_escritura.sql'), 'utf8')
+  const p0only = full.slice(0, full.indexOf('-- ═══ P1/P2')) + "\nSELECT 'p0-only' AS x;\n"
+  writeFileSync(resolve('./189_p0_only.sql'), p0only)
+  await runFileAs(admin, 'prod_owner', resolve('./189_p0_only.sql'), 'MIG189 v2 (solo P0)')
+
+  const matriz = JSON.parse(readFileSync(resolve('./matriz_p0.json'), 'utf8'))
+  const t = new pg.Client({ host: '127.0.0.1', port: PORT, user: 'authenticator', password: 'authpw', database: 'postgres' })
+  await t.connect()
+  const claims = (sub, rol) => sub ? JSON.stringify({ sub, role: 'authenticated', user_metadata: {} }) : JSON.stringify({ role: 'anon' })
+  const U = {
+    admin: '11111111-1111-1111-1111-111111111111',
+    tecnico: '22222222-2222-2222-2222-222222222222',
+    bodeguero: '33333333-3333-3333-3333-333333333333',
+    comercial: '44444444-4444-4444-4444-444444444444',
+    supervisor: '55555555-5555-5555-5555-555555555555',
+    disabled: '66666666-6666-6666-6666-666666666666',
+    portal: '99999999-9999-9999-9999-999999999999', // sin fila en usuarios_perfil (== portal cliente)
+  }
+  const ROLBYID = { [U.tecnico]: 'tecnico_mantenimiento', [U.bodeguero]: 'bodeguero', [U.comercial]: 'comercial', [U.supervisor]: 'supervisor' }
+  async function ctx(role, sub) {
+    await t.query('RESET ROLE')
+    await t.query(`SELECT set_config('request.jwt.claims',$1,false)`, [role === 'anon' ? claims(null) : claims(sub)])
+    if (role) await t.query(`SET ROLE ${role}`)
+  }
+  const argCount = (idargs) => idargs.trim() === '' ? 0 : idargs.split(',').length
+  const callSql = (fn, n) => `SELECT public.${fn}(${Array(n).fill('NULL').join(',')})`
+  const DENY = /No autorizado|permission denied|42501/i
+  async function call(fn, n) {
+    try { await t.query(callSql(fn, n)); return { denied: false, err: null } }
+    catch (e) { return { denied: DENY.test(e.message) || e.code === '42501' || e.code === '42501', err: e.message.slice(0, 60), code: e.code } }
+  }
+  const rec = (test, ctxt, esp, ok, ev) => { results.tests.push({ test, contexto: ctxt, esperado: esp, real: ok ? 'OK' : 'FALLA', ok }); if (!ok) log(`  ✗ ${test} [${ctxt}] ${ev||''}`) }
+
+  const grupoA = matriz.filter(m => m.grupo === 'A')
+  const grupoB = matriz.filter(m => m.grupo === 'B')
+  let aOk = 0
+  for (const m of grupoA) {
+    const n = argCount(m.args)
+    // rol autenticado SIN el permiso: primero de estos que no esté en m.roles
+    const sinPermRol = ['bodeguero', 'comercial', 'tecnico', 'supervisor'].find(k => !m.roles.includes(ROLBYID[U[k]]))
+    // anon
+    await ctx('anon'); let r = await call(m.fn, n)
+    const t1 = r.denied
+    // sin perfil (== portal cliente)
+    await ctx('authenticated', U.portal); r = await call(m.fn, n); const t2 = r.denied
+    // deshabilitado
+    await ctx('authenticated', U.disabled); r = await call(m.fn, n); const t3 = r.denied
+    // autenticado sin permiso
+    await ctx('authenticated', U[sinPermRol]); r = await call(m.fn, n); const t4 = r.denied
+    // administrador (con permiso) → NO denegado (el cuerpo real falla por tabla ausente = authz pasó)
+    await ctx('authenticated', U.admin); r = await call(m.fn, n); const t5 = !r.denied
+    const ok = t1 && t2 && t3 && t4 && t5
+    if (ok) aOk++
+    rec(`P0-A ${m.fn} (${m.modulo}/${m.accion})`, 'anon/portal/inactivo/sin-perm→deny · admin→pasa', 'guard fail-closed',
+      ok, `anon=${t1} portal=${t2} inact=${t3} sinperm(${sinPermRol})=${t4} admin_pasa=${t5}`)
+  }
+  // Grupo B: anon y authenticated NO pueden ejecutar (sin grant)
+  let bOk = 0
+  for (const m of grupoB) {
+    const n = argCount(m.args)
+    await ctx('anon'); let r = await call(m.fn, n); const b1 = r.denied
+    await ctx('authenticated', U.admin); r = await call(m.fn, n); const b2 = r.denied
+    const ok = b1 && b2
+    if (ok) bOk++
+    rec(`P0-B ${m.fn} (interno)`, 'anon + authenticated', 'sin acceso PostgREST', ok, `anon=${b1} auth=${b2}`)
+  }
+  log(`✓ Grupo A: ${aOk}/${grupoA.length} funciones con guard fail-closed verificado`)
+  log(`✓ Grupo B: ${bOk}/${grupoB.length} funciones internas sin acceso PostgREST`)
+
+  // IDOR/scope: informativo — los guards son por ROL, no por entidad (faena/contrato).
+  log('ℹ IDOR: portal cliente denegado en todas (sin perfil). Scope por faena/contrato NO se aplica (decisión de negocio Fase 1).')
+  await t.end()
+}
 
 // ── FASE 6: MIG188 v2 — demo excluido + precondiciones ─────────────────────
 async function test188v2() {
