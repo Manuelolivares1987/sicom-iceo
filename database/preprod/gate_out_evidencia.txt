@@ -1,0 +1,331 @@
+The files belonging to this database system will be owned by user "Manuel Olivares".
+This user must also own the server process.
+
+
+The database cluster will be initialized with locale "C".
+The default text search configuration will be set to "english".
+
+Data page checksums are enabled.
+
+
+creating directory C:/Users/Manuel Olivares/AppData/Local/Temp/claude/C--Users-Manuel-Olivares-sicom-iceo/8406c148-dcce-486c-b51a-2d4d5e4662f4/scratchpad/preprod/pgdata2 ... 
+ok
+
+creating subdirectories ... 
+ok
+
+selecting dynamic shared memory implementation ... windows
+
+selecting default "max_connections" ... 
+100
+selecting default "shared_buffers" ... 
+128MB
+selecting default time zone ... 
+America/Santiago
+creating configuration files ... 
+ok
+running bootstrap script ... 
+ok
+
+performing post-bootstrap initialization ... 
+ok
+syncing data to disk ... 
+ok
+
+Success. You can now start the database server using:
+
+    ^"C^:^\Users^\Manuel^ Olivares^\AppData^\Local^\Temp^\claude^\C^-^-Users^-Manuel^-Olivares^-sicom^-iceo^\8406c148^-dcce^-486c^-b51a^-2d4d5e4662f4^\scratchpad^\preprod^\node^_modules^\^@embedded^-postgres^\windows^-x64^\native^\bin^\pg^_ctl^" -D ^"C^:^\Users^\Manuel^ Olivares^\AppData^\Local^\Temp^\claude^\C^-^-Users^-Manuel^-Olivares^-sicom^-iceo^\8406c148^-dcce^-486c^-b51a^-2d4d5e4662f4^\scratchpad^\preprod^\pgdata2^" -l logfile start
+
+
+2026-07-04 22:29:30.532 -04 [36292] LOG:  starting PostgreSQL 18.4 on x86_64-windows, compiled by msvc-19.44.35226, 64-bit
+
+2026-07-04 22:29:30.535 -04 [36292] LOG:  listening on IPv6 address "::1", port 55433
+
+2026-07-04 22:29:30.536 -04 [36292] LOG:  listening on IPv4 address "127.0.0.1", port 55433
+
+2026-07-04 22:29:30.600 -04 [33140] LOG:  database system was shut down at 2026-07-04 22:29:27 -04
+
+2026-07-04 22:29:30.606 -04 [36292] LOG:  database system is ready to accept connections
+
+
+══════════════════════════════════════════════════════════════════════
+FASE 1 · Construcción del entorno preprod (pre-MIG185)
+══════════════════════════════════════════════════════════════════════
+
+▶ bootstrap (roles+auth)  (29 ms)  ✓
+
+▶ enums extra  (1 ms)  ✓
+
+▶ base: tablas + grants  (63 ms)  ✓
+
+▶ stubs (fiabilidad/vistas)  (3 ms)  ✓
+
+▶ base: funciones pre-185  (9 ms)  ✓
+
+▶ seed anonimizado  (10 ms)  ✓
+
+Estado de PARTIDA (debe ser vulnerable): {"anon_cierre":true,"anon_reporte":true,"edf_rls":false,"anon_edf_insert":true}
+
+══════════════════════════════════════════════════════════════════════
+FASE 2 · Aplicación individual de migraciones + smoke interno
+══════════════════════════════════════════════════════════════════════
+
+▶ MIG185  (5 ms)  ✓
+
+▶ MIG186  (6 ms)  ✓
+
+▶ MIG187  (4 ms)  ✓
+
+Estado POST-migraciones (debe estar cerrado): {"anon_cierre":false,"auth_cierre":true,"anon_reporte":false,"anon_propuesta":false,"edf_rls":true,"anon_edf_insert":false,"edf_policies":"1"}
+search_path: [{"proname":"fn_reporte_fiabilidad_publico","proconfig":["search_path=public, pg_temp"]},{"proname":"fn_tiene_permiso_modulo","proconfig":["search_path=public, pg_temp"]},{"proname":"rpc_confirmar_cierre_diario","proconfig":["search_path=public, pg_temp"]},{"proname":"rpc_registrar_salida_combustible_valorizada","proconfig":["search_path=public, pg_temp"]},{"proname":"rpc_registrar_traspaso_combustible","proconfig":["search_path=public, pg_temp"]}]
+
+══════════════════════════════════════════════════════════════════════
+FASE 3 · MIG188 (dry-run: debe ABORTAR por guard)
+══════════════════════════════════════════════════════════════════════
+2026-07-04 22:29:30.923 -04 [15312] ERROR:  MIG188 one-shot de datos. Revisar dry-run y editar v_autorizado := true.
+2026-07-04 22:29:30.923 -04 [15312] CONTEXT:  PL/pgSQL function inline_code_block line 22 at RAISE
+2026-07-04 22:29:30.923 -04 [15312] STATEMENT:  -- ============================================================================
+	-- SICOM-ICEO | 188 — Regularización histórica de valor_total_stock (combustible)
+	-- ----------------------------------------------------------------------------
+	-- ⚠️  NO APLICAR JUNTO CON MIG187. MIG187 corrige el comportamiento futuro;
+	--     esta 188 regulariza los SALDOS históricos (valor de estanque) que
+	--     quedaron inflados por el bug (MIG77/78 dejaron de bajar el valor en
+	--     salidas; MIG76/93/99 nunca lo movieron en traspasos).
+	--
+	-- ⚠️  REQUIERE AUTORIZACIÓN EXPLÍCITA ("APLICAR EN PRODUCCIÓN"). Editar el
+	--     bloque de PARÁMETROS con lo aprobado en el dry-run
+	--     (database/diagnostics/combustible_reconciliacion.sql) y poner
+	--     v_autorizado := true. La migración ABORTA si el estado actual difiere de
+	--     lo aprobado (conteo, IDs o delta máximo), evitando aplicar sobre datos
+	--     que cambiaron desde la revisión.
+	--
+	-- DISEÑO (rev. gate preproducción):
+	--   * DEMO EXCLUIDO POR DEFECTO: la regularización normal solo toca estanques
+	--     reales (es_demo = false). Los DEMO requieren una autorización aparte
+	--     (v_incluir_demo := true), porque son datos de prueba, no operación.
+	--   * PRECONDICIONES bloqueantes: conteo esperado, IDs esperados y delta máximo
+	--     absoluto. Si la realidad no coincide con lo aprobado → aborta.
+	--   * BACKUP con valor anterior, valor nuevo, fecha, usuario y motivo.
+	--   * Regla de valor: valor := ROUND(stock * COALESCE(cpp,0), 2) (idéntica a
+	--     kardex y MIG187). Verificado en prod: el último kardex de cada estanque
+	--     ya coincide con stock*cpp; solo la columna estaba desviada.
+	--
+	-- Rollback: UPDATE desde el backup (bloque comentado al final).
+	-- ============================================================================
+	
+	DO $$
+	DECLARE
+	    -- ── PARÁMETROS (editar con lo aprobado en el dry-run) ───────────────────
+	    v_autorizado   CONSTANT BOOLEAN   := false;   -- ⚠️ true solo con APLICAR EN PRODUCCIÓN
+	    v_incluir_demo CONSTANT BOOLEAN   := false;   -- autorización SEPARADA para estanques demo
+	    -- Códigos de estanque REALES que el dry-run aprobó corregir (ajustar a prod):
+	    v_expected_ids CONSTANT TEXT[]    := ARRAY['EST-1K','EST-15K'];
+	    v_max_delta    CONSTANT NUMERIC   := 100000;  -- |cambio| máximo permitido por estanque real
+	    v_motivo       CONSTANT TEXT      := 'Regularizacion valor_total_stock (auditoria Fase 0, bug MIG77/78)';
+	
+	    -- ── internos ────────────────────────────────────────────────────────────
+	    v_def          TEXT;
+	    v_neg          INT;
+	    v_ids_reales   TEXT[];
+	    v_n_reales     INT;
+	    v_max_real     NUMERIC;
+	    v_extra        TEXT[];
+	    v_n_corr       INT;
+	    v_uid          UUID := NULL;
+	BEGIN
+	    IF NOT v_autorizado THEN
+	        RAISE EXCEPTION 'MIG188 one-shot de datos. Revisar dry-run y editar v_autorizado := true.';
+	    END IF;
+	
+	    -- Precondición 1: MIG187 aplicada (si no, el descuadre se reproduce).
+	    SELECT pg_get_functiondef(p.oid) INTO v_def
+	      FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+	     WHERE n.nspname='public' AND p.proname='rpc_registrar_salida_combustible_valorizada';
+	    IF v_def NOT LIKE '%valor_total_stock = v_valor_post%' THEN
+	        RAISE EXCEPTION 'Precondición: aplicar MIG187 antes que MIG188.';
+	    END IF;
+	
+	    -- Precondición 2: sin stock negativo.
+	    SELECT count(*) INTO v_neg FROM public.combustible_estanques WHERE stock_teorico_lt < 0;
+	    IF v_neg > 0 THEN
+	        RAISE EXCEPTION 'Precondición: % estanques con stock negativo; investigar antes.', v_neg;
+	    END IF;
+	
+	    -- Estado REAL a corregir (SOLO no-demo).
+	    SELECT array_agg(codigo ORDER BY codigo),
+	           count(*),
+	           COALESCE(max(abs(ROUND((stock_teorico_lt*COALESCE(costo_promedio_lt,0))::numeric,2) - valor_total_stock)),0)
+	      INTO v_ids_reales, v_n_reales, v_max_real
+	      FROM public.combustible_estanques
+	     WHERE NOT es_demo
+	       AND ROUND((stock_teorico_lt*COALESCE(costo_promedio_lt,0))::numeric,2) IS DISTINCT FROM valor_total_stock;
+	    v_ids_reales := COALESCE(v_ids_reales, ARRAY[]::text[]);
+	
+	    -- Precondición 3: el conjunto real == el aprobado (ni más ni menos).
+	    v_extra := ARRAY(SELECT unnest(v_ids_reales) EXCEPT SELECT unnest(v_expected_ids));
+	    IF array_length(v_extra,1) > 0 THEN
+	        RAISE EXCEPTION 'Aborta: estanques reales a corregir % difieren de lo aprobado %. Rehacer dry-run.',
+	            v_ids_reales, v_expected_ids;
+	    END IF;
+	    v_extra := ARRAY(SELECT unnest(v_expected_ids) EXCEPT SELECT unnest(v_ids_reales));
+	    IF array_length(v_extra,1) > 0 THEN
+	        RAISE EXCEPTION 'Aborta: estanques aprobados % ya no requieren corrección (real=%). Rehacer dry-run.',
+	            v_expected_ids, v_ids_reales;
+	    END IF;
+	
+	    -- Precondición 4: delta máximo dentro del umbral aprobado.
+	    IF v_max_real > v_max_delta THEN
+	        RAISE EXCEPTION 'Aborta: delta máximo real % supera el umbral aprobado %.', v_max_real, v_max_delta;
+	    END IF;
+	
+	    -- Backup con trazabilidad completa (valor anterior/nuevo, fecha, usuario, motivo).
+	    BEGIN v_uid := auth.uid(); EXCEPTION WHEN OTHERS THEN v_uid := NULL; END;
+	    CREATE TABLE IF NOT EXISTS public.combustible_estanques_valor_bkp_mig188 (
+	        respaldado_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+	        aplicado_por  UUID,
+	        aplicado_por_conn TEXT,
+	        motivo        TEXT,
+	        id            UUID,
+	        codigo        TEXT,
+	        es_demo       BOOLEAN,
+	        incluye_demo  BOOLEAN,
+	        valor_anterior NUMERIC,
+	        valor_nuevo    NUMERIC
+	    );
+	    INSERT INTO public.combustible_estanques_valor_bkp_mig188
+	        (aplicado_por, aplicado_por_conn, motivo, id, codigo, es_demo, incluye_demo, valor_anterior, valor_nuevo)
+	    SELECT v_uid, session_user, v_motivo, e.id, e.codigo, e.es_demo, v_incluir_demo,
+	           e.valor_total_stock,
+	           ROUND((e.stock_teorico_lt*COALESCE(e.costo_promedio_lt,0))::numeric,2)
+	      FROM public.combustible_estanques e
+	     WHERE (NOT e.es_demo OR v_incluir_demo)
+	       AND ROUND((e.stock_teorico_lt*COALESCE(e.costo_promedio_lt,0))::numeric,2) IS DISTINCT FROM e.valor_total_stock;
+	
+	    -- Regularización (demo solo si autorizado aparte).
+	    UPDATE public.combustible_estanques e
+	       SET valor_total_stock = ROUND((e.stock_teorico_lt*COALESCE(e.costo_promedio_lt,0))::numeric,2),
+	           updated_at        = now()
+	     WHERE (NOT e.es_demo OR v_incluir_demo)
+	       AND ROUND((e.stock_teorico_lt*COALESCE(e.costo_promedio_lt,0))::numeric,2) IS DISTINCT FROM e.valor_total_stock;
+	    GET DIAGNOSTICS v_n_corr = ROW_COUNT;
+	
+	    -- Postvalidación: los no-demo deben quedar cuadrados.
+	    SELECT count(*) INTO v_neg FROM public.combustible_estanques e
+	     WHERE NOT e.es_demo
+	       AND abs(COALESCE(e.valor_total_stock,0) - e.stock_teorico_lt*COALESCE(e.costo_promedio_lt,0)) > 0.011;
+	    IF v_neg > 0 THEN
+	        RAISE EXCEPTION 'Postvalidación FALLÓ: % estanques reales siguen descuadrados (rollback).', v_neg;
+	    END IF;
+	
+	    RAISE NOTICE 'MIG188 OK: % estanques regularizados (demo incluido: %). Backup en combustible_estanques_valor_bkp_mig188.',
+	        v_n_corr, v_incluir_demo;
+	END $$;
+	
+	-- Reporte de cambios (última SELECT: la imprime aplicar-migracion.mjs)
+	SELECT codigo, es_demo, valor_anterior, valor_nuevo,
+	       ROUND((valor_nuevo - valor_anterior)::numeric,2) AS diferencia, respaldado_at
+	FROM public.combustible_estanques_valor_bkp_mig188
+	ORDER BY respaldado_at DESC, abs(valor_nuevo - valor_anterior) DESC;
+	
+	-- ============================================================================
+	-- ROLLBACK (manual, solo si se necesita revertir el último lote):
+	--
+	-- UPDATE public.combustible_estanques e
+	--    SET valor_total_stock = b.valor_anterior, updated_at = now()
+	--   FROM public.combustible_estanques_valor_bkp_mig188 b
+	--  WHERE b.id = e.id
+	--    AND b.respaldado_at = (SELECT max(respaldado_at) FROM public.combustible_estanques_valor_bkp_mig188)
+	--    AND e.valor_total_stock IS DISTINCT FROM b.valor_anterior;
+	-- ============================================================================
+	
+
+
+▶ MIG188 (guard)  (2 ms)  ✗ MIG188 one-shot de datos. Revisar dry-run y editar v_autorizado := true.
+MIG188 abortó como se espera: SÍ ✓
+MIG188 tocaría estas filas (nótese demo mezclado): [{"codigo":"EST-TEST-1K","es_demo":false,"actual":"94700.00","regularizado":"55.93"},{"codigo":"EST-TEST-15K","es_demo":false,"actual":"4493.33","regularizado":"465.79"},{"codigo":"CAM-DEMO-TEST","es_demo":true,"actual":"16000000.00","regularizado":"0.00"}]
+
+══════════════════════════════════════════════════════════════════════
+FASE 4 · Tests de seguridad con contextos reales (authenticator→SET ROLE)
+══════════════════════════════════════════════════════════════════════
+2026-07-04 22:29:30.972 -04 [12004] ERROR:  permission denied for function rpc_confirmar_cierre_diario
+2026-07-04 22:29:30.972 -04 [12004] STATEMENT:  SELECT rpc_confirmar_cierre_diario(CURRENT_DATE, $1::jsonb)
+
+✓ T01 cierre diario [anon] → denegado | permission denied for function rpc_confirmar_cierre_diario
+2026-07-04 22:29:30.974 -04 [12004] ERROR:  permission denied for table estado_diario_flota
+2026-07-04 22:29:30.974 -04 [12004] STATEMENT:  INSERT INTO estado_diario_flota(activo_id,fecha,estado_codigo) VALUES ($1,CURRENT_DATE+1,'D')
+
+✓ T02 INSERT directo edf [anon] → denegado | permission denied for table estado_diario_flota
+2026-07-04 22:29:30.979 -04 [12004] ERROR:  No autorizado para confirmar el cierre diario de flota.
+2026-07-04 22:29:30.979 -04 [12004] CONTEXT:  PL/pgSQL function rpc_confirmar_cierre_diario(date,jsonb) line 20 at RAISE
+2026-07-04 22:29:30.979 -04 [12004] STATEMENT:  SELECT rpc_confirmar_cierre_diario(CURRENT_DATE,$1::jsonb)
+
+✓ T03 cierre diario [auth tecnico (sin permiso)] → denegado | No autorizado para confirmar el cierre diario de flota.
+✓ T04 cierre diario [auth administrador] → confirmados=1
+2026-07-04 22:29:30.987 -04 [12004] ERROR:  Activo 00000000-0000-0000-0000-0000000000ff inexistente o dado de baja; cierre rechazado completo.
+2026-07-04 22:29:30.987 -04 [12004] CONTEXT:  PL/pgSQL function rpc_confirmar_cierre_diario(date,jsonb) line 44 at RAISE
+2026-07-04 22:29:30.987 -04 [12004] STATEMENT:  SELECT rpc_confirmar_cierre_diario(CURRENT_DATE+2,$1::jsonb)
+
+✓ T05 lote con activo inexistente [auth administrador] → rechazado, filas 0→0 | Activo 00000000-0000-0000-0000-0000000000ff inexistente o dado de baja; cierre r
+2026-07-04 22:29:30.988 -04 [12004] ERROR:  permission denied for function fn_reporte_fiabilidad_publico
+2026-07-04 22:29:30.988 -04 [12004] STATEMENT:  SELECT fn_reporte_fiabilidad_publico()
+
+✓ T06 reporte fiabilidad [anon] → denegado | permission denied for function fn_reporte_fiabilidad_publico
+✓ T07 reporte fiabilidad [auth administrador] → claves: desde,hasta,matriz,equipos,categorias,combustible
+✓ T-CORREO reporte [session_user=postgres (script correo/cron)] → ok, con combustible
+✓ T08 salida baja litros Y valor [auth bodeguero] → stock 117.00→107.00, valor 94700.00→51.15 (esper 51.15)
+2026-07-04 22:29:31.005 -04 [12004] ERROR:  Stock insuficiente en estanque EST-TEST-1K: actual 107.00 lt, solicitado 999999 lt
+2026-07-04 22:29:31.005 -04 [12004] CONTEXT:  PL/pgSQL function rpc_registrar_salida_combustible_valorizada(uuid,numeric,character varying,text,uuid,uuid,uuid,uuid,character varying,timestamp with time zone,text,text,uuid,text,text,text,text,character varying,character varying,numeric,numeric,timestamp with time zone,numeric,numeric,timestamp with time zone,numeric,numeric,timestamp with time zone,numeric,numeric,numeric) line 96 at RAISE
+2026-07-04 22:29:31.005 -04 [12004] STATEMENT:  SELECT rpc_registrar_salida_combustible_valorizada($1,999999,'consumo_interno','Test sobre stock')
+
+✓ T09 salida > stock [auth bodeguero] → denegada, stock intacto | Stock insuficiente en estanque EST-TEST-1K: actual 107.00 lt, solicitado 999999 
+✓ E1 módulo inexistente [auth supervisor] → false
+✓ E2 acción inexistente [auth supervisor] → false
+2026-07-04 22:29:31.007 -04 [12004] ERROR:  No autorizado para confirmar el cierre diario de flota.
+2026-07-04 22:29:31.007 -04 [12004] CONTEXT:  PL/pgSQL function rpc_confirmar_cierre_diario(date,jsonb) line 20 at RAISE
+2026-07-04 22:29:31.007 -04 [12004] STATEMENT:  SELECT rpc_confirmar_cierre_diario(CURRENT_DATE,$1::jsonb)
+
+✓ E3 usuario sin perfil [auth uid sin usuarios_perfil] → denegado | No autorizado para confirmar el cierre diario de flota.
+2026-07-04 22:29:31.008 -04 [12004] ERROR:  No autorizado para confirmar el cierre diario de flota.
+2026-07-04 22:29:31.008 -04 [12004] CONTEXT:  PL/pgSQL function rpc_confirmar_cierre_diario(date,jsonb) line 20 at RAISE
+2026-07-04 22:29:31.008 -04 [12004] STATEMENT:  SELECT rpc_confirmar_cierre_diario(CURRENT_DATE+3,$1::jsonb)
+
+✓ E4 usuario deshabilitado [auth supervisor activo=false] → denegado | hallazgo si PERMITIÓ
+2026-07-04 22:29:31.011 -04 [12004] ERROR:  No autorizado para confirmar el cierre diario de flota.
+2026-07-04 22:29:31.011 -04 [12004] CONTEXT:  PL/pgSQL function rpc_confirmar_cierre_diario(date,jsonb) line 20 at RAISE
+2026-07-04 22:29:31.011 -04 [12004] STATEMENT:  SELECT rpc_confirmar_cierre_diario(CURRENT_DATE+4,$1::jsonb)
+
+✓ E5 override niega approve [auth supervisor + override[view]] → denegado | No autorizado para confirmar el cierre diario de flota.
+✓ E6 override otorga approve [auth comercial + override[approve]] → confirmados=1
+2026-07-04 22:29:31.015 -04 [12004] ERROR:  permission denied for function rpc_confirmar_cierre_diario
+2026-07-04 22:29:31.015 -04 [12004] STATEMENT:  SELECT rpc_confirmar_cierre_diario(CURRENT_DATE+6,$1::jsonb)
+
+✓ E7 service_role sin uid [service_role] → denegado | permission denied for function rpc_confirmar_cierre_diario
+✓ E8 vin solo tras auth [auth administrador] → vin presente (interno)
+✓ E9 sobrecargas salida vs anon [catálogo] → 1 sobrecarga(s), 0 anon
+
+══════════════════════════════════════════════════════════════════════
+FASE 5 · Ciclo de rollback 185 (aplicar→rollback→reabrir→reaplicar)
+══════════════════════════════════════════════════════════════════════
+1) estado actual (post-185, cerrado): {"anon_cierre":false,"edf_rls":true,"helper":"1"}
+
+▶ rollback_185  (2 ms)  ✓
+2) tras rollback (debe REABRIR: anon_cierre=true, edf_rls=false, helper=0): {"anon_cierre":true,"edf_rls":false,"helper":"0"}
+
+▶ re-aplicar MIG185  (2 ms)  ✓
+3) tras re-aplicar (debe CERRAR: anon_cierre=false, edf_rls=true, helper=1): {"anon_cierre":false,"edf_rls":true,"helper":"1"}
+✓ R1 rollback reabre la vulnerabilidad C1
+✓ R2 re-aplicar MIG185 la vuelve a cerrar
+
+══════════════════════════════════════════════════════════════════════
+FASE 6 · MIG188 v2 (autorizado, demo excluido)
+══════════════════════════════════════════════════════════════════════
+Dry-run: estanques reales a corregir = ["EST-TEST-15K"]
+✓ M1 estanques reales cuadran tras 188
+✓ M2 estanque demo intacto (16000000.00 → 16000000.00)
+✓ M3 backup con 2 filas no-demo, valor anterior y motivo
+
+══════════════════════════════════════════════════════════════════════
+RESUMEN: 24/24 tests OK · migraciones 3/3 aplicadas
+══════════════════════════════════════════════════════════════════════
+
+preprod detenido.

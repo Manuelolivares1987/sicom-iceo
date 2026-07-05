@@ -47,10 +47,18 @@ DECLARE
     v_rol      TEXT;
     v_permisos TEXT[];
 BEGIN
+    -- Fail-closed: acción o módulo desconocidos ⇒ denegar (no depender de que el
+    -- caller pase valores válidos). Acciones canónicas = las de MIG126.
+    IF p_accion IS NULL OR p_accion NOT IN ('view','create','edit','delete','approve','export') THEN
+        RETURN false;
+    END IF;
+    IF p_modulo IS NULL OR length(trim(p_modulo)) = 0 THEN
+        RETURN false;
+    END IF;
     IF auth.uid() IS NULL THEN
         RETURN false;
     END IF;
-    v_rol := public.fn_user_rol();
+    v_rol := public.fn_user_rol();   -- NULL si no hay perfil o usuario inactivo ⇒ deniega
     IF v_rol IS NULL THEN
         RETURN false;
     END IF;
@@ -63,7 +71,7 @@ BEGIN
       FROM public.rol_permisos_modulo
      WHERE rol = v_rol AND modulo = p_modulo;
     IF FOUND THEN
-        RETURN p_accion = ANY(v_permisos);
+        RETURN p_accion = ANY(v_permisos);   -- override negativo también deniega
     END IF;
     RETURN v_rol = ANY(p_roles_default);
 END $$;
