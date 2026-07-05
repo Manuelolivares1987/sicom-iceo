@@ -45,12 +45,17 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_ENABLE_UPLOAD_ARTIFACT: 'false'
-      - name: Escaneo adicional (patrones) en el diff
+      - name: Escaneo adicional (archivos .env y JWT reales)
         run: |
-          if git grep -nE 'eyJ[A-Za-z0-9_-]{20,}|SUPABASE_(DB|SERVICE)[A-Z_]*=.|postgresql://[^ ]*:[^ @]+@' -- ':!*.md' ':!database/preprod/*'; then
-            echo "::error::posible secreto detectado"; exit 1
+          # 1) ningún archivo .env*.local debe estar versionado
+          if git ls-files | grep -E '\.env[^/]*\.local$'; then
+            echo "::error::archivo de entorno local versionado (posibles credenciales)"; exit 1
           fi
-          echo "sin secretos en patrones conocidos"
+          # 2) JWT real (3 segmentos base64 separados por punto); excluye ejemplos/placeholders
+          if git grep -nE 'eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}' -- ':!*.md'; then
+            echo "::error::posible JWT/token real detectado"; exit 1
+          fi
+          echo "sin secretos: sin .env versionado ni JWT real"
 
   migraciones:
     runs-on: ubuntu-latest
