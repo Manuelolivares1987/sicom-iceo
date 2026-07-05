@@ -5,7 +5,7 @@
 
 ---
 
-## A. VEREDICTO: **NO-GO** (rev. 2 · 2026-07-04)
+## A. VEREDICTO: **NO-GO** (rev. 3 · 2026-07-04)
 
 > **Actualización rev. 2:** MIG189 fue **rediseñada** — pasó de "REVOKE anon + GRANT authenticated" (insuficiente: `authenticated` no es autorización de negocio) a **autorización real por función**. Las 11 P0 de usuario tienen **guard interno fail-closed**; las 7 P0 internas quedan sin acceso PostgREST. Probado en preprod: **42/42 tests** (ver sección G). Aun así el veredicto se mantiene **NO-GO** hasta cerrar los bloqueadores de la sección C (esquema completo, backup, ratificación).
 
@@ -294,3 +294,134 @@ Con la lista default de MIG185, recibirían el permiso **6 usuarios activos**:
 ## Veredicto rev. 2: **NO-GO**
 
 No recomiendo `APLICAR EN PRODUCCIÓN` mientras: (2) MIG189 no pase un preprod de esquema completo, (5) el backup no esté restaurado y verificado, y (6) no se ratifiquen los roles del cierre diario. Las P0 ya tienen autorización real (guards fail-closed probados) y **ninguna P0 puede ejecutarse por un usuario autenticado sin permiso específico** — pero esos tres bloqueadores impiden el GO del sistema.
+
+---
+
+# REV. 3 — Gate final: reconciliación, grafo de llamadores y endurecimiento
+
+**Fecha:** 2026-07-04 · **Veredicto:** **NO-GO** (bloqueadores en §M3). Preprod: **46/46 tests** (`database/preprod/gate_out_evidencia.txt`).
+
+## O. Reconciliación de conteos (sección 1) — cuadra con el catálogo
+
+Consulta directa a `pg_proc` + `has_function_privilege` (`database/preprod/gen-reconciliacion.mjs`, tabla completa en `database/preprod/reconciliacion_48.md`):
+
+| Métrica | Catálogo real | Inventario documentado |
+|---|---|---|
+| Total escritura anónima sin validación | **48** | 48 ✅ |
+| P0 / P1 / P2 | **19 / 24 / 5** | 19 / 24 / 5 ✅ |
+| Cierra MIG185 | 1 P0 | 1 ✅ |
+| Cierra MIG189 | 45 (11 GrupoA + 7 GrupoB + 27 P1/P2) | 18 P0 + 27 P1/P2 ✅ |
+| Allowlist QR | 2 | 2 ✅ |
+| Cerradas a anon (185+189) | **46 de 48** | 46 ✅ |
+
+La aritmética del inventario es **correcta**; no hubo que ajustar documentación. (Contexto: hay 169 funciones DEFINER ejecutables por anon que escriben; 121 ya validan sesión/rol; las 48 sin validación son las tratadas.)
+
+## P. Grafo completo de llamadores (sección 2)
+
+Búsqueda en frontend (`.ts/.tsx`), `database/scripts` (`.mjs`), `.ps1`, `.py`, `supabase/functions` (edge), SQL, `pg_trigger`, `pg_proc` (fn→fn) y `cron.job`.
+
+| Función | Llamador | Tipo | Identidad | ¿PostgREST? | Tras MIG189 |
+|---|---|---|---|---|---|
+| 11 P0 Grupo A | páginas/servicios frontend | cliente | authenticated | sí | guard decide |
+| `rpc_ingestar_gps_batch` (P1) | edge `gps-radicom-poll` | Edge Function | **service_role** | sí | **GRANT service_role** (ver hallazgo) |
+| `fn_mantenimiento_diario` (P1) | cron + script `.mjs` | cron/script | postgres | no | REVOKE anon (postgres OK) |
+| `fn_generar_nc_desde_checklist_ot` | `trg_nc_al_cerrar_checklist_ot` | trigger | postgres | no | trigger sigue OK |
+| `fn_generar_nc_desde_v3_ot` | `trg_nc_al_pausar_finalizar_ot` | trigger | postgres | no | trigger sigue OK |
+| `fn_auto_crear_planes_activo` | `trg_auto_planes_activo` | trigger | postgres | no | trigger sigue OK |
+| `verificar_certificaciones` | cron `verificar-certificaciones` | cron | postgres | no | cron sigue OK |
+| `generar_ots_preventivas` | **nadie** (el cron homónimo inlinea la lógica, NO la llama) | — | — | no | **huérfana** → REVOKE seguro |
+| `fn_reconciliar_estado_ficha_desde_matriz` | **nadie** (manual/admin) | — | postgres | no | REVOKE seguro |
+| `fn_reconciliar_comercial_ficha_desde_matriz` | **nadie** (manual/admin) | — | postgres | no | REVOKE seguro |
+
+**Hallazgo crítico (corregido):** `rpc_ingestar_gps_batch` la invoca la **edge function GPS con `SUPABASE_SERVICE_ROLE_KEY`**. La versión previa de MIG189 (`REVOKE anon, PUBLIC` + `GRANT authenticated`) le habría quitado el acceso a `service_role` (que hoy lo tiene vía PUBLIC) → **habría roto la ingesta GPS**. Corregido: MIG189 ahora `GRANT ... TO service_role` para esa función (única necesidad documentada; ninguna API route Next llama a las 48). Los triggers/cron corren como `postgres`, no dependen de anon. `generar_ots_preventivas` y los `fn_reconciliar_*` quedaron **sin llamadores** (candidatos a deprecación en Fase 1).
+
+## Q. Bloqueo permanente del portal cliente (sección 3) — implementado
+
+`fn_tiene_permiso_modulo` (MIG185) ahora deniega **por regla** a cualquier usuario con fila activa en `cliente_portal_perfil`, ANTES de mirar el rol interno:
+```sql
+IF EXISTS (SELECT 1 FROM public.cliente_portal_perfil cpp
+           WHERE cpp.user_id = auth.uid() AND cpp.activo) THEN RETURN false; END IF;
+```
+Ya no depende de la ausencia accidental de intersección. **Perfil dual** (fila en ambas tablas, incluso como `administrador`): **denegado por defecto** — probado en preprod (test S3 dual). Si a futuro se quisieran perfiles duales operativos, requeriría una regla explícita de selección de contexto (claim/sesión); hoy **no existe** y se deniega. Pruebas: portal explícito denegado, dual denegado (46/46).
+
+## R. Cierre diario admin-only (sección 4) — implementado
+
+MIG185: `rpc_confirmar_cierre_diario` ya **no** usa fallback amplio; su default es **`ARRAY['administrador']`**. Supervisores u otros roles se habilitan solo por override en Admin (MIG126) tras ratificación. Alinea con `rpc_confirmar_estado_dia` (§I). Propuesta de permisos (no aplicar aún):
+
+| Usuario | Rol | Permiso actual (pre-185) | Permiso propuesto | Justificación |
+|---|---|---|---|---|
+| admin@pillado.cl | administrador | total (anon incluso) | cierre: sí | admin |
+| admin@sicom-iceo.cl | administrador | total | cierre: sí | admin |
+| supcalama@pillado.cl | supervisor | (vía anon, sin control) | **cierre: NO por defecto** | override tras ratificación |
+| supervisor.mp/pc/pe@sicom-iceo.cl | supervisor | (vía anon) | **cierre: NO por defecto** | override tras ratificación |
+
+## S. Alcance por faena (sección 5) — decisión pendiente + análisis por función
+
+El sistema **no** modela alcance por faena para staff interno (todos operan sobre toda la flota). La empresa debe elegir **Regla A (global)** o **Regla B (restringida por faena)**. Análisis de las 11 P0 si se adoptara Regla B:
+
+| Función | ¿Afecta otra faena? | Roles con acceso | Impacto de operación cruzada | Recomendación |
+|---|---|---|---|---|
+| `rpc_cambiar_contrato_activo` | sí (contrato global) | admin | **alto** (comercial) | admin-only mitiga; scope contrato en Fase 1 si Regla B |
+| `rpc_confirmar_estado_dia` | sí (estado global) | admin | alto | admin-only mitiga |
+| `rpc_cerrar_ot_supervisor` | sí (OT de otra faena) | admin+jefes+supervisor | medio | scope por faena de la OT si Regla B |
+| `rpc_crear_ot` / `rpc_transicion_ot` | sí (OT/activo otra faena) | jefes+planif+super+técnico | medio | scope por faena si Regla B |
+| `rpc_registrar_salida_inventario` | sí (inventario compartido) | bodeguero+abastec | medio | scope por bodega/faena si Regla B |
+| `rpc_actualizar_metricas_activo` / `rpc_generar_qr_activo` | sí (activo otra faena) | admin+auditor+jefes | bajo-medio | scope por faena del activo si Regla B |
+| `rpc_asignar_pauta` | sí (plan otra faena) | admin+auditor+jefe+planif | bajo | scope si Regla B |
+| `rpc_crear_auxiliar` | sí (crea activo) | admin | bajo | admin-only mitiga |
+| `rpc_validar_sugerencia` | sí (sugerencia otra faena) | amplio | bajo | scope si Regla B |
+
+Recomendación técnica: **Regla A (global) es coherente con la operación actual**; si se elige Regla B, es trabajo de Fase 1 (agregar `usuarios_perfil.faena_id` al guard de las funciones con `faena_id`/`activo_id`). **No es bloqueante de seguridad anónima**, sí una decisión de gobernanza.
+
+## T. `search_path` (sección 10) — verificado
+
+Las 11 P0 Grupo A + las de MIG185–187: `SET search_path = public, pg_temp` (`pg_temp` AL FINAL). Demostración de no-shadowing (no solo permiso global):
+- `has_schema_privilege('anon'|'authenticated'|'PUBLIC','public','CREATE')` = **false** (verificado) ⇒ nadie no confiable crea objetos en `public`.
+- `pg_temp` va **último** ⇒ toda referencia no calificada resuelve primero en `public`; solo caería a `pg_temp` si el objeto NO existiera en `public` (no es el caso).
+- **Sin SQL dinámico** (`EXECUTE format/'...'`) en ninguna de las 11 (verificado) ⇒ sin superficie de inyección.
+- El guard llama `public.fn_tiene_permiso_modulo` calificado.
+
+Conclusión: `public, pg_temp` es seguro aquí. `search_path = ''` requeriría calificar todas las referencias de los cuerpos originales (hoy sin calificar) → cambio de mayor riesgo; se deja como endurecimiento opcional Fase 1.
+
+## U. Rollback y bundle (secciones 11, 12)
+
+- **Rollback MIG189 v2** (`database/rollback/rollback_189_fase01.sql`): restaura los 11 cuerpos originales (sin guard) + re-otorga anon a las 48. Reabre la escritura anónima (incl. P0). Estructuralmente idéntico al rollback de MIG185, **cuyo ciclo aplicar→rollback→reabrir→reaplicar→cerrar está probado** (tests R1/R2). El ciclo completo de 189 sobre esquema completo queda para el pase de §M3-cond2 (mismo bloqueador que el apply completo de 189).
+- **Bundle reanudable** (`database/scripts/aplicar-bundle-fase0.mjs`, dry-run probado): aplica 185→186→187→189 en tx separadas, **postvalida cada una**, se **detiene** al primer error, registra estado en `.fase0_deploy_state.json`, **reanuda** saltando las aplicadas, y **NO** hace rollback automático (política: detener y corregir hacia adelante; nunca reabrir anon). Estados intermedios y su riesgo:
+
+| Estado | Riesgo | Funcionamiento | Acción |
+|---|---|---|---|
+| Ninguna | vulnerabilidades C1/C3/C5 + 48 anón abiertas | actual | aplicar bundle |
+| Solo 185 | C3/C5 abiertas; cierre diario y edf ya seguros | OK parcial | continuar |
+| 185–186 | C5 abierta; reporte ya cerrado + combustible restaurado | OK | continuar |
+| 185–187 | 48 anón aún abiertas; C1/C3/C5 cerradas | OK | continuar a 189 |
+| 185–187+189 | superficie anónima cerrada (46/48) | objetivo | desplegar frontend |
+| MIG188 | pendiente aparte (desautorizada) | n/a | ventana separada |
+
+## V. Backup y esquema completo (secciones 6, 13) — bloqueadores de entorno
+
+No alcanzables en este entorno de revisión y **deben ejecutarse en la máquina de operaciones**:
+- **`pg_dump` no disponible** (no hay binario; `pg-dump-restore` solo hace `spawn` de un `pg_dump` del PATH; no hay PostgreSQL instalado). Por eso el preprod usa reconstrucción por catálogo (cuerpos y firmas **reales**, no stubs, para las funciones ejercitadas) + PG 18.4 en vez de 17.6.
+- **Backup end-to-end (§13)**: no ejecutado (sin `pg_dump`/`pg_restore`). Precondición dura.
+- **Esquema completo (§6)**: el pase con las 48 funciones, todas las tablas, triggers, policies y **extensiones** (`pg_cron`, `pg_net`, `vault`) no es reconstruible localmente (extensiones no instalables). Lo tratado en preprod: las 11 P0 con **cuerpo real guardado** + un flujo end-to-end completo con cambio real validado (`rpc_cambiar_contrato_activo`).
+
+Instrucciones exactas para el pase final (ops): `pg_dump --schema-only` de prod → restaurar en PG17 local con extensiones → sembrar datos ficticios → correr `database/preprod/run-gate.mjs` adaptado + backup restore.
+
+## M3. Tabla final de criterios (sección 14)
+
+| Condición | Estado | Evidencia | Bloqueante |
+|---|---|---|---|
+| Conteos reconciliados | ✅ | §O (48=19+24+5, 46 cerradas) | — |
+| Grafo completo de llamadores | ✅ | §P (+ fix service_role GPS) | — |
+| Portal cliente denegado por **regla** | ✅ | §Q, tests S3 (incl. dual) | — |
+| MIG189 pasa con cuerpos + esquema completo | ⛔ parcial (cuerpos reales sí; esquema completo no) | §V | **SÍ** |
+| 11 P0 flujos completos exitosos | ⚠️ 1 completo + 10 con autorización probada | §S7, §J | **parcial** |
+| 7 internas por trigger/cron/admin | ✅ triggers/cron reales verificados; sin PostgREST | §P | — |
+| Rollback MIG189 v2 probado | ⚠️ estructura ok; ciclo completo requiere esquema completo | §U | ligado a esquema |
+| Backup restaurado | ⛔ NO (sin `pg_dump`) | §V | **SÍ** |
+| Cierre diario admin-only o ratificado | ✅ admin-only por defecto | §R | — |
+| Alcance global/faena decidido | ⛔ decisión pendiente empresa | §S | decisión |
+| MIG188 separada y desautorizada | ✅ | guard v_autorizado=false | — |
+
+## Veredicto rev. 3: **NO-GO**
+
+Cerrado en esta revisión: reconciliación de conteos, grafo completo de llamadores (con fix real de `service_role` para GPS), bloqueo permanente de portal cliente + perfil dual, cierre diario admin-only, `search_path`/SQL dinámico, orquestador de despliegue reanudable, y un flujo end-to-end completo con cambio real validado. **Bloqueadores restantes** (todos de entorno o de negocio): (a) pase de MIG189 sobre **esquema completo** con las 48 funciones y extensiones; (b) **backup restaurado** end-to-end; (c) **decisión de alcance** global vs faena; y la ratificación del cierre diario ya resuelta por defecto admin-only. No recomiendo `APLICAR EN PRODUCCIÓN` mientras (a) y (b) sigan abiertos.

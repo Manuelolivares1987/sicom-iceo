@@ -12,7 +12,7 @@ const TABLES = [
   'estado_diario_flota','activos','contratos','combustible_estanques',
   'combustible_kardex_valorizado','combustible_traspasos','usuarios_perfil',
   'rol_permisos_modulo','marcas','modelos','vehiculos_autorizados_externos',
-  'combustible_despachos_sellos','combustible_recirculaciones'
+  'combustible_despachos_sellos','combustible_recirculaciones','historico_contrato_activo'
 ]
 const FUNCS = [
   'fn_user_rol','rpc_confirmar_cierre_diario','fn_propuesta_cierre_diario',
@@ -53,7 +53,11 @@ for (const t of TABLES) {
   const colDefs = cols.rows.map(r => {
     let s = `  "${r.attname}" ${r.typ}`
     if (r.attgenerated === 's') { s += ` GENERATED ALWAYS AS (${r.def}) STORED`; return s }
-    if (r.def) s += ` DEFAULT ${r.def}`
+    if (r.def) {
+      const seq = /nextval\('([^']+)'/.exec(r.def)
+      if (seq) out += `CREATE SEQUENCE IF NOT EXISTS ${seq[1]};\n`  // crear secuencia referenciada
+      s += ` DEFAULT ${r.def}`
+    }
     if (r.attnotnull) s += ' NOT NULL'
     return s
   })

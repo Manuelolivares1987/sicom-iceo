@@ -988,6 +988,7 @@ GRANT  EXECUTE ON FUNCTION public.rpc_generar_alerta_temprana(p_checklist_id uui
 -- (allowlist QR) rpc_guardar_checklist_publico
 REVOKE EXECUTE ON FUNCTION public.rpc_ingestar_gps_batch(p_proveedor_nombre text, p_eventos jsonb) FROM anon, PUBLIC;
 GRANT  EXECUTE ON FUNCTION public.rpc_ingestar_gps_batch(p_proveedor_nombre text, p_eventos jsonb) TO authenticated;
+GRANT  EXECUTE ON FUNCTION public.rpc_ingestar_gps_batch(p_proveedor_nombre text, p_eventos jsonb) TO service_role;  -- edge function GPS (documentado)
 REVOKE EXECUTE ON FUNCTION public.rpc_portal_marcar_acceso() FROM anon, PUBLIC;
 GRANT  EXECUTE ON FUNCTION public.rpc_portal_marcar_acceso() TO authenticated;
 REVOKE EXECUTE ON FUNCTION public.rpc_procesar_recalculos_iceo() FROM anon, PUBLIC;

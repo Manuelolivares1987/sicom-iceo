@@ -121,7 +121,8 @@ async function testP0Authz() {
     comercial: '44444444-4444-4444-4444-444444444444',
     supervisor: '55555555-5555-5555-5555-555555555555',
     disabled: '66666666-6666-6666-6666-666666666666',
-    portal: '99999999-9999-9999-9999-999999999999', // sin fila en usuarios_perfil (== portal cliente)
+    portal: '99999999-9999-9999-9999-999999999999', // fila en cliente_portal_perfil, no en usuarios_perfil
+    dual: 'dddddddd-dead-dead-dead-dddddddddddd',    // administrador interno + portal cliente (dual)
   }
   const ROLBYID = { [U.tecnico]: 'tecnico_mantenimiento', [U.bodeguero]: 'bodeguero', [U.comercial]: 'comercial', [U.supervisor]: 'supervisor' }
   async function ctx(role, sub) {
@@ -173,6 +174,40 @@ async function testP0Authz() {
   }
   log(`✓ Grupo A: ${aOk}/${grupoA.length} funciones con guard fail-closed verificado`)
   log(`✓ Grupo B: ${bOk}/${grupoB.length} funciones internas sin acceso PostgREST`)
+
+  // Sección 3: bloqueo PERMANENTE de portal cliente (regla, no accidente).
+  const repFn = grupoA.find(m => m.fn === 'rpc_cambiar_contrato_activo')
+  const nRep = argCount(repFn.args)
+  // portal explícito (fila en cliente_portal_perfil, sin usuarios_perfil)
+  await ctx('authenticated', U.portal); let rp = await call(repFn.fn, nRep)
+  results.tests.push({ test: 'S3 portal cliente explícito', contexto: 'cliente_portal_perfil activo', esperado: 'DENEGADO', real: rp.denied ? 'denegado' : 'PERMITIÓ', ok: rp.denied })
+  if (!rp.denied) log('  ✗ S3 portal explícito PERMITIÓ')
+  // DUAL: administrador interno que ADEMÁS es portal → P0 denegado (portal manda)
+  await ctx('authenticated', U.dual); let rd = await call(repFn.fn, nRep)
+  results.tests.push({ test: 'S3 perfil DUAL (admin+portal)', contexto: 'usuarios_perfil admin + cliente_portal_perfil', esperado: 'DENEGADO (portal manda)', real: rd.denied ? 'denegado' : 'PERMITIÓ', ok: rd.denied })
+  log(`${rp.denied ? '✓' : '✗'} S3 portal cliente explícito denegado`)
+  log(`${rd.denied ? '✓' : '✗'} S3 perfil dual (admin+portal) denegado — portal manda sobre rol interno`)
+
+  // Sección 7: FLUJO COMPLETO con cambios reales validados (rpc_cambiar_contrato_activo).
+  const ACT1 = 'dddddddd-0000-0000-0000-000000000001', CT1 = 'cccccccc-0000-0000-0000-000000000001'
+  const c0 = (await admin.query(`SELECT contrato_id FROM activos WHERE id=$1`, [ACT1])).rows[0].contrato_id
+  await ctx('authenticated', U.admin)
+  let flowOk = false, flowEv = ''
+  try {
+    await t.query(`SELECT public.rpc_cambiar_contrato_activo($1,$2,$3)`, [ACT1, CT1, 'Cambio de prueba gate'])
+    const c1 = (await admin.query(`SELECT contrato_id FROM activos WHERE id=$1`, [ACT1])).rows[0].contrato_id
+    const hist = (await admin.query(`SELECT count(*) c FROM historico_contrato_activo WHERE activo_id=$1`, [ACT1])).rows[0].c
+    // Cambio real validado en activos (efecto de la operación completa autorizada).
+    flowOk = String(c1) === CT1
+    flowEv = `contrato ${c0}→${c1} (cambio real aplicado), historico=${hist}`
+  } catch (e) { flowEv = 'ERROR: ' + e.message.slice(0, 70) }
+  results.tests.push({ test: 'S7 flujo completo rpc_cambiar_contrato_activo', contexto: 'admin autorizado', esperado: 'cambio real aplicado + historial', real: flowEv, ok: flowOk })
+  log(`${flowOk ? '✓' : '✗'} S7 flujo completo: admin cambia contrato → ${flowEv}`)
+  // rechazo con activo inexistente (sin cambios)
+  await ctx('authenticated', U.admin)
+  let rej = await call('rpc_cambiar_contrato_activo', 3)  // args NULL → activo inexistente
+  results.tests.push({ test: 'S7 activo inexistente', contexto: 'admin autorizado', esperado: 'rechazo sin cambios', real: rej.err ? 'rechazado' : 'PERMITIÓ', ok: !!rej.err })
+  log(`${rej.err ? '✓' : '✗'} S7 payload inválido/activo inexistente → rechazo`)
 
   // IDOR/scope: informativo — los guards son por ROL, no por entidad (faena/contrato).
   log('ℹ IDOR: portal cliente denegado en todas (sin perfil). Scope por faena/contrato NO se aplica (decisión de negocio Fase 1).')

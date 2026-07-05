@@ -58,6 +58,15 @@ BEGIN
     IF auth.uid() IS NULL THEN
         RETURN false;
     END IF;
+    -- Bloqueo PERMANENTE del portal cliente (regla, no accidente de datos):
+    -- un usuario asociado al portal NUNCA autoriza acciones internas, aun si
+    -- tuviera además fila en usuarios_perfil (perfil dual ⇒ denegado por defecto).
+    IF EXISTS (
+        SELECT 1 FROM public.cliente_portal_perfil cpp
+         WHERE cpp.user_id = auth.uid() AND cpp.activo
+    ) THEN
+        RETURN false;
+    END IF;
     v_rol := public.fn_user_rol();   -- NULL si no hay perfil o usuario inactivo ⇒ deniega
     IF v_rol IS NULL THEN
         RETURN false;
@@ -109,9 +118,13 @@ BEGIN
     IF v_user IS NULL THEN
         RAISE EXCEPTION 'No autenticado.';
     END IF;
+    -- Fail-closed (rev. gate): SIN fallback amplio. Cierre diario = admin-only por
+    -- defecto (reescribe toda la flota). Supervisores u otros roles se habilitan
+    -- SOLO con override explícito en Admin (rol_permisos_modulo, MIG126) tras
+    -- ratificación individual. Alinea con rpc_confirmar_estado_dia (flota/approve).
     IF NOT public.fn_tiene_permiso_modulo(
         'flota', 'approve',
-        ARRAY['administrador','subgerente_operaciones','jefe_operaciones','supervisor']
+        ARRAY['administrador']
     ) THEN
         RAISE EXCEPTION 'No autorizado para confirmar el cierre diario de flota.';
     END IF;

@@ -152,6 +152,8 @@ for (const [name, cfg] of Object.entries(P0)) {
 
 // ── P1/P2 (REVOKE anon, GRANT authenticated) salvo allowlist ────────────────
 const ALLOW = new Set(['rpc_guardar_checklist_publico','rpc_checklist_cliente_guardar'])
+// Llamada por la edge function GPS con SUPABASE_SERVICE_ROLE_KEY (necesidad documentada):
+const SERVICE_ROLE = new Set(['rpc_ingestar_gps_batch'])
 const p1p2 = (await c.query(`
   SELECT p.proname, pg_get_function_identity_arguments(p.oid) AS args
   FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace AND n.nspname='public'
@@ -166,6 +168,7 @@ for (const r of p1p2) {
   if (ALLOW.has(r.proname)) { sql += `-- (allowlist QR) ${r.proname}\n`; continue }
   sql += `REVOKE EXECUTE ON FUNCTION public.${r.proname}(${r.args}) FROM anon, PUBLIC;\n`
   sql += `GRANT  EXECUTE ON FUNCTION public.${r.proname}(${r.args}) TO authenticated;\n`
+  if (SERVICE_ROLE.has(r.proname)) sql += `GRANT  EXECUTE ON FUNCTION public.${r.proname}(${r.args}) TO service_role;  -- edge function GPS (documentado)\n`
 }
 
 // ── Verificación ────────────────────────────────────────────────────────────

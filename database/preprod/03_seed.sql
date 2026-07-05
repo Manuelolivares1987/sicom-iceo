@@ -42,3 +42,24 @@ ON CONFLICT DO NOTHING;
 
 -- Secuencia usada por fn_generar_folio_salida_combustible (existe en prod).
 CREATE SEQUENCE IF NOT EXISTS seq_folio_salida_combustible;
+
+-- ── Portal cliente (sección 3): tabla + usuario portal + usuario DUAL ────────
+CREATE TABLE IF NOT EXISTS cliente_portal_perfil (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid,
+  nombre_visible text,
+  empresa text,
+  activo boolean NOT NULL DEFAULT true,
+  creado_at timestamptz DEFAULT now()
+);
+-- Usuario SOLO portal (no está en usuarios_perfil): uuid 99999999...
+INSERT INTO cliente_portal_perfil (user_id, nombre_visible, empresa, activo)
+VALUES ('99999999-9999-9999-9999-999999999999','Portal Cliente Test','Cliente SA', true)
+ON CONFLICT DO NOTHING;
+-- Usuario DUAL: administrador interno QUE ADEMÁS es portal cliente → debe DENEGAR P0.
+INSERT INTO usuarios_perfil (id, email, nombre_completo, rol, activo)
+VALUES ('dddddddd-dead-dead-dead-dddddddddddd','dual@test.local','Dual Interno+Portal','administrador', true)
+ON CONFLICT (id) DO NOTHING;
+INSERT INTO cliente_portal_perfil (user_id, nombre_visible, empresa, activo)
+VALUES ('dddddddd-dead-dead-dead-dddddddddddd','Dual','Cliente SA', true)
+ON CONFLICT DO NOTHING;
