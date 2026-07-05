@@ -1,0 +1,623 @@
+The files belonging to this database system will be owned by user "Manuel Olivares".
+This user must also own the server process.
+
+
+The database cluster will be initialized with locale "C".
+The default text search configuration will be set to "english".
+
+Data page checksums are enabled.
+
+
+creating directory C:/Users/Manuel Olivares/AppData/Local/Temp/claude/C--Users-Manuel-Olivares-sicom-iceo/8406c148-dcce-486c-b51a-2d4d5e4662f4/scratchpad/preprod/pgdata2 ... 
+ok
+
+creating subdirectories ... 
+ok
+
+selecting dynamic shared memory implementation ... windows
+selecting default "max_connections" ... 
+100
+selecting default "shared_buffers" ... 
+128MB
+selecting default time zone ... 
+America/Santiago
+
+creating configuration files ... 
+ok
+running bootstrap script ... 
+ok
+
+performing post-bootstrap initialization ... 
+ok
+syncing data to disk ... 
+ok
+
+Success. You can now start the database server using:
+
+    ^"C^:^\Users^\Manuel^ Olivares^\AppData^\Local^\Temp^\claude^\C^-^-Users^-Manuel^-Olivares^-sicom^-iceo^\8406c148^-dcce^-486c^-b51a^-2d4d5e4662f4^\scratchpad^\preprod^\node^_modules^\^@embedded^-postgres^\windows^-x64^\native^\bin^\pg^_ctl^" -D ^"C^:^\Users^\Manuel^ Olivares^\AppData^\Local^\Temp^\claude^\C^-^-Users^-Manuel^-Olivares^-sicom^-iceo^\8406c148^-dcce^-486c^-b51a^-2d4d5e4662f4^\scratchpad^\preprod^\pgdata2^" -l logfile start
+
+
+2026-07-04 23:45:27.764 -04 [34280] LOG:  starting PostgreSQL 18.4 on x86_64-windows, compiled by msvc-19.44.35226, 64-bit
+
+2026-07-04 23:45:27.768 -04 [34280] LOG:  listening on IPv6 address "::1", port 55433
+
+2026-07-04 23:45:27.768 -04 [34280] LOG:  listening on IPv4 address "127.0.0.1", port 55433
+
+2026-07-04 23:45:27.831 -04 [25408] LOG:  database system was shut down at 2026-07-04 23:45:25 -04
+
+2026-07-04 23:45:27.836 -04 [34280] LOG:  database system is ready to accept connections
+
+
+══════════════════════════════════════════════════════════════════════
+FASE 1 · Construcción del entorno preprod (pre-MIG185)
+══════════════════════════════════════════════════════════════════════
+
+▶ bootstrap (roles+auth)  (28 ms)  ✓
+
+▶ enums extra  (1 ms)  ✓
+
+▶ base: tablas + grants  (66 ms)  ✓
+
+▶ stubs (fiabilidad/vistas)  (3 ms)  ✓
+
+▶ base: funciones pre-185  (8 ms)  ✓
+
+▶ seed anonimizado  (13 ms)  ✓
+
+Estado de PARTIDA (debe ser vulnerable): {"anon_cierre":true,"anon_reporte":true,"edf_rls":false,"anon_edf_insert":true}
+
+══════════════════════════════════════════════════════════════════════
+FASE 2 · Aplicación individual de migraciones + smoke interno
+══════════════════════════════════════════════════════════════════════
+
+▶ MIG185  (5 ms)  ✓
+
+▶ MIG186  (5 ms)  ✓
+
+▶ MIG187  (5 ms)  ✓
+
+Estado POST-migraciones (debe estar cerrado): {"anon_cierre":false,"auth_cierre":true,"anon_reporte":false,"anon_propuesta":false,"edf_rls":true,"anon_edf_insert":false,"edf_policies":"1"}
+search_path: [{"proname":"fn_reporte_fiabilidad_publico","proconfig":["search_path=public, pg_temp"]},{"proname":"fn_tiene_permiso_modulo","proconfig":["search_path=public, pg_temp"]},{"proname":"rpc_confirmar_cierre_diario","proconfig":["search_path=public, pg_temp"]},{"proname":"rpc_registrar_salida_combustible_valorizada","proconfig":["search_path=public, pg_temp"]},{"proname":"rpc_registrar_traspaso_combustible","proconfig":["search_path=public, pg_temp"]}]
+
+══════════════════════════════════════════════════════════════════════
+FASE 3 · MIG188 (dry-run: debe ABORTAR por guard)
+══════════════════════════════════════════════════════════════════════
+2026-07-04 23:45:28.047 -04 [28972] ERROR:  MIG188 one-shot de datos. Revisar dry-run y editar v_autorizado := true.
+2026-07-04 23:45:28.047 -04 [28972] CONTEXT:  PL/pgSQL function inline_code_block line 22 at RAISE
+2026-07-04 23:45:28.047 -04 [28972] STATEMENT:  -- ============================================================================
+	-- SICOM-ICEO | 188 — Regularización histórica de valor_total_stock (combustible)
+	-- ----------------------------------------------------------------------------
+	-- ⚠️  NO APLICAR JUNTO CON MIG187. MIG187 corrige el comportamiento futuro;
+	--     esta 188 regulariza los SALDOS históricos (valor de estanque) que
+	--     quedaron inflados por el bug (MIG77/78 dejaron de bajar el valor en
+	--     salidas; MIG76/93/99 nunca lo movieron en traspasos).
+	--
+	-- ⚠️  REQUIERE AUTORIZACIÓN EXPLÍCITA ("APLICAR EN PRODUCCIÓN"). Editar el
+	--     bloque de PARÁMETROS con lo aprobado en el dry-run
+	--     (database/diagnostics/combustible_reconciliacion.sql) y poner
+	--     v_autorizado := true. La migración ABORTA si el estado actual difiere de
+	--     lo aprobado (conteo, IDs o delta máximo), evitando aplicar sobre datos
+	--     que cambiaron desde la revisión.
+	--
+	-- DISEÑO (rev. gate preproducción):
+	--   * DEMO EXCLUIDO POR DEFECTO: la regularización normal solo toca estanques
+	--     reales (es_demo = false). Los DEMO requieren una autorización aparte
+	--     (v_incluir_demo := true), porque son datos de prueba, no operación.
+	--   * PRECONDICIONES bloqueantes: conteo esperado, IDs esperados y delta máximo
+	--     absoluto. Si la realidad no coincide con lo aprobado → aborta.
+	--   * BACKUP con valor anterior, valor nuevo, fecha, usuario y motivo.
+	--   * Regla de valor: valor := ROUND(stock * COALESCE(cpp,0), 2) (idéntica a
+	--     kardex y MIG187). Verificado en prod: el último kardex de cada estanque
+	--     ya coincide con stock*cpp; solo la columna estaba desviada.
+	--
+	-- Rollback: UPDATE desde el backup (bloque comentado al final).
+	-- ============================================================================
+	
+	DO $$
+	DECLARE
+	    -- ── PARÁMETROS (editar con lo aprobado en el dry-run) ───────────────────
+	    v_autorizado   CONSTANT BOOLEAN   := false;   -- ⚠️ true solo con APLICAR EN PRODUCCIÓN
+	    v_incluir_demo CONSTANT BOOLEAN   := false;   -- autorización SEPARADA para estanques demo
+	    -- Códigos de estanque REALES que el dry-run aprobó corregir (ajustar a prod):
+	    v_expected_ids CONSTANT TEXT[]    := ARRAY['EST-1K','EST-15K'];
+	    v_max_delta    CONSTANT NUMERIC   := 100000;  -- |cambio| máximo permitido por estanque real
+	    v_motivo       CONSTANT TEXT      := 'Regularizacion valor_total_stock (auditoria Fase 0, bug MIG77/78)';
+	
+	    -- ── internos ────────────────────────────────────────────────────────────
+	    v_def          TEXT;
+	    v_neg          INT;
+	    v_ids_reales   TEXT[];
+	    v_n_reales     INT;
+	    v_max_real     NUMERIC;
+	    v_extra        TEXT[];
+	    v_n_corr       INT;
+	    v_uid          UUID := NULL;
+	BEGIN
+	    IF NOT v_autorizado THEN
+	        RAISE EXCEPTION 'MIG188 one-shot de datos. Revisar dry-run y editar v_autorizado := true.';
+	    END IF;
+	
+	    -- Precondición 1: MIG187 aplicada (si no, el descuadre se reproduce).
+	    SELECT pg_get_functiondef(p.oid) INTO v_def
+	      FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+	     WHERE n.nspname='public' AND p.proname='rpc_registrar_salida_combustible_valorizada';
+	    IF v_def NOT LIKE '%valor_total_stock = v_valor_post%' THEN
+	        RAISE EXCEPTION 'Precondición: aplicar MIG187 antes que MIG188.';
+	    END IF;
+	
+	    -- Precondición 2: sin stock negativo.
+	    SELECT count(*) INTO v_neg FROM public.combustible_estanques WHERE stock_teorico_lt < 0;
+	    IF v_neg > 0 THEN
+	        RAISE EXCEPTION 'Precondición: % estanques con stock negativo; investigar antes.', v_neg;
+	    END IF;
+	
+	    -- Estado REAL a corregir (SOLO no-demo).
+	    SELECT array_agg(codigo ORDER BY codigo),
+	           count(*),
+	           COALESCE(max(abs(ROUND((stock_teorico_lt*COALESCE(costo_promedio_lt,0))::numeric,2) - valor_total_stock)),0)
+	      INTO v_ids_reales, v_n_reales, v_max_real
+	      FROM public.combustible_estanques
+	     WHERE NOT es_demo
+	       AND ROUND((stock_teorico_lt*COALESCE(costo_promedio_lt,0))::numeric,2) IS DISTINCT FROM valor_total_stock;
+	    v_ids_reales := COALESCE(v_ids_reales, ARRAY[]::text[]);
+	
+	    -- Precondición 3: el conjunto real == el aprobado (ni más ni menos).
+	    v_extra := ARRAY(SELECT unnest(v_ids_reales) EXCEPT SELECT unnest(v_expected_ids));
+	    IF array_length(v_extra,1) > 0 THEN
+	        RAISE EXCEPTION 'Aborta: estanques reales a corregir % difieren de lo aprobado %. Rehacer dry-run.',
+	            v_ids_reales, v_expected_ids;
+	    END IF;
+	    v_extra := ARRAY(SELECT unnest(v_expected_ids) EXCEPT SELECT unnest(v_ids_reales));
+	    IF array_length(v_extra,1) > 0 THEN
+	        RAISE EXCEPTION 'Aborta: estanques aprobados % ya no requieren corrección (real=%). Rehacer dry-run.',
+	            v_expected_ids, v_ids_reales;
+	    END IF;
+	
+	    -- Precondición 4: delta máximo dentro del umbral aprobado.
+	    IF v_max_real > v_max_delta THEN
+	        RAISE EXCEPTION 'Aborta: delta máximo real % supera el umbral aprobado %.', v_max_real, v_max_delta;
+	    END IF;
+	
+	    -- Backup con trazabilidad completa (valor anterior/nuevo, fecha, usuario, motivo).
+	    BEGIN v_uid := auth.uid(); EXCEPTION WHEN OTHERS THEN v_uid := NULL; END;
+	    CREATE TABLE IF NOT EXISTS public.combustible_estanques_valor_bkp_mig188 (
+	        respaldado_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+	        aplicado_por  UUID,
+	        aplicado_por_conn TEXT,
+	        motivo        TEXT,
+	        id            UUID,
+	        codigo        TEXT,
+	        es_demo       BOOLEAN,
+	        incluye_demo  BOOLEAN,
+	        valor_anterior NUMERIC,
+	        valor_nuevo    NUMERIC
+	    );
+	    INSERT INTO public.combustible_estanques_valor_bkp_mig188
+	        (aplicado_por, aplicado_por_conn, motivo, id, codigo, es_demo, incluye_demo, valor_anterior, valor_nuevo)
+	    SELECT v_uid, session_user, v_motivo, e.id, e.codigo, e.es_demo, v_incluir_demo,
+	           e.valor_total_stock,
+	           ROUND((e.stock_teorico_lt*COALESCE(e.costo_promedio_lt,0))::numeric,2)
+	      FROM public.combustible_estanques e
+	     WHERE (NOT e.es_demo OR v_incluir_demo)
+	       AND ROUND((e.stock_teorico_lt*COALESCE(e.costo_promedio_lt,0))::numeric,2) IS DISTINCT FROM e.valor_total_stock;
+	
+	    -- Regularización (demo solo si autorizado aparte).
+	    UPDATE public.combustible_estanques e
+	       SET valor_total_stock = ROUND((e.stock_teorico_lt*COALESCE(e.costo_promedio_lt,0))::numeric,2),
+	           updated_at        = now()
+	     WHERE (NOT e.es_demo OR v_incluir_demo)
+	       AND ROUND((e.stock_teorico_lt*COALESCE(e.costo_promedio_lt,0))::numeric,2) IS DISTINCT FROM e.valor_total_stock;
+	    GET DIAGNOSTICS v_n_corr = ROW_COUNT;
+	
+	    -- Postvalidación: los no-demo deben quedar cuadrados.
+	    SELECT count(*) INTO v_neg FROM public.combustible_estanques e
+	     WHERE NOT e.es_demo
+	       AND abs(COALESCE(e.valor_total_stock,0) - e.stock_teorico_lt*COALESCE(e.costo_promedio_lt,0)) > 0.011;
+	    IF v_neg > 0 THEN
+	        RAISE EXCEPTION 'Postvalidación FALLÓ: % estanques reales siguen descuadrados (rollback).', v_neg;
+	    END IF;
+	
+	    RAISE NOTICE 'MIG188 OK: % estanques regularizados (demo incluido: %). Backup en combustible_estanques_valor_bkp_mig188.',
+	        v_n_corr, v_incluir_demo;
+	END $$;
+	
+	-- Reporte de cambios (última SELECT: la imprime aplicar-migracion.mjs)
+	SELECT codigo, es_demo, valor_anterior, valor_nuevo,
+	       ROUND((valor_nuevo - valor_anterior)::numeric,2) AS diferencia, respaldado_at
+	FROM public.combustible_estanques_valor_bkp_mig188
+	ORDER BY respaldado_at DESC, abs(valor_nuevo - valor_anterior) DESC;
+	
+	-- ============================================================================
+	-- ROLLBACK (manual, solo si se necesita revertir el último lote):
+	--
+	-- UPDATE public.combustible_estanques e
+	--    SET valor_total_stock = b.valor_anterior, updated_at = now()
+	--   FROM public.combustible_estanques_valor_bkp_mig188 b
+	--  WHERE b.id = e.id
+	--    AND b.respaldado_at = (SELECT max(respaldado_at) FROM public.combustible_estanques_valor_bkp_mig188)
+	--    AND e.valor_total_stock IS DISTINCT FROM b.valor_anterior;
+	-- ============================================================================
+	
+
+
+▶ MIG188 (guard)  (2 ms)  ✗ MIG188 one-shot de datos. Revisar dry-run y editar v_autorizado := true.
+MIG188 abortó como se espera: SÍ ✓
+MIG188 tocaría estas filas (nótese demo mezclado): [{"codigo":"EST-TEST-1K","es_demo":false,"actual":"94700.00","regularizado":"55.93"},{"codigo":"EST-TEST-15K","es_demo":false,"actual":"4493.33","regularizado":"465.79"},{"codigo":"CAM-DEMO-TEST","es_demo":true,"actual":"16000000.00","regularizado":"0.00"}]
+
+══════════════════════════════════════════════════════════════════════
+FASE 4 · Tests de seguridad con contextos reales (authenticator→SET ROLE)
+══════════════════════════════════════════════════════════════════════
+2026-07-04 23:45:28.229 -04 [24768] ERROR:  permission denied for function rpc_confirmar_cierre_diario
+2026-07-04 23:45:28.229 -04 [24768] STATEMENT:  SELECT rpc_confirmar_cierre_diario(CURRENT_DATE, $1::jsonb)
+
+✓ T01 cierre diario [anon] → denegado | permission denied for function rpc_confirmar_cierre_diario
+2026-07-04 23:45:28.231 -04 [24768] ERROR:  permission denied for table estado_diario_flota
+2026-07-04 23:45:28.231 -04 [24768] STATEMENT:  INSERT INTO estado_diario_flota(activo_id,fecha,estado_codigo) VALUES ($1,CURRENT_DATE+1,'D')
+
+✓ T02 INSERT directo edf [anon] → denegado | permission denied for table estado_diario_flota
+2026-07-04 23:45:28.236 -04 [24768] ERROR:  No autorizado para confirmar el cierre diario de flota.
+2026-07-04 23:45:28.236 -04 [24768] CONTEXT:  PL/pgSQL function rpc_confirmar_cierre_diario(date,jsonb) line 24 at RAISE
+2026-07-04 23:45:28.236 -04 [24768] STATEMENT:  SELECT rpc_confirmar_cierre_diario(CURRENT_DATE,$1::jsonb)
+
+✓ T03 cierre diario [auth tecnico (sin permiso)] → denegado | No autorizado para confirmar el cierre diario de flota.
+✓ T04 cierre diario [auth administrador] → confirmados=1
+2026-07-04 23:45:28.254 -04 [24768] ERROR:  Activo 00000000-0000-0000-0000-0000000000ff inexistente o dado de baja; cierre rechazado completo.
+2026-07-04 23:45:28.254 -04 [24768] CONTEXT:  PL/pgSQL function rpc_confirmar_cierre_diario(date,jsonb) line 48 at RAISE
+2026-07-04 23:45:28.254 -04 [24768] STATEMENT:  SELECT rpc_confirmar_cierre_diario(CURRENT_DATE+2,$1::jsonb)
+
+✓ T05 lote con activo inexistente [auth administrador] → rechazado, filas 0→0 | Activo 00000000-0000-0000-0000-0000000000ff inexistente o dado de baja; cierre r
+2026-07-04 23:45:28.255 -04 [24768] ERROR:  permission denied for function fn_reporte_fiabilidad_publico
+2026-07-04 23:45:28.255 -04 [24768] STATEMENT:  SELECT fn_reporte_fiabilidad_publico()
+
+✓ T06 reporte fiabilidad [anon] → denegado | permission denied for function fn_reporte_fiabilidad_publico
+✓ T07 reporte fiabilidad [auth administrador] → claves: desde,hasta,matriz,equipos,categorias,combustible
+✓ T-CORREO reporte [session_user=postgres (script correo/cron)] → ok, con combustible
+✓ T08 salida baja litros Y valor [auth bodeguero] → stock 117.00→107.00, valor 94700.00→51.15 (esper 51.15)
+2026-07-04 23:45:28.271 -04 [24768] ERROR:  Stock insuficiente en estanque EST-TEST-1K: actual 107.00 lt, solicitado 999999 lt
+2026-07-04 23:45:28.271 -04 [24768] CONTEXT:  PL/pgSQL function rpc_registrar_salida_combustible_valorizada(uuid,numeric,character varying,text,uuid,uuid,uuid,uuid,character varying,timestamp with time zone,text,text,uuid,text,text,text,text,character varying,character varying,numeric,numeric,timestamp with time zone,numeric,numeric,timestamp with time zone,numeric,numeric,timestamp with time zone,numeric,numeric,numeric) line 96 at RAISE
+2026-07-04 23:45:28.271 -04 [24768] STATEMENT:  SELECT rpc_registrar_salida_combustible_valorizada($1,999999,'consumo_interno','Test sobre stock')
+
+✓ T09 salida > stock [auth bodeguero] → denegada, stock intacto | Stock insuficiente en estanque EST-TEST-1K: actual 107.00 lt, solicitado 999999 
+✓ E1 módulo inexistente [auth supervisor] → false
+✓ E2 acción inexistente [auth supervisor] → false
+2026-07-04 23:45:28.273 -04 [24768] ERROR:  No autorizado para confirmar el cierre diario de flota.
+2026-07-04 23:45:28.273 -04 [24768] CONTEXT:  PL/pgSQL function rpc_confirmar_cierre_diario(date,jsonb) line 24 at RAISE
+2026-07-04 23:45:28.273 -04 [24768] STATEMENT:  SELECT rpc_confirmar_cierre_diario(CURRENT_DATE,$1::jsonb)
+
+✓ E3 usuario sin perfil [auth uid sin usuarios_perfil] → denegado | No autorizado para confirmar el cierre diario de flota.
+2026-07-04 23:45:28.274 -04 [24768] ERROR:  No autorizado para confirmar el cierre diario de flota.
+2026-07-04 23:45:28.274 -04 [24768] CONTEXT:  PL/pgSQL function rpc_confirmar_cierre_diario(date,jsonb) line 24 at RAISE
+2026-07-04 23:45:28.274 -04 [24768] STATEMENT:  SELECT rpc_confirmar_cierre_diario(CURRENT_DATE+3,$1::jsonb)
+
+✓ E4 usuario deshabilitado [auth supervisor activo=false] → denegado | hallazgo si PERMITIÓ
+2026-07-04 23:45:28.277 -04 [24768] ERROR:  No autorizado para confirmar el cierre diario de flota.
+2026-07-04 23:45:28.277 -04 [24768] CONTEXT:  PL/pgSQL function rpc_confirmar_cierre_diario(date,jsonb) line 24 at RAISE
+2026-07-04 23:45:28.277 -04 [24768] STATEMENT:  SELECT rpc_confirmar_cierre_diario(CURRENT_DATE+4,$1::jsonb)
+
+✓ E5 override niega approve [auth supervisor + override[view]] → denegado | No autorizado para confirmar el cierre diario de flota.
+✓ E6 override otorga approve [auth comercial + override[approve]] → confirmados=1
+2026-07-04 23:45:28.279 -04 [24768] ERROR:  permission denied for function rpc_confirmar_cierre_diario
+2026-07-04 23:45:28.279 -04 [24768] STATEMENT:  SELECT rpc_confirmar_cierre_diario(CURRENT_DATE+6,$1::jsonb)
+
+✓ E7 service_role sin uid [service_role] → denegado | permission denied for function rpc_confirmar_cierre_diario
+✓ E8 vin solo tras auth [auth administrador] → vin presente (interno)
+✓ E9 sobrecargas salida vs anon [catálogo] → 1 sobrecarga(s), 0 anon
+
+══════════════════════════════════════════════════════════════════════
+FASE 5 · Ciclo de rollback 185 (aplicar→rollback→reabrir→reaplicar)
+══════════════════════════════════════════════════════════════════════
+1) estado actual (post-185, cerrado): {"anon_cierre":false,"edf_rls":true,"helper":"1"}
+
+▶ rollback_185  (2 ms)  ✓
+2) tras rollback (debe REABRIR: anon_cierre=true, edf_rls=false, helper=0): {"anon_cierre":true,"edf_rls":false,"helper":"0"}
+
+▶ re-aplicar MIG185  (2 ms)  ✓
+3) tras re-aplicar (debe CERRAR: anon_cierre=false, edf_rls=true, helper=1): {"anon_cierre":false,"edf_rls":true,"helper":"1"}
+✓ R1 rollback reabre la vulnerabilidad C1
+✓ R2 re-aplicar MIG185 la vuelve a cerrar
+
+══════════════════════════════════════════════════════════════════════
+FASE 6 · MIG188 v2 (autorizado, demo excluido)
+══════════════════════════════════════════════════════════════════════
+Dry-run: estanques reales a corregir = ["EST-TEST-15K"]
+✓ M1 estanques reales cuadran tras 188
+✓ M2 estanque demo intacto (16000000.00 → 16000000.00)
+✓ M3 backup con 2 filas no-demo, valor anterior y motivo
+
+══════════════════════════════════════════════════════════════════════
+FASE 7 · MIG189 v2 — autorización real de las 18 P0
+══════════════════════════════════════════════════════════════════════
+
+▶ stubs P0 (18, granted anon)  (12 ms)  ✓
+
+▶ MIG189 v2 (solo P0)  (5 ms)  ✓
+2026-07-04 23:45:28.358 -04 [17228] ERROR:  permission denied for function rpc_crear_ot
+2026-07-04 23:45:28.358 -04 [17228] STATEMENT:  SELECT public.rpc_crear_ot(NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL)
+
+2026-07-04 23:45:28.362 -04 [17228] ERROR:  No autorizado para ordenes_trabajo (ordenes_trabajo.create).
+2026-07-04 23:45:28.362 -04 [17228] CONTEXT:  PL/pgSQL function rpc_crear_ot(tipo_ot_enum,uuid,uuid,uuid,prioridad_enum,date,uuid,uuid,uuid) line 17 at RAISE
+2026-07-04 23:45:28.362 -04 [17228] STATEMENT:  SELECT public.rpc_crear_ot(NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL)
+
+2026-07-04 23:45:28.363 -04 [17228] ERROR:  No autorizado para ordenes_trabajo (ordenes_trabajo.create).
+2026-07-04 23:45:28.363 -04 [17228] CONTEXT:  PL/pgSQL function rpc_crear_ot(tipo_ot_enum,uuid,uuid,uuid,prioridad_enum,date,uuid,uuid,uuid) line 17 at RAISE
+2026-07-04 23:45:28.363 -04 [17228] STATEMENT:  SELECT public.rpc_crear_ot(NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL)
+
+2026-07-04 23:45:28.365 -04 [17228] ERROR:  No autorizado para ordenes_trabajo (ordenes_trabajo.create).
+2026-07-04 23:45:28.365 -04 [17228] CONTEXT:  PL/pgSQL function rpc_crear_ot(tipo_ot_enum,uuid,uuid,uuid,prioridad_enum,date,uuid,uuid,uuid) line 17 at RAISE
+2026-07-04 23:45:28.365 -04 [17228] STATEMENT:  SELECT public.rpc_crear_ot(NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL)
+
+2026-07-04 23:45:28.367 -04 [17228] ERROR:  Contrato no encontrado
+2026-07-04 23:45:28.367 -04 [17228] CONTEXT:  PL/pgSQL function rpc_crear_ot(tipo_ot_enum,uuid,uuid,uuid,prioridad_enum,date,uuid,uuid,uuid) line 21 at RAISE
+2026-07-04 23:45:28.367 -04 [17228] STATEMENT:  SELECT public.rpc_crear_ot(NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL)
+
+2026-07-04 23:45:28.368 -04 [17228] ERROR:  permission denied for function rpc_transicion_ot
+2026-07-04 23:45:28.368 -04 [17228] STATEMENT:  SELECT public.rpc_transicion_ot(NULL,NULL,NULL,NULL,NULL,NULL,NULL)
+
+2026-07-04 23:45:28.369 -04 [17228] ERROR:  No autorizado para ordenes_trabajo (ordenes_trabajo.edit).
+2026-07-04 23:45:28.369 -04 [17228] CONTEXT:  PL/pgSQL function rpc_transicion_ot(uuid,estado_ot_enum,uuid,causa_no_ejecucion_enum,text,text,uuid) line 13 at RAISE
+2026-07-04 23:45:28.369 -04 [17228] STATEMENT:  SELECT public.rpc_transicion_ot(NULL,NULL,NULL,NULL,NULL,NULL,NULL)
+
+2026-07-04 23:45:28.370 -04 [17228] ERROR:  No autorizado para ordenes_trabajo (ordenes_trabajo.edit).
+2026-07-04 23:45:28.370 -04 [17228] CONTEXT:  PL/pgSQL function rpc_transicion_ot(uuid,estado_ot_enum,uuid,causa_no_ejecucion_enum,text,text,uuid) line 13 at RAISE
+2026-07-04 23:45:28.370 -04 [17228] STATEMENT:  SELECT public.rpc_transicion_ot(NULL,NULL,NULL,NULL,NULL,NULL,NULL)
+
+2026-07-04 23:45:28.371 -04 [17228] ERROR:  No autorizado para ordenes_trabajo (ordenes_trabajo.edit).
+2026-07-04 23:45:28.371 -04 [17228] CONTEXT:  PL/pgSQL function rpc_transicion_ot(uuid,estado_ot_enum,uuid,causa_no_ejecucion_enum,text,text,uuid) line 13 at RAISE
+2026-07-04 23:45:28.371 -04 [17228] STATEMENT:  SELECT public.rpc_transicion_ot(NULL,NULL,NULL,NULL,NULL,NULL,NULL)
+
+2026-07-04 23:45:28.372 -04 [17228] ERROR:  relation "ordenes_trabajo" does not exist at character 25
+2026-07-04 23:45:28.372 -04 [17228] QUERY:  SELECT *           FROM ordenes_trabajo WHERE id = p_ot_id FOR UPDATE
+2026-07-04 23:45:28.372 -04 [17228] CONTEXT:  PL/pgSQL function rpc_transicion_ot(uuid,estado_ot_enum,uuid,causa_no_ejecucion_enum,text,text,uuid) line 16 at SQL statement
+2026-07-04 23:45:28.372 -04 [17228] STATEMENT:  SELECT public.rpc_transicion_ot(NULL,NULL,NULL,NULL,NULL,NULL,NULL)
+
+2026-07-04 23:45:28.373 -04 [17228] ERROR:  permission denied for function rpc_cerrar_ot_supervisor
+2026-07-04 23:45:28.373 -04 [17228] STATEMENT:  SELECT public.rpc_cerrar_ot_supervisor(NULL,NULL,NULL)
+
+2026-07-04 23:45:28.373 -04 [17228] ERROR:  No autorizado para ordenes_trabajo (ordenes_trabajo.approve).
+2026-07-04 23:45:28.373 -04 [17228] CONTEXT:  PL/pgSQL function rpc_cerrar_ot_supervisor(uuid,uuid,text) line 15 at RAISE
+2026-07-04 23:45:28.373 -04 [17228] STATEMENT:  SELECT public.rpc_cerrar_ot_supervisor(NULL,NULL,NULL)
+
+2026-07-04 23:45:28.374 -04 [17228] ERROR:  No autorizado para ordenes_trabajo (ordenes_trabajo.approve).
+2026-07-04 23:45:28.374 -04 [17228] CONTEXT:  PL/pgSQL function rpc_cerrar_ot_supervisor(uuid,uuid,text) line 15 at RAISE
+2026-07-04 23:45:28.374 -04 [17228] STATEMENT:  SELECT public.rpc_cerrar_ot_supervisor(NULL,NULL,NULL)
+
+2026-07-04 23:45:28.375 -04 [17228] ERROR:  No autorizado para ordenes_trabajo (ordenes_trabajo.approve).
+2026-07-04 23:45:28.375 -04 [17228] CONTEXT:  PL/pgSQL function rpc_cerrar_ot_supervisor(uuid,uuid,text) line 15 at RAISE
+2026-07-04 23:45:28.375 -04 [17228] STATEMENT:  SELECT public.rpc_cerrar_ot_supervisor(NULL,NULL,NULL)
+
+2026-07-04 23:45:28.375 -04 [17228] ERROR:  relation "ordenes_trabajo" does not exist at character 25
+2026-07-04 23:45:28.375 -04 [17228] QUERY:  SELECT *           FROM ordenes_trabajo WHERE id = p_ot_id FOR UPDATE
+2026-07-04 23:45:28.375 -04 [17228] CONTEXT:  PL/pgSQL function rpc_cerrar_ot_supervisor(uuid,uuid,text) line 18 at SQL statement
+2026-07-04 23:45:28.375 -04 [17228] STATEMENT:  SELECT public.rpc_cerrar_ot_supervisor(NULL,NULL,NULL)
+
+2026-07-04 23:45:28.376 -04 [17228] ERROR:  permission denied for function rpc_registrar_salida_inventario
+2026-07-04 23:45:28.376 -04 [17228] STATEMENT:  SELECT public.rpc_registrar_salida_inventario(NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL)
+
+2026-07-04 23:45:28.377 -04 [17228] ERROR:  No autorizado para inventario (inventario.create).
+2026-07-04 23:45:28.377 -04 [17228] CONTEXT:  PL/pgSQL function rpc_registrar_salida_inventario(uuid,uuid,numeric,uuid,uuid,uuid,character varying,text) line 15 at RAISE
+2026-07-04 23:45:28.377 -04 [17228] STATEMENT:  SELECT public.rpc_registrar_salida_inventario(NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL)
+
+2026-07-04 23:45:28.378 -04 [17228] ERROR:  No autorizado para inventario (inventario.create).
+2026-07-04 23:45:28.378 -04 [17228] CONTEXT:  PL/pgSQL function rpc_registrar_salida_inventario(uuid,uuid,numeric,uuid,uuid,uuid,character varying,text) line 15 at RAISE
+2026-07-04 23:45:28.378 -04 [17228] STATEMENT:  SELECT public.rpc_registrar_salida_inventario(NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL)
+
+2026-07-04 23:45:28.379 -04 [17228] ERROR:  No autorizado para inventario (inventario.create).
+2026-07-04 23:45:28.379 -04 [17228] CONTEXT:  PL/pgSQL function rpc_registrar_salida_inventario(uuid,uuid,numeric,uuid,uuid,uuid,character varying,text) line 15 at RAISE
+2026-07-04 23:45:28.379 -04 [17228] STATEMENT:  SELECT public.rpc_registrar_salida_inventario(NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL)
+
+2026-07-04 23:45:28.379 -04 [17228] ERROR:  REGLA: No se permite salida de inventario sin OT asociada.
+2026-07-04 23:45:28.379 -04 [17228] CONTEXT:  PL/pgSQL function rpc_registrar_salida_inventario(uuid,uuid,numeric,uuid,uuid,uuid,character varying,text) line 20 at RAISE
+2026-07-04 23:45:28.379 -04 [17228] STATEMENT:  SELECT public.rpc_registrar_salida_inventario(NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL)
+
+2026-07-04 23:45:28.380 -04 [17228] ERROR:  permission denied for function rpc_cambiar_contrato_activo
+2026-07-04 23:45:28.380 -04 [17228] STATEMENT:  SELECT public.rpc_cambiar_contrato_activo(NULL,NULL,NULL)
+
+2026-07-04 23:45:28.381 -04 [17228] ERROR:  No autorizado para contratos (contratos.edit).
+2026-07-04 23:45:28.381 -04 [17228] CONTEXT:  PL/pgSQL function rpc_cambiar_contrato_activo(uuid,uuid,text) line 11 at RAISE
+2026-07-04 23:45:28.381 -04 [17228] STATEMENT:  SELECT public.rpc_cambiar_contrato_activo(NULL,NULL,NULL)
+
+2026-07-04 23:45:28.382 -04 [17228] ERROR:  No autorizado para contratos (contratos.edit).
+2026-07-04 23:45:28.382 -04 [17228] CONTEXT:  PL/pgSQL function rpc_cambiar_contrato_activo(uuid,uuid,text) line 11 at RAISE
+2026-07-04 23:45:28.382 -04 [17228] STATEMENT:  SELECT public.rpc_cambiar_contrato_activo(NULL,NULL,NULL)
+
+2026-07-04 23:45:28.382 -04 [17228] ERROR:  No autorizado para contratos (contratos.edit).
+2026-07-04 23:45:28.382 -04 [17228] CONTEXT:  PL/pgSQL function rpc_cambiar_contrato_activo(uuid,uuid,text) line 11 at RAISE
+2026-07-04 23:45:28.382 -04 [17228] STATEMENT:  SELECT public.rpc_cambiar_contrato_activo(NULL,NULL,NULL)
+
+2026-07-04 23:45:28.384 -04 [17228] ERROR:  Activo <NULL> no encontrado
+2026-07-04 23:45:28.384 -04 [17228] CONTEXT:  PL/pgSQL function rpc_cambiar_contrato_activo(uuid,uuid,text) line 16 at RAISE
+2026-07-04 23:45:28.384 -04 [17228] STATEMENT:  SELECT public.rpc_cambiar_contrato_activo(NULL,NULL,NULL)
+
+2026-07-04 23:45:28.385 -04 [17228] ERROR:  permission denied for function rpc_confirmar_estado_dia
+2026-07-04 23:45:28.385 -04 [17228] STATEMENT:  SELECT public.rpc_confirmar_estado_dia(NULL,NULL,NULL)
+
+2026-07-04 23:45:28.387 -04 [17228] ERROR:  No autorizado para flota (flota.approve).
+2026-07-04 23:45:28.387 -04 [17228] CONTEXT:  PL/pgSQL function rpc_confirmar_estado_dia(uuid,date,character) line 7 at RAISE
+2026-07-04 23:45:28.387 -04 [17228] STATEMENT:  SELECT public.rpc_confirmar_estado_dia(NULL,NULL,NULL)
+
+2026-07-04 23:45:28.388 -04 [17228] ERROR:  No autorizado para flota (flota.approve).
+2026-07-04 23:45:28.388 -04 [17228] CONTEXT:  PL/pgSQL function rpc_confirmar_estado_dia(uuid,date,character) line 7 at RAISE
+2026-07-04 23:45:28.388 -04 [17228] STATEMENT:  SELECT public.rpc_confirmar_estado_dia(NULL,NULL,NULL)
+
+2026-07-04 23:45:28.389 -04 [17228] ERROR:  No autorizado para flota (flota.approve).
+2026-07-04 23:45:28.389 -04 [17228] CONTEXT:  PL/pgSQL function rpc_confirmar_estado_dia(uuid,date,character) line 7 at RAISE
+2026-07-04 23:45:28.389 -04 [17228] STATEMENT:  SELECT public.rpc_confirmar_estado_dia(NULL,NULL,NULL)
+
+2026-07-04 23:45:28.391 -04 [17228] ERROR:  null value in column "activo_id" of relation "estado_diario_flota" violates not-null constraint
+2026-07-04 23:45:28.391 -04 [17228] DETAIL:  Failing row contains (44bf9f99-691a-4ab1-9412-993eb2f5de48, null, null, null, null, null, null, null, null, 0.0, 0.0, 0.0, 0.0, null, null, 2026-07-04 23:45:28.39033-04, 2026-07-04 23:45:28.39033-04, t, Confirmado por planificador (sugerencia GPS), 11111111-1111-1111-1111-111111111111, 2026-07-04 23:45:28.39033-04, null, f).
+2026-07-04 23:45:28.391 -04 [17228] CONTEXT:  SQL statement "INSERT INTO estado_diario_flota
+	    (activo_id, fecha, estado_codigo, override_manual, calculado_auto, motivo_override, actualizado_por, actualizado_at)
+	  VALUES
+	    (p_activo_id, p_fecha, p_estado, true, false, 'Confirmado por planificador (sugerencia GPS)', auth.uid(), now())
+	  ON CONFLICT (activo_id, fecha) DO UPDATE
+	    SET estado_codigo = EXCLUDED.estado_codigo, override_manual = true, calculado_auto = false,
+	        motivo_override = EXCLUDED.motivo_override, actualizado_por = auth.uid(),
+	        actualizado_at = now(), updated_at = now()"
+	PL/pgSQL function rpc_confirmar_estado_dia(uuid,date,character) line 10 at SQL statement
+2026-07-04 23:45:28.391 -04 [17228] STATEMENT:  SELECT public.rpc_confirmar_estado_dia(NULL,NULL,NULL)
+
+2026-07-04 23:45:28.391 -04 [17228] ERROR:  permission denied for function rpc_actualizar_metricas_activo
+2026-07-04 23:45:28.391 -04 [17228] STATEMENT:  SELECT public.rpc_actualizar_metricas_activo(NULL,NULL,NULL,NULL,NULL)
+
+2026-07-04 23:45:28.392 -04 [17228] ERROR:  No autorizado para activos (activos.edit).
+2026-07-04 23:45:28.392 -04 [17228] CONTEXT:  PL/pgSQL function rpc_actualizar_metricas_activo(uuid,numeric,numeric,integer,uuid) line 12 at RAISE
+2026-07-04 23:45:28.392 -04 [17228] STATEMENT:  SELECT public.rpc_actualizar_metricas_activo(NULL,NULL,NULL,NULL,NULL)
+
+2026-07-04 23:45:28.393 -04 [17228] ERROR:  No autorizado para activos (activos.edit).
+2026-07-04 23:45:28.393 -04 [17228] CONTEXT:  PL/pgSQL function rpc_actualizar_metricas_activo(uuid,numeric,numeric,integer,uuid) line 12 at RAISE
+2026-07-04 23:45:28.393 -04 [17228] STATEMENT:  SELECT public.rpc_actualizar_metricas_activo(NULL,NULL,NULL,NULL,NULL)
+
+2026-07-04 23:45:28.393 -04 [17228] ERROR:  No autorizado para activos (activos.edit).
+2026-07-04 23:45:28.393 -04 [17228] CONTEXT:  PL/pgSQL function rpc_actualizar_metricas_activo(uuid,numeric,numeric,integer,uuid) line 12 at RAISE
+2026-07-04 23:45:28.393 -04 [17228] STATEMENT:  SELECT public.rpc_actualizar_metricas_activo(NULL,NULL,NULL,NULL,NULL)
+
+2026-07-04 23:45:28.394 -04 [17228] ERROR:  Activo no encontrado.
+2026-07-04 23:45:28.394 -04 [17228] CONTEXT:  PL/pgSQL function rpc_actualizar_metricas_activo(uuid,numeric,numeric,integer,uuid) line 22 at RAISE
+2026-07-04 23:45:28.394 -04 [17228] STATEMENT:  SELECT public.rpc_actualizar_metricas_activo(NULL,NULL,NULL,NULL,NULL)
+
+2026-07-04 23:45:28.395 -04 [17228] ERROR:  permission denied for function rpc_asignar_pauta
+2026-07-04 23:45:28.395 -04 [17228] STATEMENT:  SELECT public.rpc_asignar_pauta(NULL,NULL)
+
+2026-07-04 23:45:28.396 -04 [17228] ERROR:  No autorizado para mantenimiento (mantenimiento.edit).
+2026-07-04 23:45:28.396 -04 [17228] CONTEXT:  PL/pgSQL function rpc_asignar_pauta(uuid,uuid) line 8 at RAISE
+2026-07-04 23:45:28.396 -04 [17228] STATEMENT:  SELECT public.rpc_asignar_pauta(NULL,NULL)
+
+2026-07-04 23:45:28.396 -04 [17228] ERROR:  No autorizado para mantenimiento (mantenimiento.edit).
+2026-07-04 23:45:28.396 -04 [17228] CONTEXT:  PL/pgSQL function rpc_asignar_pauta(uuid,uuid) line 8 at RAISE
+2026-07-04 23:45:28.396 -04 [17228] STATEMENT:  SELECT public.rpc_asignar_pauta(NULL,NULL)
+
+2026-07-04 23:45:28.397 -04 [17228] ERROR:  No autorizado para mantenimiento (mantenimiento.edit).
+2026-07-04 23:45:28.397 -04 [17228] CONTEXT:  PL/pgSQL function rpc_asignar_pauta(uuid,uuid) line 8 at RAISE
+2026-07-04 23:45:28.397 -04 [17228] STATEMENT:  SELECT public.rpc_asignar_pauta(NULL,NULL)
+
+2026-07-04 23:45:28.398 -04 [17228] ERROR:  relation "pautas_fabricante" does not exist at character 25
+2026-07-04 23:45:28.398 -04 [17228] QUERY:  SELECT *           FROM pautas_fabricante WHERE id = p_pauta_id
+2026-07-04 23:45:28.398 -04 [17228] CONTEXT:  PL/pgSQL function rpc_asignar_pauta(uuid,uuid) line 11 at SQL statement
+2026-07-04 23:45:28.398 -04 [17228] STATEMENT:  SELECT public.rpc_asignar_pauta(NULL,NULL)
+
+2026-07-04 23:45:28.398 -04 [17228] ERROR:  permission denied for function rpc_crear_auxiliar
+2026-07-04 23:45:28.398 -04 [17228] STATEMENT:  SELECT public.rpc_crear_auxiliar(NULL,NULL,NULL)
+
+2026-07-04 23:45:28.400 -04 [17228] ERROR:  No autorizado para activos (activos.create).
+2026-07-04 23:45:28.400 -04 [17228] CONTEXT:  PL/pgSQL function rpc_crear_auxiliar(uuid,text,tipo_activo_enum) line 13 at RAISE
+2026-07-04 23:45:28.400 -04 [17228] STATEMENT:  SELECT public.rpc_crear_auxiliar(NULL,NULL,NULL)
+
+2026-07-04 23:45:28.400 -04 [17228] ERROR:  No autorizado para activos (activos.create).
+2026-07-04 23:45:28.400 -04 [17228] CONTEXT:  PL/pgSQL function rpc_crear_auxiliar(uuid,text,tipo_activo_enum) line 13 at RAISE
+2026-07-04 23:45:28.400 -04 [17228] STATEMENT:  SELECT public.rpc_crear_auxiliar(NULL,NULL,NULL)
+
+2026-07-04 23:45:28.401 -04 [17228] ERROR:  No autorizado para activos (activos.create).
+2026-07-04 23:45:28.401 -04 [17228] CONTEXT:  PL/pgSQL function rpc_crear_auxiliar(uuid,text,tipo_activo_enum) line 13 at RAISE
+2026-07-04 23:45:28.401 -04 [17228] STATEMENT:  SELECT public.rpc_crear_auxiliar(NULL,NULL,NULL)
+
+2026-07-04 23:45:28.402 -04 [17228] ERROR:  Equipo padre no existe
+2026-07-04 23:45:28.402 -04 [17228] CONTEXT:  PL/pgSQL function rpc_crear_auxiliar(uuid,text,tipo_activo_enum) line 17 at RAISE
+2026-07-04 23:45:28.402 -04 [17228] STATEMENT:  SELECT public.rpc_crear_auxiliar(NULL,NULL,NULL)
+
+2026-07-04 23:45:28.403 -04 [17228] ERROR:  permission denied for function rpc_generar_qr_activo
+2026-07-04 23:45:28.403 -04 [17228] STATEMENT:  SELECT public.rpc_generar_qr_activo(NULL,NULL)
+
+2026-07-04 23:45:28.404 -04 [17228] ERROR:  No autorizado para activos (activos.edit).
+2026-07-04 23:45:28.404 -04 [17228] CONTEXT:  PL/pgSQL function rpc_generar_qr_activo(uuid,text) line 11 at RAISE
+2026-07-04 23:45:28.404 -04 [17228] STATEMENT:  SELECT public.rpc_generar_qr_activo(NULL,NULL)
+
+2026-07-04 23:45:28.404 -04 [17228] ERROR:  No autorizado para activos (activos.edit).
+2026-07-04 23:45:28.404 -04 [17228] CONTEXT:  PL/pgSQL function rpc_generar_qr_activo(uuid,text) line 11 at RAISE
+2026-07-04 23:45:28.404 -04 [17228] STATEMENT:  SELECT public.rpc_generar_qr_activo(NULL,NULL)
+
+2026-07-04 23:45:28.405 -04 [17228] ERROR:  No autorizado para activos (activos.edit).
+2026-07-04 23:45:28.405 -04 [17228] CONTEXT:  PL/pgSQL function rpc_generar_qr_activo(uuid,text) line 11 at RAISE
+2026-07-04 23:45:28.405 -04 [17228] STATEMENT:  SELECT public.rpc_generar_qr_activo(NULL,NULL)
+
+2026-07-04 23:45:28.406 -04 [17228] ERROR:  Activo no encontrado.
+2026-07-04 23:45:28.406 -04 [17228] CONTEXT:  PL/pgSQL function rpc_generar_qr_activo(uuid,text) line 18 at RAISE
+2026-07-04 23:45:28.406 -04 [17228] STATEMENT:  SELECT public.rpc_generar_qr_activo(NULL,NULL)
+
+2026-07-04 23:45:28.406 -04 [17228] ERROR:  permission denied for function rpc_validar_sugerencia
+2026-07-04 23:45:28.406 -04 [17228] STATEMENT:  SELECT public.rpc_validar_sugerencia(NULL,NULL,NULL)
+
+2026-07-04 23:45:28.407 -04 [17228] ERROR:  No autorizado para flota (flota.edit).
+2026-07-04 23:45:28.407 -04 [17228] CONTEXT:  PL/pgSQL function rpc_validar_sugerencia(uuid,character varying,text) line 10 at RAISE
+2026-07-04 23:45:28.407 -04 [17228] STATEMENT:  SELECT public.rpc_validar_sugerencia(NULL,NULL,NULL)
+
+2026-07-04 23:45:28.408 -04 [17228] ERROR:  No autorizado para flota (flota.edit).
+2026-07-04 23:45:28.408 -04 [17228] CONTEXT:  PL/pgSQL function rpc_validar_sugerencia(uuid,character varying,text) line 10 at RAISE
+2026-07-04 23:45:28.408 -04 [17228] STATEMENT:  SELECT public.rpc_validar_sugerencia(NULL,NULL,NULL)
+
+2026-07-04 23:45:28.409 -04 [17228] ERROR:  No autorizado para flota (flota.edit).
+2026-07-04 23:45:28.409 -04 [17228] CONTEXT:  PL/pgSQL function rpc_validar_sugerencia(uuid,character varying,text) line 10 at RAISE
+2026-07-04 23:45:28.409 -04 [17228] STATEMENT:  SELECT public.rpc_validar_sugerencia(NULL,NULL,NULL)
+
+2026-07-04 23:45:28.409 -04 [17228] ERROR:  relation "cambios_estado_sugeridos" does not exist at character 33
+2026-07-04 23:45:28.409 -04 [17228] QUERY:  SELECT *                   FROM cambios_estado_sugeridos
+	     WHERE id = p_sugerencia_id
+2026-07-04 23:45:28.409 -04 [17228] CONTEXT:  PL/pgSQL function rpc_validar_sugerencia(uuid,character varying,text) line 13 at SQL statement
+2026-07-04 23:45:28.409 -04 [17228] STATEMENT:  SELECT public.rpc_validar_sugerencia(NULL,NULL,NULL)
+
+2026-07-04 23:45:28.410 -04 [17228] ERROR:  permission denied for function generar_ots_preventivas
+2026-07-04 23:45:28.410 -04 [17228] STATEMENT:  SELECT public.generar_ots_preventivas()
+
+2026-07-04 23:45:28.411 -04 [17228] ERROR:  permission denied for function generar_ots_preventivas
+2026-07-04 23:45:28.411 -04 [17228] STATEMENT:  SELECT public.generar_ots_preventivas()
+
+2026-07-04 23:45:28.411 -04 [17228] ERROR:  permission denied for function verificar_certificaciones
+2026-07-04 23:45:28.411 -04 [17228] STATEMENT:  SELECT public.verificar_certificaciones()
+
+2026-07-04 23:45:28.412 -04 [17228] ERROR:  permission denied for function verificar_certificaciones
+2026-07-04 23:45:28.412 -04 [17228] STATEMENT:  SELECT public.verificar_certificaciones()
+
+2026-07-04 23:45:28.413 -04 [17228] ERROR:  permission denied for function fn_auto_crear_planes_activo
+2026-07-04 23:45:28.413 -04 [17228] STATEMENT:  SELECT public.fn_auto_crear_planes_activo(NULL)
+
+2026-07-04 23:45:28.413 -04 [17228] ERROR:  permission denied for function fn_auto_crear_planes_activo
+2026-07-04 23:45:28.413 -04 [17228] STATEMENT:  SELECT public.fn_auto_crear_planes_activo(NULL)
+
+2026-07-04 23:45:28.414 -04 [17228] ERROR:  permission denied for function fn_generar_nc_desde_checklist_ot
+2026-07-04 23:45:28.414 -04 [17228] STATEMENT:  SELECT public.fn_generar_nc_desde_checklist_ot(NULL)
+
+2026-07-04 23:45:28.415 -04 [17228] ERROR:  permission denied for function fn_generar_nc_desde_checklist_ot
+2026-07-04 23:45:28.415 -04 [17228] STATEMENT:  SELECT public.fn_generar_nc_desde_checklist_ot(NULL)
+
+2026-07-04 23:45:28.416 -04 [17228] ERROR:  permission denied for function fn_generar_nc_desde_v3_ot
+2026-07-04 23:45:28.416 -04 [17228] STATEMENT:  SELECT public.fn_generar_nc_desde_v3_ot(NULL)
+
+2026-07-04 23:45:28.416 -04 [17228] ERROR:  permission denied for function fn_generar_nc_desde_v3_ot
+2026-07-04 23:45:28.416 -04 [17228] STATEMENT:  SELECT public.fn_generar_nc_desde_v3_ot(NULL)
+
+2026-07-04 23:45:28.417 -04 [17228] ERROR:  permission denied for function fn_reconciliar_estado_ficha_desde_matriz
+2026-07-04 23:45:28.417 -04 [17228] STATEMENT:  SELECT public.fn_reconciliar_estado_ficha_desde_matriz()
+
+2026-07-04 23:45:28.418 -04 [17228] ERROR:  permission denied for function fn_reconciliar_estado_ficha_desde_matriz
+2026-07-04 23:45:28.418 -04 [17228] STATEMENT:  SELECT public.fn_reconciliar_estado_ficha_desde_matriz()
+
+2026-07-04 23:45:28.419 -04 [17228] ERROR:  permission denied for function fn_reconciliar_comercial_ficha_desde_matriz
+2026-07-04 23:45:28.419 -04 [17228] STATEMENT:  SELECT public.fn_reconciliar_comercial_ficha_desde_matriz()
+
+2026-07-04 23:45:28.420 -04 [17228] ERROR:  permission denied for function fn_reconciliar_comercial_ficha_desde_matriz
+2026-07-04 23:45:28.420 -04 [17228] STATEMENT:  SELECT public.fn_reconciliar_comercial_ficha_desde_matriz()
+
+✓ Grupo A: 11/11 funciones con guard fail-closed verificado
+✓ Grupo B: 7/7 funciones internas sin acceso PostgREST
+2026-07-04 23:45:28.422 -04 [17228] ERROR:  No autorizado para contratos (contratos.edit).
+2026-07-04 23:45:28.422 -04 [17228] CONTEXT:  PL/pgSQL function rpc_cambiar_contrato_activo(uuid,uuid,text) line 11 at RAISE
+2026-07-04 23:45:28.422 -04 [17228] STATEMENT:  SELECT public.rpc_cambiar_contrato_activo(NULL,NULL,NULL)
+
+2026-07-04 23:45:28.423 -04 [17228] ERROR:  No autorizado para contratos (contratos.edit).
+2026-07-04 23:45:28.423 -04 [17228] CONTEXT:  PL/pgSQL function rpc_cambiar_contrato_activo(uuid,uuid,text) line 11 at RAISE
+2026-07-04 23:45:28.423 -04 [17228] STATEMENT:  SELECT public.rpc_cambiar_contrato_activo(NULL,NULL,NULL)
+
+✓ S3 portal cliente explícito denegado
+✓ S3 perfil dual (admin+portal) denegado — portal manda sobre rol interno
+✓ S7 flujo completo: admin cambia contrato → contrato null→cccccccc-0000-0000-0000-000000000001 (cambio real aplicado), historico=0
+2026-07-04 23:45:28.438 -04 [17228] ERROR:  Activo <NULL> no encontrado
+2026-07-04 23:45:28.438 -04 [17228] CONTEXT:  PL/pgSQL function rpc_cambiar_contrato_activo(uuid,uuid,text) line 16 at RAISE
+2026-07-04 23:45:28.438 -04 [17228] STATEMENT:  SELECT public.rpc_cambiar_contrato_activo(NULL,NULL,NULL)
+
+✓ S7 payload inválido/activo inexistente → rechazo
+ℹ IDOR: portal cliente denegado en todas (sin perfil). Scope por faena/contrato NO se aplica (decisión de negocio Fase 1).
+
+══════════════════════════════════════════════════════════════════════
+RESUMEN: 46/46 tests OK · migraciones 3/3 aplicadas
+══════════════════════════════════════════════════════════════════════
+
+preprod detenido.

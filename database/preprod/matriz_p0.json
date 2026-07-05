@@ -1,0 +1,197 @@
+[
+  {
+    "fn": "rpc_crear_ot",
+    "grupo": "A",
+    "args": "p_tipo tipo_ot_enum, p_contrato_id uuid, p_faena_id uuid, p_activo_id uuid, p_prioridad prioridad_enum, p_fecha_programada date, p_responsable_id uuid, p_plan_mantenimiento_id uuid, p_usuario_id uuid",
+    "modulo": "ordenes_trabajo",
+    "accion": "create",
+    "roles": [
+      "administrador",
+      "jefe_mantenimiento",
+      "jefe_operaciones",
+      "planificador",
+      "supervisor"
+    ]
+  },
+  {
+    "fn": "rpc_transicion_ot",
+    "grupo": "A",
+    "args": "p_ot_id uuid, p_nuevo_estado estado_ot_enum, p_usuario_id uuid, p_causa_no_ejecucion causa_no_ejecucion_enum, p_detalle_no_ejecucion text, p_observaciones text, p_responsable_id uuid",
+    "modulo": "ordenes_trabajo",
+    "accion": "edit",
+    "roles": [
+      "administrador",
+      "auditor_calidad",
+      "jefe_mantenimiento",
+      "jefe_operaciones",
+      "planificador",
+      "supervisor",
+      "tecnico_mantenimiento"
+    ]
+  },
+  {
+    "fn": "rpc_cerrar_ot_supervisor",
+    "grupo": "A",
+    "args": "p_ot_id uuid, p_supervisor_id uuid, p_observaciones text",
+    "modulo": "ordenes_trabajo",
+    "accion": "approve",
+    "roles": [
+      "administrador",
+      "jefe_mantenimiento",
+      "jefe_operaciones",
+      "subgerente_operaciones",
+      "supervisor"
+    ]
+  },
+  {
+    "fn": "rpc_registrar_salida_inventario",
+    "grupo": "A",
+    "args": "p_bodega_id uuid, p_producto_id uuid, p_cantidad numeric, p_ot_id uuid, p_usuario_id uuid, p_activo_id uuid, p_lote character varying, p_motivo text",
+    "modulo": "inventario",
+    "accion": "create",
+    "roles": [
+      "administrador",
+      "bodeguero",
+      "operador_abastecimiento"
+    ]
+  },
+  {
+    "fn": "rpc_cambiar_contrato_activo",
+    "grupo": "A",
+    "args": "p_activo_id uuid, p_nuevo_contrato_id uuid, p_razon text",
+    "modulo": "contratos",
+    "accion": "edit",
+    "roles": [
+      "administrador"
+    ]
+  },
+  {
+    "fn": "rpc_confirmar_estado_dia",
+    "grupo": "A",
+    "args": "p_activo_id uuid, p_fecha date, p_estado character",
+    "modulo": "flota",
+    "accion": "approve",
+    "roles": []
+  },
+  {
+    "fn": "rpc_actualizar_metricas_activo",
+    "grupo": "A",
+    "args": "p_activo_id uuid, p_kilometraje numeric, p_horas_uso numeric, p_ciclos integer, p_usuario_id uuid",
+    "modulo": "activos",
+    "accion": "edit",
+    "roles": [
+      "administrador",
+      "auditor_calidad",
+      "jefe_mantenimiento",
+      "jefe_operaciones"
+    ]
+  },
+  {
+    "fn": "rpc_asignar_pauta",
+    "grupo": "A",
+    "args": "p_activo_id uuid, p_pauta_id uuid",
+    "modulo": "mantenimiento",
+    "accion": "edit",
+    "roles": [
+      "administrador",
+      "auditor_calidad",
+      "jefe_mantenimiento",
+      "planificador"
+    ]
+  },
+  {
+    "fn": "rpc_crear_auxiliar",
+    "grupo": "A",
+    "args": "p_padre_id uuid, p_nombre text, p_tipo tipo_activo_enum",
+    "modulo": "activos",
+    "accion": "create",
+    "roles": [
+      "administrador"
+    ]
+  },
+  {
+    "fn": "rpc_generar_qr_activo",
+    "grupo": "A",
+    "args": "p_activo_id uuid, p_base_url text",
+    "modulo": "activos",
+    "accion": "edit",
+    "roles": [
+      "administrador",
+      "auditor_calidad",
+      "jefe_mantenimiento",
+      "jefe_operaciones"
+    ]
+  },
+  {
+    "fn": "rpc_validar_sugerencia",
+    "grupo": "A",
+    "args": "p_sugerencia_id uuid, p_accion character varying, p_comentario text",
+    "modulo": "flota",
+    "accion": "edit",
+    "roles": [
+      "administrador",
+      "auditor_calidad",
+      "jefe_mantenimiento",
+      "jefe_operaciones",
+      "planificador",
+      "subgerente_operaciones",
+      "supervisor"
+    ]
+  },
+  {
+    "fn": "generar_ots_preventivas",
+    "grupo": "B",
+    "args": "",
+    "modulo": "(interno)",
+    "accion": "—",
+    "roles": []
+  },
+  {
+    "fn": "verificar_certificaciones",
+    "grupo": "B",
+    "args": "",
+    "modulo": "(interno)",
+    "accion": "—",
+    "roles": []
+  },
+  {
+    "fn": "fn_auto_crear_planes_activo",
+    "grupo": "B",
+    "args": "p_activo_id uuid",
+    "modulo": "(interno)",
+    "accion": "—",
+    "roles": []
+  },
+  {
+    "fn": "fn_generar_nc_desde_checklist_ot",
+    "grupo": "B",
+    "args": "p_ot_id uuid",
+    "modulo": "(interno)",
+    "accion": "—",
+    "roles": []
+  },
+  {
+    "fn": "fn_generar_nc_desde_v3_ot",
+    "grupo": "B",
+    "args": "p_ot_id uuid",
+    "modulo": "(interno)",
+    "accion": "—",
+    "roles": []
+  },
+  {
+    "fn": "fn_reconciliar_estado_ficha_desde_matriz",
+    "grupo": "B",
+    "args": "",
+    "modulo": "(interno)",
+    "accion": "—",
+    "roles": []
+  },
+  {
+    "fn": "fn_reconciliar_comercial_ficha_desde_matriz",
+    "grupo": "B",
+    "args": "",
+    "modulo": "(interno)",
+    "accion": "—",
+    "roles": []
+  }
+]
