@@ -166,9 +166,14 @@ const p1p2 = (await c.query(`
 sql += `\n\n-- ═══ P1/P2 · cierre de superficie anónima (endurecimiento por-fn en Fase 1) ═══\n`
 for (const r of p1p2) {
   if (ALLOW.has(r.proname)) { sql += `-- (allowlist QR) ${r.proname}\n`; continue }
+  if (SERVICE_ROLE.has(r.proname)) {
+    // Solo la edge function (service_role): NO authenticated (ningún usuario final la llama).
+    sql += `REVOKE EXECUTE ON FUNCTION public.${r.proname}(${r.args}) FROM anon, authenticated, PUBLIC;\n`
+    sql += `GRANT  EXECUTE ON FUNCTION public.${r.proname}(${r.args}) TO service_role;  -- solo edge function GPS (documentado)\n`
+    continue
+  }
   sql += `REVOKE EXECUTE ON FUNCTION public.${r.proname}(${r.args}) FROM anon, PUBLIC;\n`
   sql += `GRANT  EXECUTE ON FUNCTION public.${r.proname}(${r.args}) TO authenticated;\n`
-  if (SERVICE_ROLE.has(r.proname)) sql += `GRANT  EXECUTE ON FUNCTION public.${r.proname}(${r.args}) TO service_role;  -- edge function GPS (documentado)\n`
 }
 
 // ── Verificación ────────────────────────────────────────────────────────────

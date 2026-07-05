@@ -48,7 +48,8 @@ const BUNDLE = [
           AND pg_get_functiondef(p.oid) ~* 'insert into|update .* set|delete from'
           AND pg_get_functiondef(p.oid) !~* 'auth.uid\\(\\) is null|no autenticado|fn_user_rol|fn_tiene_permiso'
           AND p.proname NOT IN ('rpc_guardar_checklist_publico','rpc_checklist_cliente_guardar')) = 0
-      AND has_function_privilege('service_role','public.rpc_ingestar_gps_batch(text,jsonb)','EXECUTE') AS ok` },
+      AND has_function_privilege('service_role','public.rpc_ingestar_gps_batch(text,jsonb)','EXECUTE')
+      AND NOT has_function_privilege('authenticated','public.rpc_ingestar_gps_batch(text,jsonb)','EXECUTE') AS ok` },
 ]
 
 const state = existsSync(STATE) ? JSON.parse(readFileSync(STATE, 'utf8')) : { aplicadas: [] }
