@@ -102,6 +102,8 @@ async function cmdStatus(c) {
   console.log(`Pendientes (${pend.length}): ${pend.slice(-12).join(', ')}${pend.length > 12 ? ' …' : ''}`)
 }
 
+const ADVISORY_KEY = 749185026  // clave fija para serializar ejecutores de migración
+
 async function cmdApply(c, file) {
   const abs = resolve(process.cwd(), file)
   if (!existsSync(abs)) { console.error('no existe:', abs); process.exit(2) }
@@ -109,6 +111,11 @@ async function cmdApply(c, file) {
   const version = versionOf(abs)
   const hash = sha256(raw)
   const fn = basename(abs)
+  const esBootstrap = /CREATE\s+TABLE[^;]*\bschema_migrations\b/i.test(raw)
+
+  // Exclusión concurrente: solo un ejecutor aplica migraciones a la vez.
+  // Lock de sesión; se libera al cerrar la conexión (o al terminar el proceso).
+  await c.query('SELECT pg_advisory_lock($1)', [ADVISORY_KEY])
 
   // Anomalías de directorio (aviso, no bloqueo salvo versión doble del mismo archivo objetivo)
   const { dobles } = scanDir()
@@ -120,6 +127,11 @@ async function cmdApply(c, file) {
   if (destr) { console.error(`✗ BLOQUEADO: SQL destructivo sin anotación en ${fn}:`); destr.forEach(h => console.error('   - ' + h)); console.error('   Agregar "-- destructivo-ok: <motivo>" si es intencional.'); process.exit(1) }
 
   const reg = await registryExists(c)
+  // Bootstrap: si no existe el registro, SOLO se admite la migración que lo crea.
+  if (!reg && !esBootstrap) {
+    console.error('✗ BLOQUEADO: no existe schema_migrations. Aplica primero la migración bootstrap (190).')
+    process.exit(1)
+  }
   if (reg) {
     const prev = (await c.query(`SELECT sha256, success FROM public.schema_migrations WHERE version=$1`, [version])).rows[0]
     if (prev?.success && prev.sha256 === hash) { console.log(`↷ ${version} ya aplicada (mismo hash). No se re-ejecuta.`); return }

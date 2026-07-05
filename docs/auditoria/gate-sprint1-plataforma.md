@@ -61,9 +61,10 @@ Se completó y **probó** el núcleo de la **Entrega A** (registro de migracione
 
 Retención corregida y probada. **Pendiente para GO:** ejecutar un backup automático real, copia externa confirmada, restauración probada end-to-end, alerta simulada por fallo. (El backup manual pre-Fase 0 fue cifrado AES-256 y verificado — ver `gate-final-fase-0.md`.)
 
-## 7. Estado de RLS
+## 7. Estado de RLS (reconciliado con prod 2026-07-05, solo lectura)
 
-Sin cambios este sprint (Entrega C). Tablas núcleo objetivo siguen **sin RLS**: `no_conformidades`, `estado_diario_flota`, `verificaciones_disponibilidad`, `registro_jornada_conductor`, `normativa_documentos`, `suspel_*`, `respel_*`, inventario/costos expuestos al portal.
+- **`estado_diario_flota`: CERRADA** ✅ — MIG185 la dejó con `relrowsecurity=true`, policy `pol_edf_select_authenticated` (SELECT authenticated), **anon sin ningún privilegio**; las escrituras de authenticated quedan bloqueadas por RLS (sin policy de escritura → default-deny; solo escriben las funciones SECURITY DEFINER). (El informe previo la listaba por error como pendiente.) Cleanup menor futuro: revocar los grants de INSERT/UPDATE/DELETE de authenticated (ya inertes por RLS).
+- **Pendientes reales (Entrega C)** — verificado `rls=false, 0 policies, anon puede INSERT+SELECT` en: `no_conformidades`, `verificaciones_disponibilidad`, `registro_jornada_conductor`, `normativa_documentos`, `respel_empresas_receptoras`, `respel_movimientos`, `respel_tipos`, `suspel_bodegas`, `suspel_productos`, y tablas de inventario/costos expuestas al portal.
 
 ## 8. Estado de QR
 
