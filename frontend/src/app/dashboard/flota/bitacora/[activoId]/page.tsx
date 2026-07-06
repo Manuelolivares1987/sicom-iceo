@@ -6,13 +6,14 @@ import Link from 'next/link'
 import { useQuery } from '@tanstack/react-query'
 import {
   Wrench, History, ShieldCheck, FileText, Clock, ClipboardList, ChevronDown, ChevronRight,
-  Camera, CheckCircle2, XCircle, MinusCircle, Truck, ExternalLink,
+  Camera, CheckCircle2, XCircle, MinusCircle, Truck, ExternalLink, FileCheck, Eye,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Spinner } from '@/components/ui/spinner'
 import { Badge } from '@/components/ui/badge'
 import { useRequireAuth } from '@/hooks/use-require-auth'
 import { getBitacoraEquipo, getActivoBasico, getOtDetalleBitacora, type BitacoraEvento } from '@/lib/services/bitacora'
+import { getInformeDetalle, getSignedPdfUrl } from '@/lib/services/informe-intervencion'
 import { cn } from '@/lib/utils'
 
 const TIPO_META: Record<string, { icon: any; label: string; color: string }> = {
@@ -22,9 +23,10 @@ const TIPO_META: Record<string, { icon: any; label: string; color: string }> = {
   recepcion:         { icon: FileText,      label: 'Recepción',       color: 'text-purple-600' },
   diferido:          { icon: Clock,         label: 'Pendiente',       color: 'text-amber-600' },
   checklist_cliente: { icon: ClipboardList, label: 'Checklist cliente', color: 'text-indigo-600' },
+  informe_tecnico:   { icon: FileCheck,     label: 'Informe técnico', color: 'text-green-600' },
 }
 
-const TIPOS = ['ot', 'os_legacy', 'auditoria', 'recepcion', 'diferido', 'checklist_cliente'] as const
+const TIPOS = ['ot', 'os_legacy', 'auditoria', 'recepcion', 'diferido', 'checklist_cliente', 'informe_tecnico'] as const
 
 export default function BitacoraEquipoPage() {
   useRequireAuth()
@@ -93,7 +95,7 @@ export default function BitacoraEquipoPage() {
 function EventoFila({ e }: { e: BitacoraEvento }) {
   const m = TIPO_META[e.tipo_registro] ?? TIPO_META.ot
   const [open, setOpen] = useState(false)
-  const expandible = e.tipo_registro === 'ot'
+  const expandible = e.tipo_registro === 'ot' || e.tipo_registro === 'informe_tecnico'
   const fecha = e.fecha ? new Date(e.fecha).toLocaleDateString('es-CL', { year: 'numeric', month: 'short', day: 'numeric' }) : '—'
 
   return (
@@ -126,7 +128,8 @@ function EventoFila({ e }: { e: BitacoraEvento }) {
               {expandible && (open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />)}
             </div>
           </div>
-          {open && expandible && <OtDetalle otId={e.ref_id} />}
+          {open && e.tipo_registro === 'ot' && <OtDetalle otId={e.ref_id} />}
+          {open && e.tipo_registro === 'informe_tecnico' && <InformeTecnicoDetalle informeId={e.ref_id} />}
         </CardContent>
       </Card>
     </div>
@@ -190,6 +193,64 @@ function OtDetalle({ otId }: { otId: string }) {
       ))}
       {data.checklist.length === 0 && data.materiales.length === 0 && data.evidencias.length === 0 && (
         <p className="text-xs text-muted-foreground">Sin detalle registrado. <Link href={`/dashboard/ordenes-trabajo/${otId}`} className="text-blue-600">Abrir OT</Link></p>
+      )}
+    </div>
+  )
+}
+
+function InformeTecnicoDetalle({ informeId }: { informeId: string }) {
+  const { data, isLoading } = useQuery({
+    queryKey: ['bitacora-informe-detalle', informeId],
+    queryFn: async () => {
+      const { data, error } = await getInformeDetalle(informeId)
+      if (error) throw error
+      return data
+    },
+  })
+  if (isLoading) return <div className="mt-3 pt-3 border-t"><Spinner className="h-4 w-4" /></div>
+  if (!data) return null
+
+  const { informe, trabajos, materiales, manoobra } = data
+  const totalMat = materiales.reduce((s, m) => s + Number(m.costo_total ?? 0), 0)
+  const totalMO = manoobra.reduce((s, m) => s + Number(m.costo_total_snapshot ?? 0), 0)
+
+  async function verPDF() {
+    if (!informe.pdf_url) return
+    const { data: url } = await getSignedPdfUrl(informe.pdf_url)
+    if (url) window.open(url, '_blank')
+  }
+
+  const bloque = (titulo: string, texto?: string | null) =>
+    texto && texto.trim() ? (
+      <div>
+        <div className="text-xs font-semibold text-muted-foreground mb-0.5">{titulo}</div>
+        <p className="text-xs whitespace-pre-line">{texto}</p>
+      </div>
+    ) : null
+
+  return (
+    <div className="mt-3 pt-3 border-t space-y-3 text-sm">
+      <div className="flex flex-wrap items-center gap-2">
+        <Link href={`/dashboard/ordenes-trabajo/${informe.ot_id}`} className="text-xs text-blue-600 flex items-center gap-1">
+          <ExternalLink className="h-3 w-3" /> Abrir OT
+        </Link>
+        {informe.pdf_url && (
+          <button onClick={verPDF} className="text-xs text-green-700 flex items-center gap-1 border rounded px-2 py-0.5">
+            <Eye className="h-3 w-3" /> Ver PDF
+          </button>
+        )}
+      </div>
+      {bloque('Diagnóstico', informe.diagnostico_resumen)}
+      {bloque('Trabajo realizado', informe.trabajo_realizado_resumen)}
+      {bloque('Trabajos pendientes', informe.trabajos_pendientes_resumen)}
+      {bloque('Estado de salida', informe.estado_salida)}
+      {bloque('Recomendaciones', informe.recomendaciones)}
+      {(trabajos.length > 0 || materiales.length > 0 || manoobra.length > 0) && (
+        <div className="text-xs text-muted-foreground">
+          {trabajos.length} trabajo(s) · {materiales.length} material(es)
+          {totalMat > 0 && ` ($${totalMat.toLocaleString('es-CL')})`}
+          {' · '}MO ${totalMO.toLocaleString('es-CL')}
+        </div>
       )}
     </div>
   )

@@ -73,6 +73,7 @@ import { supabase } from '@/lib/supabase'
 import { calcularKPIs } from '@/lib/services/kpi-iceo'
 import { OTInfoHeader } from '@/components/ot/ot-info-header'
 import { OTActionBar } from '@/components/ot/ot-action-bar'
+import { InformeTecnicoSeccion } from '@/components/informe-intervencion/informe-tecnico-seccion'
 import { isImmutableState, isAwaitingClosure } from '@/domain/ot/transitions'
 
 // ---------------------------------------------------------------------------
@@ -1493,6 +1494,9 @@ export default function OrdenTrabajoDetailPage() {
           {activeTab === 'historial' && id && <HistorialTab otId={id} />}
         </CardContent>
       </Card>
+
+      {/* Informe técnico de intervención (Incremento 1) */}
+      {id && <InformeTecnicoSeccion otId={id} activoId={otData.activo_id} otEstado={otData.estado} />}
 
       {/* Bottom action bar — technician actions */}
       <OTActionBar
