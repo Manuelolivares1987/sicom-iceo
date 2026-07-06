@@ -33,6 +33,8 @@ export type MecanicoOT = {
   cuadrilla: string | null
   responsable_id: string | null
   responsable: string | null
+  /** TRUE si la OT trae el nombre/cuenta del usuario autenticado (MIG193). */
+  asignada_a_mi: boolean | null
   checklist_total: number | null
   checklist_completados: number | null
   tiempo_estimado_total_min: number | null
