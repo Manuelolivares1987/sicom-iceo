@@ -47,17 +47,22 @@ $sizeMB = [math]::Round((Get-Item $outFile).Length / 1MB, 1)
 Add-Content (Join-Path $backupDir 'backup-log.csv') "$stamp,$sizeMB MB,OK"
 Set-Content (Join-Path $backupDir 'ULTIMO_BACKUP_OK.txt') (Get-Date -Format 's')
 
-# Retención: diarios >14 días se eliminan, salvo lunes (<=8 semanas) y día 1 (<=12 meses)
-Get-ChildItem $backupDir -Filter 'sicom-*.dump' | ForEach-Object {
-    if ($_.Name -match 'sicom-(\d{8})-') {
-        $fecha = [datetime]::ParseExact($Matches[1], 'yyyyMMdd', $null)
-        $edad  = (New-TimeSpan -Start $fecha -End (Get-Date)).Days
-        $esLunes  = $fecha.DayOfWeek -eq 'Monday'
-        $esDia1   = $fecha.Day -eq 1
-        $borrar = ($edad -gt 14 -and -not $esLunes -and -not $esDia1) `
-              -or ($edad -gt 56 -and $esLunes -and -not $esDia1) `
-              -or ($edad -gt 365 -and $esDia1)
-        if ($borrar) { Remove-Item $_.FullName -Confirm:$false }
-    }
-}
-Write-Output "Backup OK: $outFile ($sizeMB MB)"
+# Retención robusta: conservar la copia MÁS RECIENTE de cada período
+# (NO depende de que el proceso corra un día específico):
+#   7 diarias · 5 semanales (semana ISO) · 12 mensuales.
+$cal = [System.Globalization.CultureInfo]::InvariantCulture.Calendar
+$dumps = Get-ChildItem $backupDir -Filter 'sicom-*.dump' |
+    ForEach-Object {
+        $s = $_.BaseName.Substring(6, 8)
+        $f = $null; [void][datetime]::TryParseExact($s, 'yyyyMMdd', $null, [System.Globalization.DateTimeStyles]::None, [ref]$f)
+        if ($null -eq $f) { return }
+        [pscustomobject]@{ File = $_; Fecha = $f
+            Semana = '{0}-{1:00}' -f $f.Year, $cal.GetWeekOfYear($f, [System.Globalization.CalendarWeekRule]::FirstFourDayWeek, [DayOfWeek]::Monday)
+            Mes = '{0}-{1:00}' -f $f.Year, $f.Month }
+    } | Sort-Object Fecha -Descending
+$conservar = New-Object System.Collections.Generic.HashSet[string]
+$dumps | Select-Object -First 7 | ForEach-Object { [void]$conservar.Add($_.File.FullName) }          # 7 diarias
+$dumps | Group-Object Semana | Sort-Object Name -Descending | Select-Object -First 5 | ForEach-Object { [void]$conservar.Add(($_.Group | Select-Object -First 1).File.FullName) }  # 5 semanales
+$dumps | Group-Object Mes | Sort-Object Name -Descending | Select-Object -First 12 | ForEach-Object { [void]$conservar.Add(($_.Group | Select-Object -First 1).File.FullName) }     # 12 mensuales
+$dumps | Where-Object { -not $conservar.Contains($_.File.FullName) } | ForEach-Object { Remove-Item $_.File.FullName -Confirm:$false }
+Write-Output "Backup OK: $outFile ($sizeMB MB). Conservados tras retención: $($conservar.Count)"

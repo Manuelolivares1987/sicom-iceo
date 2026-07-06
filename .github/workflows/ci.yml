@@ -1,0 +1,86 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# El merge queda bloqueado si cualquier job falla (configurar como required check
+# en Settings → Branches → protection rules).
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Instalación reproducible (lockfile)
+        run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Tests
+        run: npm test
+      - name: Build de producción
+        run: npm run build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder-anon-key
+
+  secretos:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Escaneo de secretos (gitleaks)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: 'false'
+      - name: Escaneo adicional (archivos .env y JWT reales)
+        run: |
+          # 1) ningún archivo .env*.local debe estar versionado
+          if git ls-files | grep -E '\.env[^/]*\.local$'; then
+            echo "::error::archivo de entorno local versionado (posibles credenciales)"; exit 1
+          fi
+          # 2) JWT real (3 segmentos base64 separados por punto); excluye ejemplos/placeholders
+          if git grep -nE 'eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}' -- ':!*.md'; then
+            echo "::error::posible JWT/token real detectado"; exit 1
+          fi
+          echo "sin secretos: sin .env versionado ni JWT real"
+
+  migraciones:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s
+          --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - name: Instalar deps del ejecutor
+        working-directory: database/scripts
+        run: npm ci || npm install pg dotenv
+      - name: Detección de SQL destructivo (todas las migraciones)
+        working-directory: database/scripts
+        run: node verificar-migraciones-destructivas.mjs
+      - name: Ejecutor de migraciones — pruebas de control (registro/hash/destructivo)
+        working-directory: database/scripts
+        env:
+          SUPABASE_DB_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
+          DB_ENV: ci
+        run: node test-db-migrate.mjs
