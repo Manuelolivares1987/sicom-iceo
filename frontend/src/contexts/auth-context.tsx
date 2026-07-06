@@ -32,6 +32,23 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined)
 
+// Ultimo perfil conocido por usuario: permite recuperar rol/nombre sin conexión
+// (apps offline-first /m/taller y /m/calama recargadas sin señal).
+const PERFIL_CACHE_KEY = 'sicom-perfil-cache'
+
+function leerPerfilCache(userId: string): UsuarioPerfil | null {
+  try {
+    const raw = localStorage.getItem(PERFIL_CACHE_KEY)
+    if (!raw) return null
+    const p = JSON.parse(raw) as UsuarioPerfil
+    return p?.id === userId ? p : null
+  } catch { return null }
+}
+
+function guardarPerfilCache(p: UsuarioPerfil): void {
+  try { localStorage.setItem(PERFIL_CACHE_KEY, JSON.stringify(p)) } catch { /* noop */ }
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [perfil, setPerfil] = useState<UsuarioPerfil | null>(null)
@@ -48,12 +65,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (perfilError) {
       console.error('Error fetching perfil:', perfilError.message)
-      setPerfil(null)
+      // Sin conexión (o error transitorio): usar el último perfil conocido.
+      setPerfil(leerPerfilCache(userId))
     } else if (!data) {
       console.warn('No se encontró perfil para el usuario. Cree un registro en usuarios_perfil.')
       setPerfil(null)
     } else {
       setPerfil(data as UsuarioPerfil)
+      guardarPerfilCache(data as UsuarioPerfil)
     }
 
     // Cargar rol Calama desde calama_roles_proyecto (puede no existir tabla en algunos entornos).
@@ -136,11 +155,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setPerfil(null)
     setRolCalama(null)
 
-    // Limpia BD offline de Calama: nunca dejar datos del operador en un
-    // dispositivo despues del logout.
+    // Limpia BD offline de Calama y Taller + perfil cacheado: nunca dejar
+    // datos del operador en un dispositivo despues del logout.
+    try { localStorage.removeItem(PERFIL_CACHE_KEY) } catch { /* noop */ }
     try {
       const { clearCalamaDB } = await import('@/lib/offline/calama-db')
       await clearCalamaDB()
+    } catch { /* noop */ }
+    try {
+      const { clearTallerDB } = await import('@/lib/offline/taller-db')
+      await clearTallerDB()
     } catch { /* noop */ }
   }, [])
 

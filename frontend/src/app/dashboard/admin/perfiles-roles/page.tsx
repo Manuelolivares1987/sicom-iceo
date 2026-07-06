@@ -3,17 +3,18 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  Users, ShieldCheck, Save, RotateCcw, AlertTriangle, CheckCircle2, Lock,
+  Users, ShieldCheck, Save, RotateCcw, AlertTriangle, CheckCircle2, Lock, UserPlus,
 } from 'lucide-react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
 import { Badge } from '@/components/ui/badge'
+import { Modal, ModalFooter } from '@/components/ui/modal'
 import { useRequireAuth } from '@/hooks/use-require-auth'
 import { usePermissions, useRolPermisosOverrides,
   ALL_ROLES, ALL_PERMISSIONS, PERMISSION_LABELS, MODULE_CATALOG, defaultPermsForRole,
   type PermisosOverrides } from '@/hooks/use-permissions'
-import { getUsuarios, updateUsuario } from '@/lib/services/admin'
+import { getUsuarios, updateUsuario, crearUsuarioAdmin, getTecnicosSinCuenta } from '@/lib/services/admin'
 import { supabase } from '@/lib/supabase'
 import type { RolUsuario } from '@/types/database'
 import type { Permission } from '@/hooks/use-permissions'
@@ -21,11 +22,11 @@ import { cn } from '@/lib/utils'
 
 const ROL_LABEL: Record<string, string> = {
   administrador: 'Administrador', gerencia: 'Gerencia', subgerente_operaciones: 'Subgerente Ops',
-  jefe_operaciones: 'Jefe Operaciones', jefe_mantenimiento: 'Jefe Mantenimiento', supervisor: 'Supervisor',
+  jefe_operaciones: 'Jefe Operaciones', jefe_mantenimiento: 'Jefe de Taller / Mantenimiento', supervisor: 'Supervisor',
   planificador: 'Planificador', tecnico_mantenimiento: 'Técnico Mantenimiento', bodeguero: 'Bodeguero',
   operador_abastecimiento: 'Operador Abastecimiento', comercial: 'Comercial', prevencionista: 'Prevencionista',
   colaborador: 'Colaborador', auditor: 'Auditor', auditor_calidad: 'Auditor de Calidad',
-  rrhh_incentivos: 'RRHH Incentivos',
+  rrhh_incentivos: 'RRHH Incentivos', operador_taller: 'Operador de Taller',
 }
 const rolLabel = (r: string) => ROL_LABEL[r] ?? r
 
@@ -75,6 +76,7 @@ function UsuariosTab() {
   const [savingId, setSavingId] = useState<string | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
   const [filtro, setFiltro] = useState('')
+  const [crear, setCrear] = useState(false)
 
   const cambiarRol = async (id: string, rol: string) => {
     setSavingId(id); setMsg(null)
@@ -97,10 +99,15 @@ function UsuariosTab() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base flex items-center justify-between">
+        <CardTitle className="text-base flex items-center justify-between gap-2">
           <span>Usuarios ({lista.length})</span>
-          <input className="rounded border px-2 py-1 text-sm font-normal" placeholder="Buscar…"
-            value={filtro} onChange={(e) => setFiltro(e.target.value)} />
+          <div className="flex items-center gap-2">
+            <input className="rounded border px-2 py-1 text-sm font-normal" placeholder="Buscar…"
+              value={filtro} onChange={(e) => setFiltro(e.target.value)} />
+            <Button size="sm" onClick={() => setCrear(true)}>
+              <UserPlus className="h-4 w-4 mr-1" /> Crear usuario
+            </Button>
+          </div>
         </CardTitle>
       </CardHeader>
       <CardContent>
@@ -125,7 +132,132 @@ function UsuariosTab() {
           ))}
         </div>
       </CardContent>
+      {crear && (
+        <CrearUsuarioModal
+          onClose={() => setCrear(false)}
+          onCreated={(m) => { setMsg(m); setCrear(false); qc.invalidateQueries({ queryKey: ['admin-usuarios'] }) }}
+        />
+      )}
     </Card>
+  )
+}
+
+// ── Modal Crear usuario (via edge function admin-crear-usuario) ─────────────
+function CrearUsuarioModal({ onClose, onCreated }: {
+  onClose: () => void
+  onCreated: (msg: string) => void
+}) {
+  const [nombre, setNombre] = useState('')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [rol, setRol] = useState<string>('operador_taller')
+  const [cargo, setCargo] = useState('')
+  const [tecnicoId, setTecnicoId] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const { data: tecnicos = [] } = useQuery({
+    queryKey: ['tecnicos-sin-cuenta'],
+    queryFn: getTecnicosSinCuenta,
+  })
+
+  const esRolTaller = rol === 'operador_taller' || rol === 'jefe_mantenimiento'
+  const valido = nombre.trim().length > 0 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())
+    && password.length >= 6
+
+  function generarPassword() {
+    const chars = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789'
+    let p = ''
+    const buf = new Uint32Array(10)
+    crypto.getRandomValues(buf)
+    buf.forEach((n) => { p += chars[n % chars.length] })
+    setPassword(p)
+  }
+
+  async function guardar() {
+    setSaving(true); setError(null)
+    try {
+      const r = await crearUsuarioAdmin({
+        email: email.trim(), password, nombre_completo: nombre.trim(), rol,
+        cargo: cargo.trim() || null,
+        tecnico_id: esRolTaller && tecnicoId ? tecnicoId : null,
+      })
+      onCreated(r.warning
+        ? `Usuario creado. Aviso: ${r.warning}`
+        : `Usuario ${nombre.trim()} creado con rol «${rolLabel(rol)}»${r.tecnico_vinculado ? ` y vinculado al técnico ${r.tecnico_vinculado}` : ''}. Entrégale el correo y la contraseña.`)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Error al crear usuario')
+    } finally { setSaving(false) }
+  }
+
+  return (
+    <Modal open onClose={onClose} title="Crear usuario">
+      <div className="space-y-3">
+        <div>
+          <label className="text-xs font-medium text-muted-foreground">Nombre completo</label>
+          <input className="mt-1 w-full rounded border px-3 py-2 text-sm" value={nombre}
+            onChange={(e) => setNombre(e.target.value)} placeholder="Ej: Joel Coo" />
+        </div>
+        <div>
+          <label className="text-xs font-medium text-muted-foreground">Correo (será su login)</label>
+          <input type="email" className="mt-1 w-full rounded border px-3 py-2 text-sm" value={email}
+            onChange={(e) => setEmail(e.target.value)} placeholder="operador@empresa.cl" />
+        </div>
+        <div>
+          <label className="text-xs font-medium text-muted-foreground">Contraseña inicial (mín. 6)</label>
+          <div className="mt-1 flex gap-2">
+            <input className="w-full rounded border px-3 py-2 text-sm font-mono" value={password}
+              onChange={(e) => setPassword(e.target.value)} />
+            <Button size="sm" variant="outline" type="button" onClick={generarPassword}>Generar</Button>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="text-xs font-medium text-muted-foreground">Rol</label>
+            <select className="mt-1 w-full rounded border px-2 py-2 text-sm" value={rol}
+              onChange={(e) => setRol(e.target.value)}>
+              {ALL_ROLES.map((r) => <option key={r} value={r}>{rolLabel(r)}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs font-medium text-muted-foreground">Cargo (opcional)</label>
+            <input className="mt-1 w-full rounded border px-3 py-2 text-sm" value={cargo}
+              onChange={(e) => setCargo(e.target.value)} placeholder="Mecánico" />
+          </div>
+        </div>
+        {esRolTaller && (
+          <div>
+            <label className="text-xs font-medium text-muted-foreground">
+              Vincular a técnico del taller (para que vea las OTs de su cuadrilla)
+            </label>
+            <select className="mt-1 w-full rounded border px-2 py-2 text-sm" value={tecnicoId}
+              onChange={(e) => setTecnicoId(e.target.value)}>
+              <option value="">— Sin vincular —</option>
+              {(tecnicos as Array<{ id: string; nombre: string; operacion: string | null }>).map((t) => (
+                <option key={t.id} value={t.id}>{t.nombre}{t.operacion ? ` (${t.operacion})` : ''}</option>
+              ))}
+            </select>
+          </div>
+        )}
+        {rol === 'operador_taller' && (
+          <p className="text-xs text-muted-foreground">
+            El operador entra directo a la app móvil del taller y solo ve las OTs que su jefatura le asigne.
+          </p>
+        )}
+        {error && (
+          <div className="flex items-center gap-2 text-sm text-red-600">
+            <AlertTriangle className="h-4 w-4 shrink-0" /> {error}
+          </div>
+        )}
+      </div>
+      <ModalFooter>
+        <Button variant="outline" onClick={onClose} disabled={saving}>Cancelar</Button>
+        <Button onClick={guardar} disabled={!valido || saving}>
+          {saving ? <Spinner className="h-4 w-4 mr-1" /> : <UserPlus className="h-4 w-4 mr-1" />}
+          Crear usuario
+        </Button>
+      </ModalFooter>
+    </Modal>
   )
 }
 

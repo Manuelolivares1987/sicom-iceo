@@ -1,16 +1,25 @@
+import { useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  getPlanSemanalById, getDiasPlanSemanal, getJornadasPlanSemanal,
-  getBacklog, getKpiSemanal, getCumplimientoPmMes, getUsuariosAsignables,
-  getCoberturaResumen, getActivosSinPlan, getChecklistV3OT, getTallerTecnicos,
+  getBacklog, getCumplimientoPmMes,
+  getCoberturaResumen, getActivosSinPlan,
   crearTallerTecnico, desactivarTallerTecnico,
   rpcAgregarTareaLibre, rpcEliminarTarea,
-  rpcGetOrCreatePlanSemanal, rpcAgregarJornadaOT, rpcMoverJornada,
-  rpcQuitarJornada, rpcAsignarResponsable, rpcConfirmarPlanSemanal,
-  rpcEditarJornada, rpcV3SetTiempo, rpcV3SetExcluido, rpcV3AgregarItem, rpcV3EliminarCustom,
-  rpcIniciarEjecucion, rpcPausarEjecucion, rpcReanudarEjecucion, rpcFinalizarEjecucion,
+  rpcAgregarJornadaOT,
+  rpcQuitarJornada, rpcConfirmarPlanSemanal,
+  rpcV3SetTiempo, rpcV3SetExcluido, rpcV3AgregarItem, rpcV3EliminarCustom,
   rpcAdminSembrarPlanesFaltantes,
 } from '@/lib/services/taller-plan-semanal'
+// Capa offline del Kanban del jefe: lecturas cacheadas + cola de mutaciones
+// que se sincroniza al recuperar internet.
+import {
+  getOrCreatePlanOffline, getPlanOffline, getDiasOffline, getJornadasOffline,
+  getKpiOffline, getTecnicosOffline, getUsuariosOffline, getChecklistV3Offline,
+  iniciarEjecucionOffline, pausarEjecucionOffline, reanudarEjecucionOffline,
+  finalizarEjecucionOffline, moverJornadaOffline, asignarResponsableOffline,
+  editarJornadaOffline, syncTallerPlanPending, getPlanPendingCount,
+  descargarSemanaOffline,
+} from '@/lib/offline/taller-plan-offline'
 
 const KEY = (...parts: (string | null | undefined)[]) => ['taller', ...parts.filter(Boolean)] as const
 
@@ -19,21 +28,24 @@ export function usePlanSemanalTaller(id: string | null) {
   return useQuery({
     queryKey: KEY('plan', id ?? 'none'),
     enabled: !!id,
-    queryFn: () => getPlanSemanalById(id!),
+    networkMode: 'always',
+    queryFn: () => getPlanOffline(id!),
   })
 }
 export function useDiasPlanSemanalTaller(id: string | null) {
   return useQuery({
     queryKey: KEY('dias', id ?? 'none'),
     enabled: !!id,
-    queryFn: () => getDiasPlanSemanal(id!),
+    networkMode: 'always',
+    queryFn: () => getDiasOffline(id!),
   })
 }
 export function useJornadasPlanSemanalTaller(id: string | null) {
   return useQuery({
     queryKey: KEY('jornadas', id ?? 'none'),
     enabled: !!id,
-    queryFn: () => getJornadasPlanSemanal(id!),
+    networkMode: 'always',
+    queryFn: () => getJornadasOffline(id!),
   })
 }
 export function useBacklogTaller() {
@@ -47,7 +59,8 @@ export function useKpiSemanalTaller(id: string | null) {
   return useQuery({
     queryKey: KEY('kpi', id ?? 'none'),
     enabled: !!id,
-    queryFn: () => getKpiSemanal(id!),
+    networkMode: 'always',
+    queryFn: () => getKpiOffline(id!),
   })
 }
 export function useCumplimientoPmMesTaller() {
@@ -60,14 +73,16 @@ export function useCumplimientoPmMesTaller() {
 export function useUsuariosAsignablesTaller() {
   return useQuery({
     queryKey: KEY('usuarios'),
-    queryFn: () => getUsuariosAsignables(),
+    networkMode: 'always',
+    queryFn: () => getUsuariosOffline(),
     staleTime: 5 * 60_000,
   })
 }
 export function useTallerTecnicos(operacion?: string | null) {
   return useQuery({
     queryKey: KEY('tecnicos', operacion),
-    queryFn: () => getTallerTecnicos(operacion),
+    networkMode: 'always',
+    queryFn: () => getTecnicosOffline(operacion),
     staleTime: 5 * 60_000,
   })
 }
@@ -115,8 +130,9 @@ function useInvalidatePlan(planId?: string | null) {
 export function useGetOrCreatePlanSemanalTaller() {
   const qc = useQueryClient()
   return useMutation({
+    networkMode: 'always',
     mutationFn: ({ fechaInicio, faenaId }: { fechaInicio: string; faenaId?: string | null }) =>
-      rpcGetOrCreatePlanSemanal(fechaInicio, faenaId),
+      getOrCreatePlanOffline(fechaInicio, faenaId),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['taller'] }),
   })
 }
@@ -145,8 +161,9 @@ export function useEliminarTareaTaller(planId: string | null) {
 export function useMoverJornadaTaller(planId: string | null) {
   const invalidate = useInvalidatePlan(planId)
   return useMutation({
-    mutationFn: ({ planOtId, fechaDestino, responsableId, motivo }: { planOtId: string; fechaDestino: string; responsableId?: string | null; motivo?: string | null }) =>
-      rpcMoverJornada(planOtId, fechaDestino, responsableId, motivo),
+    networkMode: 'always',
+    mutationFn: (p: { planOtId: string; fechaDestino: string; responsableId?: string | null; motivo?: string | null }) =>
+      moverJornadaOffline(p),
     onSuccess: () => invalidate(),
   })
 }
@@ -160,15 +177,17 @@ export function useQuitarJornadaTaller(planId: string | null) {
 export function useAsignarResponsableTaller(planId: string | null) {
   const invalidate = useInvalidatePlan(planId)
   return useMutation({
-    mutationFn: ({ planOtId, responsableId, cuadrilla, motivo }: { planOtId: string; responsableId: string | null; cuadrilla?: string | null; motivo?: string | null }) =>
-      rpcAsignarResponsable(planOtId, responsableId, cuadrilla, motivo),
+    networkMode: 'always',
+    mutationFn: (p: { planOtId: string; responsableId: string | null; responsableNombre?: string | null; cuadrilla?: string | null; motivo?: string | null }) =>
+      asignarResponsableOffline(p),
     onSuccess: () => invalidate(),
   })
 }
 export function useEditarJornadaTaller(planId: string | null) {
   const invalidate = useInvalidatePlan(planId)
   return useMutation({
-    mutationFn: rpcEditarJornada,
+    networkMode: 'always',
+    mutationFn: editarJornadaOffline,
     onSuccess: () => invalidate(),
   })
 }
@@ -178,7 +197,8 @@ export function useChecklistV3Taller(otId: string | null) {
   return useQuery({
     queryKey: KEY('checklist-v3', otId ?? 'none'),
     enabled: !!otId,
-    queryFn: () => getChecklistV3OT(otId!),
+    networkMode: 'always',
+    queryFn: () => getChecklistV3Offline(otId!),
   })
 }
 
@@ -237,31 +257,36 @@ export function useConfirmarPlanSemanalTaller(planId: string | null) {
 export function useIniciarEjecucionTaller(planId: string | null) {
   const invalidate = useInvalidatePlan(planId)
   return useMutation({
-    mutationFn: ({ otId, observacion }: { otId: string; observacion?: string | null }) =>
-      rpcIniciarEjecucion(otId, observacion),
+    networkMode: 'always',
+    mutationFn: (p: { otId: string; planOtId?: string | null; observacion?: string | null }) =>
+      iniciarEjecucionOffline(p),
     onSuccess: () => invalidate(),
   })
 }
 export function usePausarEjecucionTaller(planId: string | null) {
   const invalidate = useInvalidatePlan(planId)
   return useMutation({
-    mutationFn: ({ ejecucionId, motivo }: { ejecucionId: string; motivo?: string | null }) =>
-      rpcPausarEjecucion(ejecucionId, motivo),
+    networkMode: 'always',
+    mutationFn: (p: { ejecucionId?: string | null; otId?: string | null; planOtId?: string | null; motivo?: string | null }) =>
+      pausarEjecucionOffline(p),
     onSuccess: () => invalidate(),
   })
 }
 export function useReanudarEjecucionTaller(planId: string | null) {
   const invalidate = useInvalidatePlan(planId)
   return useMutation({
-    mutationFn: (ejecucionId: string) => rpcReanudarEjecucion(ejecucionId),
+    networkMode: 'always',
+    mutationFn: (p: { ejecucionId?: string | null; otId?: string | null; planOtId?: string | null }) =>
+      reanudarEjecucionOffline(p),
     onSuccess: () => invalidate(),
   })
 }
 export function useFinalizarEjecucionTaller(planId: string | null) {
   const invalidate = useInvalidatePlan(planId)
   return useMutation({
-    mutationFn: ({ ejecucionId, avanceFinal, observacion }: { ejecucionId: string; avanceFinal?: number; observacion?: string | null }) =>
-      rpcFinalizarEjecucion(ejecucionId, avanceFinal ?? 100, observacion),
+    networkMode: 'always',
+    mutationFn: (p: { ejecucionId?: string | null; otId?: string | null; planOtId?: string | null; avanceFinal?: number; observacion?: string | null }) =>
+      finalizarEjecucionOffline(p),
     onSuccess: () => invalidate(),
   })
 }
@@ -271,5 +296,48 @@ export function useAdminSembrarPlanesFaltantes() {
   return useMutation({
     mutationFn: () => rpcAdminSembrarPlanesFaltantes(),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['taller'] }),
+  })
+}
+
+// ── Offline del Kanban del jefe ─────────────────────────────────────────────
+export function usePlanPendingCount(autoRefreshMs = 4000) {
+  return useQuery({
+    queryKey: KEY('plan-pending'),
+    queryFn: getPlanPendingCount,
+    networkMode: 'always',
+    refetchInterval: autoRefreshMs,
+  })
+}
+
+export function useSyncTallerPlan() {
+  const qc = useQueryClient()
+  return useMutation({
+    networkMode: 'always',
+    mutationFn: syncTallerPlanPending,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['taller'] }),
+  })
+}
+
+/** Sincroniza la cola del plan automáticamente al recuperar conexión. */
+export function useAutoSyncTallerPlan() {
+  const qc = useQueryClient()
+  useEffect(() => {
+    const trySync = async () => {
+      if (typeof navigator !== 'undefined' && navigator.onLine) {
+        const r = await syncTallerPlanPending()
+        if (r.ok > 0 || r.failed > 0) qc.invalidateQueries({ queryKey: ['taller'] })
+      }
+    }
+    window.addEventListener('online', trySync)
+    void trySync()
+    return () => window.removeEventListener('online', trySync)
+  }, [qc])
+}
+
+/** Pre-descarga la semana completa (plan + jornadas + checklists) para offline. */
+export function useDescargarSemanaOffline() {
+  return useMutation({
+    networkMode: 'always',
+    mutationFn: (fechaInicio: string) => descargarSemanaOffline(fechaInicio),
   })
 }

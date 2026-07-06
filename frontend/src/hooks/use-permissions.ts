@@ -303,6 +303,27 @@ const PERMISSIONS: Record<RolUsuario, Record<Module, Permission[]>> = {
     comercial: [],
     reporte_diario: [],
   },
+  // Operador de Taller: SOLO ejecuta las OTs que su jefatura le asigna, desde
+  // la app movil offline /m/taller. Sin acceso al dashboard (guard en
+  // dashboard/layout lo redirige, igual que operador_calama).
+  operador_taller: {
+    contratos: [],
+    activos: [],
+    ordenes_trabajo: [],
+    inventario: [],
+    mantenimiento: [],
+    abastecimiento: [],
+    cumplimiento: [],
+    kpi: [],
+    iceo: [],
+    reportes: [],
+    auditoria: [],
+    admin: [],
+    flota: [],
+    prevencion: [],
+    comercial: [],
+    reporte_diario: [],
+  },
   // Auditor de Calidad: control de calidad del taller (Gate 1 chequeo cruzado,
   // Gate 2 auditoria pre-operativo, diferidos). 'approve' en mantenimiento
   // habilita la liberacion a operativo.
@@ -421,6 +442,11 @@ export function usePermissions() {
     return !isAdminGlobal()
   }
 
+  // Operador de Taller: solo puede ver /m/taller (sus OTs asignadas).
+  function esOperadorTallerSolo(): boolean {
+    return rol === 'operador_taller'
+  }
+
   // Supervisor Calama "puro": rol_calama=supervisor_calama y NO admin global.
   // Solo puede ver /dashboard/operacion-calama/*.
   function esSupervisorCalamaSolo(): boolean {
@@ -491,6 +517,7 @@ export function usePermissions() {
     getVisibleModules,
     rol, rolCalama,
     esOperadorCalamaSolo, esSupervisorCalamaSolo, esRestringidoCalama,
+    esOperadorTallerSolo,
     esComercialSolo,
     tieneRolCalama, tieneAccesoDashboardCalama,
   }
