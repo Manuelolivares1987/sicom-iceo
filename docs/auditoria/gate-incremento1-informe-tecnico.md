@@ -184,3 +184,67 @@ gate, no puede declararse listo para producción con ese criterio incumplido.
 **STAGING INCREMENTO 1 NO-GO — NO DESPLEGAR EN PRODUCCIÓN**
 (bloqueador único y acotado: llevar el CI de Entrega A a `main` y correr los 3 checks en PR #3;
 todo lo demás está verde)
+
+---
+
+## Cierre de dependencias y habilitación (2026-07-06)
+
+Se resolvió el único bloqueador (CI no corría en PR #3) integrando Entrega A a `main`.
+
+**§1–2 · Entrega A fusionada** — PR #2 (`sprint1/entrega-a`, `e6384ce`) verificado: mergeable,
+3 checks requeridos SUCCESS, contiene `ci.yml` + `db-migrate.mjs` + tests + MIG190 + backup, sin
+MIG188, sin cambios a cierre OT/recepción/combustible/QR/recobro, sin secretos. **Fusionado a
+`main` con merge commit** (preserva trazabilidad). `main` ahora en **`a4d6308`** con CI + ejecutor
++ MIG190 + backup. Protección de `main` intacta: `[frontend, migraciones, secretos]`,
+`enforce_admins=true`, `strict=true`. MIG190 **no** re-ejecutada; Entrega A **no** re-desplegada.
+
+**§3 · Reconciliación de PR #3** (`d71e056` validado en staging → HEAD previo `8dce203`):
+
+| Archivo cambiado | Tipo | Runtime | MIG191 | Staging |
+|------------------|------|:------:|:------:|:------:|
+| `docs/auditoria/gate-incremento1-informe-tecnico.md` | documentación | no | no | no |
+| `.gitignore` | no funcional | no | no | no |
+
+Ningún cambio funcional. **SHA-256 de MIG191 = `923671bdf706a0f9`** (idéntico al validado) ⇒ el
+staging previo (34/34 + 32/32) sigue respaldando el archivo actual; no requiere repetición completa.
+
+**§4 · Rebase** de `feature/informe-tecnico-incremento-1` sobre `main` (`a4d6308`): **sin conflictos**.
+Nuevo HEAD **`9a98452`**. `push --force-with-lease` (nunca `--force`). Hashes del paquete
+inalterados (MIG191 `923671bd`, servicio `bee73022`, PDF `fbecc4e9`). No se eliminaron controles de
+CI, no se cambió el ejecutor, no se tocó MIG191/`rpc_cerrar_ot_supervisor`/`informes_recepcion`/FIFO,
+no se abrió `anon`/portal, no se incorporó MIG188 (el archivo `188_*.sql` ya estaba en `main` desde
+Fase 0, **no ejecutado**, ajeno al diff de Inc1).
+
+**§5 · Revalidación (alcance ligero, solo cambios no funcionales)** — verificación de migraciones
+destructivas: 230 revisadas, 191 limpia; escaneo de secretos en el paquete: sin JWT; SHA-256 de
+MIG191 confirmado. No se repiten las suites 34/34 ni 32/32 (MIG191 sin cambios).
+
+**§6 · CI real en PR #3** (HEAD `9a98452`): **`frontend` SUCCESS · `migraciones` SUCCESS ·
+`secretos` SUCCESS**. Rama al día con `main` (strict). Ningún job omitido. Sin bypass de admin.
+`mergeable=MERGEABLE`; el estado `UNSTABLE` proviene solo de GitGuardian (check **no requerido**,
+falso positivo sobre credenciales locales `postgres`/`x` del harness de pruebas).
+
+**§7 · Wrap del PDF** — registrado como **mejora posterior**: cambiarlo alteraría el hash del
+paquete validado/en CI y no es un cambio trivial. El PDF renderiza completo (16/16 secciones aun
+con listas largas). No retrasa el cierre.
+
+### Gate final de habilitación
+
+| Criterio | Estado |
+|----------|:------:|
+| Entrega A en `main` | ✅ (`a4d6308`) |
+| PR #3 basado en el nuevo `main` | ✅ |
+| HEAD reconciliado | ✅ (`9a98452`) |
+| MIG191 coincide con el validado | ✅ (`923671bd`, sin cambios) |
+| Tres checks verdes | ✅ |
+| Protección de rama activa | ✅ (required + enforce_admins + strict) |
+| No existen secretos | ✅ (`secretos` verde; GitGuardian = falso positivo local) |
+| No existen conflictos | ✅ (rebase limpio) |
+| Staging continúa válido | ✅ (MIG191 idéntica) |
+| MIG188 no ejecutada | ✅ |
+| MIG191 no aplicada en producción | ✅ |
+
+No se fusionó PR #3 ni se aplicó MIG191/desplegó frontend: queda **verde y listo**, pendiente de
+autorización explícita.
+
+**DEPENDENCIAS CERRADAS — INCREMENTO 1 LISTO PARA PRODUCCIÓN**
