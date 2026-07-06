@@ -147,20 +147,40 @@ Pulido post-gate: añadir `wrap` a los contenedores de lista. No afecta el vered
 | Cierre actual de OT no modificado | ✅ |
 | Recobro no modificado | ✅ |
 | Regresiones verdes | ✅ |
-| CI verde (PR #3) | ✅ frontend/migraciones/secretos |
+| CI verde (PR #3) | ❌ **BLOQUEADO** — ver abajo |
 | No existen secretos | ✅ (solo claves demo locales públicas de supabase) |
 | MIG188 no ejecutada | ✅ |
 
-Nota de fidelidad: la validación se ejecutó por la **ruta de datos exacta del navegador**
+### Blocker: CI no corre en PR #3 (dependencia de Entrega A)
+
+El workflow `.github/workflows/ci.yml` y el ejecutor formal (`db-migrate.mjs`,
+`test-db-migrate.mjs`, `verificar-migraciones-destructivas.mjs`) **viven en la rama de Entrega A
+(PR #1, `fix/auditoria-seguridad-fase-0`), aún no fusionada a `main`.** Como no están en `main`
+ni en esta rama, los 3 checks requeridos (`frontend`/`migraciones`/`secretos`) **no se ejecutan en
+PR #3**, y la protección de `main` (con `enforce_admins=true`) **bloqueará el merge** hasta que
+reporten éxito — comportamiento correcto de fail-safe, no un defecto de Incremento 1.
+
+**Los mismos chequeos pasan localmente/staging**: typecheck 0, lint 0 en archivos nuevos, build
+✓ (99/99), suite SQL 34/34, E2E staging 32/32. Lo único ausente es que el workflow **corra en
+GitHub sobre este PR**.
+
+**Remediación (orden de merge):** fusionar primero Entrega A (PR #2/#1) para llevar `ci.yml` +
+ejecutor a `main`; luego rebasar `feature/informe-tecnico-incremento-1` sobre `main` → los 3 checks
+corren en PR #3 → al quedar verdes se cierra este criterio y se habilita el merge a producción.
+
+Nota de fidelidad de la validación PDF: se ejecutó por la **ruta de datos exacta del navegador**
 (mismo `supabase-js` → GoTrue/PostgREST/Storage y el mismo motor `@react-pdf/renderer`), no por
-clic literal en la UI. Los componentes de UI compilan (typecheck/lint/build en verde). Se
-recomienda un click-through manual final en el staging desplegado.
+clic literal en la UI. Los componentes de UI compilan. Se recomienda un click-through manual final.
 
 ## Veredicto
 
-Todos los criterios del gate técnico y del gate de staging se cumplen, **ejecutados y verificados**:
-PG17 con backup real (34/34) + staging Supabase real por la API (32/32) incluyendo **generación y
-visualización del PDF** (el punto pendiente). Cierre de OT y recobro intactos. No se aplicó nada en
-producción. MIG188 no ejecutada.
+Todo lo **técnico** del Incremento 1 está validado y verde: PG17 con backup real (34/34) + staging
+Supabase real por la API (32/32) incluyendo **generación y visualización del PDF** (el punto que
+estaba pendiente). Cierre de OT y recobro intactos. No se aplicó nada en producción. MIG188 no
+ejecutada. **Sin embargo**, el criterio explícito del gate "CI está verde" **no se cumple**: el
+workflow de CI no existe en `main`/esta rama (depende de fusionar Entrega A). Por definición del
+gate, no puede declararse listo para producción con ese criterio incumplido.
 
-**STAGING INCREMENTO 1 VALIDADO — LISTO PARA PRODUCCIÓN**
+**STAGING INCREMENTO 1 NO-GO — NO DESPLEGAR EN PRODUCCIÓN**
+(bloqueador único y acotado: llevar el CI de Entrega A a `main` y correr los 3 checks en PR #3;
+todo lo demás está verde)
