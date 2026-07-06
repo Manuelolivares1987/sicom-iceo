@@ -300,7 +300,7 @@ export type UsuarioAsignable = {
 export async function getUsuariosAsignables(): Promise<UsuarioAsignable[]> {
   const { data, error } = await supabase
     .from('usuarios_perfil').select('id, nombre_completo, rol')
-    .in('rol', ['administrador','supervisor','operario','jefe_mantenimiento','tecnico'])
+    .in('rol', ['administrador','supervisor','jefe_mantenimiento','tecnico_mantenimiento','operador_taller'])
     .order('nombre_completo')
   if (error) throw error
   return (data ?? []) as UsuarioAsignable[]

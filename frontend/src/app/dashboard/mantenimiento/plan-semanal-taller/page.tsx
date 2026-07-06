@@ -33,7 +33,9 @@ import {
   useV3AgregarItemTaller, useV3EliminarCustomTaller,
   useTallerTecnicos, useAgregarTareaLibreTaller,
   useCrearTecnico, useDesactivarTecnico,
+  usePlanPendingCount, useSyncTallerPlan, useAutoSyncTallerPlan, useDescargarSemanaOffline,
 } from '@/hooks/use-taller-plan-semanal'
+import { useNetworkStatus } from '@/hooks/use-calama-offline'
 import {
   lunesDeIso, getJornadaEventos,
   CATEGORIA_TAREA_LABEL, CATEGORIAS_TAREA_LIBRE,
@@ -117,6 +119,12 @@ const CATEGORIA_CORTA: Record<string, string> = {
 export default function PlanSemanalTallerPage() {
   useRequireAuth()
   const toast = useToast()
+  // Offline: sincroniza la cola del jefe al recuperar conexión.
+  useAutoSyncTallerPlan()
+  const online = useNetworkStatus()
+  const { data: pendientesOffline = 0 } = usePlanPendingCount()
+  const syncPlan = useSyncTallerPlan()
+  const descargarSemana = useDescargarSemanaOffline()
 
   const [semanaIso, setSemanaIso] = useState<string>(() => lunesDeIso(new Date()))
   const [planSemanalId, setPlanSemanalId] = useState<string>('')
@@ -430,6 +438,19 @@ export default function PlanSemanalTallerPage() {
             <User className="h-4 w-4 mr-1" /> Técnicos
           </Button>
           <Button
+            variant="outline"
+            size="sm"
+            disabled={!online || descargarSemana.isPending}
+            onClick={() => descargarSemana.mutate(semanaIso, {
+              onSuccess: (r) => toast.success(`Semana descargada para uso sin internet (${r.jornadas} jornadas, ${r.checklists} checklists)`),
+              onError: (err) => toast.error((err as Error).message),
+            })}
+            title="Guarda el plan de esta semana en el teléfono para trabajar sin señal"
+          >
+            {descargarSemana.isPending ? <Spinner className="h-4 w-4 mr-1" /> : <Upload className="h-4 w-4 mr-1 rotate-180" />}
+            Descargar semana
+          </Button>
+          <Button
             size="sm"
             disabled={!planSemanalId || confirmarPlan.isPending || planConfirmado}
             onClick={() => confirmarPlan.mutate(planSemanalId, {
@@ -444,6 +465,34 @@ export default function PlanSemanalTallerPage() {
           </Button>
         </div>
       </div>
+
+      {/* Estado de conexión / cola offline del Kanban */}
+      {(!online || pendientesOffline > 0) && (
+        <Card className={!online ? 'border-amber-300 bg-amber-50' : 'border-blue-300 bg-blue-50'}>
+          <CardContent className="flex flex-wrap items-center justify-between gap-2 p-3 text-sm">
+            <div className={`flex items-center gap-2 ${!online ? 'text-amber-800' : 'text-blue-800'}`}>
+              <AlertTriangle className="h-4 w-4" />
+              <span>
+                {!online
+                  ? <><strong>Sin conexión</strong> — los cambios (play/pausa/finalizar, mover, asignar) se guardan en el teléfono y se envían al volver la señal.</>
+                  : <strong>Conexión recuperada</strong>}
+                {pendientesOffline > 0 && <> · {pendientesOffline} cambio{pendientesOffline === 1 ? '' : 's'} por sincronizar</>}
+              </span>
+            </div>
+            {online && pendientesOffline > 0 && (
+              <Button size="sm" variant="outline" disabled={syncPlan.isPending}
+                onClick={() => syncPlan.mutate(undefined, {
+                  onSuccess: (r) => r.failed > 0
+                    ? toast.error(`${r.ok} sincronizados, ${r.failed} con error (se reintentarán)`)
+                    : toast.success(`${r.ok} cambios sincronizados`),
+                })}>
+                {syncPlan.isPending ? <Spinner className="h-4 w-4 mr-1" /> : <RefreshCw className="h-4 w-4 mr-1" />}
+                Sincronizar ahora
+              </Button>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Banner cobertura PM */}
       {cobertura && cobertura.activos_sin_plan > 0 && (
@@ -511,11 +560,12 @@ export default function PlanSemanalTallerPage() {
                         onSuccess: () => toast.success('Jornada quitada'),
                         onError: (err) => toast.error((err as Error).message),
                       })}
-                      onIniciar={(j) => j.ot_id && iniciarEjec.mutate({ otId: j.ot_id }, {
+                      onIniciar={(j) => j.ot_id && iniciarEjec.mutate({ otId: j.ot_id, planOtId: j.plan_ot_id }, {
                         onSuccess: () => toast.success('OT iniciada'),
                         onError: (err) => toast.error((err as Error).message),
                       })}
-                      onPausar={(j) => j.ejecucion_activa_id && pausarEjec.mutate({ ejecucionId: j.ejecucion_activa_id }, {
+                      onPausar={(j) => j.ejecucion_activa_id && pausarEjec.mutate(
+                        { ejecucionId: j.ejecucion_activa_id, otId: j.ot_id, planOtId: j.plan_ot_id }, {
                         onSuccess: () => toast.success('OT pausada'),
                         onError: (err) => toast.error((err as Error).message),
                       })}
@@ -616,6 +666,8 @@ export default function PlanSemanalTallerPage() {
             <Button onClick={() => {
               finalizarEjec.mutate({
                 ejecucionId: finalizarOpen.ejecucion_activa_id!,
+                otId: finalizarOpen.ot_id,
+                planOtId: finalizarOpen.plan_ot_id,
                 avanceFinal: finAvance,
                 observacion: finObs.trim() || null,
               }, {

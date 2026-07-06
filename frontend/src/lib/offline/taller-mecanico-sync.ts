@@ -31,6 +31,7 @@ export type MecanicoOT = {
   activo_nombre: string | null
   activo_patente: string | null
   cuadrilla: string | null
+  responsable_id: string | null
   responsable: string | null
   checklist_total: number | null
   checklist_completados: number | null

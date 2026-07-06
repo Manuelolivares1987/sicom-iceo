@@ -35,9 +35,39 @@ export type TallerPending = {
   created_at: string
 }
 
+/** Cambio pendiente del PLAN del jefe de taller (Kanban offline, MIG fase 2). */
+export type TallerPlanPending = {
+  local_id: string
+  kind: 'timing' | 'mover' | 'asignar' | 'editar'
+  plan_ot_id: string | null
+  ot_id: string | null
+  // kind = 'timing' (play/pausa/finalizar de una jornada desde el Kanban)
+  accion?: 'iniciar' | 'pausar' | 'reanudar' | 'finalizar'
+  ejecucion_id?: string | null      // real o 'offline:<local_id del iniciar>'
+  avance_final?: number | null
+  observacion?: string | null
+  // kind = 'mover'
+  fecha_destino?: string | null
+  // kind = 'asignar' / 'editar'
+  responsable_id?: string | null
+  responsable_nombre?: string | null
+  cuadrilla?: string | null
+  horas?: number | null
+  avance_objetivo?: number | null
+  observaciones?: string | null
+  // común (control de cambios)
+  motivo?: string | null
+  // control
+  sync_status: 'pending' | 'error'
+  retries: number
+  last_error: string | null
+  created_at: string
+}
+
 class TallerTerrenoDB extends Dexie {
   cache!: Table<TallerCacheRow, string>
   pending!: Table<TallerPending, string>
+  pendingPlan!: Table<TallerPlanPending, string>
   blobs!: Table<TallerBlob, string>
 
   constructor() {
@@ -46,6 +76,14 @@ class TallerTerrenoDB extends Dexie {
       cache:   'key, updated_at',
       pending: 'local_id, ot_id, kind, instance_item_id, sync_status, created_at',
       blobs:   'blob_id',
+    })
+    // v2: cola separada para el Kanban del jefe (no mezclar con la del mecánico,
+    // cuyo sync interpreta los kinds de la tabla `pending`).
+    this.version(2).stores({
+      cache:       'key, updated_at',
+      pending:     'local_id, ot_id, kind, instance_item_id, sync_status, created_at',
+      pendingPlan: 'local_id, plan_ot_id, ot_id, kind, sync_status, created_at',
+      blobs:       'blob_id',
     })
   }
 }

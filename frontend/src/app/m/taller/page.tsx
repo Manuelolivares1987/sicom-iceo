@@ -2,10 +2,12 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import {
   Wrench, ChevronRight, RefreshCw, WifiOff, CloudOff, CheckCircle2, Play, Pause, User, LogOut,
 } from 'lucide-react'
 import { Spinner } from '@/components/ui/spinner'
+import { useAuth } from '@/contexts/auth-context'
 import { MECANICOS } from '@/lib/taller-grupos'
 import {
   useMecanicoOTs, usePendingCount, useSyncTaller, useAutoSyncTaller, useNetworkStatus,
@@ -26,11 +28,17 @@ function estadoBadge(estado: string) {
 export default function MecanicoHomePage() {
   useAutoSyncTaller()
   const online = useNetworkStatus()
+  const router = useRouter()
+  const { perfil, signOut } = useAuth()
   const { data: ots, isLoading, refetch, isFetching } = useMecanicoOTs()
   const { data: pendientes = 0 } = usePendingCount()
   const sync = useSyncTaller()
   const descargar = useDescargarOffline()
   const [descargaMsg, setDescargaMsg] = useState<string>('')
+
+  // Operador de Taller con login propio: la BD ya filtra sus OTs asignadas
+  // (v_taller_mecanico_ots, MIG192) — no elige nombre de una lista.
+  const esOperador = perfil?.rol === 'operador_taller'
 
   const [mecanico, setMecanico] = useState<string>('')
   useEffect(() => {
@@ -42,12 +50,18 @@ export default function MecanicoHomePage() {
     if (typeof window !== 'undefined') localStorage.setItem(LS_KEY, m)
   }
 
+  async function salir() {
+    try { await signOut() } catch { /* noop */ }
+    router.replace('/login')
+  }
+
   const misOts = useMemo(() => {
     const list = ots ?? []
+    if (esOperador) return list
     if (!mecanico) return []
     const m = mecanico.toLowerCase()
     return list.filter((o) => (o.cuadrilla ?? '').toLowerCase().includes(m))
-  }, [ots, mecanico])
+  }, [ots, mecanico, esOperador])
 
   return (
     <div className="p-3 space-y-3">
@@ -59,10 +73,18 @@ export default function MecanicoHomePage() {
           </div>
           <div>
             <h1 className="text-base font-bold text-gray-900 leading-tight">Taller — Mecánico</h1>
-            <p className="text-[11px] text-gray-500">Checklist de ejecución</p>
+            <p className="text-[11px] text-gray-500">
+              {esOperador ? (perfil?.nombre_completo ?? 'Operador de taller') : 'Checklist de ejecución'}
+            </p>
           </div>
         </div>
-        <Link href="/dashboard" className="text-gray-400 hover:text-gray-600"><LogOut className="h-5 w-5" /></Link>
+        {esOperador ? (
+          <button onClick={salir} aria-label="Cerrar sesión" className="text-gray-400 hover:text-gray-600">
+            <LogOut className="h-5 w-5" />
+          </button>
+        ) : (
+          <Link href="/dashboard" className="text-gray-400 hover:text-gray-600"><LogOut className="h-5 w-5" /></Link>
+        )}
       </div>
 
       {/* Estado de conexión / pendientes */}
@@ -83,25 +105,27 @@ export default function MecanicoHomePage() {
         )}
       </div>
 
-      {/* Selector de mecánico */}
-      <div>
-        <div className="flex items-center gap-1 mb-1 text-xs font-medium text-gray-500">
-          <User className="h-3.5 w-3.5" /> Soy:
+      {/* Selector de mecánico (solo perfiles sin login de operador) */}
+      {!esOperador && (
+        <div>
+          <div className="flex items-center gap-1 mb-1 text-xs font-medium text-gray-500">
+            <User className="h-3.5 w-3.5" /> Soy:
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {MECANICOS.map((m) => (
+              <button key={m} onClick={() => elegir(m)}
+                      className={`rounded-full px-3 py-1.5 text-sm border ${
+                        mecanico === m ? 'bg-orange-600 text-white border-orange-600'
+                                       : 'bg-white text-gray-700 border-gray-300'}`}>
+                {m}
+              </button>
+            ))}
+          </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          {MECANICOS.map((m) => (
-            <button key={m} onClick={() => elegir(m)}
-                    className={`rounded-full px-3 py-1.5 text-sm border ${
-                      mecanico === m ? 'bg-orange-600 text-white border-orange-600'
-                                     : 'bg-white text-gray-700 border-gray-300'}`}>
-              {m}
-            </button>
-          ))}
-        </div>
-      </div>
+      )}
 
       {/* Descargar para offline */}
-      {mecanico && misOts.length > 0 && online && (
+      {(esOperador || mecanico) && misOts.length > 0 && online && (
         <button
           onClick={() => descargar.mutate(misOts.map((o) => o.ot_id), {
             onSuccess: (n) => setDescargaMsg(`${n} OTs descargadas para usar sin internet`),
@@ -116,18 +140,22 @@ export default function MecanicoHomePage() {
 
       {/* Lista */}
       <div className="flex items-center justify-between pt-1">
-        <h2 className="text-sm font-semibold text-gray-700">Mis OTs liberadas</h2>
+        <h2 className="text-sm font-semibold text-gray-700">
+          {esOperador ? 'Mis OTs asignadas' : 'Mis OTs liberadas'}
+        </h2>
         <button onClick={() => refetch()} className="text-gray-400 hover:text-gray-600" disabled={isFetching}>
           <RefreshCw className={`h-4 w-4 ${isFetching ? 'animate-spin' : ''}`} />
         </button>
       </div>
 
-      {!mecanico ? (
+      {!esOperador && !mecanico ? (
         <p className="py-8 text-center text-sm text-gray-400">Elige tu nombre para ver tus OTs.</p>
       ) : isLoading ? (
         <div className="flex justify-center py-8"><Spinner /></div>
       ) : misOts.length === 0 ? (
-        <p className="py-8 text-center text-sm text-gray-400">No tienes OTs liberadas a ejecución.</p>
+        <p className="py-8 text-center text-sm text-gray-400">
+          {esOperador ? 'Tu jefatura aún no te asigna OTs para ejecutar.' : 'No tienes OTs liberadas a ejecución.'}
+        </p>
       ) : (
         <div className="space-y-2">
           {misOts.map((o) => {
