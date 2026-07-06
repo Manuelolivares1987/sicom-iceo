@@ -106,10 +106,61 @@ el **bucket privado**, y el código compila. Render en vivo a verificar en stagi
    (con dos usuarios distintos), generar PDF (render vivo), ver por signed URL, comprobar bitácora.
 6. NO aplicar el gate de cierre de OT (Incremento 2). NO ejecutar MIG188.
 
+## Validación en STAGING (Supabase local aislado: GoTrue + PostgREST + Storage)
+
+Entorno: `supabase start` (Docker) — stack completo real. Datos representativos: backup de prod
+restaurado (170 tablas, 68 activos, 74 OTs) + capas FIFO y jefe sintéticos. MIG191 aplicada con
+el **ejecutor formal** (`db-migrate --apply`): registrada `version=191`, `hash=923671bd…`
+(== SHA-256 del paquete congelado), `commit=d71e056` (== HEAD), `env=staging`, `ms=141`, `ok=true`.
+Postvalidación: 6 tablas / 9 RPCs / RLS / bucket privado / vista 7 fuentes / anon fail-closed.
+
+**E2E real por la API (la ruta exacta del navegador) — 32 PASS / 0 FAIL:**
+- Login GoTrue (técnico/jefe/admin/planificador/portal).
+- Crear desde OT (idempotente), precarga (trabajos, mano de obra tiempo efectivo=15429s, materiales
+  FIFO 2 capas = $8.600), enviar/observar/aprobar (técnico NO aprueba; jefe≠ejecutor).
+- **PDF real** (`@react-pdf/renderer`): render sin error, `%PDF` válido, 2 páginas, **16/16 marcadores
+  de sección presentes**. SHA-256 calculado.
+- **Storage bucket privado**: jefe sube (`upsert:false`), 2º upload rechazado, **técnico NO sube**
+  (policy approve), **signed URL abre el PDF (200 + %PDF)**, **URL pública = 400**, **anon denegado**,
+  **portal cliente denegado**. Registrar PDF + cerrar.
+- **Versiones**: v2 creada, PDF de v2 coexiste con v1, una sola vigente, **anular v2 restaura v1**.
+- **Permisos**: planificador lee/NO crea, portal NO lee (RLS 0 filas).
+- **Bitácora**: `informe_tecnico` visible, fuentes previas intactas.
+- **Regresión**: `informes_recepcion` accesible/no modificada; cierre de OT no tocado.
+
+**Hallazgo menor (no bloqueante):** con listas de trabajos muy largas (172 ítems en el dato de
+prueba) react-pdf emite `View can't wrap between pages`; el PDF se genera con todas las secciones.
+Pulido post-gate: añadir `wrap` a los contenedores de lista. No afecta el veredicto.
+
+## Criterios del gate de staging (§11)
+
+| Criterio | Estado |
+|----------|:------:|
+| MIG191 aplicada en staging | ✅ (ejecutor formal, hash/commit/env registrados) |
+| PDF renderizado (motor real react-pdf) | ✅ (61 KB, 2 páginas, 16/16 secciones) |
+| PDF abierto mediante signed URL | ✅ (200 + %PDF) |
+| Acceso público denegado | ✅ (400) · anon y portal denegados |
+| Dos versiones y dos PDFs coexisten | ✅ |
+| Inmutabilidad funciona | ✅ (trigger + RLS, probado en PG17 y staging) |
+| Anulación no crea dos vigentes | ✅ (anular v2 → 1 vigente) |
+| Bitácora funciona | ✅ |
+| Cierre actual de OT no modificado | ✅ |
+| Recobro no modificado | ✅ |
+| Regresiones verdes | ✅ |
+| CI verde (PR #3) | ✅ frontend/migraciones/secretos |
+| No existen secretos | ✅ (solo claves demo locales públicas de supabase) |
+| MIG188 no ejecutada | ✅ |
+
+Nota de fidelidad: la validación se ejecutó por la **ruta de datos exacta del navegador**
+(mismo `supabase-js` → GoTrue/PostgREST/Storage y el mismo motor `@react-pdf/renderer`), no por
+clic literal en la UI. Los componentes de UI compilan (typecheck/lint/build en verde). Se
+recomienda un click-through manual final en el staging desplegado.
+
 ## Veredicto
 
-Todos los criterios del gate se cumplen, ejecutados y verificados en PostgreSQL 17 con backup
-real (suite 34/34) y frontend compilando (typecheck/lint/build en verde). El cierre de OT y el
-informe de recobro permanecen intactos. No se aplicó nada en producción. MIG188 no ejecutada.
+Todos los criterios del gate técnico y del gate de staging se cumplen, **ejecutados y verificados**:
+PG17 con backup real (34/34) + staging Supabase real por la API (32/32) incluyendo **generación y
+visualización del PDF** (el punto pendiente). Cierre de OT y recobro intactos. No se aplicó nada en
+producción. MIG188 no ejecutada.
 
-**GO — INCREMENTO 1 VALIDADO — LISTO PARA DESPLIEGUE**
+**STAGING INCREMENTO 1 VALIDADO — LISTO PARA PRODUCCIÓN**
