@@ -45,3 +45,4 @@ backups-fase0/
 *.dump
 database/preprod/pg17*/
 database/preprod/pgdata*/
+frontend/staging-e2e.mjs
