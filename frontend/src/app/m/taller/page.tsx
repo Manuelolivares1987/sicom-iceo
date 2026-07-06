@@ -36,9 +36,11 @@ export default function MecanicoHomePage() {
   const descargar = useDescargarOffline()
   const [descargaMsg, setDescargaMsg] = useState<string>('')
 
-  // Operador de Taller con login propio: la BD ya filtra sus OTs asignadas
-  // (v_taller_mecanico_ots, MIG192) — no elige nombre de una lista.
+  // Operador de Taller con login propio: ve TODAS las OTs liberadas y la BD
+  // marca con asignada_a_mi las que traen su nombre (MIG193) — puede tomar
+  // cualquiera, con filtro "Con mi nombre".
   const esOperador = perfil?.rol === 'operador_taller'
+  const [soloMias, setSoloMias] = useState(false)
 
   const [mecanico, setMecanico] = useState<string>('')
   useEffect(() => {
@@ -55,13 +57,22 @@ export default function MecanicoHomePage() {
     router.replace('/login')
   }
 
+  const conMiNombre = useMemo(
+    () => (ots ?? []).filter((o) => o.asignada_a_mi).length,
+    [ots],
+  )
+
   const misOts = useMemo(() => {
     const list = ots ?? []
-    if (esOperador) return list
+    if (esOperador) {
+      if (soloMias) return list.filter((o) => o.asignada_a_mi)
+      // Todas, pero las que traen su nombre primero.
+      return [...list].sort((a, b) => Number(b.asignada_a_mi ?? false) - Number(a.asignada_a_mi ?? false))
+    }
     if (!mecanico) return []
     const m = mecanico.toLowerCase()
     return list.filter((o) => (o.cuadrilla ?? '').toLowerCase().includes(m))
-  }, [ots, mecanico, esOperador])
+  }, [ots, mecanico, esOperador, soloMias])
 
   return (
     <div className="p-3 space-y-3">
@@ -105,6 +116,24 @@ export default function MecanicoHomePage() {
         )}
       </div>
 
+      {/* Filtro del operador: todas las liberadas vs. las que traen su nombre */}
+      {esOperador && (
+        <div className="flex gap-2">
+          <button onClick={() => setSoloMias(false)}
+                  className={`rounded-full px-3 py-1.5 text-sm border ${
+                    !soloMias ? 'bg-orange-600 text-white border-orange-600'
+                              : 'bg-white text-gray-700 border-gray-300'}`}>
+            Todas ({(ots ?? []).length})
+          </button>
+          <button onClick={() => setSoloMias(true)}
+                  className={`rounded-full px-3 py-1.5 text-sm border ${
+                    soloMias ? 'bg-orange-600 text-white border-orange-600'
+                             : 'bg-white text-gray-700 border-gray-300'}`}>
+            Con mi nombre ({conMiNombre})
+          </button>
+        </div>
+      )}
+
       {/* Selector de mecánico (solo perfiles sin login de operador) */}
       {!esOperador && (
         <div>
@@ -141,7 +170,7 @@ export default function MecanicoHomePage() {
       {/* Lista */}
       <div className="flex items-center justify-between pt-1">
         <h2 className="text-sm font-semibold text-gray-700">
-          {esOperador ? 'Mis OTs asignadas' : 'Mis OTs liberadas'}
+          {esOperador ? (soloMias ? 'OTs con mi nombre' : 'OTs liberadas a ejecución') : 'Mis OTs liberadas'}
         </h2>
         <button onClick={() => refetch()} className="text-gray-400 hover:text-gray-600" disabled={isFetching}>
           <RefreshCw className={`h-4 w-4 ${isFetching ? 'animate-spin' : ''}`} />
@@ -154,7 +183,9 @@ export default function MecanicoHomePage() {
         <div className="flex justify-center py-8"><Spinner /></div>
       ) : misOts.length === 0 ? (
         <p className="py-8 text-center text-sm text-gray-400">
-          {esOperador ? 'Tu jefatura aún no te asigna OTs para ejecutar.' : 'No tienes OTs liberadas a ejecución.'}
+          {esOperador
+            ? (soloMias ? 'No hay OTs liberadas con tu nombre — revisa "Todas".' : 'No hay OTs liberadas a ejecución.')
+            : 'No tienes OTs liberadas a ejecución.'}
         </p>
       ) : (
         <div className="space-y-2">
@@ -168,6 +199,11 @@ export default function MecanicoHomePage() {
                     className="block rounded-xl border border-gray-200 bg-white p-3 active:bg-gray-50">
                 <div className="flex items-center gap-2">
                   <span className="font-mono text-xs font-bold text-gray-900">{o.ot_folio}</span>
+                  {esOperador && o.asignada_a_mi && (
+                    <span className="rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-medium text-orange-700">
+                      ★ Mi nombre
+                    </span>
+                  )}
                   <span className={`ml-auto flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${b.cls}`}>
                     <Icon className="h-3 w-3" /> {b.label}
                   </span>
