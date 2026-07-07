@@ -39,6 +39,7 @@ import {
   Scale,
   Satellite,
   Lightbulb,
+  ShoppingCart,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -168,6 +169,8 @@ const navGroups: NavGroup[] = [
         tooltip: 'Stock, compras, salidas, combustible y reportes — todo en un solo panel' },
       { label: 'Pedidos de material', href: '/dashboard/bodega/solicitudes', icon: PackageSearch, extendedModule: 'bodega', badge: 'Nuevo',
         tooltip: 'Todo en un lugar: lo pedido por las OT (con o sin stock) + las solicitudes de las No Conformidades' },
+      { label: 'Seguimiento repuestos', href: '/dashboard/bodega/seguimiento-repuestos', icon: ShoppingCart, extendedModule: 'bodega', badge: 'Nuevo',
+        tooltip: 'Repuestos pedidos por el taller sin stock: generar OC, ver en qué está cada compra y cuándo llega' },
       { label: 'Tickets de bodega', href: '/dashboard/bodega/tickets', icon: Ticket, extendedModule: 'bodega', badge: 'Nuevo',
         tooltip: 'El jefe emite un ticket firmado por camión; el bodeguero lo escanea y entrega (rebaja FIFO, total/parcial)' },
       { label: 'Combustible Franke', href: '/dashboard/combustible/franke', icon: Fuel, extendedModule: 'bodega', badge: 'Nuevo',
