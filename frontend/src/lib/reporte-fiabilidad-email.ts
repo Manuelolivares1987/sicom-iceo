@@ -25,7 +25,7 @@ const pct = (v: number | null | undefined, d = 1) => v == null ? '—' : `${(Num
 const num = (v: number | null | undefined, d = 1) => v == null ? '—' : Number(v).toFixed(d)
 const esc = (s: unknown) => String(s ?? '').replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c] as string))
 
-export function buildFiabilidadEmailHtml(data: Reporte, desde: string, hasta: string, origin: string): string {
+export function buildFiabilidadEmailHtml(data: Reporte, desde: string, hasta: string, origin: string, token?: string | null): string {
   const cats = data.categorias ?? []
   const equipos = data.equipos ?? []
   // Excluir camiones Franke (codigo CAM-*): solo se ven en la sección Franke.
@@ -41,7 +41,8 @@ export function buildFiabilidadEmailHtml(data: Reporte, desde: string, hasta: st
   const dispInh = mtbf + mttr > 0 ? mtbf / (mtbf + mttr) : 1
   const combTot = combustible.reduce((a, e) => ({ cap: a.cap + n(e.capacidad_lt), st: a.st + n(e.stock_actual) }), { cap: 0, st: 0 })
   const peores = [...equipos].sort((a, b) => n(a.disponibilidad_inherente) - n(b.disponibilidad_inherente)).slice(0, 5)
-  const link = `${origin}/reporte-fiabilidad?desde=${desde}&hasta=${hasta}`
+  // Token del link (MIG200): el destinatario abre el reporte sin iniciar sesión.
+  const link = `${origin}/reporte-fiabilidad?desde=${desde}&hasta=${hasta}${token ? `&t=${token}` : ''}`
 
   const td = (t: string, r = false) => `<td style="padding:8px;border:1px solid #e5e7eb;text-align:${r ? 'right' : 'left'}">${t}</td>`
   const th = (t: string, r = false) => `<th style="padding:8px;border:1px solid #e5e7eb;text-align:${r ? 'right' : 'left'};background:#f1f5f9;color:#475569">${t}</th>`
@@ -82,11 +83,14 @@ export function buildFiabilidadEmailHtml(data: Reporte, desde: string, hasta: st
 export async function copiarReporteFiabilidad(desde: string, hasta: string): Promise<string> {
   const { data, error } = await supabase.rpc('fn_reporte_fiabilidad_publico', { p_ini: desde, p_fin: hasta })
   if (error) throw new Error(error.message)
-  const html = buildFiabilidadEmailHtml(data as Reporte, desde, hasta, window.location.origin)
+  // Token del link (MIG200): si falla se copia el link sin token (pedirá sesión).
+  const { data: token } = await supabase.rpc('fn_reporte_fiabilidad_link_token')
+  const linkPlano = `${window.location.origin}/reporte-fiabilidad?desde=${desde}&hasta=${hasta}${token ? `&t=${token}` : ''}`
+  const html = buildFiabilidadEmailHtml(data as Reporte, desde, hasta, window.location.origin, token as string | null)
   try {
     await navigator.clipboard.write([new ClipboardItem({
       'text/html': new Blob([html], { type: 'text/html' }),
-      'text/plain': new Blob([`Reporte de Fiabilidad de Flota (${desde} a ${hasta}) — ${window.location.origin}/reporte-fiabilidad?desde=${desde}&hasta=${hasta}`], { type: 'text/plain' }),
+      'text/plain': new Blob([`Reporte de Fiabilidad de Flota (${desde} a ${hasta}) — ${linkPlano}`], { type: 'text/plain' }),
     })])
     return 'Copiado ✓ — ahora pega en Outlook (Ctrl+V)'
   } catch {

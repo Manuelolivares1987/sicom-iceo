@@ -75,6 +75,9 @@ export default function ReporteFiabilidadPublicoPage() {
   const [msg, setMsg] = useState<string | null>(null)
   // null = verificando sesión; false = sin sesión (el reporte es interno desde MIG186)
   const [sesionOk, setSesionOk] = useState<boolean | null>(null)
+  // Token del link del correo (?t=..., MIG200): permite ver el reporte sin sesión.
+  // undefined = aún no se lee la URL; null = la URL no trae token.
+  const [tokenLink, setTokenLink] = useState<string | null | undefined>(undefined)
 
   useEffect(() => {
     let cancel = false
@@ -89,14 +92,18 @@ export default function ReporteFiabilidadPublicoPage() {
     const q = new URLSearchParams(window.location.search)
     const d = q.get('desde'); const h = q.get('hasta')
     if (d) setDesde(d); if (h) setHasta(h)
+    setTokenLink(q.get('t'))
   }, [])
 
   useEffect(() => {
-    if (sesionOk !== true) return
+    if (tokenLink === undefined) return           // URL aún no leída
+    if (sesionOk !== true && !tokenLink) return   // sin sesión ni token no se consulta
     let cancel = false
     setCargando(true); setError(null)
     ;(async () => {
-      const { data, error } = await supabase.rpc('fn_reporte_fiabilidad_publico', { p_ini: desde, p_fin: hasta })
+      const { data, error } = await supabase.rpc('fn_reporte_fiabilidad_publico', {
+        p_ini: desde, p_fin: hasta, p_token: tokenLink ?? null,
+      })
       if (cancel) return
       if (error) {
         setError(error.message)
@@ -114,7 +121,7 @@ export default function ReporteFiabilidadPublicoPage() {
       setCargando(false)
     })()
     return () => { cancel = true }
-  }, [desde, hasta, sesionOk])
+  }, [desde, hasta, sesionOk, tokenLink])
 
   const equipos = data?.equipos ?? []
   const matriz = data?.matriz ?? []
@@ -342,11 +349,11 @@ export default function ReporteFiabilidadPublicoPage() {
     URL.revokeObjectURL(url)
   }
 
-  // El reporte es de uso interno (MIG186): sin sesión no se consulta ni renderiza.
-  if (sesionOk === null) {
-    return <div className="min-h-screen bg-gray-50 py-20 text-center text-gray-400">Verificando sesión…</div>
+  // Acceso: sesión interna (MIG186) o token del link del correo (MIG200).
+  if (tokenLink === undefined || (sesionOk === null && !tokenLink)) {
+    return <div className="min-h-screen bg-gray-50 py-20 text-center text-gray-400">Verificando acceso…</div>
   }
-  if (sesionOk === false) {
+  if (sesionOk === false && !tokenLink) {
     return (
       <div className="min-h-screen bg-gray-50 py-20">
         <div className="mx-auto max-w-md rounded-lg border border-gray-200 bg-white p-8 text-center shadow-sm">

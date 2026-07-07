@@ -27,7 +27,7 @@ const INI = argIni || `${hoy.slice(0, 7)}-01`
 const FIN = argFin || hoy
 const NOMBRE = argNombre || 'Mes actual'
 const BASE_URL = process.env.REPORTE_BASE_URL || 'https://pilladoiceo.netlify.app'
-const LINK = `${BASE_URL}/reporte-fiabilidad?desde=${INI}&hasta=${FIN}`
+let LINK = `${BASE_URL}/reporte-fiabilidad?desde=${INI}&hasta=${FIN}`
 
 const client = new pg.Client({ connectionString: (process.env.SUPABASE_DB_URL || '').trim(), ssl: { rejectUnauthorized: false } })
 const esc = (s) => String(s ?? '').replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]))
@@ -37,6 +37,12 @@ const CAT = { arriendo_comercial: 'Arriendo comercial', leasing_operativo: 'Leas
 async function main() {
   await client.connect()
   const rep = (await client.query(`SELECT fn_reporte_fiabilidad_publico($1,$2) j`, [INI, FIN])).rows[0].j
+  // Token del link (MIG200): el destinatario abre el reporte sin iniciar sesion.
+  const tok = (await client.query(
+    `SELECT token FROM reporte_tokens
+      WHERE reporte='fiabilidad' AND activo AND (expira_at IS NULL OR expira_at > NOW())
+      ORDER BY created_at DESC LIMIT 1`)).rows[0]?.token
+  if (tok) LINK += `&t=${tok}`
   await client.end()
 
   const cats = rep.categorias || []
