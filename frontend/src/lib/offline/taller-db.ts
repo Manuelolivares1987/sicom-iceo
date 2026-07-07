@@ -15,7 +15,7 @@ export type TallerPending = {
   local_id: string
   client_uuid: string
   ot_id: string
-  kind: 'item' | 'timing'
+  kind: 'item' | 'timing' | 'recurso'
   // kind = 'item' (marcar resultado / observación / foto de una tarea)
   instance_item_id?: string
   instance_id?: string
@@ -28,6 +28,14 @@ export type TallerPending = {
   observaciones?: string | null
   con_observaciones?: boolean
   firma_blob_id?: string | null   // firma del técnico para finalizar
+  // kind = 'recurso' (repuesto/material solicitado para reparar, MIG197)
+  producto_id?: string | null
+  producto_nombre?: string | null  // solo para mostrar en la UI offline
+  descripcion?: string | null
+  unidad?: string | null
+  cantidad?: number
+  comentario?: string | null
+  solicitado_nombre?: string | null
   // control
   sync_status: 'pending' | 'error'
   retries: number

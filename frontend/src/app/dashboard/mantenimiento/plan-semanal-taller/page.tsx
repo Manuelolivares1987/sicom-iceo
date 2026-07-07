@@ -8,7 +8,7 @@ import {
 import {
   Calendar, ArrowLeft, ChevronLeft, ChevronRight, Lock, AlertTriangle, Trash2, User,
   Play, Pause, CheckCircle2, BarChart3, ShieldAlert, RefreshCw, Wrench, Layers, FileSpreadsheet,
-  Truck, Mail, Pencil, Plus, Clock, Camera, ExternalLink, ListChecks, Upload,
+  Truck, Mail, Pencil, Plus, Clock, Camera, ExternalLink, ListChecks, Upload, Package, X,
 } from 'lucide-react'
 import { exportarPlanSemanalExcel, descargarBlob } from '@/lib/export/plan-semanal-excel'
 import { buildPlanSemanalTallerEmailHtml } from '@/lib/email/plan-semanal-taller-email'
@@ -34,7 +34,11 @@ import {
   useTallerTecnicos, useAgregarTareaLibreTaller,
   useCrearTecnico, useDesactivarTecnico,
   usePlanPendingCount, useSyncTallerPlan, useAutoSyncTallerPlan, useDescargarSemanaOffline,
+  useRecursosOTTaller, useValidarRecursoTaller, useAgregarRecursoTaller, useEmitirValeTaller,
 } from '@/hooks/use-taller-plan-semanal'
+import { SignaturePad } from '@/components/ui/signature-pad'
+import { RECURSO_ESTADO_LABEL, type OTRecurso } from '@/lib/services/ot-recursos'
+import { buscarProductos } from '@/lib/services/ot-materiales'
 import { useNetworkStatus } from '@/hooks/use-calama-offline'
 import {
   lunesDeIso, getJornadaEventos,
@@ -2128,6 +2132,9 @@ function JornadaDetalleModal({ jornada, planId, onClose }: {
           </div>
         </div>
 
+        {/* Recursos que pidió el operador → validar y emitir vale de bodega */}
+        <RecursosJefeSection otId={jornada.ot_id} otFolio={jornada.ot_folio} />
+
         {/* Control de cambios: bitácora de reprogramaciones y cambios de personal */}
         <JornadaEventosTimeline planOtId={jornada.plan_ot_id} />
       </div>
@@ -2140,6 +2147,217 @@ function JornadaDetalleModal({ jornada, planId, onClose }: {
         </Button>
       </ModalFooter>
     </Modal>
+  )
+}
+
+// ── Recursos del operador: validar (aprobar/rechazar/ajustar/agregar) y vale ─
+type ProductoLiteJefe = { id: string; codigo: string | null; nombre: string; unidad_medida: string | null }
+
+function RecursosJefeSection({ otId, otFolio }: { otId: string | null; otFolio: string | null }) {
+  const toast = useToast()
+  const { data: recursos, isLoading } = useRecursosOTTaller(otId)
+  const validar = useValidarRecursoTaller(otId)
+  const agregarRec = useAgregarRecursoTaller(otId)
+  const emitir = useEmitirValeTaller(otId)
+
+  // Ajuste de cantidad por fila (default = lo pedido)
+  const [cantidades, setCantidades] = useState<Record<string, string>>({})
+  // Agregar ítem del jefe
+  const [agregarOpen, setAgregarOpen] = useState(false)
+  const [q, setQ] = useState('')
+  const [resultados, setResultados] = useState<ProductoLiteJefe[]>([])
+  const [prod, setProd] = useState<ProductoLiteJefe | null>(null)
+  const [cant, setCant] = useState('')
+  // Vale con firma
+  const [valeOpen, setValeOpen] = useState(false)
+  const [firma, setFirma] = useState('')
+
+  useEffect(() => {
+    if (prod || q.trim().length < 2) { setResultados([]); return }
+    const t = setTimeout(async () => {
+      try {
+        const { data } = await buscarProductos(q, 8)
+        setResultados((data ?? []) as ProductoLiteJefe[])
+      } catch { setResultados([]) }
+    }, 300)
+    return () => clearTimeout(t)
+  }, [q, prod])
+
+  const lista = recursos ?? []
+  const pendientes = lista.filter((r) => r.estado === 'solicitado').length
+  const aprobados = lista.filter((r) => r.estado === 'aprobado').length
+
+  function aprobar(r: OTRecurso) {
+    const cantTxt = cantidades[r.id]
+    const cantAprob = cantTxt !== undefined && cantTxt !== '' ? Number(cantTxt) : r.cantidad
+    if (!cantAprob || cantAprob <= 0) { toast.error('Cantidad aprobada inválida'); return }
+    validar.mutate({ recursoId: r.id, accion: 'aprobar', cantidadAprobada: cantAprob },
+      { onError: (e) => toast.error((e as Error).message) })
+  }
+  function rechazar(r: OTRecurso) {
+    const nota = window.prompt('Motivo del rechazo (lo verá el mecánico):') ?? undefined
+    validar.mutate({ recursoId: r.id, accion: 'rechazar', nota: nota?.trim() || null },
+      { onError: (e) => toast.error((e as Error).message) })
+  }
+  function agregarItem() {
+    const n = Number(cant)
+    if (!n || n <= 0 || (!prod && q.trim().length < 3)) return
+    agregarRec.mutate({
+      otId: otId ?? '', cantidad: n,
+      productoId: prod?.id ?? null, descripcion: prod ? null : q.trim(),
+      unidad: prod?.unidad_medida ?? null,
+    }, {
+      onSuccess: () => { setQ(''); setProd(null); setCant(''); setAgregarOpen(false) },
+      onError: (e) => toast.error((e as Error).message),
+    })
+  }
+  function emitirVale() {
+    if (!firma) return
+    emitir.mutate({ firmaDataUrl: firma }, {
+      onSuccess: (r) => { toast.success(`Vale ${r.folio} emitido (${r.items} ítems) — bodega lo despacha con el QR`); setValeOpen(false); setFirma('') },
+      onError: (e) => toast.error((e as Error).message),
+    })
+  }
+
+  return (
+    <div className="border-t pt-3">
+      <div className="flex items-center justify-between mb-2">
+        <h3 className="text-sm font-semibold flex items-center gap-1">
+          <Package className="h-4 w-4 text-orange-600" /> Recursos solicitados
+          {pendientes > 0 && (
+            <span className="ml-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
+              {pendientes} por validar
+            </span>
+          )}
+        </h3>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => setAgregarOpen((v) => !v)}>
+            <Plus className="h-3.5 w-3.5 mr-1" /> Ítem
+          </Button>
+          <Button disabled={aprobados === 0 || emitir.isPending} onClick={() => setValeOpen(true)}>
+            {emitir.isPending ? <Spinner className="h-4 w-4 mr-1" /> : <Package className="h-4 w-4 mr-1" />}
+            Generar vale ({aprobados})
+          </Button>
+        </div>
+      </div>
+
+      {isLoading ? (
+        <div className="flex justify-center py-3"><Spinner className="h-4 w-4" /></div>
+      ) : lista.length === 0 ? (
+        <p className="text-[11px] text-gray-400 py-1">El operador aún no pide recursos para esta OT.</p>
+      ) : (
+        <div className="space-y-1.5">
+          {lista.map((r) => {
+            const chip = RECURSO_ESTADO_LABEL[r.estado]
+            return (
+              <div key={r.id} className="rounded-lg border border-gray-100 bg-gray-50 px-2.5 py-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="flex-1 min-w-[140px] text-xs font-medium text-gray-800">
+                    {r.producto_nombre ?? r.descripcion}
+                    {r.producto_codigo && <span className="ml-1 font-mono text-[10px] text-gray-400">{r.producto_codigo}</span>}
+                  </span>
+                  {r.producto_id && (
+                    <span className={`text-[10px] ${Number(r.stock_total ?? 0) > 0 ? 'text-gray-500' : 'text-red-600 font-semibold'}`}>
+                      stock {r.stock_total ?? 0}
+                    </span>
+                  )}
+                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${chip.cls}`}>
+                    {chip.label}{r.estado === 'en_vale' && r.ticket_folio ? ` · ${r.ticket_folio}` : ''}
+                  </span>
+                </div>
+                <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-gray-600">
+                  <span>
+                    Pide {r.cantidad} {r.unidad ?? 'un'}
+                    {r.solicitado_nombre ? ` · ${r.solicitado_nombre}` : r.agregado_por_jefe ? ' · agregado por jefatura' : ''}
+                  </span>
+                  {r.comentario && <span className="italic">«{r.comentario}»</span>}
+                  {r.estado === 'solicitado' && (
+                    <span className="ml-auto flex items-center gap-1.5">
+                      <input type="number" min="0" step="any"
+                             value={cantidades[r.id] ?? String(r.cantidad)}
+                             onChange={(e) => setCantidades((p) => ({ ...p, [r.id]: e.target.value }))}
+                             className="w-16 rounded border border-gray-300 px-1.5 py-0.5 text-xs" />
+                      <button onClick={() => aprobar(r)} disabled={validar.isPending}
+                              className="rounded bg-green-600 px-2 py-1 text-[11px] font-semibold text-white disabled:opacity-50">
+                        Aprobar
+                      </button>
+                      <button onClick={() => rechazar(r)} disabled={validar.isPending}
+                              className="rounded bg-red-600 px-2 py-1 text-[11px] font-semibold text-white disabled:opacity-50">
+                        Rechazar
+                      </button>
+                    </span>
+                  )}
+                  {r.estado === 'aprobado' && (
+                    <span className="ml-auto text-green-700 font-medium">
+                      Aprobado {r.cantidad_aprobada ?? r.cantidad} {r.unidad ?? 'un'}
+                      {r.validado_por_nombre ? ` · ${r.validado_por_nombre}` : ''}
+                    </span>
+                  )}
+                </div>
+                {r.nota_jefe && <p className="mt-0.5 text-[10px] italic text-gray-500">Nota: «{r.nota_jefe}»</p>}
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* Agregar ítem directo (nace aprobado) */}
+      {agregarOpen && (
+        <div className="mt-2 space-y-2 rounded-lg border border-orange-200 bg-orange-50/50 p-2.5">
+          {prod ? (
+            <div className="flex items-center gap-2 rounded border border-green-200 bg-green-50 px-2 py-1.5 text-xs">
+              <span className="flex-1 font-medium text-green-800">{prod.nombre}</span>
+              <button onClick={() => { setProd(null); setQ('') }} className="text-green-700"><X className="h-3.5 w-3.5" /></button>
+            </div>
+          ) : (
+            <div>
+              <Input value={q} onChange={(e) => setQ(e.target.value)}
+                     placeholder="Busca en bodega o describe el material…" />
+              {resultados.length > 0 && (
+                <div className="mt-1 overflow-hidden rounded border border-gray-200 bg-white">
+                  {resultados.map((p) => (
+                    <button key={p.id} onClick={() => { setProd(p); setResultados([]) }}
+                            className="flex w-full items-center gap-2 border-b border-gray-100 px-2 py-1.5 text-left text-xs last:border-0 hover:bg-gray-50">
+                      <span className="flex-1">{p.nombre}</span>
+                      {p.codigo && <span className="font-mono text-[10px] text-gray-400">{p.codigo}</span>}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+          <div className="flex items-center gap-2">
+            <Input type="number" min="0" value={cant} onChange={(e) => setCant(e.target.value)}
+                   placeholder="Cantidad" className="w-28" />
+            <Button variant="outline" disabled={agregarRec.isPending || !Number(cant) || (!prod && q.trim().length < 3)}
+                    onClick={agregarItem}>
+              {agregarRec.isPending ? <Spinner className="h-4 w-4 mr-1" /> : <Plus className="h-4 w-4 mr-1" />}
+              Agregar aprobado
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Vale de bodega con firma del jefe */}
+      {valeOpen && (
+        <Modal open onClose={() => setValeOpen(false)} title={`Vale de bodega · OT ${otFolio ?? ''}`}>
+          <div className="space-y-3">
+            <p className="text-sm text-gray-600">
+              Se emite un ticket con los {aprobados} recursos aprobados (más los materiales de NC
+              pendientes de esta OT, si los hay). Bodega lo despacha escaneando el QR.
+            </p>
+            <SignaturePad label="Firma del jefe de taller (obligatoria)" onCapture={setFirma} />
+          </div>
+          <ModalFooter>
+            <Button variant="outline" onClick={() => setValeOpen(false)}>Cancelar</Button>
+            <Button disabled={!firma || emitir.isPending} onClick={emitirVale}>
+              {emitir.isPending ? <Spinner className="h-4 w-4 mr-1" /> : <CheckCircle2 className="h-4 w-4 mr-1" />}
+              Emitir vale
+            </Button>
+          </ModalFooter>
+        </Modal>
+      )}
+    </div>
   )
 }
 

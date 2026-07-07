@@ -1,10 +1,11 @@
 'use client'
 
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import {
   ArrowLeft, Camera, Check, X, Minus, Play, Pause, CheckCircle2, Loader2, WifiOff, AlertTriangle, Clock,
+  Package, Plus,
 } from 'lucide-react'
 import { Spinner } from '@/components/ui/spinner'
 import { Button } from '@/components/ui/button'
@@ -13,9 +14,11 @@ import { SignaturePad } from '@/components/ui/signature-pad'
 import { useAuth } from '@/contexts/auth-context'
 import { BLOQUE_LABELS } from '@/lib/services/checklist-v2'
 import type { ChecklistV3Item } from '@/lib/services/taller-plan-semanal'
+import { RECURSO_ESTADO_LABEL } from '@/lib/services/ot-recursos'
+import { buscarProductos } from '@/lib/services/ot-materiales'
 import {
   useMecanicoOTs, useMecanicoChecklist, useMarcarItem, useTimingMecanico,
-  useAutoSyncTaller, useNetworkStatus,
+  useAutoSyncTaller, useNetworkStatus, useRecursosOT, useSolicitarRecurso,
 } from '@/hooks/use-taller-mecanico'
 
 function dataUrlToBlob(dataUrl: string): Blob {
@@ -55,6 +58,145 @@ function ResultRadio({ value, disabled, onChange }: {
           </button>
         )
       })}
+    </div>
+  )
+}
+
+type ProductoLite = { id: string; codigo: string | null; nombre: string; unidad_medida: string | null }
+
+// Repuestos y materiales que el mecánico pide para reparar (los valida el jefe).
+function RecursosSection({ otId, online }: { otId: string; online: boolean }) {
+  const { data: recursos } = useRecursosOT(otId)
+  const solicitar = useSolicitarRecurso(otId)
+  const [abierto, setAbierto] = useState(false)
+  const [q, setQ] = useState('')
+  const [resultados, setResultados] = useState<ProductoLite[]>([])
+  const [prod, setProd] = useState<ProductoLite | null>(null)
+  const [cantidad, setCantidad] = useState('')
+  const [comentario, setComentario] = useState('')
+
+  // Búsqueda en el catálogo de bodega (solo online; sin conexión va texto libre).
+  useEffect(() => {
+    if (!online || prod || q.trim().length < 2) { setResultados([]); return }
+    const t = setTimeout(async () => {
+      try {
+        const { data } = await buscarProductos(q, 8)
+        setResultados((data ?? []) as ProductoLite[])
+      } catch { setResultados([]) }
+    }, 300)
+    return () => clearTimeout(t)
+  }, [q, online, prod])
+
+  const puedesPedir = Number(cantidad) > 0 && (prod !== null || q.trim().length >= 3)
+
+  function pedir() {
+    if (!puedesPedir) return
+    const nombre = typeof window !== 'undefined' ? localStorage.getItem('taller-mecanico') : null
+    solicitar.mutate({
+      productoId: prod?.id ?? null,
+      productoNombre: prod?.nombre ?? null,
+      descripcion: prod ? null : q.trim(),
+      unidad: prod?.unidad_medida ?? null,
+      cantidad: Number(cantidad),
+      comentario: comentario.trim() || null,
+      solicitadoNombre: nombre,
+    }, {
+      onSuccess: () => { setQ(''); setProd(null); setCantidad(''); setComentario(''); setAbierto(false) },
+    })
+  }
+
+  const lista = recursos ?? []
+
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white p-3">
+      <div className="flex items-center justify-between">
+        <h2 className="flex items-center gap-1.5 text-sm font-semibold text-gray-800">
+          <Package className="h-4 w-4 text-orange-600" /> Repuestos y materiales
+          {lista.length > 0 && <span className="text-xs font-normal text-gray-400">({lista.length})</span>}
+        </h2>
+        <button onClick={() => setAbierto((v) => !v)}
+                className="flex items-center gap-1 rounded-lg bg-orange-600 px-2.5 py-1.5 text-xs font-semibold text-white">
+          <Plus className="h-3.5 w-3.5" /> Pedir
+        </button>
+      </div>
+
+      {lista.length === 0 && !abierto && (
+        <p className="mt-2 text-xs text-gray-400">¿Necesitas repuestos para reparar? Pídelos aquí y el jefe los valida.</p>
+      )}
+
+      {lista.length > 0 && (
+        <div className="mt-2 space-y-1.5">
+          {lista.map((r) => {
+            const chip = RECURSO_ESTADO_LABEL[r.estado]
+            return (
+              <div key={r.id} className="rounded-lg border border-gray-100 bg-gray-50 px-2.5 py-2">
+                <div className="flex items-center gap-2">
+                  <span className="flex-1 text-xs font-medium text-gray-800">
+                    {r.producto_nombre ?? r.descripcion}
+                  </span>
+                  <span className="text-xs text-gray-600 whitespace-nowrap">
+                    {r.cantidad_aprobada ?? r.cantidad} {r.unidad ?? 'un'}
+                  </span>
+                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${chip.cls}`}>
+                    {chip.label}{r.estado === 'en_vale' && r.ticket_folio ? ` · ${r.ticket_folio}` : ''}
+                  </span>
+                </div>
+                {r.estado === 'aprobado' && r.cantidad_aprobada != null && r.cantidad_aprobada !== r.cantidad && (
+                  <p className="mt-0.5 text-[10px] text-gray-500">Pediste {r.cantidad}, el jefe aprobó {r.cantidad_aprobada}</p>
+                )}
+                {r.nota_jefe && <p className="mt-0.5 text-[10px] italic text-gray-500">Jefe: «{r.nota_jefe}»</p>}
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {abierto && (
+        <div className="mt-3 space-y-2 border-t border-gray-100 pt-3">
+          {prod ? (
+            <div className="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-2.5 py-2 text-xs">
+              <span className="flex-1 font-medium text-green-800">{prod.nombre}</span>
+              {prod.unidad_medida && <span className="text-green-700">{prod.unidad_medida}</span>}
+              <button onClick={() => { setProd(null); setQ('') }} className="text-green-700"><X className="h-3.5 w-3.5" /></button>
+            </div>
+          ) : (
+            <div>
+              <input type="text" value={q} onChange={(e) => setQ(e.target.value)}
+                     placeholder={online ? 'Busca en bodega o describe lo que necesitas…' : 'Sin conexión: describe lo que necesitas…'}
+                     className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm" />
+              {resultados.length > 0 && (
+                <div className="mt-1 overflow-hidden rounded-lg border border-gray-200">
+                  {resultados.map((p) => (
+                    <button key={p.id} onClick={() => { setProd(p); setResultados([]) }}
+                            className="flex w-full items-center gap-2 border-b border-gray-100 bg-white px-2.5 py-2 text-left text-xs last:border-0 active:bg-gray-50">
+                      <span className="flex-1">{p.nombre}</span>
+                      {p.codigo && <span className="font-mono text-[10px] text-gray-400">{p.codigo}</span>}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+          <div className="flex gap-2">
+            <input type="number" inputMode="decimal" min="0" value={cantidad}
+                   onChange={(e) => setCantidad(e.target.value)} placeholder="Cantidad"
+                   className="w-28 rounded-lg border border-gray-200 px-3 py-2 text-sm" />
+            <input type="text" value={comentario} onChange={(e) => setComentario(e.target.value)}
+                   placeholder="Comentario (opcional)"
+                   className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm" />
+          </div>
+          <button onClick={pedir} disabled={!puedesPedir || solicitar.isPending}
+                  className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-orange-600 py-2.5 text-sm font-semibold text-white disabled:opacity-50">
+            {solicitar.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Package className="h-4 w-4" />}
+            Pedir al jefe de taller
+          </button>
+          {solicitar.isError && (
+            <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
+              No se pudo enviar: {(solicitar.error as Error).message}
+            </p>
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -186,6 +328,9 @@ export default function MecanicoOTPage() {
         <AlertTriangle className="h-3 w-3 text-amber-500" />
         Al pausar o finalizar, las tareas NO OK se reportan como No Conformidad al jefe.
       </p>
+
+      {/* Repuestos y materiales para reparar (los valida el jefe) */}
+      <RecursosSection otId={otId} online={online} />
 
       {/* Checklist */}
       {isLoading ? (

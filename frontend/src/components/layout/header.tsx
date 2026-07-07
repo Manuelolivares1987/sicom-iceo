@@ -21,6 +21,8 @@ function rutaAlerta(entidadTipo: string | null): string {
     case 'no_conformidad': return '/dashboard/mantenimiento/no-conformidades'
     case 'activo':         return '/dashboard/flota/gps'
     case 'ot':             return '/dashboard/ordenes-trabajo'
+    // Recursos pedidos por el operador: se validan en el Plan Taller (MIG197)
+    case 'recurso_ot':     return '/dashboard/mantenimiento/plan-semanal-taller'
     default:               return '/dashboard'
   }
 }

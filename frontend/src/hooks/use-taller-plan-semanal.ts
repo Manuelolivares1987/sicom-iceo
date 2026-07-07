@@ -20,6 +20,8 @@ import {
   editarJornadaOffline, syncTallerPlanPending, getPlanPendingCount,
   descargarSemanaOffline,
 } from '@/lib/offline/taller-plan-offline'
+import { getRecursosOT, validarRecurso, agregarRecursoJefe } from '@/lib/services/ot-recursos'
+import { subirFirmaTicket, crearTicket } from '@/lib/services/bodega-tickets'
 
 const KEY = (...parts: (string | null | undefined)[]) => ['taller', ...parts.filter(Boolean)] as const
 
@@ -339,5 +341,47 @@ export function useDescargarSemanaOffline() {
   return useMutation({
     networkMode: 'always',
     mutationFn: (fechaInicio: string) => descargarSemanaOffline(fechaInicio),
+  })
+}
+
+// ── Recursos solicitados por el operador → validación del jefe (MIG197) ─────
+export function useRecursosOTTaller(otId: string | null) {
+  return useQuery({
+    queryKey: KEY('recursos', otId ?? 'none'),
+    enabled: !!otId,
+    queryFn: () => getRecursosOT(otId!),
+    staleTime: 10_000,
+  })
+}
+
+export function useValidarRecursoTaller(otId: string | null) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: validarRecurso,
+    onSuccess: () => qc.invalidateQueries({ queryKey: KEY('recursos', otId ?? 'none') }),
+  })
+}
+
+export function useAgregarRecursoTaller(otId: string | null) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: agregarRecursoJefe,
+    onSuccess: () => qc.invalidateQueries({ queryKey: KEY('recursos', otId ?? 'none') }),
+  })
+}
+
+/** Emite el vale de bodega de la OT: sube la firma del jefe y crea el ticket. */
+export function useEmitirValeTaller(otId: string | null) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (p: { firmaDataUrl: string; observacion?: string | null }) => {
+      const firmaUrl = await subirFirmaTicket(p.firmaDataUrl, 'vale')
+      return crearTicket({ otId: otId!, firmaJefeUrl: firmaUrl, observacion: p.observacion ?? null })
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: KEY('recursos', otId ?? 'none') })
+      qc.invalidateQueries({ queryKey: ['tickets'] })
+      qc.invalidateQueries({ queryKey: ['tickets-emitibles'] })
+    },
   })
 }
