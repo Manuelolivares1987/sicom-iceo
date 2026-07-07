@@ -93,8 +93,10 @@ export default function ValeImprimiblePage() {
             </p>
           </div>
           <div className="text-center">
-            <QRCodeCanvas value={ticket.qr_code ?? ticket.folio} size={110} />
-            <p className="mt-1 font-mono text-[10px] text-gray-500">{ticket.qr_code}</p>
+            {/* QR = link: cualquier teléfono lo abre en la pantalla de despacho de bodega */}
+            <QRCodeCanvas value={`${typeof window !== 'undefined' ? window.location.origin : ''}/dashboard/bodega/tickets?folio=${ticket.folio}`} size={110} />
+            <p className="mt-1 font-mono text-[10px] text-gray-500">{ticket.folio}</p>
+            <p className="text-[9px] text-gray-400">Escanear = abre el despacho en bodega</p>
           </div>
         </div>
 
