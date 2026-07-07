@@ -19,7 +19,7 @@ import { useToast } from '@/contexts/toast-context'
 import { useRequireAuth } from '@/hooks/use-require-auth'
 import {
   getSeguimientoRecursos, asignarProductoRecurso, crearProductoRapido, generarOcRecursos,
-  RECURSO_ESTADO_LABEL, type OTRecursoSeguimiento,
+  registrarNumeroOcExterno, RECURSO_ESTADO_LABEL, type OTRecursoSeguimiento,
 } from '@/lib/services/ot-recursos'
 import { buscarProductos, } from '@/lib/services/ot-materiales'
 import { listarProveedoresActivos } from '@/lib/services/bodega-oc'
@@ -140,12 +140,25 @@ export default function SeguimientoRepuestosPage() {
   const generarOc = useMutation({
     mutationFn: generarOcRecursos,
     onSuccess: (r) => {
-      toast.success(`OC ${r.numero_oc} generada (${r.items} ítems) — recepciónala al llegar y los repuestos pasan solos a "Recibido"`)
+      toast.success(`Solicitud ${r.numero_oc} creada (${r.items} ítems) — cuando Softland emita la OC registra su N°; al recepcionar pasan solos a "Recibido"`)
       setOcOpen(false); setSel(new Set()); setProveedor(''); setNumeroOc(''); setEta(''); setObsOc('')
       qc.invalidateQueries({ queryKey: ['seguimiento-repuestos'] })
     },
     onError: (e) => toast.error((e as Error).message),
   })
+
+  const numExterno = useMutation({
+    mutationFn: ({ ocId, numero }: { ocId: string; numero: string }) => registrarNumeroOcExterno(ocId, numero),
+    onSuccess: () => {
+      toast.success('N° de OC Softland registrado')
+      qc.invalidateQueries({ queryKey: ['seguimiento-repuestos'] })
+    },
+    onError: (e) => toast.error((e as Error).message),
+  })
+  function pedirNumeroSoftland(f: OTRecursoSeguimiento) {
+    const n = window.prompt(`N° de la OC emitida en Softland para la solicitud ${f.oc_numero}:`)
+    if (n && n.trim() && f.oc_id) numExterno.mutate({ ocId: f.oc_id, numero: n.trim() })
+  }
 
   const lista = useMemo(() => {
     const all = (filas ?? []).filter((f) => f.estado !== 'rechazado')
@@ -190,7 +203,7 @@ export default function SeguimientoRepuestosPage() {
             <RefreshCw className={`h-4 w-4 ${isFetching ? 'animate-spin' : ''}`} />
           </Button>
           <Button disabled={nSel === 0} onClick={() => setOcOpen(true)}>
-            <ShoppingCart className="h-4 w-4 mr-1" /> Generar OC ({nSel})
+            <ShoppingCart className="h-4 w-4 mr-1" /> Solicitar OC ({nSel})
           </Button>
         </div>
       </div>
@@ -225,7 +238,7 @@ export default function SeguimientoRepuestosPage() {
                   <th className="text-right p-2">Cant.</th>
                   <th className="text-right p-2">Stock</th>
                   <th className="text-left p-2">Estado</th>
-                  <th className="text-left p-2">OC / ETA</th>
+                  <th className="text-left p-2">OC (Softland) / ETA</th>
                   <th className="text-right p-2">Espera</th>
                 </tr>
               </thead>
@@ -290,7 +303,7 @@ export default function SeguimientoRepuestosPage() {
                         {f.oc_numero ? (
                           <Link href={`/dashboard/abastecimiento/oc/${f.oc_id}`}
                                 className="text-blue-600 hover:underline flex items-center gap-1 text-xs">
-                            {f.oc_numero} <ExternalLink className="h-3 w-3" />
+                            {f.oc_numero_externo ?? `${f.oc_numero} (solicitud)`} <ExternalLink className="h-3 w-3" />
                           </Link>
                         ) : <span className="text-[11px] text-gray-400">—</span>}
                         {f.oc_numero && (
@@ -301,6 +314,12 @@ export default function SeguimientoRepuestosPage() {
                               <span className="ml-1 font-semibold text-red-600">atrasada</span>
                             )}
                           </div>
+                        )}
+                        {f.estado === 'en_compra' && !f.oc_numero_externo && (
+                          <button onClick={() => pedirNumeroSoftland(f)} disabled={numExterno.isPending}
+                                  className="mt-0.5 rounded border border-purple-300 bg-purple-50 px-1.5 py-0.5 text-[10px] font-semibold text-purple-700 disabled:opacity-50">
+                            + N° OC Softland
+                          </button>
                         )}
                       </td>
                       <td className="p-2 text-right"><AgingBadge dias={f.dias_desde_solicitud} /></td>
@@ -315,9 +334,10 @@ export default function SeguimientoRepuestosPage() {
 
       {filtro === 'por_comprar' && seleccionables.length > 0 && (
         <p className="text-xs text-gray-500">
-          Marca los repuestos y pulsa «Generar OC»: se crea la orden de compra real y al{' '}
-          <b>recepcionarla</b> (Listado OCs → Recepcionar) cada repuesto pasa solo a «Recibido» y
-          le avisa al jefe de taller para emitir el vale.
+          Marca los repuestos y pulsa «Solicitar OC»: queda la solicitud con proveedor y fecha
+          estimada. La OC oficial la emite el área especialista <b>en Softland</b> (registra su N°
+          en la fila) y al <b>recepcionar</b> (Listado OCs → Recepcionar) cada repuesto pasa solo a
+          «Recibido» y le avisa al jefe de taller para emitir el vale.
         </p>
       )}
 
@@ -327,8 +347,12 @@ export default function SeguimientoRepuestosPage() {
       )}
 
       {ocOpen && (
-        <Modal open onClose={() => setOcOpen(false)} title={`Generar orden de compra (${nSel} repuestos)`}>
+        <Modal open onClose={() => setOcOpen(false)} title={`Solicitud de OC (${nSel} repuestos)`}>
           <div className="space-y-3">
+            <p className="text-xs text-gray-500">
+              La OC oficial la emite el área especialista en Softland. Esta solicitud deja la
+              trazabilidad: cuando Softland la emita, registra su N° en la fila del repuesto.
+            </p>
             <div>
               <label className="text-xs font-medium">Proveedor <span className="text-red-500">*</span></label>
               <select value={proveedor} onChange={(e) => setProveedor(e.target.value)}
@@ -341,8 +365,8 @@ export default function SeguimientoRepuestosPage() {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-xs font-medium">N° OC externo (opcional)</label>
-                <Input value={numeroOc} onChange={(e) => setNumeroOc(e.target.value)} placeholder="Autogenerado si va vacío" />
+                <label className="text-xs font-medium">N° OC Softland (si ya existe)</label>
+                <Input value={numeroOc} onChange={(e) => setNumeroOc(e.target.value)} placeholder="Se puede registrar después" />
               </div>
               <div>
                 <label className="text-xs font-medium">Fecha estimada de llegada</label>

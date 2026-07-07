@@ -265,7 +265,7 @@ export default function InventarioPage() {
           { label: 'Nueva OC',           description: 'Crear orden de compra interna',  href: '/dashboard/abastecimiento/oc/nueva',      icon: Plus,            accent: 'green' },
           { label: 'Importar OC (PDF)',  description: 'Cargar OC externa desde PDF',    href: '/dashboard/abastecimiento/oc/importar',   icon: FileSpreadsheet, accent: 'blue' },
           { label: 'Listado OCs',        description: 'Ver y recepcionar OCs',          href: '/dashboard/abastecimiento/oc',            icon: FileText,        accent: 'amber' },
-          { label: 'Seguimiento repuestos', description: 'Pedidos del taller sin stock → OC → llegada', href: '/dashboard/bodega/seguimiento-repuestos', icon: PackageSearch, accent: 'purple', badge: 'Nuevo' },
+          { label: 'Seguimiento repuestos', description: 'Pedidos del taller sin stock → solicitud OC → llegada', href: '/dashboard/bodega/seguimiento-repuestos', icon: PackageSearch, accent: 'purple', badge: 'Nuevo' },
           { label: 'Ingreso combustible', description: 'Ingreso valorizado CPP móvil',  href: '/dashboard/combustible/ingreso',          icon: Fuel,            accent: 'amber' },
         ]}
       />

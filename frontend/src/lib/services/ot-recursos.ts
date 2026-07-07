@@ -36,6 +36,8 @@ export type OTRecurso = {
   oc_id: string | null
   oc_item_id: string | null
   oc_numero: string | null
+  /** N° de la OC oficial emitida por el área especialista en Softland. */
+  oc_numero_externo: string | null
   oc_estado: string | null
   oc_fecha_entrega: string | null
   oc_proveedor: string | null
@@ -79,6 +81,15 @@ export async function crearProductoRapido(params: {
   })
   if (error) throw error
   return data as { success: boolean; producto_id: string; codigo: string }
+}
+
+/** Registra el N° de la OC oficial emitida en Softland. */
+export async function registrarNumeroOcExterno(ocId: string, numero: string) {
+  const { data, error } = await supabase.rpc('rpc_oc_registrar_numero_externo', {
+    p_oc_id: ocId, p_numero: numero,
+  })
+  if (error) throw error
+  return data as { success: boolean }
 }
 
 export async function generarOcRecursos(params: {
@@ -175,7 +186,7 @@ export const RECURSO_ESTADO_LABEL: Record<OTRecursoEstado, { label: string; cls:
   solicitado: { label: 'Por validar', cls: 'bg-amber-100 text-amber-800' },
   aprobado:   { label: 'Aprobado',    cls: 'bg-green-100 text-green-700' },
   rechazado:  { label: 'Rechazado',   cls: 'bg-red-100 text-red-700' },
-  en_compra:  { label: 'En compra',   cls: 'bg-purple-100 text-purple-700' },
+  en_compra:  { label: 'OC solicitada', cls: 'bg-purple-100 text-purple-700' },
   recibido:   { label: 'Recibido — por entregar', cls: 'bg-teal-100 text-teal-700' },
   en_vale:    { label: 'En vale',     cls: 'bg-blue-100 text-blue-700' },
 }

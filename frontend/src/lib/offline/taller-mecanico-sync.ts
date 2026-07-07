@@ -154,7 +154,7 @@ export async function getRecursosMecanico(otId: string): Promise<OTRecurso[]> {
       nota_jefe: null, ticket_id: null, created_at: p.created_at,
       producto_codigo: null, producto_nombre: p.producto_nombre ?? null,
       stock_total: null, validado_por_nombre: null, ticket_folio: null, ticket_estado: null,
-      oc_id: null, oc_item_id: null, oc_numero: null, oc_estado: null,
+      oc_id: null, oc_item_id: null, oc_numero: null, oc_numero_externo: null, oc_estado: null,
       oc_fecha_entrega: null, oc_proveedor: null, oc_cantidad_recibida: null,
     }
   }))
