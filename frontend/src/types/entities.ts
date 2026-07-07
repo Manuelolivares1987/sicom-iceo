@@ -115,6 +115,8 @@ export interface OrdenTrabajo {
   prioridad: Prioridad
   estado: EstadoOT
   responsable_id: string | null
+  /** Técnico responsable del catálogo taller_tecnicos (MIG195). */
+  tecnico_id: string | null
   cuadrilla: string | null
   fecha_programada: string | null
   fecha_inicio: string | null
