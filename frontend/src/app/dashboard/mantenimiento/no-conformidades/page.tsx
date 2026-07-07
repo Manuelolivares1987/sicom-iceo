@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   AlertTriangle, ClipboardList, Wrench, PlusCircle, Trash2, CheckCircle2, Loader2, Package,
@@ -17,7 +17,13 @@ import {
   getRecepcionesParaNc, getActivosParaNc, subirFotoNc, type NcRecepcion, type NcMaterial,
 } from '@/lib/services/no-conformidades'
 import { getProductos } from '@/lib/services/inventario'
-import { getRecursosPorHallazgo, RECURSO_ESTADO_LABEL } from '@/lib/services/ot-recursos'
+import {
+  getRecursosPorHallazgo, getRecursosOT, validarRecurso, agregarRecursoJefe,
+  RECURSO_ESTADO_LABEL, type OTRecurso,
+} from '@/lib/services/ot-recursos'
+import { buscarProductos } from '@/lib/services/ot-materiales'
+import { subirFirmaTicket, crearTicket } from '@/lib/services/bodega-tickets'
+import { SignaturePad } from '@/components/ui/signature-pad'
 import { getCategoriasProducto } from '@/lib/services/producto-categorias'
 import { solicitarMaterialBodega } from '@/lib/services/bodega-solicitudes'
 import { MECANICOS } from '@/lib/taller-grupos'
@@ -143,55 +149,231 @@ function Kpi({ label, value, warn }: { label: string; value: number; warn?: bool
   return <Card><CardContent className="p-3"><div className="text-xs text-muted-foreground">{label}</div><div className={cn('text-2xl font-bold', warn && 'text-amber-600')}>{value}</div></CardContent></Card>
 }
 
-// Lo que el operador pidió desde el hallazgo NO OK que generó esta NC:
-// fotos, cantidades y en qué etapa va cada insumo (MIG199/201).
+// Gestión COMPLETA de los insumos del taller desde la NC (MIG204): aprobar /
+// rechazar / ajustar cantidad / agregar ítems y emitir el vale de bodega, sin
+// tener que ir al Plan Taller.
+type ProductoLiteNC = { id: string; codigo: string | null; nombre: string; unidad_medida: string | null }
+
 function InsumosOperadorNC({ nc }: { nc: NcRecepcion }) {
+  const toast = useToast()
+  const qc = useQueryClient()
   const { data: recursos = [] } = useQuery({
     queryKey: ['nc-insumos-operador', nc.id],
-    queryFn: () => getRecursosPorHallazgo(nc.checklist_item_ref!),
-    enabled: !!nc.checklist_item_ref,
-    staleTime: 15_000,
+    // Con OT: todos los insumos de la OT (el vale es por OT); sin OT, los del hallazgo.
+    queryFn: () => nc.ot_id ? getRecursosOT(nc.ot_id) : getRecursosPorHallazgo(nc.checklist_item_ref!),
+    enabled: !!nc.ot_id || !!nc.checklist_item_ref,
+    staleTime: 10_000,
   })
-  if (!nc.checklist_item_ref || recursos.length === 0) return null
+  const invalidar = () => qc.invalidateQueries({ queryKey: ['nc-insumos-operador', nc.id] })
+
+  const [cantidades, setCantidades] = useState<Record<string, string>>({})
+  const [busy, setBusy] = useState(false)
+  // Agregar ítem
+  const [agregarOpen, setAgregarOpen] = useState(false)
+  const [q, setQ] = useState('')
+  const [resultados, setResultados] = useState<ProductoLiteNC[]>([])
+  const [prod, setProd] = useState<ProductoLiteNC | null>(null)
+  const [cant, setCant] = useState('')
+  // Vale con firma
+  const [valeOpen, setValeOpen] = useState(false)
+  const [firma, setFirma] = useState('')
+
+  useEffect(() => {
+    if (prod || q.trim().length < 2) { setResultados([]); return }
+    const t = setTimeout(async () => {
+      try {
+        const { data } = await buscarProductos(q, 8)
+        setResultados((data ?? []) as ProductoLiteNC[])
+      } catch { setResultados([]) }
+    }, 300)
+    return () => clearTimeout(t)
+  }, [q, prod])
+
+  const valeables = recursos.filter((r) => r.estado === 'aprobado' || r.estado === 'recibido').length
+  const pendientes = recursos.filter((r) => r.estado === 'solicitado').length
+
+  async function validar(r: OTRecurso, accion: 'aprobar' | 'rechazar') {
+    setBusy(true)
+    try {
+      const cantTxt = cantidades[r.id]
+      const nota = accion === 'rechazar' ? (window.prompt('Motivo del rechazo (lo verá el mecánico):') ?? undefined) : undefined
+      await validarRecurso({
+        recursoId: r.id, accion,
+        cantidadAprobada: accion === 'aprobar' ? (cantTxt !== undefined && cantTxt !== '' ? Number(cantTxt) : r.cantidad) : null,
+        nota: nota?.trim() || null,
+      })
+      invalidar()
+    } catch (e) { toast.error((e as Error).message) } finally { setBusy(false) }
+  }
+  async function agregarItem() {
+    const n = Number(cant)
+    if (!n || n <= 0 || (!prod && q.trim().length < 3) || !nc.ot_id) return
+    setBusy(true)
+    try {
+      await agregarRecursoJefe({
+        otId: nc.ot_id, cantidad: n,
+        productoId: prod?.id ?? null, descripcion: prod ? null : q.trim(),
+        unidad: prod?.unidad_medida ?? null,
+        instanceItemId: nc.checklist_item_ref ?? null,
+      })
+      setQ(''); setProd(null); setCant(''); setAgregarOpen(false)
+      invalidar()
+    } catch (e) { toast.error((e as Error).message) } finally { setBusy(false) }
+  }
+  async function emitirVale() {
+    if (!firma || !nc.ot_id) return
+    setBusy(true)
+    try {
+      const url = await subirFirmaTicket(firma, 'vale-nc')
+      const r = await crearTicket({ otId: nc.ot_id, firmaJefeUrl: url })
+      toast.success(`Vale ${r.folio} emitido (${r.items} ítems) — bodega lo despacha con el QR`)
+      setValeOpen(false); setFirma('')
+      invalidar()
+    } catch (e) { toast.error((e as Error).message) } finally { setBusy(false) }
+  }
+
+  if (!nc.ot_id && !nc.checklist_item_ref) return null
+
   return (
     <div className="rounded-lg border border-orange-200 bg-orange-50/50 p-2.5">
-      <p className="text-xs font-semibold text-orange-800 flex items-center gap-1 mb-1.5">
-        <Package className="h-3.5 w-3.5" /> Insumos pedidos por el operador en este hallazgo
-      </p>
-      <div className="space-y-1.5">
-        {recursos.map((r) => {
-          const chip = RECURSO_ESTADO_LABEL[r.estado]
-          return (
-            <div key={r.id} className="rounded border border-orange-100 bg-white px-2 py-1.5">
-              <div className="flex flex-wrap items-center gap-2 text-xs">
-                <span className="flex-1 font-medium text-gray-800">{r.producto_nombre ?? r.descripcion}</span>
-                <span className="text-gray-600 whitespace-nowrap">{r.cantidad_aprobada ?? r.cantidad} {r.unidad ?? 'un'}</span>
-                <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${chip.cls}`}>
-                  {chip.label}{r.estado === 'en_vale' && r.ticket_folio ? ` · ${r.ticket_folio}` : ''}
-                </span>
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5">
+        <p className="text-xs font-semibold text-orange-800 flex items-center gap-1">
+          <Package className="h-3.5 w-3.5" /> Insumos del taller
+          {pendientes > 0 && (
+            <span className="rounded-full bg-amber-200 px-1.5 py-0.5 text-[10px] font-bold text-amber-900">
+              {pendientes} por validar
+            </span>
+          )}
+        </p>
+        <div className="flex gap-1.5">
+          <button type="button" onClick={() => setAgregarOpen((v) => !v)} disabled={!nc.ot_id}
+                  className="rounded border border-orange-300 bg-white px-2 py-1 text-[11px] font-semibold text-orange-700 disabled:opacity-50">
+            + Ítem
+          </button>
+          <button type="button" onClick={() => setValeOpen(true)} disabled={valeables === 0 || busy}
+                  className="rounded bg-orange-600 px-2 py-1 text-[11px] font-semibold text-white disabled:opacity-50">
+            Generar vale ({valeables})
+          </button>
+        </div>
+      </div>
+
+      {recursos.length === 0 ? (
+        <p className="text-[11px] text-gray-400">Sin insumos pedidos para esta OT todavía.</p>
+      ) : (
+        <div className="space-y-1.5">
+          {recursos.map((r) => {
+            const chip = RECURSO_ESTADO_LABEL[r.estado]
+            const deEsteHallazgo = !!nc.checklist_item_ref && r.instance_item_id === nc.checklist_item_ref
+            return (
+              <div key={r.id} className="rounded border border-orange-100 bg-white px-2 py-1.5">
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  <span className="flex-1 font-medium text-gray-800">
+                    {r.producto_nombre ?? r.descripcion}
+                    {deEsteHallazgo && (
+                      <span className="ml-1 rounded bg-red-100 px-1 py-0.5 text-[9px] font-semibold text-red-700">este hallazgo</span>
+                    )}
+                  </span>
+                  <span className="text-gray-600 whitespace-nowrap">{r.cantidad_aprobada ?? r.cantidad} {r.unidad ?? 'un'}</span>
+                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${chip.cls}`}>
+                    {chip.label}{r.estado === 'en_vale' && r.ticket_folio ? ` · ${r.ticket_folio}` : ''}
+                  </span>
+                </div>
+                {(r.solicitado_nombre || r.comentario) && (
+                  <p className="mt-0.5 text-[10px] text-gray-500">
+                    {r.solicitado_nombre}{r.comentario ? ` · «${r.comentario}»` : ''}
+                  </p>
+                )}
+                {(r.fotos?.length ?? 0) > 0 && (
+                  <div className="mt-1 flex gap-1">
+                    {(r.fotos ?? []).map((url, i) => (
+                      <a key={i} href={url} target="_blank" rel="noreferrer">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={url} alt="foto" className="h-12 w-12 rounded border object-cover hover:opacity-80" />
+                      </a>
+                    ))}
+                  </div>
+                )}
+                {r.estado === 'solicitado' && (
+                  <div className="mt-1 flex items-center gap-1.5">
+                    <input type="number" min="0" step="any"
+                           value={cantidades[r.id] ?? String(r.cantidad)}
+                           onChange={(e) => setCantidades((p) => ({ ...p, [r.id]: e.target.value }))}
+                           className="w-16 rounded border border-gray-300 px-1.5 py-0.5 text-xs" />
+                    <button type="button" onClick={() => validar(r, 'aprobar')} disabled={busy}
+                            className="rounded bg-green-600 px-2 py-1 text-[11px] font-semibold text-white disabled:opacity-50">
+                      Aprobar
+                    </button>
+                    <button type="button" onClick={() => validar(r, 'rechazar')} disabled={busy}
+                            className="rounded bg-red-600 px-2 py-1 text-[11px] font-semibold text-white disabled:opacity-50">
+                      Rechazar
+                    </button>
+                  </div>
+                )}
               </div>
-              {(r.solicitado_nombre || r.comentario) && (
-                <p className="mt-0.5 text-[10px] text-gray-500">
-                  {r.solicitado_nombre}{r.comentario ? ` · «${r.comentario}»` : ''}
-                </p>
-              )}
-              {(r.fotos?.length ?? 0) > 0 && (
-                <div className="mt-1 flex gap-1">
-                  {(r.fotos ?? []).map((url, i) => (
-                    <a key={i} href={url} target="_blank" rel="noreferrer">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={url} alt="foto" className="h-12 w-12 rounded border object-cover hover:opacity-80" />
-                    </a>
+            )
+          })}
+        </div>
+      )}
+
+      {agregarOpen && (
+        <div className="mt-2 space-y-1.5 rounded border border-orange-200 bg-white p-2">
+          {prod ? (
+            <div className="flex items-center gap-2 rounded border border-green-200 bg-green-50 px-2 py-1 text-xs">
+              <span className="flex-1 font-medium text-green-800">{prod.nombre}</span>
+              <button type="button" onClick={() => { setProd(null); setQ('') }} className="text-green-700 text-[11px]">cambiar</button>
+            </div>
+          ) : (
+            <div>
+              <input value={q} onChange={(e) => setQ(e.target.value)}
+                     placeholder="Busca en bodega o describe el material…"
+                     className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm" />
+              {resultados.length > 0 && (
+                <div className="mt-1 overflow-hidden rounded border border-gray-200 bg-white">
+                  {resultados.map((p) => (
+                    <button key={p.id} type="button" onClick={() => { setProd(p); setResultados([]) }}
+                            className="flex w-full items-center gap-2 border-b border-gray-100 px-2 py-1.5 text-left text-xs last:border-0 hover:bg-gray-50">
+                      <span className="flex-1">{p.nombre}</span>
+                      {p.codigo && <span className="font-mono text-[10px] text-gray-400">{p.codigo}</span>}
+                    </button>
                   ))}
                 </div>
               )}
             </div>
-          )
-        })}
-      </div>
+          )}
+          <div className="flex items-center gap-1.5">
+            <input type="number" min="0" value={cant} onChange={(e) => setCant(e.target.value)}
+                   placeholder="Cantidad" className="w-24 rounded border border-gray-300 px-2 py-1.5 text-sm" />
+            <button type="button" disabled={busy || !Number(cant) || (!prod && q.trim().length < 3)} onClick={agregarItem}
+                    className="rounded bg-orange-600 px-2.5 py-1.5 text-[11px] font-semibold text-white disabled:opacity-50">
+              Agregar aprobado
+            </button>
+          </div>
+        </div>
+      )}
+
       <p className="mt-1.5 text-[10px] text-gray-500">
-        Estos insumos ya van por el flujo del taller (vale / compra). No hace falta duplicarlos abajo.
+        Aprueba/ajusta y emite el vale aquí mismo. Si un insumo aprobado no tiene stock, sigue en
+        Bodega → Seguimiento repuestos (solicitud de OC) y vuelve como «Recibido» para el vale.
       </p>
+
+      {valeOpen && (
+        <Modal open onClose={() => setValeOpen(false)} title="Vale de bodega — firma del jefe">
+          <div className="space-y-3">
+            <p className="text-sm text-gray-600">
+              Se emite un ticket QR con los {valeables} insumos aprobados/recibidos de la OT (más los
+              materiales de NC pendientes). Bodega lo despacha escaneándolo.
+            </p>
+            <SignaturePad label="Firma del jefe de taller (obligatoria)" onCapture={setFirma} />
+          </div>
+          <ModalFooter>
+            <Button variant="outline" onClick={() => setValeOpen(false)}>Cancelar</Button>
+            <Button disabled={!firma || busy} onClick={emitirVale}>
+              {busy ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <CheckCircle2 className="h-4 w-4 mr-1" />}
+              Emitir vale
+            </Button>
+          </ModalFooter>
+        </Modal>
+      )}
     </div>
   )
 }
