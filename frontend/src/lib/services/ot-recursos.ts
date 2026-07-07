@@ -2,7 +2,7 @@
 // una OT y que el jefe valida antes de emitir el vale de bodega (MIG197).
 import { supabase } from '@/lib/supabase'
 
-export type OTRecursoEstado = 'solicitado' | 'aprobado' | 'rechazado' | 'en_vale'
+export type OTRecursoEstado = 'solicitado' | 'aprobado' | 'rechazado' | 'en_compra' | 'recibido' | 'en_vale'
 
 export type OTRecurso = {
   id: string
@@ -32,6 +32,66 @@ export type OTRecurso = {
   validado_por_nombre: string | null
   ticket_folio: string | null
   ticket_estado: string | null
+  // Seguimiento de compra (MIG201)
+  oc_id: string | null
+  oc_item_id: string | null
+  oc_numero: string | null
+  oc_estado: string | null
+  oc_fecha_entrega: string | null
+  oc_proveedor: string | null
+  oc_cantidad_recibida: number | null
+}
+
+/** Fila del tablero de seguimiento (v_ot_recursos_seguimiento). */
+export type OTRecursoSeguimiento = OTRecurso & {
+  ot_folio: string
+  activo_codigo: string | null
+  activo_patente: string | null
+  activo_nombre: string | null
+  dias_desde_solicitud: number
+  /** Aprobado, sin OC y sin stock (o fuera de catálogo): hay que comprarlo. */
+  por_comprar: boolean
+}
+
+export async function getSeguimientoRecursos(): Promise<OTRecursoSeguimiento[]> {
+  const { data, error } = await supabase
+    .from('v_ot_recursos_seguimiento').select('*')
+    .order('created_at', { ascending: false })
+    .limit(500)
+  if (error) throw error
+  return (data ?? []) as OTRecursoSeguimiento[]
+}
+
+export async function asignarProductoRecurso(recursoId: string, productoId: string) {
+  const { data, error } = await supabase.rpc('rpc_ot_recurso_asignar_producto', {
+    p_recurso_id: recursoId, p_producto_id: productoId,
+  })
+  if (error) throw error
+  return data as { success: boolean }
+}
+
+export async function crearProductoRapido(params: {
+  nombre: string; categoria?: string; unidad?: string; codigo?: string | null
+}) {
+  const { data, error } = await supabase.rpc('rpc_producto_rapido', {
+    p_nombre: params.nombre, p_categoria: params.categoria ?? 'repuesto',
+    p_unidad: params.unidad ?? 'unidad', p_codigo: params.codigo ?? null,
+  })
+  if (error) throw error
+  return data as { success: boolean; producto_id: string; codigo: string }
+}
+
+export async function generarOcRecursos(params: {
+  recursoIds: string[]; proveedorId: string
+  numeroOc?: string | null; fechaEntrega?: string | null; observacion?: string | null
+}) {
+  const { data, error } = await supabase.rpc('rpc_ot_recursos_generar_oc', {
+    p_recurso_ids: params.recursoIds, p_proveedor_id: params.proveedorId,
+    p_numero_oc: params.numeroOc ?? null, p_fecha_entrega: params.fechaEntrega ?? null,
+    p_observacion: params.observacion ?? null,
+  })
+  if (error) throw error
+  return data as { success: boolean; orden_compra_id: string; numero_oc: string; items: number }
 }
 
 export async function getRecursosOT(otId: string): Promise<OTRecurso[]> {
@@ -115,5 +175,7 @@ export const RECURSO_ESTADO_LABEL: Record<OTRecursoEstado, { label: string; cls:
   solicitado: { label: 'Por validar', cls: 'bg-amber-100 text-amber-800' },
   aprobado:   { label: 'Aprobado',    cls: 'bg-green-100 text-green-700' },
   rechazado:  { label: 'Rechazado',   cls: 'bg-red-100 text-red-700' },
+  en_compra:  { label: 'En compra',   cls: 'bg-purple-100 text-purple-700' },
+  recibido:   { label: 'Recibido — por entregar', cls: 'bg-teal-100 text-teal-700' },
   en_vale:    { label: 'En vale',     cls: 'bg-blue-100 text-blue-700' },
 }

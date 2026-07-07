@@ -23,6 +23,8 @@ function rutaAlerta(entidadTipo: string | null): string {
     case 'ot':             return '/dashboard/ordenes-trabajo'
     // Recursos pedidos por el operador: se validan en el Plan Taller (MIG197)
     case 'recurso_ot':     return '/dashboard/mantenimiento/plan-semanal-taller'
+    // Repuesto aprobado sin stock: se compra desde el seguimiento (MIG201)
+    case 'recurso_compra': return '/dashboard/bodega/seguimiento-repuestos'
     default:               return '/dashboard'
   }
 }
