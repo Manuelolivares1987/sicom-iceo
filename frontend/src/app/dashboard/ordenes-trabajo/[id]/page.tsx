@@ -1165,29 +1165,35 @@ function EditarOTCard({ otData, otId }: { otData: any; otId: string }) {
   const updateOT = useUpdateOT()
   const [prioridad, setPrioridad] = useState(otData.prioridad || 'normal')
   const [fechaProgramada, setFechaProgramada] = useState(otData.fecha_programada || '')
-  const [responsableId, setResponsableId] = useState(otData.responsable_id || '')
+  const [tecnicoId, setTecnicoId] = useState(otData.tecnico_id || '')
   const [observaciones, setObservaciones] = useState(otData.observaciones || '')
-  const [responsables, setResponsables] = useState<{id: string; nombre: string}[]>([])
+  // Responsable = técnico del catálogo de taller (misma lista que el plan
+  // semanal, MIG195) — no cuentas de la plataforma.
+  const [tecnicos, setTecnicos] = useState<{id: string; nombre: string; especialidad: string; usuario_perfil_id: string | null}[]>([])
   const [editSuccess, setEditSuccess] = useState(false)
   const [editError, setEditError] = useState<string | null>(null)
 
   useEffect(() => {
-    supabase.from('usuarios_perfil').select('id, nombre_completo').eq('activo', true).order('nombre_completo')
+    supabase.from('taller_tecnicos').select('id, nombre, especialidad, usuario_perfil_id').eq('activo', true).order('nombre')
       .then(({ data }) => {
-        if (data) setResponsables(data.map(r => ({ id: r.id, nombre: r.nombre_completo })))
+        if (data) setTecnicos(data as {id: string; nombre: string; especialidad: string; usuario_perfil_id: string | null}[])
       })
   }, [])
 
   function handleGuardar() {
     setEditError(null)
     setEditSuccess(false)
+    const tec = tecnicos.find((t) => t.id === tecnicoId)
     updateOT.mutate(
       {
         id: otId,
         data: {
           prioridad,
           fecha_programada: fechaProgramada || null,
-          responsable_id: responsableId || null,
+          tecnico_id: tecnicoId || null,
+          // La cuenta responsable sigue al técnico (si tiene login propio);
+          // sin técnico elegido se conserva la cuenta que ya tenía la OT.
+          responsable_id: tecnicoId ? (tec?.usuario_perfil_id ?? null) : (otData.responsable_id ?? null),
           observaciones: observaciones || null,
         },
       },
@@ -1235,15 +1241,15 @@ function EditarOTCard({ otData, otId }: { otData: any; otId: string }) {
             />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-gray-500">Responsable</label>
+            <label className="mb-1 block text-xs font-medium text-gray-500">Responsable (técnico de taller)</label>
             <select
-              value={responsableId}
-              onChange={(e) => setResponsableId(e.target.value)}
+              value={tecnicoId}
+              onChange={(e) => setTecnicoId(e.target.value)}
               className="h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm text-gray-700 focus:border-pillado-green-500 focus:outline-none focus:ring-2 focus:ring-pillado-green-500/20"
             >
               <option value="">Sin asignar</option>
-              {responsables.map((r) => (
-                <option key={r.id} value={r.id}>{r.nombre}</option>
+              {tecnicos.map((t) => (
+                <option key={t.id} value={t.id}>{t.nombre} ({t.especialidad})</option>
               ))}
             </select>
           </div>
