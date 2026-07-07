@@ -13,6 +13,8 @@ import {
   useMecanicoOTs, usePendingCount, useSyncTaller, useAutoSyncTaller, useNetworkStatus,
   useDescargarOffline,
 } from '@/hooks/use-taller-mecanico'
+import { useTallerTecnicos } from '@/hooks/use-taller-plan-semanal'
+import type { MecanicoOT } from '@/lib/offline/taller-mecanico-sync'
 import { Download } from 'lucide-react'
 
 const LS_KEY = 'taller-mecanico'
@@ -36,11 +38,12 @@ export default function MecanicoHomePage() {
   const descargar = useDescargarOffline()
   const [descargaMsg, setDescargaMsg] = useState<string>('')
 
-  // Operador de Taller con login propio: ve TODAS las OTs liberadas y la BD
-  // marca con asignada_a_mi las que traen su nombre (MIG193) — puede tomar
-  // cualquiera, con filtro "Con mi nombre".
+  // La cuenta operador_taller es COMPARTIDA por los mecánicos: ve TODAS las
+  // OTs liberadas (MIG193) y cada uno elige su nombre del catálogo de técnicos
+  // para filtrar/destacar las suyas (nombre en la cuadrilla del plan).
   const esOperador = perfil?.rol === 'operador_taller'
   const [soloMias, setSoloMias] = useState(false)
+  const { data: tecnicosCat } = useTallerTecnicos(null)
 
   const [mecanico, setMecanico] = useState<string>('')
   useEffect(() => {
@@ -57,22 +60,38 @@ export default function MecanicoHomePage() {
     router.replace('/login')
   }
 
-  const conMiNombre = useMemo(
-    () => (ots ?? []).filter((o) => o.asignada_a_mi).length,
-    [ots],
-  )
+  // Nombres del selector "Soy:" del operador (catálogo real; MECANICOS de respaldo).
+  const nombresPicker = useMemo(() => {
+    const cat = (tecnicosCat ?? []).filter((t) => t.activo).map((t) => t.nombre)
+    return cat.length > 0 ? cat : [...MECANICOS]
+  }, [tecnicosCat])
+
+  // ¿La OT es del mecánico elegido? Nombre completo o primer nombre en la
+  // cuadrilla (planes antiguos usan nombres cortos), o asignación por cuenta.
+  const esMia = useMemo(() => {
+    const n = mecanico.trim().toLowerCase()
+    const primer = n.split(/\s+/)[0] ?? ''
+    return (o: MecanicoOT): boolean => {
+      if (o.asignada_a_mi) return true
+      if (!n) return false
+      const c = (o.cuadrilla ?? '').toLowerCase()
+      return c.includes(n) || (primer.length >= 3 && c.includes(primer))
+    }
+  }, [mecanico])
+
+  const conMiNombre = useMemo(() => (ots ?? []).filter(esMia).length, [ots, esMia])
 
   const misOts = useMemo(() => {
     const list = ots ?? []
     if (esOperador) {
-      if (soloMias) return list.filter((o) => o.asignada_a_mi)
-      // Todas, pero las que traen su nombre primero.
-      return [...list].sort((a, b) => Number(b.asignada_a_mi ?? false) - Number(a.asignada_a_mi ?? false))
+      if (soloMias) return list.filter(esMia)
+      // Todas, pero las del mecánico elegido primero.
+      return [...list].sort((a, b) => Number(esMia(b)) - Number(esMia(a)))
     }
     if (!mecanico) return []
     const m = mecanico.toLowerCase()
     return list.filter((o) => (o.cuadrilla ?? '').toLowerCase().includes(m))
-  }, [ots, mecanico, esOperador, soloMias])
+  }, [ots, mecanico, esOperador, soloMias, esMia])
 
   return (
     <div className="p-3 space-y-3">
@@ -85,7 +104,7 @@ export default function MecanicoHomePage() {
           <div>
             <h1 className="text-base font-bold text-gray-900 leading-tight">Taller — Mecánico</h1>
             <p className="text-[11px] text-gray-500">
-              {esOperador ? (perfil?.nombre_completo ?? 'Operador de taller') : 'Checklist de ejecución'}
+              {esOperador ? (mecanico || 'Elige tu nombre') : 'Checklist de ejecución'}
             </p>
           </div>
         </div>
@@ -134,24 +153,24 @@ export default function MecanicoHomePage() {
         </div>
       )}
 
-      {/* Selector de mecánico (solo perfiles sin login de operador) */}
-      {!esOperador && (
-        <div>
-          <div className="flex items-center gap-1 mb-1 text-xs font-medium text-gray-500">
-            <User className="h-3.5 w-3.5" /> Soy:
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {MECANICOS.map((m) => (
-              <button key={m} onClick={() => elegir(m)}
-                      className={`rounded-full px-3 py-1.5 text-sm border ${
-                        mecanico === m ? 'bg-orange-600 text-white border-orange-600'
-                                       : 'bg-white text-gray-700 border-gray-300'}`}>
-                {m}
-              </button>
-            ))}
-          </div>
+      {/* Selector de mecánico: en la cuenta compartida del operador cada uno
+          elige su nombre (catálogo de técnicos); perfiles del dashboard usan
+          la lista corta legacy. */}
+      <div>
+        <div className="flex items-center gap-1 mb-1 text-xs font-medium text-gray-500">
+          <User className="h-3.5 w-3.5" /> Soy:
         </div>
-      )}
+        <div className="flex flex-wrap gap-2">
+          {(esOperador ? nombresPicker : [...MECANICOS]).map((m) => (
+            <button key={m} onClick={() => elegir(m)}
+                    className={`rounded-full px-3 py-1.5 text-sm border ${
+                      mecanico === m ? 'bg-orange-600 text-white border-orange-600'
+                                     : 'bg-white text-gray-700 border-gray-300'}`}>
+              {m}
+            </button>
+          ))}
+        </div>
+      </div>
 
       {/* Descargar para offline */}
       {(esOperador || mecanico) && misOts.length > 0 && online && (
@@ -184,7 +203,9 @@ export default function MecanicoHomePage() {
       ) : misOts.length === 0 ? (
         <p className="py-8 text-center text-sm text-gray-400">
           {esOperador
-            ? (soloMias ? 'No hay OTs liberadas con tu nombre — revisa "Todas".' : 'No hay OTs liberadas a ejecución.')
+            ? (soloMias
+                ? (mecanico ? 'No hay OTs liberadas con tu nombre — revisa "Todas".' : 'Elige tu nombre arriba para ver tus OTs.')
+                : 'No hay OTs liberadas a ejecución.')
             : 'No tienes OTs liberadas a ejecución.'}
         </p>
       ) : (
@@ -199,7 +220,7 @@ export default function MecanicoHomePage() {
                     className="block rounded-xl border border-gray-200 bg-white p-3 active:bg-gray-50">
                 <div className="flex items-center gap-2">
                   <span className="font-mono text-xs font-bold text-gray-900">{o.ot_folio}</span>
-                  {esOperador && o.asignada_a_mi && (
+                  {esOperador && esMia(o) && (
                     <span className="rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-medium text-orange-700">
                       ★ Mi nombre
                     </span>
