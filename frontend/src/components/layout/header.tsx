@@ -25,6 +25,8 @@ function rutaAlerta(entidadTipo: string | null): string {
     case 'recurso_ot':     return '/dashboard/mantenimiento/plan-semanal-taller'
     // Repuesto aprobado sin stock: se compra desde el seguimiento (MIG201)
     case 'recurso_compra': return '/dashboard/bodega/seguimiento-repuestos'
+    // Vale emitido: bodega prepara la entrega y despacha con el QR (MIG205)
+    case 'ticket_bodega':  return '/dashboard/bodega/tickets'
     default:               return '/dashboard'
   }
 }

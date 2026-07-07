@@ -88,6 +88,13 @@ export async function getTickets(estado?: EstadoTicket): Promise<BodegaTicket[]>
   return (data ?? []) as BodegaTicket[]
 }
 
+export async function getTicketById(id: string): Promise<BodegaTicket | null> {
+  const { data, error } = await supabase.from('v_bodega_ticket').select('*')
+    .eq('id', id).maybeSingle()
+  if (error) throw error
+  return (data as BodegaTicket | null) ?? null
+}
+
 export async function getTicketByFolio(folio: string): Promise<BodegaTicket | null> {
   const { data, error } = await supabase.from('v_bodega_ticket').select('*')
     .eq('folio', folio.trim().toUpperCase()).maybeSingle()
