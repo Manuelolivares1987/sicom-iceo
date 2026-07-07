@@ -74,6 +74,16 @@ function RecursosSection({ otId, online }: { otId: string; online: boolean }) {
   const [prod, setProd] = useState<ProductoLite | null>(null)
   const [cantidad, setCantidad] = useState('')
   const [comentario, setComentario] = useState('')
+  // Fotos del repuesto (clave cuando la pieza no existe en bodega y hay que comprarla)
+  const [fotos, setFotos] = useState<{ file: File; url: string }[]>([])
+  const fotoRef = useRef<HTMLInputElement | null>(null)
+
+  function agregarFoto(f: File) {
+    setFotos((p) => (p.length >= 3 ? p : [...p, { file: f, url: URL.createObjectURL(f) }]))
+  }
+  function quitarFoto(i: number) {
+    setFotos((p) => { URL.revokeObjectURL(p[i].url); return p.filter((_, j) => j !== i) })
+  }
 
   // Búsqueda en el catálogo de bodega (solo online; sin conexión va texto libre).
   useEffect(() => {
@@ -100,8 +110,12 @@ function RecursosSection({ otId, online }: { otId: string; online: boolean }) {
       cantidad: Number(cantidad),
       comentario: comentario.trim() || null,
       solicitadoNombre: nombre,
+      fotos: fotos.map((f) => f.file),
     }, {
-      onSuccess: () => { setQ(''); setProd(null); setCantidad(''); setComentario(''); setAbierto(false) },
+      onSuccess: () => {
+        fotos.forEach((f) => URL.revokeObjectURL(f.url))
+        setQ(''); setProd(null); setCantidad(''); setComentario(''); setFotos([]); setAbierto(false)
+      },
     })
   }
 
@@ -145,6 +159,16 @@ function RecursosSection({ otId, online }: { otId: string; online: boolean }) {
                   <p className="mt-0.5 text-[10px] text-gray-500">Pediste {r.cantidad}, el jefe aprobó {r.cantidad_aprobada}</p>
                 )}
                 {r.nota_jefe && <p className="mt-0.5 text-[10px] italic text-gray-500">Jefe: «{r.nota_jefe}»</p>}
+                {(r.fotos?.length ?? 0) > 0 && (
+                  <div className="mt-1.5 flex gap-1.5">
+                    {(r.fotos ?? []).map((url, i) => (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img key={i} src={url} alt={`foto ${i + 1}`}
+                           onClick={() => window.open(url, '_blank')}
+                           className="h-12 w-12 rounded-lg border object-cover" />
+                    ))}
+                  </div>
+                )}
               </div>
             )
           })}
@@ -185,6 +209,33 @@ function RecursosSection({ otId, online }: { otId: string; online: boolean }) {
                    placeholder="Comentario (opcional)"
                    className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm" />
           </div>
+
+          {/* Fotos del repuesto: sirven cuando la pieza no existe en bodega y hay que comprarla */}
+          <div className="flex items-center gap-2">
+            {fotos.map((f, i) => (
+              <div key={f.url} className="relative">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={f.url} alt={`foto ${i + 1}`} className="h-14 w-14 rounded-lg border object-cover" />
+                <button onClick={() => quitarFoto(i)}
+                        className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-red-600 text-white">
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            ))}
+            {fotos.length < 3 && (
+              <button onClick={() => fotoRef.current?.click()}
+                      className="flex h-14 w-14 flex-col items-center justify-center gap-0.5 rounded-lg border border-dashed border-gray-300 text-gray-500">
+                <Camera className="h-4 w-4" />
+                <span className="text-[9px]">Foto</span>
+              </button>
+            )}
+            <input ref={fotoRef} type="file" accept="image/*" capture="environment" className="hidden"
+                   onChange={(e) => { const f = e.target.files?.[0]; if (f) agregarFoto(f); e.target.value = '' }} />
+            {fotos.length === 0 && (
+              <span className="text-[10px] text-gray-400">Foto de la pieza (útil si no existe en bodega)</span>
+            )}
+          </div>
+
           <button onClick={pedir} disabled={!puedesPedir || solicitar.isPending}
                   className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-orange-600 py-2.5 text-sm font-semibold text-white disabled:opacity-50">
             {solicitar.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Package className="h-4 w-4" />}

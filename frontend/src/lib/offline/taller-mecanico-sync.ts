@@ -8,7 +8,7 @@ import { supabase } from '@/lib/supabase'
 import { getChecklistV3OT, type ChecklistV3Item } from '@/lib/services/taller-plan-semanal'
 import { actualizarItem, subirFotoItem } from '@/lib/services/checklist-v2'
 import { iniciarOT, pausarOT } from '@/lib/services/ordenes-trabajo'
-import { getRecursosOT, solicitarRecurso, type OTRecurso } from '@/lib/services/ot-recursos'
+import { getRecursosOT, solicitarRecurso, subirFotoRecurso, type OTRecurso } from '@/lib/services/ot-recursos'
 import { tallerDB, newId, type TallerPending } from './taller-db'
 
 const FIRMA_BUCKET = 'calama-firmas'
@@ -134,18 +134,26 @@ export async function getRecursosMecanico(otId: string): Promise<OTRecurso[]> {
   const pend = (await tallerDB().pending.where('ot_id').equals(otId).toArray())
     .filter((p) => p.kind === 'recurso')
     .sort((a, b) => a.created_at.localeCompare(b.created_at))
-  const locales: OTRecurso[] = pend.map((p) => ({
-    id: p.client_uuid, client_uuid: p.client_uuid, ot_id: otId,
-    producto_id: p.producto_id ?? null,
-    descripcion: p.descripcion ?? p.producto_nombre ?? null,
-    unidad: p.unidad ?? null,
-    cantidad: p.cantidad ?? 0, cantidad_aprobada: null,
-    comentario: p.comentario ?? null, estado: 'solicitado',
-    solicitado_por: null, solicitado_nombre: p.solicitado_nombre ?? null,
-    agregado_por_jefe: false, validado_por: null, validado_at: null,
-    nota_jefe: null, ticket_id: null, created_at: p.created_at,
-    producto_codigo: null, producto_nombre: p.producto_nombre ?? null,
-    stock_total: null, validado_por_nombre: null, ticket_folio: null, ticket_estado: null,
+  const locales: OTRecurso[] = await Promise.all(pend.map(async (p) => {
+    // Fotos aún no subidas: mostrar las locales como object URLs.
+    const fotos: string[] = []
+    for (const bid of p.fotos_blob_ids ?? []) {
+      const b = await tallerDB().blobs.get(bid)
+      if (b) fotos.push(URL.createObjectURL(b.blob))
+    }
+    return {
+      id: p.client_uuid, client_uuid: p.client_uuid, ot_id: otId,
+      producto_id: p.producto_id ?? null,
+      descripcion: p.descripcion ?? p.producto_nombre ?? null,
+      unidad: p.unidad ?? null,
+      cantidad: p.cantidad ?? 0, cantidad_aprobada: null,
+      comentario: p.comentario ?? null, fotos: fotos.length ? fotos : null, estado: 'solicitado',
+      solicitado_por: null, solicitado_nombre: p.solicitado_nombre ?? null,
+      agregado_por_jefe: false, validado_por: null, validado_at: null,
+      nota_jefe: null, ticket_id: null, created_at: p.created_at,
+      producto_codigo: null, producto_nombre: p.producto_nombre ?? null,
+      stock_total: null, validado_por_nombre: null, ticket_folio: null, ticket_estado: null,
+    }
   }))
   // Evitar duplicados cuando la solicitud ya llegó al servidor (mismo client_uuid).
   const enServer = new Set(base.map((r) => r.client_uuid).filter(Boolean))
@@ -166,8 +174,15 @@ export async function queueRecurso(params: {
   cantidad: number
   comentario?: string | null
   solicitadoNombre?: string | null
+  fotos?: (File | Blob)[]
 }): Promise<void> {
   const db = tallerDB()
+  const fotosIds: string[] = []
+  for (const f of params.fotos ?? []) {
+    const bid = newId()
+    await db.blobs.put({ blob_id: bid, blob: f, mime: (f as File).type || 'image/jpeg' })
+    fotosIds.push(bid)
+  }
   const row: TallerPending = {
     local_id: newId(), client_uuid: newId(), ot_id: params.otId, kind: 'recurso',
     producto_id: params.productoId ?? null,
@@ -177,6 +192,7 @@ export async function queueRecurso(params: {
     cantidad: params.cantidad,
     comentario: params.comentario ?? null,
     solicitado_nombre: params.solicitadoNombre ?? null,
+    fotos_blob_ids: fotosIds.length ? fotosIds : undefined,
     sync_status: 'pending', retries: 0, last_error: null, created_at: new Date().toISOString(),
   }
   await db.pending.put(row)
@@ -281,13 +297,21 @@ export async function syncTallerPending(): Promise<{ ok: number; failed: number 
         })
         if (p.foto_blob_id) await db.blobs.delete(p.foto_blob_id)
       } else if (p.kind === 'recurso') {
+        // Subir primero las fotos del repuesto (si las hay)
+        const fotosUrls: string[] = []
+        for (const bid of p.fotos_blob_ids ?? []) {
+          const b = await db.blobs.get(bid)
+          if (b) fotosUrls.push(await subirFotoRecurso(p.ot_id, b.blob))
+        }
         await solicitarRecurso({
           otId: p.ot_id, cantidad: p.cantidad ?? 0,
           productoId: p.producto_id, descripcion: p.descripcion,
           unidad: p.unidad, comentario: p.comentario,
           solicitadoNombre: p.solicitado_nombre,
           clientUuid: p.client_uuid,   // idempotente: reintentos no duplican
+          fotos: fotosUrls.length ? fotosUrls : null,
         })
+        for (const bid of p.fotos_blob_ids ?? []) await db.blobs.delete(bid)
       } else if (p.accion === 'finalizar') {
         // Finalizar requiere firma del técnico → setea firma y transiciona vía RPC.
         let firmaUrl: string | null = null
