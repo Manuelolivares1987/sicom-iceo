@@ -2255,6 +2255,11 @@ function RecursosJefeSection({ otId, otFolio }: { otId: string | null; otFolio: 
                   <span className="flex-1 min-w-[140px] text-xs font-medium text-gray-800">
                     {r.producto_nombre ?? r.descripcion}
                     {r.producto_codigo && <span className="ml-1 font-mono text-[10px] text-gray-400">{r.producto_codigo}</span>}
+                    {r.instance_item_id && (
+                      <span className="ml-1.5 rounded bg-red-100 px-1.5 py-0.5 text-[9px] font-semibold text-red-700">
+                        hallazgo NO OK
+                      </span>
+                    )}
                   </span>
                   {r.producto_id && (
                     <span className={`text-[10px] ${Number(r.stock_total ?? 0) > 0 ? 'text-gray-500' : 'text-red-600 font-semibold'}`}>
