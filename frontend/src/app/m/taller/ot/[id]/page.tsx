@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import {
   ArrowLeft, Camera, Check, X, Minus, Play, Pause, CheckCircle2, Loader2, WifiOff, AlertTriangle, Clock,
-  Package, Plus,
+  Package, Plus, Gauge,
 } from 'lucide-react'
 import { Spinner } from '@/components/ui/spinner'
 import { Button } from '@/components/ui/button'
@@ -65,6 +65,93 @@ function ResultRadio({ value, disabled, onChange }: {
 type ProductoLite = { id: string; codigo: string | null; nombre: string; unidad_medida: string | null }
 
 export type RecursoPrefill = { instanceItemId: string; texto: string }
+
+type MedicionNeum = { pos: string; mm: number | null }
+const esItemNeumaticos = (desc: string) => /neum[aá]tic/i.test(desc)
+
+// Profundidad por neumático (MIG203): el mecánico registra los mm de cada posición.
+function NeumaticosProfundidad({ item, onSave, saving }: {
+  item: ChecklistV3Item
+  onSave: (m: MedicionNeum[]) => void
+  saving: boolean
+}) {
+  const guardadas = item.mediciones ?? []
+  const [abierto, setAbierto] = useState(false)
+  const [rows, setRows] = useState<MedicionNeum[]>([])
+
+  function abrir() {
+    setRows(guardadas.length > 0 ? guardadas : Array.from({ length: 4 }, (_, i) => ({ pos: `Pos ${i + 1}`, mm: null })))
+    setAbierto(true)
+  }
+  function setMm(i: number, v: string) {
+    setRows((p) => p.map((r, j) => j === i ? { ...r, mm: v === '' ? null : Number(v) } : r))
+  }
+  function guardar() {
+    const conDato = rows.filter((r) => r.mm != null)
+    if (conDato.length === 0) return
+    onSave(rows.map((r, i) => ({ pos: `Pos ${i + 1}`, mm: r.mm })))
+    setAbierto(false)
+  }
+
+  if (!abierto) {
+    return (
+      <div className="mt-2">
+        {guardadas.length > 0 ? (
+          <button onClick={abrir} className="flex flex-wrap items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-2 py-1.5 text-left">
+            {guardadas.map((m, i) => (
+              <span key={i} className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${
+                m.mm != null && m.mm < 3 ? 'bg-red-100 text-red-700' : 'bg-white text-blue-800 border border-blue-200'}`}>
+                {m.pos}: {m.mm ?? '—'} mm
+              </span>
+            ))}
+            <span className="text-[10px] text-blue-600">editar</span>
+          </button>
+        ) : (
+          <button onClick={abrir}
+                  className="flex items-center gap-1 rounded-lg border border-blue-300 bg-blue-50 px-2 py-1.5 text-[11px] font-semibold text-blue-700">
+            <Gauge className="h-3.5 w-3.5" /> Registrar profundidad por neumático
+          </button>
+        )}
+      </div>
+    )
+  }
+
+  return (
+    <div className="mt-2 space-y-2 rounded-lg border border-blue-200 bg-blue-50/60 p-2.5">
+      <p className="text-[11px] font-semibold text-blue-800">Profundidad de cada neumático (mm)</p>
+      <div className="grid grid-cols-2 gap-1.5">
+        {rows.map((r, i) => (
+          <label key={i} className="flex items-center gap-1.5 text-[11px] text-gray-700">
+            <span className="w-11 shrink-0">Pos {i + 1}</span>
+            <input type="number" inputMode="decimal" min="0" step="0.5"
+                   value={r.mm ?? ''} onChange={(e) => setMm(i, e.target.value)}
+                   placeholder="mm"
+                   className="w-full rounded-lg border border-gray-200 px-2 py-1.5 text-sm" />
+          </label>
+        ))}
+      </div>
+      <div className="flex gap-2">
+        <button onClick={() => setRows((p) => [...p, { pos: `Pos ${p.length + 1}`, mm: null }])}
+                className="rounded-lg border border-blue-300 bg-white px-2 py-1.5 text-[11px] font-semibold text-blue-700">
+          + Neumático
+        </button>
+        {rows.length > 2 && (
+          <button onClick={() => setRows((p) => p.slice(0, -1))}
+                  className="rounded-lg border border-gray-300 bg-white px-2 py-1.5 text-[11px] text-gray-600">
+            − Quitar
+          </button>
+        )}
+        <button onClick={guardar} disabled={saving || rows.every((r) => r.mm == null)}
+                className="ml-auto rounded-lg bg-blue-600 px-3 py-1.5 text-[11px] font-semibold text-white disabled:opacity-50">
+          Guardar
+        </button>
+        <button onClick={() => setAbierto(false)} className="rounded-lg px-2 py-1.5 text-[11px] text-gray-500">
+          Cancelar
+        </button>
+      </div>
+    </div>
+  )
+}
 
 // Repuestos y materiales que el mecánico pide para reparar (los valida el jefe).
 function RecursosSection({ otId, online, prefill, onPrefillConsumido }: {
@@ -457,6 +544,12 @@ export default function MecanicoOTPage() {
                   </div>
 
                   <div className="mt-2"><ResultRadio value={it.resultado} onChange={(v) => setResultado(it, v)} /></div>
+
+                  {/* Neumáticos: profundidad por posición (MIG203) */}
+                  {esItemNeumaticos(it.descripcion) && (
+                    <NeumaticosProfundidad item={it} saving={marcar.isPending}
+                      onSave={(m) => marcar.mutate({ instanceItemId: it.instance_item_id, instanceId: it.instance_id, mediciones: m })} />
+                  )}
 
                   {/* Hallazgo NO OK: foto obligatoria + pedir repuesto ahí mismo */}
                   {it.resultado === 'no_ok' && (

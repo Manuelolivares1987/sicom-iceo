@@ -100,7 +100,11 @@ export type ChecklistV2Item = {
   foto_url: string | null
   cobrable_override: DefaultCobrable | null
   costo_estimado: number | null
+  /** Mediciones estructuradas, p.ej. profundidad por neumático (MIG203). */
+  mediciones?: MedicionNeumatico[] | null
 }
+
+export type MedicionNeumatico = { pos: string; mm: number | null }
 
 export type ChecklistV2Instance = {
   id: string
@@ -235,6 +239,7 @@ export async function actualizarItem(itemId: string, patch: Partial<ChecklistV2I
     foto_url:          patch.foto_url,
     cobrable_override: patch.cobrable_override,
     costo_estimado:    patch.costo_estimado,
+    mediciones:        patch.mediciones,
   }
   const body: Record<string, unknown> = { respondido_at: new Date().toISOString() }
   for (const [k, v] of Object.entries(allowed)) if (v !== undefined) body[k] = v

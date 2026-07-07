@@ -149,6 +149,8 @@ export type ChecklistV3Item = {
   foto_url: string | null
   excluido: boolean
   es_custom: boolean
+  /** Profundidad por neumático u otras mediciones del ítem (MIG203). */
+  mediciones: { pos: string; mm: number | null }[] | null
 }
 
 export type TallerOTBacklog = {

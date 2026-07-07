@@ -49,6 +49,7 @@ export function useMarcarItem(otId: string) {
     mutationFn: (p: {
       instanceItemId: string; instanceId: string
       resultado?: 'ok' | 'no_ok' | 'na'; observacion?: string | null; file?: File | null
+      mediciones?: { pos: string; mm: number | null }[]
     }) => queueItem({ otId, ...p }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: keyChecklist(otId) })

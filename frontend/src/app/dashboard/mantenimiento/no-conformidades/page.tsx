@@ -17,6 +17,7 @@ import {
   getRecepcionesParaNc, getActivosParaNc, subirFotoNc, type NcRecepcion, type NcMaterial,
 } from '@/lib/services/no-conformidades'
 import { getProductos } from '@/lib/services/inventario'
+import { getRecursosPorHallazgo, RECURSO_ESTADO_LABEL } from '@/lib/services/ot-recursos'
 import { getCategoriasProducto } from '@/lib/services/producto-categorias'
 import { solicitarMaterialBodega } from '@/lib/services/bodega-solicitudes'
 import { MECANICOS } from '@/lib/taller-grupos'
@@ -142,6 +143,59 @@ function Kpi({ label, value, warn }: { label: string; value: number; warn?: bool
   return <Card><CardContent className="p-3"><div className="text-xs text-muted-foreground">{label}</div><div className={cn('text-2xl font-bold', warn && 'text-amber-600')}>{value}</div></CardContent></Card>
 }
 
+// Lo que el operador pidió desde el hallazgo NO OK que generó esta NC:
+// fotos, cantidades y en qué etapa va cada insumo (MIG199/201).
+function InsumosOperadorNC({ nc }: { nc: NcRecepcion }) {
+  const { data: recursos = [] } = useQuery({
+    queryKey: ['nc-insumos-operador', nc.id],
+    queryFn: () => getRecursosPorHallazgo(nc.checklist_item_ref!),
+    enabled: !!nc.checklist_item_ref,
+    staleTime: 15_000,
+  })
+  if (!nc.checklist_item_ref || recursos.length === 0) return null
+  return (
+    <div className="rounded-lg border border-orange-200 bg-orange-50/50 p-2.5">
+      <p className="text-xs font-semibold text-orange-800 flex items-center gap-1 mb-1.5">
+        <Package className="h-3.5 w-3.5" /> Insumos pedidos por el operador en este hallazgo
+      </p>
+      <div className="space-y-1.5">
+        {recursos.map((r) => {
+          const chip = RECURSO_ESTADO_LABEL[r.estado]
+          return (
+            <div key={r.id} className="rounded border border-orange-100 bg-white px-2 py-1.5">
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                <span className="flex-1 font-medium text-gray-800">{r.producto_nombre ?? r.descripcion}</span>
+                <span className="text-gray-600 whitespace-nowrap">{r.cantidad_aprobada ?? r.cantidad} {r.unidad ?? 'un'}</span>
+                <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${chip.cls}`}>
+                  {chip.label}{r.estado === 'en_vale' && r.ticket_folio ? ` · ${r.ticket_folio}` : ''}
+                </span>
+              </div>
+              {(r.solicitado_nombre || r.comentario) && (
+                <p className="mt-0.5 text-[10px] text-gray-500">
+                  {r.solicitado_nombre}{r.comentario ? ` · «${r.comentario}»` : ''}
+                </p>
+              )}
+              {(r.fotos?.length ?? 0) > 0 && (
+                <div className="mt-1 flex gap-1">
+                  {(r.fotos ?? []).map((url, i) => (
+                    <a key={i} href={url} target="_blank" rel="noreferrer">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={url} alt="foto" className="h-12 w-12 rounded border object-cover hover:opacity-80" />
+                    </a>
+                  ))}
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+      <p className="mt-1.5 text-[10px] text-gray-500">
+        Estos insumos ya van por el flujo del taller (vale / compra). No hace falta duplicarlos abajo.
+      </p>
+    </div>
+  )
+}
+
 function AsignarRecursosModal({ nc, onClose, onDone }: { nc: NcRecepcion; onClose: () => void; onDone: () => void }) {
   const toast = useToast()
   const { data: prodRes } = useQuery({ queryKey: ['productos-nc'], queryFn: () => getProductos(), staleTime: 300_000 })
@@ -187,7 +241,16 @@ function AsignarRecursosModal({ nc, onClose, onDone }: { nc: NcRecepcion; onClos
   return (
     <Modal open onClose={onClose} title={`Recursos · ${nc.patente ?? nc.codigo}`}>
       <div className="space-y-3">
-        <p className="text-xs text-gray-500">{nc.descripcion}</p>
+        <div className="flex items-start gap-3">
+          {nc.foto_url && (
+            <a href={nc.foto_url} target="_blank" rel="noreferrer" className="shrink-0">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={nc.foto_url} alt="foto del hallazgo" className="h-20 w-20 rounded-lg border object-cover hover:opacity-80" />
+            </a>
+          )}
+          <p className="text-xs text-gray-600">{nc.descripcion}</p>
+        </div>
+        <InsumosOperadorNC nc={nc} />
         <div>
           <label className="text-xs font-medium">Grupo de trabajo (mano de obra)</label>
           <div className="mt-1 flex flex-wrap gap-1">

@@ -2508,6 +2508,17 @@ function ChecklistV3Row({ item, otId, planId }: {
           )}
         </div>
       </div>
+      {/* Profundidad por neumático registrada por el mecánico (MIG203) */}
+      {(item.mediciones?.length ?? 0) > 0 && (
+        <div className="mt-1 flex flex-wrap gap-1">
+          {(item.mediciones ?? []).map((m, i) => (
+            <span key={i} className={`rounded px-1.5 py-0.5 text-[9px] font-semibold ${
+              m.mm != null && m.mm < 3 ? 'bg-red-100 text-red-700' : 'bg-blue-50 text-blue-800 border border-blue-100'}`}>
+              {m.pos}: {m.mm ?? '—'} mm
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
