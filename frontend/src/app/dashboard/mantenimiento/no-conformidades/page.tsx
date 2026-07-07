@@ -73,11 +73,20 @@ export default function NoConformidadesPage() {
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2"><AlertTriangle className="h-6 w-6 text-orange-600" /> No Conformidades (Recepción)</h1>
-          <p className="text-sm text-muted-foreground">Nacen del checklist de recepción (y ad-hoc). Asigna recursos y planifícalas como trabajo correctivo.</p>
+          <p className="text-sm text-muted-foreground">
+            Llegan solas desde el taller (hallazgos NO OK del checklist) y desde la recepción de equipos.
+            Aquí validas insumos, emites el vale y las planificas como trabajo correctivo.
+          </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={() => setGenOpen(true)}><ClipboardList className="h-4 w-4 mr-1" /> Generar del checklist</Button>
-          <Button variant="outline" onClick={() => setAdhocOpen(true)}><PlusCircle className="h-4 w-4 mr-1" /> Registrar NC ad-hoc</Button>
+          <Button variant="outline" onClick={() => setGenOpen(true)}
+                  title="Convierte en NC los ítems malos de un checklist de recepción de equipo (cuando vuelve de arriendo)">
+            <ClipboardList className="h-4 w-4 mr-1" /> NC desde recepción de equipo
+          </Button>
+          <Button variant="outline" onClick={() => setAdhocOpen(true)}
+                  title="Registrar a mano un daño/falla detectado fuera de un checklist (foto obligatoria)">
+            <PlusCircle className="h-4 w-4 mr-1" /> NC manual (con foto)
+          </Button>
         </div>
       </div>
 
@@ -168,6 +177,9 @@ function InsumosOperadorNC({ nc }: { nc: NcRecepcion }) {
 
   const [cantidades, setCantidades] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState(false)
+  // Por defecto SOLO los insumos de este hallazgo (con 4 NC del mismo equipo se
+  // enreda); expandir muestra los de toda la OT (el vale es por OT).
+  const [verTodaLaOT, setVerTodaLaOT] = useState(false)
   // Agregar ítem
   const [agregarOpen, setAgregarOpen] = useState(false)
   const [q, setQ] = useState('')
@@ -189,8 +201,15 @@ function InsumosOperadorNC({ nc }: { nc: NcRecepcion }) {
     return () => clearTimeout(t)
   }, [q, prod])
 
+  // Insumos que nacen de ESTE hallazgo vs el resto de la OT
+  const delHallazgo = nc.checklist_item_ref
+    ? recursos.filter((r) => r.instance_item_id === nc.checklist_item_ref)
+    : recursos
+  const lista = verTodaLaOT ? recursos : delHallazgo
+  const otrosOT = recursos.length - delHallazgo.length
+
   const valeables = recursos.filter((r) => r.estado === 'aprobado' || r.estado === 'recibido').length
-  const pendientes = recursos.filter((r) => r.estado === 'solicitado').length
+  const pendientes = lista.filter((r) => r.estado === 'solicitado').length
 
   async function validar(r: OTRecurso, accion: 'aprobar' | 'rechazar') {
     setBusy(true)
@@ -257,11 +276,13 @@ function InsumosOperadorNC({ nc }: { nc: NcRecepcion }) {
         </div>
       </div>
 
-      {recursos.length === 0 ? (
-        <p className="text-[11px] text-gray-400">Sin insumos pedidos para esta OT todavía.</p>
+      {lista.length === 0 ? (
+        <p className="text-[11px] text-gray-400">
+          {recursos.length === 0 ? 'Sin insumos pedidos para esta OT todavía.' : 'Este hallazgo no tiene insumos pedidos.'}
+        </p>
       ) : (
         <div className="space-y-1.5">
-          {recursos.map((r) => {
+          {lista.map((r) => {
             const chip = RECURSO_ESTADO_LABEL[r.estado]
             const deEsteHallazgo = !!nc.checklist_item_ref && r.instance_item_id === nc.checklist_item_ref
             return (
@@ -269,7 +290,7 @@ function InsumosOperadorNC({ nc }: { nc: NcRecepcion }) {
                 <div className="flex flex-wrap items-center gap-2 text-xs">
                   <span className="flex-1 font-medium text-gray-800">
                     {r.producto_nombre ?? r.descripcion}
-                    {deEsteHallazgo && (
+                    {verTodaLaOT && deEsteHallazgo && (
                       <span className="ml-1 rounded bg-red-100 px-1 py-0.5 text-[9px] font-semibold text-red-700">este hallazgo</span>
                     )}
                   </span>
@@ -351,9 +372,18 @@ function InsumosOperadorNC({ nc }: { nc: NcRecepcion }) {
         </div>
       )}
 
+      {nc.checklist_item_ref && otrosOT > 0 && (
+        <button type="button" onClick={() => setVerTodaLaOT((v) => !v)}
+                className="mt-1.5 text-[11px] font-medium text-orange-700 hover:underline">
+          {verTodaLaOT
+            ? 'Ver solo este hallazgo'
+            : `Ver los ${otrosOT} insumos de las otras NC de esta OT (el vale los incluye a todos)`}
+        </button>
+      )}
       <p className="mt-1.5 text-[10px] text-gray-500">
-        Aprueba/ajusta y emite el vale aquí mismo. Si un insumo aprobado no tiene stock, sigue en
-        Bodega → Seguimiento repuestos (solicitud de OC) y vuelve como «Recibido» para el vale.
+        Aprueba/ajusta y emite el vale aquí mismo (el vale es UNO por OT e incluye todo lo aprobado
+        del equipo). Si un insumo aprobado no tiene stock, sigue en Bodega → Seguimiento repuestos
+        (solicitud de OC) y vuelve como «Recibido» para el vale.
       </p>
 
       {valeOpen && (
