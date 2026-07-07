@@ -25,6 +25,18 @@ import {
 
 type Tab = 'emitir' | 'despachar' | 'historial'
 
+// El QR del vale es un LINK: cualquier cámara de teléfono lo abre en esta
+// página con el ticket cargado para despachar (MIG205).
+function urlDespachoTicket(folio: string): string {
+  return `${typeof window !== 'undefined' ? window.location.origin : ''}/dashboard/bodega/tickets?folio=${folio}`
+}
+
+/** Extrae el folio TKT-… de lo escaneado (texto plano, SICOM-… o URL). */
+function extraerFolio(raw: string): string {
+  const m = raw.toUpperCase().match(/TKT-\d{6}-\d{5}/)
+  return m ? m[0] : raw.trim().toUpperCase().replace(/^SICOM-/, '')
+}
+
 function QrImg({ value, size = 180 }: { value: string; size?: number }) {
   const [url, setUrl] = useState('')
   useEffect(() => { QRCode.toDataURL(value, { width: size, margin: 1 }).then(setUrl).catch(() => {}) }, [value, size])
@@ -45,6 +57,12 @@ function estadoBadge(e: string) {
 export default function BodegaTicketsPage() {
   useRequireAuth()
   const [tab, setTab] = useState<Tab>('emitir')
+
+  // Llegada por QR (?folio=TKT-…): directo a Despachar con el ticket cargado.
+  useEffect(() => {
+    const f = new URLSearchParams(window.location.search).get('folio')
+    if (f) setTab('despachar')
+  }, [])
 
   return (
     <div className="pb-16">
@@ -145,8 +163,11 @@ function EmitirTab() {
       {resultado && (
         <Modal open onClose={() => setResultado(null)} title={`Ticket ${resultado.folio}`}>
           <div className="flex flex-col items-center gap-3 py-2 print-area">
-            <div className="text-sm text-gray-600">Entrega este ticket al ejecutor. El bodeguero lo escanea para despachar.</div>
-            <QrImg value={resultado.qr} />
+            <div className="text-sm text-gray-600">
+              Entrega este ticket al ejecutor. Cualquier teléfono que escanee el QR abre el
+              despacho con el ticket cargado.
+            </div>
+            <QrImg value={urlDespachoTicket(resultado.folio)} />
             <div className="font-mono text-lg font-bold">{resultado.folio}</div>
           </div>
           <ModalFooter>
@@ -190,7 +211,7 @@ function DespacharTab() {
   }, [bodegas, bodegaId])
 
   async function buscar(f: string) {
-    const limpio = f.trim().toUpperCase().replace(/^SICOM-/, '')
+    const limpio = extraerFolio(f)
     if (!limpio) return
     setBuscando(true)
     try {
@@ -199,6 +220,13 @@ function DespacharTab() {
       else { setTicket(t); setCant({}); setResultado(null) }
     } catch (e) { toast.error((e as Error).message) } finally { setBuscando(false) }
   }
+
+  // Llegada por QR (?folio=…): cargar el ticket al tiro.
+  useEffect(() => {
+    const f = new URLSearchParams(window.location.search).get('folio')
+    if (f) { setFolio(extraerFolio(f)); void buscar(f) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const usable = ticket && ticket.estado !== 'entregado' && ticket.estado !== 'anulado'
 
@@ -238,7 +266,7 @@ function DespacharTab() {
       {scan && (
         <div className="rounded-lg border p-2">
           <BarcodeScanner active={scan} onClose={() => setScan(false)}
-                          onScan={(code) => { setScan(false); setFolio(code.replace(/^SICOM-/, '')); buscar(code) }} />
+                          onScan={(code) => { setScan(false); setFolio(extraerFolio(code)); buscar(code) }} />
           <Button variant="ghost" size="sm" className="mt-2" onClick={() => setScan(false)}><X className="h-4 w-4 mr-1" /> Cerrar cámara</Button>
         </div>
       )}
