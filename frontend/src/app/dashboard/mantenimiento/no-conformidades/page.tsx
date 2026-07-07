@@ -107,6 +107,11 @@ export default function NoConformidadesPage() {
                     {nc.grupo_trabajo || nc.horas_estimadas || nc.n_materiales > 0
                       ? `${nc.grupo_trabajo ?? '—'}${nc.horas_estimadas ? ` · ${nc.horas_estimadas}h` : ''}${nc.tiempo_estimado_dias ? ` · ${nc.tiempo_estimado_dias}d` : ''}${nc.n_materiales ? ` · ${nc.n_materiales} mat.` : ''}`
                       : <span className="text-amber-600">sin asignar</span>}
+                    {nc.n_recursos_operador > 0 && (
+                      <span className="ml-1.5 rounded bg-orange-100 px-1.5 py-0.5 text-[10px] font-semibold text-orange-700 whitespace-nowrap">
+                        {nc.n_recursos_operador} insumo{nc.n_recursos_operador > 1 ? 's' : ''} pedido{nc.n_recursos_operador > 1 ? 's' : ''} por operador
+                      </span>
+                    )}
                   </td>
                   <td className="p-2 text-center"><Badge variant={(ESTADO_BADGE[nc.estado_planificacion]?.v) ?? 'default'} className="text-[10px]">{ESTADO_BADGE[nc.estado_planificacion]?.t ?? nc.estado_planificacion}</Badge></td>
                   <td className="p-2 whitespace-nowrap text-right">

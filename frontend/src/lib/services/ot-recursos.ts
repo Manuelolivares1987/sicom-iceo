@@ -9,6 +9,8 @@ export type OTRecurso = {
   client_uuid: string | null
   ot_id: string
   producto_id: string | null
+  /** Ítem NO OK del checklist que motivó el pedido (enlaza con la NC). MIG199. */
+  instance_item_id: string | null
   descripcion: string | null
   unidad: string | null
   cantidad: number
@@ -51,6 +53,7 @@ export async function solicitarRecurso(params: {
   solicitadoNombre?: string | null
   clientUuid?: string | null
   fotos?: string[] | null
+  instanceItemId?: string | null
 }) {
   const { data, error } = await supabase.rpc('rpc_ot_recurso_solicitar', {
     p_ot_id: params.otId, p_cantidad: params.cantidad,
@@ -59,6 +62,7 @@ export async function solicitarRecurso(params: {
     p_solicitado_nombre: params.solicitadoNombre ?? null,
     p_client_uuid: params.clientUuid ?? null,
     p_fotos: params.fotos && params.fotos.length > 0 ? params.fotos : null,
+    p_instance_item_id: params.instanceItemId ?? null,
   })
   if (error) throw error
   return data as { success: boolean; recurso_id: string; duplicado?: boolean }

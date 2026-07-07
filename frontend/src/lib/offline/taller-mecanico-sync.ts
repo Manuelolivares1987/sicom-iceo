@@ -143,6 +143,7 @@ export async function getRecursosMecanico(otId: string): Promise<OTRecurso[]> {
     }
     return {
       id: p.client_uuid, client_uuid: p.client_uuid, ot_id: otId,
+      instance_item_id: p.instance_item_id ?? null,
       producto_id: p.producto_id ?? null,
       descripcion: p.descripcion ?? p.producto_nombre ?? null,
       unidad: p.unidad ?? null,
@@ -175,6 +176,7 @@ export async function queueRecurso(params: {
   comentario?: string | null
   solicitadoNombre?: string | null
   fotos?: (File | Blob)[]
+  instanceItemId?: string | null
 }): Promise<void> {
   const db = tallerDB()
   const fotosIds: string[] = []
@@ -185,6 +187,7 @@ export async function queueRecurso(params: {
   }
   const row: TallerPending = {
     local_id: newId(), client_uuid: newId(), ot_id: params.otId, kind: 'recurso',
+    instance_item_id: params.instanceItemId ?? undefined,
     producto_id: params.productoId ?? null,
     producto_nombre: params.productoNombre ?? null,
     descripcion: params.descripcion ?? null,
@@ -310,6 +313,7 @@ export async function syncTallerPending(): Promise<{ ok: number; failed: number 
           solicitadoNombre: p.solicitado_nombre,
           clientUuid: p.client_uuid,   // idempotente: reintentos no duplican
           fotos: fotosUrls.length ? fotosUrls : null,
+          instanceItemId: p.instance_item_id ?? null,
         })
         for (const bid of p.fotos_blob_ids ?? []) await db.blobs.delete(bid)
       } else if (p.accion === 'finalizar') {

@@ -23,6 +23,11 @@ export type NcRecepcion = {
   resuelto: boolean
   n_materiales: number
   created_at: string
+  ot_id: string | null
+  foto_url: string | null
+  checklist_item_ref: string | null
+  /** Insumos que el operador pidió desde el hallazgo NO OK (MIG199). */
+  n_recursos_operador: number
 }
 
 export type NcMaterial = { descripcion?: string | null; producto_id?: string | null; cantidad: number; comentario?: string | null }

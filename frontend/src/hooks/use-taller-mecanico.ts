@@ -93,7 +93,7 @@ export function useSolicitarRecurso(otId: string) {
       productoId?: string | null; productoNombre?: string | null
       descripcion?: string | null; unidad?: string | null
       cantidad: number; comentario?: string | null; solicitadoNombre?: string | null
-      fotos?: (File | Blob)[]
+      fotos?: (File | Blob)[]; instanceItemId?: string | null
     }) => queueRecurso({ otId, ...p }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: keyRecursos(otId) })

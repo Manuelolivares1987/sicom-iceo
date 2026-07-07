@@ -64,8 +64,14 @@ function ResultRadio({ value, disabled, onChange }: {
 
 type ProductoLite = { id: string; codigo: string | null; nombre: string; unidad_medida: string | null }
 
+export type RecursoPrefill = { instanceItemId: string; texto: string }
+
 // Repuestos y materiales que el mecánico pide para reparar (los valida el jefe).
-function RecursosSection({ otId, online }: { otId: string; online: boolean }) {
+function RecursosSection({ otId, online, prefill, onPrefillConsumido }: {
+  otId: string; online: boolean
+  prefill?: RecursoPrefill | null
+  onPrefillConsumido?: () => void
+}) {
   const { data: recursos } = useRecursosOT(otId)
   const solicitar = useSolicitarRecurso(otId)
   const [abierto, setAbierto] = useState(false)
@@ -74,6 +80,21 @@ function RecursosSection({ otId, online }: { otId: string; online: boolean }) {
   const [prod, setProd] = useState<ProductoLite | null>(null)
   const [cantidad, setCantidad] = useState('')
   const [comentario, setComentario] = useState('')
+  // Hallazgo NO OK que motiva el pedido (amarra el pedido a la NC)
+  const [itemRef, setItemRef] = useState<string | null>(null)
+  const [itemTexto, setItemTexto] = useState('')
+  const seccionRef = useRef<HTMLDivElement | null>(null)
+
+  // "Pedir repuesto" desde un ítem NO OK: abre el formulario amarrado al hallazgo.
+  useEffect(() => {
+    if (!prefill) return
+    setAbierto(true)
+    setItemRef(prefill.instanceItemId)
+    setItemTexto(prefill.texto)
+    seccionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    onPrefillConsumido?.()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefill])
   // Fotos del repuesto (clave cuando la pieza no existe en bodega y hay que comprarla)
   const [fotos, setFotos] = useState<{ file: File; url: string }[]>([])
   const fotoRef = useRef<HTMLInputElement | null>(null)
@@ -108,13 +129,15 @@ function RecursosSection({ otId, online }: { otId: string; online: boolean }) {
       descripcion: prod ? null : q.trim(),
       unidad: prod?.unidad_medida ?? null,
       cantidad: Number(cantidad),
-      comentario: comentario.trim() || null,
+      comentario: comentario.trim() || (itemTexto ? `Hallazgo: ${itemTexto}` : null),
       solicitadoNombre: nombre,
       fotos: fotos.map((f) => f.file),
+      instanceItemId: itemRef,
     }, {
       onSuccess: () => {
         fotos.forEach((f) => URL.revokeObjectURL(f.url))
-        setQ(''); setProd(null); setCantidad(''); setComentario(''); setFotos([]); setAbierto(false)
+        setQ(''); setProd(null); setCantidad(''); setComentario(''); setFotos([])
+        setItemRef(null); setItemTexto(''); setAbierto(false)
       },
     })
   }
@@ -122,7 +145,7 @@ function RecursosSection({ otId, online }: { otId: string; online: boolean }) {
   const lista = recursos ?? []
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-3">
+    <div ref={seccionRef} className="rounded-xl border border-gray-200 bg-white p-3">
       <div className="flex items-center justify-between">
         <h2 className="flex items-center gap-1.5 text-sm font-semibold text-gray-800">
           <Package className="h-4 w-4 text-orange-600" /> Repuestos y materiales
@@ -177,6 +200,15 @@ function RecursosSection({ otId, online }: { otId: string; online: boolean }) {
 
       {abierto && (
         <div className="mt-3 space-y-2 border-t border-gray-100 pt-3">
+          {itemRef && (
+            <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-2 text-[11px] text-amber-800">
+              <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+              <span className="flex-1">Pedido por hallazgo NO OK: <b>{itemTexto}</b></span>
+              <button onClick={() => { setItemRef(null); setItemTexto('') }} className="text-amber-700">
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
           {prod ? (
             <div className="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-2.5 py-2 text-xs">
               <span className="flex-1 font-medium text-green-800">{prod.nombre}</span>
@@ -289,11 +321,19 @@ export default function MecanicoOTPage() {
   const total = visibles.length
   const hechos = visibles.filter((i) => i.resultado && i.resultado !== 'pendiente').length
   const pendientesOblig = visibles.filter((i) => i.obligatorio && (!i.resultado || i.resultado === 'pendiente')).length
+  // Hallazgos NO OK sin foto: bloquean pausar/finalizar (la NC nace con foto).
+  const noOkSinFoto = visibles.filter((i) => i.resultado === 'no_ok' && !i.foto_url).length
+  const [warnFoto, setWarnFoto] = useState(false)
+  const [prefillRecurso, setPrefillRecurso] = useState<RecursoPrefill | null>(null)
 
   function doTiming(accion: 'iniciar' | 'pausar') {
+    if (accion === 'pausar' && noOkSinFoto > 0) { setWarnFoto(true); return }
+    setWarnFoto(false)
     timing.mutate({ accion, userId })
   }
   function abrirFinalizar() {
+    if (noOkSinFoto > 0) { setWarnFoto(true); return }
+    setWarnFoto(false)
     if (pendientesOblig > 0 && !confirm(`Quedan ${pendientesOblig} tareas obligatorias sin marcar. ¿Finalizar igual?`)) return
     setFirma(''); setConObs(false); setObsFin(''); setFinalizar(true)
   }
@@ -370,6 +410,12 @@ export default function MecanicoOTPage() {
           </button>
         )}
       </div>
+      {warnFoto && noOkSinFoto > 0 && (
+        <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
+          Hay {noOkSinFoto} hallazgo{noOkSinFoto > 1 ? 's' : ''} NO OK sin foto. Saca la foto de cada
+          hallazgo antes de pausar o finalizar — la No Conformidad se reporta con esa foto.
+        </p>
+      )}
       {timing.isError && (
         <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
           No se pudo registrar la acción: {(timing.error as Error).message}
@@ -381,7 +427,8 @@ export default function MecanicoOTPage() {
       </p>
 
       {/* Repuestos y materiales para reparar (los valida el jefe) */}
-      <RecursosSection otId={otId} online={online} />
+      <RecursosSection otId={otId} online={online}
+                       prefill={prefillRecurso} onPrefillConsumido={() => setPrefillRecurso(null)} />
 
       {/* Checklist */}
       {isLoading ? (
@@ -410,6 +457,26 @@ export default function MecanicoOTPage() {
                   </div>
 
                   <div className="mt-2"><ResultRadio value={it.resultado} onChange={(v) => setResultado(it, v)} /></div>
+
+                  {/* Hallazgo NO OK: foto obligatoria + pedir repuesto ahí mismo */}
+                  {it.resultado === 'no_ok' && (
+                    <div className="mt-2 flex items-center gap-2">
+                      {!it.foto_url ? (
+                        <button onClick={() => fileRefs.current[it.instance_item_id]?.click()}
+                                className="flex items-center gap-1 rounded-lg border border-red-300 bg-red-50 px-2 py-1.5 text-[11px] font-semibold text-red-700">
+                          <Camera className="h-3.5 w-3.5" /> Foto obligatoria
+                        </button>
+                      ) : (
+                        <span className="flex items-center gap-1 text-[11px] text-green-700">
+                          <Check className="h-3.5 w-3.5" /> Foto del hallazgo OK
+                        </span>
+                      )}
+                      <button onClick={() => setPrefillRecurso({ instanceItemId: it.instance_item_id, texto: it.descripcion })}
+                              className="flex items-center gap-1 rounded-lg border border-orange-300 bg-orange-50 px-2 py-1.5 text-[11px] font-semibold text-orange-700">
+                        <Package className="h-3.5 w-3.5" /> Pedir repuesto
+                      </button>
+                    </div>
+                  )}
 
                   {it.foto_url && (
                     <div className="mt-2">
