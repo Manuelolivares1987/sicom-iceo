@@ -14,6 +14,7 @@ export type OTRecurso = {
   cantidad: number
   cantidad_aprobada: number | null
   comentario: string | null
+  fotos: string[] | null
   estado: OTRecursoEstado
   solicitado_por: string | null
   solicitado_nombre: string | null
@@ -49,6 +50,7 @@ export async function solicitarRecurso(params: {
   comentario?: string | null
   solicitadoNombre?: string | null
   clientUuid?: string | null
+  fotos?: string[] | null
 }) {
   const { data, error } = await supabase.rpc('rpc_ot_recurso_solicitar', {
     p_ot_id: params.otId, p_cantidad: params.cantidad,
@@ -56,9 +58,22 @@ export async function solicitarRecurso(params: {
     p_unidad: params.unidad ?? null, p_comentario: params.comentario ?? null,
     p_solicitado_nombre: params.solicitadoNombre ?? null,
     p_client_uuid: params.clientUuid ?? null,
+    p_fotos: params.fotos && params.fotos.length > 0 ? params.fotos : null,
   })
   if (error) throw error
   return data as { success: boolean; recurso_id: string; duplicado?: boolean }
+}
+
+/** Sube una foto del repuesto solicitado (mismo bucket de evidencias del checklist). */
+export async function subirFotoRecurso(otId: string, file: File | Blob): Promise<string> {
+  const BUCKET = 'evidencias-verificacion'
+  const ext = (file as File).name?.split('.').pop()?.toLowerCase() ?? 'jpg'
+  const path = `ot-recursos/${otId}/${Date.now()}_${Math.floor(Math.random() * 1e6)}.${ext}`
+  const { error } = await supabase.storage
+    .from(BUCKET)
+    .upload(path, file, { upsert: false, contentType: (file as File).type || 'image/jpeg' })
+  if (error) throw error
+  return supabase.storage.from(BUCKET).getPublicUrl(path).data.publicUrl
 }
 
 export async function validarRecurso(params: {

@@ -2295,6 +2295,17 @@ function RecursosJefeSection({ otId, otFolio }: { otId: string | null; otFolio: 
                   )}
                 </div>
                 {r.nota_jefe && <p className="mt-0.5 text-[10px] italic text-gray-500">Nota: «{r.nota_jefe}»</p>}
+                {(r.fotos?.length ?? 0) > 0 && (
+                  <div className="mt-1.5 flex gap-1.5">
+                    {(r.fotos ?? []).map((url, i) => (
+                      <a key={i} href={url} target="_blank" rel="noreferrer">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={url} alt={`foto ${i + 1}`}
+                             className="h-14 w-14 rounded-lg border object-cover hover:opacity-80" />
+                      </a>
+                    ))}
+                  </div>
+                )}
               </div>
             )
           })}

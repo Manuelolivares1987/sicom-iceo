@@ -36,6 +36,7 @@ export type TallerPending = {
   cantidad?: number
   comentario?: string | null
   solicitado_nombre?: string | null
+  fotos_blob_ids?: string[]        // fotos del repuesto pendientes de subir (MIG198)
   // control
   sync_status: 'pending' | 'error'
   retries: number
