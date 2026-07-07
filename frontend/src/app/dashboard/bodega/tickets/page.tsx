@@ -355,6 +355,10 @@ function HistorialTab() {
                   OT {t.ot_folio} · {t.n_entregados}/{t.n_items} ítems · emitió {t.emitido_por_nombre ?? '—'}
                 </div>
               </div>
+              <Button variant="outline" size="sm" title="Vale imprimible para el retiro"
+                      onClick={() => window.open(`/vale/${t.id}`, '_blank')}>
+                Imprimir
+              </Button>
               {(t.estado === 'emitido' || t.estado === 'parcial') && (
                 <Button variant="ghost" size="sm"
                         onClick={() => { if (confirm(`¿Anular ticket ${t.folio}?`)) anular.mutate({ ticketId: t.id }) }}>

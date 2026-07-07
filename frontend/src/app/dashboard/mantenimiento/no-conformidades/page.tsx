@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  AlertTriangle, ClipboardList, Wrench, PlusCircle, Trash2, CheckCircle2, Loader2, Package,
+  AlertTriangle, ClipboardList, Wrench, PlusCircle, Trash2, CheckCircle2, Loader2, Package, Ticket, Printer,
 } from 'lucide-react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -19,7 +19,8 @@ import {
 import { getProductos } from '@/lib/services/inventario'
 import {
   getRecursosPorHallazgo, getRecursosOT, validarRecurso, agregarRecursoJefe,
-  RECURSO_ESTADO_LABEL, type OTRecurso,
+  getSeguimientoRecursos,
+  RECURSO_ESTADO_LABEL, type OTRecurso, type OTRecursoSeguimiento,
 } from '@/lib/services/ot-recursos'
 import { buscarProductos } from '@/lib/services/ot-materiales'
 import { subirFirmaTicket, crearTicket } from '@/lib/services/bodega-tickets'
@@ -48,7 +49,28 @@ export default function NoConformidadesPage() {
   const [recursosNc, setRecursosNc] = useState<NcRecepcion | null>(null)
   const [genOpen, setGenOpen] = useState(false)
   const [adhocOpen, setAdhocOpen] = useState(false)
+  const [valeOpen, setValeOpen] = useState(false)
   const [busyId, setBusyId] = useState<string | null>(null)
+
+  // Equipos con insumos aprobados/recibidos listos para vale (botón grande)
+  const { data: seguimiento = [] } = useQuery({
+    queryKey: ['vale-equipos-listos'],
+    queryFn: getSeguimientoRecursos,
+    staleTime: 20_000,
+  })
+  const equiposListos = useMemo(() => {
+    const m = new Map<string, { otId: string; otFolio: string; patente: string; nombre: string | null; items: OTRecursoSeguimiento[] }>()
+    for (const f of seguimiento) {
+      if (f.estado !== 'aprobado' && f.estado !== 'recibido') continue
+      const g = m.get(f.ot_id) ?? {
+        otId: f.ot_id, otFolio: f.ot_folio,
+        patente: f.activo_patente ?? f.activo_codigo ?? '—', nombre: f.activo_nombre, items: [],
+      }
+      g.items.push(f)
+      m.set(f.ot_id, g)
+    }
+    return Array.from(m.values())
+  }, [seguimiento])
 
   const invalidar = () => qc.invalidateQueries({ queryKey: ['nc-recepcion'] })
 
@@ -78,7 +100,7 @@ export default function NoConformidadesPage() {
             Aquí validas insumos, emites el vale y las planificas como trabajo correctivo.
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" onClick={() => setGenOpen(true)}
                   title="Convierte en NC los ítems malos de un checklist de recepción de equipo (cuando vuelve de arriendo)">
             <ClipboardList className="h-4 w-4 mr-1" /> NC desde recepción de equipo
@@ -86,6 +108,11 @@ export default function NoConformidadesPage() {
           <Button variant="outline" onClick={() => setAdhocOpen(true)}
                   title="Registrar a mano un daño/falla detectado fuera de un checklist (foto obligatoria)">
             <PlusCircle className="h-4 w-4 mr-1" /> NC manual (con foto)
+          </Button>
+          <Button onClick={() => setValeOpen(true)} disabled={equiposListos.length === 0}
+                  className="bg-orange-600 hover:bg-orange-700 text-white font-bold px-5"
+                  title="Elegir la patente, revisar lo aprobado y emitir el vale de bodega (llega a bodega y se imprime para el retiro)">
+            <Ticket className="h-5 w-5 mr-1.5" /> Vale para bodega{equiposListos.length > 0 ? ` (${equiposListos.length})` : ''}
           </Button>
         </div>
       </div>
@@ -150,12 +177,133 @@ export default function NoConformidadesPage() {
       {recursosNc && <AsignarRecursosModal nc={recursosNc} onClose={() => setRecursosNc(null)} onDone={() => { setRecursosNc(null); invalidar() }} />}
       {genOpen && <GenerarDesdeRecepcionModal onClose={() => setGenOpen(false)} onDone={() => { setGenOpen(false); invalidar() }} />}
       {adhocOpen && <RegistrarNcModal onClose={() => setAdhocOpen(false)} onDone={() => { setAdhocOpen(false); invalidar() }} />}
+      {valeOpen && (
+        <ValeBodegaModal equipos={equiposListos}
+                         onClose={() => setValeOpen(false)}
+                         onDone={() => {
+                           setValeOpen(false)
+                           qc.invalidateQueries({ queryKey: ['vale-equipos-listos'] })
+                           qc.invalidateQueries({ queryKey: ['nc-insumos-operador'] })
+                         }} />
+      )}
     </div>
   )
 }
 
 function Kpi({ label, value, warn }: { label: string; value: number; warn?: boolean }) {
   return <Card><CardContent className="p-3"><div className="text-xs text-muted-foreground">{label}</div><div className={cn('text-2xl font-bold', warn && 'text-amber-600')}>{value}</div></CardContent></Card>
+}
+
+// Botón grande "Vale para bodega" (MIG205): elegir la patente, revisar todo lo
+// aprobado del equipo, firmar y emitir. Bodega recibe la campanita y el vale
+// queda imprimible para que el operador retire.
+type EquipoVale = { otId: string; otFolio: string; patente: string; nombre: string | null; items: OTRecursoSeguimiento[] }
+
+function ValeBodegaModal({ equipos, onClose, onDone }: {
+  equipos: EquipoVale[]; onClose: () => void; onDone: () => void
+}) {
+  const toast = useToast()
+  const [sel, setSel] = useState<EquipoVale | null>(equipos.length === 1 ? equipos[0] : null)
+  const [firma, setFirma] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [emitido, setEmitido] = useState<{ folio: string; ticketId: string; items: number } | null>(null)
+
+  async function emitir() {
+    if (!firma || !sel) return
+    setBusy(true)
+    try {
+      const url = await subirFirmaTicket(firma, 'vale-nc')
+      const r = await crearTicket({ otId: sel.otId, firmaJefeUrl: url })
+      setEmitido({ folio: r.folio, ticketId: r.ticket_id, items: r.items })
+      toast.success(`Vale ${r.folio} emitido — bodega ya recibió la solicitud`)
+    } catch (e) { toast.error((e as Error).message) } finally { setBusy(false) }
+  }
+
+  // Pantalla de éxito: imprimir para el retiro
+  if (emitido) {
+    return (
+      <Modal open onClose={() => { onDone() }} title={`Vale ${emitido.folio} emitido ✓`}>
+        <div className="space-y-3 text-center py-2">
+          <CheckCircle2 className="mx-auto h-12 w-12 text-green-600" />
+          <p className="text-sm text-gray-700">
+            {emitido.items} ítem{emitido.items !== 1 ? 's' : ''} para <b>{sel?.patente}</b>. Bodega ya
+            recibió la solicitud por campanita. Imprime el vale y entrégaselo al operador para el retiro.
+          </p>
+          <Button onClick={() => window.open(`/vale/${emitido.ticketId}`, '_blank')} className="w-full bg-[#0b2a4a]">
+            <Printer className="h-4 w-4 mr-1.5" /> Imprimir vale
+          </Button>
+        </div>
+        <ModalFooter>
+          <Button variant="outline" onClick={() => { onDone() }}>Cerrar</Button>
+        </ModalFooter>
+      </Modal>
+    )
+  }
+
+  return (
+    <Modal open onClose={onClose} title="Vale para bodega">
+      <div className="space-y-3">
+        {equipos.length === 0 ? (
+          <p className="py-4 text-center text-sm text-gray-500">
+            No hay insumos aprobados pendientes de vale. Aprueba primero los pedidos en cada NC.
+          </p>
+        ) : (
+          <>
+            <div>
+              <label className="text-xs font-medium">1. Elige la patente / equipo</label>
+              <div className="mt-1 grid gap-1.5">
+                {equipos.map((e) => (
+                  <button key={e.otId} type="button" onClick={() => setSel(e)}
+                          className={`flex items-center gap-3 rounded-lg border px-3 py-2 text-left ${
+                            sel?.otId === e.otId ? 'border-orange-500 bg-orange-50' : 'border-gray-200 bg-white hover:bg-gray-50'}`}>
+                    <span className="text-base font-bold text-gray-800">{e.patente}</span>
+                    <span className="flex-1 text-xs text-gray-500">{e.nombre} · {e.otFolio}</span>
+                    <span className="rounded-full bg-green-100 px-2 py-0.5 text-[11px] font-semibold text-green-700">
+                      {e.items.length} ítem{e.items.length !== 1 ? 's' : ''}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {sel && (
+              <>
+                <div>
+                  <label className="text-xs font-medium">2. Lo que se está pidiendo</label>
+                  <div className="mt-1 max-h-44 space-y-1 overflow-y-auto rounded-lg border border-gray-100 bg-gray-50 p-2">
+                    {sel.items.map((r) => (
+                      <div key={r.id} className="flex items-center gap-2 rounded border border-gray-100 bg-white px-2 py-1.5 text-xs">
+                        <span className="flex-1 font-medium text-gray-800">{r.producto_nombre ?? r.descripcion}</span>
+                        <span className="text-gray-600 whitespace-nowrap">{r.cantidad_aprobada ?? r.cantidad} {r.unidad ?? 'un'}</span>
+                        {r.estado === 'recibido' && (
+                          <span className="rounded-full bg-teal-100 px-1.5 py-0.5 text-[10px] font-medium text-teal-700">recibido</span>
+                        )}
+                        {r.solicitado_nombre && <span className="text-[10px] text-gray-400">{r.solicitado_nombre}</span>}
+                      </div>
+                    ))}
+                  </div>
+                  <p className="mt-1 text-[10px] text-gray-500">
+                    Se incluyen también los materiales de NC pendientes de este equipo, si los hay.
+                  </p>
+                </div>
+                <div>
+                  <label className="text-xs font-medium">3. Firma y emite</label>
+                  <SignaturePad label="Firma del jefe de taller (obligatoria)" onCapture={setFirma} />
+                </div>
+              </>
+            )}
+          </>
+        )}
+      </div>
+      <ModalFooter>
+        <Button variant="outline" onClick={onClose} disabled={busy}>Cancelar</Button>
+        <Button disabled={!sel || !firma || busy} onClick={emitir} className="bg-orange-600 hover:bg-orange-700">
+          {busy ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Ticket className="h-4 w-4 mr-1" />}
+          Emitir vale{sel ? ` — ${sel.patente}` : ''}
+        </Button>
+      </ModalFooter>
+    </Modal>
+  )
 }
 
 // Gestión COMPLETA de los insumos del taller desde la NC (MIG204): aprobar /
@@ -245,7 +393,8 @@ function InsumosOperadorNC({ nc }: { nc: NcRecepcion }) {
     try {
       const url = await subirFirmaTicket(firma, 'vale-nc')
       const r = await crearTicket({ otId: nc.ot_id, firmaJefeUrl: url })
-      toast.success(`Vale ${r.folio} emitido (${r.items} ítems) — bodega lo despacha con el QR`)
+      toast.success(`Vale ${r.folio} emitido (${r.items} ítems) — bodega ya recibió la solicitud`)
+      window.open(`/vale/${r.ticket_id}`, '_blank')  // imprimible para el retiro
       setValeOpen(false); setFirma('')
       invalidar()
     } catch (e) { toast.error((e as Error).message) } finally { setBusy(false) }
