@@ -2,6 +2,7 @@
 
 import { useRequireAuth } from '@/hooks/use-require-auth'
 import { Spinner } from '@/components/ui/spinner'
+import SugerenciaWidget from '@/components/sugerencias/sugerencia-widget'
 
 export default function MobileTallerLayout({ children }: { children: React.ReactNode }) {
   const { loading } = useRequireAuth()
@@ -17,6 +18,8 @@ export default function MobileTallerLayout({ children }: { children: React.React
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="mx-auto max-w-md sm:max-w-lg pb-24">{children}</div>
+      {/* Ampolleta de sugerencias: el operador reporta errores/mejoras al instante */}
+      <SugerenciaWidget />
     </div>
   )
 }
