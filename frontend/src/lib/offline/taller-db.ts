@@ -51,6 +51,7 @@ export type TallerPlanPending = {
   // kind = 'asignar' / 'editar'
   responsable_id?: string | null
   responsable_nombre?: string | null
+  tecnico_id?: string | null
   cuadrilla?: string | null
   horas?: number | null
   avance_objetivo?: number | null

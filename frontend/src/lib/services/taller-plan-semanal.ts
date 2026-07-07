@@ -454,9 +454,12 @@ export async function rpcAsignarResponsable(planOtId: string, responsableId: str
 
 // Editar la jornada completa (jefe de taller): responsable, cuadrilla, horas,
 // meta de avance y observaciones. El responsable se sincroniza con la OT.
+// tecnicoId = técnico del catálogo (taller_tecnicos); la BD deriva el
+// responsable_id de su cuenta vinculada si la tiene (MIG194).
 export async function rpcEditarJornada(params: {
   planOtId: string
   responsableId?: string | null
+  tecnicoId?: string | null
   cuadrilla?: string | null
   horasPlanificadas?: number | null
   avanceObjetivo?: number | null
@@ -466,6 +469,7 @@ export async function rpcEditarJornada(params: {
   const { data, error } = await supabase.rpc('rpc_taller_editar_jornada', {
     p_plan_ot_id: params.planOtId,
     p_responsable_id: params.responsableId ?? null,
+    p_tecnico_id: params.tecnicoId ?? null,
     p_cuadrilla: params.cuadrilla ?? null,
     p_horas_planificadas: params.horasPlanificadas ?? null,
     p_avance_objetivo: params.avanceObjetivo ?? null,

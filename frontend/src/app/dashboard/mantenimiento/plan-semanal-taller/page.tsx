@@ -28,7 +28,7 @@ import {
   useAsignarResponsableTaller, useConfirmarPlanSemanalTaller,
   useIniciarEjecucionTaller, usePausarEjecucionTaller, useFinalizarEjecucionTaller,
   useAdminSembrarPlanesFaltantes,
-  useEditarJornadaTaller, useUsuariosAsignablesTaller,
+  useEditarJornadaTaller,
   useChecklistV3Taller, useV3SetTiempoTaller, useV3SetExcluidoTaller,
   useV3AgregarItemTaller, useV3EliminarCustomTaller,
   useTallerTecnicos, useAgregarTareaLibreTaller,
@@ -1940,7 +1940,6 @@ function JornadaDetalleModal({ jornada, planId, onClose }: {
   onClose: () => void
 }) {
   const toast = useToast()
-  const { data: usuarios } = useUsuariosAsignablesTaller()
   const { data: tecnicos } = useTallerTecnicos(jornada.operacion)
   const editar = useEditarJornadaTaller(planId)
   const { data: checklist, isLoading: loadCl } = useChecklistV3Taller(jornada.ot_id)
@@ -1949,7 +1948,18 @@ function JornadaDetalleModal({ jornada, planId, onClose }: {
   const mecIniciales = (jornada.cuadrilla ?? '').split(',').map((s) => s.trim())
     .filter(Boolean).slice(0, MAX_MECANICOS)
   const [mecanicos, setMecanicos] = useState<string[]>(mecIniciales)
-  const [responsableId, setResponsableId] = useState<string>(jornada.responsable_id ?? '')
+  // Responsable = técnico del catálogo de taller (mismo selector que el
+  // planificador, MIG194). Si la jornada aún no guarda tecnico_id, se muestra
+  // el primero de la cuadrilla que calce con el catálogo (planes antiguos).
+  const tecnicoDefault = useMemo(() => {
+    if (jornada.tecnico_id) return jornada.tecnico_id
+    const primero = (jornada.cuadrilla ?? '').split(',')[0]?.trim().toLowerCase()
+    if (!primero) return ''
+    return (tecnicos ?? []).find((t) => t.nombre.trim().toLowerCase() === primero)?.id ?? ''
+  }, [jornada.tecnico_id, jornada.cuadrilla, tecnicos])
+  const [tecnicoSel, setTecnicoSel] = useState<string | null>(null) // null = sin tocar
+  const tecnicoId = tecnicoSel ?? tecnicoDefault
+  const tecnicoCambia = tecnicoSel !== null && tecnicoSel !== (jornada.tecnico_id ?? '')
   const [horas, setHoras] = useState<string>(jornada.horas_planificadas != null ? String(jornada.horas_planificadas) : '')
   const [meta, setMeta] = useState<string>(jornada.avance_objetivo_pct != null ? String(jornada.avance_objetivo_pct) : '')
   const [obs, setObs] = useState<string>(jornada.observaciones ?? '')
@@ -1960,7 +1970,7 @@ function JornadaDetalleModal({ jornada, planId, onClose }: {
   // Control de cambios: si el plan está confirmado y cambia el personal, exigir motivo.
   const confirmado = jornada.plan_estado !== 'borrador'
   const personalCambia =
-    (responsableId !== (jornada.responsable_id ?? '')) ||
+    tecnicoCambia ||
     (mecanicos.join(', ') !== (jornada.cuadrilla ?? ''))
   const requiereMotivo = confirmado && personalCambia
 
@@ -1971,7 +1981,8 @@ function JornadaDetalleModal({ jornada, planId, onClose }: {
     }
     editar.mutate({
       planOtId: jornada.plan_ot_id,
-      responsableId: responsableId || null,
+      // Solo se envía si el usuario lo cambió (la RPC exige motivo con plan confirmado)
+      tecnicoId: tecnicoCambia ? (tecnicoId || null) : null,
       cuadrilla: mecanicos.join(', '),
       horasPlanificadas: horas ? Number(horas) : null,
       avanceObjetivo: meta ? Number(meta) : null,
@@ -2025,12 +2036,12 @@ function JornadaDetalleModal({ jornada, planId, onClose }: {
         {/* Campos editables de la actividad */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
-            <label className="text-xs font-medium">Responsable</label>
-            <select value={responsableId} onChange={(e) => setResponsableId(e.target.value)}
+            <label className="text-xs font-medium">Responsable (técnico de taller)</label>
+            <select value={tecnicoId} onChange={(e) => setTecnicoSel(e.target.value)}
                     className="w-full border rounded px-2 py-1.5 text-sm">
               <option value="">Sin asignar</option>
-              {(usuarios ?? []).map((u) => (
-                <option key={u.id} value={u.id}>{u.nombre_completo ?? u.id} {u.rol ? `(${u.rol})` : ''}</option>
+              {(tecnicos ?? []).map((t) => (
+                <option key={t.id} value={t.id}>{t.nombre} ({t.especialidad})</option>
               ))}
             </select>
           </div>
@@ -2154,8 +2165,12 @@ function JornadaEventosTimeline({ planOtId }: { planOtId: string }) {
   function detalle(e: TallerJornadaEvento): string {
     if (e.tipo === 'reprogramacion' && e.dia_anterior && e.dia_nuevo)
       return `${fmtFecha(e.dia_anterior)} → ${fmtFecha(e.dia_nuevo)}`
-    if (e.tipo === 'cambio_responsable')
+    if (e.tipo === 'cambio_responsable') {
+      // campo='tecnico' (MIG194): los nombres vienen del catálogo en valor_*
+      if (e.campo === 'tecnico')
+        return `${e.valor_anterior ?? 'Sin asignar'} → ${e.valor_nuevo ?? 'Sin asignar'}`
       return `${e.responsable_anterior_nombre ?? 'Sin asignar'} → ${e.responsable_nuevo_nombre ?? 'Sin asignar'}`
+    }
     if (e.tipo === 'cambio_cuadrilla')
       return `${e.cuadrilla_anterior ?? '—'} → ${e.cuadrilla_nueva ?? '—'}`
     if (e.valor_anterior != null || e.valor_nuevo != null)

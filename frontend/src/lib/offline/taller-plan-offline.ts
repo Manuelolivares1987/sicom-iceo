@@ -178,6 +178,7 @@ export async function editarJornadaOffline(p: {
   planOtId: string
   responsableId?: string | null
   responsableNombre?: string | null
+  tecnicoId?: string | null
   cuadrilla?: string | null
   horasPlanificadas?: number | null
   avanceObjetivo?: number | null
@@ -188,6 +189,7 @@ export async function editarJornadaOffline(p: {
   return encolar({
     kind: 'editar', plan_ot_id: p.planOtId, ot_id: null,
     responsable_id: p.responsableId ?? null, responsable_nombre: p.responsableNombre ?? null,
+    tecnico_id: p.tecnicoId ?? null,
     cuadrilla: p.cuadrilla ?? null, horas: p.horasPlanificadas ?? null,
     avance_objetivo: p.avanceObjetivo ?? null, observaciones: p.observaciones ?? null,
     motivo: p.motivo ?? null,
@@ -240,7 +242,7 @@ export async function syncTallerPlanPending(): Promise<{ ok: number; failed: num
       } else if (p.kind === 'editar') {
         await rpcEditarJornada({
           planOtId: p.plan_ot_id!,
-          responsableId: p.responsable_id, cuadrilla: p.cuadrilla,
+          responsableId: p.responsable_id, tecnicoId: p.tecnico_id, cuadrilla: p.cuadrilla,
           horasPlanificadas: p.horas, avanceObjetivo: p.avance_objetivo,
           observaciones: p.observaciones, motivo: p.motivo,
         })
