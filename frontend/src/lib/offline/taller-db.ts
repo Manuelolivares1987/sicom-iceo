@@ -22,6 +22,7 @@ export type TallerPending = {
   resultado?: 'ok' | 'no_ok' | 'na'
   observacion?: string | null
   foto_blob_id?: string | null
+  mediciones?: { pos: string; mm: number | null }[]  // profundidad neumáticos (MIG203)
   // kind = 'timing' (cronómetro de jornada)
   accion?: 'iniciar' | 'pausar' | 'finalizar'
   user_id?: string

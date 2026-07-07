@@ -105,6 +105,16 @@ export async function generarOcRecursos(params: {
   return data as { success: boolean; orden_compra_id: string; numero_oc: string; items: number }
 }
 
+/** Insumos que el operador pidió desde un hallazgo NO OK (para la NC). */
+export async function getRecursosPorHallazgo(instanceItemId: string): Promise<OTRecurso[]> {
+  const { data, error } = await supabase
+    .from('v_ot_recursos').select('*')
+    .eq('instance_item_id', instanceItemId)
+    .order('created_at', { ascending: true })
+  if (error) throw error
+  return (data ?? []) as OTRecurso[]
+}
+
 export async function getRecursosOT(otId: string): Promise<OTRecurso[]> {
   const { data, error } = await supabase
     .from('v_ot_recursos').select('*')

@@ -89,13 +89,14 @@ export async function getChecklistMecanico(otId: string): Promise<ChecklistV3Ite
   if (pend.length === 0) return base
 
   // Acumular pendientes por ítem (en orden cronológico).
-  const acc = new Map<string, { resultado?: string; observacion?: string | null; foto_blob_id?: string | null }>()
+  const acc = new Map<string, { resultado?: string; observacion?: string | null; foto_blob_id?: string | null; mediciones?: { pos: string; mm: number | null }[] }>()
   for (const p of pend) {
     if (!p.instance_item_id) continue
     const cur = acc.get(p.instance_item_id) ?? {}
     if (p.resultado !== undefined) cur.resultado = p.resultado
     if (p.observacion !== undefined) cur.observacion = p.observacion
     if (p.foto_blob_id) cur.foto_blob_id = p.foto_blob_id
+    if (p.mediciones !== undefined) cur.mediciones = p.mediciones
     acc.set(p.instance_item_id, cur)
   }
 
@@ -112,6 +113,7 @@ export async function getChecklistMecanico(otId: string): Promise<ChecklistV3Ite
       resultado: (a.resultado as ChecklistV3Item['resultado']) ?? it.resultado,
       observacion: a.observacion !== undefined ? a.observacion : it.observacion,
       foto_url: foto,
+      mediciones: a.mediciones !== undefined ? a.mediciones : it.mediciones,
     }
   }))
 }
@@ -218,6 +220,7 @@ export async function queueItem(params: {
   resultado?: 'ok' | 'no_ok' | 'na'
   observacion?: string | null
   file?: File | null
+  mediciones?: { pos: string; mm: number | null }[]
 }): Promise<void> {
   const db = tallerDB()
   let blobId: string | null = null
@@ -231,6 +234,7 @@ export async function queueItem(params: {
     resultado: params.resultado,
     observacion: params.observacion,
     foto_blob_id: blobId,
+    mediciones: params.mediciones,
     sync_status: 'pending', retries: 0, last_error: null, created_at: new Date().toISOString(),
   }
   await db.pending.put(row)
@@ -299,6 +303,7 @@ export async function syncTallerPending(): Promise<{ ok: number; failed: number 
           resultado: p.resultado,
           observacion: p.observacion ?? undefined,
           foto_url: fotoUrl,
+          mediciones: p.mediciones,
         })
         if (p.foto_blob_id) await db.blobs.delete(p.foto_blob_id)
       } else if (p.kind === 'recurso') {
