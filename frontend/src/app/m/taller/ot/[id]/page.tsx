@@ -177,6 +177,11 @@ export default function MecanicoOTPage() {
           </button>
         )}
       </div>
+      {timing.isError && (
+        <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
+          No se pudo registrar la acción: {(timing.error as Error).message}
+        </p>
+      )}
       <p className="text-[11px] text-gray-500 flex items-center gap-1">
         <AlertTriangle className="h-3 w-3 text-amber-500" />
         Al pausar o finalizar, las tareas NO OK se reportan como No Conformidad al jefe.
@@ -256,6 +261,11 @@ export default function MecanicoOTPage() {
                         placeholder="Observaciones…" className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
             )}
             <SignaturePad label="Firma del técnico (obligatoria)" onCapture={setFirma} />
+            {timing.isError && (
+              <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
+                No se pudo finalizar: {(timing.error as Error).message}
+              </p>
+            )}
           </div>
           <ModalFooter>
             <Button variant="outline" onClick={() => setFinalizar(false)}>Cancelar</Button>

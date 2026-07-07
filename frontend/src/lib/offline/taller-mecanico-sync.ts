@@ -173,7 +173,17 @@ export async function queueTiming(
     await tallerDB().cache.put({ key: 'ots', value: list, updated_at: new Date().toISOString() })
   }
 
-  if (isOnline()) { try { await syncTallerPending() } catch { /* queda en cola */ } }
+  if (isOnline()) {
+    try { await syncTallerPending() } catch { /* queda en cola */ }
+    // Si el servidor rechazó ESTA acción (p.ej. permiso/estado inválido),
+    // avisar al mecánico en vez de fallar en silencio. La acción queda en
+    // cola y se reintenta en el próximo sync.
+    const after = await db.pending.get(row.local_id)
+    if (after?.sync_status === 'error') {
+      await fetchAndCacheOTs().catch(() => undefined) // deshacer el optimismo local
+      throw new Error(after.last_error ?? 'El servidor rechazó la acción')
+    }
+  }
 }
 
 // ── Sync ─────────────────────────────────────────────────────────────────────
