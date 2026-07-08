@@ -269,6 +269,73 @@ export async function eliminarPautaItem(itemId: string) {
   if (error) throw error
 }
 
+// ── Ejecución en terreno (MIG208) ─────────────────────────────────────────
+export type EnexPendiente = {
+  programacion_id: string
+  periodo_anio: number
+  periodo_mes: number
+  tipo_servicio: TipoServicio
+  fecha_programada: string | null
+  instalacion_id: string
+  instalacion: string
+  instalacion_tipo: string
+  patente: string | null
+  linea: string | null
+  faena_id: string
+  faena_codigo: string
+  faena: string
+  pauta_id: string | null
+  pauta_nombre: string | null
+  pauta_borrador: boolean | null
+  pauta_items: number
+  ejecucion_id: string | null
+  estado: string | null
+  cumplida: boolean
+}
+
+export type EnexItemResultado = {
+  pauta_item_id: string
+  resultado?: string | null       // ok/no_ok/na/si/no
+  valor_medicion?: string | null
+  foto_url?: string | null
+  observacion?: string | null
+}
+
+export async function getTerrenoPendientes(anio: number, mes: number): Promise<EnexPendiente[]> {
+  const { data, error } = await supabase.from('v_enex_terreno_pendientes').select('*')
+    .eq('periodo_anio', anio).eq('periodo_mes', mes)
+  if (error) throw error
+  return (data ?? []) as EnexPendiente[]
+}
+
+export async function getEjecucionItems(ejecucionId: string) {
+  const { data, error } = await supabase.from('v_enex_ejecucion_items').select('*').eq('ejecucion_id', ejecucionId)
+  if (error) throw error
+  return data ?? []
+}
+
+export async function ejecutarPauta(p: {
+  programacionId: string; items: EnexItemResultado[]
+  otNumero?: string | null; ejecutor?: string | null; observacion?: string | null
+  fecha?: string | null; evidenciaUrls?: string[] | null
+  firmaTecnicoUrl?: string | null; tecnicoNombre?: string | null
+  firmaMandanteUrl?: string | null; firmanteMandante?: string | null
+}) {
+  const { data, error } = await supabase.rpc('rpc_enex_ejecutar_pauta', {
+    p_programacion_id: p.programacionId, p_items: p.items,
+    p_ot_numero: p.otNumero ?? null, p_ejecutor: p.ejecutor ?? null, p_observacion: p.observacion ?? null,
+    p_fecha: p.fecha ?? null, p_evidencia_urls: p.evidenciaUrls ?? null,
+    p_firma_tecnico_url: p.firmaTecnicoUrl ?? null, p_tecnico_nombre: p.tecnicoNombre ?? null,
+    p_firma_mandante_url: p.firmaMandanteUrl ?? null, p_firmante_mandante: p.firmanteMandante ?? null,
+    p_client_uuid: null,
+  })
+  if (error) throw error
+  return data as { success: boolean; ejecucion_id: string; estado: string; cumplida: boolean; items: number }
+}
+
+// Firma genérica ENEX (técnico o mandante) → bucket público
+export const subirFirmaEnex = subirFirmaMandante
+
 export const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
   'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
 export const clp = (n: number | null | undefined) =>
