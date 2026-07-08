@@ -128,6 +128,8 @@ const navGroups: NavGroup[] = [
         tooltip: 'Programa de mantención por instalación y cumplimiento del contrato ENEX (KPI y exposición a multa)' },
       { label: 'Pautas (checklists)', href: '/dashboard/enex/pautas', icon: ClipboardList, badge: 'Nuevo',
         tooltip: 'Checklists de mantención y calibración por tipo de instalación (editables)' },
+      { label: 'Terreno (móvil)', href: '/m/enex', icon: ClipboardCheck, badge: 'Nuevo',
+        tooltip: 'App del mantenedor: ejecuta la pauta de la instalación programada, con mediciones, fotos y firmas' },
     ],
   },
   // Checklists de estado + Alertas — misma familia: chequeo del equipo -> alerta.
