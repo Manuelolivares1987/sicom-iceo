@@ -40,6 +40,7 @@ import {
   Satellite,
   Lightbulb,
   ShoppingCart,
+  Building2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -117,6 +118,14 @@ const navGroups: NavGroup[] = [
       { label: 'Reportes',         href: '/dashboard/operacion-calama/reportes',        icon: BarChart3,       extendedModule: 'operacion_calama' },
       { label: 'Pruebas terreno',  href: '/dashboard/operacion-calama/pruebas',         icon: Eye,             extendedModule: 'operacion_calama' },
       { label: 'Aceptaciones',     href: '/dashboard/operacion-calama/aceptaciones',    icon: ClipboardCheck,  extendedModule: 'operacion_calama' },
+    ],
+  },
+  // Contrato ENEX/ESM (Calama): mantención de EESS combustibles/lubricantes.
+  {
+    label: 'Contrato ENEX (Calama)',
+    items: [
+      { label: 'Control & KPI', href: '/dashboard/enex', icon: Building2, badge: 'Nuevo',
+        tooltip: 'Programa de mantención por instalación y cumplimiento del contrato ENEX (KPI y exposición a multa)' },
     ],
   },
   // Checklists de estado + Alertas — misma familia: chequeo del equipo -> alerta.
