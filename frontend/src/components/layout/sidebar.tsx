@@ -126,6 +126,8 @@ const navGroups: NavGroup[] = [
     items: [
       { label: 'Control & KPI', href: '/dashboard/enex', icon: Building2, badge: 'Nuevo',
         tooltip: 'Programa de mantención por instalación y cumplimiento del contrato ENEX (KPI y exposición a multa)' },
+      { label: 'Pautas (checklists)', href: '/dashboard/enex/pautas', icon: ClipboardList, badge: 'Nuevo',
+        tooltip: 'Checklists de mantención y calibración por tipo de instalación (editables)' },
     ],
   },
   // Checklists de estado + Alertas — misma familia: chequeo del equipo -> alerta.

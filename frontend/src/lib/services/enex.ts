@@ -187,6 +187,88 @@ export async function subirEvidenciaEnex(file: File): Promise<string> {
   return supabase.storage.from('evidencias-verificacion').getPublicUrl(path).data.publicUrl
 }
 
+// ── Pautas (checklists) — motor MIG207 ────────────────────────────────────
+export type TipoCampo = 'ok_nook' | 'medicion' | 'si_no' | 'texto'
+export type Periodicidad = 'trimestral' | 'mensual' | 'anual' | 'semestral' | 'requerimiento'
+
+export type EnexPauta = {
+  id: string
+  codigo: string
+  nombre: string
+  tipo_servicio: TipoServicio
+  aplica_tipos: string[]
+  linea: string | null
+  version: number
+  es_borrador: boolean
+  activo: boolean
+}
+export type EnexPautaItem = {
+  id: string
+  pauta_id: string
+  bloque: string
+  bloque_orden: number
+  orden: number
+  codigo: string | null
+  descripcion: string
+  periodicidad: Periodicidad
+  tipo_campo: TipoCampo
+  unidad: string | null
+  valor_referencia: number | null
+  tolerancia_min: number | null
+  tolerancia_max: number | null
+  requiere_foto: boolean
+  obligatorio: boolean
+  activo: boolean
+}
+
+export const TIPO_CAMPO_LABEL: Record<TipoCampo, string> = {
+  ok_nook: 'OK / NO OK', medicion: 'Medición (valor)', si_no: 'Sí / No', texto: 'Texto libre',
+}
+
+export async function getPautas(): Promise<EnexPauta[]> {
+  const { data, error } = await supabase.from('enex_pautas').select('*').eq('activo', true).order('tipo_servicio').order('codigo')
+  if (error) throw error
+  return (data ?? []) as EnexPauta[]
+}
+export async function getPautaItems(pautaId: string): Promise<EnexPautaItem[]> {
+  const { data, error } = await supabase.from('enex_pauta_items').select('*')
+    .eq('pauta_id', pautaId).eq('activo', true).order('bloque_orden').order('orden')
+  if (error) throw error
+  return (data ?? []) as EnexPautaItem[]
+}
+export async function guardarPauta(p: {
+  id?: string | null; codigo: string; nombre: string; tipoServicio: TipoServicio
+  aplicaTipos: string[]; linea?: string | null; esBorrador?: boolean
+}) {
+  const { data, error } = await supabase.rpc('rpc_enex_pauta_guardar', {
+    p_id: p.id ?? null, p_codigo: p.codigo, p_nombre: p.nombre, p_tipo_servicio: p.tipoServicio,
+    p_aplica_tipos: p.aplicaTipos, p_linea: p.linea ?? null, p_es_borrador: p.esBorrador ?? true,
+  })
+  if (error) throw error
+  return data as { success: boolean; pauta_id: string }
+}
+export async function guardarPautaItem(p: {
+  id?: string | null; pautaId: string; bloque: string; bloqueOrden: number; orden: number
+  codigo?: string | null; descripcion: string; periodicidad: Periodicidad; tipoCampo: TipoCampo
+  unidad?: string | null; valorReferencia?: number | null; toleranciaMin?: number | null
+  toleranciaMax?: number | null; requiereFoto?: boolean; obligatorio?: boolean
+}) {
+  const { data, error } = await supabase.rpc('rpc_enex_pauta_item_guardar', {
+    p_id: p.id ?? null, p_pauta_id: p.pautaId, p_bloque: p.bloque, p_bloque_orden: p.bloqueOrden,
+    p_orden: p.orden, p_codigo: p.codigo ?? null, p_descripcion: p.descripcion,
+    p_periodicidad: p.periodicidad, p_tipo_campo: p.tipoCampo, p_unidad: p.unidad ?? null,
+    p_valor_referencia: p.valorReferencia ?? null, p_tolerancia_min: p.toleranciaMin ?? null,
+    p_tolerancia_max: p.toleranciaMax ?? null, p_requiere_foto: p.requiereFoto ?? false,
+    p_obligatorio: p.obligatorio ?? true,
+  })
+  if (error) throw error
+  return data as { success: boolean; item_id: string }
+}
+export async function eliminarPautaItem(itemId: string) {
+  const { error } = await supabase.rpc('rpc_enex_pauta_item_eliminar', { p_item_id: itemId })
+  if (error) throw error
+}
+
 export const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
   'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
 export const clp = (n: number | null | undefined) =>
