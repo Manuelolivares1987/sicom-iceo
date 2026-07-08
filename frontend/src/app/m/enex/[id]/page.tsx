@@ -14,12 +14,17 @@ import { Button } from '@/components/ui/button'
 import { SignaturePad } from '@/components/ui/signature-pad'
 import { useAuth } from '@/contexts/auth-context'
 import { useToast } from '@/contexts/toast-context'
-import {
-  getTerrenoPendientes, getPautaItems, ejecutarPauta, getEjecucionItems,
-  subirEvidenciaEnex, subirFirmaEnex,
-  type EnexPautaItem, type EnexPendiente,
-} from '@/lib/services/enex'
-import { useQuery } from '@tanstack/react-query'
+import { getEjecucionItems, type EnexPautaItem, type EnexPendiente } from '@/lib/services/enex'
+import { getPendientesOffline, getPautaItemsOffline, queueEjecucion } from '@/lib/offline/enex-offline'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+
+function dataUrlToBlob(dataUrl: string): Blob {
+  const [meta, b64] = dataUrl.split(',')
+  const mime = meta.match(/:(.*?);/)?.[1] ?? 'image/png'
+  const bin = atob(b64); const arr = new Uint8Array(bin.length)
+  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i)
+  return new Blob([arr], { type: mime })
+}
 
 type Estado = { resultado?: string; valor?: string; file?: File; fotoUrl?: string; obs?: string }
 
@@ -45,17 +50,19 @@ export default function EnexEjecutarPage() {
   const params = useParams()
   const router = useRouter()
   const toast = useToast()
+  const qc = useQueryClient()
   const { perfil } = useAuth()
   const progId = params?.id as string
 
   const hoyP = (() => { const d = new Date(); return { anio: d.getFullYear(), mes: d.getMonth() + 1 } })()
   const { data: pendientes = [] } = useQuery({
-    queryKey: ['enex-terreno', hoyP.anio, hoyP.mes], queryFn: () => getTerrenoPendientes(hoyP.anio, hoyP.mes), staleTime: 10_000,
+    queryKey: ['enex-terreno', hoyP.anio, hoyP.mes], queryFn: () => getPendientesOffline(hoyP.anio, hoyP.mes),
+    networkMode: 'always', staleTime: 10_000,
   })
   const prog: EnexPendiente | undefined = useMemo(() => pendientes.find((p) => p.programacion_id === progId), [pendientes, progId])
   const { data: items = [], isLoading } = useQuery({
-    queryKey: ['enex-pauta-items', prog?.pauta_id], queryFn: () => getPautaItems(prog!.pauta_id!),
-    enabled: !!prog?.pauta_id,
+    queryKey: ['enex-pauta-items', prog?.pauta_id], queryFn: () => getPautaItemsOffline(prog!.pauta_id!),
+    enabled: !!prog?.pauta_id, networkMode: 'always',
   })
 
   const [estado, setEstado] = useState<Record<string, Estado>>({})
@@ -96,27 +103,27 @@ export default function EnexEjecutarPage() {
     if (conFirmaMandante && !firmaMand) { toast.error('Falta la firma del mandante'); return }
     setGuardando(true)
     try {
-      // subir fotos por ítem
-      const itemsPayload = []
-      for (const it of items) {
-        const st = estado[it.id]
-        if (!st) continue
-        let fotoUrl = st.fotoUrl ?? null
-        if (st.file) fotoUrl = await subirEvidenciaEnex(st.file)
-        itemsPayload.push({
-          pauta_item_id: it.id, resultado: st.resultado ?? null,
-          valor_medicion: st.valor ?? null, foto_url: fotoUrl, observacion: st.obs ?? null,
-        })
-      }
-      const firmaTecUrl = firmaTec ? await subirFirmaEnex(firmaTec) : null
-      const firmaMandUrl = conFirmaMandante && firmaMand ? await subirFirmaEnex(firmaMand) : null
-      const r = await ejecutarPauta({
-        programacionId: prog.programacion_id, items: itemsPayload,
-        otNumero: otNumero || null, ejecutor: perfil?.nombre_completo ?? null, observacion: obs || null,
-        firmaTecnicoUrl: firmaTecUrl, tecnicoNombre: perfil?.nombre_completo ?? null,
-        firmaMandanteUrl: firmaMandUrl, firmanteMandante: firmante || null,
+      const itemsPayload = items.map((it) => {
+        const st = estado[it.id] ?? {}
+        return {
+          pauta_item_id: it.id, resultado: st.resultado ?? null, valor_medicion: st.valor ?? null,
+          observacion: st.obs ?? null, file: st.file ?? null, fotoUrl: st.fotoUrl ?? null,
+        }
+      }).filter((p) => p.resultado || p.valor_medicion || p.observacion || p.file || p.fotoUrl)
+
+      const r = await queueEjecucion({
+        programacionId: prog.programacion_id, conMandante: conFirmaMandante,
+        otNumero: otNumero || null, ejecutor: perfil?.nombre_completo ?? null,
+        tecnicoNombre: perfil?.nombre_completo ?? null, observacion: obs || null,
+        firmanteMandante: firmante || null, items: itemsPayload,
+        firmaTecFile: firmaTec ? dataUrlToBlob(firmaTec) : null,
+        firmaMandFile: conFirmaMandante && firmaMand ? dataUrlToBlob(firmaMand) : null,
       })
-      toast.success(r.cumplida ? 'Registrada y CUMPLIDA (firma del mandante)' : 'Ejecución guardada — falta firma del mandante para cumplir')
+      qc.invalidateQueries({ queryKey: ['enex-terreno'] })
+      qc.invalidateQueries({ queryKey: ['enex-pending-count'] })
+      toast.success(r.synced
+        ? (conFirmaMandante ? 'Registrada y CUMPLIDA (firma del mandante)' : 'Ejecución guardada')
+        : 'Guardada local — se sube sola al recuperar señal')
       router.push('/m/enex')
     } catch (e) { toast.error((e as Error).message) } finally { setGuardando(false) }
   }
