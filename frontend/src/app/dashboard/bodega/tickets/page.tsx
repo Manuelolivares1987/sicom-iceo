@@ -261,6 +261,24 @@ function DespacharTab() {
 
   async function confirmar() {
     if (!ticket || !bodegaId) return
+    // Validar contra pendiente y stock ANTES de mandar: el servidor rechaza
+    // toda la entrega si un solo ítem no tiene stock (rebaja FIFO atómica).
+    for (const i of items ?? []) {
+      const c = Number(cant[i.id] || 0)
+      if (c <= 0) continue
+      const nombre = i.producto_nombre ?? i.descripcion ?? 'ítem'
+      if (c > i.pendiente) {
+        toast.error(`"${nombre}": ingresaste ${c} pero quedan ${i.pendiente} pendientes en el vale.`)
+        return
+      }
+      const disp = i.producto_id && stock ? (stock[i.producto_id] ?? 0) : null
+      if (disp != null && c > disp) {
+        toast.error(disp === 0
+          ? `"${nombre}" no tiene stock en esta bodega. Déjalo en 0: queda pendiente en el vale y se gestiona como compra/reposición.`
+          : `"${nombre}": solo hay ${disp} en stock. Entrega ${disp} y el saldo queda pendiente en el vale.`)
+        return
+      }
+    }
     const entregas = (items ?? [])
       .map((i) => ({ ticket_item_id: i.id, cantidad: Number(cant[i.id] || 0) }))
       .filter((e) => e.cantidad > 0)
@@ -369,7 +387,8 @@ function DespacharTab() {
               {/* Items (con las fotos del pedido — MIG212) */}
               <div className="space-y-2">
                 {(items ?? []).map((i) => {
-                  const disp = i.producto_id ? (stock?.[i.producto_id] ?? 0) : null
+                  // null = sin producto en catálogo O stock aún cargando (no bloquear).
+                  const disp = i.producto_id && stock ? (stock[i.producto_id] ?? 0) : null
                   const max = disp != null ? Math.min(i.pendiente, disp) : i.pendiente
                   return (
                     <div key={i.id} className="rounded-lg border p-2">
@@ -379,7 +398,7 @@ function DespacharTab() {
                           <div className="text-[11px] text-gray-500">
                             Pide {i.cantidad_solicitada} · entregado {i.cantidad_entregada} · pendiente {i.pendiente}
                             {i.producto_id
-                              ? <> · stock {disp ?? 0}</>
+                              ? <span className={disp === 0 ? 'font-semibold text-red-600' : undefined}> · stock {disp ?? '…'}</span>
                               : <span className="text-amber-600"> · sin producto en catálogo</span>}
                           </div>
                           {(i.solicitado_nombre || i.nc_descripcion) && (
@@ -389,11 +408,17 @@ function DespacharTab() {
                           )}
                         </div>
                         {usable && i.pendiente > 0 && i.producto_id && (
-                          <div className="w-20">
-                            <Input type="number" min="0" max={max} value={cant[i.id] ?? ''}
-                                   onChange={(e) => setCant((p) => ({ ...p, [i.id]: e.target.value }))}
-                                   placeholder="0" />
-                          </div>
+                          disp === 0 ? (
+                            <span className="shrink-0 rounded-full bg-red-100 px-2 py-1 text-[10px] font-semibold text-red-700">
+                              sin stock
+                            </span>
+                          ) : (
+                            <div className="w-20">
+                              <Input type="number" min="0" max={max} value={cant[i.id] ?? ''}
+                                     onChange={(e) => setCant((p) => ({ ...p, [i.id]: e.target.value }))}
+                                     placeholder="0" />
+                            </div>
+                          )
                         )}
                         {i.pendiente <= 0 && <CheckCircle2 className="h-4 w-4 text-green-600" />}
                       </div>
@@ -415,6 +440,13 @@ function DespacharTab() {
                 })}
               </div>
 
+              {usable && (items ?? []).some((i) => i.pendiente > 0 && i.producto_id && stock && (stock[i.producto_id] ?? 0) === 0) && (
+                <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                  Hay ítems <b>sin stock</b> en esta bodega: entrega el resto y el vale queda
+                  <b> parcial</b> por el saldo. El material faltante se gestiona como
+                  compra/reposición (pestaña Solicitudes) y se despacha con el mismo vale al llegar.
+                </p>
+              )}
               {usable && (
                 <>
                   <div>
