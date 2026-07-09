@@ -20,7 +20,7 @@ import {
 } from '@/lib/services/no-conformidades'
 import { getProductos } from '@/lib/services/inventario'
 import {
-  getRecursosPorHallazgo, getRecursosOT, validarRecurso, agregarRecursoJefe,
+  getRecursosPorHallazgo, getRecursosOT, validarRecurso, agregarRecursoJefe, subirFotoRecurso,
   getSeguimientoRecursos,
   RECURSO_ESTADO_LABEL, type OTRecurso, type OTRecursoSeguimiento,
 } from '@/lib/services/ot-recursos'
@@ -433,6 +433,7 @@ function InsumosOperadorNC({ nc, todaOT }: { nc: NcRecepcion; todaOT?: boolean }
   const [resultados, setResultados] = useState<ProductoLiteNC[]>([])
   const [prod, setProd] = useState<ProductoLiteNC | null>(null)
   const [cant, setCant] = useState('')
+  const [fotoItem, setFotoItem] = useState<File | null>(null)
   // Vale con firma
   const [valeOpen, setValeOpen] = useState(false)
   const [firma, setFirma] = useState('')
@@ -476,13 +477,15 @@ function InsumosOperadorNC({ nc, todaOT }: { nc: NcRecepcion; todaOT?: boolean }
     if (!n || n <= 0 || (!prod && q.trim().length < 3) || !nc.ot_id) return
     setBusy(true)
     try {
+      const fotos = fotoItem ? [await subirFotoRecurso(nc.ot_id, fotoItem)] : null
       await agregarRecursoJefe({
         otId: nc.ot_id, cantidad: n,
         productoId: prod?.id ?? null, descripcion: prod ? null : q.trim(),
         unidad: prod?.unidad_medida ?? null,
         instanceItemId: nc.checklist_item_ref ?? null,
+        fotos,
       })
-      setQ(''); setProd(null); setCant(''); setAgregarOpen(false)
+      setQ(''); setProd(null); setCant(''); setFotoItem(null); setAgregarOpen(false)
       invalidar()
     } catch (e) { toast.error((e as Error).message) } finally { setBusy(false) }
   }
@@ -617,6 +620,13 @@ function InsumosOperadorNC({ nc, todaOT }: { nc: NcRecepcion; todaOT?: boolean }
               Agregar aprobado
             </button>
           </div>
+          <label className="block text-[11px] text-gray-600">
+            Foto del repuesto (opcional — bodega la ve)
+            <input type="file" accept="image/*" capture="environment"
+                   onChange={(e) => setFotoItem(e.target.files?.[0] ?? null)}
+                   className="mt-0.5 w-full rounded border border-gray-300 px-2 py-1 text-xs" />
+            {fotoItem && <span className="text-[10px] text-green-600">✓ {fotoItem.name}</span>}
+          </label>
         </div>
       )}
 
@@ -687,7 +697,7 @@ function RecursosEquipoModal({ equipo, onClose, onDone }: { equipo: EquipoNC; on
     return res
   }, [ncsAbiertas])
 
-  type MatRow = NcMaterial & { solicitar?: boolean }
+  type MatRow = NcMaterial & { solicitar?: boolean; foto?: File | null }
   const [mecanicos, setMecanicos] = useState<string[]>(() =>
     (equipo.grupos ?? '').split(',').map((s) => s.trim()).filter((s) => (MECANICOS as readonly string[]).includes(s)))
   const [horas, setHoras] = useState(equipo.horas ? String(equipo.horas) : '')
@@ -724,10 +734,12 @@ function RecursosEquipoModal({ equipo, onClose, onDone }: { equipo: EquipoNC; on
         materiales,
       })
       // Materiales que NO están en bodega -> solicitud a bodega (queda ligada al equipo vía su NC).
+      // Con foto propia si el jefe la adjuntó; si no, la RPC hereda la foto de la NC.
       const ncAncla = ncsAbiertas[0]
       const solicitudes = filas.filter((m) => m.solicitar && (m.descripcion ?? '').trim())
       for (const s of solicitudes) {
-        await solicitarMaterialBodega({ descripcion: s.descripcion!, cantidad: Number(s.cantidad) || 1, ncId: ncAncla?.id ?? null })
+        const fotoUrl = s.foto ? await subirFotoNc(s.foto) : null
+        await solicitarMaterialBodega({ descripcion: s.descripcion!, cantidad: Number(s.cantidad) || 1, ncId: ncAncla?.id ?? null, fotoUrl })
       }
       toast.success(`Recursos de ${equipo.patente} guardados (${ncsAbiertas.length} NC)${solicitudes.length ? ` · ${solicitudes.length} solicitud(es) enviada(s) a bodega` : ''}`)
       onDone()
@@ -789,9 +801,17 @@ function RecursosEquipoModal({ equipo, onClose, onDone }: { equipo: EquipoNC; on
             {filas.map((m, i) => (
               <div key={i} className="flex gap-1 items-center">
                 {m.solicitar ? (
-                  <input value={m.descripcion ?? ''} placeholder="Material que no está en bodega…"
-                    onChange={(e) => setMats((s) => (s ?? []).map((x, j) => j === i ? { ...x, descripcion: e.target.value } : x))}
-                    className="flex-1 rounded border border-amber-300 bg-amber-50 px-2 py-1 text-sm" />
+                  <div className="flex-1 flex items-center gap-1">
+                    <input value={m.descripcion ?? ''} placeholder="Material que no está en bodega…"
+                      onChange={(e) => setMats((s) => (s ?? []).map((x, j) => j === i ? { ...x, descripcion: e.target.value } : x))}
+                      className="flex-1 rounded border border-amber-300 bg-amber-50 px-2 py-1 text-sm" />
+                    <label className={`cursor-pointer rounded border px-1.5 py-1 text-[10px] whitespace-nowrap ${m.foto ? 'border-green-400 bg-green-50 text-green-700' : 'border-amber-300 bg-white text-amber-700'}`}
+                           title="Foto del material para bodega (opcional)">
+                      {m.foto ? '✓ foto' : '📷 foto'}
+                      <input type="file" accept="image/*" capture="environment" className="hidden"
+                        onChange={(e) => { const f = e.target.files?.[0] ?? null; setMats((s) => (s ?? []).map((x, j) => j === i ? { ...x, foto: f } : x)) }} />
+                    </label>
+                  </div>
                 ) : (
                   <select value={m.producto_id ?? ''}
                     onChange={(e) => {
@@ -814,7 +834,7 @@ function RecursosEquipoModal({ equipo, onClose, onDone }: { equipo: EquipoNC; on
             ))}
           </div>
           <button type="button" onClick={() => setMats((s) => [...(s ?? []), { producto_id: '', descripcion: '', cantidad: 1 }])} className="text-xs text-blue-600 mt-1">+ Agregar material</button>
-          <p className="text-[10px] text-gray-400 mt-1">La lista es del conjunto del equipo. Si un material no está en bodega, pulsa «no hay» → se envía una solicitud a bodega asociada a la patente.</p>
+          <p className="text-[10px] text-gray-400 mt-1">La lista es del conjunto del equipo. Si un material no está en bodega, pulsa «no hay» → se envía una solicitud a bodega asociada a la patente, con la foto que adjuntes (si no adjuntas, va la foto de la NC).</p>
         </div>
       </div>
       <ModalFooter>
