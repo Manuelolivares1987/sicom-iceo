@@ -393,6 +393,9 @@ export default function MecanicoOTPage() {
   const [obsFin, setObsFin] = useState('')
 
   const estado = ot?.ot_estado ?? 'asignada'
+  // La vista solo trae OTs activas liberadas: si la lista cargó y esta OT ya
+  // no viene, es porque quedó finalizada/cerrada (p.ej. desde otro equipo).
+  const otNoDisponible = ots !== undefined && !ot
 
   const visibles = (items ?? []).filter((i) => !i.excluido)
   const grupos = useMemo(() => {
@@ -416,12 +419,16 @@ export default function MecanicoOTPage() {
   function doTiming(accion: 'iniciar' | 'pausar') {
     if (accion === 'pausar' && noOkSinFoto > 0) { setWarnFoto(true); return }
     setWarnFoto(false)
+    timing.reset()
     timing.mutate({ accion, userId })
   }
   function abrirFinalizar() {
     if (noOkSinFoto > 0) { setWarnFoto(true); return }
     setWarnFoto(false)
     if (pendientesOblig > 0 && !confirm(`Quedan ${pendientesOblig} tareas obligatorias sin marcar. ¿Finalizar igual?`)) return
+    // Limpiar el error de una acción anterior (p.ej. un pausar fallido) para
+    // que no aparezca dentro del modal como "No se pudo finalizar".
+    timing.reset()
     setFirma(''); setConObs(false); setObsFin(''); setFinalizar(true)
   }
   function confirmFinalizar() {
@@ -471,6 +478,12 @@ export default function MecanicoOTPage() {
       </div>
 
       {/* Cronómetro de jornada */}
+      {otNoDisponible ? (
+        <p className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-medium text-blue-700">
+          Esta OT ya no está entre tus OTs activas: probablemente ya fue finalizada.
+          Vuelve a «Mis OTs» para ver tu trabajo pendiente.
+        </p>
+      ) : (
       <div className="flex gap-2">
         {estado === 'asignada' && (
           <button onClick={() => doTiming('iniciar')} disabled={timing.isPending}
@@ -497,6 +510,7 @@ export default function MecanicoOTPage() {
           </button>
         )}
       </div>
+      )}
       {warnFoto && noOkSinFoto > 0 && (
         <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
           Hay {noOkSinFoto} hallazgo{noOkSinFoto > 1 ? 's' : ''} NO OK sin foto. Saca la foto de cada
