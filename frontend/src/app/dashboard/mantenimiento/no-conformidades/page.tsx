@@ -166,9 +166,9 @@ export default function NoConformidadesPage() {
                   title="Registrar a mano un daño/falla detectado fuera de un checklist (foto obligatoria)">
             <PlusCircle className="h-4 w-4 mr-1" /> NC manual (con foto)
           </Button>
-          <Button onClick={() => setValeOpen(true)} disabled={equiposListos.length === 0}
+          <Button onClick={() => setValeOpen(true)}
                   className="bg-orange-600 hover:bg-orange-700 text-white font-bold px-5"
-                  title="Elegir la patente, revisar lo aprobado y emitir el vale de bodega (llega a bodega y se imprime para el retiro)">
+                  title="Elegir la patente, revisar/aprobar/agregar los recursos y emitir el vale de bodega (llega a bodega y se imprime para el retiro)">
             <Ticket className="h-5 w-5 mr-1.5" /> Vale para bodega{equiposListos.length > 0 ? ` (${equiposListos.length})` : ''}
           </Button>
         </div>
@@ -277,12 +277,12 @@ export default function NoConformidadesPage() {
       {genOpen && <GenerarDesdeRecepcionModal onClose={() => setGenOpen(false)} onDone={() => { setGenOpen(false); invalidar() }} />}
       {adhocOpen && <RegistrarNcModal onClose={() => setAdhocOpen(false)} onDone={() => { setAdhocOpen(false); invalidar() }} />}
       {valeOpen && (
-        <ValeBodegaModal equipos={equiposListos}
-                         onClose={() => setValeOpen(false)}
-                         onDone={() => {
+        <ValeBodegaModal grupos={equipos} listos={equiposListos}
+                         onClose={() => {
                            setValeOpen(false)
                            qc.invalidateQueries({ queryKey: ['vale-equipos-listos'] })
                            qc.invalidateQueries({ queryKey: ['nc-insumos-operador'] })
+                           invalidar()
                          }} />
       )}
     </div>
@@ -293,113 +293,100 @@ function Kpi({ label, value, warn }: { label: string; value: number; warn?: bool
   return <Card><CardContent className="p-3"><div className="text-xs text-muted-foreground">{label}</div><div className={cn('text-2xl font-bold', warn && 'text-amber-600')}>{value}</div></CardContent></Card>
 }
 
-// Botón grande "Vale para bodega" (MIG205): elegir la patente, revisar todo lo
-// aprobado del equipo, firmar y emitir. Bodega recibe la campanita y el vale
-// queda imprimible para que el operador retire.
+// Botón grande "Vale para bodega": SIEMPRE habilitado. Elegir la patente,
+// revisar/aprobar/agregar los recursos del equipo (con foto) y emitir el vale
+// aquí mismo — aunque todavía no haya nada aprobado. Bodega recibe campanita
+// y el vale queda imprimible para el retiro.
 type EquipoVale = { otId: string; otFolio: string; patente: string; nombre: string | null; items: OTRecursoSeguimiento[] }
 
-function ValeBodegaModal({ equipos, onClose, onDone }: {
-  equipos: EquipoVale[]; onClose: () => void; onDone: () => void
+function ValeBodegaModal({ grupos, listos, onClose }: {
+  grupos: EquipoNC[]; listos: EquipoVale[]; onClose: () => void
 }) {
-  const toast = useToast()
-  const [sel, setSel] = useState<EquipoVale | null>(equipos.length === 1 ? equipos[0] : null)
-  const [firma, setFirma] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [emitido, setEmitido] = useState<{ folio: string; ticketId: string; items: number } | null>(null)
+  type Opcion = { key: string; patente: string; nombre: string | null; tipo: string; nc: NcRecepcion; nListos: number }
 
-  async function emitir() {
-    if (!firma || !sel) return
-    setBusy(true)
-    try {
-      const url = await subirFirmaTicket(firma, 'vale-nc')
-      const r = await crearTicket({ otId: sel.otId, firmaJefeUrl: url })
-      setEmitido({ folio: r.folio, ticketId: r.ticket_id, items: r.items })
-      toast.success(`Vale ${r.folio} emitido — bodega ya recibió la solicitud`)
-    } catch (e) { toast.error((e as Error).message) } finally { setBusy(false) }
-  }
+  // Equipos elegibles: los de la bandeja (por cada OT del equipo: la de origen
+  // de los hallazgos Y la correctiva en ejecución — el operador puede pedir
+  // repuestos nuevos MIENTRAS ejecuta) + los que ya tienen insumos listos.
+  const opciones = useMemo<Opcion[]>(() => {
+    const out: Opcion[] = []
+    const vistos = new Set<string>()
+    const fakeNc = (otId: string) =>
+      ({ id: `ot-${otId}`, ot_id: otId, checklist_item_ref: null } as unknown as NcRecepcion)
+    for (const g of grupos) {
+      for (const n of g.ncs) {
+        if (n.ot_id && !vistos.has(n.ot_id)) {
+          vistos.add(n.ot_id)
+          out.push({
+            key: n.ot_id, patente: g.patente, nombre: g.nombre, tipo: 'OT de origen (hallazgos)', nc: n,
+            nListos: listos.find((l) => l.otId === n.ot_id)?.items.length ?? 0,
+          })
+        }
+        if (n.plan_ot_id && n.plan_ot_id !== n.ot_id && !vistos.has(n.plan_ot_id)) {
+          vistos.add(n.plan_ot_id)
+          out.push({
+            key: n.plan_ot_id, patente: g.patente, nombre: g.nombre,
+            tipo: 'OT correctiva (pedidos durante la ejecución)', nc: fakeNc(n.plan_ot_id),
+            nListos: listos.find((l) => l.otId === n.plan_ot_id)?.items.length ?? 0,
+          })
+        }
+      }
+    }
+    for (const l of listos) {
+      if (vistos.has(l.otId)) continue
+      out.push({
+        key: l.otId, patente: l.patente, nombre: l.nombre, tipo: l.otFolio,
+        nListos: l.items.length, nc: fakeNc(l.otId),
+      })
+    }
+    return out.sort((a, b) => b.nListos - a.nListos || a.patente.localeCompare(b.patente))
+  }, [grupos, listos])
 
-  // Pantalla de éxito: imprimir para el retiro
-  if (emitido) {
-    return (
-      <Modal open onClose={() => { onDone() }} title={`Vale ${emitido.folio} emitido ✓`}>
-        <div className="space-y-3 text-center py-2">
-          <CheckCircle2 className="mx-auto h-12 w-12 text-green-600" />
-          <p className="text-sm text-gray-700">
-            {emitido.items} ítem{emitido.items !== 1 ? 's' : ''} para <b>{sel?.patente}</b>. Bodega ya
-            recibió la solicitud por campanita. Imprime el vale y entrégaselo al operador para el retiro.
-          </p>
-          <Button onClick={() => window.open(`/vale/${emitido.ticketId}`, '_blank')} className="w-full bg-[#0b2a4a]">
-            <Printer className="h-4 w-4 mr-1.5" /> Imprimir vale
-          </Button>
-        </div>
-        <ModalFooter>
-          <Button variant="outline" onClick={() => { onDone() }}>Cerrar</Button>
-        </ModalFooter>
-      </Modal>
-    )
-  }
+  const [sel, setSel] = useState<Opcion | null>(opciones.length === 1 ? opciones[0] : null)
 
   return (
     <Modal open onClose={onClose} title="Vale para bodega">
       <div className="space-y-3">
-        {equipos.length === 0 ? (
+        {opciones.length === 0 ? (
           <p className="py-4 text-center text-sm text-gray-500">
-            No hay insumos aprobados pendientes de vale. Aprueba primero los pedidos en cada NC.
+            No hay equipos con OT de taller para emitir vale. Los insumos nacen de los hallazgos
+            de la OT o se agregan con «+ Ítem» una vez que el equipo tiene OT.
           </p>
         ) : (
           <>
             <div>
               <label className="text-xs font-medium">1. Elige la patente / equipo</label>
-              <div className="mt-1 grid gap-1.5">
-                {equipos.map((e) => (
-                  <button key={e.otId} type="button" onClick={() => setSel(e)}
+              <div className="mt-1 grid max-h-52 gap-1.5 overflow-y-auto">
+                {opciones.map((o) => (
+                  <button key={o.key} type="button" onClick={() => setSel(o)}
                           className={`flex items-center gap-3 rounded-lg border px-3 py-2 text-left ${
-                            sel?.otId === e.otId ? 'border-orange-500 bg-orange-50' : 'border-gray-200 bg-white hover:bg-gray-50'}`}>
-                    <span className="text-base font-bold text-gray-800">{e.patente}</span>
-                    <span className="flex-1 text-xs text-gray-500">{e.nombre} · {e.otFolio}</span>
-                    <span className="rounded-full bg-green-100 px-2 py-0.5 text-[11px] font-semibold text-green-700">
-                      {e.items.length} ítem{e.items.length !== 1 ? 's' : ''}
-                    </span>
+                            sel?.key === o.key ? 'border-orange-500 bg-orange-50' : 'border-gray-200 bg-white hover:bg-gray-50'}`}>
+                    <span className="text-base font-bold text-gray-800">{o.patente}</span>
+                    <span className="flex-1 text-xs text-gray-500">{o.nombre}<span className="block text-[10px] text-gray-400">{o.tipo}</span></span>
+                    {o.nListos > 0 ? (
+                      <span className="rounded-full bg-green-100 px-2 py-0.5 text-[11px] font-semibold text-green-700">
+                        {o.nListos} listo{o.nListos !== 1 ? 's' : ''} para vale
+                      </span>
+                    ) : (
+                      <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] text-gray-500">revisar / agregar</span>
+                    )}
                   </button>
                 ))}
               </div>
             </div>
 
             {sel && (
-              <>
-                <div>
-                  <label className="text-xs font-medium">2. Lo que se está pidiendo</label>
-                  <div className="mt-1 max-h-44 space-y-1 overflow-y-auto rounded-lg border border-gray-100 bg-gray-50 p-2">
-                    {sel.items.map((r) => (
-                      <div key={r.id} className="flex items-center gap-2 rounded border border-gray-100 bg-white px-2 py-1.5 text-xs">
-                        <span className="flex-1 font-medium text-gray-800">{r.producto_nombre ?? r.descripcion}</span>
-                        <span className="text-gray-600 whitespace-nowrap">{r.cantidad_aprobada ?? r.cantidad} {r.unidad ?? 'un'}</span>
-                        {r.estado === 'recibido' && (
-                          <span className="rounded-full bg-teal-100 px-1.5 py-0.5 text-[10px] font-medium text-teal-700">recibido</span>
-                        )}
-                        {r.solicitado_nombre && <span className="text-[10px] text-gray-400">{r.solicitado_nombre}</span>}
-                      </div>
-                    ))}
-                  </div>
-                  <p className="mt-1 text-[10px] text-gray-500">
-                    Se incluyen también los materiales de NC pendientes de este equipo, si los hay.
-                  </p>
+              <div>
+                <label className="text-xs font-medium">2. Revisa, aprueba o agrega ítems — y emite el vale con tu firma</label>
+                <div className="mt-1">
+                  <InsumosOperadorNC key={sel.key} nc={sel.nc} todaOT />
                 </div>
-                <div>
-                  <label className="text-xs font-medium">3. Firma y emite</label>
-                  <SignaturePad label="Firma del jefe de taller (obligatoria)" onCapture={setFirma} />
-                </div>
-              </>
+              </div>
             )}
           </>
         )}
       </div>
       <ModalFooter>
-        <Button variant="outline" onClick={onClose} disabled={busy}>Cancelar</Button>
-        <Button disabled={!sel || !firma || busy} onClick={emitir} className="bg-orange-600 hover:bg-orange-700">
-          {busy ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Ticket className="h-4 w-4 mr-1" />}
-          Emitir vale{sel ? ` — ${sel.patente}` : ''}
-        </Button>
+        <Button variant="outline" onClick={onClose}>Cerrar</Button>
       </ModalFooter>
     </Modal>
   )
