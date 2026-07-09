@@ -120,12 +120,13 @@ interface OTRow {
   activo?: { id: string; codigo: string; nombre: string | null; tipo: string } | null
   faena?: { id: string; codigo: string; nombre: string } | null
   responsable?: { id: string; nombre_completo: string; cargo: string | null } | null
+  tecnico?: { id: string; nombre: string; especialidad: string | null } | null
 }
 
 function MobileCard({ ot }: { ot: OTRow }) {
   const activoLabel = ot.activo ? (ot.activo.nombre || ot.activo.codigo) : '—'
   const faenaLabel = ot.faena?.nombre || '—'
-  const responsableLabel = ot.responsable?.nombre_completo || '—'
+  const responsableLabel = ot.tecnico?.nombre || ot.responsable?.nombre_completo || '—'
 
   return (
     <Link href={`/dashboard/ordenes-trabajo/${ot.id}`}>
@@ -244,7 +245,7 @@ export default function OrdenesTrabajoPage() {
     if (!search) return true
     const s = search.toLowerCase()
     const activoName = ot.activo?.nombre || ot.activo?.codigo || ''
-    const responsableName = ot.responsable?.nombre_completo || ''
+    const responsableName = ot.tecnico?.nombre || ot.responsable?.nombre_completo || ''
     return (
       ot.folio.toLowerCase().includes(s) ||
       activoName.toLowerCase().includes(s) ||
@@ -385,7 +386,7 @@ export default function OrdenesTrabajoPage() {
                         {getEstadoOTLabel(ot.estado)}
                       </Badge>
                     </TableCell>
-                    <TableCell>{ot.responsable?.nombre_completo || '—'}</TableCell>
+                    <TableCell>{ot.tecnico?.nombre || ot.responsable?.nombre_completo || '—'}</TableCell>
                     <TableCell>{ot.fecha_programada ? formatDate(ot.fecha_programada) : '—'}</TableCell>
                     <TableCell className="text-right font-medium">
                       {ot.costo_total > 0 ? formatCLP(ot.costo_total) : '—'}

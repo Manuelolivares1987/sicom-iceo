@@ -344,9 +344,19 @@ export async function syncTallerPending(): Promise<{ ok: number; failed: number 
       await db.pending.delete(p.local_id)
       ok++
     } catch (e) {
+      const msg = (e as Error).message ?? ''
+      // Acción de cronómetro que ya no aplica porque la OT cambió de estado en
+      // el servidor (p.ej. quedó "pausar" en cola y la OT ya está finalizada):
+      // descartarla — reintentarla jamás va a funcionar y su error se le
+      // mostraba al mecánico en cada acción nueva.
+      if (p.kind === 'timing' && /transici[oó]n inv[aá]lida/i.test(msg)) {
+        if (p.firma_blob_id) await db.blobs.delete(p.firma_blob_id)
+        await db.pending.delete(p.local_id)
+        continue
+      }
       failed++
       await db.pending.update(p.local_id, {
-        sync_status: 'error', retries: (p.retries || 0) + 1, last_error: (e as Error).message,
+        sync_status: 'error', retries: (p.retries || 0) + 1, last_error: msg,
       })
     }
   }
