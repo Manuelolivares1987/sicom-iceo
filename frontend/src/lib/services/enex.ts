@@ -320,6 +320,7 @@ export async function ejecutarPauta(p: {
   fecha?: string | null; evidenciaUrls?: string[] | null
   firmaTecnicoUrl?: string | null; tecnicoNombre?: string | null
   firmaMandanteUrl?: string | null; firmanteMandante?: string | null
+  clientUuid?: string | null
 }) {
   const { data, error } = await supabase.rpc('rpc_enex_ejecutar_pauta', {
     p_programacion_id: p.programacionId, p_items: p.items,
@@ -327,7 +328,7 @@ export async function ejecutarPauta(p: {
     p_fecha: p.fecha ?? null, p_evidencia_urls: p.evidenciaUrls ?? null,
     p_firma_tecnico_url: p.firmaTecnicoUrl ?? null, p_tecnico_nombre: p.tecnicoNombre ?? null,
     p_firma_mandante_url: p.firmaMandanteUrl ?? null, p_firmante_mandante: p.firmanteMandante ?? null,
-    p_client_uuid: null,
+    p_client_uuid: p.clientUuid ?? null,
   })
   if (error) throw error
   return data as { success: boolean; ejecucion_id: string; estado: string; cumplida: boolean; items: number }

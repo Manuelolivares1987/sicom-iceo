@@ -3,20 +3,44 @@
 // Terreno ENEX — lista de instalaciones programadas por período (MIG208).
 // El mantenedor elige una y ejecuta su pauta.
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { useQuery } from '@tanstack/react-query'
-import { Building2, ChevronRight, ChevronLeft, CheckCircle2, Clock, RefreshCw, AlertTriangle } from 'lucide-react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import {
+  Building2, ChevronRight, ChevronLeft, CheckCircle2, Clock, RefreshCw, AlertTriangle,
+  WifiOff, CloudOff, Download,
+} from 'lucide-react'
 import { Spinner } from '@/components/ui/spinner'
-import { getTerrenoPendientes, MESES, TIPO_INSTALACION_LABEL, type EnexPendiente } from '@/lib/services/enex'
+import { MESES, TIPO_INSTALACION_LABEL, type EnexPendiente } from '@/lib/services/enex'
+import { getPendientesOffline, prepararEnexOffline, getEnexPendingCount, syncEnexPending } from '@/lib/offline/enex-offline'
+import { useNetworkStatus } from '@/hooks/use-calama-offline'
 
 const hoy = () => { const d = new Date(); return { anio: d.getFullYear(), mes: d.getMonth() + 1 } }
 
 export default function EnexTerrenoHome() {
   const [{ anio, mes }, setPeriodo] = useState(hoy())
+  const qc = useQueryClient()
+  const online = useNetworkStatus()
+  const [descargaMsg, setDescargaMsg] = useState('')
   const { data: pend = [], isLoading, refetch, isFetching } = useQuery({
-    queryKey: ['enex-terreno', anio, mes], queryFn: () => getTerrenoPendientes(anio, mes), staleTime: 10_000,
+    queryKey: ['enex-terreno', anio, mes], queryFn: () => getPendientesOffline(anio, mes),
+    networkMode: 'always', staleTime: 10_000,
   })
+  const { data: pendientesSync = 0 } = useQuery({
+    queryKey: ['enex-pending-count'], queryFn: getEnexPendingCount, networkMode: 'always', refetchInterval: 4000,
+  })
+
+  // Sincroniza al recuperar conexión
+  useEffect(() => {
+    const trySync = async () => {
+      if (typeof navigator !== 'undefined' && navigator.onLine) {
+        const r = await syncEnexPending()
+        if (r.ok > 0 || r.failed > 0) { qc.invalidateQueries({ queryKey: ['enex-terreno'] }); qc.invalidateQueries({ queryKey: ['enex-pending-count'] }) }
+      }
+    }
+    window.addEventListener('online', trySync); void trySync()
+    return () => window.removeEventListener('online', trySync)
+  }, [qc])
 
   function cambiarMes(d: number) {
     let m = mes + d, a = anio
@@ -46,6 +70,20 @@ export default function EnexTerrenoHome() {
         </div>
         <button onClick={() => refetch()} className="text-gray-400"><RefreshCw className={`h-4 w-4 ${isFetching ? 'animate-spin' : ''}`} /></button>
       </div>
+
+      {/* Estado de conexión / cola */}
+      <div className={`flex items-center gap-2 rounded-lg border p-2 text-xs ${online ? 'border-green-200 bg-green-50 text-green-700' : 'border-amber-300 bg-amber-50 text-amber-800'}`}>
+        {online ? <CheckCircle2 className="h-3.5 w-3.5" /> : <WifiOff className="h-3.5 w-3.5" />}
+        <span className="font-medium">{online ? 'En línea' : 'Sin conexión — se guarda local'}</span>
+        {pendientesSync > 0 && <span className="ml-auto flex items-center gap-1"><CloudOff className="h-3 w-3" /> {pendientesSync} por sincronizar</span>}
+      </div>
+      {online && pend.length > 0 && (
+        <button onClick={async () => { const n = await prepararEnexOffline(anio, mes); setDescargaMsg(`${n} servicios descargados para usar sin internet`) }}
+                className="flex w-full items-center justify-center gap-2 rounded-lg border border-blue-300 bg-blue-50 py-2 text-xs font-medium text-blue-700">
+          <Download className="h-4 w-4" /> Descargar el mes para trabajar sin señal
+        </button>
+      )}
+      {descargaMsg && <p className="text-center text-[11px] text-green-600">{descargaMsg}</p>}
 
       <div className="flex items-center justify-center gap-3">
         <button onClick={() => cambiarMes(-1)} className="rounded-lg border bg-white px-2 py-1.5"><ChevronLeft className="h-4 w-4" /></button>
