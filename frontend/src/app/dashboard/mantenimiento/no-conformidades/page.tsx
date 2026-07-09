@@ -20,12 +20,12 @@ import {
 } from '@/lib/services/no-conformidades'
 import { getProductos } from '@/lib/services/inventario'
 import {
-  getRecursosPorHallazgo, getRecursosOT, validarRecurso, agregarRecursoJefe, subirFotoRecurso,
+  getRecursosPorHallazgo, getRecursosOT, getRecursosOTs, validarRecurso, agregarRecursoJefe, subirFotoRecurso,
   getSeguimientoRecursos,
   RECURSO_ESTADO_LABEL, type OTRecurso, type OTRecursoSeguimiento,
 } from '@/lib/services/ot-recursos'
 import { buscarProductos } from '@/lib/services/ot-materiales'
-import { subirFirmaTicket, crearTicket } from '@/lib/services/bodega-tickets'
+import { subirFirmaTicket, crearTicket, getTicketsOts, anularTicket } from '@/lib/services/bodega-tickets'
 import { SignaturePad } from '@/components/ui/signature-pad'
 import { getCategoriasProducto } from '@/lib/services/producto-categorias'
 import { solicitarMaterialBodega } from '@/lib/services/bodega-solicitudes'
@@ -302,40 +302,39 @@ type EquipoVale = { otId: string; otFolio: string; patente: string; nombre: stri
 function ValeBodegaModal({ grupos, listos, onClose }: {
   grupos: EquipoNC[]; listos: EquipoVale[]; onClose: () => void
 }) {
-  type Opcion = { key: string; patente: string; nombre: string | null; tipo: string; nc: NcRecepcion; nListos: number }
+  type Opcion = { key: string; patente: string; nombre: string | null; otIds: string[]; nc: NcRecepcion; nListos: number }
 
-  // Equipos elegibles: los de la bandeja (por cada OT del equipo: la de origen
-  // de los hallazgos Y la correctiva en ejecución — el operador puede pedir
-  // repuestos nuevos MIENTRAS ejecuta) + los que ya tienen insumos listos.
+  // UNA entrada por patente. Por dentro junta TODAS las OT del equipo (la de
+  // origen de los hallazgos y la correctiva donde el operador pide durante la
+  // ejecución) — MIG213: el vale también se arma por equipo.
   const opciones = useMemo<Opcion[]>(() => {
     const out: Opcion[] = []
     const vistos = new Set<string>()
-    const fakeNc = (otId: string) =>
-      ({ id: `ot-${otId}`, ot_id: otId, checklist_item_ref: null } as unknown as NcRecepcion)
+    const fakeNc = (key: string, otId: string) =>
+      ({ id: `eq-${key}`, ot_id: otId, checklist_item_ref: null } as unknown as NcRecepcion)
     for (const g of grupos) {
+      const otIds: string[] = []
+      let mainOt: string | null = null
       for (const n of g.ncs) {
-        if (n.ot_id && !vistos.has(n.ot_id)) {
-          vistos.add(n.ot_id)
-          out.push({
-            key: n.ot_id, patente: g.patente, nombre: g.nombre, tipo: 'OT de origen (hallazgos)', nc: n,
-            nListos: listos.find((l) => l.otId === n.ot_id)?.items.length ?? 0,
-          })
-        }
-        if (n.plan_ot_id && n.plan_ot_id !== n.ot_id && !vistos.has(n.plan_ot_id)) {
-          vistos.add(n.plan_ot_id)
-          out.push({
-            key: n.plan_ot_id, patente: g.patente, nombre: g.nombre,
-            tipo: 'OT correctiva (pedidos durante la ejecución)', nc: fakeNc(n.plan_ot_id),
-            nListos: listos.find((l) => l.otId === n.plan_ot_id)?.items.length ?? 0,
-          })
-        }
+        if (n.ot_id && !otIds.includes(n.ot_id)) otIds.push(n.ot_id)
+        if (n.plan_ot_id && !otIds.includes(n.plan_ot_id)) otIds.push(n.plan_ot_id)
+        if (n.plan_ot_id) mainOt = n.plan_ot_id  // la correctiva manda para + Ítem / emitir
+        else if (!mainOt && n.ot_id) mainOt = n.ot_id
       }
+      if (otIds.length === 0 || !mainOt) continue
+      otIds.forEach((o) => vistos.add(o))
+      out.push({
+        key: g.activoId, patente: g.patente, nombre: g.nombre, otIds,
+        nc: fakeNc(g.activoId, mainOt),
+        nListos: listos.filter((l) => otIds.includes(l.otId)).reduce((s, l) => s + l.items.length, 0),
+      })
     }
+    // Equipos con insumos listos que no están en la bandeja
     for (const l of listos) {
       if (vistos.has(l.otId)) continue
       out.push({
-        key: l.otId, patente: l.patente, nombre: l.nombre, tipo: l.otFolio,
-        nListos: l.items.length, nc: fakeNc(l.otId),
+        key: l.otId, patente: l.patente, nombre: l.nombre, otIds: [l.otId],
+        nListos: l.items.length, nc: fakeNc(l.otId, l.otId),
       })
     }
     return out.sort((a, b) => b.nListos - a.nListos || a.patente.localeCompare(b.patente))
@@ -361,7 +360,7 @@ function ValeBodegaModal({ grupos, listos, onClose }: {
                           className={`flex items-center gap-3 rounded-lg border px-3 py-2 text-left ${
                             sel?.key === o.key ? 'border-orange-500 bg-orange-50' : 'border-gray-200 bg-white hover:bg-gray-50'}`}>
                     <span className="text-base font-bold text-gray-800">{o.patente}</span>
-                    <span className="flex-1 text-xs text-gray-500">{o.nombre}<span className="block text-[10px] text-gray-400">{o.tipo}</span></span>
+                    <span className="flex-1 text-xs text-gray-500">{o.nombre}</span>
                     {o.nListos > 0 ? (
                       <span className="rounded-full bg-green-100 px-2 py-0.5 text-[11px] font-semibold text-green-700">
                         {o.nListos} listo{o.nListos !== 1 ? 's' : ''} para vale
@@ -375,12 +374,19 @@ function ValeBodegaModal({ grupos, listos, onClose }: {
             </div>
 
             {sel && (
-              <div>
-                <label className="text-xs font-medium">2. Revisa, aprueba o agrega ítems — y emite el vale con tu firma</label>
-                <div className="mt-1">
-                  <InsumosOperadorNC key={sel.key} nc={sel.nc} todaOT />
+              <>
+                <ValesDelEquipo key={`vales-${sel.key}`} otIds={sel.otIds} />
+                <div>
+                  <label className="text-xs font-medium">2. Revisa, aprueba o agrega ítems — y emite el vale con tu firma</label>
+                  <div className="mt-1">
+                    <InsumosOperadorNC key={sel.key} nc={sel.nc} todaOT otIds={sel.otIds} />
+                  </div>
+                  <p className="mt-1 text-[10px] text-gray-500">
+                    Cada vale nuevo sale solo con lo que no estaba en un vale anterior. Para re-emitir
+                    TODO en un solo vale, anula el vale abierto (arriba) y genera de nuevo.
+                  </p>
                 </div>
-              </div>
+              </>
             )}
           </>
         )}
@@ -392,20 +398,84 @@ function ValeBodegaModal({ grupos, listos, onClose }: {
   )
 }
 
+// Vales ya emitidos del equipo: volver a imprimir en un click, o anular el
+// abierto para re-emitir todo junto.
+const TICKET_ESTADO_CHIP: Record<string, string> = {
+  emitido: 'bg-blue-100 text-blue-800',
+  parcial: 'bg-amber-100 text-amber-800',
+  entregado: 'bg-green-100 text-green-700',
+  anulado: 'bg-gray-200 text-gray-500',
+}
+
+function ValesDelEquipo({ otIds }: { otIds: string[] }) {
+  const toast = useToast()
+  const qc = useQueryClient()
+  const { data: vales = [] } = useQuery({
+    queryKey: ['vales-equipo', ...otIds],
+    queryFn: () => getTicketsOts(otIds),
+    staleTime: 10_000,
+  })
+  const [busy, setBusy] = useState<string | null>(null)
+
+  const anular = async (id: string, folio: string) => {
+    if (!window.confirm(`¿Anular el vale ${folio}? Sus insumos vuelven a "aprobado" para re-emitirlos junto a lo nuevo.`)) return
+    setBusy(id)
+    try {
+      await anularTicket(id, 'Re-emisión desde bandeja NC')
+      toast.success(`Vale ${folio} anulado — genera el vale de nuevo con todo incluido`)
+      qc.invalidateQueries({ queryKey: ['vales-equipo'] })
+      qc.invalidateQueries({ queryKey: ['nc-insumos-operador'] })
+      qc.invalidateQueries({ queryKey: ['vale-equipos-listos'] })
+    } catch (e) { toast.error((e as Error).message) } finally { setBusy(null) }
+  }
+
+  if (vales.length === 0) return null
+  return (
+    <div>
+      <label className="text-xs font-medium">Vales ya emitidos de este equipo</label>
+      <div className="mt-1 space-y-1">
+        {vales.map((t) => (
+          <div key={t.id} className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs">
+            <span className="font-mono font-bold">{t.folio}</span>
+            <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${TICKET_ESTADO_CHIP[t.estado] ?? 'bg-gray-100'}`}>{t.estado}</span>
+            <span className="flex-1 text-gray-500">
+              {t.n_items} ítem{t.n_items !== 1 ? 's' : ''} · {new Date(t.created_at).toLocaleDateString('es-CL')}
+            </span>
+            <button type="button" onClick={() => window.open(`/vale/${t.id}`, '_blank')}
+                    className="inline-flex items-center gap-1 rounded border border-gray-300 px-2 py-1 font-semibold text-gray-700 hover:bg-gray-50">
+              <Printer className="h-3 w-3" /> Imprimir
+            </button>
+            {(t.estado === 'emitido' || t.estado === 'parcial') && (
+              <button type="button" disabled={busy === t.id} onClick={() => anular(t.id, t.folio)}
+                      title="Anular para re-emitir TODO junto (los insumos vuelven a aprobado)"
+                      className="rounded border border-red-200 px-2 py-1 text-red-600 hover:bg-red-50 disabled:opacity-50">
+                {busy === t.id ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Anular'}
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 // Gestión COMPLETA de los insumos del taller desde la NC (MIG204): aprobar /
 // rechazar / ajustar cantidad / agregar ítems y emitir el vale de bodega, sin
 // tener que ir al Plan Taller. En el modal por equipo se muestra TODO lo de la
 // OT de una vez (todaOT).
 type ProductoLiteNC = { id: string; codigo: string | null; nombre: string; unidad_medida: string | null }
 
-function InsumosOperadorNC({ nc, todaOT }: { nc: NcRecepcion; todaOT?: boolean }) {
+function InsumosOperadorNC({ nc, todaOT, otIds }: { nc: NcRecepcion; todaOT?: boolean; otIds?: string[] }) {
   const toast = useToast()
   const qc = useQueryClient()
   const { data: recursos = [] } = useQuery({
-    queryKey: ['nc-insumos-operador', nc.id],
-    // Con OT: todos los insumos de la OT (el vale es por OT); sin OT, los del hallazgo.
-    queryFn: () => nc.ot_id ? getRecursosOT(nc.ot_id) : getRecursosPorHallazgo(nc.checklist_item_ref!),
-    enabled: !!nc.ot_id || !!nc.checklist_item_ref,
+    queryKey: ['nc-insumos-operador', nc.id, ...(otIds ?? [])],
+    // Con otIds (modo equipo): insumos de TODAS las OT del equipo. Con OT: los
+    // de esa OT. Sin OT: los del hallazgo.
+    queryFn: () => (otIds && otIds.length > 0)
+      ? getRecursosOTs(otIds)
+      : nc.ot_id ? getRecursosOT(nc.ot_id) : getRecursosPorHallazgo(nc.checklist_item_ref!),
+    enabled: (otIds?.length ?? 0) > 0 || !!nc.ot_id || !!nc.checklist_item_ref,
     staleTime: 10_000,
   })
   const invalidar = () => qc.invalidateQueries({ queryKey: ['nc-insumos-operador', nc.id] })
@@ -486,10 +556,11 @@ function InsumosOperadorNC({ nc, todaOT }: { nc: NcRecepcion; todaOT?: boolean }
       window.open(`/vale/${r.ticket_id}`, '_blank')  // imprimible para el retiro
       setValeOpen(false); setFirma('')
       invalidar()
+      qc.invalidateQueries({ queryKey: ['vales-equipo'] })
     } catch (e) { toast.error((e as Error).message) } finally { setBusy(false) }
   }
 
-  if (!nc.ot_id && !nc.checklist_item_ref) return null
+  if (!nc.ot_id && !nc.checklist_item_ref && (otIds?.length ?? 0) === 0) return null
 
   return (
     <div className="rounded-lg border border-orange-200 bg-orange-50/50 p-2.5">
@@ -646,8 +717,8 @@ function InsumosOperadorNC({ nc, todaOT }: { nc: NcRecepcion; todaOT?: boolean }
         <Modal open onClose={() => setValeOpen(false)} title="Vale de bodega — firma del jefe">
           <div className="space-y-3">
             <p className="text-sm text-gray-600">
-              Se emite un ticket QR con los {valeables} insumos aprobados/recibidos de la OT (más los
-              materiales de NC pendientes). Bodega lo despacha escaneándolo.
+              Se emite un ticket QR con los {valeables} insumos aprobados/recibidos del equipo (más los
+              materiales de NC pendientes que no estén en otro vale). Bodega lo despacha escaneándolo.
             </p>
             <SignaturePad label="Firma del jefe de taller (obligatoria)" onCapture={setFirma} />
           </div>

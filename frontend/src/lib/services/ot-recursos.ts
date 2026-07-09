@@ -124,6 +124,17 @@ export async function getRecursosOT(otId: string): Promise<OTRecurso[]> {
   return (data ?? []) as OTRecurso[]
 }
 
+/** Recursos de varias OT (todas las del equipo: origen + correctiva). */
+export async function getRecursosOTs(otIds: string[]): Promise<OTRecurso[]> {
+  if (otIds.length === 0) return []
+  const { data, error } = await supabase
+    .from('v_ot_recursos').select('*')
+    .in('ot_id', otIds)
+    .order('created_at', { ascending: true })
+  if (error) throw error
+  return (data ?? []) as OTRecurso[]
+}
+
 export async function solicitarRecurso(params: {
   otId: string
   cantidad: number

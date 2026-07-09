@@ -99,6 +99,15 @@ export async function getTicketById(id: string): Promise<BodegaTicket | null> {
   return (data as BodegaTicket | null) ?? null
 }
 
+/** Vales del equipo (por sus OT) — para reimprimir/anular desde la bandeja NC. */
+export async function getTicketsOts(otIds: string[]): Promise<BodegaTicket[]> {
+  if (otIds.length === 0) return []
+  const { data, error } = await supabase.from('v_bodega_ticket').select('*')
+    .in('ot_id', otIds).order('created_at', { ascending: false }).limit(20)
+  if (error) throw error
+  return (data ?? []) as BodegaTicket[]
+}
+
 export async function getTicketByFolio(folio: string): Promise<BodegaTicket | null> {
   const { data, error } = await supabase.from('v_bodega_ticket').select('*')
     .eq('folio', folio.trim().toUpperCase()).maybeSingle()
