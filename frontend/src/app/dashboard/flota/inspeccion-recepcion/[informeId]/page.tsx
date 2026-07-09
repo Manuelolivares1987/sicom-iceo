@@ -29,8 +29,9 @@ import {
   useEliminarCosto,
   useCerrarInspeccionRecepcion,
 } from '@/hooks/use-informe-recepcion'
+import { useQueryClient } from '@tanstack/react-query'
 import {
-  subirFotoHallazgo, subirFirmaInforme, cierreParcialRecepcion,
+  subirFotoHallazgo, subirFirmaInforme, cierreParcialRecepcion, generarHallazgosDesdeChecklist,
   type GravedadHallazgo, type TipoCostoRecepcion,
 } from '@/lib/services/informe-recepcion'
 import {
@@ -52,6 +53,25 @@ export default function InspeccionRecepcionPage() {
   const [firmaDataUrl, setFirmaDataUrl] = useState<string | null>(null)
   const [cierreMsg, setCierreMsg] = useState<string | null>(null)
   const [cierreBusy, setCierreBusy] = useState(false)
+
+  const qc = useQueryClient()
+  const [recobroBusy, setRecobroBusy] = useState(false)
+  // Volcar TODOS los NO OK del checklist V02 como hallazgos de recobro (MIG214)
+  const traerHallazgosChecklist = async () => {
+    if (!informeId) return
+    setRecobroBusy(true); setErrorMsg(null)
+    try {
+      const r = await generarHallazgosDesdeChecklist(informeId)
+      if (r.total_no_ok === 0) {
+        setCierreMsg(r.mensaje ?? 'El checklist no tiene ítems NO OK todavía.')
+      } else {
+        setCierreMsg(`${r.creados} hallazgo(s) del checklist volcado(s) al informe de recobro${r.ya_existian ? ` · ${r.ya_existian} ya estaban` : ''}.`)
+      }
+      qc.invalidateQueries({ queryKey: ['informe-hallazgos', informeId] })
+    } catch (e) {
+      setErrorMsg(e instanceof Error ? e.message : 'Error al volcar los hallazgos')
+    } finally { setRecobroBusy(false) }
+  }
 
   const hacerCierreParcial = async () => {
     if (!informeId) return
@@ -197,6 +217,19 @@ export default function InspeccionRecepcionPage() {
             "Registrar daño" — el sistema lo anotará como hallazgo (por defecto atribuible al cliente,
             se puede editar después).
           </p>
+
+          {/* Recobro en un clic: trae los NO OK del checklist V02 con foto y observación */}
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-red-200 bg-red-50 p-3">
+            <p className="text-xs text-red-800">
+              ¿Ya hiciste el checklist del equipo? Vuelca <b>todos los hallazgos</b> (ítems NO OK, con
+              su foto y observación) al informe de recobro en un solo paso.
+            </p>
+            <Button size="sm" disabled={recobroBusy} onClick={traerHallazgosChecklist}
+                    className="bg-red-600 hover:bg-red-700 text-white">
+              {recobroBusy ? <Spinner className="h-4 w-4 mr-1" /> : <Sparkles className="h-4 w-4 mr-1" />}
+              Traer hallazgos del checklist
+            </Button>
+          </div>
 
           {grupos.map(([seccion, items]) => (
             <Card key={seccion}>
