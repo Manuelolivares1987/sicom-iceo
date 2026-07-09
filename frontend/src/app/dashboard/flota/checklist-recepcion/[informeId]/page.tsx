@@ -3,16 +3,19 @@
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, ClipboardCheck, AlertTriangle } from 'lucide-react'
+import { ArrowLeft, ClipboardCheck, AlertTriangle, FileWarning, Loader2 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Spinner } from '@/components/ui/spinner'
+import { Modal, ModalFooter } from '@/components/ui/modal'
+import { useToast } from '@/contexts/toast-context'
 import { useRequireAuth } from '@/hooks/use-require-auth'
 import { ChecklistV2Wizard } from '@/components/flota/checklist-v2-wizard'
 import {
   buscarInstanceRecepcionPorInforme, type ChecklistV2Instance,
 } from '@/lib/services/checklist-v2'
+import { generarHallazgosDesdeChecklist } from '@/lib/services/informe-recepcion'
 import { supabase } from '@/lib/supabase'
 
 type InformeInfo = {
@@ -29,10 +32,40 @@ export default function ChecklistRecepcionWizardPage() {
   const router = useRouter()
   const informeId = params.informeId
 
+  const toast = useToast()
   const [instance, setInstance] = useState<ChecklistV2Instance | null>(null)
   const [informe, setInforme]   = useState<InformeInfo | null>(null)
   const [loading, setLoading]   = useState(true)
   const [error, setError]       = useState<string | null>(null)
+  // Al cerrar el checklist: opción de crear el informe de recobro con TODOS
+  // los hallazgos NO OK encontrados (MIG214).
+  const [recobro, setRecobro]   = useState<{ noOk: number } | null>(null)
+  const [creando, setCreando]   = useState(false)
+
+  const irAlInforme = () => router.push(`/dashboard/flota/inspeccion-recepcion/${informeId}`)
+
+  async function onWizardClosed() {
+    try {
+      const { count } = await supabase
+        .from('checklist_v2_instance_item')
+        .select('id', { count: 'exact', head: true })
+        .eq('instance_id', instance!.id)
+        .eq('resultado', 'no_ok')
+      if ((count ?? 0) > 0) { setRecobro({ noOk: count! }); return }
+    } catch { /* si falla el conteo, seguimos al informe */ }
+    irAlInforme()
+  }
+
+  async function crearInformeRecobro() {
+    setCreando(true)
+    try {
+      const r = await generarHallazgosDesdeChecklist(informeId)
+      toast.success(`${r.creados} hallazgo(s) volcado(s) al informe de recobro${r.ya_existian ? ` (${r.ya_existian} ya estaban)` : ''}`)
+      irAlInforme()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Error al generar los hallazgos')
+    } finally { setCreando(false) }
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -123,8 +156,37 @@ export default function ChecklistRecepcionWizardPage() {
 
       <ChecklistV2Wizard
         instanceId={instance.id}
-        onClosed={() => router.push(`/dashboard/flota/inspeccion-recepcion/${informeId}`)}
+        onClosed={onWizardClosed}
       />
+
+      {recobro && (
+        <Modal open onClose={() => { setRecobro(null); irAlInforme() }} title="Checklist cerrado ✓">
+          <div className="space-y-3">
+            <div className="flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 p-3">
+              <FileWarning className="mt-0.5 h-6 w-6 shrink-0 text-red-600" />
+              <div className="text-sm text-gray-700">
+                Se encontraron <b>{recobro.noOk} hallazgo{recobro.noOk !== 1 ? 's' : ''}</b> (ítems NO OK)
+                en el checklist de <b>{informe.activo_patente ?? informe.activo_codigo}</b>.
+                ¿Quieres crear el informe de recobro con todos los hallazgos (sección, descripción,
+                foto y observación de cada uno)?
+              </div>
+            </div>
+            <p className="text-[11px] text-gray-500">
+              Los hallazgos quedan marcados «atribuible al cliente» por defecto — después puedes
+              ajustar gravedad, cobrable y costos antes de emitir el informe.
+            </p>
+          </div>
+          <ModalFooter>
+            <Button variant="outline" disabled={creando} onClick={() => { setRecobro(null); irAlInforme() }}>
+              Ahora no
+            </Button>
+            <Button disabled={creando} onClick={crearInformeRecobro} className="bg-red-600 hover:bg-red-700">
+              {creando ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <FileWarning className="mr-1 h-4 w-4" />}
+              Crear informe de recobro ({recobro.noOk})
+            </Button>
+          </ModalFooter>
+        </Modal>
+      )}
     </div>
   )
 }

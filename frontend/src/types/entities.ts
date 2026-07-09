@@ -141,6 +141,8 @@ export interface OrdenTrabajo {
   activo?: Activo
   faena?: Faena
   responsable?: UsuarioPerfil
+  /** Técnico del catálogo taller_tecnicos (MIG217: preferirlo sobre la cuenta). */
+  tecnico?: { id: string; nombre: string; especialidad: string | null } | null
 }
 
 export interface Producto {

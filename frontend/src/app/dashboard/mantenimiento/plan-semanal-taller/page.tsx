@@ -929,7 +929,10 @@ function NcOtCard({ n }: { n: NcOtPorAgendar }) {
     <div ref={setNodeRef} style={style} {...listeners} {...attributes}
          title={`${n.descripcion}${n.grupo_trabajo ? ' · ' + n.grupo_trabajo : ''}${n.horas_estimadas ? ' · ' + n.horas_estimadas + 'h' : ''}`}
          className="shrink-0 w-[140px] rounded border border-orange-300 bg-orange-50 text-orange-900 px-2.5 py-1.5 cursor-grab active:cursor-grabbing shadow-sm text-[12px] text-center">
-      <div className="font-mono font-bold">{n.patente ?? n.codigo}</div>
+      <div className="font-mono font-bold">
+        {n.patente ?? n.codigo}
+        {n.n_ncs > 1 && <span className="ml-1 rounded bg-orange-200 px-1 text-[9px] font-sans font-semibold">{n.n_ncs} NC</span>}
+      </div>
       <div className="text-[10px] truncate">{n.descripcion}</div>
       {(n.grupo_trabajo || n.horas_estimadas) && (
         <div className="text-[9px] text-orange-700">{n.grupo_trabajo ?? ''}{n.horas_estimadas ? ` · ${n.horas_estimadas}h` : ''}</div>

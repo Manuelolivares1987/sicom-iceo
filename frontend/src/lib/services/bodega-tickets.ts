@@ -52,6 +52,10 @@ export type BodegaTicketItem = {
   producto_codigo: string | null
   producto_nombre: string | null
   unidad_medida: string | null
+  /** Fotos del recurso pedido (o la foto de la NC de origen). MIG212. */
+  fotos: string[] | null
+  solicitado_nombre: string | null
+  nc_descripcion: string | null
 }
 
 export type BodegaSimple = { id: string; nombre: string; faena_id: string | null }
@@ -93,6 +97,15 @@ export async function getTicketById(id: string): Promise<BodegaTicket | null> {
     .eq('id', id).maybeSingle()
   if (error) throw error
   return (data as BodegaTicket | null) ?? null
+}
+
+/** Vales del equipo (por sus OT) — para reimprimir/anular desde la bandeja NC. */
+export async function getTicketsOts(otIds: string[]): Promise<BodegaTicket[]> {
+  if (otIds.length === 0) return []
+  const { data, error } = await supabase.from('v_bodega_ticket').select('*')
+    .in('ot_id', otIds).order('created_at', { ascending: false }).limit(20)
+  if (error) throw error
+  return (data ?? []) as BodegaTicket[]
 }
 
 export async function getTicketByFolio(folio: string): Promise<BodegaTicket | null> {
@@ -160,4 +173,14 @@ export async function anularTicket(ticketId: string, motivo?: string) {
   const { data, error } = await supabase.rpc('rpc_anular_ticket_bodega', { p_ticket_id: ticketId, p_motivo: motivo ?? null })
   if (error) throw error
   return data as { success: boolean }
+}
+
+/** Lo que bodega NO puede entregar se manda a comprar: entra al tablero de
+ *  Seguimiento repuestos y avisa a adquisiciones (MIG218). */
+export async function enviarItemACompra(ticketItemId: string, motivo?: string | null) {
+  const { data, error } = await supabase.rpc('rpc_ticket_item_a_compra', {
+    p_ticket_item_id: ticketItemId, p_motivo: motivo ?? null,
+  })
+  if (error) throw error
+  return data as { success: boolean; recurso_id: string; cantidad: number; vale: string }
 }

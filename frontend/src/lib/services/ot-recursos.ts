@@ -124,6 +124,17 @@ export async function getRecursosOT(otId: string): Promise<OTRecurso[]> {
   return (data ?? []) as OTRecurso[]
 }
 
+/** Recursos de varias OT (todas las del equipo: origen + correctiva). */
+export async function getRecursosOTs(otIds: string[]): Promise<OTRecurso[]> {
+  if (otIds.length === 0) return []
+  const { data, error } = await supabase
+    .from('v_ot_recursos').select('*')
+    .in('ot_id', otIds)
+    .order('created_at', { ascending: true })
+  if (error) throw error
+  return (data ?? []) as OTRecurso[]
+}
+
 export async function solicitarRecurso(params: {
   otId: string
   cantidad: number
@@ -184,12 +195,15 @@ export async function agregarRecursoJefe(params: {
   comentario?: string | null
   /** Hallazgo NO OK al que se amarra el ítem (p.ej. al agregar desde la NC). */
   instanceItemId?: string | null
+  /** Fotos del repuesto que pide el jefe (MIG210) — bodega las ve igual que las del operador. */
+  fotos?: string[] | null
 }) {
   const { data, error } = await supabase.rpc('rpc_ot_recurso_agregar', {
     p_ot_id: params.otId, p_cantidad: params.cantidad,
     p_producto_id: params.productoId ?? null, p_descripcion: params.descripcion ?? null,
     p_unidad: params.unidad ?? null, p_comentario: params.comentario ?? null,
     p_instance_item_id: params.instanceItemId ?? null,
+    p_fotos: params.fotos && params.fotos.length > 0 ? params.fotos : null,
   })
   if (error) throw error
   return data as { success: boolean; recurso_id: string }

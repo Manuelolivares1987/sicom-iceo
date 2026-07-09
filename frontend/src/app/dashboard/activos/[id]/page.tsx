@@ -76,6 +76,7 @@ import { useOEEActivo } from '@/hooks/use-flota'
 import { HistorialEstadosChart } from '@/components/flota/historial-estados-chart'
 import { useHistorialOSLegacyByActivo } from '@/hooks/use-historial-os-legacy'
 import { CambiarContratoModal } from '@/components/activos/cambiar-contrato-modal'
+import { CarpetaCertificados } from '@/components/activos/carpeta-certificados'
 import { HistoricoContratosCard } from '@/components/activos/historico-contratos-card'
 import { useHistorialArriendos, useUltimoArriendo } from '@/hooks/use-arriendos'
 import { Building2 } from 'lucide-react'
@@ -357,7 +358,13 @@ export default function ActivoDetailPage() {
       {/* ── Tab content ── */}
       <div>
         {tab === 'identificacion' && <TabIdentificacion activo={a} onUpdate={handleUpdateField} />}
-        {tab === 'certificaciones' && <TabCertificaciones activoId={id} />}
+        {tab === 'certificaciones' && (
+          <div className="space-y-6">
+            {/* Carpeta del equipo: certificados emitidos por el sistema (MIG219) */}
+            <CarpetaCertificados activoId={id} />
+            <TabCertificaciones activoId={id} />
+          </div>
+        )}
         {tab === 'ots' && <TabOTs activoId={id} />}
         {tab === 'planes' && <TabPlanes activoId={id} />}
         {tab === 'costos' && <TabCostos activoId={id} />}
