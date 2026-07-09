@@ -5,7 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import QRCode from 'qrcode'
 import {
   Ticket, Truck, ScanLine, Printer, Search, CheckCircle2, AlertTriangle, PenLine, History, X,
-  PackageSearch, Image as ImageIcon, Check, Loader2, ChevronLeft,
+  PackageSearch, Image as ImageIcon, Check, Loader2, ChevronLeft, ShoppingCart,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -22,7 +22,7 @@ import {
   useCrearTicket, useEntregarTicket, useAnularTicket,
 } from '@/hooks/use-bodega-tickets'
 import {
-  getTicketByFolio, subirFirmaTicket,
+  getTicketByFolio, subirFirmaTicket, enviarItemACompra,
   type TicketEmitible, type BodegaTicket,
 } from '@/lib/services/bodega-tickets'
 import { getSolicitudesBodega, atenderSolicitudBodega, type BodegaSolicitud } from '@/lib/services/bodega-solicitudes'
@@ -206,6 +206,7 @@ function EmitirTab() {
 // ── Por despachar (bodeguero): lista de vales pendientes + despacho ───────────
 function DespacharTab() {
   const toast = useToast()
+  const qc = useQueryClient()
   const [folio, setFolio] = useState('')
   const [scan, setScan] = useState(false)
   const [ticket, setTicket] = useState<BodegaTicket | null>(null)
@@ -259,8 +260,42 @@ function DespacharTab() {
 
   const usable = ticket && ticket.estado !== 'entregado' && ticket.estado !== 'anulado'
 
+  // Lo que Gustavo NO va a entregar se manda a COMPRA: entra al tablero de
+  // Seguimiento repuestos con todos los datos y le avisa a adquisiciones.
+  const [aCompraBusy, setACompraBusy] = useState<string | null>(null)
+  async function mandarACompra(i: { id: string; producto_nombre?: string | null; descripcion?: string | null; pendiente: number }) {
+    const nombre = i.producto_nombre ?? i.descripcion ?? 'ítem'
+    const motivo = window.prompt(
+      `"${nombre}" (${i.pendiente} pendiente) se enviará a COMPRA — adquisiciones lo verá en Seguimiento repuestos.\n\nMotivo (opcional):`)
+    if (motivo === null) return
+    setACompraBusy(i.id)
+    try {
+      const r = await enviarItemACompra(i.id, motivo.trim() || null)
+      toast.success(`"${nombre}" enviado a compra (${r.cantidad}). Síguelo en Seguimiento repuestos.`)
+      qc.invalidateQueries({ queryKey: ['ticket-items'] })
+    } catch (e) { toast.error((e as Error).message) } finally { setACompraBusy(null) }
+  }
+
   async function confirmar() {
     if (!ticket || !bodegaId) return
+    // Validar contra pendiente y stock ANTES de mandar: el servidor rechaza
+    // toda la entrega si un solo ítem no tiene stock (rebaja FIFO atómica).
+    for (const i of items ?? []) {
+      const c = Number(cant[i.id] || 0)
+      if (c <= 0) continue
+      const nombre = i.producto_nombre ?? i.descripcion ?? 'ítem'
+      if (c > i.pendiente) {
+        toast.error(`"${nombre}": ingresaste ${c} pero quedan ${i.pendiente} pendientes en el vale.`)
+        return
+      }
+      const disp = i.producto_id && stock ? (stock[i.producto_id] ?? 0) : null
+      if (disp != null && c > disp) {
+        toast.error(disp === 0
+          ? `"${nombre}" no tiene stock en esta bodega. Déjalo en 0: queda pendiente en el vale y se gestiona como compra/reposición.`
+          : `"${nombre}": solo hay ${disp} en stock. Entrega ${disp} y el saldo queda pendiente en el vale.`)
+        return
+      }
+    }
     const entregas = (items ?? [])
       .map((i) => ({ ticket_item_id: i.id, cantidad: Number(cant[i.id] || 0) }))
       .filter((e) => e.cantidad > 0)
@@ -369,7 +404,8 @@ function DespacharTab() {
               {/* Items (con las fotos del pedido — MIG212) */}
               <div className="space-y-2">
                 {(items ?? []).map((i) => {
-                  const disp = i.producto_id ? (stock?.[i.producto_id] ?? 0) : null
+                  // null = sin producto en catálogo O stock aún cargando (no bloquear).
+                  const disp = i.producto_id && stock ? (stock[i.producto_id] ?? 0) : null
                   const max = disp != null ? Math.min(i.pendiente, disp) : i.pendiente
                   return (
                     <div key={i.id} className="rounded-lg border p-2">
@@ -379,7 +415,7 @@ function DespacharTab() {
                           <div className="text-[11px] text-gray-500">
                             Pide {i.cantidad_solicitada} · entregado {i.cantidad_entregada} · pendiente {i.pendiente}
                             {i.producto_id
-                              ? <> · stock {disp ?? 0}</>
+                              ? <span className={disp === 0 ? 'font-semibold text-red-600' : undefined}> · stock {disp ?? '…'}</span>
                               : <span className="text-amber-600"> · sin producto en catálogo</span>}
                           </div>
                           {(i.solicitado_nombre || i.nc_descripcion) && (
@@ -389,11 +425,25 @@ function DespacharTab() {
                           )}
                         </div>
                         {usable && i.pendiente > 0 && i.producto_id && (
-                          <div className="w-20">
-                            <Input type="number" min="0" max={max} value={cant[i.id] ?? ''}
-                                   onChange={(e) => setCant((p) => ({ ...p, [i.id]: e.target.value }))}
-                                   placeholder="0" />
-                          </div>
+                          disp === 0 ? (
+                            <span className="shrink-0 rounded-full bg-red-100 px-2 py-1 text-[10px] font-semibold text-red-700">
+                              sin stock
+                            </span>
+                          ) : (
+                            <div className="w-20">
+                              <Input type="number" min="0" max={max} value={cant[i.id] ?? ''}
+                                     onChange={(e) => setCant((p) => ({ ...p, [i.id]: e.target.value }))}
+                                     placeholder="0" />
+                            </div>
+                          )
+                        )}
+                        {usable && i.pendiente > 0 && (
+                          <button type="button" onClick={() => mandarACompra(i)} disabled={aCompraBusy === i.id}
+                                  title="No lo voy a entregar: enviar solicitud de compra a adquisiciones"
+                                  className="flex shrink-0 items-center gap-1 rounded-lg border border-indigo-300 bg-indigo-50 px-2 py-1.5 text-[11px] font-semibold text-indigo-700 disabled:opacity-50">
+                            {aCompraBusy === i.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ShoppingCart className="h-3.5 w-3.5" />}
+                            A compra
+                          </button>
                         )}
                         {i.pendiente <= 0 && <CheckCircle2 className="h-4 w-4 text-green-600" />}
                       </div>
@@ -415,6 +465,13 @@ function DespacharTab() {
                 })}
               </div>
 
+              {usable && (items ?? []).some((i) => i.pendiente > 0 && i.producto_id && stock && (stock[i.producto_id] ?? 0) === 0) && (
+                <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                  Hay ítems <b>sin stock</b> en esta bodega: entrega el resto y el vale queda
+                  <b> parcial</b> por el saldo. El material faltante se gestiona como
+                  compra/reposición (pestaña Solicitudes) y se despacha con el mismo vale al llegar.
+                </p>
+              )}
               {usable && (
                 <>
                   <div>

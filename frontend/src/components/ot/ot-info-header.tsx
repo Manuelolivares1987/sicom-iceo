@@ -33,6 +33,7 @@ export interface OTInfoHeaderProps {
     activo?: { id: string; codigo: string; nombre: string | null } | null
     faena?: { id: string; nombre: string } | null
     responsable?: { id: string; nombre_completo: string; cargo: string | null } | null
+    tecnico?: { id: string; nombre: string; especialidad?: string | null } | null
   }
 }
 
@@ -42,7 +43,9 @@ export interface OTInfoHeaderProps {
 export function OTInfoHeader({ ot }: OTInfoHeaderProps) {
   const activoLabel = ot.activo ? (ot.activo.nombre || ot.activo.codigo) : '—'
   const faenaLabel = ot.faena?.nombre || '—'
-  const responsableLabel = ot.responsable?.nombre_completo || '—'
+  // El técnico del catálogo del taller manda sobre la cuenta (MIG217): la
+  // cuenta puede ser compartida o el jefe que liberó, no quien ejecuta.
+  const responsableLabel = ot.tecnico?.nombre || ot.responsable?.nombre_completo || '—'
   const tipoLabel = tipoLabels[ot.tipo] || ot.tipo
   const prioridadLabel =
     (ot.prioridad as string).charAt(0).toUpperCase() + (ot.prioridad as string).slice(1)
