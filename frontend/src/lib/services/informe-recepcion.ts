@@ -128,6 +128,18 @@ export async function cerrarInspeccionRecepcion(
   return { data, error }
 }
 
+/** Vuelca TODOS los ítems NO OK del checklist del informe como hallazgos de
+ *  recobro (idempotente — no duplica los ya volcados). MIG214. */
+export async function generarHallazgosDesdeChecklist(informeId: string): Promise<{
+  creados: number; ya_existian: number; total_no_ok: number; mensaje?: string
+}> {
+  const { data, error } = await supabase.rpc('fn_generar_hallazgos_desde_checklist', {
+    p_informe_id: informeId,
+  })
+  if (error) throw error
+  return data as any
+}
+
 // Cierre parcial del día: genera las NC evaluadas hasta ahora (idempotente),
 // sin cerrar el informe. Para inspecciones de recepción que duran varios días.
 export async function cierreParcialRecepcion(informeId: string, observacion?: string) {
