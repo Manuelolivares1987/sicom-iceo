@@ -67,7 +67,17 @@ export default function ValeImprimiblePage() {
   })
 
   return (
-    <div className="mx-auto max-w-2xl bg-white p-6 print:p-0">
+    <div className="mx-auto max-w-2xl bg-white p-6 print:max-w-full print:p-0">
+      {/* Impresión en hoja carta: márgenes cortos y todo compacto para que quepa en 1 página */}
+      <style jsx global>{`
+        @media print {
+          @page { size: letter portrait; margin: 8mm 10mm; }
+          html, body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .vale-doc { font-size: 11px; }
+          .vale-doc tr { break-inside: avoid; }
+          .vale-firmas { break-inside: avoid; }
+        }
+      `}</style>
       {/* Barra de acciones (no se imprime) */}
       <div className="mb-4 flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 print:hidden">
         <p className="text-sm text-gray-600">
@@ -80,12 +90,12 @@ export default function ValeImprimiblePage() {
       </div>
 
       {/* Vale */}
-      <div className="rounded-xl border-2 border-gray-800 print:rounded-none print:border">
-        <div className="flex items-start justify-between border-b-2 border-gray-800 p-4">
+      <div className="vale-doc rounded-xl border-2 border-gray-800 print:rounded-none print:border">
+        <div className="flex items-start justify-between border-b-2 border-gray-800 p-4 print:p-2">
           <div>
-            <h1 className="text-lg font-black tracking-tight text-[#0b2a4a]">VALE DE BODEGA — PILLADO</h1>
-            <p className="mt-0.5 font-mono text-2xl font-black">{ticket.folio}</p>
-            <p className="mt-1 text-xs text-gray-600">{fecha}</p>
+            <h1 className="text-lg font-black tracking-tight text-[#0b2a4a] print:text-base">VALE DE BODEGA — PILLADO</h1>
+            <p className="mt-0.5 font-mono text-2xl font-black print:text-lg">{ticket.folio}</p>
+            <p className="mt-1 text-xs text-gray-600 print:mt-0">{fecha}</p>
             <p className={`mt-1 inline-block rounded px-2 py-0.5 text-[11px] font-bold ${
               ticket.estado === 'entregado' ? 'bg-green-100 text-green-800'
               : ticket.estado === 'anulado' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-800'}`}>
@@ -94,48 +104,49 @@ export default function ValeImprimiblePage() {
           </div>
           <div className="text-center">
             {/* QR = link: cualquier teléfono lo abre en la pantalla de despacho de bodega */}
-            <QRCodeCanvas value={`${typeof window !== 'undefined' ? window.location.origin : ''}/dashboard/bodega/tickets?folio=${ticket.folio}`} size={110} />
+            <QRCodeCanvas value={`${typeof window !== 'undefined' ? window.location.origin : ''}/dashboard/bodega/tickets?folio=${ticket.folio}`} size={110}
+                          className="print:h-[84px] print:w-[84px]" />
             <p className="mt-1 font-mono text-[10px] text-gray-500">{ticket.folio}</p>
             <p className="text-[9px] text-gray-400">Escanear = abre el despacho en bodega</p>
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-3 border-b border-gray-300 p-4 text-sm">
+        <div className="grid grid-cols-2 gap-3 border-b border-gray-300 p-4 text-sm print:p-2">
           <div>
             <p className="text-[11px] uppercase text-gray-500">Equipo / Patente</p>
-            <p className="text-lg font-bold">{ticket.activo_patente ?? ticket.activo_codigo}</p>
+            <p className="text-lg font-bold print:text-base">{ticket.activo_patente ?? ticket.activo_codigo}</p>
             <p className="text-xs text-gray-600">{ticket.activo_nombre}</p>
           </div>
           <div>
             <p className="text-[11px] uppercase text-gray-500">Orden de trabajo</p>
             <p className="font-mono font-bold">{ticket.ot_folio}</p>
-            <p className="mt-1 text-[11px] uppercase text-gray-500">Autoriza</p>
+            <p className="mt-1 text-[11px] uppercase text-gray-500 print:mt-0">Autoriza</p>
             <p className="text-xs font-medium">{ticket.emitido_por_nombre ?? '—'}</p>
           </div>
         </div>
 
-        <table className="w-full text-sm">
+        <table className="w-full text-sm print:text-xs">
           <thead>
             <tr className="border-b border-gray-300 text-left text-[11px] uppercase text-gray-500">
-              <th className="p-2 pl-4">#</th>
-              <th className="p-2">Material / repuesto</th>
-              <th className="p-2 text-right">Cantidad</th>
-              <th className="p-2 pr-4 text-right">Entregado</th>
+              <th className="p-2 pl-4 print:py-1 print:pl-2">#</th>
+              <th className="p-2 print:py-1">Material / repuesto</th>
+              <th className="p-2 text-right print:py-1">Cantidad</th>
+              <th className="p-2 pr-4 text-right print:py-1 print:pr-2">Entregado</th>
             </tr>
           </thead>
           <tbody>
             {items.map((it, i) => (
               <tr key={it.id} className="border-b border-gray-200">
-                <td className="p-2 pl-4 text-gray-500">{i + 1}</td>
-                <td className="p-2">
+                <td className="p-2 pl-4 text-gray-500 print:py-1 print:pl-2">{i + 1}</td>
+                <td className="p-2 print:py-1">
                   <span className="font-medium">{it.producto_nombre ?? it.descripcion}</span>
                   {it.producto_codigo && <span className="ml-1 font-mono text-[10px] text-gray-400">{it.producto_codigo}</span>}
                   {it.comentario && <div className="text-[10px] italic text-gray-500">{it.comentario}</div>}
                 </td>
-                <td className="p-2 text-right font-semibold whitespace-nowrap">
+                <td className="p-2 text-right font-semibold whitespace-nowrap print:py-1">
                   {it.cantidad_solicitada} {it.unidad ?? it.unidad_medida ?? 'un'}
                 </td>
-                <td className="p-2 pr-4 text-right text-gray-400">
+                <td className="p-2 pr-4 text-right text-gray-400 print:py-1 print:pr-2">
                   {Number(it.cantidad_entregada) > 0 ? it.cantidad_entregada : '____'}
                 </td>
               </tr>
@@ -143,25 +154,25 @@ export default function ValeImprimiblePage() {
           </tbody>
         </table>
 
-        <div className="grid grid-cols-3 gap-4 p-4 pt-8">
+        <div className="vale-firmas grid grid-cols-3 gap-4 p-4 pt-8 print:p-2 print:pt-4">
           <div className="text-center">
             {ticket.firma_jefe_url ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={ticket.firma_jefe_url} alt="firma jefe" className="mx-auto h-14 object-contain" />
-            ) : <div className="h-14" />}
+              <img src={ticket.firma_jefe_url} alt="firma jefe" className="mx-auto h-14 object-contain print:h-10" />
+            ) : <div className="h-14 print:h-10" />}
             <div className="border-t border-gray-800 pt-1 text-[11px] font-medium">Jefe de Taller (autoriza)</div>
           </div>
           <div className="text-center">
-            <div className="h-14" />
+            <div className="h-14 print:h-10" />
             <div className="border-t border-gray-800 pt-1 text-[11px] font-medium">Operador (retira)</div>
           </div>
           <div className="text-center">
-            <div className="h-14" />
+            <div className="h-14 print:h-10" />
             <div className="border-t border-gray-800 pt-1 text-[11px] font-medium">Bodega (entrega)</div>
           </div>
         </div>
 
-        <p className="border-t border-gray-300 p-3 text-center text-[10px] text-gray-500">
+        <p className="border-t border-gray-300 p-3 text-center text-[10px] text-gray-500 print:p-1.5">
           Presentar este vale en bodega. El bodeguero escanea el QR en Bodega → Tickets y registra la
           entrega (total o parcial). Ticket de un solo uso — al completarse queda ENTREGADO.
         </p>
