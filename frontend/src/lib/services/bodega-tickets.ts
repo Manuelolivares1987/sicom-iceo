@@ -52,6 +52,10 @@ export type BodegaTicketItem = {
   producto_codigo: string | null
   producto_nombre: string | null
   unidad_medida: string | null
+  /** Fotos del recurso pedido (o la foto de la NC de origen). MIG212. */
+  fotos: string[] | null
+  solicitado_nombre: string | null
+  nc_descripcion: string | null
 }
 
 export type BodegaSimple = { id: string; nombre: string; faena_id: string | null }

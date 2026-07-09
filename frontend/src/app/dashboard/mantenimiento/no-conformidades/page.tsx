@@ -546,9 +546,18 @@ function InsumosOperadorNC({ nc, todaOT }: { nc: NcRecepcion; todaOT?: boolean }
                     )}
                   </span>
                   <span className="text-gray-600 whitespace-nowrap">{r.cantidad_aprobada ?? r.cantidad} {r.unidad ?? 'un'}</span>
-                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${chip.cls}`}>
-                    {chip.label}{r.estado === 'en_vale' && r.ticket_folio ? ` · ${r.ticket_folio}` : ''}
-                  </span>
+                  {r.estado === 'en_vale' && r.ticket_id ? (
+                    <a href={`/vale/${r.ticket_id}`} target="_blank" rel="noreferrer"
+                       title="Ver / volver a imprimir el vale"
+                       className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium underline decoration-dotted hover:opacity-75 ${chip.cls}`}>
+                      <Printer className="h-3 w-3" />
+                      {chip.label}{r.ticket_folio ? ` · ${r.ticket_folio}` : ''}
+                    </a>
+                  ) : (
+                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${chip.cls}`}>
+                      {chip.label}
+                    </span>
+                  )}
                 </div>
                 {(r.solicitado_nombre || r.comentario) && (
                   <p className="mt-0.5 text-[10px] text-gray-500">
@@ -641,7 +650,9 @@ function InsumosOperadorNC({ nc, todaOT }: { nc: NcRecepcion; todaOT?: boolean }
       <p className="mt-1.5 text-[10px] text-gray-500">
         Aprueba/ajusta y emite el vale aquí mismo (el vale es UNO por OT e incluye todo lo aprobado
         del equipo). Si un insumo aprobado no tiene stock, sigue en Bodega → Seguimiento repuestos
-        (solicitud de OC) y vuelve como «Recibido» para el vale.
+        (solicitud de OC) y vuelve como «Recibido» para el vale. Los vales emitidos quedan con el
+        folio clickeable (🖨) para volver a imprimir; bodega los recibe por campanita y los despacha
+        en Bodega → Tickets.
       </p>
 
       {valeOpen && (
