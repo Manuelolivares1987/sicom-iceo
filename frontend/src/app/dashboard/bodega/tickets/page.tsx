@@ -1,14 +1,17 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import QRCode from 'qrcode'
 import {
-  Ticket, Truck, ScanLine, Printer, Search, CheckCircle2, AlertTriangle, PenLine, Loader2, History, X,
+  Ticket, Truck, ScanLine, Printer, Search, CheckCircle2, AlertTriangle, PenLine, History, X,
+  PackageSearch, Image as ImageIcon, Check, Loader2, ChevronLeft,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Spinner } from '@/components/ui/spinner'
+import { Badge } from '@/components/ui/badge'
 import { Modal, ModalFooter } from '@/components/ui/modal'
 import { SignaturePad } from '@/components/ui/signature-pad'
 import { BarcodeScanner } from '@/components/ui/barcode-scanner'
@@ -22,8 +25,11 @@ import {
   getTicketByFolio, subirFirmaTicket,
   type TicketEmitible, type BodegaTicket,
 } from '@/lib/services/bodega-tickets'
+import { getSolicitudesBodega, atenderSolicitudBodega, type BodegaSolicitud } from '@/lib/services/bodega-solicitudes'
+import { useMaterialesPendientesDespacho, useDespacharMaterialOT } from '@/hooks/use-ot-materiales'
+import { cn } from '@/lib/utils'
 
-type Tab = 'emitir' | 'despachar' | 'historial'
+type Tab = 'despachar' | 'solicitudes' | 'historial' | 'emitir'
 
 // El QR del vale es un LINK: cualquier cámara de teléfono lo abre en esta
 // página con el ticket cargado para despachar (MIG205).
@@ -54,14 +60,24 @@ function estadoBadge(e: string) {
   }
 }
 
+// Bodega gestiona TODO el pedido del taller en esta única página: vales por
+// despachar (con fotos), solicitudes de material y el historial.
 export default function BodegaTicketsPage() {
   useRequireAuth()
-  const [tab, setTab] = useState<Tab>('emitir')
+  const [tab, setTab] = useState<Tab>('despachar')
 
-  // Llegada por QR (?folio=TKT-…): directo a Despachar con el ticket cargado.
+  // Badges de las pestañas
+  const { data: tickets } = useTickets()
+  const nPorDespachar = (tickets ?? []).filter((t) => t.estado === 'emitido' || t.estado === 'parcial').length
+  const { data: solsNc = [] } = useQuery({ queryKey: ['bodega-solicitudes', 'pendiente'], queryFn: () => getSolicitudesBodega('pendiente'), staleTime: 15_000 })
+  const { data: pendientesOT = [] } = useMaterialesPendientesDespacho()
+  const nSolicitudes = (solsNc as BodegaSolicitud[]).length + (pendientesOT as any[]).length
+
+  // Llegada por QR (?folio=TKT-…) o link antiguo (?tab=solicitudes)
   useEffect(() => {
-    const f = new URLSearchParams(window.location.search).get('folio')
-    if (f) setTab('despachar')
+    const p = new URLSearchParams(window.location.search)
+    if (p.get('folio')) setTab('despachar')
+    else if (p.get('tab') === 'solicitudes') setTab('solicitudes')
   }, [])
 
   return (
@@ -71,24 +87,31 @@ export default function BodegaTicketsPage() {
           <Ticket className="h-5 w-5" />
         </div>
         <div>
-          <h1 className="text-lg font-bold text-gray-900">Tickets de bodega</h1>
-          <p className="text-xs text-gray-500">Pedido firmado del jefe → entrega del bodeguero (rebaja FIFO)</p>
+          <h1 className="text-lg font-bold text-gray-900">Pedidos a bodega</h1>
+          <p className="text-xs text-gray-500">Vales por despachar (con fotos), solicitudes de material e historial — todo en un solo lugar</p>
         </div>
       </div>
 
       <div className="mb-4 flex gap-1 rounded-xl bg-gray-100 p-1">
-        {([['emitir', 'Emitir', Truck], ['despachar', 'Despachar', ScanLine], ['historial', 'Historial', History]] as const).map(([id, label, Icon]) => (
+        {([
+          ['despachar', 'Por despachar', Truck, nPorDespachar],
+          ['solicitudes', 'Solicitudes', PackageSearch, nSolicitudes],
+          ['historial', 'Historial', History, 0],
+          ['emitir', 'Emitir', PenLine, 0],
+        ] as const).map(([id, label, Icon, n]) => (
           <button key={id} onClick={() => setTab(id)}
-                  className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium ${
+                  className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg px-2 py-2 text-sm font-medium ${
                     tab === id ? 'bg-white text-orange-600 shadow-sm' : 'text-gray-500'}`}>
-            <Icon className="h-4 w-4" /> {label}
+            <Icon className="h-4 w-4" /> <span className="truncate">{label}</span>
+            {n > 0 && <span className="rounded-full bg-orange-600 px-1.5 py-0.5 text-[10px] font-bold text-white">{n}</span>}
           </button>
         ))}
       </div>
 
-      {tab === 'emitir' && <EmitirTab />}
       {tab === 'despachar' && <DespacharTab />}
+      {tab === 'solicitudes' && <SolicitudesTab />}
       {tab === 'historial' && <HistorialTab />}
+      {tab === 'emitir' && <EmitirTab />}
     </div>
   )
 }
@@ -180,13 +203,19 @@ function EmitirTab() {
   )
 }
 
-// ── Despachar (bodeguero) ─────────────────────────────────────────────────────
+// ── Por despachar (bodeguero): lista de vales pendientes + despacho ───────────
 function DespacharTab() {
   const toast = useToast()
   const [folio, setFolio] = useState('')
   const [scan, setScan] = useState(false)
   const [ticket, setTicket] = useState<BodegaTicket | null>(null)
   const [buscando, setBuscando] = useState(false)
+
+  // Vales pendientes (emitido/parcial): el bodeguero los ve SIN escanear nada
+  const { data: todos, isLoading: cargandoLista } = useTickets()
+  const pendientes = useMemo(
+    () => (todos ?? []).filter((t) => t.estado === 'emitido' || t.estado === 'parcial'),
+    [todos])
 
   const { data: items } = useTicketItems(ticket?.id ?? null)
   const { data: bodegasAll } = useBodegasTaller()
@@ -251,7 +280,7 @@ function DespacharTab() {
 
   return (
     <div className="space-y-3">
-      {/* Buscar / escanear */}
+      {/* Buscar / escanear (el QR del vale impreso también llega aquí) */}
       <div className="flex gap-2">
         <div className="flex-1">
           <Input value={folio} onChange={(e) => setFolio(e.target.value)} placeholder="Folio del ticket (TKT-…)"
@@ -271,80 +300,137 @@ function DespacharTab() {
         </div>
       )}
 
-      {ticket && (
-        <Card>
-          <CardContent className="p-3 space-y-3">
-            <div className="flex items-center gap-2">
-              <span className="font-mono text-sm font-bold">{ticket.folio}</span>
-              <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${estadoBadge(ticket.estado)}`}>{ticket.estado}</span>
-              <span className="ml-auto text-xs text-gray-500">{ticket.activo_codigo} {ticket.activo_patente && `· ${ticket.activo_patente}`}</span>
-            </div>
-            <div className="text-xs text-gray-500">OT {ticket.ot_folio} · emitió {ticket.emitido_por_nombre ?? '—'}</div>
-
-            {!usable && (
-              <div className="flex items-center gap-2 rounded-lg bg-amber-50 border border-amber-200 p-2 text-sm text-amber-800">
-                <AlertTriangle className="h-4 w-4" /> Este ticket ya está {ticket.estado} — no se puede usar.
-              </div>
-            )}
-
-            {/* Bodega */}
-            <div>
-              <label className="text-xs font-medium">Bodega de despacho</label>
-              <select value={bodegaId} onChange={(e) => setBodegaId(e.target.value)} disabled={!usable}
-                      className="w-full border rounded px-2 py-1.5 text-sm">
-                {(bodegas ?? []).map((b) => <option key={b.id} value={b.id}>{b.nombre}</option>)}
-              </select>
-            </div>
-
-            {/* Items */}
-            <div className="space-y-2">
-              {(items ?? []).map((i) => {
-                const disp = i.producto_id ? (stock?.[i.producto_id] ?? 0) : null
-                const max = disp != null ? Math.min(i.pendiente, disp) : i.pendiente
-                return (
-                  <div key={i.id} className="rounded-lg border p-2">
-                    <div className="flex items-center gap-2">
-                      <div className="flex-1">
-                        <div className="text-sm font-medium">{i.producto_nombre ?? i.descripcion}</div>
-                        <div className="text-[11px] text-gray-500">
-                          Pide {i.cantidad_solicitada} · entregado {i.cantidad_entregada} · pendiente {i.pendiente}
-                          {i.producto_id
-                            ? <> · stock {disp ?? 0}</>
-                            : <span className="text-amber-600"> · sin producto en catálogo</span>}
-                        </div>
+      {/* Lista de vales pendientes: tocar uno lo carga para despachar */}
+      {!ticket && (
+        cargandoLista ? (
+          <div className="flex justify-center py-8"><Spinner /></div>
+        ) : pendientes.length === 0 ? (
+          <p className="py-8 text-center text-sm text-gray-400">No hay vales pendientes de despacho. 🎉</p>
+        ) : (
+          <div className="space-y-2">
+            <p className="text-xs text-gray-500">{pendientes.length} vale{pendientes.length !== 1 ? 's' : ''} por despachar — toca uno para gestionarlo:</p>
+            {pendientes.map((t) => (
+              <button key={t.id} type="button" onClick={() => buscar(t.folio)}
+                      className="w-full text-left">
+                <Card className="border-orange-200 hover:bg-orange-50/50 transition-colors">
+                  <CardContent className="flex items-center gap-3 p-3">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-xs font-bold">{t.folio}</span>
+                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${estadoBadge(t.estado)}`}>{t.estado}</span>
                       </div>
-                      {usable && i.pendiente > 0 && i.producto_id && (
-                        <div className="w-20">
-                          <Input type="number" min="0" max={max} value={cant[i.id] ?? ''}
-                                 onChange={(e) => setCant((p) => ({ ...p, [i.id]: e.target.value }))}
-                                 placeholder="0" />
+                      <div className="text-sm font-semibold text-gray-800">{t.activo_patente ?? t.activo_codigo} <span className="font-normal text-gray-500">{t.activo_nombre}</span></div>
+                      <div className="text-[11px] text-gray-500">
+                        OT {t.ot_folio} · {t.n_items} ítem{t.n_items !== 1 ? 's' : ''} · emitió {t.emitido_por_nombre ?? '—'} · {new Date(t.created_at).toLocaleDateString('es-CL')}
+                      </div>
+                    </div>
+                    <Truck className="h-5 w-5 text-orange-500 shrink-0" />
+                  </CardContent>
+                </Card>
+              </button>
+            ))}
+          </div>
+        )
+      )}
+
+      {ticket && (
+        <>
+          <Button variant="ghost" size="sm" onClick={() => { setTicket(null); setResultado(null); setFolio('') }}>
+            <ChevronLeft className="h-4 w-4 mr-1" /> Volver a la lista
+          </Button>
+          <Card>
+            <CardContent className="p-3 space-y-3">
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-sm font-bold">{ticket.folio}</span>
+                <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${estadoBadge(ticket.estado)}`}>{ticket.estado}</span>
+                <button type="button" onClick={() => window.open(`/vale/${ticket.id}`, '_blank')}
+                        title="Ver / imprimir el vale" className="text-gray-400 hover:text-gray-600">
+                  <Printer className="h-4 w-4" />
+                </button>
+                <span className="ml-auto text-xs text-gray-500">{ticket.activo_codigo} {ticket.activo_patente && `· ${ticket.activo_patente}`}</span>
+              </div>
+              <div className="text-xs text-gray-500">OT {ticket.ot_folio} · emitió {ticket.emitido_por_nombre ?? '—'}</div>
+
+              {!usable && (
+                <div className="flex items-center gap-2 rounded-lg bg-amber-50 border border-amber-200 p-2 text-sm text-amber-800">
+                  <AlertTriangle className="h-4 w-4" /> Este ticket ya está {ticket.estado} — no se puede usar.
+                </div>
+              )}
+
+              {/* Bodega */}
+              <div>
+                <label className="text-xs font-medium">Bodega de despacho</label>
+                <select value={bodegaId} onChange={(e) => setBodegaId(e.target.value)} disabled={!usable}
+                        className="w-full border rounded px-2 py-1.5 text-sm">
+                  {(bodegas ?? []).map((b) => <option key={b.id} value={b.id}>{b.nombre}</option>)}
+                </select>
+              </div>
+
+              {/* Items (con las fotos del pedido — MIG212) */}
+              <div className="space-y-2">
+                {(items ?? []).map((i) => {
+                  const disp = i.producto_id ? (stock?.[i.producto_id] ?? 0) : null
+                  const max = disp != null ? Math.min(i.pendiente, disp) : i.pendiente
+                  return (
+                    <div key={i.id} className="rounded-lg border p-2">
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1">
+                          <div className="text-sm font-medium">{i.producto_nombre ?? i.descripcion}</div>
+                          <div className="text-[11px] text-gray-500">
+                            Pide {i.cantidad_solicitada} · entregado {i.cantidad_entregada} · pendiente {i.pendiente}
+                            {i.producto_id
+                              ? <> · stock {disp ?? 0}</>
+                              : <span className="text-amber-600"> · sin producto en catálogo</span>}
+                          </div>
+                          {(i.solicitado_nombre || i.nc_descripcion) && (
+                            <div className="text-[10px] text-gray-400">
+                              {i.solicitado_nombre}{i.nc_descripcion ? ` · NC: ${i.nc_descripcion}` : ''}
+                            </div>
+                          )}
+                        </div>
+                        {usable && i.pendiente > 0 && i.producto_id && (
+                          <div className="w-20">
+                            <Input type="number" min="0" max={max} value={cant[i.id] ?? ''}
+                                   onChange={(e) => setCant((p) => ({ ...p, [i.id]: e.target.value }))}
+                                   placeholder="0" />
+                          </div>
+                        )}
+                        {i.pendiente <= 0 && <CheckCircle2 className="h-4 w-4 text-green-600" />}
+                      </div>
+                      {(i.fotos?.length ?? 0) > 0 && (
+                        <div className="mt-1.5 flex gap-1.5">
+                          {(i.fotos ?? []).map((url, j) => (
+                            <a key={j} href={url} target="_blank" rel="noreferrer">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img src={url} alt="foto del pedido" className="h-14 w-14 rounded border object-cover hover:opacity-80" />
+                            </a>
+                          ))}
                         </div>
                       )}
-                      {i.pendiente <= 0 && <CheckCircle2 className="h-4 w-4 text-green-600" />}
+                      {usable && i.producto_id && disp != null && Number(cant[i.id] || 0) > disp && (
+                        <div className="mt-1 text-[11px] text-red-600">Supera el stock disponible ({disp}).</div>
+                      )}
                     </div>
-                    {usable && i.producto_id && disp != null && Number(cant[i.id] || 0) > disp && (
-                      <div className="mt-1 text-[11px] text-red-600">Supera el stock disponible ({disp}).</div>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
+                  )
+                })}
+              </div>
 
-            {usable && (
-              <>
-                <div>
-                  <label className="text-xs font-medium">Entregado a (nombre)</label>
-                  <Input value={entregadoA} onChange={(e) => setEntregadoA(e.target.value)} placeholder="ej: Yusedl" />
-                </div>
-                <SignaturePad label="Firma del bodeguero (opcional)" onCapture={setFirmaBod} />
-                <Button variant="primary" className="w-full" disabled={entregar.isPending} onClick={confirmar}>
-                  {entregar.isPending ? <Spinner className="h-4 w-4 mr-1" /> : <CheckCircle2 className="h-4 w-4 mr-1" />}
-                  Confirmar entrega (rebaja FIFO)
-                </Button>
-              </>
-            )}
-          </CardContent>
-        </Card>
+              {usable && (
+                <>
+                  <div>
+                    <label className="text-xs font-medium">Entregado a (nombre)</label>
+                    <Input value={entregadoA} onChange={(e) => setEntregadoA(e.target.value)} placeholder="ej: Yusedl" />
+                  </div>
+                  <SignaturePad label="Firma del bodeguero (opcional)" onCapture={setFirmaBod} />
+                  <Button variant="primary" className="w-full" disabled={entregar.isPending} onClick={confirmar}>
+                    {entregar.isPending ? <Spinner className="h-4 w-4 mr-1" /> : <CheckCircle2 className="h-4 w-4 mr-1" />}
+                    Confirmar entrega (rebaja FIFO)
+                  </Button>
+                </>
+              )}
+            </CardContent>
+          </Card>
+        </>
       )}
 
       {resultado && (
@@ -354,6 +440,162 @@ function DespacharTab() {
             : '✓ Entrega PARCIAL registrada — el ticket sigue abierto por el saldo.'}
           {resultado.despacho && <div className="mt-1 font-mono text-xs">Despacho: {resultado.despacho}</div>}
         </div>
+      )}
+    </div>
+  )
+}
+
+// ── Solicitudes (material que no está en bodega + materiales de OT) ──────────
+function SolicitudesTab() {
+  const { data: pendientesOT = [] } = useMaterialesPendientesDespacho()
+  return (
+    <div className="space-y-6">
+      <SolicitudesNCSection />
+      <MaterialesOTSection items={pendientesOT as any[]} />
+    </div>
+  )
+}
+
+function SolicitudesNCSection() {
+  const qc = useQueryClient()
+  const toast = useToast()
+  const [filtro, setFiltro] = useState('pendiente')
+  const { data: sols = [], isLoading } = useQuery({ queryKey: ['bodega-solicitudes', filtro], queryFn: () => getSolicitudesBodega(filtro || undefined), staleTime: 15_000 })
+  const [busy, setBusy] = useState<string | null>(null)
+  const FILTROS = [['pendiente', 'Pendientes'], ['atendida', 'Atendidas'], ['rechazada', 'Rechazadas'], ['', 'Todas']] as const
+
+  const accion = async (s: BodegaSolicitud, estado: 'atendida' | 'rechazada') => {
+    setBusy(s.id)
+    try {
+      await atenderSolicitudBodega({ id: s.id, estado })
+      toast.success(estado === 'atendida' ? 'Solicitud atendida' : 'Solicitud rechazada')
+      qc.invalidateQueries({ queryKey: ['bodega-solicitudes'] })
+    } catch (e) { toast.error(e instanceof Error ? e.message : 'Error') } finally { setBusy(null) }
+  }
+
+  return (
+    <div className="space-y-3">
+      <div>
+        <h2 className="text-sm font-bold text-gray-800 flex items-center gap-1.5"><PackageSearch className="h-4 w-4 text-indigo-600" /> Material que NO está en bodega</h2>
+        <p className="text-xs text-muted-foreground">Solicitado desde las No Conformidades, con la foto y el equipo. Atender = ya se gestionó (compra/reposición).</p>
+      </div>
+      <div className="flex gap-2">
+        {FILTROS.map(([k, l]) => (
+          <button key={k} onClick={() => setFiltro(k)} className={cn('rounded-full border px-3 py-1 text-xs', filtro === k ? 'bg-indigo-600 text-white border-indigo-600' : 'hover:bg-muted')}>{l}</button>
+        ))}
+      </div>
+      {isLoading && <div className="p-6"><Spinner className="h-5 w-5" /></div>}
+      {!isLoading && sols.length === 0 && <Card><CardContent className="p-6 text-center text-sm text-muted-foreground">Sin solicitudes {filtro && `(${filtro})`}.</CardContent></Card>}
+      <div className="grid gap-3 md:grid-cols-2">
+        {sols.map((s) => (
+          <Card key={s.id} className={cn(s.estado === 'pendiente' && 'border-amber-300')}>
+            <CardContent className="p-3 flex gap-3">
+              {s.foto_url ? (
+                <a href={s.foto_url} target="_blank" rel="noreferrer" className="shrink-0">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={s.foto_url} alt="foto solicitud" className="h-20 w-20 rounded object-cover border" />
+                </a>
+              ) : (
+                <div className="h-20 w-20 rounded border bg-muted flex items-center justify-center text-muted-foreground shrink-0"><ImageIcon className="h-6 w-6" /></div>
+              )}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold">{s.descripcion}</span>
+                  <span className="text-xs text-muted-foreground">x{s.cantidad}{s.unidad ? ` ${s.unidad}` : ''}</span>
+                </div>
+                <div className="text-xs text-muted-foreground mt-0.5">
+                  {s.patente ?? s.activo_codigo ?? '—'} · {s.solicitado_por_nombre ?? '—'} · {new Date(s.created_at).toLocaleDateString('es-CL')}
+                </div>
+                {s.observacion && <p className="text-xs mt-1 text-gray-600 line-clamp-2">{s.observacion}</p>}
+                <div className="mt-2 flex items-center gap-2">
+                  <Badge variant={s.estado === 'pendiente' ? 'asignada' : s.estado === 'atendida' ? 'operativo' : 'default'} className="text-[10px]">{s.estado}</Badge>
+                  {s.estado === 'pendiente' && (
+                    <>
+                      <Button size="sm" disabled={busy === s.id} onClick={() => accion(s, 'atendida')}>
+                        {busy === s.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5 mr-1" />} Atender
+                      </Button>
+                      <Button size="sm" variant="outline" disabled={busy === s.id} onClick={() => accion(s, 'rechazada')}><X className="h-3.5 w-3.5 mr-1" /> Rechazar</Button>
+                    </>
+                  )}
+                  {s.nota_bodega && <span className="text-[11px] text-muted-foreground">· {s.nota_bodega}</span>}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function MaterialesOTSection({ items }: { items: any[] }) {
+  const toast = useToast()
+  const despachar = useDespacharMaterialOT()
+  const [busy, setBusy] = useState<string | null>(null)
+  const [soloFalta, setSoloFalta] = useState(false)
+
+  const lista = soloFalta ? items.filter((m) => m.estado === 'faltante') : items
+  const faltan = items.filter((m) => m.estado === 'faltante').length
+
+  const onDespachar = (m: any) => {
+    setBusy(m.material_id)
+    despachar.mutate({ materialId: m.material_id, otId: m.ot_id }, {
+      onSuccess: () => toast.success('Material despachado'),
+      onError: (e: any) => toast.error(e?.message ?? 'Error al despachar'),
+      onSettled: () => setBusy(null),
+    })
+  }
+
+  return (
+    <div className="space-y-3">
+      <div>
+        <h2 className="text-sm font-bold text-gray-800 flex items-center gap-1.5"><Truck className="h-4 w-4 text-indigo-600" /> Materiales planificados en las OT</h2>
+        <p className="text-xs text-muted-foreground">Lo pedido en las órdenes de trabajo, con o sin stock.</p>
+      </div>
+      {items.length === 0 ? (
+        <Card><CardContent className="p-6 text-center text-sm text-muted-foreground">Sin materiales pedidos por OT pendientes.</CardContent></Card>
+      ) : (
+        <>
+          <label className="flex items-center gap-2 text-xs text-muted-foreground">
+            <input type="checkbox" checked={soloFalta} onChange={(e) => setSoloFalta(e.target.checked)} />
+            Mostrar solo lo que <b className="text-red-600">falta</b> ({faltan})
+          </label>
+          <Card>
+            <CardContent className="p-0 overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead><tr className="text-xs text-muted-foreground border-b">
+                  <th className="text-left p-2">Material</th><th className="text-left p-2">OT / Equipo</th>
+                  <th className="p-2">Pide</th><th className="p-2">Stock</th><th className="p-2">Estado</th><th className="p-2"></th>
+                </tr></thead>
+                <tbody>
+                  {lista.map((m) => {
+                    const hay = m.estado === 'suficiente'
+                    return (
+                      <tr key={m.material_id} className={cn('border-b', !hay && 'bg-red-50/40')}>
+                        <td className="p-2"><span className="font-mono text-xs text-muted-foreground">{m.producto_codigo}</span> {m.producto_nombre}</td>
+                        <td className="p-2 text-xs">{m.ot_folio} · <b>{m.activo_patente ?? m.activo_codigo ?? '—'}</b></td>
+                        <td className="p-2 text-center">{m.cantidad_plan}</td>
+                        <td className="p-2 text-center text-xs">{m.stock_actual ?? 0}</td>
+                        <td className="p-2 text-center">
+                          <Badge variant={hay ? 'operativo' : 'critica'} className="text-[10px]">{hay ? 'Hay stock' : 'Falta'}</Badge>
+                        </td>
+                        <td className="p-2 text-right">
+                          {hay ? (
+                            <Button size="sm" disabled={busy === m.material_id} onClick={() => onDespachar(m)}>
+                              {busy === m.material_id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Truck className="h-3.5 w-3.5 mr-1" />} Despachar
+                            </Button>
+                          ) : (
+                            <span className="text-[11px] text-amber-600 flex items-center justify-end gap-1"><AlertTriangle className="h-3.5 w-3.5" /> comprar / reponer</span>
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </CardContent>
+          </Card>
+        </>
       )}
     </div>
   )
