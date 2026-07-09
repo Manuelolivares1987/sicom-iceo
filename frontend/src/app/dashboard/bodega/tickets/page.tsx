@@ -5,7 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import QRCode from 'qrcode'
 import {
   Ticket, Truck, ScanLine, Printer, Search, CheckCircle2, AlertTriangle, PenLine, History, X,
-  PackageSearch, Image as ImageIcon, Check, Loader2, ChevronLeft,
+  PackageSearch, Image as ImageIcon, Check, Loader2, ChevronLeft, ShoppingCart,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -22,7 +22,7 @@ import {
   useCrearTicket, useEntregarTicket, useAnularTicket,
 } from '@/hooks/use-bodega-tickets'
 import {
-  getTicketByFolio, subirFirmaTicket,
+  getTicketByFolio, subirFirmaTicket, enviarItemACompra,
   type TicketEmitible, type BodegaTicket,
 } from '@/lib/services/bodega-tickets'
 import { getSolicitudesBodega, atenderSolicitudBodega, type BodegaSolicitud } from '@/lib/services/bodega-solicitudes'
@@ -206,6 +206,7 @@ function EmitirTab() {
 // ── Por despachar (bodeguero): lista de vales pendientes + despacho ───────────
 function DespacharTab() {
   const toast = useToast()
+  const qc = useQueryClient()
   const [folio, setFolio] = useState('')
   const [scan, setScan] = useState(false)
   const [ticket, setTicket] = useState<BodegaTicket | null>(null)
@@ -258,6 +259,22 @@ function DespacharTab() {
   }, [])
 
   const usable = ticket && ticket.estado !== 'entregado' && ticket.estado !== 'anulado'
+
+  // Lo que Gustavo NO va a entregar se manda a COMPRA: entra al tablero de
+  // Seguimiento repuestos con todos los datos y le avisa a adquisiciones.
+  const [aCompraBusy, setACompraBusy] = useState<string | null>(null)
+  async function mandarACompra(i: { id: string; producto_nombre?: string | null; descripcion?: string | null; pendiente: number }) {
+    const nombre = i.producto_nombre ?? i.descripcion ?? 'ítem'
+    const motivo = window.prompt(
+      `"${nombre}" (${i.pendiente} pendiente) se enviará a COMPRA — adquisiciones lo verá en Seguimiento repuestos.\n\nMotivo (opcional):`)
+    if (motivo === null) return
+    setACompraBusy(i.id)
+    try {
+      const r = await enviarItemACompra(i.id, motivo.trim() || null)
+      toast.success(`"${nombre}" enviado a compra (${r.cantidad}). Síguelo en Seguimiento repuestos.`)
+      qc.invalidateQueries({ queryKey: ['ticket-items'] })
+    } catch (e) { toast.error((e as Error).message) } finally { setACompraBusy(null) }
+  }
 
   async function confirmar() {
     if (!ticket || !bodegaId) return
@@ -419,6 +436,14 @@ function DespacharTab() {
                                      placeholder="0" />
                             </div>
                           )
+                        )}
+                        {usable && i.pendiente > 0 && (
+                          <button type="button" onClick={() => mandarACompra(i)} disabled={aCompraBusy === i.id}
+                                  title="No lo voy a entregar: enviar solicitud de compra a adquisiciones"
+                                  className="flex shrink-0 items-center gap-1 rounded-lg border border-indigo-300 bg-indigo-50 px-2 py-1.5 text-[11px] font-semibold text-indigo-700 disabled:opacity-50">
+                            {aCompraBusy === i.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ShoppingCart className="h-3.5 w-3.5" />}
+                            A compra
+                          </button>
                         )}
                         {i.pendiente <= 0 && <CheckCircle2 className="h-4 w-4 text-green-600" />}
                       </div>

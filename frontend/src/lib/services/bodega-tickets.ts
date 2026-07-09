@@ -174,3 +174,13 @@ export async function anularTicket(ticketId: string, motivo?: string) {
   if (error) throw error
   return data as { success: boolean }
 }
+
+/** Lo que bodega NO puede entregar se manda a comprar: entra al tablero de
+ *  Seguimiento repuestos y avisa a adquisiciones (MIG218). */
+export async function enviarItemACompra(ticketItemId: string, motivo?: string | null) {
+  const { data, error } = await supabase.rpc('rpc_ticket_item_a_compra', {
+    p_ticket_item_id: ticketItemId, p_motivo: motivo ?? null,
+  })
+  if (error) throw error
+  return data as { success: boolean; recurso_id: string; cantidad: number; vale: string }
+}
