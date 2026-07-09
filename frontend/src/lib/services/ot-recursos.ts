@@ -184,12 +184,15 @@ export async function agregarRecursoJefe(params: {
   comentario?: string | null
   /** Hallazgo NO OK al que se amarra el ítem (p.ej. al agregar desde la NC). */
   instanceItemId?: string | null
+  /** Fotos del repuesto que pide el jefe (MIG210) — bodega las ve igual que las del operador. */
+  fotos?: string[] | null
 }) {
   const { data, error } = await supabase.rpc('rpc_ot_recurso_agregar', {
     p_ot_id: params.otId, p_cantidad: params.cantidad,
     p_producto_id: params.productoId ?? null, p_descripcion: params.descripcion ?? null,
     p_unidad: params.unidad ?? null, p_comentario: params.comentario ?? null,
     p_instance_item_id: params.instanceItemId ?? null,
+    p_fotos: params.fotos && params.fotos.length > 0 ? params.fotos : null,
   })
   if (error) throw error
   return data as { success: boolean; recurso_id: string }

@@ -1,11 +1,12 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   AlertTriangle, ClipboardList, Wrench, PlusCircle, Trash2, CheckCircle2, Loader2, Package, Ticket, Printer,
+  ChevronDown, ChevronRight,
 } from 'lucide-react'
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
 import { Badge } from '@/components/ui/badge'
@@ -13,12 +14,13 @@ import { Modal, ModalFooter } from '@/components/ui/modal'
 import { useToast } from '@/contexts/toast-context'
 import { useRequireAuth } from '@/hooks/use-require-auth'
 import {
-  getNcRecepcion, asignarRecursosNc, planificarNc, registrarNcAdhoc, generarNcDesdeRecepcion,
+  getNcRecepcion, planificarNcEquipo, asignarRecursosNcEquipo, getNcMaterialesEquipo,
+  registrarNcAdhoc, generarNcDesdeRecepcion,
   getRecepcionesParaNc, getActivosParaNc, subirFotoNc, type NcRecepcion, type NcMaterial,
 } from '@/lib/services/no-conformidades'
 import { getProductos } from '@/lib/services/inventario'
 import {
-  getRecursosPorHallazgo, getRecursosOT, validarRecurso, agregarRecursoJefe,
+  getRecursosPorHallazgo, getRecursosOT, validarRecurso, agregarRecursoJefe, subirFotoRecurso,
   getSeguimientoRecursos,
   RECURSO_ESTADO_LABEL, type OTRecurso, type OTRecursoSeguimiento,
 } from '@/lib/services/ot-recursos'
@@ -38,7 +40,34 @@ const ESTADO_BADGE: Record<string, { v: any; t: string }> = {
   resuelta: { v: 'operativo', t: 'Resuelta' },
   descartada: { v: 'default', t: 'Descartada' },
 }
+// Estado del CONJUNTO del equipo (el peor manda)
+const ESTADO_EQUIPO: Record<string, { v: any; t: string }> = {
+  registrada: { v: 'default', t: 'Sin recursos' },
+  con_recursos: { v: 'asignada', t: 'Con recursos' },
+  planificada: { v: 'en_ejecucion', t: 'Planificado' },
+  en_ejecucion: { v: 'en_ejecucion', t: 'En ejecución' },
+  resuelta: { v: 'operativo', t: 'Resuelto' },
+  descartada: { v: 'default', t: 'Descartado' },
+}
+const ORDEN_ESTADO = ['registrada', 'con_recursos', 'planificada', 'en_ejecucion', 'resuelta', 'descartada']
+const ORDEN_SEV = ['critica', 'alta', 'media', 'baja']
 const FILTROS = [['', 'Todas'], ['registrada', 'Sin recursos'], ['con_recursos', 'Con recursos'], ['planificada', 'Planificadas']] as const
+
+// Conjunto de NC de una patente: en el taller TODO se gestiona por equipo (MIG209)
+type EquipoNC = {
+  activoId: string
+  patente: string
+  nombre: string | null
+  ncs: NcRecepcion[]
+  pendientes: NcRecepcion[]   // sin OT correctiva todavía (planificables)
+  sevMax: string
+  estado: string
+  grupos: string | null
+  horas: number
+  dias: number
+  nMateriales: number
+  nInsumosOperador: number
+}
 
 export default function NoConformidadesPage() {
   useRequireAuth()
@@ -46,11 +75,12 @@ export default function NoConformidadesPage() {
   const toast = useToast()
   const [filtro, setFiltro] = useState('')
   const { data: ncs = [], isLoading } = useQuery({ queryKey: ['nc-recepcion', filtro], queryFn: () => getNcRecepcion(filtro || undefined), staleTime: 20_000 })
-  const [recursosNc, setRecursosNc] = useState<NcRecepcion | null>(null)
+  const [recursosEquipo, setRecursosEquipo] = useState<EquipoNC | null>(null)
   const [genOpen, setGenOpen] = useState(false)
   const [adhocOpen, setAdhocOpen] = useState(false)
   const [valeOpen, setValeOpen] = useState(false)
   const [busyId, setBusyId] = useState<string | null>(null)
+  const [expandido, setExpandido] = useState<Record<string, boolean>>({})
 
   // Equipos con insumos aprobados/recibidos listos para vale (botón grande)
   const { data: seguimiento = [] } = useQuery({
@@ -72,21 +102,48 @@ export default function NoConformidadesPage() {
     return Array.from(m.values())
   }, [seguimiento])
 
+  // ── Agrupar las NC por equipo (patente): así trabaja el taller ─────────────
+  const equipos = useMemo<EquipoNC[]>(() => {
+    const m = new Map<string, EquipoNC>()
+    for (const nc of ncs) {
+      const g = m.get(nc.activo_id) ?? {
+        activoId: nc.activo_id, patente: nc.patente ?? nc.codigo ?? '—', nombre: nc.equipo,
+        ncs: [], pendientes: [], sevMax: 'baja', estado: 'descartada',
+        grupos: null, horas: 0, dias: 0, nMateriales: 0, nInsumosOperador: 0,
+      }
+      g.ncs.push(nc)
+      if (!nc.plan_ot_id && ['registrada', 'con_recursos'].includes(nc.estado_planificacion)) g.pendientes.push(nc)
+      if (ORDEN_SEV.indexOf(nc.severidad) < ORDEN_SEV.indexOf(g.sevMax as any)) g.sevMax = nc.severidad
+      if (ORDEN_ESTADO.indexOf(nc.estado_planificacion) < ORDEN_ESTADO.indexOf(g.estado)) g.estado = nc.estado_planificacion
+      if (nc.grupo_trabajo && !(g.grupos ?? '').includes(nc.grupo_trabajo)) g.grupos = g.grupos ? `${g.grupos}, ${nc.grupo_trabajo}` : nc.grupo_trabajo
+      g.horas += nc.horas_estimadas ?? 0
+      g.dias = Math.max(g.dias, nc.tiempo_estimado_dias ?? 0)
+      g.nMateriales += nc.n_materiales
+      g.nInsumosOperador += nc.n_recursos_operador
+      m.set(nc.activo_id, g)
+    }
+    return Array.from(m.values()).sort((a, b) =>
+      ORDEN_ESTADO.indexOf(a.estado) - ORDEN_ESTADO.indexOf(b.estado) || a.patente.localeCompare(b.patente))
+  }, [ncs])
+
   const invalidar = () => qc.invalidateQueries({ queryKey: ['nc-recepcion'] })
 
   const kpi = useMemo(() => ({
-    total: ncs.length,
-    sin: ncs.filter((n) => n.estado_planificacion === 'registrada').length,
-    con: ncs.filter((n) => n.estado_planificacion === 'con_recursos').length,
-    plan: ncs.filter((n) => n.estado_planificacion === 'planificada').length,
-  }), [ncs])
+    total: equipos.length,
+    sin: equipos.filter((e) => e.estado === 'registrada').length,
+    con: equipos.filter((e) => e.estado === 'con_recursos').length,
+    plan: equipos.filter((e) => ['planificada', 'en_ejecucion'].includes(e.estado)).length,
+  }), [equipos])
 
-  const planificar = async (nc: NcRecepcion) => {
-    setBusyId(nc.id)
+  const planificar = async (eq: EquipoNC) => {
+    setBusyId(eq.activoId)
     try {
-      await planificarNc(nc.id)
-      toast.success('NC planificada: se creó la OT correctiva')
-      invalidar(); qc.invalidateQueries({ queryKey: ['ordenes-trabajo'] })
+      const r = await planificarNcEquipo(eq.activoId)
+      if (!r.ot_id) { toast.error(r.mensaje ?? 'Sin NC pendientes'); return }
+      toast.success(r.ot_reutilizada
+        ? `${r.n_ncs} NC de ${eq.patente} sumadas a la OT correctiva ya abierta`
+        : `OT correctiva creada para ${eq.patente} con ${r.n_ncs} NC`)
+      invalidar(); qc.invalidateQueries({ queryKey: ['ordenes-trabajo'] }); qc.invalidateQueries({ queryKey: ['nc-ot-por-agendar'] })
     } catch (e) { toast.error(e instanceof Error ? e.message : 'Error al planificar') } finally { setBusyId(null) }
   }
 
@@ -94,10 +151,10 @@ export default function NoConformidadesPage() {
     <div className="space-y-6">
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2"><AlertTriangle className="h-6 w-6 text-orange-600" /> No Conformidades (Recepción)</h1>
+          <h1 className="text-2xl font-bold flex items-center gap-2"><AlertTriangle className="h-6 w-6 text-orange-600" /> No Conformidades por equipo</h1>
           <p className="text-sm text-muted-foreground">
-            Llegan solas desde el taller (hallazgos NO OK del checklist) y desde la recepción de equipos.
-            Aquí validas insumos, emites el vale y las planificas como trabajo correctivo.
+            Las NC llegan solas desde el taller y la recepción, y aquí se trabajan como el taller:
+            TODO el conjunto de la patente junto — recursos, vale de bodega y UNA OT correctiva por equipo.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -118,10 +175,10 @@ export default function NoConformidadesPage() {
       </div>
 
       <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
-        <Kpi label="Total" value={kpi.total} />
+        <Kpi label="Equipos con NC" value={kpi.total} />
         <Kpi label="Sin recursos" value={kpi.sin} warn={kpi.sin > 0} />
         <Kpi label="Con recursos" value={kpi.con} />
-        <Kpi label="Planificadas" value={kpi.plan} />
+        <Kpi label="Planificados" value={kpi.plan} />
       </div>
 
       <div className="flex gap-2">
@@ -135,46 +192,88 @@ export default function NoConformidadesPage() {
           {isLoading && <div className="p-4"><Spinner className="h-5 w-5" /></div>}
           <table className="w-full text-sm">
             <thead><tr className="text-xs text-muted-foreground border-b">
-              <th className="text-left p-2">Equipo</th><th className="text-left p-2">No Conformidad</th>
-              <th className="p-2">Sev.</th><th className="p-2">Origen</th><th className="text-left p-2">Recursos</th>
+              <th className="text-left p-2">Equipo</th><th className="p-2">NC</th><th className="p-2">Sev.</th>
+              <th className="text-left p-2">Recursos del conjunto</th>
               <th className="p-2">Estado</th><th className="p-2"></th>
             </tr></thead>
             <tbody>
-              {ncs.map((nc) => (
-                <tr key={nc.id} className="border-b hover:bg-muted/40">
-                  <td className="p-2 font-medium whitespace-nowrap">{nc.patente ?? nc.codigo}</td>
-                  <td className="p-2">{nc.descripcion}</td>
-                  <td className="p-2 text-center"><Badge variant={nc.severidad as any} className="text-[10px]">{nc.severidad}</Badge></td>
-                  <td className="p-2 text-center text-[11px] text-muted-foreground">{nc.origen === 'recepcion_adhoc' ? 'ad-hoc' : 'checklist'}</td>
-                  <td className="p-2 text-xs text-muted-foreground">
-                    {nc.grupo_trabajo || nc.horas_estimadas || nc.n_materiales > 0
-                      ? `${nc.grupo_trabajo ?? '—'}${nc.horas_estimadas ? ` · ${nc.horas_estimadas}h` : ''}${nc.tiempo_estimado_dias ? ` · ${nc.tiempo_estimado_dias}d` : ''}${nc.n_materiales ? ` · ${nc.n_materiales} mat.` : ''}`
-                      : <span className="text-amber-600">sin asignar</span>}
-                    {nc.n_recursos_operador > 0 && (
-                      <span className="ml-1.5 rounded bg-orange-100 px-1.5 py-0.5 text-[10px] font-semibold text-orange-700 whitespace-nowrap">
-                        {nc.n_recursos_operador} insumo{nc.n_recursos_operador > 1 ? 's' : ''} pedido{nc.n_recursos_operador > 1 ? 's' : ''} por operador
-                      </span>
-                    )}
-                  </td>
-                  <td className="p-2 text-center"><Badge variant={(ESTADO_BADGE[nc.estado_planificacion]?.v) ?? 'default'} className="text-[10px]">{ESTADO_BADGE[nc.estado_planificacion]?.t ?? nc.estado_planificacion}</Badge></td>
-                  <td className="p-2 whitespace-nowrap text-right">
-                    <Button size="sm" variant="outline" onClick={() => setRecursosNc(nc)}><Package className="h-3.5 w-3.5 mr-1" /> Recursos</Button>
-                    {!nc.plan_ot_id && (
-                      <Button size="sm" className="ml-1" disabled={busyId === nc.id} onClick={() => planificar(nc)}>
-                        {busyId === nc.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wrench className="h-3.5 w-3.5 mr-1" />} Planificar
-                      </Button>
-                    )}
-                    {nc.plan_ot_id && <Badge variant="en_ejecucion" className="ml-1 text-[10px]">OT creada</Badge>}
-                  </td>
-                </tr>
-              ))}
-              {!isLoading && ncs.length === 0 && <tr><td colSpan={7} className="p-6 text-center text-muted-foreground">Sin No Conformidades. Genera desde un checklist de recepción o registra una ad-hoc.</td></tr>}
+              {equipos.map((eq) => {
+                const abierto = expandido[eq.activoId] ?? false
+                const eb = ESTADO_EQUIPO[eq.estado] ?? { v: 'default', t: eq.estado }
+                return (
+                  <Fragment key={eq.activoId}>
+                    <tr className="border-b hover:bg-muted/40 cursor-pointer"
+                        onClick={() => setExpandido((p) => ({ ...p, [eq.activoId]: !abierto }))}>
+                      <td className="p-2 whitespace-nowrap">
+                        <span className="inline-flex items-center gap-1 font-bold">
+                          {abierto ? <ChevronDown className="h-3.5 w-3.5 text-gray-400" /> : <ChevronRight className="h-3.5 w-3.5 text-gray-400" />}
+                          {eq.patente}
+                        </span>
+                        {eq.nombre && <span className="ml-1.5 text-[11px] text-muted-foreground">{eq.nombre}</span>}
+                      </td>
+                      <td className="p-2 text-center">
+                        <span className="rounded-full bg-orange-100 px-2 py-0.5 text-[11px] font-bold text-orange-700">{eq.ncs.length}</span>
+                      </td>
+                      <td className="p-2 text-center"><Badge variant={eq.sevMax as any} className="text-[10px]">{eq.sevMax}</Badge></td>
+                      <td className="p-2 text-xs text-muted-foreground">
+                        {eq.grupos || eq.horas > 0 || eq.nMateriales > 0
+                          ? `${eq.grupos ?? '—'}${eq.horas ? ` · ${eq.horas}h` : ''}${eq.dias ? ` · ${eq.dias}d` : ''}${eq.nMateriales ? ` · ${eq.nMateriales} mat.` : ''}`
+                          : <span className="text-amber-600">sin asignar</span>}
+                        {eq.nInsumosOperador > 0 && (
+                          <span className="ml-1.5 rounded bg-orange-100 px-1.5 py-0.5 text-[10px] font-semibold text-orange-700 whitespace-nowrap">
+                            {eq.nInsumosOperador} insumo{eq.nInsumosOperador > 1 ? 's' : ''} pedido{eq.nInsumosOperador > 1 ? 's' : ''} por operador
+                          </span>
+                        )}
+                      </td>
+                      <td className="p-2 text-center"><Badge variant={eb.v} className="text-[10px]">{eb.t}</Badge></td>
+                      <td className="p-2 whitespace-nowrap text-right" onClick={(e) => e.stopPropagation()}>
+                        <Button size="sm" variant="outline" onClick={() => setRecursosEquipo(eq)}>
+                          <Package className="h-3.5 w-3.5 mr-1" /> Recursos
+                        </Button>
+                        {eq.pendientes.length > 0 ? (
+                          <Button size="sm" className="ml-1" disabled={busyId === eq.activoId} onClick={() => planificar(eq)}>
+                            {busyId === eq.activoId ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wrench className="h-3.5 w-3.5 mr-1" />}
+                            Planificar equipo ({eq.pendientes.length})
+                          </Button>
+                        ) : (
+                          <Badge variant="en_ejecucion" className="ml-1 text-[10px]">OT creada</Badge>
+                        )}
+                      </td>
+                    </tr>
+                    {abierto && eq.ncs.map((nc) => (
+                      <tr key={nc.id} className="border-b bg-muted/20 text-xs">
+                        <td className="p-2 pl-8 text-muted-foreground" colSpan={2}>
+                          {nc.foto_url && (
+                            <a href={nc.foto_url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className="mr-2 inline-block align-middle">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img src={nc.foto_url} alt="foto" className="h-8 w-8 rounded border object-cover hover:opacity-80" />
+                            </a>
+                          )}
+                          {nc.descripcion}
+                        </td>
+                        <td className="p-2 text-center"><Badge variant={nc.severidad as any} className="text-[10px]">{nc.severidad}</Badge></td>
+                        <td className="p-2 text-[11px] text-muted-foreground">
+                          {nc.origen === 'recepcion_adhoc' ? 'ad-hoc' : 'checklist'}
+                          {nc.n_recursos_operador > 0 && ` · ${nc.n_recursos_operador} insumo(s) del operador`}
+                        </td>
+                        <td className="p-2 text-center">
+                          <Badge variant={(ESTADO_BADGE[nc.estado_planificacion]?.v) ?? 'default'} className="text-[10px]">
+                            {ESTADO_BADGE[nc.estado_planificacion]?.t ?? nc.estado_planificacion}
+                          </Badge>
+                        </td>
+                        <td />
+                      </tr>
+                    ))}
+                  </Fragment>
+                )
+              })}
+              {!isLoading && equipos.length === 0 && <tr><td colSpan={6} className="p-6 text-center text-muted-foreground">Sin No Conformidades. Genera desde un checklist de recepción o registra una ad-hoc.</td></tr>}
             </tbody>
           </table>
         </CardContent>
       </Card>
 
-      {recursosNc && <AsignarRecursosModal nc={recursosNc} onClose={() => setRecursosNc(null)} onDone={() => { setRecursosNc(null); invalidar() }} />}
+      {recursosEquipo && <RecursosEquipoModal equipo={recursosEquipo} onClose={() => setRecursosEquipo(null)} onDone={() => { setRecursosEquipo(null); invalidar() }} />}
       {genOpen && <GenerarDesdeRecepcionModal onClose={() => setGenOpen(false)} onDone={() => { setGenOpen(false); invalidar() }} />}
       {adhocOpen && <RegistrarNcModal onClose={() => setAdhocOpen(false)} onDone={() => { setAdhocOpen(false); invalidar() }} />}
       {valeOpen && (
@@ -308,10 +407,11 @@ function ValeBodegaModal({ equipos, onClose, onDone }: {
 
 // Gestión COMPLETA de los insumos del taller desde la NC (MIG204): aprobar /
 // rechazar / ajustar cantidad / agregar ítems y emitir el vale de bodega, sin
-// tener que ir al Plan Taller.
+// tener que ir al Plan Taller. En el modal por equipo se muestra TODO lo de la
+// OT de una vez (todaOT).
 type ProductoLiteNC = { id: string; codigo: string | null; nombre: string; unidad_medida: string | null }
 
-function InsumosOperadorNC({ nc }: { nc: NcRecepcion }) {
+function InsumosOperadorNC({ nc, todaOT }: { nc: NcRecepcion; todaOT?: boolean }) {
   const toast = useToast()
   const qc = useQueryClient()
   const { data: recursos = [] } = useQuery({
@@ -325,15 +425,15 @@ function InsumosOperadorNC({ nc }: { nc: NcRecepcion }) {
 
   const [cantidades, setCantidades] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState(false)
-  // Por defecto SOLO los insumos de este hallazgo (con 4 NC del mismo equipo se
-  // enreda); expandir muestra los de toda la OT (el vale es por OT).
-  const [verTodaLaOT, setVerTodaLaOT] = useState(false)
+  // En modo equipo se ve TODO de una; por hallazgo, solo lo suyo (expandible).
+  const [verTodaLaOT, setVerTodaLaOT] = useState(!!todaOT)
   // Agregar ítem
   const [agregarOpen, setAgregarOpen] = useState(false)
   const [q, setQ] = useState('')
   const [resultados, setResultados] = useState<ProductoLiteNC[]>([])
   const [prod, setProd] = useState<ProductoLiteNC | null>(null)
   const [cant, setCant] = useState('')
+  const [fotoItem, setFotoItem] = useState<File | null>(null)
   // Vale con firma
   const [valeOpen, setValeOpen] = useState(false)
   const [firma, setFirma] = useState('')
@@ -377,13 +477,15 @@ function InsumosOperadorNC({ nc }: { nc: NcRecepcion }) {
     if (!n || n <= 0 || (!prod && q.trim().length < 3) || !nc.ot_id) return
     setBusy(true)
     try {
+      const fotos = fotoItem ? [await subirFotoRecurso(nc.ot_id, fotoItem)] : null
       await agregarRecursoJefe({
         otId: nc.ot_id, cantidad: n,
         productoId: prod?.id ?? null, descripcion: prod ? null : q.trim(),
         unidad: prod?.unidad_medida ?? null,
         instanceItemId: nc.checklist_item_ref ?? null,
+        fotos,
       })
-      setQ(''); setProd(null); setCant(''); setAgregarOpen(false)
+      setQ(''); setProd(null); setCant(''); setFotoItem(null); setAgregarOpen(false)
       invalidar()
     } catch (e) { toast.error((e as Error).message) } finally { setBusy(false) }
   }
@@ -439,7 +541,7 @@ function InsumosOperadorNC({ nc }: { nc: NcRecepcion }) {
                 <div className="flex flex-wrap items-center gap-2 text-xs">
                   <span className="flex-1 font-medium text-gray-800">
                     {r.producto_nombre ?? r.descripcion}
-                    {verTodaLaOT && deEsteHallazgo && (
+                    {verTodaLaOT && !todaOT && deEsteHallazgo && (
                       <span className="ml-1 rounded bg-red-100 px-1 py-0.5 text-[9px] font-semibold text-red-700">este hallazgo</span>
                     )}
                   </span>
@@ -518,10 +620,17 @@ function InsumosOperadorNC({ nc }: { nc: NcRecepcion }) {
               Agregar aprobado
             </button>
           </div>
+          <label className="block text-[11px] text-gray-600">
+            Foto del repuesto (opcional — bodega la ve)
+            <input type="file" accept="image/*" capture="environment"
+                   onChange={(e) => setFotoItem(e.target.files?.[0] ?? null)}
+                   className="mt-0.5 w-full rounded border border-gray-300 px-2 py-1 text-xs" />
+            {fotoItem && <span className="text-[10px] text-green-600">✓ {fotoItem.name}</span>}
+          </label>
         </div>
       )}
 
-      {nc.checklist_item_ref && otrosOT > 0 && (
+      {!todaOT && nc.checklist_item_ref && otrosOT > 0 && (
         <button type="button" onClick={() => setVerTodaLaOT((v) => !v)}
                 className="mt-1.5 text-[11px] font-medium text-orange-700 hover:underline">
           {verTodaLaOT
@@ -557,63 +666,111 @@ function InsumosOperadorNC({ nc }: { nc: NcRecepcion }) {
   )
 }
 
-function AsignarRecursosModal({ nc, onClose, onDone }: { nc: NcRecepcion; onClose: () => void; onDone: () => void }) {
+// Recursos del CONJUNTO del equipo (MIG209): un solo modal por patente con
+// todas sus NC, los insumos del taller de sus OT, grupo/horas/días compartidos
+// y UNA lista de materiales para todo el equipo.
+function RecursosEquipoModal({ equipo, onClose, onDone }: { equipo: EquipoNC; onClose: () => void; onDone: () => void }) {
   const toast = useToast()
   const { data: prodRes } = useQuery({ queryKey: ['productos-nc'], queryFn: () => getProductos(), staleTime: 300_000 })
   const productos = (prodRes?.data ?? []) as Array<{ id: string; codigo: string; nombre: string; categoria: string }>
   const { data: categorias = [] } = useQuery({ queryKey: ['producto-categorias-activas'], queryFn: () => getCategoriasProducto(true), staleTime: 300_000 })
 
-  type MatRow = NcMaterial & { solicitar?: boolean }
+  // NC abiertas del equipo (las que reciben los recursos) y sus materiales actuales
+  const ncsAbiertas = useMemo(() => equipo.ncs.filter((n) => !['resuelta', 'descartada'].includes(n.estado_planificacion)), [equipo.ncs])
+  const idsAbiertas = useMemo(() => ncsAbiertas.map((n) => n.id), [ncsAbiertas])
+  const { data: matsGuardados, isLoading: cargandoMats } = useQuery({
+    queryKey: ['nc-materiales-equipo', equipo.activoId],
+    queryFn: () => getNcMaterialesEquipo(idsAbiertas),
+    enabled: idsAbiertas.length > 0,
+  })
+
+  // Una OT de origen puede repetirse entre NC: un bloque de insumos por OT distinta
+  const ncsInsumos = useMemo(() => {
+    const vistos = new Set<string>()
+    const res: NcRecepcion[] = []
+    for (const n of ncsAbiertas) {
+      const clave = n.ot_id ?? (n.checklist_item_ref ? `item:${n.checklist_item_ref}` : null)
+      if (!clave || vistos.has(clave)) continue
+      vistos.add(clave)
+      res.push(n)
+    }
+    return res
+  }, [ncsAbiertas])
+
+  type MatRow = NcMaterial & { solicitar?: boolean; foto?: File | null }
   const [mecanicos, setMecanicos] = useState<string[]>(() =>
-    (nc.grupo_trabajo ?? '').split(',').map((s) => s.trim()).filter((s) => (MECANICOS as readonly string[]).includes(s)))
-  const [horas, setHoras] = useState(nc.horas_estimadas?.toString() ?? '')
-  const [dias, setDias] = useState(nc.tiempo_estimado_dias?.toString() ?? '')
+    (equipo.grupos ?? '').split(',').map((s) => s.trim()).filter((s) => (MECANICOS as readonly string[]).includes(s)))
+  const [horas, setHoras] = useState(equipo.horas ? String(equipo.horas) : '')
+  const [dias, setDias] = useState(equipo.dias ? String(equipo.dias) : '')
   const [catFiltro, setCatFiltro] = useState('')
-  const [mats, setMats] = useState<MatRow[]>([{ producto_id: '', descripcion: '', cantidad: 1 }])
+  const [mats, setMats] = useState<MatRow[] | null>(null)
   const [saving, setSaving] = useState(false)
 
+  // Precargar los materiales ya guardados del conjunto (una sola vez)
+  useEffect(() => {
+    if (mats !== null || cargandoMats) return
+    const previos = (matsGuardados ?? []).map((m: any) => ({
+      producto_id: m.producto_id ?? '', descripcion: m.descripcion ?? '', cantidad: Number(m.cantidad) || 1, nc_id: m.no_conformidad_id,
+    }))
+    setMats(previos.length ? previos : [{ producto_id: '', descripcion: '', cantidad: 1 }])
+  }, [matsGuardados, cargandoMats, mats])
+
+  const filas = mats ?? []
   const productosFiltrados = catFiltro ? productos.filter((p) => p.categoria === catFiltro) : productos
   const toggleMec = (m: string) => setMecanicos((prev) => prev.includes(m) ? prev.filter((x) => x !== m) : [...prev, m])
 
   const submit = async () => {
     setSaving(true)
     try {
-      // Materiales del catálogo -> recursos de la NC.
-      const materiales = mats
+      // Materiales del catálogo -> recursos del conjunto del equipo.
+      const materiales = filas
         .filter((m) => !m.solicitar && (m.producto_id || (m.descripcion ?? '').trim()))
-        .map((m) => ({ producto_id: m.producto_id || null, descripcion: m.descripcion, cantidad: Number(m.cantidad) || 1 }))
-      await asignarRecursosNc({
-        ncId: nc.id,
+        .map((m) => ({ producto_id: m.producto_id || null, descripcion: m.descripcion, cantidad: Number(m.cantidad) || 1, nc_id: m.nc_id ?? null }))
+      await asignarRecursosNcEquipo({
+        activoId: equipo.activoId,
         grupo: mecanicos.length ? mecanicos.join(', ') : null,
         horas: horas ? Number(horas) : null,
         tiempoDias: dias ? Number(dias) : null,
         materiales,
       })
-      // Materiales que NO están en bodega -> solicitud a bodega (con foto+obs de la NC).
-      const solicitudes = mats.filter((m) => m.solicitar && (m.descripcion ?? '').trim())
+      // Materiales que NO están en bodega -> solicitud a bodega (queda ligada al equipo vía su NC).
+      // Con foto propia si el jefe la adjuntó; si no, la RPC hereda la foto de la NC.
+      const ncAncla = ncsAbiertas[0]
+      const solicitudes = filas.filter((m) => m.solicitar && (m.descripcion ?? '').trim())
       for (const s of solicitudes) {
-        await solicitarMaterialBodega({ descripcion: s.descripcion!, cantidad: Number(s.cantidad) || 1, ncId: nc.id })
+        const fotoUrl = s.foto ? await subirFotoNc(s.foto) : null
+        await solicitarMaterialBodega({ descripcion: s.descripcion!, cantidad: Number(s.cantidad) || 1, ncId: ncAncla?.id ?? null, fotoUrl })
       }
-      toast.success(`Recursos asignados${solicitudes.length ? ` · ${solicitudes.length} solicitud(es) enviada(s) a bodega` : ''}`)
+      toast.success(`Recursos de ${equipo.patente} guardados (${ncsAbiertas.length} NC)${solicitudes.length ? ` · ${solicitudes.length} solicitud(es) enviada(s) a bodega` : ''}`)
       onDone()
     } catch (e) { toast.error(e instanceof Error ? e.message : 'Error') } finally { setSaving(false) }
   }
 
   return (
-    <Modal open onClose={onClose} title={`Recursos · ${nc.patente ?? nc.codigo}`}>
+    <Modal open onClose={onClose} title={`Recursos del equipo · ${equipo.patente}`}>
       <div className="space-y-3">
-        <div className="flex items-start gap-3">
-          {nc.foto_url && (
-            <a href={nc.foto_url} target="_blank" rel="noreferrer" className="shrink-0">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={nc.foto_url} alt="foto del hallazgo" className="h-20 w-20 rounded-lg border object-cover hover:opacity-80" />
-            </a>
-          )}
-          <p className="text-xs text-gray-600">{nc.descripcion}</p>
-        </div>
-        <InsumosOperadorNC nc={nc} />
         <div>
-          <label className="text-xs font-medium">Grupo de trabajo (mano de obra)</label>
+          <p className="text-xs font-medium mb-1">No Conformidades del equipo ({ncsAbiertas.length})</p>
+          <div className="max-h-40 space-y-1 overflow-y-auto rounded-lg border border-gray-100 bg-gray-50 p-2">
+            {ncsAbiertas.map((nc) => (
+              <div key={nc.id} className="flex items-center gap-2 rounded border border-gray-100 bg-white px-2 py-1.5 text-xs">
+                {nc.foto_url && (
+                  <a href={nc.foto_url} target="_blank" rel="noreferrer" className="shrink-0">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={nc.foto_url} alt="foto" className="h-9 w-9 rounded border object-cover hover:opacity-80" />
+                  </a>
+                )}
+                <span className="flex-1 text-gray-700">{nc.descripcion}</span>
+                <Badge variant={nc.severidad as any} className="text-[9px] shrink-0">{nc.severidad}</Badge>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {ncsInsumos.map((nc) => <InsumosOperadorNC key={nc.id} nc={nc} todaOT />)}
+
+        <div>
+          <label className="text-xs font-medium">Grupo de trabajo (mano de obra) — para todo el conjunto</label>
           <div className="mt-1 flex flex-wrap gap-1">
             {MECANICOS.map((m) => {
               const on = mecanicos.includes(m)
@@ -625,56 +782,64 @@ function AsignarRecursosModal({ nc, onClose, onDone }: { nc: NcRecepcion; onClos
           </div>
         </div>
         <div className="grid grid-cols-2 gap-2">
-          <label className="text-xs font-medium">Horas estimadas (MO)
+          <label className="text-xs font-medium">Horas estimadas totales (MO)
             <input type="number" value={horas} onChange={(e) => setHoras(e.target.value)} className="mt-0.5 w-full rounded border px-2 py-1.5 text-sm" />
           </label>
-          <label className="text-xs font-medium">Tiempo (días)
+          <label className="text-xs font-medium">Tiempo total (días)
             <input type="number" value={dias} onChange={(e) => setDias(e.target.value)} className="mt-0.5 w-full rounded border px-2 py-1.5 text-sm" />
           </label>
         </div>
         <div>
           <div className="text-xs font-medium mb-1 flex items-center justify-between">
-            <span className="flex items-center gap-1"><Package className="h-3.5 w-3.5" /> Materiales</span>
+            <span className="flex items-center gap-1"><Package className="h-3.5 w-3.5" /> Materiales del equipo</span>
             <select value={catFiltro} onChange={(e) => setCatFiltro(e.target.value)} className="rounded border px-1.5 py-0.5 text-[11px] text-gray-600">
               <option value="">Todas las categorías</option>
               {categorias.map((c) => <option key={c.codigo} value={c.codigo}>{c.nombre}</option>)}
             </select>
           </div>
           <div className="space-y-1">
-            {mats.map((m, i) => (
+            {filas.map((m, i) => (
               <div key={i} className="flex gap-1 items-center">
                 {m.solicitar ? (
-                  <input value={m.descripcion ?? ''} placeholder="Material que no está en bodega…"
-                    onChange={(e) => setMats((s) => s.map((x, j) => j === i ? { ...x, descripcion: e.target.value } : x))}
-                    className="flex-1 rounded border border-amber-300 bg-amber-50 px-2 py-1 text-sm" />
+                  <div className="flex-1 flex items-center gap-1">
+                    <input value={m.descripcion ?? ''} placeholder="Material que no está en bodega…"
+                      onChange={(e) => setMats((s) => (s ?? []).map((x, j) => j === i ? { ...x, descripcion: e.target.value } : x))}
+                      className="flex-1 rounded border border-amber-300 bg-amber-50 px-2 py-1 text-sm" />
+                    <label className={`cursor-pointer rounded border px-1.5 py-1 text-[10px] whitespace-nowrap ${m.foto ? 'border-green-400 bg-green-50 text-green-700' : 'border-amber-300 bg-white text-amber-700'}`}
+                           title="Foto del material para bodega (opcional)">
+                      {m.foto ? '✓ foto' : '📷 foto'}
+                      <input type="file" accept="image/*" capture="environment" className="hidden"
+                        onChange={(e) => { const f = e.target.files?.[0] ?? null; setMats((s) => (s ?? []).map((x, j) => j === i ? { ...x, foto: f } : x)) }} />
+                    </label>
+                  </div>
                 ) : (
                   <select value={m.producto_id ?? ''}
                     onChange={(e) => {
                       const p = productos.find((x) => x.id === e.target.value)
-                      setMats((s) => s.map((x, j) => j === i ? { ...x, producto_id: e.target.value, descripcion: p ? `${p.codigo} · ${p.nombre}` : '' } : x))
+                      setMats((s) => (s ?? []).map((x, j) => j === i ? { ...x, producto_id: e.target.value, descripcion: p ? `${p.codigo} · ${p.nombre}` : '' } : x))
                     }}
                     className="flex-1 rounded border px-2 py-1 text-sm">
-                    <option value="">— Repuesto / material —</option>
+                    <option value="">{m.descripcion ? m.descripcion : '— Repuesto / material —'}</option>
                     {productosFiltrados.map((p) => <option key={p.id} value={p.id}>{p.codigo} · {p.nombre}</option>)}
                   </select>
                 )}
-                <input type="number" value={m.cantidad} onChange={(e) => setMats((s) => s.map((x, j) => j === i ? { ...x, cantidad: Number(e.target.value) } : x))} className="w-14 rounded border px-2 py-1 text-sm" />
+                <input type="number" value={m.cantidad} onChange={(e) => setMats((s) => (s ?? []).map((x, j) => j === i ? { ...x, cantidad: Number(e.target.value) } : x))} className="w-14 rounded border px-2 py-1 text-sm" />
                 <button type="button" title="No está en bodega (solicitar)"
-                  onClick={() => setMats((s) => s.map((x, j) => j === i ? { ...x, solicitar: !x.solicitar, producto_id: '', descripcion: '' } : x))}
+                  onClick={() => setMats((s) => (s ?? []).map((x, j) => j === i ? { ...x, solicitar: !x.solicitar, producto_id: '', descripcion: '' } : x))}
                   className={`rounded border px-1.5 py-1 text-[10px] ${m.solicitar ? 'border-amber-400 bg-amber-100 text-amber-700' : 'border-gray-200 text-gray-500'}`}>
                   {m.solicitar ? 'a bodega' : 'no hay'}
                 </button>
-                <button type="button" onClick={() => setMats((s) => s.filter((_, j) => j !== i))} className="text-red-500 px-1"><Trash2 className="h-4 w-4" /></button>
+                <button type="button" onClick={() => setMats((s) => (s ?? []).filter((_, j) => j !== i))} className="text-red-500 px-1"><Trash2 className="h-4 w-4" /></button>
               </div>
             ))}
           </div>
-          <button type="button" onClick={() => setMats((s) => [...s, { producto_id: '', descripcion: '', cantidad: 1 }])} className="text-xs text-blue-600 mt-1">+ Agregar material</button>
-          <p className="text-[10px] text-gray-400 mt-1">Si un material no está en bodega, pulsa «no hay» → se envía una solicitud a bodega con la foto y observación de la NC.</p>
+          <button type="button" onClick={() => setMats((s) => [...(s ?? []), { producto_id: '', descripcion: '', cantidad: 1 }])} className="text-xs text-blue-600 mt-1">+ Agregar material</button>
+          <p className="text-[10px] text-gray-400 mt-1">La lista es del conjunto del equipo. Si un material no está en bodega, pulsa «no hay» → se envía una solicitud a bodega asociada a la patente, con la foto que adjuntes (si no adjuntas, va la foto de la NC).</p>
         </div>
       </div>
       <ModalFooter>
         <Button variant="outline" onClick={onClose} disabled={saving}>Cancelar</Button>
-        <Button onClick={submit} disabled={saving}>{saving ? 'Guardando…' : 'Guardar recursos'}</Button>
+        <Button onClick={submit} disabled={saving || mats === null}>{saving ? 'Guardando…' : `Guardar recursos (${ncsAbiertas.length} NC)`}</Button>
       </ModalFooter>
     </Modal>
   )

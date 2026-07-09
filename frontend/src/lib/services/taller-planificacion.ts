@@ -339,6 +339,8 @@ export type NcOtPorAgendar = {
   nc_id: string; ot_id: string; ot_folio: string; activo_id: string
   patente: string | null; codigo: string | null; descripcion: string; severidad: string
   grupo_trabajo: string | null; horas_estimadas: number | null; tiempo_estimado_dias: number | null
+  /** MIG209: la vista agrupa por OT — total de NC del equipo en esa OT. */
+  n_ncs: number
 }
 
 export async function getNcOtsPorAgendar(): Promise<NcOtPorAgendar[]> {

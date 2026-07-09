@@ -30,7 +30,7 @@ export type NcRecepcion = {
   n_recursos_operador: number
 }
 
-export type NcMaterial = { descripcion?: string | null; producto_id?: string | null; cantidad: number; comentario?: string | null }
+export type NcMaterial = { descripcion?: string | null; producto_id?: string | null; cantidad: number; comentario?: string | null; nc_id?: string | null }
 
 export async function getNcRecepcion(estado?: string): Promise<NcRecepcion[]> {
   let q = supabase.from('v_nc_recepcion').select('*').order('created_at', { ascending: false })
@@ -65,6 +65,41 @@ export async function planificarNc(ncId: string) {
   const { data, error } = await supabase.rpc('fn_planificar_nc', { p_nc_id: ncId })
   if (error) throw error
   return data
+}
+
+// ── Por equipo (MIG209): en el taller todo se gestiona por patente ──────────
+
+/** UNA OT correctiva con TODAS las NC pendientes del equipo (o reutiliza la abierta). */
+export async function planificarNcEquipo(activoId: string): Promise<{ ot_id?: string; n_ncs: number; ot_reutilizada?: boolean; mensaje?: string }> {
+  const { data, error } = await supabase.rpc('fn_planificar_nc_equipo', { p_activo_id: activoId })
+  if (error) throw error
+  return data as any
+}
+
+/** Recursos para el conjunto del equipo: grupo a todas las NC; horas/días/materiales en la NC ancla. */
+export async function asignarRecursosNcEquipo(p: {
+  activoId: string; grupo?: string | null; horas?: number | null; tiempoDias?: number | null; materiales: NcMaterial[]
+}) {
+  const { data, error } = await supabase.rpc('fn_asignar_recursos_nc_equipo', {
+    p_activo_id: p.activoId,
+    p_grupo: p.grupo ?? null,
+    p_horas: p.horas ?? null,
+    p_tiempo_dias: p.tiempoDias ?? null,
+    p_materiales: p.materiales ?? [],
+  })
+  if (error) throw error
+  return data
+}
+
+/** Materiales ya guardados de un conjunto de NC (para precargar el modal por equipo). */
+export async function getNcMaterialesEquipo(ncIds: string[]) {
+  if (ncIds.length === 0) return []
+  const { data, error } = await supabase
+    .from('nc_materiales')
+    .select('id, no_conformidad_id, producto_id, descripcion, cantidad, comentario')
+    .in('no_conformidad_id', ncIds)
+  if (error) throw error
+  return data ?? []
 }
 
 // Sube la foto de la NC a 'evidencias-verificacion/nc/'.
