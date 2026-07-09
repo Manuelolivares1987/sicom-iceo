@@ -30,6 +30,7 @@ import { SignaturePad } from '@/components/ui/signature-pad'
 import { getCategoriasProducto } from '@/lib/services/producto-categorias'
 import { solicitarMaterialBodega } from '@/lib/services/bodega-solicitudes'
 import { MECANICOS } from '@/lib/taller-grupos'
+import { getTallerTecnicos } from '@/lib/services/taller-plan-semanal'
 import { cn } from '@/lib/utils'
 
 const ESTADO_BADGE: Record<string, { v: any; t: string }> = {
@@ -768,7 +769,22 @@ function RecursosEquipoModal({ equipo, onClose, onDone }: { equipo: EquipoNC; on
 
   type MatRow = NcMaterial & { solicitar?: boolean; foto?: File | null }
   const [mecanicos, setMecanicos] = useState<string[]>(() =>
-    (equipo.grupos ?? '').split(',').map((s) => s.trim()).filter((s) => (MECANICOS as readonly string[]).includes(s)))
+    (equipo.grupos ?? '').split(',').map((s) => s.trim()).filter(Boolean))
+
+  // Mismos técnicos que en Planificación (catálogo taller_tecnicos, MIG195);
+  // MECANICOS queda solo de respaldo si el catálogo está vacío.
+  const { data: tecnicosCat = [] } = useQuery({
+    queryKey: ['taller-tecnicos-activos'], queryFn: () => getTallerTecnicos(), staleTime: 300_000,
+  })
+  const opcionesTecnicos = useMemo(() => {
+    const base = tecnicosCat.length > 0
+      ? tecnicosCat.map((t) => ({ nombre: t.nombre, especialidad: t.especialidad }))
+      : (MECANICOS as readonly string[]).map((m) => ({ nombre: m, especialidad: '' }))
+    // Nombres ya guardados que no están en el catálogo siguen visibles para poder quitarlos
+    const extra = mecanicos.filter((m) => !base.some((b) => b.nombre === m))
+      .map((m) => ({ nombre: m, especialidad: '' }))
+    return [...base, ...extra]
+  }, [tecnicosCat, mecanicos])
   const [horas, setHoras] = useState(equipo.horas ? String(equipo.horas) : '')
   const [dias, setDias] = useState(equipo.dias ? String(equipo.dias) : '')
   const [catFiltro, setCatFiltro] = useState('')
@@ -841,11 +857,14 @@ function RecursosEquipoModal({ equipo, onClose, onDone }: { equipo: EquipoNC; on
         <div>
           <label className="text-xs font-medium">Grupo de trabajo (mano de obra) — para todo el conjunto</label>
           <div className="mt-1 flex flex-wrap gap-1">
-            {MECANICOS.map((m) => {
-              const on = mecanicos.includes(m)
+            {opcionesTecnicos.map((t) => {
+              const on = mecanicos.includes(t.nombre)
               return (
-                <button key={m} type="button" onClick={() => toggleMec(m)}
-                  className={`rounded border px-2 py-1 text-[11px] ${on ? 'border-blue-500 bg-blue-500 text-white' : 'border-gray-200 bg-white text-gray-600'}`}>{m}</button>
+                <button key={t.nombre} type="button" onClick={() => toggleMec(t.nombre)} title={t.especialidad || undefined}
+                  className={`rounded border px-2 py-1 text-[11px] ${on ? 'border-blue-500 bg-blue-500 text-white' : 'border-gray-200 bg-white text-gray-600'}`}>
+                  {t.nombre}
+                  {t.especialidad && <span className={`ml-1 text-[9px] ${on ? 'text-blue-100' : 'text-gray-400'}`}>{t.especialidad}</span>}
+                </button>
               )
             })}
           </div>
