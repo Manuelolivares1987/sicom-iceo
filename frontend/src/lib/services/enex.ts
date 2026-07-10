@@ -341,3 +341,72 @@ export const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
   'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
 export const clp = (n: number | null | undefined) =>
   '$' + Math.round(Number(n || 0)).toLocaleString('es-CL')
+
+// ── Fase 3: reporte de servicio / certificado de calibración (por ejecución) ──
+export type EnexReporteItem = {
+  id: string
+  resultado: string | null
+  valor_medicion: number | null
+  dentro_tolerancia: boolean | null
+  foto_url: string | null
+  observacion: string | null
+  item: {
+    bloque: string | null; bloque_orden: number | null; orden: number | null
+    codigo: string | null; descripcion: string; tipo_campo: string | null
+    unidad: string | null; valor_referencia: string | null
+    tolerancia_min: number | null; tolerancia_max: number | null
+  } | null
+}
+
+export type EnexReporte = {
+  id: string
+  estado: string
+  fecha_ejecucion: string | null
+  ot_numero: string | null
+  ejecutor: string | null
+  observacion: string | null
+  evidencia_urls: string[] | null
+  firma_tecnico_url: string | null
+  tecnico_nombre: string | null
+  firma_mandante_url: string | null
+  firmante_mandante_nombre: string | null
+  firmante_mandante_at: string | null
+  programacion: {
+    tipo_servicio: string
+    fecha_programada: string | null
+    periodo_anio: number
+    periodo_mes: number
+    instalacion: {
+      nombre: string; codigo: string | null; tipo: string | null
+      linea: string | null; patente: string | null
+      faena: { nombre: string; codigo: string | null } | null
+    } | null
+  } | null
+  pauta: { codigo: string | null; nombre: string; tipo_servicio: string | null; version: number | null } | null
+}
+
+export async function getEjecucionReporte(id: string): Promise<{ reporte: EnexReporte | null; items: EnexReporteItem[] }> {
+  const { data, error } = await supabase
+    .from('enex_ejecuciones')
+    .select(`*,
+      programacion:enex_programaciones(tipo_servicio, fecha_programada, periodo_anio, periodo_mes,
+        instalacion:enex_instalaciones(nombre, codigo, tipo, linea, patente,
+          faena:enex_faenas(nombre, codigo))),
+      pauta:enex_pautas(codigo, nombre, tipo_servicio, version)`)
+    .eq('id', id)
+    .maybeSingle()
+  if (error) throw error
+  if (!data) return { reporte: null, items: [] }
+  const { data: items, error: e2 } = await supabase
+    .from('enex_ejecucion_items')
+    .select(`id, resultado, valor_medicion, dentro_tolerancia, foto_url, observacion,
+      item:enex_pauta_items(bloque, bloque_orden, orden, codigo, descripcion, tipo_campo,
+        unidad, valor_referencia, tolerancia_min, tolerancia_max)`)
+    .eq('ejecucion_id', id)
+  if (e2) throw e2
+  return {
+    reporte: data as unknown as EnexReporte,
+    items: ((items ?? []) as unknown as EnexReporteItem[]).sort((a, b) =>
+      (a.item?.bloque_orden ?? 99) - (b.item?.bloque_orden ?? 99) || (a.item?.orden ?? 999) - (b.item?.orden ?? 999)),
+  }
+}
