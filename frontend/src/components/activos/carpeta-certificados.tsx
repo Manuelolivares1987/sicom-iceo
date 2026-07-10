@@ -18,6 +18,8 @@ import {
   getCertificadoTipos, getCertificadosActivo, getNcAbiertasActivo, getTecnicosTaller,
   emitirCertificado, type CertificadoTipo,
 } from '@/lib/services/certificados-activo'
+import { getInformesRecepcionActivo } from '@/lib/services/informe-recepcion'
+import { FileText } from 'lucide-react'
 
 type ActivoLite = {
   nombre: string | null
@@ -48,6 +50,11 @@ export function CarpetaCertificados({ activoId }: { activoId: string }) {
   const { data: tipos } = useQuery({ queryKey: ['certificado-tipos'], queryFn: getCertificadoTipos, staleTime: 300_000 })
   const { data: tecnicos } = useQuery({ queryKey: ['taller-tecnicos-cert'], queryFn: getTecnicosTaller, staleTime: 300_000 })
   const { data: activo } = useQuery({ queryKey: ['activo-lite-cert', activoId], queryFn: () => getActivoLite(activoId) })
+  // Informes de recepción/recobro del equipo: también viven en la carpeta.
+  const { data: informes } = useQuery({
+    queryKey: ['activo-informes-recepcion', activoId],
+    queryFn: () => getInformesRecepcionActivo(activoId),
+  })
 
   const [abierto, setAbierto] = useState(false)
   const [tipoCodigo, setTipoCodigo] = useState('')
@@ -166,6 +173,45 @@ export function CarpetaCertificados({ activoId }: { activoId: string }) {
           ))}
         </div>
       )}
+
+      {/* Informes de recepción y recobro del equipo */}
+      <div className="pt-2">
+        <h4 className="flex items-center gap-1.5 text-sm font-semibold text-gray-800">
+          <FileText className="h-4 w-4 text-blue-600" /> Informes de recepción y recobro
+        </h4>
+        {(informes ?? []).length === 0 ? (
+          <p className="mt-1 text-xs text-gray-400">Sin informes de recepción para este equipo.</p>
+        ) : (
+          <div className="mt-2 space-y-2">
+            {(informes ?? []).map((inf) => (
+              <Card key={inf.id}>
+                <CardContent className="flex items-center gap-3 p-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-xs font-bold">{inf.folio ?? 'Sin folio'}</span>
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                        inf.estado === 'emitido' ? 'bg-green-100 text-green-800'
+                          : inf.estado === 'cancelado' ? 'bg-gray-200 text-gray-600' : 'bg-blue-100 text-blue-800'}`}>
+                        {inf.estado}
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-gray-500">
+                      Recepción {formatDate(inf.fecha_recepcion)}
+                      {inf.cliente_nombre && <> · {inf.cliente_nombre}</>}
+                      {inf.total_cobrable_cliente > 0 && (
+                        <> · recobro <b className="text-orange-700">${Math.round(inf.total_cobrable_cliente).toLocaleString('es-CL')}</b></>
+                      )}
+                    </div>
+                  </div>
+                  <Button variant="outline" size="sm" onClick={() => window.open(`/informe-recepcion/${inf.id}`, '_blank')}>
+                    <Printer className="h-4 w-4 mr-1" /> Ver / Imprimir
+                  </Button>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* Modal de emisión */}
       {abierto && (
