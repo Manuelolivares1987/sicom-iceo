@@ -45,6 +45,8 @@ export type TallerPlanOTFull = {
   ot_tipo: string | null
   ot_estado: string | null
   ot_prioridad: string | null
+  /** NULL = la OT aún NO está liberada a ejecución (el mecánico no la ve). MIG221. */
+  preparacion_ok_at: string | null
   ot_fecha_programada: string | null
   plan_mantenimiento_id: string | null
   pm_nombre: string | null
@@ -605,6 +607,13 @@ export async function rpcReabrirPreparacion(otId: string) {
   const { data, error } = await supabase.rpc('rpc_taller_reabrir_preparacion', { p_ot_id: otId })
   if (error) throw error
   return data as { success: boolean; ot_id: string }
+}
+
+/** Liberación masiva a ejecución desde el Kanban (MIG220). */
+export async function rpcLiberarOts(otIds: string[]) {
+  const { data, error } = await supabase.rpc('rpc_taller_liberar_ots', { p_ot_ids: otIds })
+  if (error) throw error
+  return data as { success: boolean; liberadas: number; errores: { ot_id: string; error: string }[] }
 }
 
 export async function rpcConfirmarPlanSemanal(planSemanalId: string) {

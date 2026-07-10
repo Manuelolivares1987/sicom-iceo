@@ -6,7 +6,7 @@ import {
   DndContext, DragEndEvent, PointerSensor, useDraggable, useDroppable, useSensor, useSensors,
 } from '@dnd-kit/core'
 import {
-  Calendar, ArrowLeft, ChevronLeft, ChevronRight, Lock, AlertTriangle, Trash2, User,
+  Calendar, ArrowLeft, ChevronLeft, ChevronRight, Lock, Unlock, AlertTriangle, Trash2, User,
   Play, Pause, CheckCircle2, BarChart3, ShieldAlert, RefreshCw, Wrench, Layers, FileSpreadsheet,
   Truck, Mail, Pencil, Plus, Clock, Camera, ExternalLink, ListChecks, Upload, Package, X,
 } from 'lucide-react'
@@ -25,7 +25,7 @@ import {
   useKpiSemanalTaller, useCumplimientoPmMesTaller,
   useCoberturaPm, useActivosSinPlan,
   useAgregarJornadaTaller, useMoverJornadaTaller, useQuitarJornadaTaller,
-  useAsignarResponsableTaller, useConfirmarPlanSemanalTaller,
+  useAsignarResponsableTaller, useConfirmarPlanSemanalTaller, useLiberarOtsTaller,
   useIniciarEjecucionTaller, usePausarEjecucionTaller, useFinalizarEjecucionTaller,
   useAdminSembrarPlanesFaltantes,
   useEditarJornadaTaller,
@@ -152,6 +152,7 @@ export default function PlanSemanalTallerPage() {
   const agregarJornada = useAgregarJornadaTaller(planSemanalId)
   const quitarJornada = useQuitarJornadaTaller(planSemanalId)
   const confirmarPlan = useConfirmarPlanSemanalTaller(planSemanalId)
+  const liberarOts = useLiberarOtsTaller(planSemanalId)
   const iniciarEjec = useIniciarEjecucionTaller(planSemanalId)
   const pausarEjec  = usePausarEjecucionTaller(planSemanalId)
   const finalizarEjec = useFinalizarEjecucionTaller(planSemanalId)
@@ -221,6 +222,14 @@ export default function PlanSemanalTallerPage() {
   // Estado real del plan (para no permitir re-confirmar uno ya confirmado).
   const planEstado = kpi?.plan_estado ?? jornadas?.[0]?.plan_estado ?? null
   const planConfirmado = planEstado != null && planEstado !== 'borrador'
+
+  // OTs del plan que el mecánico AÚN no ve en /m/taller (sin liberar a ejecución).
+  const otsSinLiberar = useMemo(() => {
+    const ids = (jornadas ?? [])
+      .filter((j) => !j.es_tarea_libre && j.ot_id && !j.preparacion_ok_at && j.jornada_estado !== 'finalizada')
+      .map((j) => j.ot_id as string)
+    return Array.from(new Set(ids))
+  }, [jornadas])
 
   // Resolver/crear plan al cambiar de semana
   useEffect(() => {
@@ -454,6 +463,22 @@ export default function PlanSemanalTallerPage() {
             {descargarSemana.isPending ? <Spinner className="h-4 w-4 mr-1" /> : <Upload className="h-4 w-4 mr-1 rotate-180" />}
             Descargar semana
           </Button>
+          {otsSinLiberar.length > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={liberarOts.isPending}
+              onClick={() => liberarOts.mutate(otsSinLiberar, {
+                onSuccess: (d) => toast.success(`${d.liberadas} OT(s) liberadas — los mecánicos ya las ven en su teléfono`),
+                onError: (err) => toast.error((err as Error).message),
+              })}
+              className="border-amber-400 text-amber-800 hover:bg-amber-50"
+              title="Los mecánicos NO ven las OTs en /m/taller hasta liberarlas a ejecución"
+            >
+              {liberarOts.isPending ? <Spinner className="h-4 w-4 mr-1" /> : <Unlock className="h-4 w-4 mr-1" />}
+              Liberar a ejecución ({otsSinLiberar.length})
+            </Button>
+          )}
           <Button
             size="sm"
             disabled={!planSemanalId || confirmarPlan.isPending || planConfirmado}
@@ -574,6 +599,10 @@ export default function PlanSemanalTallerPage() {
                         onError: (err) => toast.error((err as Error).message),
                       })}
                       onFinalizar={(j) => { setFinalizarOpen(j); setFinAvance(100); setFinObs('') }}
+                      onLiberar={(j) => j.ot_id && liberarOts.mutate([j.ot_id], {
+                        onSuccess: () => toast.success(`${j.ot_folio} liberada — el mecánico ya la ve en su teléfono`),
+                        onError: (err) => toast.error((err as Error).message),
+                      })}
                     />
                   ))
                 )}
@@ -1682,7 +1711,7 @@ function TareaLibreDialog({ dias, tecnicos, operacionInicial, enviando, onClose,
   )
 }
 
-function DiaColumna({ fecha, nombre, jornadas, onAsignar, onDetalle, onQuitar, onIniciar, onPausar, onFinalizar }: {
+function DiaColumna({ fecha, nombre, jornadas, onAsignar, onDetalle, onQuitar, onIniciar, onPausar, onFinalizar, onLiberar }: {
   fecha: string
   nombre: string
   jornadas: TallerPlanOTFull[]
@@ -1692,6 +1721,7 @@ function DiaColumna({ fecha, nombre, jornadas, onAsignar, onDetalle, onQuitar, o
   onIniciar: (j: TallerPlanOTFull) => void
   onPausar: (j: TallerPlanOTFull) => void
   onFinalizar: (j: TallerPlanOTFull) => void
+  onLiberar: (j: TallerPlanOTFull) => void
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: `dia:${fecha}` })
   const esHoy = fecha === new Date().toISOString().slice(0, 10)
@@ -1711,7 +1741,8 @@ function DiaColumna({ fecha, nombre, jornadas, onAsignar, onDetalle, onQuitar, o
           jornadas.map((j) => (
             <JornadaCard key={j.plan_ot_id} jornada={j}
                          onAsignar={onAsignar} onDetalle={onDetalle} onQuitar={onQuitar}
-                         onIniciar={onIniciar} onPausar={onPausar} onFinalizar={onFinalizar} />
+                         onIniciar={onIniciar} onPausar={onPausar} onFinalizar={onFinalizar}
+                         onLiberar={onLiberar} />
           ))
         )}
       </CardContent>
@@ -1719,7 +1750,7 @@ function DiaColumna({ fecha, nombre, jornadas, onAsignar, onDetalle, onQuitar, o
   )
 }
 
-function JornadaCard({ jornada, onAsignar, onDetalle, onQuitar, onIniciar, onPausar, onFinalizar }: {
+function JornadaCard({ jornada, onAsignar, onDetalle, onQuitar, onIniciar, onPausar, onFinalizar, onLiberar }: {
   jornada: TallerPlanOTFull
   onAsignar: (j: TallerPlanOTFull) => void
   onDetalle: (j: TallerPlanOTFull) => void
@@ -1727,6 +1758,7 @@ function JornadaCard({ jornada, onAsignar, onDetalle, onQuitar, onIniciar, onPau
   onIniciar: (j: TallerPlanOTFull) => void
   onPausar: (j: TallerPlanOTFull) => void
   onFinalizar: (j: TallerPlanOTFull) => void
+  onLiberar: (j: TallerPlanOTFull) => void
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: `jornada:${jornada.plan_ot_id}`,
@@ -1762,6 +1794,12 @@ function JornadaCard({ jornada, onAsignar, onDetalle, onQuitar, onIniciar, onPau
           {jornada.secuencia_jornada > 1 && (
             <span className="text-[9px] px-1 py-0.5 rounded bg-purple-100 text-purple-700 font-bold">
               J{jornada.secuencia_jornada}
+            </span>
+          )}
+          {!libre && !jornada.preparacion_ok_at && !finalizada && (
+            <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 font-bold"
+                  title="El mecánico NO la ve en su teléfono hasta liberarla a ejecución">
+              sin liberar
             </span>
           )}
           {jornada.horas_planificadas && (
@@ -1837,6 +1875,12 @@ function JornadaCard({ jornada, onAsignar, onDetalle, onQuitar, onIniciar, onPau
                     className="text-[9px] px-1.5 py-0.5 rounded bg-gray-100 hover:bg-gray-200 flex items-center gap-1">
               <User className="h-3 w-3" />
             </button>
+            {!jornada.preparacion_ok_at && (
+              <button onClick={() => onLiberar(jornada)} title="Liberar a ejecución: el mecánico la ve en su teléfono"
+                      className="text-[9px] px-1.5 py-0.5 rounded bg-amber-100 hover:bg-amber-200 text-amber-800 flex items-center gap-1 font-semibold">
+                <Unlock className="h-3 w-3" /> Liberar
+              </button>
+            )}
             {!enEjec && !pausada && (
               <button onClick={() => onIniciar(jornada)} title="Iniciar"
                       className="text-[9px] px-1.5 py-0.5 rounded bg-green-100 hover:bg-green-200 text-green-700">

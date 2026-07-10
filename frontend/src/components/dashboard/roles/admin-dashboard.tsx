@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { Settings, Users, Database, ShieldAlert, Activity, FileWarning } from 'lucide-react'
+import { Settings, Users, Database, ShieldAlert, Activity } from 'lucide-react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Spinner } from '@/components/ui/spinner'
 import { useSystemStats } from '@/hooks/use-admin-stats'
@@ -81,29 +81,6 @@ export function AdminDashboard() {
         </Card>
       </div>
 
-      {/* Notas migraciones pendientes */}
-      <Card className="border-amber-200 bg-amber-50">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base text-amber-900">
-            <FileWarning className="h-5 w-5" />
-            Migraciones pendientes (FASE 5.6)
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <ul className="text-sm text-amber-800 space-y-1 list-disc pl-5">
-            <li>52 — RLS hardening (solo Block A recomendado pre-demo)</li>
-            <li>53 — Seed roles piloto (manual)</li>
-            <li>54 — Verificaciones flota (Block 0 SAFE aplicable)</li>
-            <li>55 — Bodega OC/CECO (base de 56 y 57)</li>
-            <li>56 — FIFO repuestos (depende de 55)</li>
-            <li>57 — Combustible CPP móvil (depende de 55)</li>
-          </ul>
-          <p className="mt-2 text-xs text-amber-700">
-            Ver <code>PLAN_OPERACION_STAGING_MIGRACIONES.md</code> y{' '}
-            <code>PLAN_PASO_PRODUCCION_CONTROLADO.md</code>.
-          </p>
-        </CardContent>
-      </Card>
     </div>
   )
 }

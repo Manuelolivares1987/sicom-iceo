@@ -6,7 +6,7 @@ import {
   crearTallerTecnico, desactivarTallerTecnico,
   rpcAgregarTareaLibre, rpcEliminarTarea,
   rpcAgregarJornadaOT,
-  rpcQuitarJornada, rpcConfirmarPlanSemanal,
+  rpcQuitarJornada, rpcConfirmarPlanSemanal, rpcLiberarOts,
   rpcV3SetTiempo, rpcV3SetExcluido, rpcV3AgregarItem, rpcV3EliminarCustom,
   rpcAdminSembrarPlanesFaltantes,
 } from '@/lib/services/taller-plan-semanal'
@@ -252,6 +252,16 @@ export function useConfirmarPlanSemanalTaller(planId: string | null) {
   const invalidate = useInvalidatePlan(planId)
   return useMutation({
     mutationFn: (planSemanalId: string) => rpcConfirmarPlanSemanal(planSemanalId),
+    onSuccess: () => invalidate(),
+  })
+}
+
+/** Liberar OTs a ejecución en masa desde el Kanban (MIG220): sin esto los
+ *  mecánicos no ven NADA en /m/taller aunque el plan esté lleno. */
+export function useLiberarOtsTaller(planId: string | null) {
+  const invalidate = useInvalidatePlan(planId)
+  return useMutation({
+    mutationFn: (otIds: string[]) => rpcLiberarOts(otIds),
     onSuccess: () => invalidate(),
   })
 }
