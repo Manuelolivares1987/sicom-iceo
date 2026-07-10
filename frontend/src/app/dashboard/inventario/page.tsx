@@ -319,6 +319,7 @@ export default function InventarioPage() {
         cols={3}
         actions={[
           { label: 'Corregir ingreso',  description: 'Anular ingreso combustible mal cargado', href: '/dashboard/combustible/corregir-ingreso', icon: Ban,            accent: 'red',   badge: 'Admin' },
+          { label: 'Costos FIFO',       description: 'Corregir el costo de las capas semilla ($1)', href: '/dashboard/inventario/costos-fifo',  icon: DollarSign,     accent: 'green', badge: 'Admin' },
           { label: 'Cargar maestro',    description: 'Importar productos desde Excel',         href: '/dashboard/inventario/cargar-maestro',    icon: FileSpreadsheet, accent: 'slate', badge: 'Admin' },
           { label: 'Scanner',           description: 'Pistola lectora código de barras',       href: '/dashboard/inventario/scanner',           icon: BarChart3,      accent: 'slate' },
         ]}

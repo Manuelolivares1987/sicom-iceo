@@ -596,6 +596,15 @@ export async function rpcV3EliminarCustom(itemId: string) {
   return data as { success: boolean }
 }
 
+/** Marcar "No aplica" (o restaurar) un BLOQUE completo del checklist (MIG223). */
+export async function rpcV3SetExcluidoBloque(otId: string, bloque: string, excluido: boolean) {
+  const { data, error } = await supabase.rpc('rpc_taller_v3_set_excluido_bloque', {
+    p_ot_id: otId, p_bloque: bloque, p_excluido: excluido,
+  })
+  if (error) throw error
+  return data as { success: boolean; items_actualizados: number }
+}
+
 // Handoff jefe -> ejecutor: liberar / reabrir la preparación del checklist
 export async function rpcLiberarEjecucion(otId: string) {
   const { data, error } = await supabase.rpc('rpc_taller_liberar_ejecucion', { p_ot_id: otId })

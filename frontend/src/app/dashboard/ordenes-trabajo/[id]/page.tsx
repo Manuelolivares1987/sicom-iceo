@@ -8,7 +8,7 @@ import { useAuth } from '@/contexts/auth-context'
 import { usePermissions } from '@/hooks/use-permissions'
 import {
   getJornadasDeOT, getChecklistV3OT, type ChecklistV3Item,
-  rpcV3SetTiempo, rpcV3SetExcluido, rpcV3AgregarItem, rpcV3EliminarCustom,
+  rpcV3SetTiempo, rpcV3SetExcluido, rpcV3SetExcluidoBloque, rpcV3AgregarItem, rpcV3EliminarCustom,
   rpcLiberarEjecucion, rpcReabrirPreparacion,
 } from '@/lib/services/taller-plan-semanal'
 import {
@@ -33,6 +33,8 @@ import {
   DollarSign,
   Plus,
   Search,
+  ChevronUp,
+  ChevronDown,
   Loader2,
   Pencil,
   Clock,
@@ -218,8 +220,20 @@ function ChecklistTab({
   const [nuevaTarea, setNuevaTarea] = useState('')
   const [nuevoTiempo, setNuevoTiempo] = useState('')
   const [busy, setBusy] = useState(false)
+  // Vista amigable con pautas grandes: bloques colapsables + búsqueda.
+  const [bloquesAbiertos, setBloquesAbiertos] = useState<Record<string, boolean>>({})
+  const [busqueda, setBusqueda] = useState('')
+  const [bloqueBusy, setBloqueBusy] = useState<string | null>(null)
 
   function invalidate() { qc.invalidateQueries({ queryKey: ['checklist-v3', otId] }) }
+
+  async function toggleBloqueExcluido(bloque: string, excluir: boolean) {
+    setBloqueBusy(bloque)
+    try {
+      await rpcV3SetExcluidoBloque(otId, bloque, excluir)
+      invalidate()
+    } catch { /* retry */ } finally { setBloqueBusy(null) }
+  }
 
   // — ejecución —
   async function setResultado(it: ChecklistV3Item, v: 'ok' | 'no_ok' | 'na') {
@@ -344,18 +358,75 @@ function ChecklistTab({
         <span className="font-semibold">{hechos}/{activos.length} tareas</span>
         <span className="text-blue-400">|</span>
         <span>{tiempoTotal} min ({(tiempoTotal / 60).toFixed(1)} h) estimados</span>
+        {mode === 'edit' && all.some((i) => i.excluido) && (
+          <span className="text-blue-500">| {all.filter((i) => i.excluido).length} no aplican</span>
+        )}
+        {mode === 'edit' && (
+          <div className="ml-auto flex items-center gap-2">
+            <div className="relative">
+              <Search className="absolute left-2 top-2 h-3.5 w-3.5 text-gray-400" />
+              <input value={busqueda} onChange={(e) => setBusqueda(e.target.value)}
+                     placeholder="Buscar tarea…"
+                     className="h-8 w-52 rounded-lg border border-blue-200 bg-white pl-7 pr-2 text-xs" />
+            </div>
+            <button onClick={() => {
+                      const abrir = !grupos.every((g) => bloquesAbiertos[g.bloque])
+                      setBloquesAbiertos(Object.fromEntries(grupos.map((g) => [g.bloque, abrir])))
+                    }}
+                    className="rounded-lg border border-blue-200 bg-white px-2 py-1.5 text-xs text-blue-700 hover:bg-blue-100">
+              {grupos.every((g) => bloquesAbiertos[g.bloque]) ? 'Colapsar todo' : 'Expandir todo'}
+            </button>
+          </div>
+        )}
       </div>
 
       {grupos.map((g) => {
+        const itemsFiltrados = mode === 'edit' && busqueda.trim()
+          ? g.items.filter((i) => (i.descripcion ?? '').toLowerCase().includes(busqueda.trim().toLowerCase())
+              || (i.codigo ?? '').toLowerCase().includes(busqueda.trim().toLowerCase()))
+          : g.items
+        if (mode === 'edit' && busqueda.trim() && itemsFiltrados.length === 0) return null
+        const nActivos = g.items.filter((i) => !i.excluido).length
         const tBloque = g.items.filter((i) => !i.excluido).reduce((s, i) => s + (i.tiempo_min ?? 0), 0)
+        const bloqueExcluido = nActivos === 0
+        // En edición los bloques parten colapsados (pautas de 180+ ítems);
+        // la búsqueda o el toggle los abren. En ejecución, siempre abiertos.
+        const abierto = mode !== 'edit' || !!busqueda.trim() || (bloquesAbiertos[g.bloque] ?? false)
         return (
-          <div key={g.bloque}>
-            <div className="flex items-center justify-between rounded-t-lg bg-gray-100 px-3 py-2">
-              <h4 className="text-sm font-semibold text-gray-700">{bloqueLabel(g.bloque)}</h4>
-              <span className="text-xs text-gray-500">{g.items.filter((i) => !i.excluido).length} · {tBloque} min</span>
+          <div key={g.bloque} className={bloqueExcluido && mode === 'edit' ? 'opacity-60' : ''}>
+            <div
+              className={`flex items-center justify-between gap-2 bg-gray-100 px-3 py-2 ${abierto ? 'rounded-t-lg' : 'rounded-lg'} ${mode === 'edit' ? 'cursor-pointer hover:bg-gray-200' : ''}`}
+              onClick={() => mode === 'edit' && setBloquesAbiertos((p) => ({ ...p, [g.bloque]: !abierto }))}
+            >
+              <div className="flex min-w-0 items-center gap-1.5">
+                {mode === 'edit' && (
+                  abierto ? <ChevronUp className="h-4 w-4 shrink-0 text-gray-500" /> : <ChevronDown className="h-4 w-4 shrink-0 text-gray-500" />
+                )}
+                <h4 className={`truncate text-sm font-semibold ${bloqueExcluido ? 'text-gray-400 line-through' : 'text-gray-700'}`}>
+                  {bloqueLabel(g.bloque)}
+                </h4>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <span className="text-xs text-gray-500">
+                  {nActivos}/{g.items.length} · {tBloque} min
+                </span>
+                {mode === 'edit' && !readOnly && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); toggleBloqueExcluido(g.bloque, !bloqueExcluido) }}
+                    disabled={bloqueBusy === g.bloque}
+                    title={bloqueExcluido ? 'Restaurar todas las tareas del bloque' : 'Marcar TODO el bloque como no aplica'}
+                    className={`rounded-lg px-2 py-1 text-[11px] font-medium disabled:opacity-50 ${bloqueExcluido
+                      ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                      : 'bg-white text-gray-600 border border-gray-300 hover:bg-gray-50'}`}
+                  >
+                    {bloqueBusy === g.bloque ? '…' : bloqueExcluido ? 'Incluir bloque' : 'No aplica todo'}
+                  </button>
+                )}
+              </div>
             </div>
+            {abierto && (
             <div className="space-y-2 pt-2">
-              {g.items.map((item, idx) => mode === 'edit' ? (
+              {itemsFiltrados.map((item, idx) => mode === 'edit' ? (
                 /* ───── modo preparación (jefe) ───── */
                 <Card key={item.instance_item_id} className={item.excluido ? 'opacity-60' : ''}>
                   <CardContent className="p-3">
@@ -457,6 +528,7 @@ function ChecklistTab({
                 </Card>
               ))}
             </div>
+            )}
           </div>
         )
       })}
