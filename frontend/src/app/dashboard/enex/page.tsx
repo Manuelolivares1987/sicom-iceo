@@ -8,6 +8,7 @@ import { useMemo, useState } from 'react'
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import {
   Building2, ChevronLeft, ChevronRight, Copy, Plus, CheckCircle2, Clock, X, AlertTriangle, Loader2, Camera,
+  Printer, FileSpreadsheet,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -102,6 +103,25 @@ export default function EnexControlPage() {
           <button onClick={() => cambiarMes(1)} className="rounded-lg border px-2 py-1.5 hover:bg-gray-50"><ChevronRight className="h-4 w-4" /></button>
           <Button variant="outline" onClick={() => dup.mutate()} disabled={dup.isPending} title="Copiar el plan del mes anterior">
             {dup.isPending ? <Spinner className="h-4 w-4" /> : <Copy className="h-4 w-4 mr-1" />} Copiar mes ant.
+          </Button>
+          <Button variant="outline" disabled={panel.length === 0}
+                  title="Exportar el programa del mes a Excel/CSV (respaldo mensual para ENEX)"
+                  onClick={() => {
+                    const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`
+                    const filas = panel.map((r) => [
+                      r.faena, r.instalacion, r.instalacion_tipo ?? '', r.patente ?? '', r.tipo_servicio,
+                      r.fecha_programada ?? '', r.fecha_ejecucion ?? '', r.ot_numero ?? '', r.ejecutor ?? '',
+                      r.cumplida ? 'CUMPLIDA' : (r.estado ?? 'programada'), r.firmante_mandante_nombre ?? '',
+                    ].map(esc).join(';'))
+                    const csv = ['Faena;Instalación;Tipo;Patente;Servicio;Programada;Ejecutada;OT;Ejecutor;Estado;Firmó mandante', ...filas].join('\r\n')
+                    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' })
+                    const a = document.createElement('a')
+                    a.href = URL.createObjectURL(blob)
+                    a.download = `ENEX_programa_${anio}-${String(mes).padStart(2, '0')}.csv`
+                    a.click()
+                    URL.revokeObjectURL(a.href)
+                  }}>
+            <FileSpreadsheet className="h-4 w-4 mr-1" /> Exportar mes
           </Button>
         </div>
       </div>
@@ -314,7 +334,15 @@ function CeldaModal({ anio, mes, inst, servicio, row, onClose, onDone }: {
                 <img src={row.firma_mandante_url} alt="firma" className="h-16 rounded border bg-white object-contain px-2" />
               )}
             </div>
-            <Button variant="outline" size="sm" onClick={() => setModo('ejecutar')}>Editar registro</Button>
+            <div className="flex gap-2">
+              {row.ejecucion_id && (
+                <Button variant="primary" size="sm" onClick={() => window.open(`/enex-reporte/${row.ejecucion_id}`, '_blank')}>
+                  <Printer className="h-4 w-4 mr-1" />
+                  {row.tipo_servicio === 'calibracion' ? 'Certificado de calibración' : 'Reporte de servicio'}
+                </Button>
+              )}
+              <Button variant="outline" size="sm" onClick={() => setModo('ejecutar')}>Editar registro</Button>
+            </div>
           </div>
         ) : (
           <div className="space-y-2">
