@@ -18,13 +18,19 @@ import { useNetworkStatus } from '@/hooks/use-calama-offline'
 const hoy = () => { const d = new Date(); return { anio: d.getFullYear(), mes: d.getMonth() + 1 } }
 
 export default function EnexTerrenoHome() {
-  const [{ anio, mes }, setPeriodo] = useState(hoy())
+  // El período parte NULL y se fija tras el mount: la página se prerenderiza
+  // en el build y usar new Date() en el primer render hidrata mal (React #418)
+  // cuando la fecha del build difiere de la del teléfono.
+  const [periodo, setPeriodo] = useState<{ anio: number; mes: number } | null>(null)
+  useEffect(() => { setPeriodo(hoy()) }, [])
+  const anio = periodo?.anio ?? 0
+  const mes = periodo?.mes ?? 1
   const qc = useQueryClient()
   const online = useNetworkStatus()
   const [descargaMsg, setDescargaMsg] = useState('')
   const { data: pend = [], isLoading, refetch, isFetching } = useQuery({
     queryKey: ['enex-terreno', anio, mes], queryFn: () => getPendientesOffline(anio, mes),
-    networkMode: 'always', staleTime: 10_000,
+    networkMode: 'always', staleTime: 10_000, enabled: periodo !== null,
   })
   const { data: pendientesSync = 0 } = useQuery({
     queryKey: ['enex-pending-count'], queryFn: getEnexPendingCount, networkMode: 'always', refetchInterval: 4000,
@@ -59,6 +65,9 @@ export default function EnexTerrenoHome() {
   }, [pend])
 
   const pendientes = pend.filter((p) => !p.cumplida).length
+
+  // Primer render (SSR/hidratación) sin fecha: contenido determinista.
+  if (!periodo) return <div className="flex justify-center py-10"><Spinner /></div>
 
   return (
     <div className="p-3 space-y-3">
