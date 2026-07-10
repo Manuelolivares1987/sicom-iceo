@@ -391,7 +391,7 @@ export default function ActivoDetailPage() {
         abierto={showContratoModal}
         onClose={() => setShowContratoModal(false)}
         activoId={id}
-        activoCodigo={a.codigo}
+        activoCodigo={a.patente || a.codigo}
         contratoActualId={a.contrato_id ?? null}
         contratoActualCodigo={a.contrato?.codigo ?? null}
         clienteActual={a.contrato?.cliente ?? a.cliente_actual ?? null}

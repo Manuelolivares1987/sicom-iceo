@@ -89,7 +89,8 @@ export function OTInfoHeader({ ot }: OTInfoHeaderProps) {
             },
             {
               label: 'Fecha Término',
-              value: ot.fecha_termino ? formatDateTime(ot.fecha_termino) : 'En curso',
+              // "En curso" solo si la OT partió; una OT creada/asignada no está en curso.
+              value: ot.fecha_termino ? formatDateTime(ot.fecha_termino) : (ot.fecha_inicio ? 'En curso' : '—'),
             },
           ].map((item) => (
             <div key={item.label}>
