@@ -176,6 +176,40 @@ export async function getInformeRecepcion(id: string) {
   return { data: data as InformeRecepcion | null, error }
 }
 
+/** Informe + equipo + nombres de firmantes, para la versión imprimible. */
+export type InformeRecepcionCompleto = InformeRecepcion & {
+  activo: {
+    codigo: string; nombre: string | null; patente: string | null
+    modelo?: { nombre: string; marca?: { nombre: string } | null } | null
+  } | null
+  inspector: { nombre_completo: string } | null
+  encargado: { nombre_completo: string } | null
+}
+
+export async function getInformeRecepcionCompleto(id: string): Promise<InformeRecepcionCompleto | null> {
+  const { data, error } = await supabase
+    .from('informes_recepcion')
+    .select(`*,
+      activo:activos(codigo, nombre, patente, modelo:modelos(nombre, marca:marcas(nombre))),
+      inspector:usuarios_perfil!inspector_id(nombre_completo),
+      encargado:usuarios_perfil!encargado_cobros_id(nombre_completo)`)
+    .eq('id', id)
+    .maybeSingle()
+  if (error) throw error
+  return (data as unknown as InformeRecepcionCompleto | null) ?? null
+}
+
+/** Informes del equipo — para la carpeta en la ficha del activo. */
+export async function getInformesRecepcionActivo(activoId: string): Promise<InformeRecepcion[]> {
+  const { data, error } = await supabase
+    .from('informes_recepcion')
+    .select('*')
+    .eq('activo_id', activoId)
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return (data ?? []) as InformeRecepcion[]
+}
+
 export async function getHallazgosInforme(informeId: string) {
   const { data, error } = await supabase
     .from('informe_recepcion_hallazgos')
