@@ -32,6 +32,9 @@ export function useStockProductos(bodegaId: string | null, productoIds: string[]
     queryKey: ['stock-productos', bodegaId ?? 'none', [...productoIds].sort().join(',')],
     queryFn: () => getStockProductos(bodegaId!, productoIds),
     enabled: !!bodegaId && productoIds.length > 0,
+    // El stock cambia con cada despacho: siempre refetch al montar/reabrir el vale.
+    staleTime: 0,
+    refetchOnMount: 'always',
   })
 }
 
@@ -53,6 +56,8 @@ export function useEntregarTicket() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['tickets'] })
       qc.invalidateQueries({ queryKey: ['ticket-items'] })
+      // La entrega rebaja stock (FIFO): refrescar el saldo que muestra el vale.
+      qc.invalidateQueries({ queryKey: ['stock-productos'] })
     },
   })
 }
