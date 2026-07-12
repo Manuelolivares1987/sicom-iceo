@@ -247,7 +247,7 @@ function DespacharTab() {
     try {
       const t = await getTicketByFolio(limpio)
       if (!t) { toast.error('Ticket no encontrado'); setTicket(null) }
-      else { setTicket(t); setCant({}); setResultado(null) }
+      else { setTicket(t); setCant({}); setResultado(null); setEntregaError(null) }
     } catch (e) { toast.error((e as Error).message) } finally { setBuscando(false) }
   }
 
@@ -263,21 +263,29 @@ function DespacharTab() {
   // Lo que Gustavo NO va a entregar se manda a COMPRA: entra al tablero de
   // Seguimiento repuestos con todos los datos y le avisa a adquisiciones.
   const [aCompraBusy, setACompraBusy] = useState<string | null>(null)
-  async function mandarACompra(i: { id: string; producto_nombre?: string | null; descripcion?: string | null; pendiente: number }) {
-    const nombre = i.producto_nombre ?? i.descripcion ?? 'ítem'
-    const motivo = window.prompt(
-      `"${nombre}" (${i.pendiente} pendiente) se enviará a COMPRA — adquisiciones lo verá en Seguimiento repuestos.\n\nMotivo (opcional):`)
-    if (motivo === null) return
-    setACompraBusy(i.id)
+  const [aCompraTarget, setACompraTarget] = useState<{ id: string; nombre: string; pendiente: number } | null>(null)
+  const [aCompraMotivo, setACompraMotivo] = useState('')
+  function mandarACompra(i: { id: string; producto_nombre?: string | null; descripcion?: string | null; pendiente: number }) {
+    setACompraMotivo('')
+    setACompraTarget({ id: i.id, nombre: i.producto_nombre ?? i.descripcion ?? 'ítem', pendiente: i.pendiente })
+  }
+  async function confirmarACompra() {
+    if (!aCompraTarget) return
+    setACompraBusy(aCompraTarget.id)
     try {
-      const r = await enviarItemACompra(i.id, motivo.trim() || null)
-      toast.success(`"${nombre}" enviado a compra (${r.cantidad}). Síguelo en Seguimiento repuestos.`)
+      const r = await enviarItemACompra(aCompraTarget.id, aCompraMotivo.trim() || null)
+      toast.success(`"${aCompraTarget.nombre}" enviado a compra (${r.cantidad}). Síguelo en Seguimiento repuestos.`)
       qc.invalidateQueries({ queryKey: ['ticket-items'] })
+      setACompraTarget(null)
     } catch (e) { toast.error((e as Error).message) } finally { setACompraBusy(null) }
   }
 
+  // Error visible y persistente junto al botón (los toasts se pierden).
+  const [entregaError, setEntregaError] = useState<string | null>(null)
+
   async function confirmar() {
     if (!ticket || !bodegaId) return
+    setEntregaError(null)
     // Validar contra pendiente y stock ANTES de mandar: el servidor rechaza
     // toda la entrega si un solo ítem no tiene stock (rebaja FIFO atómica).
     for (const i of items ?? []) {
@@ -285,12 +293,12 @@ function DespacharTab() {
       if (c <= 0) continue
       const nombre = i.producto_nombre ?? i.descripcion ?? 'ítem'
       if (c > i.pendiente) {
-        toast.error(`"${nombre}": ingresaste ${c} pero quedan ${i.pendiente} pendientes en el vale.`)
+        setEntregaError(`"${nombre}": ingresaste ${c} pero quedan ${i.pendiente} pendientes en el vale.`)
         return
       }
       const disp = i.producto_id && stock ? (stock[i.producto_id] ?? 0) : null
       if (disp != null && c > disp) {
-        toast.error(disp === 0
+        setEntregaError(disp === 0
           ? `"${nombre}" no tiene stock en esta bodega. Déjalo en 0: queda pendiente en el vale y se gestiona como compra/reposición.`
           : `"${nombre}": solo hay ${disp} en stock. Entrega ${disp} y el saldo queda pendiente en el vale.`)
         return
@@ -299,7 +307,7 @@ function DespacharTab() {
     const entregas = (items ?? [])
       .map((i) => ({ ticket_item_id: i.id, cantidad: Number(cant[i.id] || 0) }))
       .filter((e) => e.cantidad > 0)
-    if (entregas.length === 0) { toast.error('Ingresa al menos una cantidad'); return }
+    if (entregas.length === 0) { setEntregaError('Ingresa al menos una cantidad a entregar.'); return }
     try {
       const firmaUrl = firmaBod ? await subirFirmaTicket(firmaBod, 'bodeguero') : null
       const r = await entregar.mutateAsync({
@@ -310,7 +318,7 @@ function DespacharTab() {
       setTicket(t)
       setCant({}); setFirmaBod('')
       toast.success(r.estado === 'entregado' ? 'Entrega total — ticket cerrado' : 'Entrega parcial registrada')
-    } catch (e) { toast.error((e as Error).message) }
+    } catch (e) { setEntregaError((e as Error).message) }
   }
 
   return (
@@ -395,7 +403,7 @@ function DespacharTab() {
               {/* Bodega */}
               <div>
                 <label className="text-xs font-medium">Bodega de despacho</label>
-                <select value={bodegaId} onChange={(e) => setBodegaId(e.target.value)} disabled={!usable}
+                <select value={bodegaId} onChange={(e) => { setBodegaId(e.target.value); setEntregaError(null) }} disabled={!usable}
                         className="w-full border rounded px-2 py-1.5 text-sm">
                   {(bodegas ?? []).map((b) => <option key={b.id} value={b.id}>{b.nombre}</option>)}
                 </select>
@@ -430,10 +438,17 @@ function DespacharTab() {
                               sin stock
                             </span>
                           ) : (
-                            <div className="w-20">
-                              <Input type="number" min="0" max={max} value={cant[i.id] ?? ''}
-                                     onChange={(e) => setCant((p) => ({ ...p, [i.id]: e.target.value }))}
-                                     placeholder="0" />
+                            <div className="flex shrink-0 items-center gap-1">
+                              <div className="w-20">
+                                <Input type="number" min="0" max={max} value={cant[i.id] ?? ''}
+                                       onChange={(e) => setCant((p) => ({ ...p, [i.id]: e.target.value }))}
+                                       placeholder="0" />
+                              </div>
+                              <button type="button" title={`Entregar todo lo posible (${max})`}
+                                      onClick={() => setCant((p) => ({ ...p, [i.id]: String(max) }))}
+                                      className="rounded-lg border border-gray-300 px-1.5 py-1.5 text-[10px] font-semibold text-gray-600 hover:bg-gray-50">
+                                todo
+                              </button>
                             </div>
                           )
                         )}
@@ -474,11 +489,21 @@ function DespacharTab() {
               )}
               {usable && (
                 <>
+                  <p className="text-[11px] text-gray-500">
+                    Entrega solo lo que corresponda: lo que dejes en 0 (o vacío) <b>queda pendiente
+                    en el vale</b> y se puede despachar después con este mismo vale.
+                  </p>
                   <div>
                     <label className="text-xs font-medium">Entregado a (nombre)</label>
                     <Input value={entregadoA} onChange={(e) => setEntregadoA(e.target.value)} placeholder="ej: Yusedl" />
                   </div>
                   <SignaturePad label="Firma del bodeguero (opcional)" onCapture={setFirmaBod} />
+                  {entregaError && (
+                    <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
+                      <AlertTriangle className="h-4 w-4 shrink-0" />
+                      <span>{entregaError}</span>
+                    </div>
+                  )}
                   <Button variant="primary" className="w-full" disabled={entregar.isPending} onClick={confirmar}>
                     {entregar.isPending ? <Spinner className="h-4 w-4 mr-1" /> : <CheckCircle2 className="h-4 w-4 mr-1" />}
                     Confirmar entrega (rebaja FIFO)
@@ -497,6 +522,36 @@ function DespacharTab() {
             : '✓ Entrega PARCIAL registrada — el ticket sigue abierto por el saldo.'}
           {resultado.despacho && <div className="mt-1 font-mono text-xs">Despacho: {resultado.despacho}</div>}
         </div>
+      )}
+
+      {/* Modal: enviar ítem a compra (reemplaza el prompt del navegador) */}
+      {aCompraTarget && (
+        <Modal open onClose={() => setACompraTarget(null)} title="Enviar a compra">
+          <div className="space-y-3">
+            <div className="rounded-lg border bg-gray-50 p-2 text-sm">
+              <div className="font-medium text-gray-800">{aCompraTarget.nombre}</div>
+              <div className="text-xs text-gray-500">{aCompraTarget.pendiente} pendiente(s) se enviarán a compra</div>
+            </div>
+            <p className="text-xs text-gray-500">
+              Adquisiciones lo verá en <b>Seguimiento repuestos</b> con todos los datos del pedido.
+              Cuando llegue, se despacha con este mismo vale.
+            </p>
+            <div>
+              <label className="text-xs font-medium">Motivo (opcional)</label>
+              <textarea value={aCompraMotivo} onChange={(e) => setACompraMotivo(e.target.value)}
+                        rows={2} autoFocus
+                        className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+                        placeholder="Ej: sin stock en todas las bodegas…" />
+            </div>
+          </div>
+          <ModalFooter>
+            <Button variant="outline" onClick={() => setACompraTarget(null)}>Cancelar</Button>
+            <Button disabled={aCompraBusy === aCompraTarget.id} onClick={confirmarACompra}>
+              {aCompraBusy === aCompraTarget.id ? <Spinner className="h-4 w-4 mr-1" /> : <ShoppingCart className="h-4 w-4 mr-1" />}
+              Enviar a compra
+            </Button>
+          </ModalFooter>
+        </Modal>
       )}
     </div>
   )
