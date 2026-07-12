@@ -5,6 +5,8 @@
 -- (VA_24_068: mantención trimestral, calibración NCh 1436:2001) al armar el
 -- plan mensual/trimestral. Se guardan POR instalación (editable, porque los
 -- anexos pueden fijar frecuencias distintas por punto).
+-- destructivo-ok: UPDATE masivo intencional — solo siembra el valor por defecto
+-- del contrato en las columnas recién creadas (COALESCE respeta valores previos).
 -- ============================================================================
 
 ALTER TABLE enex_instalaciones
