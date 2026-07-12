@@ -13,7 +13,6 @@ import {
   getEstadoActivoLabel,
 } from '@/domain/activos/status'
 import { useFichaActivo } from '@/hooks/use-activos'
-import { TIPO_DOC_LABEL } from '@/lib/services/taller-planificacion'
 import { supabase } from '@/lib/supabase'
 
 // Documentos del equipo para la ficha pública (QR): último por tipo, con
@@ -24,13 +23,6 @@ interface DocPublico {
   dias_restantes: number | null
   estado: 'vigente' | 'por_vencer' | 'vencido' | 'permanente'
   archivo_url: string | null
-}
-
-const DOC_ESTADO_UI: Record<string, { label: string; cls: string }> = {
-  vigente:    { label: 'Vigente',    cls: 'bg-green-100 text-green-700' },
-  por_vencer: { label: 'Por vencer', cls: 'bg-yellow-100 text-yellow-700' },
-  vencido:    { label: 'RENOVAR',    cls: 'bg-red-100 text-red-700' },
-  permanente: { label: 'Permanente', cls: 'bg-gray-100 text-gray-600' },
 }
 
 function useDocumentosPublicos(activoId?: string) {
@@ -70,6 +62,7 @@ export default function FichaEquipoPage() {
 
   const { data: ficha, isLoading, error } = useFichaActivo(id)
   const { data: docs = [] } = useDocumentosPublicos(id)
+  const docsVencidos = docs.filter((d) => d.estado === 'vencido').length
 
   if (isLoading) {
     return (
@@ -211,43 +204,30 @@ export default function FichaEquipoPage() {
             )}
           </div>
 
-          {/* Documentación del equipo (pública vía QR) */}
-          {docs.length > 0 && (
-            <div>
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">
-                Documentación del equipo
-              </p>
-              <div className="space-y-1.5">
-                {docs.map((d) => {
-                  const ui = DOC_ESTADO_UI[d.estado] ?? DOC_ESTADO_UI.permanente
-                  return (
-                    <div key={d.tipo}
-                         className="flex items-center gap-2 rounded-lg border border-gray-100 bg-gray-50/60 px-2.5 py-2">
-                      <div className="flex-1 min-w-0">
-                        <p className="truncate text-xs font-medium text-gray-800">
-                          {TIPO_DOC_LABEL[d.tipo] ?? d.tipo}
-                        </p>
-                        {d.estado !== 'permanente' && d.fecha_vencimiento && (
-                          <p className={cn('text-[10px]',
-                            d.estado === 'vencido' ? 'text-red-600 font-semibold'
-                              : d.estado === 'por_vencer' ? 'text-yellow-600' : 'text-gray-400')}>
-                            Vence {formatDate(d.fecha_vencimiento)}
-                          </p>
-                        )}
-                      </div>
-                      <span className={cn('rounded-full px-2 py-0.5 text-[9px] font-bold', ui.cls)}>{ui.label}</span>
-                      {d.archivo_url && (
-                        <a href={d.archivo_url} target="_blank" rel="noreferrer"
-                           className="rounded-lg border border-pillado-green-600 px-2 py-1 text-[10px] font-semibold text-pillado-green-600 hover:bg-pillado-green-50">
-                          Ver
-                        </a>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-          )}
+          {/* Menú del QR: documentación vigente + checklist del arrendatario */}
+          <div className="space-y-2">
+            <Link href={`/equipo/${id}/documentos`}
+                  className="flex items-center gap-3 rounded-xl border-2 border-pillado-green-600 bg-pillado-green-50/40 px-4 py-3 hover:bg-pillado-green-50">
+              <span className="text-2xl">📄</span>
+              <span className="flex-1">
+                <span className="block text-sm font-bold text-gray-900">Documentación vigente</span>
+                <span className="block text-[11px] text-gray-500">
+                  {docs.length > 0 ? `${docs.length} documentos del equipo` : 'Permisos, certificados y vigencias'}
+                  {docsVencidos > 0 && <span className="ml-1 font-semibold text-red-600">· {docsVencidos} por renovar</span>}
+                </span>
+              </span>
+              <span className="text-gray-400">›</span>
+            </Link>
+            <Link href={`/equipo/${id}/checklist-cliente`}
+                  className="flex items-center gap-3 rounded-xl border-2 border-blue-500 bg-blue-50/40 px-4 py-3 hover:bg-blue-50">
+              <span className="text-2xl">✅</span>
+              <span className="flex-1">
+                <span className="block text-sm font-bold text-gray-900">Checklist del equipo</span>
+                <span className="block text-[11px] text-gray-500">Inspección semanal que realiza quien arrienda el equipo</span>
+              </span>
+              <span className="text-gray-400">›</span>
+            </Link>
+          </div>
 
           {/* QR value */}
           {f.qr_code && (
