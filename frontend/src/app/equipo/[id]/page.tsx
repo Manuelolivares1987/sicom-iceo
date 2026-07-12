@@ -2,6 +2,7 @@
 
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
+import { useQuery } from '@tanstack/react-query'
 import { Spinner } from '@/components/ui/spinner'
 import { Badge } from '@/components/ui/badge'
 import { cn, formatCLP, formatDate } from '@/lib/utils'
@@ -12,6 +13,38 @@ import {
   getEstadoActivoLabel,
 } from '@/domain/activos/status'
 import { useFichaActivo } from '@/hooks/use-activos'
+import { TIPO_DOC_LABEL } from '@/lib/services/taller-planificacion'
+import { supabase } from '@/lib/supabase'
+
+// Documentos del equipo para la ficha pública (QR): último por tipo, con
+// vigencia calculada en el servidor (MIG227).
+interface DocPublico {
+  tipo: string
+  fecha_vencimiento: string | null
+  dias_restantes: number | null
+  estado: 'vigente' | 'por_vencer' | 'vencido' | 'permanente'
+  archivo_url: string | null
+}
+
+const DOC_ESTADO_UI: Record<string, { label: string; cls: string }> = {
+  vigente:    { label: 'Vigente',    cls: 'bg-green-100 text-green-700' },
+  por_vencer: { label: 'Por vencer', cls: 'bg-yellow-100 text-yellow-700' },
+  vencido:    { label: 'RENOVAR',    cls: 'bg-red-100 text-red-700' },
+  permanente: { label: 'Permanente', cls: 'bg-gray-100 text-gray-600' },
+}
+
+function useDocumentosPublicos(activoId?: string) {
+  return useQuery({
+    queryKey: ['docs-publicos', activoId],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('rpc_documentos_activo_publico', { p_activo_id: activoId })
+      if (error) throw error
+      return (data ?? []) as DocPublico[]
+    },
+    enabled: !!activoId,
+    staleTime: 60_000,
+  })
+}
 
 function getProximaColor(fecha: string | null) {
   if (!fecha) return 'text-gray-500'
@@ -36,6 +69,7 @@ export default function FichaEquipoPage() {
   const id = params.id as string
 
   const { data: ficha, isLoading, error } = useFichaActivo(id)
+  const { data: docs = [] } = useDocumentosPublicos(id)
 
   if (isLoading) {
     return (
@@ -176,6 +210,44 @@ export default function FichaEquipoPage() {
               <Row label="MTTR" value={`${Number(f.mttr_horas).toFixed(1)} hrs`} />
             )}
           </div>
+
+          {/* Documentación del equipo (pública vía QR) */}
+          {docs.length > 0 && (
+            <div>
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">
+                Documentación del equipo
+              </p>
+              <div className="space-y-1.5">
+                {docs.map((d) => {
+                  const ui = DOC_ESTADO_UI[d.estado] ?? DOC_ESTADO_UI.permanente
+                  return (
+                    <div key={d.tipo}
+                         className="flex items-center gap-2 rounded-lg border border-gray-100 bg-gray-50/60 px-2.5 py-2">
+                      <div className="flex-1 min-w-0">
+                        <p className="truncate text-xs font-medium text-gray-800">
+                          {TIPO_DOC_LABEL[d.tipo] ?? d.tipo}
+                        </p>
+                        {d.estado !== 'permanente' && d.fecha_vencimiento && (
+                          <p className={cn('text-[10px]',
+                            d.estado === 'vencido' ? 'text-red-600 font-semibold'
+                              : d.estado === 'por_vencer' ? 'text-yellow-600' : 'text-gray-400')}>
+                            Vence {formatDate(d.fecha_vencimiento)}
+                          </p>
+                        )}
+                      </div>
+                      <span className={cn('rounded-full px-2 py-0.5 text-[9px] font-bold', ui.cls)}>{ui.label}</span>
+                      {d.archivo_url && (
+                        <a href={d.archivo_url} target="_blank" rel="noreferrer"
+                           className="rounded-lg border border-pillado-green-600 px-2 py-1 text-[10px] font-semibold text-pillado-green-600 hover:bg-pillado-green-50">
+                          Ver
+                        </a>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
 
           {/* QR value */}
           {f.qr_code && (
