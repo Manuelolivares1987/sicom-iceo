@@ -26,6 +26,9 @@ export type EnexInstalacion = {
   linea: 'combustible' | 'lubricante' | null
   pauta: string | null
   frecuencia_meses: number
+  // Referencia del contrato (MIG230): frecuencia exigida por servicio.
+  frecuencia_mantencion: string | null
+  frecuencia_calibracion: string | null
   patente: string | null
   activo: boolean
   orden: number
@@ -107,6 +110,17 @@ export async function crearInstalacion(p: {
   }).select('id').single()
   if (error) throw error
   return data
+}
+
+// Frecuencias del contrato por instalación (referencia editable — MIG230).
+export async function actualizarFrecuencias(instalacionId: string, p: {
+  frecuenciaMantencion?: string | null; frecuenciaCalibracion?: string | null
+}) {
+  const { error } = await supabase.from('enex_instalaciones').update({
+    frecuencia_mantencion: p.frecuenciaMantencion ?? null,
+    frecuencia_calibracion: p.frecuenciaCalibracion ?? null,
+  }).eq('id', instalacionId)
+  if (error) throw error
 }
 
 // ── Panel mensual + KPI ───────────────────────────────────────────────────

@@ -21,7 +21,7 @@ import { useToast } from '@/contexts/toast-context'
 import { useRequireAuth } from '@/hooks/use-require-auth'
 import {
   getFaenas, getInstalaciones, getPanelMensual, getKpiMensual, getPanelMeses, getKpiMeses,
-  programar, desprogramar, registrarEjecucion, duplicarPeriodo, crearInstalacion,
+  programar, desprogramar, registrarEjecucion, duplicarPeriodo, crearInstalacion, actualizarFrecuencias,
   subirFirmaMandante, subirEvidenciaEnex,
   TIPO_INSTALACION_LABEL, MESES, clp,
   type EnexPanelRow, type EnexInstalacion, type TipoServicio,
@@ -48,6 +48,7 @@ export default function EnexControlPage() {
   const [faenaSel, setFaenaSel] = useState<string | null>(null)
   const [cell, setCell] = useState<{ inst: EnexInstalacion; servicio: TipoServicio; mes: number; row?: EnexPanelRow } | null>(null)
   const [addInst, setAddInst] = useState(false)
+  const [frecEdit, setFrecEdit] = useState<EnexInstalacion | null>(null)
 
   // Meses del trimestre calendario del mes seleccionado (T1: ene-mar, …)
   const mesesTri = useMemo(() => {
@@ -249,6 +250,15 @@ export default function EnexControlPage() {
                       <div className="text-[11px] text-gray-500">
                         {TIPO_INSTALACION_LABEL[i.tipo]}{i.patente ? ` · ${i.patente}` : ''}{i.linea ? ` · ${i.linea}` : ''}
                       </div>
+                      {/* Frecuencia exigida por el contrato — referencia al planificar (MIG230) */}
+                      {(i.frecuencia_mantencion || i.frecuencia_calibracion) && (
+                        <button onClick={() => setFrecEdit(i)} title="Frecuencia del contrato — clic para editar"
+                                className="mt-0.5 block text-left text-[10px] text-indigo-600 hover:underline">
+                          Contrato: {i.frecuencia_mantencion && `Mant. ${i.frecuencia_mantencion}`}
+                          {i.frecuencia_mantencion && i.frecuencia_calibracion && ' · '}
+                          {i.frecuencia_calibracion && `Calib. ${i.frecuencia_calibracion}`}
+                        </button>
+                      )}
                     </td>
                     {vista === 'mes' ? (
                       SERVICIOS.map((s) => {
@@ -297,6 +307,10 @@ export default function EnexControlPage() {
       {addInst && faenaId && (
         <AgregarInstalacionModal faenaId={faenaId} onClose={() => setAddInst(false)}
                                  onDone={() => { setAddInst(false); qc.invalidateQueries({ queryKey: ['enex-inst'] }) }} />
+      )}
+      {frecEdit && (
+        <FrecuenciasModal inst={frecEdit} onClose={() => setFrecEdit(null)}
+                          onDone={() => { setFrecEdit(null); qc.invalidateQueries({ queryKey: ['enex-inst'] }) }} />
       )}
     </div>
   )
@@ -399,12 +413,20 @@ function CeldaModal({ anio, mes, inst, servicio, row, onClose, onDone }: {
 
   const titulo = `${inst.nombre} · ${SERVICIO_LABEL[servicio]}`
 
+  // Frecuencia que exige el contrato para este servicio (referencia MIG230).
+  const frecContrato = servicio === 'mantencion' ? inst.frecuencia_mantencion : inst.frecuencia_calibracion
+
   // No programada aún → programar
   if (!row) {
     return (
       <Modal open onClose={onClose} title={titulo}>
         <div className="space-y-3">
           <p className="text-sm text-gray-600">Programa este servicio para {MESES[mes - 1]} {anio}.</p>
+          {frecContrato && (
+            <div className="rounded-lg border border-indigo-200 bg-indigo-50/60 px-3 py-2 text-xs text-indigo-800">
+              <b>Frecuencia según contrato:</b> {frecContrato}
+            </div>
+          )}
           <div>
             <label className="text-xs font-medium">Fecha planificada (opcional)</label>
             <Input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} />
@@ -494,6 +516,49 @@ function CeldaModal({ anio, mes, inst, servicio, row, onClose, onDone }: {
             Guardar {firma || row.firma_mandante_url ? '(cumplida)' : 'ejecución'}
           </Button>
         )}
+      </ModalFooter>
+    </Modal>
+  )
+}
+
+// Editar la frecuencia contractual de referencia de una instalación (MIG230).
+function FrecuenciasModal({ inst, onClose, onDone }: { inst: EnexInstalacion; onClose: () => void; onDone: () => void }) {
+  const toast = useToast()
+  const [mant, setMant] = useState(inst.frecuencia_mantencion ?? '')
+  const [calib, setCalib] = useState(inst.frecuencia_calibracion ?? '')
+  const [busy, setBusy] = useState(false)
+
+  async function guardar() {
+    setBusy(true)
+    try {
+      await actualizarFrecuencias(inst.id, {
+        frecuenciaMantencion: mant.trim() || null,
+        frecuenciaCalibracion: calib.trim() || null,
+      })
+      toast.success('Frecuencias actualizadas')
+      onDone()
+    } catch (e) { toast.error((e as Error).message) } finally { setBusy(false) }
+  }
+
+  return (
+    <Modal open onClose={onClose} title={`Frecuencia del contrato · ${inst.nombre}`}>
+      <div className="space-y-3">
+        <p className="text-xs text-gray-500">
+          Referencia al planificar (contrato VA_24_068 y anexos). Ejemplos: «Trimestral»,
+          «Mensual», «2 veces/mes», «Quincenal», «Según requerimiento».
+        </p>
+        <div>
+          <label className="text-xs font-medium">Mantención</label>
+          <Input value={mant} onChange={(e) => setMant(e.target.value)} placeholder="ej. Trimestral" />
+        </div>
+        <div>
+          <label className="text-xs font-medium">Calibración y certificación</label>
+          <Input value={calib} onChange={(e) => setCalib(e.target.value)} placeholder="ej. Trimestral · NCh 1436:2001" />
+        </div>
+      </div>
+      <ModalFooter>
+        <Button variant="outline" onClick={onClose}>Cancelar</Button>
+        <Button disabled={busy} onClick={guardar}>{busy ? <Spinner className="h-4 w-4 mr-1" /> : null} Guardar</Button>
       </ModalFooter>
     </Modal>
   )
