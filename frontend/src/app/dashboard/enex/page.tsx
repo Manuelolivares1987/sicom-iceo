@@ -3,12 +3,13 @@
 // Módulo Calama-ENEX — Fase 1: control + KPI de cumplimiento (MIG206).
 // Replica el "Panel de Control ESM-ENEX": instalación × servicio por mes, plan
 // vs cumplimiento, con el KPI de cumplimiento y la exposición a multa en vivo.
+// MIG229: vista TRIMESTRAL y varias programaciones del mismo punto en el mes.
 
 import { useMemo, useState } from 'react'
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import {
   Building2, ChevronLeft, ChevronRight, Copy, Plus, CheckCircle2, Clock, X, AlertTriangle, Loader2, Camera,
-  Printer, FileSpreadsheet,
+  Printer, FileSpreadsheet, CalendarDays, CalendarRange,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -19,7 +20,7 @@ import { SignaturePad } from '@/components/ui/signature-pad'
 import { useToast } from '@/contexts/toast-context'
 import { useRequireAuth } from '@/hooks/use-require-auth'
 import {
-  getFaenas, getInstalaciones, getPanelMensual, getKpiMensual,
+  getFaenas, getInstalaciones, getPanelMensual, getKpiMensual, getPanelMeses, getKpiMeses,
   programar, desprogramar, registrarEjecucion, duplicarPeriodo, crearInstalacion,
   subirFirmaMandante, subirEvidenciaEnex,
   TIPO_INSTALACION_LABEL, MESES, clp,
@@ -29,6 +30,7 @@ import {
 const hoy = () => { const d = new Date(); return { anio: d.getFullYear(), mes: d.getMonth() + 1 } }
 const SERVICIOS: TipoServicio[] = ['mantencion', 'calibracion']
 const SERVICIO_LABEL: Record<TipoServicio, string> = { mantencion: 'Mantención', calibracion: 'Calibración y certificación' }
+const SERVICIO_CORTO: Record<TipoServicio, string> = { mantencion: 'Mant.', calibracion: 'Calib.' }
 
 function kpiColor(pct: number | null): string {
   if (pct == null) return 'text-gray-400'
@@ -42,30 +44,55 @@ export default function EnexControlPage() {
   const qc = useQueryClient()
   const toast = useToast()
   const [{ anio, mes }, setPeriodo] = useState(hoy())
+  const [vista, setVista] = useState<'mes' | 'trimestre'>('mes')
   const [faenaSel, setFaenaSel] = useState<string | null>(null)
-  const [cell, setCell] = useState<{ inst: EnexInstalacion; servicio: TipoServicio; row?: EnexPanelRow } | null>(null)
+  const [cell, setCell] = useState<{ inst: EnexInstalacion; servicio: TipoServicio; mes: number; row?: EnexPanelRow } | null>(null)
   const [addInst, setAddInst] = useState(false)
+
+  // Meses del trimestre calendario del mes seleccionado (T1: ene-mar, …)
+  const mesesTri = useMemo(() => {
+    const base = Math.floor((mes - 1) / 3) * 3 + 1
+    return [base, base + 1, base + 2]
+  }, [mes])
+  const meses = vista === 'mes' ? [mes] : mesesTri
 
   const { data: faenas = [] } = useQuery({ queryKey: ['enex-faenas'], queryFn: getFaenas, staleTime: 5 * 60_000 })
   const faenaId = faenaSel ?? faenas[0]?.id ?? null
   const { data: kpis = [] } = useQuery({ queryKey: ['enex-kpi', anio, mes], queryFn: () => getKpiMensual(anio, mes), staleTime: 15_000 })
+  const { data: kpisTri = [] } = useQuery({
+    queryKey: ['enex-kpi-tri', anio, mesesTri[0]], queryFn: () => getKpiMeses(anio, mesesTri),
+    enabled: vista === 'trimestre', staleTime: 15_000,
+  })
   const { data: instalaciones = [] } = useQuery({
     queryKey: ['enex-inst', faenaId], queryFn: () => getInstalaciones(faenaId ?? undefined), enabled: !!faenaId, staleTime: 60_000,
   })
   const { data: panel = [] } = useQuery({
-    queryKey: ['enex-panel', anio, mes, faenaId], queryFn: () => getPanelMensual(anio, mes, faenaId ?? undefined),
+    queryKey: ['enex-panel', anio, vista, meses.join(','), faenaId],
+    queryFn: () => vista === 'mes'
+      ? getPanelMensual(anio, mes, faenaId ?? undefined)
+      : getPanelMeses(anio, mesesTri, faenaId ?? undefined),
     enabled: !!faenaId, staleTime: 10_000,
   })
 
   const invalidar = () => {
     qc.invalidateQueries({ queryKey: ['enex-panel'] })
     qc.invalidateQueries({ queryKey: ['enex-kpi'] })
+    qc.invalidateQueries({ queryKey: ['enex-kpi-tri'] })
   }
 
-  // Índice panel por instalación+servicio
+  // Índice panel: (instalación, servicio, mes) → TODAS sus programaciones
+  // (MIG229: un punto puede estar programado varias veces en el mes).
   const panelIdx = useMemo(() => {
-    const m = new Map<string, EnexPanelRow>()
-    for (const r of panel) m.set(`${r.instalacion_id}|${r.tipo_servicio}`, r)
+    const m = new Map<string, EnexPanelRow[]>()
+    for (const r of panel) {
+      const k = `${r.instalacion_id}|${r.tipo_servicio}|${r.periodo_mes}`
+      const arr = m.get(k) ?? []
+      arr.push(r)
+      m.set(k, arr)
+    }
+    m.forEach((arr) => {
+      arr.sort((a, b) => (a.fecha_programada ?? '9999').localeCompare(b.fecha_programada ?? '9999'))
+    })
     return m
   }, [panel])
 
@@ -80,11 +107,13 @@ export default function EnexControlPage() {
 
   function cambiarMes(delta: number) {
     let m = mes + delta, a = anio
-    if (m < 1) { m = 12; a-- } else if (m > 12) { m = 1; a++ }
+    while (m < 1) { m += 12; a-- }
+    while (m > 12) { m -= 12; a++ }
     setPeriodo({ anio: a, mes: m })
   }
 
   const faenaActual = faenas.find((f) => f.id === faenaId)
+  const trimestreNum = Math.floor((mes - 1) / 3) + 1
 
   return (
     <div className="space-y-4">
@@ -97,27 +126,44 @@ export default function EnexControlPage() {
             Programa de mantención por instalación y cumplimiento del contrato (KPI y exposición a multa).
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <button onClick={() => cambiarMes(-1)} className="rounded-lg border px-2 py-1.5 hover:bg-gray-50"><ChevronLeft className="h-4 w-4" /></button>
-          <span className="min-w-[130px] text-center text-sm font-semibold">{MESES[mes - 1]} {anio}</span>
-          <button onClick={() => cambiarMes(1)} className="rounded-lg border px-2 py-1.5 hover:bg-gray-50"><ChevronRight className="h-4 w-4" /></button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex rounded-lg border overflow-hidden">
+            {([['mes', 'Mes', CalendarDays], ['trimestre', 'Trimestre', CalendarRange]] as const).map(([id, label, Icon]) => (
+              <button key={id} onClick={() => setVista(id)}
+                      className={`flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold ${
+                        vista === id ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
+                <Icon className="h-3.5 w-3.5" /> {label}
+              </button>
+            ))}
+          </div>
+          <button onClick={() => cambiarMes(vista === 'mes' ? -1 : -3)} className="rounded-lg border px-2 py-1.5 hover:bg-gray-50"><ChevronLeft className="h-4 w-4" /></button>
+          <span className="min-w-[130px] text-center text-sm font-semibold">
+            {vista === 'mes'
+              ? `${MESES[mes - 1]} ${anio}`
+              : `T${trimestreNum} · ${MESES[mesesTri[0] - 1].slice(0, 3)}–${MESES[mesesTri[2] - 1].slice(0, 3)} ${anio}`}
+          </span>
+          <button onClick={() => cambiarMes(vista === 'mes' ? 1 : 3)} className="rounded-lg border px-2 py-1.5 hover:bg-gray-50"><ChevronRight className="h-4 w-4" /></button>
+          {vista === 'mes' && (
           <Button variant="outline" onClick={() => dup.mutate()} disabled={dup.isPending} title="Copiar el plan del mes anterior">
             {dup.isPending ? <Spinner className="h-4 w-4" /> : <Copy className="h-4 w-4 mr-1" />} Copiar mes ant.
           </Button>
+          )}
           <Button variant="outline" disabled={panel.length === 0}
                   title="Exportar el programa del mes a Excel/CSV (respaldo mensual para ENEX)"
                   onClick={() => {
                     const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`
                     const filas = panel.map((r) => [
-                      r.faena, r.instalacion, r.instalacion_tipo ?? '', r.patente ?? '', r.tipo_servicio,
+                      r.faena, MESES[r.periodo_mes - 1], r.instalacion, r.instalacion_tipo ?? '', r.patente ?? '', r.tipo_servicio,
                       r.fecha_programada ?? '', r.fecha_ejecucion ?? '', r.ot_numero ?? '', r.ejecutor ?? '',
                       r.cumplida ? 'CUMPLIDA' : (r.estado ?? 'programada'), r.firmante_mandante_nombre ?? '',
                     ].map(esc).join(';'))
-                    const csv = ['Faena;Instalación;Tipo;Patente;Servicio;Programada;Ejecutada;OT;Ejecutor;Estado;Firmó mandante', ...filas].join('\r\n')
+                    const csv = ['Faena;Mes;Instalación;Tipo;Patente;Servicio;Programada;Ejecutada;OT;Ejecutor;Estado;Firmó mandante', ...filas].join('\r\n')
                     const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' })
                     const a = document.createElement('a')
                     a.href = URL.createObjectURL(blob)
-                    a.download = `ENEX_programa_${anio}-${String(mes).padStart(2, '0')}.csv`
+                    a.download = vista === 'mes'
+                      ? `ENEX_programa_${anio}-${String(mes).padStart(2, '0')}.csv`
+                      : `ENEX_programa_${anio}-T${trimestreNum}.csv`
                     a.click()
                     URL.revokeObjectURL(a.href)
                   }}>
@@ -165,17 +211,35 @@ export default function EnexControlPage() {
               <Plus className="h-4 w-4 mr-1" /> Instalación
             </Button>
           </div>
+          {/* KPI por mes del trimestre (faena seleccionada) */}
+          {vista === 'trimestre' && (
+            <div className="grid grid-cols-3 gap-2 border-b p-3">
+              {mesesTri.map((m) => {
+                const k = kpisTri.find((x) => x.faena_id === faenaId && x.periodo_mes === m)
+                const pct = k?.cumplimiento_pct ?? null
+                return (
+                  <div key={m} className="rounded-lg border bg-gray-50/60 p-2 text-center">
+                    <div className="text-[11px] font-semibold text-gray-600">{MESES[m - 1]}</div>
+                    <div className={`text-lg font-bold ${kpiColor(pct)}`}>{pct != null ? `${pct}%` : '—'}</div>
+                    <div className="text-[10px] text-gray-500">{k ? `${k.cumplidas}/${k.programadas} cumplidas` : 'sin programación'}</div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b text-xs text-gray-500">
                   <th className="p-2 text-left">Instalación</th>
-                  {SERVICIOS.map((s) => <th key={s} className="p-2 text-center min-w-[180px]">{SERVICIO_LABEL[s]}</th>)}
+                  {vista === 'mes'
+                    ? SERVICIOS.map((s) => <th key={s} className="p-2 text-center min-w-[180px]">{SERVICIO_LABEL[s]}</th>)
+                    : mesesTri.map((m) => <th key={m} className="p-2 text-center min-w-[190px] capitalize">{MESES[m - 1]}</th>)}
                 </tr>
               </thead>
               <tbody>
                 {instalaciones.length === 0 ? (
-                  <tr><td colSpan={3} className="p-6 text-center text-sm text-gray-400">
+                  <tr><td colSpan={4} className="p-6 text-center text-sm text-gray-400">
                     Esta faena aún no tiene instalaciones. Agrégalas con «Instalación».
                   </td></tr>
                 ) : instalaciones.map((i) => (
@@ -186,14 +250,38 @@ export default function EnexControlPage() {
                         {TIPO_INSTALACION_LABEL[i.tipo]}{i.patente ? ` · ${i.patente}` : ''}{i.linea ? ` · ${i.linea}` : ''}
                       </div>
                     </td>
-                    {SERVICIOS.map((s) => {
-                      const row = panelIdx.get(`${i.id}|${s}`)
-                      return (
-                        <td key={s} className="p-2 text-center">
-                          <CeldaServicio row={row} onClick={() => setCell({ inst: i, servicio: s, row })} />
+                    {vista === 'mes' ? (
+                      SERVICIOS.map((s) => {
+                        const rows = panelIdx.get(`${i.id}|${s}|${mes}`) ?? []
+                        return (
+                          <td key={s} className="p-2 text-center align-top">
+                            <CeldaServicio rows={rows}
+                                           onOpen={(row) => setCell({ inst: i, servicio: s, mes, row })}
+                                           onAdd={() => setCell({ inst: i, servicio: s, mes })} />
+                          </td>
+                        )
+                      })
+                    ) : (
+                      mesesTri.map((m) => (
+                        <td key={m} className="p-2 align-top">
+                          <div className="space-y-1.5">
+                            {SERVICIOS.map((s) => {
+                              const rows = panelIdx.get(`${i.id}|${s}|${m}`) ?? []
+                              return (
+                                <div key={s} className="flex items-start gap-1">
+                                  <span className="mt-0.5 w-9 shrink-0 text-[9px] font-bold uppercase text-gray-400">{SERVICIO_CORTO[s]}</span>
+                                  <div className="flex-1">
+                                    <CeldaServicio rows={rows} compact
+                                                   onOpen={(row) => setCell({ inst: i, servicio: s, mes: m, row })}
+                                                   onAdd={() => setCell({ inst: i, servicio: s, mes: m })} />
+                                  </div>
+                                </div>
+                              )
+                            })}
+                          </div>
                         </td>
-                      )
-                    })}
+                      ))
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -203,7 +291,7 @@ export default function EnexControlPage() {
       </Card>
 
       {cell && (
-        <CeldaModal anio={anio} mes={mes} inst={cell.inst} servicio={cell.servicio} row={cell.row}
+        <CeldaModal anio={anio} mes={cell.mes} inst={cell.inst} servicio={cell.servicio} row={cell.row}
                     onClose={() => setCell(null)} onDone={() => { setCell(null); invalidar() }} />
       )}
       {addInst && faenaId && (
@@ -214,27 +302,49 @@ export default function EnexControlPage() {
   )
 }
 
-function CeldaServicio({ row, onClick }: { row?: EnexPanelRow; onClick: () => void }) {
-  if (!row) {
-    return <button onClick={onClick} className="rounded-md border border-dashed border-gray-300 px-2 py-1 text-[11px] text-gray-400 hover:border-blue-400 hover:text-blue-600">+ programar</button>
+// Una celda = TODAS las programaciones del punto ese mes (MIG229) + botón «+»
+// para agregar otra (ej. calibración quincenal: 2 veces en el mes).
+function CeldaServicio({ rows, onOpen, onAdd, compact }: {
+  rows: EnexPanelRow[]; onOpen: (row: EnexPanelRow) => void; onAdd: () => void; compact?: boolean
+}) {
+  if (rows.length === 0) {
+    return (
+      <button onClick={onAdd}
+              className="rounded-md border border-dashed border-gray-300 px-2 py-1 text-[11px] text-gray-400 hover:border-blue-400 hover:text-blue-600">
+        + programar
+      </button>
+    )
   }
+  return (
+    <div className={`flex flex-wrap items-center gap-1 ${compact ? '' : 'justify-center'}`}>
+      {rows.map((row) => <ChipProgramacion key={row.programacion_id} row={row} onClick={() => onOpen(row)} />)}
+      <button onClick={onAdd} title="Programar otra vez este punto en el mes"
+              className="rounded-full border border-dashed border-gray-300 px-1.5 py-0.5 text-[11px] font-bold text-gray-400 hover:border-blue-400 hover:text-blue-600">
+        +
+      </button>
+    </div>
+  )
+}
+
+function ChipProgramacion({ row, onClick }: { row: EnexPanelRow; onClick: () => void }) {
+  const dia = row.fecha_programada ? ` · ${row.fecha_programada.slice(8, 10)}/${row.fecha_programada.slice(5, 7)}` : ''
   if (row.cumplida) {
-    return <button onClick={onClick} className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2.5 py-1 text-[11px] font-semibold text-green-700">
-      <CheckCircle2 className="h-3.5 w-3.5" /> Cumplida{row.ot_numero ? ` · ${row.ot_numero}` : ''}
+    return <button onClick={onClick} className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-[11px] font-semibold text-green-700">
+      <CheckCircle2 className="h-3 w-3" /> Cumplida{dia || (row.ot_numero ? ` · ${row.ot_numero}` : '')}
     </button>
   }
   if (row.estado === 'no_realizada') {
-    return <button onClick={onClick} className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2.5 py-1 text-[11px] font-semibold text-red-700">
-      <X className="h-3.5 w-3.5" /> No realizada
+    return <button onClick={onClick} className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-semibold text-red-700">
+      <X className="h-3 w-3" /> No realizada
     </button>
   }
   if (row.estado === 'ejecutada') {
-    return <button onClick={onClick} className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-1 text-[11px] font-semibold text-amber-800">
-      <Clock className="h-3.5 w-3.5" /> Ejecutada · falta firma
+    return <button onClick={onClick} className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800">
+      <Clock className="h-3 w-3" /> Falta firma{dia}
     </button>
   }
-  return <button onClick={onClick} className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2.5 py-1 text-[11px] font-semibold text-blue-700">
-    <Clock className="h-3.5 w-3.5" /> Programada{row.fecha_programada ? ` · ${row.fecha_programada.slice(8, 10)}/${row.fecha_programada.slice(5, 7)}` : ''}
+  return <button onClick={onClick} className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-[11px] font-semibold text-blue-700">
+    <Clock className="h-3 w-3" /> Prog.{dia}
   </button>
 }
 

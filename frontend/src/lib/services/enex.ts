@@ -126,6 +126,23 @@ export async function getKpiMensual(anio: number, mes: number): Promise<EnexKpi[
   return (data ?? []) as EnexKpi[]
 }
 
+// Vista trimestral: panel y KPI de varios meses del mismo año de una vez.
+export async function getPanelMeses(anio: number, meses: number[], faenaId?: string): Promise<EnexPanelRow[]> {
+  let q = supabase.from('v_enex_panel_mensual').select('*')
+    .eq('periodo_anio', anio).in('periodo_mes', meses)
+  if (faenaId) q = q.eq('faena_id', faenaId)
+  const { data, error } = await q
+  if (error) throw error
+  return (data ?? []) as EnexPanelRow[]
+}
+
+export async function getKpiMeses(anio: number, meses: number[]): Promise<EnexKpi[]> {
+  const { data, error } = await supabase.from('v_enex_kpi_mensual').select('*')
+    .eq('periodo_anio', anio).in('periodo_mes', meses)
+  if (error) throw error
+  return (data ?? []) as EnexKpi[]
+}
+
 // ── Acciones ──────────────────────────────────────────────────────────────
 export async function programar(p: {
   instalacionId: string; tipoServicio: TipoServicio; anio: number; mes: number
