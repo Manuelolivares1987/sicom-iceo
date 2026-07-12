@@ -127,7 +127,15 @@ export default function EnexTerrenoHome() {
                     : <span className="flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-700"><Clock className="h-3 w-3" /> Por ejecutar</span>}
                 </div>
                 <div className="mt-1 flex items-center justify-between text-xs text-gray-500">
-                  <span>{TIPO_INSTALACION_LABEL[p.instalacion_tipo]} · {p.tipo_servicio === 'calibracion' ? 'Calibración' : 'Mantención'} · {p.pauta_items} ítems</span>
+                  <span>
+                    {TIPO_INSTALACION_LABEL[p.instalacion_tipo]} · {p.tipo_servicio === 'calibracion' ? 'Calibración' : 'Mantención'} · {p.pauta_items} ítems
+                    {/* Con varias visitas del mismo punto en el mes, la fecha distingue cuál es cuál */}
+                    {p.fecha_programada && (
+                      <span className="ml-1 font-semibold text-blue-700">
+                        · visita del {p.fecha_programada.slice(8, 10)}/{p.fecha_programada.slice(5, 7)}
+                      </span>
+                    )}
+                  </span>
                   <ChevronRight className="h-4 w-4 text-gray-400" />
                 </div>
                 {p.pauta_borrador && (
