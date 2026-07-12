@@ -118,6 +118,17 @@ export default function ChecklistPublicoPage() {
               Tiempo mínimo de inspección: {template.duracion_minima_segundos}s.
               <br />Ítems: {items.length} + {itemsAleatorios.length} preguntas de control.
             </p>
+            {/* Menú del equipo: mismo QR da acceso a ficha y documentación vigente */}
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <button type="button" onClick={() => router.push(`/equipo/${activoId}`)}
+                      className="rounded-lg border border-gray-300 px-2 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-50">
+                Ficha del equipo
+              </button>
+              <button type="button" onClick={() => router.push(`/equipo/${activoId}/documentos`)}
+                      className="rounded-lg border border-pillado-green-600 px-2 py-2 text-xs font-semibold text-pillado-green-600 hover:bg-pillado-green-50">
+                📄 Documentación vigente
+              </button>
+            </div>
           </div>
 
           <div className="rounded-2xl bg-white p-5 shadow-lg space-y-3">
