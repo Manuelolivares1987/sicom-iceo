@@ -32,8 +32,8 @@ const S = StyleSheet.create({
   cellValue: { flex: 1, padding: 3, fontSize: 8, fontWeight: 'bold' },
   th: { padding: 3, fontSize: 8, fontWeight: 'bold', backgroundColor: '#f3f4f6', borderRightWidth: 0.5, borderRightColor: '#444', textAlign: 'center' },
   td: { padding: 3, fontSize: 8, borderRightWidth: 0.5, borderRightColor: '#444', textAlign: 'center' },
-  firmasRow: { flexDirection: 'row', marginTop: 24, gap: 12 },
-  firmaCol: { flex: 1, alignItems: 'center' },
+  firmasRow: { flexDirection: 'row', marginTop: 24 },
+  firmaCol: { flex: 1, alignItems: 'center', marginHorizontal: 6 },
   firmaImg: { height: 42, width: 120, objectFit: 'contain' },
   firmaLinea: { borderTopWidth: 1, borderTopColor: '#111', width: '100%', marginTop: 2, paddingTop: 3, alignItems: 'center' },
   firmaNombre: { fontSize: 8, fontWeight: 'bold' },
@@ -294,17 +294,50 @@ function OtMantenimiento({ reporte, items, logoUrl }: Datos) {
 }
 
 // ── Generación + almacenamiento del PDF ─────────────────────────────────────
+
+// react-pdf se cuelga (promesa que nunca resuelve) si su fetch interno de una
+// imagen remota falla: convertimos TODO a data URL nosotros, con timeout.
+async function aDataUrl(url: string | null | undefined, timeoutMs = 8000): Promise<string | null> {
+  if (!url) return null
+  try {
+    const ctl = new AbortController()
+    const t = setTimeout(() => ctl.abort(), timeoutMs)
+    const res = await fetch(url, { signal: ctl.signal })
+    clearTimeout(t)
+    if (!res.ok) return null
+    const blob = await res.blob()
+    return await new Promise((resolve) => {
+      const fr = new FileReader()
+      fr.onload = () => resolve(fr.result as string)
+      fr.onerror = () => resolve(null)
+      fr.readAsDataURL(blob)
+    })
+  } catch { return null }
+}
+
 // Genera el informe (formato según tipo de servicio), lo sube al bucket
 // documentos/enex-informes y guarda la URL en la ejecución. Devuelve la URL.
 export async function generarYGuardarInformeEnex(ejecucionId: string): Promise<string> {
   const { reporte, items } = await getEjecucionReporte(ejecucionId)
   if (!reporte) throw new Error('Ejecución no encontrada')
-  const logoUrl = `${window.location.origin}/images/logo_empresa_2.png`
+
+  // Pre-cargar imágenes como data URLs (logo, firmas, fotos de ítems, evidencias)
+  const logoUrl = await aDataUrl(`${window.location.origin}/images/logo_empresa_2.png`)
+  reporte.firma_tecnico_url = await aDataUrl(reporte.firma_tecnico_url)
+  reporte.firma_mandante_url = await aDataUrl(reporte.firma_mandante_url)
+  for (const it of items) it.foto_url = await aDataUrl(it.foto_url)
+  reporte.evidencia_urls = (await Promise.all((reporte.evidencia_urls ?? []).map((u) => aDataUrl(u))))
+    .filter(Boolean) as string[]
+
   const esCalibracion = reporte.programacion?.tipo_servicio === 'calibracion'
   const doc = esCalibracion
-    ? <CertificadoCalibracion reporte={reporte} items={items} logoUrl={logoUrl} />
-    : <OtMantenimiento reporte={reporte} items={items} logoUrl={logoUrl} />
-  const blob = await pdf(doc).toBlob()
+    ? <CertificadoCalibracion reporte={reporte} items={items} logoUrl={logoUrl ?? ''} />
+    : <OtMantenimiento reporte={reporte} items={items} logoUrl={logoUrl ?? ''} />
+  // Timeout de seguridad: si react-pdf se cuelga, avisar en vez de esperar eterno.
+  const blob = await Promise.race([
+    pdf(doc).toBlob(),
+    new Promise<never>((_, rej) => setTimeout(() => rej(new Error('La generación del PDF tardó demasiado — reintenta')), 45_000)),
+  ])
 
   const fecha = (reporte.fecha_ejecucion ?? new Date().toISOString()).slice(0, 10)
   const nombre = esCalibracion ? 'certificado-calibracion' : 'ot-mantenimiento'
