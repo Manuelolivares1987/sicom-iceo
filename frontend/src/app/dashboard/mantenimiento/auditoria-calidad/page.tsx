@@ -1,6 +1,7 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { Suspense, useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import {
   ShieldCheck, AlertTriangle, CheckCircle2, XCircle, MinusCircle,
   ClipboardList, Clock, PlusCircle, FileWarning, Gauge,
@@ -33,7 +34,16 @@ import { cn } from '@/lib/utils'
 
 type Res = 'ok' | 'no_ok' | 'na' | 'pendiente'
 
+// useSearchParams exige Suspense en el prerender (Next 14).
 export default function AuditoriaCalidadPage() {
+  return (
+    <Suspense fallback={null}>
+      <AuditoriaCalidadPageInner />
+    </Suspense>
+  )
+}
+
+function AuditoriaCalidadPageInner() {
   useRequireAuth()
   const { rol, canApprove } = usePermissions()
   const puedeAuditar = rol === 'auditor_calidad' || rol === 'administrador' || canApprove('mantenimiento')
@@ -62,9 +72,11 @@ export default function AuditoriaCalidadPage() {
 
   const [sel, setSel] = useState<{ auditoria_id: string; activo_id: string; label: string } | null>(null)
   // ?tab=plan abre directo el plan semanal (entrada propia en el sidebar).
-  const [tab, setTab] = useState<'auditorias' | 'plan'>(() =>
-    typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('tab') === 'plan'
-      ? 'plan' : 'auditorias')
+  const searchParams = useSearchParams()
+  const [tab, setTab] = useState<'auditorias' | 'plan'>('auditorias')
+  useEffect(() => {
+    if (searchParams.get('tab') === 'plan') setTab('plan')
+  }, [searchParams])
 
   return (
     <div className="space-y-6">
