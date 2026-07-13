@@ -63,6 +63,7 @@ export type EnexPanelRow = {
   firmante_mandante_nombre: string | null
   firmante_mandante_at: string | null
   cumplida: boolean
+  informe_pdf_url: string | null
 }
 
 export type EnexKpi = {
@@ -188,6 +189,14 @@ export async function registrarEjecucion(p: {
   })
   if (error) throw error
   return data as { success: boolean; estado: string; cumplida: boolean }
+}
+
+// Ejecución asociada a una programación (para generar el informe PDF post-cierre).
+export async function getEjecucionIdDeProgramacion(programacionId: string): Promise<string | null> {
+  const { data, error } = await supabase.from('enex_ejecuciones')
+    .select('id').eq('programacion_id', programacionId).maybeSingle()
+  if (error) throw error
+  return data?.id ?? null
 }
 
 export async function duplicarPeriodo(anioOrigen: number, mesOrigen: number, anioDest: number, mesDest: number) {

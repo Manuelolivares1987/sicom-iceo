@@ -22,10 +22,11 @@ import { useRequireAuth } from '@/hooks/use-require-auth'
 import {
   getFaenas, getInstalaciones, getPanelMensual, getKpiMensual, getPanelMeses, getKpiMeses,
   programar, desprogramar, registrarEjecucion, duplicarPeriodo, crearInstalacion, actualizarFrecuencias,
-  subirFirmaMandante, subirEvidenciaEnex,
+  subirFirmaMandante, subirEvidenciaEnex, getEjecucionIdDeProgramacion,
   TIPO_INSTALACION_LABEL, MESES, clp,
   type EnexPanelRow, type EnexInstalacion, type TipoServicio,
 } from '@/lib/services/enex'
+import { generarYGuardarInformeEnex } from '@/components/enex/pdf-informe-enex'
 
 const hoy = () => { const d = new Date(); return { anio: d.getFullYear(), mes: d.getMonth() + 1 } }
 const SERVICIOS: TipoServicio[] = ['mantencion', 'calibracion']
@@ -407,6 +408,25 @@ function CeldaModal({ anio, mes, inst, servicio, row, onClose, onDone }: {
         firmaMandanteUrl: firmaUrl, firmanteMandante: firmante || null,
       })
       toast.success(r.cumplida ? 'Registrada y CUMPLIDA (con firma del mandante)' : 'Ejecución registrada — falta firma del mandante para cumplir el KPI')
+      // Cumplida → generar y guardar el informe PDF con formato del mandante.
+      if (r.cumplida) {
+        getEjecucionIdDeProgramacion(row.programacion_id)
+          .then((eid) => (eid ? generarYGuardarInformeEnex(eid) : null))
+          .then((url) => { if (url) toast.success('Informe PDF generado y guardado') })
+          .catch(() => toast.error('El informe PDF no se pudo generar — reintenta desde el detalle'))
+      }
+      onDone()
+    } catch (e) { toast.error((e as Error).message) } finally { setBusy(false) }
+  }
+
+  // Generación manual del PDF (o regeneración) desde el detalle.
+  async function doGenerarPdf() {
+    if (!row?.ejecucion_id) return
+    setBusy(true)
+    try {
+      const url = await generarYGuardarInformeEnex(row.ejecucion_id)
+      toast.success('Informe PDF generado y guardado')
+      window.open(url, '_blank')
       onDone()
     } catch (e) { toast.error((e as Error).message) } finally { setBusy(false) }
   }
@@ -466,11 +486,21 @@ function CeldaModal({ anio, mes, inst, servicio, row, onClose, onDone }: {
                 <img src={row.firma_mandante_url} alt="firma" className="h-16 rounded border bg-white object-contain px-2" />
               )}
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
+              {row.informe_pdf_url ? (
+                <Button variant="primary" size="sm" onClick={() => window.open(row.informe_pdf_url!, '_blank')}>
+                  <FileSpreadsheet className="h-4 w-4 mr-1" />
+                  {row.tipo_servicio === 'calibracion' ? 'Certificado PDF (guardado)' : 'Informe OT PDF (guardado)'}
+                </Button>
+              ) : row.ejecucion_id ? (
+                <Button variant="primary" size="sm" disabled={busy} onClick={doGenerarPdf}>
+                  {busy ? <Spinner className="h-4 w-4 mr-1" /> : <FileSpreadsheet className="h-4 w-4 mr-1" />}
+                  Generar informe PDF
+                </Button>
+              ) : null}
               {row.ejecucion_id && (
-                <Button variant="primary" size="sm" onClick={() => window.open(`/enex-reporte/${row.ejecucion_id}`, '_blank')}>
-                  <Printer className="h-4 w-4 mr-1" />
-                  {row.tipo_servicio === 'calibracion' ? 'Certificado de calibración' : 'Reporte de servicio'}
+                <Button variant="outline" size="sm" onClick={() => window.open(`/enex-reporte/${row.ejecucion_id}`, '_blank')}>
+                  <Printer className="h-4 w-4 mr-1" /> Vista imprimible
                 </Button>
               )}
               <Button variant="outline" size="sm" onClick={() => setModo('ejecutar')}>Editar registro</Button>

@@ -14,7 +14,8 @@ import { Button } from '@/components/ui/button'
 import { SignaturePad } from '@/components/ui/signature-pad'
 import { useAuth } from '@/contexts/auth-context'
 import { useToast } from '@/contexts/toast-context'
-import { getEjecucionItems, type EnexPautaItem, type EnexPendiente } from '@/lib/services/enex'
+import { getEjecucionItems, getEjecucionIdDeProgramacion, type EnexPautaItem, type EnexPendiente } from '@/lib/services/enex'
+import { generarYGuardarInformeEnex } from '@/components/enex/pdf-informe-enex'
 import { getPendientesOffline, getPautaItemsOffline, queueEjecucion } from '@/lib/offline/enex-offline'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 
@@ -124,6 +125,14 @@ export default function EnexEjecutarPage() {
       toast.success(r.synced
         ? (conFirmaMandante ? 'Registrada y CUMPLIDA (firma del mandante)' : 'Ejecución guardada')
         : 'Guardada local — se sube sola al recuperar señal')
+      // Al cerrar cumplida (y con señal): generar el informe con el formato del
+      // mandante y dejarlo guardado en PDF. No bloquea la salida del técnico.
+      if (conFirmaMandante && r.synced) {
+        getEjecucionIdDeProgramacion(prog.programacion_id)
+          .then((eid) => (eid ? generarYGuardarInformeEnex(eid) : null))
+          .then((url) => { if (url) toast.success('Informe PDF generado y guardado') })
+          .catch(() => toast.error('El informe PDF no se pudo generar — se puede generar desde el panel'))
+      }
       router.push('/m/enex')
     } catch (e) { toast.error((e as Error).message) } finally { setGuardando(false) }
   }
