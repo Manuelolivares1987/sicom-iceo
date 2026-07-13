@@ -64,7 +64,7 @@ function fmtFecha(iso?: string | null): string {
 type Datos = { reporte: EnexReporte; items: EnexReporteItem[]; logoUrl: string }
 
 // ── CERTIFICADO DE CALIBRACIÓN (NCh1436 · PN.OM.DM.MN.F.01) ─────────────────
-function CertificadoCalibracion({ reporte, items, logoUrl }: Datos) {
+export function CertificadoCalibracion({ reporte, items, logoUrl }: Datos) {
   const inst = reporte.programacion?.instalacion
   const corridas = Array.from({ length: 6 }, (_, k) => {
     const med = num(items, `C${k + 1}.MED`)
@@ -191,7 +191,7 @@ function CertificadoCalibracion({ reporte, items, logoUrl }: Datos) {
 }
 
 // ── OT MANTENIMIENTO INTERMEDIO (formato Kizeo del mandante) ────────────────
-function OtMantenimiento({ reporte, items, logoUrl }: Datos) {
+export function OtMantenimiento({ reporte, items, logoUrl }: Datos) {
   const inst = reporte.programacion?.instalacion
   // Bloques de pauta (excluye datos de servicio y registro fotográfico)
   const bloques: { bloque: string; items: EnexReporteItem[] }[] = []
@@ -341,9 +341,11 @@ export async function generarYGuardarInformeEnex(ejecucionId: string): Promise<s
 
   const fecha = (reporte.fecha_ejecucion ?? new Date().toISOString()).slice(0, 10)
   const nombre = esCalibracion ? 'certificado-calibracion' : 'ot-mantenimiento'
-  const path = `enex-informes/${fecha.slice(0, 4)}/${nombre}_${fecha}_${ejecucionId}.pdf`
+  // Nombre único por generación (sin upsert: el x-upsert de Storage exige
+  // políticas extra y falla con RLS; además así queda histórico de versiones).
+  const path = `enex-informes/${fecha.slice(0, 4)}/${nombre}_${fecha}_${ejecucionId}_${Date.now()}.pdf`
   const { error } = await supabase.storage.from('documentos').upload(path, blob, {
-    contentType: 'application/pdf', upsert: true,
+    contentType: 'application/pdf', upsert: false,
   })
   if (error) throw error
   const url = supabase.storage.from('documentos').getPublicUrl(path).data.publicUrl
