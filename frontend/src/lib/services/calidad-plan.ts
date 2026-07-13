@@ -89,3 +89,15 @@ export async function eliminarTareaCalidad(id: string): Promise<void> {
   const { error } = await supabase.rpc('rpc_calidad_eliminar_tarea', { p_id: id })
   if (error) throw error
 }
+
+// Copia el plan de la semana anterior (rutinas del auditor) — MIG232.
+export async function copiarSemanaCalidad(lunesDestino: string): Promise<number> {
+  const d = new Date(lunesDestino + 'T12:00:00')
+  d.setDate(d.getDate() - 7)
+  const { data, error } = await supabase.rpc('rpc_calidad_copiar_semana', {
+    p_lunes_origen: d.toISOString().slice(0, 10),
+    p_lunes_destino: lunesDestino,
+  })
+  if (error) throw error
+  return (data as { copiadas: number }).copiadas
+}

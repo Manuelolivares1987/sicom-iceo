@@ -24,7 +24,7 @@ import {
 } from '@/hooks/use-control-calidad'
 import {
   getTareasSemanaCalidad, agregarTareaCalidad, actualizarTareaCalidad, eliminarTareaCalidad,
-  lunesDeIsoCalidad, CALIDAD_TIPO_LABEL,
+  copiarSemanaCalidad, lunesDeIsoCalidad, CALIDAD_TIPO_LABEL,
   type CalidadPlanTarea, type CalidadTareaTipo,
 } from '@/lib/services/calidad-plan'
 import { subirFirma } from '@/lib/services/verificacion'
@@ -96,7 +96,19 @@ export default function AuditoriaCalidadPage() {
         ))}
       </div>
 
-      {tab === 'plan' && <PlanSemanalCalidad puedeAuditar={puedeAuditar} />}
+      {tab === 'plan' && (
+        <PlanSemanalCalidad
+          puedeAuditar={puedeAuditar}
+          equipos={equipos as { id: string; patente: string | null; codigo: string | null }[]}
+          onIniciarAuditoria={async (activoId, label) => {
+            const r: any = await iniciar.mutateAsync({ activo_id: activoId })
+            if (r?.auditoria_id) {
+              setSel({ auditoria_id: r.auditoria_id, activo_id: activoId, label })
+              setTab('auditorias')
+            }
+          }}
+        />
+      )}
 
       {tab === 'auditorias' && <>
       {/* KPIs */}
@@ -198,16 +210,42 @@ function fmtDiaCorto(iso: string): string {
   return new Date(iso + 'T12:00:00').toLocaleDateString('es-CL', { weekday: 'long', day: '2-digit', month: 'short' })
 }
 
-function PlanSemanalCalidad({ puedeAuditar }: { puedeAuditar: boolean }) {
+type EquipoCalidad = { id: string; patente: string | null; codigo: string | null }
+
+function PlanSemanalCalidad({ puedeAuditar, equipos, onIniciarAuditoria }: {
+  puedeAuditar: boolean
+  equipos: EquipoCalidad[]
+  onIniciarAuditoria: (activoId: string, label: string) => Promise<void>
+}) {
   const toast = useToast()
   const qc = useQueryClient()
   const [lunes, setLunes] = useState<string>(() => lunesDeIsoCalidad(new Date()))
   const [modalOpen, setModalOpen] = useState(false)
+  const [copiando, setCopiando] = useState(false)
+  const [auditando, setAuditando] = useState<string | null>(null)
   const { data: tareas = [], isLoading } = useQuery({
     queryKey: ['calidad-plan-semana', lunes],
     queryFn: () => getTareasSemanaCalidad(lunes),
     staleTime: 15_000,
   })
+
+  // Equipo de la tarea (por patente o código en equipo_texto) → para "Auditar".
+  const equipoDeTarea = (t: CalidadPlanTarea): EquipoCalidad | undefined => {
+    if (!t.equipo_texto) return undefined
+    const txt = t.equipo_texto.toUpperCase()
+    return equipos.find((e) =>
+      (e.patente && txt.includes(e.patente.toUpperCase())) ||
+      (e.codigo && txt.includes(e.codigo.toUpperCase())))
+  }
+
+  const copiarSemana = async () => {
+    setCopiando(true)
+    try {
+      const n = await copiarSemanaCalidad(lunes)
+      toast.success(n > 0 ? `${n} tarea(s) copiadas de la semana anterior` : 'Nada nuevo que copiar de la semana anterior')
+      qc.invalidateQueries({ queryKey: ['calidad-plan-semana'] })
+    } catch (e) { toast.error((e as Error).message) } finally { setCopiando(false) }
+  }
 
   const dias = useMemo(() => Array.from({ length: 7 }, (_, i) => {
     const d = new Date(lunes + 'T12:00:00'); d.setDate(d.getDate() + i)
@@ -248,9 +286,15 @@ function PlanSemanalCalidad({ puedeAuditar }: { puedeAuditar: boolean }) {
         <div className="flex items-center gap-3">
           <span className="text-xs text-gray-500">{resumen.hechas}/{resumen.total} hechas</span>
           {puedeAuditar && (
-            <Button size="sm" onClick={() => setModalOpen(true)}>
-              <PlusCircle className="h-4 w-4 mr-1" /> Programar tarea
-            </Button>
+            <>
+              <Button size="sm" variant="outline" disabled={copiando} onClick={copiarSemana}
+                      title="Copiar las tareas de la semana anterior (rutinas del auditor)">
+                {copiando ? <Spinner className="h-4 w-4 mr-1" /> : null} Copiar semana ant.
+              </Button>
+              <Button size="sm" onClick={() => setModalOpen(true)}>
+                <PlusCircle className="h-4 w-4 mr-1" /> Programar tarea
+              </Button>
+            </>
           )}
         </div>
       </div>
@@ -293,6 +337,23 @@ function PlanSemanalCalidad({ puedeAuditar }: { puedeAuditar: boolean }) {
                           )}
                           <button type="button" title="Marcar hecha" onClick={() => setEstado(t, 'hecha')}
                                   className="rounded border border-green-300 bg-green-50 p-1 text-green-700"><CheckCircle2 className="h-3 w-3" /></button>
+                          {/* Tarea de auditoría con equipo reconocido → inicia la auditoría real */}
+                          {t.tipo === 'auditoria' && equipoDeTarea(t) && (
+                            <button type="button" title="Iniciar la auditoría de este equipo"
+                                    disabled={auditando === t.id}
+                                    onClick={async () => {
+                                      const eq = equipoDeTarea(t)!
+                                      setAuditando(t.id)
+                                      try {
+                                        await onIniciarAuditoria(eq.id, eq.patente ?? eq.codigo ?? '')
+                                        await actualizarTareaCalidad(t.id, { estado: 'en_curso' })
+                                        qc.invalidateQueries({ queryKey: ['calidad-plan-semana'] })
+                                      } catch (e) { toast.error((e as Error).message) } finally { setAuditando(null) }
+                                    }}
+                                    className="rounded border border-emerald-400 bg-emerald-50 px-1.5 py-0.5 text-[9px] font-bold text-emerald-700 disabled:opacity-50">
+                                    {auditando === t.id ? '…' : 'AUDITAR'}
+                          </button>
+                          )}
                           <button type="button" title="Eliminar" onClick={() => eliminar(t)}
                                   className="ml-auto rounded border border-red-200 bg-red-50 p-1 text-red-500"><Trash2 className="h-3 w-3" /></button>
                         </div>
@@ -309,6 +370,7 @@ function PlanSemanalCalidad({ puedeAuditar }: { puedeAuditar: boolean }) {
       {modalOpen && (
         <ProgramarTareaCalidadModal
           dias={dias}
+          equipos={equipos}
           onClose={() => setModalOpen(false)}
           onDone={() => { setModalOpen(false); refetch() }}
         />
@@ -317,8 +379,8 @@ function PlanSemanalCalidad({ puedeAuditar }: { puedeAuditar: boolean }) {
   )
 }
 
-function ProgramarTareaCalidadModal({ dias, onClose, onDone }: {
-  dias: string[]; onClose: () => void; onDone: () => void
+function ProgramarTareaCalidadModal({ dias, equipos, onClose, onDone }: {
+  dias: string[]; equipos: EquipoCalidad[]; onClose: () => void; onDone: () => void
 }) {
   const toast = useToast()
   const [tipo, setTipo] = useState<CalidadTareaTipo>('auditoria')
@@ -365,7 +427,15 @@ function ProgramarTareaCalidadModal({ dias, onClose, onDone }: {
         </div>
         <div>
           <label className="text-xs font-medium">Equipo / lugar (opcional)</label>
-          <Input value={equipo} onChange={(e) => setEquipo(e.target.value)} placeholder="Ej. JTYK-88 — Taller Coquimbo" />
+          <Input value={equipo} onChange={(e) => setEquipo(e.target.value)}
+                 placeholder="Ej. JTYK-88 — Taller Coquimbo" list="equipos-para-auditar" />
+          {/* Sugerencias: equipos en mantención/por auditar. Si el texto contiene la
+              patente, la tarjeta de la tarea mostrará el botón AUDITAR directo. */}
+          <datalist id="equipos-para-auditar">
+            {equipos.map((e) => (
+              <option key={e.id} value={e.patente ?? e.codigo ?? ''} />
+            ))}
+          </datalist>
         </div>
         <div>
           <label className="text-xs font-medium">Descripción</label>
