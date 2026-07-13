@@ -114,7 +114,7 @@ function AuditoriaCalidadPageInner() {
       {tab === 'plan' && (
         <PlanSemanalCalidad
           puedeAuditar={puedeAuditar}
-          equipos={equipos as { id: string; patente: string | null; codigo: string | null }[]}
+          equipos={equipos as EquipoCalidad[]}
           onIniciarAuditoria={async (activoId, label) => {
             const r: any = await iniciar.mutateAsync({ activo_id: activoId })
             if (r?.auditoria_id) {
@@ -225,7 +225,16 @@ function fmtDiaCorto(iso: string): string {
   return new Date(iso + 'T12:00:00').toLocaleDateString('es-CL', { weekday: 'long', day: '2-digit', month: 'short' })
 }
 
-type EquipoCalidad = { id: string; patente: string | null; codigo: string | null }
+type EquipoCalidad = {
+  id: string; patente: string | null; codigo: string | null
+  estado?: string | null; estado_comercial?: string | null
+}
+
+const ESTADO_EQ_BADGE: Record<string, { label: string; cls: string }> = {
+  en_mantenimiento: { label: 'Mantención', cls: 'bg-amber-100 text-amber-800' },
+  fuera_servicio:   { label: 'Fuera serv.', cls: 'bg-red-100 text-red-700' },
+  operativo:        { label: 'Operativo', cls: 'bg-green-100 text-green-700' },
+}
 
 function PlanSemanalCalidad({ puedeAuditar, equipos, onIniciarAuditoria }: {
   puedeAuditar: boolean
@@ -238,6 +247,9 @@ function PlanSemanalCalidad({ puedeAuditar, equipos, onIniciarAuditoria }: {
   const [modalOpen, setModalOpen] = useState(false)
   const [copiando, setCopiando] = useState(false)
   const [auditando, setAuditando] = useState<string | null>(null)
+  // Panel lateral de equipos: clic → programar con el equipo precargado.
+  const [preEquipo, setPreEquipo] = useState<EquipoCalidad | null>(null)
+  const [filtroEq, setFiltroEq] = useState('')
   const { data: tareas = [], isLoading } = useQuery({
     queryKey: ['calidad-plan-semana', lunes],
     queryFn: () => getTareasSemanaCalidad(lunes),
@@ -287,6 +299,25 @@ function PlanSemanalCalidad({ puedeAuditar, equipos, onIniciarAuditoria }: {
     hechas: tareas.filter((t) => t.estado === 'hecha').length,
   }), [tareas])
 
+  // Equipos ordenados para armar el plan: mantención → fuera de servicio →
+  // disponibles → resto. "En plan" si ya tienen una tarea esta semana.
+  const enPlanSemana = (e: EquipoCalidad) =>
+    tareas.some((t) => {
+      const txt = (t.equipo_texto ?? '').toUpperCase()
+      return (e.patente && txt.includes(e.patente.toUpperCase())) ||
+             (e.codigo && txt.includes(e.codigo.toUpperCase()))
+    })
+  const ordenEq = (e: EquipoCalidad) =>
+    e.estado === 'en_mantenimiento' ? 0 : e.estado === 'fuera_servicio' ? 1
+      : e.estado_comercial === 'disponible' ? 2 : 3
+  const equiposPanel = useMemo(() => {
+    const q = filtroEq.trim().toUpperCase()
+    return [...equipos]
+      .filter((e) => !q || (e.patente ?? '').toUpperCase().includes(q) || (e.codigo ?? '').toUpperCase().includes(q))
+      .sort((a, b) => ordenEq(a) - ordenEq(b) || (a.patente ?? a.codigo ?? '').localeCompare(b.patente ?? b.codigo ?? ''))
+  /* eslint-disable-next-line react-hooks/exhaustive-deps */
+  }, [equipos, filtroEq])
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -314,10 +345,48 @@ function PlanSemanalCalidad({ puedeAuditar, equipos, onIniciarAuditoria }: {
         </div>
       </div>
 
+      <div className="grid grid-cols-1 lg:grid-cols-[230px_1fr] gap-3">
+        {/* Panel de equipos: mantención y disponibles primero — clic para programar */}
+        <div className="rounded-lg border bg-white p-2 self-start">
+          <div className="mb-1.5 flex items-center gap-1.5 text-sm font-semibold text-gray-700">
+            <ClipboardList className="h-4 w-4" /> Equipos ({equiposPanel.length})
+          </div>
+          <Input value={filtroEq} onChange={(e) => setFiltroEq(e.target.value)}
+                 placeholder="Buscar patente…" className="h-8 text-xs" />
+          <div className="mt-1 text-[10px] text-gray-400">Mantención y disponibles primero. Clic → programar.</div>
+          <div className="mt-1.5 max-h-[62vh] space-y-1.5 overflow-y-auto">
+            {equiposPanel.length === 0 && <div className="py-4 text-center text-xs text-gray-300">Sin equipos</div>}
+            {equiposPanel.map((e) => {
+              const badge = ESTADO_EQ_BADGE[e.estado ?? ''] ?? { label: e.estado ?? '—', cls: 'bg-gray-100 text-gray-600' }
+              const planificado = enPlanSemana(e)
+              return (
+                <button key={e.id} type="button" disabled={!puedeAuditar}
+                        onClick={() => { setPreEquipo(e); setModalOpen(true) }}
+                        title={planificado ? 'Ya tiene una tarea esta semana — clic para agregar otra' : 'Programar tarea para este equipo'}
+                        className={cn('w-full rounded border bg-white p-2 text-left shadow-sm hover:border-emerald-400',
+                          planificado && 'border-emerald-300 bg-emerald-50/40')}>
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="font-mono text-[11px] font-bold">{e.patente ?? e.codigo}</span>
+                    <span className={cn('rounded px-1 py-0.5 text-[8px] font-bold', badge.cls)}>{badge.label}</span>
+                  </div>
+                  <div className="mt-0.5 flex items-center gap-1">
+                    {e.estado_comercial === 'disponible' && (
+                      <span className="rounded bg-blue-100 px-1 py-0.5 text-[8px] font-bold text-blue-700">disponible</span>
+                    )}
+                    {planificado && (
+                      <span className="rounded bg-emerald-100 px-1 py-0.5 text-[8px] font-bold text-emerald-700">✓ en plan</span>
+                    )}
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
       {isLoading ? (
         <div className="flex justify-center py-10"><Spinner /></div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-7 gap-2">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-7 gap-2 self-start">
           {dias.map((fecha) => {
             const delDia = tareas.filter((t) => t.fecha === fecha)
             const esHoy = fecha === new Date().toISOString().slice(0, 10)
@@ -386,21 +455,26 @@ function PlanSemanalCalidad({ puedeAuditar, equipos, onIniciarAuditoria }: {
         <ProgramarTareaCalidadModal
           dias={dias}
           equipos={equipos}
-          onClose={() => setModalOpen(false)}
-          onDone={() => { setModalOpen(false); refetch() }}
+          inicial={preEquipo}
+          onClose={() => { setModalOpen(false); setPreEquipo(null) }}
+          onDone={() => { setModalOpen(false); setPreEquipo(null); refetch() }}
         />
       )}
+      </div>
     </div>
   )
 }
 
-function ProgramarTareaCalidadModal({ dias, equipos, onClose, onDone }: {
-  dias: string[]; equipos: EquipoCalidad[]; onClose: () => void; onDone: () => void
+function ProgramarTareaCalidadModal({ dias, equipos, inicial, onClose, onDone }: {
+  dias: string[]; equipos: EquipoCalidad[]; inicial?: EquipoCalidad | null
+  onClose: () => void; onDone: () => void
 }) {
   const toast = useToast()
+  // Si viene desde el panel de equipos, precargar auditoría de esa patente.
+  const patenteIni = inicial ? (inicial.patente ?? inicial.codigo ?? '') : ''
   const [tipo, setTipo] = useState<CalidadTareaTipo>('auditoria')
-  const [titulo, setTitulo] = useState('')
-  const [equipo, setEquipo] = useState('')
+  const [titulo, setTitulo] = useState(patenteIni ? `Auditoría pre-operativo ${patenteIni}` : '')
+  const [equipo, setEquipo] = useState(patenteIni)
   const [descripcion, setDescripcion] = useState('')
   const [fecha, setFecha] = useState(dias[0])
   const [responsable, setResponsable] = useState('')
