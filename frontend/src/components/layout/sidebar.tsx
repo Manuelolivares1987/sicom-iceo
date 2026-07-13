@@ -97,6 +97,7 @@ const navGroups: NavGroup[] = [
       {
         label: 'Calidad',
         items: [
+          { label: 'Plan semanal calidad', href: '/dashboard/mantenimiento/auditoria-calidad?tab=plan', icon: CalendarClock, module: 'mantenimiento', badge: 'Nuevo' },
           { label: 'Chequeo cruzado', href: '/dashboard/mantenimiento/chequeo-cruzado', icon: ClipboardCheck, module: 'mantenimiento' },
           { label: 'Auditoría de calidad', href: '/dashboard/mantenimiento/auditoria-calidad', icon: ShieldCheck, module: 'mantenimiento' },
         ],

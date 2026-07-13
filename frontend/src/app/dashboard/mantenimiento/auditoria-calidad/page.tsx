@@ -61,7 +61,10 @@ export default function AuditoriaCalidadPage() {
   const iniciar = useIniciarAuditoria()
 
   const [sel, setSel] = useState<{ auditoria_id: string; activo_id: string; label: string } | null>(null)
-  const [tab, setTab] = useState<'auditorias' | 'plan'>('auditorias')
+  // ?tab=plan abre directo el plan semanal (entrada propia en el sidebar).
+  const [tab, setTab] = useState<'auditorias' | 'plan'>(() =>
+    typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('tab') === 'plan'
+      ? 'plan' : 'auditorias')
 
   return (
     <div className="space-y-6">
