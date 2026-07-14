@@ -150,6 +150,10 @@ export default function EnexControlPage() {
             {dup.isPending ? <Spinner className="h-4 w-4" /> : <Copy className="h-4 w-4 mr-1" />} Copiar mes ant.
           </Button>
           )}
+          <Button variant="outline" onClick={() => window.location.href = '/dashboard/enex/informes'}
+                  title="Certificados y OT en PDF generados en terreno — búsqueda por día/mes">
+            <FileSpreadsheet className="h-4 w-4 mr-1" /> Informes
+          </Button>
           <Button variant="outline" disabled={panel.length === 0}
                   title="Exportar el programa del mes a Excel/CSV (respaldo mensual para ENEX)"
                   onClick={() => {
