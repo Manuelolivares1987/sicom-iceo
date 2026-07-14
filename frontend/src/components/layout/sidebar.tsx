@@ -228,6 +228,12 @@ const navItems: NavItem[] = navGroups.flatMap((g) => [
   ...(g.subsections ?? []).flatMap((s) => s.items),
 ])
 
+// Ámbito de vista por usuario (MIG233): filtra grupos completos del menú.
+//  'calama'   → Dashboard + Operación Calama + Contrato ENEX + Flota
+//  'coquimbo' → todo menos Operación Calama y Contrato ENEX
+const GRUPOS_SOLO_CALAMA = ['Operación Calama', 'Contrato ENEX (Calama)']
+const GRUPOS_VISTA_CALAMA = [...GRUPOS_SOLO_CALAMA, 'Flota']
+
 interface SidebarProps {
   collapsed: boolean
   onToggle: () => void
@@ -338,6 +344,11 @@ export default function Sidebar({ collapsed, onToggle, onClose }: SidebarProps) 
           if ((operadorCalamaSolo || supervisorCalamaSolo) && group.label !== 'Operación Calama') return null
           // Perfil comercial: solo el grupo Negocio (Contratos, Comercial, Consolidado).
           if (comercialSolo && group.label !== 'Negocio') return null
+          // Ámbito de vista (MIG233): jefe Calama ve solo Calama/ENEX/Flota;
+          // Coquimbo ve todo menos Calama/ENEX. 'todos' = vista completa.
+          const ambito = (perfil as { ambito?: string } | null)?.ambito ?? 'todos'
+          if (ambito === 'calama' && group.label && !GRUPOS_VISTA_CALAMA.includes(group.label)) return null
+          if (ambito === 'coquimbo' && group.label && GRUPOS_SOLO_CALAMA.includes(group.label)) return null
 
           // Filtro de visibilidad: aplica las mismas reglas de permisos a items
           // planos y a items dentro de subsections.
