@@ -8,7 +8,7 @@ import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import {
-  ClipboardList, ArrowLeft, Plus, Pencil, Trash2, Camera, Ruler, ChevronDown, ChevronRight,
+  ClipboardList, ArrowLeft, Plus, Pencil, Trash2, Camera, Ruler, ChevronDown, ChevronRight, Download,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -22,6 +22,7 @@ import {
   TIPO_CAMPO_LABEL, TIPO_INSTALACION_LABEL,
   type EnexPauta, type EnexPautaItem, type TipoCampo, type Periodicidad,
 } from '@/lib/services/enex'
+import { descargarPautasEnexPdf } from '@/components/enex/pdf-pauta-enex'
 
 const PERIODICIDADES: Periodicidad[] = ['trimestral', 'mensual', 'semestral', 'anual', 'requerimiento']
 const TIPOS_CAMPO: TipoCampo[] = ['ok_nook', 'medicion', 'si_no', 'texto']
@@ -29,11 +30,18 @@ const TIPOS_CAMPO: TipoCampo[] = ['ok_nook', 'medicion', 'si_no', 'texto']
 export default function EnexPautasPage() {
   useRequireAuth()
   const qc = useQueryClient()
+  const toast = useToast()
   const [sel, setSel] = useState<string | null>(null)
   const [nuevaPauta, setNuevaPauta] = useState(false)
+  const [descargando, setDescargando] = useState(false)
 
   const { data: pautas = [], isLoading } = useQuery({ queryKey: ['enex-pautas'], queryFn: getPautas, staleTime: 30_000 })
   const pautaSel = pautas.find((p) => p.id === sel) ?? pautas[0]
+
+  async function descargarTodas() {
+    setDescargando(true)
+    try { await descargarPautasEnexPdf() } catch (e) { toast.error((e as Error).message) } finally { setDescargando(false) }
+  }
 
   return (
     <div className="space-y-4">
@@ -47,7 +55,12 @@ export default function EnexPautasPage() {
           </h1>
           <p className="text-sm text-gray-500">Checklists por tipo de instalación. Los borradores están para revisar y corregir.</p>
         </div>
-        <Button onClick={() => setNuevaPauta(true)}><Plus className="h-4 w-4 mr-1" /> Nueva pauta</Button>
+        <div className="flex gap-2">
+          <Button variant="outline" disabled={descargando || pautas.length === 0} onClick={descargarTodas}>
+            {descargando ? <Spinner className="h-4 w-4 mr-1" /> : <Download className="h-4 w-4 mr-1" />} Descargar todas (PDF)
+          </Button>
+          <Button onClick={() => setNuevaPauta(true)}><Plus className="h-4 w-4 mr-1" /> Nueva pauta</Button>
+        </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-[280px_1fr]">
@@ -91,6 +104,12 @@ function PautaDetalle({ pauta }: { pauta: EnexPauta }) {
   const [nuevoItem, setNuevoItem] = useState(false)
   const [editHeader, setEditHeader] = useState(false)
   const [colapsados, setColapsados] = useState<Set<string>>(new Set())
+  const [descargando, setDescargando] = useState(false)
+
+  async function descargarPdf() {
+    setDescargando(true)
+    try { await descargarPautasEnexPdf(pauta.id) } catch (e) { toast.error((e as Error).message) } finally { setDescargando(false) }
+  }
 
   const grupos = useMemo(() => {
     const g: { bloque: string; items: EnexPautaItem[] }[] = []
@@ -123,6 +142,9 @@ function PautaDetalle({ pauta }: { pauta: EnexPauta }) {
             <p className="text-[11px] text-gray-500">{items.length} ítems · {grupos.length} bloques · código {pauta.codigo}</p>
           </div>
           <div className="flex gap-2">
+            <Button variant="outline" size="sm" disabled={descargando} onClick={descargarPdf}>
+              {descargando ? <Spinner className="h-3.5 w-3.5 mr-1" /> : <Download className="h-3.5 w-3.5 mr-1" />} PDF
+            </Button>
             <Button variant="outline" size="sm" onClick={() => setEditHeader(true)}><Pencil className="h-3.5 w-3.5 mr-1" /> Datos</Button>
             <Button size="sm" onClick={() => setNuevoItem(true)}><Plus className="h-4 w-4 mr-1" /> Ítem</Button>
           </div>

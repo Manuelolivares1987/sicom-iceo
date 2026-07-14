@@ -297,7 +297,7 @@ export function OtMantenimiento({ reporte, items, logoUrl }: Datos) {
 
 // react-pdf se cuelga (promesa que nunca resuelve) si su fetch interno de una
 // imagen remota falla: convertimos TODO a data URL nosotros, con timeout.
-async function aDataUrl(url: string | null | undefined, timeoutMs = 8000): Promise<string | null> {
+export async function aDataUrl(url: string | null | undefined, timeoutMs = 8000): Promise<string | null> {
   if (!url) return null
   try {
     const ctl = new AbortController()
