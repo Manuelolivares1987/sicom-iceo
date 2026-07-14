@@ -158,6 +158,19 @@ export async function getKpiMeses(anio: number, meses: number[]): Promise<EnexKp
   return (data ?? []) as EnexKpi[]
 }
 
+// Informes del mes: todos los servicios EJECUTADOS del período (con o sin PDF),
+// para la página de búsqueda de informes por día/mes.
+export async function getInformesMes(anio: number, mes: number, faenaId?: string): Promise<EnexPanelRow[]> {
+  let q = supabase.from('v_enex_panel_mensual').select('*')
+    .eq('periodo_anio', anio).eq('periodo_mes', mes)
+    .not('ejecucion_id', 'is', null)
+  if (faenaId) q = q.eq('faena_id', faenaId)
+  const { data, error } = await q
+  if (error) throw error
+  return ((data ?? []) as EnexPanelRow[])
+    .sort((a, b) => (b.fecha_ejecucion ?? '').localeCompare(a.fecha_ejecucion ?? ''))
+}
+
 // ── Acciones ──────────────────────────────────────────────────────────────
 export async function programar(p: {
   instalacionId: string; tipoServicio: TipoServicio; anio: number; mes: number

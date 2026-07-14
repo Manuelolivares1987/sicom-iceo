@@ -126,6 +126,8 @@ const navGroups: NavGroup[] = [
     items: [
       { label: 'Control & KPI', href: '/dashboard/enex', icon: Building2, badge: 'Nuevo',
         tooltip: 'Programa de mantención por instalación y cumplimiento del contrato ENEX (KPI y exposición a multa)' },
+      { label: 'Informes (PDF)', href: '/dashboard/enex/informes', icon: FileText, badge: 'Nuevo',
+        tooltip: 'Certificados de calibración y OT de mantenimiento generados en terreno — búsqueda por mes, día e instalación' },
       { label: 'Pautas (checklists)', href: '/dashboard/enex/pautas', icon: ClipboardList, badge: 'Nuevo',
         tooltip: 'Checklists de mantención y calibración por tipo de instalación (editables)' },
       { label: 'Terreno (móvil)', href: '/m/enex', icon: ClipboardCheck, badge: 'Nuevo',
