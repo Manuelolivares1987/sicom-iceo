@@ -30,9 +30,23 @@ export type EnexInstalacion = {
   frecuencia_mantencion: string | null
   frecuencia_calibracion: string | null
   patente: string | null
+  // Camiones / equipos (MIG234): ubicación operativa + última calibración conocida.
+  ubicacion: string | null
+  ultima_calibracion: string | null
   activo: boolean
   orden: number
 }
+
+// "Mundo" del supervisor de terreno (MIG234): combustible vs lubricantes.
+// Cada supervisor elige el suyo según su día; filtra la lista de terreno.
+export type Mundo = 'combustible' | 'lubricante'
+export const MUNDO_LABEL: Record<Mundo, string> = {
+  combustible: 'Combustible', lubricante: 'Lubricantes',
+}
+// Instalaciones lubricantes = truck shops; el resto (EESS, petrolera,
+// semimóvil, camión) es combustible/calibración.
+export const mundoDeLinea = (linea: string | null | undefined): Mundo =>
+  linea === 'lubricante' ? 'lubricante' : 'combustible'
 
 export type TipoServicio = 'mantencion' | 'calibracion'
 
@@ -86,6 +100,10 @@ export const TIPO_INSTALACION_LABEL: Record<string, string> = {
   truck_shop: 'Truck Shop', camion: 'Camión', otro: 'Otro',
 }
 
+export const SERVICIO_LABEL_SHORT: Record<TipoServicio, string> = {
+  mantencion: 'Mantención', calibracion: 'Calibración',
+}
+
 // ── Catálogo ──────────────────────────────────────────────────────────────
 export async function getFaenas(): Promise<EnexFaena[]> {
   const { data, error } = await supabase.from('enex_faenas').select('*').eq('activo', true).order('orden')
@@ -104,10 +122,12 @@ export async function getInstalaciones(faenaId?: string): Promise<EnexInstalacio
 export async function crearInstalacion(p: {
   faenaId: string; nombre: string; tipo: EnexInstalacion['tipo']
   linea?: string | null; codigo?: string | null; patente?: string | null; frecuenciaMeses?: number
+  ubicacion?: string | null
 }) {
   const { data, error } = await supabase.from('enex_instalaciones').insert({
     faena_id: p.faenaId, nombre: p.nombre, tipo: p.tipo, linea: p.linea ?? null,
     codigo: p.codigo ?? null, patente: p.patente ?? null, frecuencia_meses: p.frecuenciaMeses ?? 3,
+    ubicacion: p.ubicacion ?? null,
   }).select('id').single()
   if (error) throw error
   return data
@@ -344,6 +364,8 @@ export type EnexPendiente = {
   ejecucion_id: string | null
   estado: string | null
   cumplida: boolean
+  // MIG234: el punto+servicio ya tiene otra ejecución en el mismo trimestre → recobro.
+  es_recobro: boolean
 }
 
 export type EnexItemResultado = {
@@ -389,6 +411,125 @@ export async function ejecutarPauta(p: {
 
 // Firma genérica ENEX (técnico o mandante) → bucket público
 export const subirFirmaEnex = subirFirmaMandante
+
+// ── Recobros (MIG234) ──────────────────────────────────────────────────────
+// 2ª+ atención/calibración del mismo punto/patente dentro del trimestre = recobro.
+export type EnexRecobro = {
+  ejecucion_id: string
+  fecha_ejecucion: string | null
+  estado: string
+  ot_numero: string | null
+  ejecutor: string | null
+  programacion_id: string
+  tipo_servicio: TipoServicio
+  instalacion_id: string
+  instalacion: string
+  instalacion_tipo: string
+  patente: string | null
+  linea: string | null
+  faena_id: string
+  faena_codigo: string
+  faena: string
+  trimestre_key: number
+  trimestre: string
+  secuencia: number
+  es_recobro: boolean
+}
+
+export async function getRecobros(soloRecobros = true): Promise<EnexRecobro[]> {
+  let q = supabase.from('v_enex_recobros').select('*').order('fecha_ejecucion', { ascending: false })
+  if (soloRecobros) q = q.eq('es_recobro', true)
+  const { data, error } = await q
+  if (error) throw error
+  return (data ?? []) as EnexRecobro[]
+}
+
+export async function checkRecobro(p: {
+  instalacionId: string; tipoServicio: TipoServicio; fecha?: string | null; excluirProgramacion?: string | null
+}): Promise<{ previas: number; es_recobro: boolean; trimestre: string }> {
+  const { data, error } = await supabase.rpc('rpc_enex_recobro_check', {
+    p_instalacion_id: p.instalacionId, p_tipo_servicio: p.tipoServicio,
+    p_fecha: p.fecha ?? null, p_excluir_prog: p.excluirProgramacion ?? null,
+  })
+  if (error) throw error
+  return data as { previas: number; es_recobro: boolean; trimestre: string }
+}
+
+// ── Reprogramación (MIG234) — registro formato ESM/PILLADO para ENEX ────────
+export const REPROG_RESPONSABLE: Record<string, string> = {
+  mandante: 'Mandante', operaciones_esm: 'Operaciones ESM', pillado: 'PILLADO',
+  cliente: 'Cliente', otro: 'Otro',
+}
+export const REPROG_CAUSA: Record<string, string> = {
+  equipo_no_disponible: 'Equipo/Camión no disponible', prioridad_operacional: 'Prioridad operacional',
+  emergencia: 'Emergencia', falta_autorizacion: 'Falta autorización', otro: 'Otro',
+}
+
+export type EnexReprogramacion = {
+  id: string
+  programacion_id: string | null
+  faena: string | null
+  instalacion: string | null
+  patente: string | null
+  tipo_activo: string | null
+  actividad: string | null
+  hora_ingreso: string | null
+  supervisor_esm: string | null
+  tecnicos_pillado: string | null
+  fecha_original: string | null
+  hora_original: string | null
+  semana: string | null
+  trimestre: string | null
+  responsable: string | null
+  causa: string | null
+  descripcion: string | null
+  nueva_fecha: string | null
+  nueva_hora: string | null
+  firma_tecnico_url: string | null
+  firma_esm_url: string | null
+  firma_mandante_url: string | null
+  pdf_url: string | null
+  creado_por_nombre: string | null
+  created_at: string
+}
+
+export async function reprogramar(p: {
+  programacionId: string
+  horaIngreso?: string | null; supervisorEsm?: string | null; tecnicosPillado?: string | null
+  responsable?: string | null; causa?: string | null; descripcion: string
+  semana?: string | null; nuevaFecha?: string | null; nuevaHora?: string | null
+  firmaTecnicoUrl?: string | null; firmaEsmUrl?: string | null; firmaMandanteUrl?: string | null
+  moverFecha?: boolean
+}) {
+  const { data, error } = await supabase.rpc('rpc_enex_reprogramar', {
+    p_programacion_id: p.programacionId, p_hora_ingreso: p.horaIngreso ?? null,
+    p_supervisor_esm: p.supervisorEsm ?? null, p_tecnicos_pillado: p.tecnicosPillado ?? null,
+    p_responsable: p.responsable ?? null, p_causa: p.causa ?? null, p_descripcion: p.descripcion,
+    p_semana: p.semana ?? null, p_nueva_fecha: p.nuevaFecha ?? null, p_nueva_hora: p.nuevaHora ?? null,
+    p_firma_tecnico_url: p.firmaTecnicoUrl ?? null, p_firma_esm_url: p.firmaEsmUrl ?? null,
+    p_firma_mandante_url: p.firmaMandanteUrl ?? null, p_mover_fecha: p.moverFecha ?? true,
+  })
+  if (error) throw error
+  return data as { success: boolean; reprogramacion_id: string }
+}
+
+export async function getReprogramacion(id: string): Promise<EnexReprogramacion | null> {
+  const { data, error } = await supabase.from('v_enex_reprogramaciones').select('*').eq('id', id).maybeSingle()
+  if (error) throw error
+  return (data ?? null) as EnexReprogramacion | null
+}
+
+export async function getReprogramaciones(): Promise<EnexReprogramacion[]> {
+  const { data, error } = await supabase.from('v_enex_reprogramaciones').select('*')
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return (data ?? []) as EnexReprogramacion[]
+}
+
+export async function setReprogramacionPdf(id: string, url: string) {
+  const { error } = await supabase.rpc('rpc_enex_reprogramacion_set_pdf', { p_id: id, p_url: url })
+  if (error) throw error
+}
 
 export const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
   'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
