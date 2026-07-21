@@ -72,7 +72,13 @@ export async function queueEjecucion(params: {
   tecnicoNombre?: string | null
   observacion?: string | null
   firmanteMandante?: string | null
-  items: Array<{ pauta_item_id: string; resultado?: string | null; valor_medicion?: string | null; observacion?: string | null; file?: File | null; fotoUrl?: string | null }>
+  items: Array<{
+    pauta_item_id: string; resultado?: string | null; valor_medicion?: string | null
+    observacion?: string | null; file?: File | null; fotoUrl?: string | null
+    // Actividades críticas: foto del antes y del después por ítem (MIG238).
+    antesFile?: File | null; despuesFile?: File | null
+    fotoAntesUrl?: string | null; fotoDespuesUrl?: string | null
+  }>
   firmaTecFile?: Blob | null
   firmaMandFile?: Blob | null
 }): Promise<{ synced: boolean }> {
@@ -82,12 +88,18 @@ export async function queueEjecucion(params: {
   for (const it of params.items) {
     let blobId: string | null = null
     if (it.file) { blobId = newId(); await db.blobs.put({ blob_id: blobId, blob: it.file, mime: it.file.type || 'image/jpeg' }) }
+    let antesId: string | null = null
+    if (it.antesFile) { antesId = newId(); await db.blobs.put({ blob_id: antesId, blob: it.antesFile, mime: it.antesFile.type || 'image/jpeg' }) }
+    let despuesId: string | null = null
+    if (it.despuesFile) { despuesId = newId(); await db.blobs.put({ blob_id: despuesId, blob: it.despuesFile, mime: it.despuesFile.type || 'image/jpeg' }) }
     items.push({
       pauta_item_id: it.pauta_item_id, resultado: it.resultado ?? null,
       valor_medicion: it.valor_medicion ?? null, observacion: it.observacion ?? null,
-      foto_blob_id: blobId ?? (it.fotoUrl ? null : null),
-      // conservar url ya subida si venía (edición): la mandamos tal cual
+      foto_blob_id: blobId, foto_antes_blob_id: antesId, foto_despues_blob_id: despuesId,
+      // conservar urls ya subidas si venían (edición): las mandamos tal cual
       ...(it.fotoUrl && !blobId ? { foto_url_existente: it.fotoUrl } as unknown as object : {}),
+      ...(it.fotoAntesUrl && !antesId ? { foto_antes_url_existente: it.fotoAntesUrl } as unknown as object : {}),
+      ...(it.fotoDespuesUrl && !despuesId ? { foto_despues_url_existente: it.fotoDespuesUrl } as unknown as object : {}),
     })
   }
   let firmaTecId: string | null = null
@@ -124,17 +136,29 @@ export async function syncEnexPending(): Promise<{ ok: number; failed: number }>
   let ok = 0, failed = 0
   for (const p of rows) {
     try {
-      // subir fotos de ítems
+      // subir fotos de ítems (única + antes/después de actividades críticas)
       const itemsPayload: EnexItemResultado[] = []
       for (const it of p.items) {
-        let fotoUrl: string | null = (it as unknown as { foto_url_existente?: string }).foto_url_existente ?? null
+        const ex = it as unknown as { foto_url_existente?: string; foto_antes_url_existente?: string; foto_despues_url_existente?: string }
+        let fotoUrl: string | null = ex.foto_url_existente ?? null
         if (it.foto_blob_id) {
           const b = await db.blobs.get(it.foto_blob_id)
           if (b) fotoUrl = await subirEvidenciaEnex(new File([b.blob], 'foto.jpg', { type: b.mime }))
         }
+        let antesUrl: string | null = ex.foto_antes_url_existente ?? null
+        if (it.foto_antes_blob_id) {
+          const b = await db.blobs.get(it.foto_antes_blob_id)
+          if (b) antesUrl = await subirEvidenciaEnex(new File([b.blob], 'antes.jpg', { type: b.mime }))
+        }
+        let despuesUrl: string | null = ex.foto_despues_url_existente ?? null
+        if (it.foto_despues_blob_id) {
+          const b = await db.blobs.get(it.foto_despues_blob_id)
+          if (b) despuesUrl = await subirEvidenciaEnex(new File([b.blob], 'despues.jpg', { type: b.mime }))
+        }
         itemsPayload.push({
           pauta_item_id: it.pauta_item_id, resultado: it.resultado ?? null,
-          valor_medicion: it.valor_medicion ?? null, foto_url: fotoUrl, observacion: it.observacion ?? null,
+          valor_medicion: it.valor_medicion ?? null, foto_url: fotoUrl,
+          foto_antes_url: antesUrl, foto_despues_url: despuesUrl, observacion: it.observacion ?? null,
         })
       }
       // firmas
@@ -151,7 +175,11 @@ export async function syncEnexPending(): Promise<{ ok: number; failed: number }>
         clientUuid: p.client_uuid,
       })
       // limpiar blobs
-      for (const it of p.items) if (it.foto_blob_id) await db.blobs.delete(it.foto_blob_id)
+      for (const it of p.items) {
+        if (it.foto_blob_id) await db.blobs.delete(it.foto_blob_id)
+        if (it.foto_antes_blob_id) await db.blobs.delete(it.foto_antes_blob_id)
+        if (it.foto_despues_blob_id) await db.blobs.delete(it.foto_despues_blob_id)
+      }
       if (p.firma_tec_blob_id) await db.blobs.delete(p.firma_tec_blob_id)
       if (p.firma_mand_blob_id) await db.blobs.delete(p.firma_mand_blob_id)
       await db.pending.delete(p.local_id)
