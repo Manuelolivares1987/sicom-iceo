@@ -27,7 +27,11 @@ function dataUrlToBlob(dataUrl: string): Blob {
   return new Blob([arr], { type: mime })
 }
 
-type Estado = { resultado?: string; valor?: string; file?: File; fotoUrl?: string; obs?: string }
+type Estado = {
+  resultado?: string; valor?: string; file?: File; fotoUrl?: string; obs?: string
+  // Actividades críticas: foto del antes y del después.
+  antesFile?: File; despuesFile?: File; fotoAntesUrl?: string; fotoDespuesUrl?: string
+}
 
 function toleranciaTexto(it: EnexPautaItem): string {
   const ref = it.valor_referencia ?? 0
@@ -74,14 +78,20 @@ export default function EnexEjecutarPage() {
   const [firmante, setFirmante] = useState('')
   const [guardando, setGuardando] = useState(false)
   const fileRefs = useRef<Record<string, HTMLInputElement | null>>({})
+  const antesRefs = useRef<Record<string, HTMLInputElement | null>>({})
+  const despuesRefs = useRef<Record<string, HTMLInputElement | null>>({})
 
   // Precargar lo ya registrado (si vuelve a editar)
   useEffect(() => {
     if (!prog?.ejecucion_id) return
     getEjecucionItems(prog.ejecucion_id).then((rows) => {
       const e: Record<string, Estado> = {}
-      for (const r of rows as Array<{ pauta_item_id: string; resultado: string | null; valor_medicion: number | null; foto_url: string | null; observacion: string | null }>) {
-        e[r.pauta_item_id] = { resultado: r.resultado ?? undefined, valor: r.valor_medicion?.toString(), fotoUrl: r.foto_url ?? undefined, obs: r.observacion ?? undefined }
+      for (const r of rows as Array<{ pauta_item_id: string; resultado: string | null; valor_medicion: number | null; foto_url: string | null; foto_antes_url: string | null; foto_despues_url: string | null; observacion: string | null }>) {
+        e[r.pauta_item_id] = {
+          resultado: r.resultado ?? undefined, valor: r.valor_medicion?.toString(),
+          fotoUrl: r.foto_url ?? undefined, fotoAntesUrl: r.foto_antes_url ?? undefined,
+          fotoDespuesUrl: r.foto_despues_url ?? undefined, obs: r.observacion ?? undefined,
+        }
       }
       setEstado(e)
     }).catch(() => {})
@@ -102,6 +112,14 @@ export default function EnexEjecutarPage() {
   async function guardar(conFirmaMandante: boolean) {
     if (!prog) return
     if (conFirmaMandante && !firmaMand) { toast.error('Falta la firma del mandante'); return }
+    // Actividades críticas: exigen foto del antes y del después para cerrar cumplida.
+    if (conFirmaMandante) {
+      const faltan = items.filter((it) => it.critico).filter((it) => {
+        const st = estado[it.id] ?? {}
+        return !(st.antesFile || st.fotoAntesUrl) || !(st.despuesFile || st.fotoDespuesUrl)
+      })
+      if (faltan.length) { toast.error(`Faltan fotos de antes/después en ${faltan.length} actividad(es) crítica(s)`); return }
+    }
     setGuardando(true)
     try {
       const itemsPayload = items.map((it) => {
@@ -109,8 +127,10 @@ export default function EnexEjecutarPage() {
         return {
           pauta_item_id: it.id, resultado: st.resultado ?? null, valor_medicion: st.valor ?? null,
           observacion: st.obs ?? null, file: st.file ?? null, fotoUrl: st.fotoUrl ?? null,
+          antesFile: st.antesFile ?? null, despuesFile: st.despuesFile ?? null,
+          fotoAntesUrl: st.fotoAntesUrl ?? null, fotoDespuesUrl: st.fotoDespuesUrl ?? null,
         }
-      }).filter((p) => p.resultado || p.valor_medicion || p.observacion || p.file || p.fotoUrl)
+      }).filter((p) => p.resultado || p.valor_medicion || p.observacion || p.file || p.fotoUrl || p.antesFile || p.despuesFile || p.fotoAntesUrl || p.fotoDespuesUrl)
 
       const r = await queueEjecucion({
         programacionId: prog.programacion_id, conMandante: conFirmaMandante,
@@ -220,19 +240,49 @@ export default function EnexEjecutarPage() {
                            className="mt-2 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm" />
                   )}
 
-                  {/* Foto */}
-                  <div className="mt-2 flex items-center gap-2">
-                    {(st.file || st.fotoUrl) ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={st.file ? URL.createObjectURL(st.file) : st.fotoUrl!} alt="ev" className="h-12 w-12 rounded-lg border object-cover" />
-                    ) : null}
-                    <button onClick={() => fileRefs.current[it.id]?.click()}
-                            className={`flex items-center gap-1 rounded-lg border px-2 py-1.5 text-[11px] font-semibold ${it.requiere_foto && !st.file && !st.fotoUrl ? 'border-blue-300 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-500'}`}>
-                      <Camera className="h-3.5 w-3.5" /> {it.requiere_foto ? 'Foto (pide)' : 'Foto'}
-                    </button>
-                    <input ref={(el) => { fileRefs.current[it.id] = el }} type="file" accept="image/*" capture="environment" className="hidden"
-                           onChange={(e) => { const f = e.target.files?.[0]; if (f) upd(it.id, { file: f }); e.target.value = '' }} />
-                  </div>
+                  {/* Evidencia fotográfica: crítica = antes/después; resto = una foto */}
+                  {it.critico ? (
+                    <div className="mt-2 rounded-lg border border-amber-300 bg-amber-50 p-2">
+                      <p className="mb-1.5 flex items-center gap-1 text-[11px] font-semibold text-amber-800">
+                        <AlertTriangle className="h-3.5 w-3.5" /> Actividad crítica — foto del antes y del después
+                      </p>
+                      <div className="flex gap-2">
+                        {(['antes', 'despues'] as const).map((tipo) => {
+                          const file = tipo === 'antes' ? st.antesFile : st.despuesFile
+                          const url = tipo === 'antes' ? st.fotoAntesUrl : st.fotoDespuesUrl
+                          const refMap = tipo === 'antes' ? antesRefs : despuesRefs
+                          return (
+                            <div key={tipo} className="flex-1">
+                              <button onClick={() => refMap.current[it.id]?.click()}
+                                      className={`flex w-full items-center justify-center gap-1 rounded-lg border px-2 py-2 text-[11px] font-semibold ${file || url ? 'border-green-400 bg-green-50 text-green-700' : 'border-amber-400 bg-white text-amber-700'}`}>
+                                {file || url ? <Check className="h-3.5 w-3.5" /> : <Camera className="h-3.5 w-3.5" />}
+                                {tipo === 'antes' ? 'Antes' : 'Después'}
+                              </button>
+                              {(file || url) && (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img src={file ? URL.createObjectURL(file) : url!} alt={tipo} className="mt-1 h-12 w-full rounded border object-cover" />
+                              )}
+                              <input ref={(el) => { refMap.current[it.id] = el }} type="file" accept="image/*" capture="environment" className="hidden"
+                                     onChange={(e) => { const f = e.target.files?.[0]; if (f) upd(it.id, tipo === 'antes' ? { antesFile: f } : { despuesFile: f }); e.target.value = '' }} />
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="mt-2 flex items-center gap-2">
+                      {(st.file || st.fotoUrl) ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={st.file ? URL.createObjectURL(st.file) : st.fotoUrl!} alt="ev" className="h-12 w-12 rounded-lg border object-cover" />
+                      ) : null}
+                      <button onClick={() => fileRefs.current[it.id]?.click()}
+                              className={`flex items-center gap-1 rounded-lg border px-2 py-1.5 text-[11px] font-semibold ${it.requiere_foto && !st.file && !st.fotoUrl ? 'border-blue-300 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-500'}`}>
+                        <Camera className="h-3.5 w-3.5" /> {it.requiere_foto ? 'Foto (pide)' : 'Foto'}
+                      </button>
+                      <input ref={(el) => { fileRefs.current[it.id] = el }} type="file" accept="image/*" capture="environment" className="hidden"
+                             onChange={(e) => { const f = e.target.files?.[0]; if (f) upd(it.id, { file: f }); e.target.value = '' }} />
+                    </div>
+                  )}
                 </div>
               )
             })}

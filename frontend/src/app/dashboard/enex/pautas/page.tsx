@@ -8,7 +8,7 @@ import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import {
-  ClipboardList, ArrowLeft, Plus, Pencil, Trash2, Camera, Ruler, ChevronDown, ChevronRight, Download,
+  ClipboardList, ArrowLeft, Plus, Pencil, Trash2, Camera, Ruler, ChevronDown, ChevronRight, Download, AlertTriangle,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -174,6 +174,7 @@ function PautaDetalle({ pauta }: { pauta: EnexPauta }) {
                           </span>
                         )}
                         {it.requiere_foto && <span className="flex items-center gap-0.5 rounded bg-green-50 px-1.5 py-0.5 text-green-700"><Camera className="h-3 w-3" /> foto</span>}
+                        {it.critico && <span className="flex items-center gap-0.5 rounded bg-amber-100 px-1.5 py-0.5 font-semibold text-amber-800"><AlertTriangle className="h-3 w-3" /> crítico · antes/después</span>}
                       </div>
                     </div>
                     <button onClick={() => setEditItem(it)} className="p-1 text-gray-400 hover:text-blue-600"><Pencil className="h-3.5 w-3.5" /></button>
@@ -218,6 +219,7 @@ function ItemModal({ pautaId, item, bloques, defaultBloque, defaultOrden, defaul
   const [tmin, setTmin] = useState(item?.tolerancia_min?.toString() ?? '')
   const [tmax, setTmax] = useState(item?.tolerancia_max?.toString() ?? '')
   const [foto, setFoto] = useState(item?.requiere_foto ?? false)
+  const [critico, setCritico] = useState(item?.critico ?? false)
   const [busy, setBusy] = useState(false)
 
   async function guardar() {
@@ -231,7 +233,7 @@ function ItemModal({ pautaId, item, bloques, defaultBloque, defaultOrden, defaul
         unidad: tipoCampo === 'medicion' ? (unidad.trim() || null) : null,
         toleranciaMin: tipoCampo === 'medicion' && tmin !== '' ? Number(tmin) : null,
         toleranciaMax: tipoCampo === 'medicion' && tmax !== '' ? Number(tmax) : null,
-        requiereFoto: foto,
+        requiereFoto: foto, critico,
       })
       toast.success(item ? 'Ítem actualizado' : 'Ítem agregado'); onDone()
     } catch (e) { toast.error((e as Error).message) } finally { setBusy(false) }
@@ -272,6 +274,10 @@ function ItemModal({ pautaId, item, bloques, defaultBloque, defaultOrden, defaul
         )}
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={foto} onChange={(e) => setFoto(e.target.checked)} /> Requiere foto
+        </label>
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={critico} onChange={(e) => setCritico(e.target.checked)} />
+          Actividad crítica (foto del antes y del después en terreno)
         </label>
       </div>
       <ModalFooter>
