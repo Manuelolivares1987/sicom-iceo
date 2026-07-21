@@ -8,7 +8,7 @@ import Link from 'next/link'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Building2, ChevronRight, ChevronLeft, CheckCircle2, Clock, RefreshCw, AlertTriangle,
-  WifiOff, CloudOff, Download, Fuel, Droplets, Repeat, Check,
+  WifiOff, CloudOff, Download, Fuel, Droplets, Repeat, Check, CalendarDays, Sun,
 } from 'lucide-react'
 import { Spinner } from '@/components/ui/spinner'
 import {
@@ -20,13 +20,25 @@ import { useNetworkStatus } from '@/hooks/use-calama-offline'
 const MUNDO_KEY = 'enex-mundo-supervisor'
 
 const hoy = () => { const d = new Date(); return { anio: d.getFullYear(), mes: d.getMonth() + 1 } }
+const hoyISOf = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
+
+const DIAS_SEMANA = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
+// "Lunes 21 de julio" a partir de un YYYY-MM-DD (sin desfase de zona horaria).
+function fmtDiaLargo(iso: string): string {
+  const [y, m, d] = iso.split('-').map(Number)
+  const dt = new Date(y, m - 1, d)
+  return `${DIAS_SEMANA[dt.getDay()]} ${d} de ${MESES[m - 1].toLowerCase()}`
+}
 
 export default function EnexTerrenoHome() {
   // El período parte NULL y se fija tras el mount: la página se prerenderiza
   // en el build y usar new Date() en el primer render hidrata mal (React #418)
   // cuando la fecha del build difiere de la del teléfono.
   const [periodo, setPeriodo] = useState<{ anio: number; mes: number } | null>(null)
-  useEffect(() => { setPeriodo(hoy()) }, [])
+  const [hoyISO, setHoyISO] = useState<string>('')
+  // Vista por día: "hoy" (por defecto, lo del día) o "mes" (agenda completa).
+  const [vista, setVista] = useState<'hoy' | 'mes'>('hoy')
+  useEffect(() => { setPeriodo(hoy()); setHoyISO(hoyISOf()) }, [])
   const anio = periodo?.anio ?? 0
   const mes = periodo?.mes ?? 1
   const qc = useQueryClient()
@@ -88,17 +100,28 @@ export default function EnexTerrenoHome() {
     () => (mundo ? pend.filter((p) => mundoDeLinea(p.linea) === mundo) : pend),
     [pend, mundo])
 
-  const porFaena = useMemo(() => {
-    const g: { faena: string; items: EnexPendiente[] }[] = []
-    for (const p of [...pendMundo].sort((a, b) => Number(a.cumplida) - Number(b.cumplida))) {
-      let x = g.find((y) => y.faena === p.faena)
-      if (!x) { x = { faena: p.faena, items: [] }; g.push(x) }
-      x.items.push(p)
+  // Agrupar por DÍA de visita (fecha programada). Los sin fecha van al final.
+  const porDia = useMemo(() => {
+    const map = new Map<string, EnexPendiente[]>()
+    for (const p of pendMundo) {
+      const key = p.fecha_programada ? p.fecha_programada.slice(0, 10) : 'sin'
+      if (!map.has(key)) map.set(key, [])
+      map.get(key)!.push(p)
     }
-    return g
+    return Array.from(map.entries())
+      .map(([fecha, items]) => ({ fecha, items: items.sort((a, b) => Number(a.cumplida) - Number(b.cumplida)) }))
+      .sort((a, b) => (a.fecha === 'sin' ? '9999-99-99' : a.fecha).localeCompare(b.fecha === 'sin' ? '9999-99-99' : b.fecha))
   }, [pendMundo])
 
-  const pendientes = pendMundo.filter((p) => !p.cumplida).length
+  // Según la vista: solo hoy, o toda la agenda del mes.
+  const diasVisibles = useMemo(
+    () => (vista === 'hoy' ? porDia.filter((d) => d.fecha === hoyISO) : porDia),
+    [porDia, vista, hoyISO])
+
+  const pendHoy = useMemo(
+    () => pendMundo.filter((p) => !p.cumplida && p.fecha_programada?.slice(0, 10) === hoyISO).length,
+    [pendMundo, hoyISO])
+  const pendMes = pendMundo.filter((p) => !p.cumplida).length
   const conteoMundo = useMemo(() => ({
     combustible: pend.filter((p) => mundoDeLinea(p.linea) === 'combustible' && !p.cumplida).length,
     lubricante: pend.filter((p) => mundoDeLinea(p.linea) === 'lubricante' && !p.cumplida).length,
@@ -160,70 +183,101 @@ export default function EnexTerrenoHome() {
       )}
       {descargaMsg && <p className="text-center text-[11px] text-green-600">{descargaMsg}</p>}
 
-      <div className="flex items-center justify-center gap-3">
-        <button onClick={() => cambiarMes(-1)} className="rounded-lg border bg-white px-2 py-1.5"><ChevronLeft className="h-4 w-4" /></button>
-        <span className="min-w-[120px] text-center text-sm font-semibold">{MESES[mes - 1]} {anio}</span>
-        <button onClick={() => cambiarMes(1)} className="rounded-lg border bg-white px-2 py-1.5"><ChevronRight className="h-4 w-4" /></button>
+      {/* Vista: Hoy vs Agenda del mes */}
+      <div className="grid grid-cols-2 gap-2">
+        <button onClick={() => setVista('hoy')}
+          className={`flex items-center justify-center gap-1.5 rounded-lg border-2 py-2 text-sm font-semibold ${vista === 'hoy' ? 'border-blue-500 bg-blue-600 text-white' : 'border-gray-200 bg-white text-gray-600'}`}>
+          <Sun className="h-4 w-4" /> Hoy
+          {pendHoy > 0 && <span className={`rounded-full px-1.5 text-[11px] ${vista === 'hoy' ? 'bg-white/25' : 'bg-blue-100 text-blue-700'}`}>{pendHoy}</span>}
+        </button>
+        <button onClick={() => setVista('mes')}
+          className={`flex items-center justify-center gap-1.5 rounded-lg border-2 py-2 text-sm font-semibold ${vista === 'mes' ? 'border-blue-500 bg-blue-600 text-white' : 'border-gray-200 bg-white text-gray-600'}`}>
+          <CalendarDays className="h-4 w-4" /> Agenda del mes
+          {pendMes > 0 && <span className={`rounded-full px-1.5 text-[11px] ${vista === 'mes' ? 'bg-white/25' : 'bg-blue-100 text-blue-700'}`}>{pendMes}</span>}
+        </button>
       </div>
 
-      <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-800">
-        {pendientes} servicio{pendientes !== 1 ? 's' : ''} por ejecutar este período
-      </div>
+      {/* En la agenda del mes: navegación de mes */}
+      {vista === 'mes' && (
+        <div className="flex items-center justify-center gap-3">
+          <button onClick={() => cambiarMes(-1)} className="rounded-lg border bg-white px-2 py-1.5"><ChevronLeft className="h-4 w-4" /></button>
+          <span className="min-w-[120px] text-center text-sm font-semibold">{MESES[mes - 1]} {anio}</span>
+          <button onClick={() => cambiarMes(1)} className="rounded-lg border bg-white px-2 py-1.5"><ChevronRight className="h-4 w-4" /></button>
+        </div>
+      )}
 
       {isLoading ? (
         <div className="flex justify-center py-10"><Spinner /></div>
-      ) : pendMundo.length === 0 ? (
-        <p className="py-10 text-center text-sm text-gray-400">
-          {pend.length === 0
-            ? <>No hay servicios programados en {MESES[mes - 1]} {anio}. El planificador los programa desde el panel de control.</>
-            : <>No hay servicios de <b>{mundo ? MUNDO_LABEL[mundo] : ''}</b> este período. Cambia de mundo arriba.</>}
-        </p>
-      ) : porFaena.map((g) => (
-        <div key={g.faena}>
-          <div className="sticky top-0 z-10 bg-gray-100 rounded px-2 py-1 text-xs font-semibold text-gray-700">{g.faena}</div>
-          <div className="space-y-2 pt-2">
-            {g.items.map((p) => (
-              <Link key={p.programacion_id} href={`/m/enex/${p.programacion_id}`}
-                    className="block rounded-xl border border-gray-200 bg-white p-3 active:bg-gray-50">
-                <div className="flex items-center gap-2">
-                  <span className="flex-1 text-sm font-medium text-gray-800">
-                    {p.instalacion}
-                    {p.patente && <span className="text-gray-500"> · {p.patente}</span>}
-                  </span>
-                  {p.cumplida
-                    ? <span className="flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-medium text-green-700"><CheckCircle2 className="h-3 w-3" /> Cumplida</span>
-                    : p.estado === 'ejecutada'
-                    ? <span className="flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800"><Clock className="h-3 w-3" /> Falta firma</span>
-                    : <span className="flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-700"><Clock className="h-3 w-3" /> Por ejecutar</span>}
-                </div>
-                <div className="mt-1 flex items-center justify-between text-xs text-gray-500">
-                  <span>
-                    {TIPO_INSTALACION_LABEL[p.instalacion_tipo]} · {p.tipo_servicio === 'calibracion' ? 'Calibración' : 'Mantención'} · {p.pauta_items} ítems
-                    {/* Con varias visitas del mismo punto en el mes, la fecha distingue cuál es cuál */}
-                    {p.fecha_programada && (
-                      <span className="ml-1 font-semibold text-blue-700">
-                        · visita del {p.fecha_programada.slice(8, 10)}/{p.fecha_programada.slice(5, 7)}
-                      </span>
-                    )}
-                  </span>
-                  <ChevronRight className="h-4 w-4 text-gray-400" />
-                </div>
-                {p.es_recobro && !p.cumplida && (
-                  <div className="mt-1 flex items-center gap-1 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800">
-                    <Repeat className="h-3 w-3" /> RECOBRO — repetición del trimestre (se factura a ENEX)
-                  </div>
-                )}
-                {p.pauta_borrador && (
-                  <div className="mt-1 flex items-center gap-1 text-[10px] text-amber-600"><AlertTriangle className="h-3 w-3" /> pauta en borrador</div>
-                )}
-                {!p.pauta_id && (
-                  <div className="mt-1 flex items-center gap-1 text-[10px] text-red-600"><AlertTriangle className="h-3 w-3" /> sin pauta asignada — avisa al supervisor</div>
-                )}
-              </Link>
-            ))}
-          </div>
+      ) : diasVisibles.length === 0 ? (
+        <div className="py-10 text-center text-sm text-gray-400">
+          {vista === 'hoy' ? (
+            <>
+              <Sun className="mx-auto mb-2 h-8 w-8 text-gray-300" />
+              <p>No tienes tareas para hoy{hoyISO && <> ({fmtDiaLargo(hoyISO)})</>}.</p>
+              {pendMes > 0 && (
+                <button onClick={() => setVista('mes')} className="mt-2 rounded-lg border border-blue-300 bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-700">
+                  Ver la agenda del mes ({pendMes})
+                </button>
+              )}
+            </>
+          ) : pend.length === 0 ? (
+            <>No hay servicios programados en {MESES[mes - 1]} {anio}. El planificador los programa desde el panel de control.</>
+          ) : (
+            <>No hay servicios de <b>{mundo ? MUNDO_LABEL[mundo] : ''}</b> este período. Cambia de mundo arriba.</>
+          )}
         </div>
-      ))}
+      ) : diasVisibles.map((dia) => {
+        const esHoy = dia.fecha === hoyISO
+        const porEjecutar = dia.items.filter((p) => !p.cumplida).length
+        return (
+          <div key={dia.fecha}>
+            {/* Cabecera del día */}
+            <div className={`sticky top-0 z-10 flex items-center gap-2 rounded-lg px-3 py-1.5 ${esHoy ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700'}`}>
+              <CalendarDays className="h-3.5 w-3.5" />
+              <span className="text-xs font-bold capitalize">{dia.fecha === 'sin' ? 'Sin fecha asignada' : fmtDiaLargo(dia.fecha)}</span>
+              {esHoy && <span className="rounded-full bg-white/25 px-1.5 py-0.5 text-[10px] font-bold">HOY</span>}
+              <span className={`ml-auto text-[11px] ${esHoy ? 'text-blue-100' : 'text-gray-500'}`}>
+                {porEjecutar > 0 ? `${porEjecutar} por ejecutar` : 'todo listo'}
+              </span>
+            </div>
+            <div className="space-y-2 pt-2">
+              {dia.items.map((p) => (
+                <Link key={p.programacion_id} href={`/m/enex/${p.programacion_id}`}
+                      className="block rounded-xl border border-gray-200 bg-white p-3 active:bg-gray-50">
+                  <div className="flex items-center gap-2">
+                    <span className="flex-1 text-sm font-medium text-gray-800">
+                      {p.instalacion}
+                      {p.patente && <span className="text-gray-500"> · {p.patente}</span>}
+                    </span>
+                    {p.cumplida
+                      ? <span className="flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-medium text-green-700"><CheckCircle2 className="h-3 w-3" /> Cumplida</span>
+                      : p.estado === 'ejecutada'
+                      ? <span className="flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800"><Clock className="h-3 w-3" /> Falta firma</span>
+                      : <span className="flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-700"><Clock className="h-3 w-3" /> Por ejecutar</span>}
+                  </div>
+                  <div className="mt-1 flex items-center justify-between text-xs text-gray-500">
+                    <span>
+                      {p.faena} · {TIPO_INSTALACION_LABEL[p.instalacion_tipo]} · {p.tipo_servicio === 'calibracion' ? 'Calibración' : 'Mantención'} · {p.pauta_items} ítems
+                    </span>
+                    <ChevronRight className="h-4 w-4 text-gray-400" />
+                  </div>
+                  {p.es_recobro && !p.cumplida && (
+                    <div className="mt-1 flex items-center gap-1 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800">
+                      <Repeat className="h-3 w-3" /> RECOBRO — repetición del trimestre (se factura a ENEX)
+                    </div>
+                  )}
+                  {p.pauta_borrador && (
+                    <div className="mt-1 flex items-center gap-1 text-[10px] text-amber-600"><AlertTriangle className="h-3 w-3" /> pauta en borrador</div>
+                  )}
+                  {!p.pauta_id && (
+                    <div className="mt-1 flex items-center gap-1 text-[10px] text-red-600"><AlertTriangle className="h-3 w-3" /> sin pauta asignada — avisa al supervisor</div>
+                  )}
+                </Link>
+              ))}
+            </div>
+          </div>
+        )
+      })}
     </div>
   )
 }
