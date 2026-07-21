@@ -7,7 +7,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import {
-  ArrowLeft, Camera, Check, X, Minus, CheckCircle2, Loader2, Ruler, AlertTriangle,
+  ArrowLeft, Camera, Check, X, Minus, CheckCircle2, Loader2, Ruler, AlertTriangle, Repeat,
 } from 'lucide-react'
 import { Spinner } from '@/components/ui/spinner'
 import { Button } from '@/components/ui/button'
@@ -156,6 +156,13 @@ export default function EnexEjecutarPage() {
         <div className="text-xs text-gray-500">{prog.faena} · {prog.tipo_servicio === 'calibracion' ? 'Calibración' : 'Mantención'}</div>
         <div className="mt-1 text-[11px] text-gray-500">{prog.pauta_nombre}{prog.pauta_borrador ? ' (borrador)' : ''}</div>
       </div>
+
+      {prog.es_recobro && !prog.cumplida && (
+        <div className="flex items-start gap-2 rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-800">
+          <Repeat className="mt-0.5 h-4 w-4 flex-shrink-0" />
+          <span><b>Este servicio es un RECOBRO.</b> Ya se atendió/calibró este punto en el trimestre; esta repetición se factura como adicional a ENEX.</span>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-2">
         <input value={otNumero} onChange={(e) => setOtNumero(e.target.value)} placeholder="N° OT (mandante)"
