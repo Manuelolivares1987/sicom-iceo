@@ -14,6 +14,9 @@ export type EnexPendItem = {
   valor_medicion?: string | null
   observacion?: string | null
   foto_blob_id?: string | null
+  // Actividades críticas (MIG238): foto del antes y del después por ítem.
+  foto_antes_blob_id?: string | null
+  foto_despues_blob_id?: string | null
 }
 
 /** Ejecución pendiente de subir. */

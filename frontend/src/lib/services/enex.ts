@@ -291,6 +291,8 @@ export type EnexPautaItem = {
   tolerancia_max: number | null
   requiere_foto: boolean
   obligatorio: boolean
+  // Actividad crítica (MIG238): exige foto del antes y del después en terreno.
+  critico: boolean
   activo: boolean
 }
 
@@ -324,7 +326,7 @@ export async function guardarPautaItem(p: {
   id?: string | null; pautaId: string; bloque: string; bloqueOrden: number; orden: number
   codigo?: string | null; descripcion: string; periodicidad: Periodicidad; tipoCampo: TipoCampo
   unidad?: string | null; valorReferencia?: number | null; toleranciaMin?: number | null
-  toleranciaMax?: number | null; requiereFoto?: boolean; obligatorio?: boolean
+  toleranciaMax?: number | null; requiereFoto?: boolean; obligatorio?: boolean; critico?: boolean
 }) {
   const { data, error } = await supabase.rpc('rpc_enex_pauta_item_guardar', {
     p_id: p.id ?? null, p_pauta_id: p.pautaId, p_bloque: p.bloque, p_bloque_orden: p.bloqueOrden,
@@ -332,7 +334,7 @@ export async function guardarPautaItem(p: {
     p_periodicidad: p.periodicidad, p_tipo_campo: p.tipoCampo, p_unidad: p.unidad ?? null,
     p_valor_referencia: p.valorReferencia ?? null, p_tolerancia_min: p.toleranciaMin ?? null,
     p_tolerancia_max: p.toleranciaMax ?? null, p_requiere_foto: p.requiereFoto ?? false,
-    p_obligatorio: p.obligatorio ?? true,
+    p_obligatorio: p.obligatorio ?? true, p_critico: p.critico ?? false,
   })
   if (error) throw error
   return data as { success: boolean; item_id: string }
@@ -373,6 +375,9 @@ export type EnexItemResultado = {
   resultado?: string | null       // ok/no_ok/na/si/no
   valor_medicion?: string | null
   foto_url?: string | null
+  // Actividades críticas (MIG238): foto del antes y del después.
+  foto_antes_url?: string | null
+  foto_despues_url?: string | null
   observacion?: string | null
 }
 
