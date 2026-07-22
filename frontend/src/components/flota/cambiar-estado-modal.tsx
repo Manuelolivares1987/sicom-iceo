@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Select } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
 import { Spinner } from '@/components/ui/spinner'
-import { cn, todayISO } from '@/lib/utils'
+import { cn, todayISO, errorMessage } from '@/lib/utils'
 import { usePermissions } from '@/hooks/use-permissions'
 import {
   useActualizarEstadoManual,
@@ -310,7 +310,7 @@ export function CambiarEstadoModal({ open, onClose, activo, estadoInicial, fecha
             razon: razonContrato.trim() || `Cambio de contrato (estado ${nuevoEstado}). Motivo: ${motivo.trim()}`,
           })
         } catch (err) {
-          const msg = err instanceof Error ? err.message : 'Error al cambiar contrato'
+          const msg = errorMessage(err, 'Error al cambiar contrato')
           setErrorMsg(`No se pudo cambiar el contrato: ${msg}`)
           return
         }
@@ -360,7 +360,7 @@ export function CambiarEstadoModal({ open, onClose, activo, estadoInicial, fecha
       )
       onClose()
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Error al actualizar estado'
+      const message = errorMessage(err, 'Error al actualizar estado')
       setErrorMsg(message)
     }
   }

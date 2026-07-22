@@ -955,7 +955,7 @@ export function FiabilidadAnalisis({ readOnly = false }: { readOnly?: boolean } 
                       </td>
                       <td className="px-2 py-1.5">{d.equipamiento ?? '—'}</td>
                       <td className="px-2 py-1.5 text-gray-500 max-w-[160px] truncate">
-                        {d.contrato_cliente ?? d.cliente_actual ?? '—'}
+                        {d.contrato_cliente ?? d.cliente_actual ?? d.ult_cliente ?? '—'}
                       </td>
                       <td className="px-2 py-1.5">
                         {d.categoria_uso ? (
