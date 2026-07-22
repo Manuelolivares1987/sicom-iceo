@@ -244,7 +244,12 @@ export function CambiarEstadoModal({ open, onClose, activo, estadoInicial, fecha
   }, [nuevoEstado])
 
   const requiereOT = nuevoEstado === 'M' || nuevoEstado === 'T' || nuevoEstado === 'F'
-  const requiereVerificacion = nuevoEstado === 'D'
+  // La verificación ready-to-rent solo aplica al TRANSICIONAR a disponible,
+  // igual que el trigger fn_validar_cambio_disponible en la BD (que exige
+  // OLD.estado_comercial != 'disponible'). Si el equipo YA está disponible,
+  // cambiar o quitar el contrato no requiere re-verificación.
+  const yaDisponible = activo?.estado_comercial === 'disponible'
+  const requiereVerificacion = nuevoEstado === 'D' && !yaDisponible
   const bloqueadoPorVerificacion =
     requiereVerificacion && !loadingVerif && !verifVigente
 
