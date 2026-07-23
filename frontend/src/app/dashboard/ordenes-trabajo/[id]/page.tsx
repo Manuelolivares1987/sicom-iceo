@@ -520,7 +520,7 @@ function ChecklistTab({
                       </button>
                       <input
                         ref={(el) => { fileInputRefs.current[item.instance_item_id] = el }}
-                        type="file" accept="image/*" capture="environment" className="hidden"
+                        type="file" accept="image/*,video/*" className="hidden"
                         onChange={(e) => { const f = e.target.files?.[0]; if (f) handlePhoto(item, f); e.target.value = '' }}
                       />
                     </div>
@@ -699,8 +699,7 @@ function EvidenciasTab({ otId, disabled }: { otId: string; disabled?: boolean })
               <input
                 ref={fileInputRef}
                 type="file"
-                accept="image/*"
-                capture="environment"
+                accept="image/*,video/*"
                 className="hidden"
                 onChange={handleFileSelect}
               />
