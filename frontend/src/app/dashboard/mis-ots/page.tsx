@@ -1,10 +1,11 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { ClipboardList, Calendar, User } from 'lucide-react'
+import { ClipboardList, Calendar, User, Search } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
 import { Spinner } from '@/components/ui/spinner'
 import { EmptyState } from '@/components/ui/empty-state'
 import { useAuth } from '@/contexts/auth-context'
@@ -79,16 +80,29 @@ export default function MisOTsPage() {
   const { user } = useAuth()
   const router = useRouter()
 
+  const [search, setSearch] = useState('')
+
   const { data: ots, isLoading } = useOrdenesTrabajo(
     user?.id ? { responsable_id: user.id } : undefined
   )
 
-  // Group OTs by estado
+  // Group OTs by estado (con búsqueda por folio / patente / activo)
   const grouped = useMemo(() => {
     if (!ots || ots.length === 0) return []
 
+    const s = search.trim().toLowerCase()
+    const filtered = !s ? (ots as any[]) : (ots as any[]).filter((ot) => {
+      const activoName = ot.activo?.nombre || ot.activo?.codigo || ''
+      const patente = ot.activo?.patente || ''
+      return (
+        (ot.folio || '').toLowerCase().includes(s) ||
+        patente.toLowerCase().includes(s) ||
+        activoName.toLowerCase().includes(s)
+      )
+    })
+
     const groups: Record<string, any[]> = {}
-    for (const ot of ots as any[]) {
+    for (const ot of filtered) {
       const estado = ot.estado || 'creada'
       if (!groups[estado]) groups[estado] = []
       groups[estado].push(ot)
@@ -101,7 +115,7 @@ export default function MisOTsPage() {
         label: estadoGroupLabels[estado] || estado,
         items: groups[estado],
       }))
-  }, [ots])
+  }, [ots, search])
 
   if (isLoading) {
     return (
@@ -120,6 +134,19 @@ export default function MisOTsPage() {
           OTs asignadas a ti. Toca una tarjeta para ver el detalle.
         </p>
       </div>
+
+      {/* Buscador por patente / folio / activo */}
+      {ots && ots.length > 0 && (
+        <div className="relative max-w-sm">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <Input
+            className="pl-9"
+            placeholder="Buscar por patente, folio o activo…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+      )}
 
       {/* Empty state */}
       {(!ots || ots.length === 0) && (
@@ -172,7 +199,7 @@ export default function MisOTsPage() {
                   </span>
                   {ot.activo && (
                     <span className="font-medium text-gray-700">
-                      {ot.activo.codigo || ot.activo.nombre}
+                      {[ot.activo.patente, ot.activo.codigo || ot.activo.nombre].filter(Boolean).join(' · ')}
                     </span>
                   )}
                 </div>

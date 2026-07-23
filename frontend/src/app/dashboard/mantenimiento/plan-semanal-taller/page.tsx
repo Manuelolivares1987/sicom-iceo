@@ -8,7 +8,7 @@ import {
 import {
   Calendar, ArrowLeft, ChevronLeft, ChevronRight, Lock, Unlock, AlertTriangle, Trash2, User,
   Play, Pause, CheckCircle2, BarChart3, ShieldAlert, RefreshCw, Wrench, Layers, FileSpreadsheet,
-  Truck, Mail, Pencil, Plus, Clock, Camera, ExternalLink, ListChecks, Upload, Package, X,
+  Truck, Mail, Pencil, Plus, Clock, Camera, ExternalLink, ListChecks, Upload, Package, X, Search,
 } from 'lucide-react'
 import { exportarPlanSemanalExcel, descargarBlob } from '@/lib/export/plan-semanal-excel'
 import { buildPlanSemanalTallerEmailHtml } from '@/lib/email/plan-semanal-taller-email'
@@ -1174,10 +1174,15 @@ function DocumentosPorVencerCard({ items, onRenovar }: {
   items: DocumentoPorVencer[]
   onRenovar: (d: DocumentoPorVencer) => void
 }) {
+  const [busca, setBusca] = useState('')
   const vencidos = items.filter((d) => d.dias_restantes < 0).length
   const grupos = useMemo(() => {
+    const s = busca.trim().toLowerCase()
+    const filtrados = !s ? items : items.filter((d) =>
+      (d.patente ?? '').toLowerCase().includes(s) || (d.codigo ?? '').toLowerCase().includes(s),
+    )
     const m = new Map<string, DocumentoPorVencer[]>()
-    for (const d of items) {
+    for (const d of filtrados) {
       const arr = m.get(d.activo_id) ?? []
       arr.push(d)
       m.set(d.activo_id, arr)
@@ -1185,7 +1190,7 @@ function DocumentosPorVencerCard({ items, onRenovar }: {
     return Array.from(m.values())
       .map((docs) => docs.slice().sort((a, b) => a.dias_restantes - b.dias_restantes))
       .sort((a, b) => a[0].dias_restantes - b[0].dias_restantes) // peor equipo primero
-  }, [items])
+  }, [items, busca])
 
   return (
     <Card className="border-amber-300">
@@ -1199,8 +1204,17 @@ function DocumentosPorVencerCard({ items, onRenovar }: {
         </CardTitle>
       </CardHeader>
       <CardContent className="p-2">
+        <div className="relative mb-2 max-w-xs">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
+          <Input
+            className="h-8 pl-8 text-xs"
+            placeholder="Buscar por patente / código…"
+            value={busca}
+            onChange={(e) => setBusca(e.target.value)}
+          />
+        </div>
         {grupos.length === 0 ? (
-          <div className="text-xs text-gray-400 p-3 text-center">Sin documentos vencidos ni próximos a vencer.</div>
+          <div className="text-xs text-gray-400 p-3 text-center">Sin documentos que coincidan.</div>
         ) : (
           <div className="flex flex-wrap gap-2">
             {grupos.map((docs) => {
