@@ -505,6 +505,7 @@ function TabCertificaciones({ activoId }: { activoId: string }) {
   const uploadCert = useUploadCertificado()
   const [showAdd, setShowAdd] = useState(false)
   const [newCert, setNewCert] = useState({ tipo: 'revision_tecnica', fecha_emision: '', fecha_vencimiento: '', entidad_certificadora: '', numero_certificado: '', bloqueante: true })
+  const [newFile, setNewFile] = useState<File | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [uploadingCertId, setUploadingCertId] = useState<string | null>(null)
 
@@ -513,8 +514,13 @@ function TabCertificaciones({ activoId }: { activoId: string }) {
       activo_id: activoId,
       ...newCert,
     }, {
-      onSuccess: () => {
+      onSuccess: (created: { id?: string } | undefined) => {
+        // Si adjuntaron el archivo en el mismo paso, súbelo a la fila recién creada.
+        if (newFile && created?.id) {
+          uploadCert.mutate({ activoId, certId: created.id, file: newFile })
+        }
         setShowAdd(false)
+        setNewFile(null)
         setNewCert({ tipo: 'revision_tecnica', fecha_emision: '', fecha_vencimiento: '', entidad_certificadora: '', numero_certificado: '', bloqueante: true })
       },
     })
@@ -588,8 +594,19 @@ function TabCertificaciones({ activoId }: { activoId: string }) {
                 </label>
               </div>
             </div>
+            {/* Archivo de respaldo (opcional) — se sube al guardar */}
+            <div>
+              <label className="text-xs font-medium text-gray-600">Archivo de respaldo (PDF o imagen)</label>
+              <input
+                type="file"
+                accept=".pdf,.jpg,.jpeg,.png"
+                className="mt-1 block w-full text-sm file:mr-3 file:rounded file:border-0 file:bg-blue-100 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-blue-700 hover:file:bg-blue-200"
+                onChange={(e) => setNewFile(e.target.files?.[0] ?? null)}
+              />
+              {newFile && <p className="mt-1 text-[11px] text-gray-500">Se subirá: {newFile.name}</p>}
+            </div>
             <div className="flex gap-2">
-              <Button size="sm" onClick={handleAdd} disabled={!newCert.fecha_emision || !newCert.fecha_vencimiento || upsertCert.isPending}>
+              <Button size="sm" onClick={handleAdd} disabled={!newCert.fecha_emision || !newCert.fecha_vencimiento || upsertCert.isPending || uploadCert.isPending}>
                 <Save className="h-4 w-4 mr-1" /> Guardar
               </Button>
               <Button size="sm" variant="outline" onClick={() => setShowAdd(false)}>Cancelar</Button>

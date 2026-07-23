@@ -23,7 +23,7 @@ export interface OTFilters {
 
 const OT_LIST_SELECT = `
   *,
-  activo:activos(id, codigo, nombre, tipo),
+  activo:activos(id, patente, codigo, nombre, tipo),
   faena:faenas(id, codigo, nombre),
   responsable:usuarios_perfil!ordenes_trabajo_responsable_id_fkey(id, nombre_completo, cargo),
   tecnico:taller_tecnicos(id, nombre, especialidad)

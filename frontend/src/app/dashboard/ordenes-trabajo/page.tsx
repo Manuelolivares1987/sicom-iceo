@@ -117,14 +117,16 @@ interface OTRow {
   estado: string
   fecha_programada: string | null
   costo_total: number
-  activo?: { id: string; codigo: string; nombre: string | null; tipo: string } | null
+  activo?: { id: string; patente: string | null; codigo: string; nombre: string | null; tipo: string } | null
   faena?: { id: string; codigo: string; nombre: string } | null
   responsable?: { id: string; nombre_completo: string; cargo: string | null } | null
   tecnico?: { id: string; nombre: string; especialidad: string | null } | null
 }
 
 function MobileCard({ ot }: { ot: OTRow }) {
-  const activoLabel = ot.activo ? (ot.activo.nombre || ot.activo.codigo) : '—'
+  const activoLabel = ot.activo
+    ? [ot.activo.patente, ot.activo.nombre || ot.activo.codigo].filter(Boolean).join(' · ')
+    : '—'
   const faenaLabel = ot.faena?.nombre || '—'
   const responsableLabel = ot.tecnico?.nombre || ot.responsable?.nombre_completo || '—'
 
@@ -245,10 +247,12 @@ export default function OrdenesTrabajoPage() {
     if (!search) return true
     const s = search.toLowerCase()
     const activoName = ot.activo?.nombre || ot.activo?.codigo || ''
+    const patente = ot.activo?.patente || ''
     const responsableName = ot.tecnico?.nombre || ot.responsable?.nombre_completo || ''
     return (
       ot.folio.toLowerCase().includes(s) ||
       activoName.toLowerCase().includes(s) ||
+      patente.toLowerCase().includes(s) ||
       responsableName.toLowerCase().includes(s)
     )
   }) as OTRow[]
@@ -275,7 +279,7 @@ export default function OrdenesTrabajoPage() {
           <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
             <div className="flex-1 sm:max-w-xs">
               <Input
-                placeholder="Buscar folio, activo, responsable..."
+                placeholder="Buscar folio, patente, activo, responsable..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />
@@ -378,7 +382,14 @@ export default function OrdenesTrabajoPage() {
                   <TableRow key={ot.id}>
                     <TableCell className="font-semibold text-gray-900">{ot.folio}</TableCell>
                     <TableCell>{getTipoBadge(ot.tipo)}</TableCell>
-                    <TableCell>{ot.activo ? (ot.activo.nombre || ot.activo.codigo) : '—'}</TableCell>
+                    <TableCell>
+                      {ot.activo ? (
+                        <div className="leading-tight">
+                          {ot.activo.patente && <div className="font-mono font-semibold text-gray-900">{ot.activo.patente}</div>}
+                          <div className={ot.activo.patente ? 'text-xs text-gray-500' : ''}>{ot.activo.nombre || ot.activo.codigo}</div>
+                        </div>
+                      ) : '—'}
+                    </TableCell>
                     <TableCell className="text-xs">{ot.faena?.nombre || '—'}</TableCell>
                     <TableCell>{getPrioridadBadge(ot.prioridad)}</TableCell>
                     <TableCell>
