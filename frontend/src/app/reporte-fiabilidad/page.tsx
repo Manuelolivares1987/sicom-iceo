@@ -28,6 +28,7 @@ type Equipo = {
   capacidad: string | null; potencia: string | null; vin_chasis: string | null; numero_motor: string | null
   estado_comercial: string | null; faena: string | null; ubicacion: string | null; lugar_fisico: string | null
   zona: string | null
+  gps_lat: number | null; gps_lng: number | null; gps_ts: string | null
   contrato_codigo: string | null; contrato_cliente: string | null
   contratos_dias: Array<{ codigo: string; cliente: string | null; dias: number }> | null
   dias_arriendo_total: number | null
@@ -574,6 +575,17 @@ export default function ReporteFiabilidadPublicoPage() {
                           <button onClick={() => setEquipoSel(d.activo_id)} className="font-mono font-semibold text-blue-700 hover:underline">
                             {d.patente}
                           </button>
+                          {d.gps_lat != null && d.gps_lng != null && (
+                            <a
+                              href={`https://www.google.com/maps?q=${d.gps_lat},${d.gps_lng}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              title={d.gps_ts ? `Última posición GPS: ${new Date(d.gps_ts).toLocaleString('es-CL')}` : 'Ver en el mapa'}
+                              className="mt-0.5 flex w-fit items-center gap-0.5 text-[10px] font-medium text-emerald-600 hover:underline"
+                            >
+                              📍 Ubicación GPS
+                            </a>
+                          )}
                         </td>
                         <td className="px-2 py-1.5 text-gray-600">{d.equipamiento ?? '—'}</td>
                         <td className="px-2 py-1.5 text-gray-500 max-w-[150px] truncate">{d.contrato_cliente ?? d.cliente ?? '—'}</td>
