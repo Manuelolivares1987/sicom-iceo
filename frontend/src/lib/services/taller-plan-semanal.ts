@@ -149,6 +149,7 @@ export type ChecklistV3Item = {
   resultado: string | null
   observacion: string | null
   foto_url: string | null
+  foto_urls: string[] | null
   excluido: boolean
   es_custom: boolean
   /** Profundidad por neumático u otras mediciones del ítem (MIG203). */

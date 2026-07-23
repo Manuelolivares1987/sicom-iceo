@@ -48,7 +48,8 @@ export function useMarcarItem(otId: string) {
     networkMode: 'always',
     mutationFn: (p: {
       instanceItemId: string; instanceId: string
-      resultado?: 'ok' | 'no_ok' | 'na'; observacion?: string | null; file?: File | null
+      resultado?: 'ok' | 'no_ok' | 'na'; observacion?: string | null
+      file?: File | null; files?: (File | Blob)[]
       mediciones?: { pos: string; mm: number | null }[]
     }) => queueItem({ otId, ...p }),
     onSuccess: () => {

@@ -447,8 +447,8 @@ export default function MecanicoOTPage() {
     if (o === undefined || o === (it.observacion ?? '')) return
     marcar.mutate({ instanceItemId: it.instance_item_id, instanceId: it.instance_id, observacion: o })
   }
-  function onPhoto(it: ChecklistV3Item, file: File) {
-    marcar.mutate({ instanceItemId: it.instance_item_id, instanceId: it.instance_id, file })
+  function onPhoto(it: ChecklistV3Item, files: File[]) {
+    if (files.length) marcar.mutate({ instanceItemId: it.instance_item_id, instanceId: it.instance_id, files })
   }
 
   return (
@@ -585,12 +585,23 @@ export default function MecanicoOTPage() {
                     </div>
                   )}
 
-                  {it.foto_url && (
-                    <div className="mt-2">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={it.foto_url} alt="foto" className="h-20 w-20 rounded-lg border object-cover" />
-                    </div>
-                  )}
+                  {(() => {
+                    const evid = it.foto_urls?.length ? it.foto_urls : (it.foto_url ? [it.foto_url] : [])
+                    if (!evid.length) return null
+                    return (
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {evid.map((u, idx) => {
+                          const esVideo = /\.(mp4|mov|webm|m4v|3gp)(\?|$)/i.test(u)
+                          return esVideo ? (
+                            <video key={idx} src={u} controls className="h-20 w-20 rounded-lg border object-cover" />
+                          ) : (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img key={idx} src={u} alt={`evidencia ${idx + 1}`} className="h-20 w-20 rounded-lg border object-cover" />
+                          )
+                        })}
+                      </div>
+                    )
+                  })()}
 
                   <div className="mt-2 flex gap-2">
                     <input type="text" placeholder="Observación…"
@@ -599,14 +610,16 @@ export default function MecanicoOTPage() {
                            onBlur={() => saveObs(it)}
                            className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm" />
                     <button type="button" onClick={() => fileRefs.current[it.instance_item_id]?.click()}
-                            className={`flex h-10 w-10 items-center justify-center rounded-lg border ${
+                            title="Cámara o galería · varias fotos o video"
+                            className={`flex h-10 min-w-10 items-center justify-center gap-1 rounded-lg border px-2 ${
                               it.foto_url ? 'border-green-300 bg-green-50 text-green-600'
                                 : it.requiere_foto ? 'border-blue-300 bg-blue-50 text-blue-600' : 'border-gray-200 text-gray-500'}`}>
                       {marcar.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
+                      <Plus className="h-3 w-3" />
                     </button>
                     <input ref={(el) => { fileRefs.current[it.instance_item_id] = el }} type="file"
-                           accept="image/*" capture="environment" className="hidden"
-                           onChange={(e) => { const f = e.target.files?.[0]; if (f) onPhoto(it, f); e.target.value = '' }} />
+                           accept="image/*,video/*" multiple className="hidden"
+                           onChange={(e) => { const fs = Array.from(e.target.files ?? []) as File[]; if (fs.length) onPhoto(it, fs); e.target.value = '' }} />
                   </div>
                 </div>
               ))}

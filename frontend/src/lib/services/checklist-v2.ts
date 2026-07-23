@@ -98,6 +98,7 @@ export type ChecklistV2Item = {
   valor_numerico: number | null
   observacion: string | null
   foto_url: string | null
+  foto_urls?: string[] | null
   cobrable_override: DefaultCobrable | null
   costo_estimado: number | null
   /** Mediciones estructuradas, p.ej. profundidad por neumático (MIG203). */
@@ -237,6 +238,7 @@ export async function actualizarItem(itemId: string, patch: Partial<ChecklistV2I
     valor_numerico:    patch.valor_numerico,
     observacion:       patch.observacion,
     foto_url:          patch.foto_url,
+    foto_urls:         patch.foto_urls,
     cobrable_override: patch.cobrable_override,
     costo_estimado:    patch.costo_estimado,
     mediciones:        patch.mediciones,
@@ -256,7 +258,9 @@ export async function subirFotoItem(
   file: File | Blob,
 ): Promise<string> {
   const ext  = (file as File).name?.split('.').pop()?.toLowerCase() ?? 'jpg'
-  const path = `checklist-v2/${instanceId}/${itemId}_${Date.now()}.${ext}`
+  // Sufijo aleatorio: varias fotos del mismo ítem pueden subirse en el mismo ms.
+  const rnd  = Math.random().toString(36).slice(2, 8)
+  const path = `checklist-v2/${instanceId}/${itemId}_${Date.now()}_${rnd}.${ext}`
   const { error } = await supabase.storage
     .from(CHECKLIST_BUCKET_FOTOS)
     .upload(path, file, { upsert: false, contentType: (file as File).type || 'image/jpeg' })
