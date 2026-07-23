@@ -89,13 +89,15 @@ export async function getChecklistMecanico(otId: string): Promise<ChecklistV3Ite
   if (pend.length === 0) return base
 
   // Acumular pendientes por ítem (en orden cronológico).
-  const acc = new Map<string, { resultado?: string; observacion?: string | null; foto_blob_id?: string | null; mediciones?: { pos: string; mm: number | null }[] }>()
+  const acc = new Map<string, { resultado?: string; observacion?: string | null; fotos_blob_ids?: string[]; mediciones?: { pos: string; mm: number | null }[] }>()
   for (const p of pend) {
     if (!p.instance_item_id) continue
     const cur = acc.get(p.instance_item_id) ?? {}
     if (p.resultado !== undefined) cur.resultado = p.resultado
     if (p.observacion !== undefined) cur.observacion = p.observacion
-    if (p.foto_blob_id) cur.foto_blob_id = p.foto_blob_id
+    // Fotos pendientes: nuevas (array) o legado (una sola).
+    const nuevas = p.fotos_blob_ids?.length ? p.fotos_blob_ids : (p.foto_blob_id ? [p.foto_blob_id] : [])
+    if (nuevas.length) cur.fotos_blob_ids = [...(cur.fotos_blob_ids ?? []), ...nuevas]
     if (p.mediciones !== undefined) cur.mediciones = p.mediciones
     acc.set(p.instance_item_id, cur)
   }
@@ -103,16 +105,18 @@ export async function getChecklistMecanico(otId: string): Promise<ChecklistV3Ite
   return Promise.all(base.map(async (it) => {
     const a = acc.get(it.instance_item_id)
     if (!a) return it
-    let foto = it.foto_url
-    if (a.foto_blob_id) {
-      const b = await tallerDB().blobs.get(a.foto_blob_id)
-      if (b) foto = URL.createObjectURL(b.blob)
+    // Evidencias ya sincronizadas + las locales pendientes (object URLs).
+    const fotos: string[] = it.foto_urls?.length ? [...it.foto_urls] : (it.foto_url ? [it.foto_url] : [])
+    for (const bid of a.fotos_blob_ids ?? []) {
+      const b = await tallerDB().blobs.get(bid)
+      if (b) fotos.push(URL.createObjectURL(b.blob))
     }
     return {
       ...it,
       resultado: (a.resultado as ChecklistV3Item['resultado']) ?? it.resultado,
       observacion: a.observacion !== undefined ? a.observacion : it.observacion,
-      foto_url: foto,
+      foto_url: fotos[0] ?? it.foto_url,
+      foto_urls: fotos.length ? fotos : it.foto_urls,
       mediciones: a.mediciones !== undefined ? a.mediciones : it.mediciones,
     }
   }))
@@ -219,21 +223,24 @@ export async function queueItem(params: {
   instanceId: string
   resultado?: 'ok' | 'no_ok' | 'na'
   observacion?: string | null
-  file?: File | null
+  files?: (File | Blob)[]
+  file?: File | null   // compat: una sola foto
   mediciones?: { pos: string; mm: number | null }[]
 }): Promise<void> {
   const db = tallerDB()
-  let blobId: string | null = null
-  if (params.file) {
-    blobId = newId()
-    await db.blobs.put({ blob_id: blobId, blob: params.file, mime: params.file.type || 'image/jpeg' })
+  const files = params.files ?? (params.file ? [params.file] : [])
+  const fotosIds: string[] = []
+  for (const f of files) {
+    const bid = newId()
+    await db.blobs.put({ blob_id: bid, blob: f, mime: (f as File).type || 'image/jpeg' })
+    fotosIds.push(bid)
   }
   const row: TallerPending = {
     local_id: newId(), client_uuid: newId(), ot_id: params.otId, kind: 'item',
     instance_item_id: params.instanceItemId, instance_id: params.instanceId,
     resultado: params.resultado,
     observacion: params.observacion,
-    foto_blob_id: blobId,
+    fotos_blob_ids: fotosIds.length ? fotosIds : undefined,
     mediciones: params.mediciones,
     sync_status: 'pending', retries: 0, last_error: null, created_at: new Date().toISOString(),
   }
@@ -294,18 +301,31 @@ export async function syncTallerPending(): Promise<{ ok: number; failed: number 
   for (const p of items) {
     try {
       if (p.kind === 'item') {
-        let fotoUrl: string | undefined
-        if (p.foto_blob_id && p.instance_id && p.instance_item_id) {
-          const b = await db.blobs.get(p.foto_blob_id)
-          if (b) fotoUrl = await subirFotoItem(p.instance_id, p.instance_item_id, b.blob)
+        // Fotos pendientes: nuevas (array) o legado (una sola).
+        const blobIds = p.fotos_blob_ids?.length ? p.fotos_blob_ids : (p.foto_blob_id ? [p.foto_blob_id] : [])
+        const nuevasUrls: string[] = []
+        if (blobIds.length && p.instance_id && p.instance_item_id) {
+          for (const bid of blobIds) {
+            const b = await db.blobs.get(bid)
+            if (b) nuevasUrls.push(await subirFotoItem(p.instance_id, p.instance_item_id, b.blob))
+          }
         }
-        await actualizarItem(p.instance_item_id!, {
-          resultado: p.resultado,
-          observacion: p.observacion ?? undefined,
-          foto_url: fotoUrl,
-          mediciones: p.mediciones,
-        })
-        if (p.foto_blob_id) await db.blobs.delete(p.foto_blob_id)
+        if (nuevasUrls.length && p.instance_item_id) {
+          // Anexar a las evidencias que ya tenga el ítem (no pisar las previas).
+          const { data: cur } = await supabase
+            .from('checklist_v2_instance_item').select('foto_urls').eq('id', p.instance_item_id).single()
+          const prev = ((cur?.foto_urls as string[] | null) ?? []).filter(Boolean)
+          const merged = [...prev, ...nuevasUrls]
+          await actualizarItem(p.instance_item_id, {
+            resultado: p.resultado, observacion: p.observacion ?? undefined,
+            foto_urls: merged, foto_url: merged[0], mediciones: p.mediciones,
+          })
+        } else {
+          await actualizarItem(p.instance_item_id!, {
+            resultado: p.resultado, observacion: p.observacion ?? undefined, mediciones: p.mediciones,
+          })
+        }
+        for (const bid of blobIds) await db.blobs.delete(bid)
       } else if (p.kind === 'recurso') {
         // Subir primero las fotos del repuesto (si las hay)
         const fotosUrls: string[] = []
