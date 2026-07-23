@@ -79,6 +79,7 @@ export interface CreateOTParams {
   prioridad?: Prioridad
   fecha_programada?: string
   responsable_id?: string
+  tecnico_id?: string
   plan_mantenimiento_id?: string | null
   usuario_id?: string
 }
@@ -94,6 +95,7 @@ export async function createOrdenTrabajo(params: CreateOTParams) {
     p_responsable_id: params.responsable_id || null,
     p_plan_mantenimiento_id: params.plan_mantenimiento_id ?? null,
     p_usuario_id: params.usuario_id || null,
+    p_tecnico_id: params.tecnico_id || null,
   })
 
   return { data, error }
