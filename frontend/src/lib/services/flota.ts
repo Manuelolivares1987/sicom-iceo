@@ -330,6 +330,7 @@ export async function getFlotaVehicular() {
 
 export const ESTADO_DIARIO_LABELS: Record<string, string> = {
   A: 'Arrendado',
+  C: 'Contrato',
   D: 'Disponible',
   H: 'En Habilitación',
   R: 'En Recepción',
@@ -343,6 +344,7 @@ export const ESTADO_DIARIO_LABELS: Record<string, string> = {
 
 export const ESTADO_DIARIO_COLORS: Record<string, string> = {
   A: 'bg-green-500 text-white',
+  C: 'bg-teal-600 text-white',
   D: 'bg-blue-500 text-white',
   H: 'bg-amber-400 text-amber-900',
   R: 'bg-purple-500 text-white',
@@ -355,7 +357,7 @@ export const ESTADO_DIARIO_COLORS: Record<string, string> = {
 }
 
 export const ESTADO_DIARIO_SHORT: Record<string, string> = {
-  A: 'A', D: 'D', H: 'H', R: 'R', M: 'M',
+  A: 'A', C: 'C', D: 'D', H: 'H', R: 'R', M: 'M',
   T: 'T', F: 'F', V: 'V', U: 'U', L: 'L',
 }
 

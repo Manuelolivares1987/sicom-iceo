@@ -29,7 +29,18 @@ import { cambiarContratoActivo } from '@/lib/services/contrato-activo'
 import { cargarContratosActivos, crearContratoRapido, type ContratoOption } from '@/lib/services/geocercas'
 import { Building2, Plus, MapPin } from 'lucide-react'
 
-type EstadoCodigo = 'A' | 'D' | 'H' | 'R' | 'M' | 'T' | 'F' | 'V' | 'U' | 'L'
+type EstadoCodigo = 'A' | 'C' | 'D' | 'H' | 'R' | 'M' | 'T' | 'F' | 'V' | 'U' | 'L'
+
+// Ubicación real del equipo según el GPS (fn_activo_geocerca_actual)
+type GpsGeo = {
+  nombre: string | null
+  motivo: string | null
+  cercana_nombre?: string | null
+  cercana_km?: number | null
+  lat?: number | null
+  lng?: number | null
+  ts_gps?: string | null
+}
 type TipoOT = 'preventivo' | 'correctivo' | 'inspeccion' | 'lubricacion'
 type PrioridadOT = 'emergencia' | 'alta' | 'normal' | 'baja'
 
@@ -60,6 +71,7 @@ const ESTADO_OPTIONS: Array<{
   group: 'productivo' | 'no_productivo' | 'mantencion'
 }> = [
   { value: 'A', label: 'A — Arrendado',         group: 'productivo',     helpText: 'Equipo en faena del cliente generando ingreso' },
+  { value: 'C', label: 'C — Contrato',          group: 'productivo',     helpText: 'Bajo contrato de largo plazo (arriendo continuo)' },
   { value: 'U', label: 'U — Uso Interno',       group: 'productivo',     helpText: 'En operación propia o contrato empresa' },
   { value: 'L', label: 'L — Leasing',           group: 'productivo',     helpText: 'Bajo contrato de leasing operativo' },
   { value: 'D', label: 'D — Disponible',        group: 'no_productivo',  helpText: 'Operativo y listo, sin arriendo asignado (pérdida comercial)' },
@@ -120,9 +132,10 @@ export function CambiarEstadoModal({ open, onClose, activo, estadoInicial, fecha
   const [otResponsableId, setOtResponsableId] = useState<string>('')
   const [otDescripcion, setOtDescripcion] = useState('')
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
-  // Lugar físico sugerido desde el GPS (geocerca actual del equipo)
-  const [gpsLugarMsg, setGpsLugarMsg] = useState<string | null>(null)
+  // Ubicación real del equipo por GPS (geocerca actual o coordenada)
+  const [gpsGeo, setGpsGeo] = useState<GpsGeo | null>(null)
   const [gpsLugarLoading, setGpsLugarLoading] = useState(false)
+  const [gpsError, setGpsError] = useState<string | null>(null)
 
   // ── Contratos: opcional cambiar contrato en el mismo flujo ──
   const [contratos, setContratos] = useState<ContratoOption[]>([])
@@ -366,30 +379,32 @@ export function CambiarEstadoModal({ open, onClose, activo, estadoInicial, fecha
     }
   }
 
-  // Rellena el lugar físico con la geocerca donde el GPS ubica al equipo.
-  const usarUbicacionGPS = async () => {
-    if (!activo) return
-    setGpsLugarMsg(null)
-    setGpsLugarLoading(true)
-    try {
-      const { data, error } = await supabase.rpc('fn_activo_geocerca_actual', {
-        p_activo_id: activo.id,
-      })
-      if (error) throw error
-      const res = data as { nombre?: string | null; motivo?: string | null } | null
-      if (res?.nombre) {
-        setUbicacion(res.nombre)
-        setGpsLugarMsg(`Tomado del GPS: ${res.nombre}`)
-      } else if (res?.motivo === 'sin_gps') {
-        setGpsLugarMsg('Este equipo no tiene señal GPS.')
-      } else {
-        setGpsLugarMsg('El equipo está fuera de toda geocerca conocida — solo hay coordenada, sin nombre de lugar.')
+  // Carga la ubicación real del equipo por GPS al abrir el modal.
+  useEffect(() => {
+    if (!open || !activo?.id) return
+    let cancelled = false
+    const load = async () => {
+      setGpsGeo(null)
+      setGpsError(null)
+      setGpsLugarLoading(true)
+      try {
+        const { data, error } = await supabase.rpc('fn_activo_geocerca_actual', {
+          p_activo_id: activo.id,
+        })
+        if (cancelled) return
+        if (error) setGpsError(errorMessage(error, 'No se pudo leer la ubicación GPS'))
+        else setGpsGeo(data as GpsGeo)
+      } finally {
+        if (!cancelled) setGpsLugarLoading(false)
       }
-    } catch (err) {
-      setGpsLugarMsg(errorMessage(err, 'No se pudo leer la ubicación GPS'))
-    } finally {
-      setGpsLugarLoading(false)
     }
+    load()
+    return () => { cancelled = true }
+  }, [open, activo?.id])
+
+  // Copia el nombre de la ubicación GPS al campo editable de lugar físico.
+  const usarUbicacionGPS = () => {
+    if (gpsGeo?.nombre) setUbicacion(gpsGeo.nombre)
   }
 
   const estadoActualBadge = useMemo(() => {
@@ -525,22 +540,68 @@ export function CambiarEstadoModal({ open, onClose, activo, estadoInicial, fecha
             )}
           </div>
 
-          {/* Lugar físico (texto libre) — dónde se encuentra el equipo */}
+          {/* Ubicación REAL por GPS — dónde está físicamente el equipo ahora */}
+          <div className="rounded-lg border border-blue-200 bg-blue-50/60 p-3 text-xs space-y-1">
+            <div className="flex items-center gap-1.5 font-medium text-blue-800">
+              <MapPin className="h-4 w-4" />
+              Ubicación real por GPS
+            </div>
+            {gpsLugarLoading ? (
+              <div className="flex items-center gap-2 text-gray-500"><Spinner className="h-3 w-3" /> Leyendo GPS…</div>
+            ) : gpsError ? (
+              <p className="text-amber-700">{gpsError}</p>
+            ) : gpsGeo?.nombre ? (
+              <div className="space-y-0.5">
+                <div className="text-sm font-semibold text-gray-800">{gpsGeo.nombre}</div>
+                <div className="text-[11px] text-gray-500">
+                  {gpsGeo.ts_gps && `Según GPS ${new Date(gpsGeo.ts_gps).toLocaleString('es-CL')}`}
+                </div>
+              </div>
+            ) : gpsGeo?.motivo === 'sin_gps' ? (
+              <p className="text-gray-500">Este equipo no tiene señal GPS.</p>
+            ) : gpsGeo ? (
+              <div className="space-y-0.5">
+                <div className="text-gray-700">
+                  Fuera de toda geocerca.{' '}
+                  {gpsGeo.cercana_nombre && (
+                    <>Lo más cercano: <span className="font-medium">{gpsGeo.cercana_nombre}</span> (a {gpsGeo.cercana_km} km).</>
+                  )}
+                </div>
+                {gpsGeo.lat != null && gpsGeo.lng != null && (
+                  <a
+                    href={`https://www.google.com/maps?q=${gpsGeo.lat},${gpsGeo.lng}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-blue-700 hover:underline"
+                  >
+                    <MapPin className="h-3 w-3" /> Ver en mapa ({Number(gpsGeo.lat).toFixed(4)}, {Number(gpsGeo.lng).toFixed(4)})
+                  </a>
+                )}
+                <div className="text-[11px] text-gray-500">
+                  {gpsGeo.ts_gps && `Según GPS ${new Date(gpsGeo.ts_gps).toLocaleString('es-CL')}`}
+                  {' · '}No hay geocerca en este punto para nombrarlo.
+                </div>
+              </div>
+            ) : null}
+          </div>
+
+          {/* Lugar físico (texto libre) — dónde se registra el equipo */}
           <div className="space-y-1">
             <div className="flex items-center justify-between">
               <label className="flex items-center gap-1.5 text-xs font-medium text-gray-600">
                 <MapPin className="h-3.5 w-3.5 text-blue-600" />
                 Lugar físico del equipo
               </label>
-              <button
-                type="button"
-                onClick={usarUbicacionGPS}
-                disabled={gpsLugarLoading}
-                className="flex items-center gap-1 rounded-md border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-50"
-              >
-                <MapPin className="h-3 w-3" />
-                {gpsLugarLoading ? 'Leyendo GPS…' : 'Usar ubicación GPS'}
-              </button>
+              {gpsGeo?.nombre && gpsGeo.nombre !== ubicacion && (
+                <button
+                  type="button"
+                  onClick={usarUbicacionGPS}
+                  className="flex items-center gap-1 rounded-md border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700 hover:bg-blue-100"
+                >
+                  <MapPin className="h-3 w-3" />
+                  Usar «{gpsGeo.nombre}»
+                </button>
+              )}
             </div>
             <input
               type="text"
@@ -550,13 +611,9 @@ export function CambiarEstadoModal({ open, onClose, activo, estadoInicial, fecha
               className="w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:border-blue-500 focus:outline-none"
               maxLength={200}
             />
-            {gpsLugarMsg ? (
-              <p className="text-[11px] text-blue-600">{gpsLugarMsg}</p>
-            ) : (
-              <p className="text-[11px] text-gray-400">
-                Dónde está físicamente el equipo. El botón lo detecta desde el GPS (geocerca actual). Queda en el historial de arriendos.
-              </p>
-            )}
+            <p className="text-[11px] text-gray-400">
+              Texto que queda en el historial del equipo. Arriba ves la ubicación real por GPS; usa el botón para copiarla.
+            </p>
           </div>
 
           {/* Operación / zona — se completa sola desde el contrato; si no hay, elígela aquí */}
