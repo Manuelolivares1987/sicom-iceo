@@ -30,6 +30,7 @@ const crearOTSchema = z.object({
   prioridad: z.enum(['emergencia', 'urgente', 'alta', 'normal', 'baja']),
   fecha_programada: z.string().optional(),
   responsable_id: z.string().optional(),
+  tecnico_id: z.string().optional(),
   observaciones: z.string().optional(),
 })
 
@@ -85,6 +86,7 @@ export function CrearOTModal({
   // Dynamic option lists loaded from Supabase
   const [activos, setActivos] = useState<{ value: string; label: string; faena_id?: string }[]>([])
   const [responsables, setResponsables] = useState<{ value: string; label: string }[]>([])
+  const [tecnicos, setTecnicos] = useState<{ value: string; label: string }[]>([])
   const [loadingData, setLoadingData] = useState(false)
   const [rpcError, setRpcError] = useState<string | null>(null)
 
@@ -133,8 +135,14 @@ export function CrearOTModal({
         .select('id, nombre_completo, cargo')
         .eq('activo', true)
         .order('nombre_completo'),
+      // Técnicos/mecánicos reales del taller (tabla taller_tecnicos).
+      supabase
+        .from('taller_tecnicos')
+        .select('id, nombre, especialidad, operacion')
+        .eq('activo', true)
+        .order('nombre'),
     ])
-      .then(([activosRes, responsablesRes]) => {
+      .then(([activosRes, responsablesRes, tecnicosRes]) => {
         if (activosRes.data) {
           setActivos(
             activosRes.data.map((a: any) => ({
@@ -149,6 +157,14 @@ export function CrearOTModal({
             responsablesRes.data.map((r: any) => ({
               value: r.id,
               label: `${r.nombre_completo}${r.cargo ? ` (${r.cargo})` : ''}`,
+            }))
+          )
+        }
+        if (tecnicosRes.data) {
+          setTecnicos(
+            tecnicosRes.data.map((t: any) => ({
+              value: t.id,
+              label: `${t.nombre}${t.especialidad ? ` · ${t.especialidad}` : ''}${t.operacion ? ` (${t.operacion})` : ''}`,
             }))
           )
         }
@@ -172,6 +188,7 @@ export function CrearOTModal({
         prioridad: values.prioridad as Prioridad,
         fecha_programada: values.fecha_programada || undefined,
         responsable_id: values.responsable_id || undefined,
+        tecnico_id: values.tecnico_id || undefined,
         usuario_id: user?.id || undefined,
       },
       {
@@ -286,6 +303,25 @@ export function CrearOTModal({
             </select>
             {errors.responsable_id && (
               <p className="mt-1 text-xs text-red-500">{errors.responsable_id.message}</p>
+            )}
+          </div>
+
+          {/* Técnico / Mecánico (tabla taller_tecnicos) */}
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">Técnico / Mecánico</label>
+            <select
+              {...register('tecnico_id')}
+              className="h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm focus:border-pillado-green-500 focus:outline-none focus:ring-2 focus:ring-pillado-green-500/20"
+            >
+              <option value="">Seleccione un técnico...</option>
+              {tecnicos.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+            {tecnicos.length === 0 && (
+              <p className="mt-1 text-xs text-gray-400">No hay técnicos activos cargados en el taller.</p>
             )}
           </div>
 
