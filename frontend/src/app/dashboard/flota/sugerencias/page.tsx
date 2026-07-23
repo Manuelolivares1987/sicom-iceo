@@ -13,7 +13,7 @@ import { useSugerenciasEstado, useConfirmarEstado } from '@/hooks/use-sugerencia
 import { CambiarEstadoModal } from '@/components/flota/cambiar-estado-modal'
 import { supabase } from '@/lib/supabase'
 
-type EstadoCodigo = 'A' | 'D' | 'H' | 'R' | 'M' | 'T' | 'F' | 'V' | 'U' | 'L'
+type EstadoCodigo = 'A' | 'C' | 'D' | 'H' | 'R' | 'M' | 'T' | 'F' | 'V' | 'U' | 'L'
 type ActivoModal = {
   id: string
   patente?: string | null
