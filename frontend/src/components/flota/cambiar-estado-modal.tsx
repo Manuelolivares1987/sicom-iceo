@@ -120,6 +120,9 @@ export function CambiarEstadoModal({ open, onClose, activo, estadoInicial, fecha
   const [otResponsableId, setOtResponsableId] = useState<string>('')
   const [otDescripcion, setOtDescripcion] = useState('')
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  // Lugar físico sugerido desde el GPS (geocerca actual del equipo)
+  const [gpsLugarMsg, setGpsLugarMsg] = useState<string | null>(null)
+  const [gpsLugarLoading, setGpsLugarLoading] = useState(false)
 
   // ── Contratos: opcional cambiar contrato en el mismo flujo ──
   const [contratos, setContratos] = useState<ContratoOption[]>([])
@@ -244,14 +247,13 @@ export function CambiarEstadoModal({ open, onClose, activo, estadoInicial, fecha
   }, [nuevoEstado])
 
   const requiereOT = nuevoEstado === 'M' || nuevoEstado === 'T' || nuevoEstado === 'F'
-  // La verificación ready-to-rent solo aplica al TRANSICIONAR a disponible,
-  // igual que el trigger fn_validar_cambio_disponible en la BD (que exige
-  // OLD.estado_comercial != 'disponible'). Si el equipo YA está disponible,
-  // cambiar o quitar el contrato no requiere re-verificación.
+  // La verificación ready-to-rent solo se ADVIERTE (no bloquea) al TRANSICIONAR
+  // a disponible, y solo si el equipo NO estaba ya disponible. La gestión de la
+  // verificación la hace el planificador (decisión Manuel 2026-07-22); aquí solo
+  // se muestra el aviso, nunca impide guardar. Espeja el trigger
+  // fn_validar_cambio_disponible de la BD (que ahora también solo advierte).
   const yaDisponible = activo?.estado_comercial === 'disponible'
   const requiereVerificacion = nuevoEstado === 'D' && !yaDisponible
-  const bloqueadoPorVerificacion =
-    requiereVerificacion && !loadingVerif && !verifVigente
 
   const handleSubmit = async () => {
     setErrorMsg(null)
@@ -274,14 +276,8 @@ export function CambiarEstadoModal({ open, onClose, activo, estadoInicial, fecha
     const debeActualizarEstado =
       nuevoEstado !== estadoExistente || (crearOT && requiereOT) || estadoExistente === null
 
-    // El gate de verificación (Disponible) solo aplica si vamos a (re)marcar el estado.
-    if (debeActualizarEstado && bloqueadoPorVerificacion) {
-      setErrorMsg(
-        'Para marcar "Disponible" se requiere una verificación ready-to-rent aprobada y vigente. ' +
-        'Usa el botón "Iniciar verificación" arriba.',
-      )
-      return
-    }
+    // La verificación ready-to-rent ya NO bloquea: si falta, la BD registra una
+    // advertencia y el planificador la gestiona. No se corta el guardado aquí.
 
     try {
       const lugarTrim = ubicacion.trim()
@@ -367,6 +363,32 @@ export function CambiarEstadoModal({ open, onClose, activo, estadoInicial, fecha
     } catch (err) {
       const message = errorMessage(err, 'Error al actualizar estado')
       setErrorMsg(message)
+    }
+  }
+
+  // Rellena el lugar físico con la geocerca donde el GPS ubica al equipo.
+  const usarUbicacionGPS = async () => {
+    if (!activo) return
+    setGpsLugarMsg(null)
+    setGpsLugarLoading(true)
+    try {
+      const { data, error } = await supabase.rpc('fn_activo_geocerca_actual', {
+        p_activo_id: activo.id,
+      })
+      if (error) throw error
+      const res = data as { nombre?: string | null; motivo?: string | null } | null
+      if (res?.nombre) {
+        setUbicacion(res.nombre)
+        setGpsLugarMsg(`Tomado del GPS: ${res.nombre}`)
+      } else if (res?.motivo === 'sin_gps') {
+        setGpsLugarMsg('Este equipo no tiene señal GPS.')
+      } else {
+        setGpsLugarMsg('El equipo está fuera de toda geocerca conocida — solo hay coordenada, sin nombre de lugar.')
+      }
+    } catch (err) {
+      setGpsLugarMsg(errorMessage(err, 'No se pudo leer la ubicación GPS'))
+    } finally {
+      setGpsLugarLoading(false)
     }
   }
 
@@ -505,10 +527,21 @@ export function CambiarEstadoModal({ open, onClose, activo, estadoInicial, fecha
 
           {/* Lugar físico (texto libre) — dónde se encuentra el equipo */}
           <div className="space-y-1">
-            <label className="flex items-center gap-1.5 text-xs font-medium text-gray-600">
-              <MapPin className="h-3.5 w-3.5 text-blue-600" />
-              Lugar físico del equipo
-            </label>
+            <div className="flex items-center justify-between">
+              <label className="flex items-center gap-1.5 text-xs font-medium text-gray-600">
+                <MapPin className="h-3.5 w-3.5 text-blue-600" />
+                Lugar físico del equipo
+              </label>
+              <button
+                type="button"
+                onClick={usarUbicacionGPS}
+                disabled={gpsLugarLoading}
+                className="flex items-center gap-1 rounded-md border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-50"
+              >
+                <MapPin className="h-3 w-3" />
+                {gpsLugarLoading ? 'Leyendo GPS…' : 'Usar ubicación GPS'}
+              </button>
+            </div>
             <input
               type="text"
               value={ubicacion}
@@ -517,9 +550,13 @@ export function CambiarEstadoModal({ open, onClose, activo, estadoInicial, fecha
               className="w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:border-blue-500 focus:outline-none"
               maxLength={200}
             />
-            <p className="text-[11px] text-gray-400">
-              Dónde está físicamente el equipo. Queda en el historial de arriendos del equipo.
-            </p>
+            {gpsLugarMsg ? (
+              <p className="text-[11px] text-blue-600">{gpsLugarMsg}</p>
+            ) : (
+              <p className="text-[11px] text-gray-400">
+                Dónde está físicamente el equipo. El botón lo detecta desde el GPS (geocerca actual). Queda en el historial de arriendos.
+              </p>
+            )}
           </div>
 
           {/* Operación / zona — se completa sola desde el contrato; si no hay, elígela aquí */}
@@ -740,7 +777,7 @@ export function CambiarEstadoModal({ open, onClose, activo, estadoInicial, fecha
           </div>
         )}
 
-        {/* ── Ready-to-rent: bloqueo si pasa a D sin verificación ── */}
+        {/* ── Ready-to-rent: advertencia (no bloquea) si pasa a D sin verificación ── */}
         {requiereVerificacion && !loadingVerif && (
           <>
             {verifVigente ? (
@@ -757,10 +794,10 @@ export function CambiarEstadoModal({ open, onClose, activo, estadoInicial, fecha
                 <div className="flex gap-2">
                   <AlertTriangle className="h-5 w-5 shrink-0" />
                   <div>
-                    <strong>Verificación ready-to-rent requerida.</strong> Antes de marcar
-                    este equipo como disponible para arriendo, debe ejecutarse el checklist
-                    de 55 ítems + road test + doble firma. Esto previene el incidente de
-                    arrendar un equipo sin validar.
+                    <strong>Sin verificación ready-to-rent vigente.</strong> Puedes marcarlo
+                    disponible igual — el planificador debe gestionar la verificación
+                    (checklist de 55 ítems + road test + doble firma) antes de arrendarlo.
+                    Este aviso queda registrado.
                   </div>
                 </div>
                 <Button
@@ -868,7 +905,7 @@ export function CambiarEstadoModal({ open, onClose, activo, estadoInicial, fecha
           variant="primary"
           onClick={handleSubmit}
           loading={mutation.isPending}
-          disabled={bloqueadoPorVerificacion || fechaInvalida}
+          disabled={fechaInvalida}
         >
           {esFuturo ? 'Programar cambio' : 'Guardar cambio'}
         </Button>
