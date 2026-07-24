@@ -5,7 +5,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNetworkStatus } from '@/hooks/use-calama-offline'
 import {
   getOTs, getChecklistMecanico, queueItem, queueTiming, syncTallerPending, getPendingCount,
-  prepareTallerOffline, getRecursosMecanico, queueRecurso, type MecanicoOT,
+  prepareTallerOffline, getRecursosMecanico, queueRecurso,
+  getNotasMecanico, queueNota, type MecanicoOT,
 } from '@/lib/offline/taller-mecanico-sync'
 
 export { useNetworkStatus }
@@ -14,6 +15,7 @@ const KEY_OTS = ['mec-ots'] as const
 const KEY_PENDING = ['mec-pending'] as const
 const keyChecklist = (otId: string) => ['mec-checklist', otId] as const
 const keyRecursos = (otId: string) => ['mec-recursos', otId] as const
+const keyNotas = (otId: string) => ['mec-notas', otId] as const
 
 export function useMecanicoOTs() {
   return useQuery({
@@ -99,6 +101,28 @@ export function useSolicitarRecurso(otId: string) {
     }) => queueRecurso({ otId, ...p }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: keyRecursos(otId) })
+      qc.invalidateQueries({ queryKey: KEY_PENDING })
+    },
+  })
+}
+
+export function useNotasOT(otId: string | null) {
+  return useQuery({
+    queryKey: otId ? keyNotas(otId) : ['mec-notas', 'none'],
+    queryFn: () => getNotasMecanico(otId!),
+    enabled: !!otId,
+    networkMode: 'always',
+  })
+}
+
+export function useAgregarNota(otId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    networkMode: 'always',
+    mutationFn: (p: { texto: string; autor?: string | null; fotos?: (File | Blob)[] }) =>
+      queueNota({ otId, ...p }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: keyNotas(otId) })
       qc.invalidateQueries({ queryKey: KEY_PENDING })
     },
   })

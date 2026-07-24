@@ -15,7 +15,7 @@ export type TallerPending = {
   local_id: string
   client_uuid: string
   ot_id: string
-  kind: 'item' | 'timing' | 'recurso'
+  kind: 'item' | 'timing' | 'recurso' | 'nota'
   // kind = 'item' (marcar resultado / observación / foto de una tarea)
   instance_item_id?: string
   instance_id?: string
@@ -37,7 +37,10 @@ export type TallerPending = {
   cantidad?: number
   comentario?: string | null
   solicitado_nombre?: string | null
-  fotos_blob_ids?: string[]        // fotos del repuesto pendientes de subir (MIG198)
+  fotos_blob_ids?: string[]        // fotos del repuesto/nota pendientes de subir
+  // kind = 'nota' (nota con foto del operador como anexo, MIG249)
+  nota_texto?: string | null
+  nota_autor?: string | null
   // control
   sync_status: 'pending' | 'error'
   retries: number

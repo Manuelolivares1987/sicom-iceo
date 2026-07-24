@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import {
   ArrowLeft, Camera, Check, X, Minus, Play, Pause, CheckCircle2, Loader2, WifiOff, AlertTriangle, Clock,
-  Package, Plus, Gauge, ChevronDown,
+  Package, Plus, Gauge, ChevronDown, StickyNote,
 } from 'lucide-react'
 import { Spinner } from '@/components/ui/spinner'
 import { Button } from '@/components/ui/button'
@@ -19,6 +19,7 @@ import { buscarProductos } from '@/lib/services/ot-materiales'
 import {
   useMecanicoOTs, useMecanicoChecklist, useMarcarItem, useTimingMecanico,
   useAutoSyncTaller, useNetworkStatus, useRecursosOT, useSolicitarRecurso,
+  useNotasOT, useAgregarNota,
 } from '@/hooks/use-taller-mecanico'
 
 function dataUrlToBlob(dataUrl: string): Blob {
@@ -371,6 +372,119 @@ function RecursosSection({ otId, online, prefill, onPrefillConsumido }: {
   )
 }
 
+// Notas con foto del operador como anexo de la OT (las ve el jefe). MIG249.
+function NotasSection({ otId }: { otId: string }) {
+  const { data: notas } = useNotasOT(otId)
+  const agregar = useAgregarNota(otId)
+  const [abierto, setAbierto] = useState(false)
+  const [texto, setTexto] = useState('')
+  const [fotos, setFotos] = useState<{ file: File; url: string }[]>([])
+  const fotoRef = useRef<HTMLInputElement | null>(null)
+
+  function addFotos(files: File[]) {
+    setFotos((p) => [...p, ...files.map((f) => ({ file: f, url: URL.createObjectURL(f) }))].slice(0, 5))
+  }
+  function quitarFoto(i: number) {
+    setFotos((p) => { URL.revokeObjectURL(p[i].url); return p.filter((_, j) => j !== i) })
+  }
+
+  function guardar() {
+    if (!texto.trim()) return
+    const nombre = typeof window !== 'undefined' ? localStorage.getItem('taller-mecanico') : null
+    agregar.mutate(
+      { texto: texto.trim(), autor: nombre, fotos: fotos.map((f) => f.file) },
+      { onSuccess: () => {
+          fotos.forEach((f) => URL.revokeObjectURL(f.url))
+          setTexto(''); setFotos([]); setAbierto(false)
+        } },
+    )
+  }
+
+  const lista = notas ?? []
+
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white p-3">
+      <div className="flex items-center justify-between">
+        <h2 className="flex items-center gap-1.5 text-sm font-semibold text-gray-800">
+          <StickyNote className="h-4 w-4 text-blue-600" /> Notas / anexos
+          {lista.length > 0 && <span className="text-xs font-normal text-gray-400">({lista.length})</span>}
+        </h2>
+        <button onClick={() => setAbierto((v) => !v)}
+                className="flex items-center gap-1 rounded-lg bg-blue-600 px-2.5 py-1.5 text-xs font-semibold text-white">
+          <Plus className="h-3.5 w-3.5" /> Nota
+        </button>
+      </div>
+
+      {lista.length === 0 && !abierto && (
+        <p className="mt-2 text-xs text-gray-400">¿Se escapó algo del checklist? Deja una nota con foto para el jefe de taller.</p>
+      )}
+
+      {abierto && (
+        <div className="mt-2 space-y-2 rounded-lg border border-blue-100 bg-blue-50/50 p-2">
+          <textarea
+            value={texto} onChange={(e) => setTexto(e.target.value)}
+            placeholder="Escribe la nota (lo que viste, un detalle, una observación…)"
+            className="min-h-[70px] w-full rounded-lg border border-gray-200 px-3 py-2 text-sm" maxLength={1000} />
+          {fotos.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {fotos.map((f, i) => (
+                <div key={i} className="relative">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={f.url} alt={`foto ${i + 1}`} className="h-16 w-16 rounded-lg border object-cover" />
+                  <button onClick={() => quitarFoto(i)}
+                          className="absolute -right-1.5 -top-1.5 rounded-full bg-white p-0.5 shadow border">
+                    <X className="h-3 w-3 text-gray-600" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={() => fotoRef.current?.click()}
+                    className="flex items-center gap-1 rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-600">
+              <Camera className="h-3.5 w-3.5" /> Foto{fotos.length ? ` (${fotos.length})` : ''}
+            </button>
+            <input ref={fotoRef} type="file" accept="image/*,video/*" multiple className="hidden"
+                   onChange={(e) => { const fs = Array.from(e.target.files ?? []) as File[]; if (fs.length) addFotos(fs); e.target.value = '' }} />
+            <button onClick={guardar} disabled={!texto.trim() || agregar.isPending}
+                    className="ml-auto flex items-center gap-1 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50">
+              {agregar.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+              Guardar
+            </button>
+          </div>
+        </div>
+      )}
+
+      {lista.length > 0 && (
+        <div className="mt-2 space-y-1.5">
+          {lista.map((n) => (
+            <div key={n.id} className="rounded-lg border border-gray-100 bg-gray-50 px-2.5 py-2">
+              <p className="text-xs text-gray-800 whitespace-pre-wrap">{n.texto}</p>
+              {n.fotos.length > 0 && (
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                  {n.fotos.map((url, i) => {
+                    const esVideo = /\.(mp4|mov|webm|m4v|3gp)(\?|$)/i.test(url)
+                    return esVideo ? (
+                      <video key={i} src={url} controls className="h-12 w-12 rounded-lg border object-cover" />
+                    ) : (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img key={i} src={url} alt={`foto ${i + 1}`} onClick={() => window.open(url, '_blank')}
+                           className="h-12 w-12 rounded-lg border object-cover" />
+                    )
+                  })}
+                </div>
+              )}
+              <p className="mt-0.5 text-[10px] text-gray-400">
+                {n.autor ? `${n.autor} · ` : ''}{new Date(n.created_at).toLocaleString('es-CL')}
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function MecanicoOTPage() {
   useAutoSyncTaller()
   const params = useParams()
@@ -551,6 +665,9 @@ export default function MecanicoOTPage() {
       {/* Repuestos y materiales para reparar (los valida el jefe) */}
       <RecursosSection otId={otId} online={online}
                        prefill={prefillRecurso} onPrefillConsumido={() => setPrefillRecurso(null)} />
+
+      {/* Notas con foto (anexo para el jefe, por si se escapa algo del checklist) */}
+      <NotasSection otId={otId} />
 
       {/* Checklist */}
       {isLoading ? (
