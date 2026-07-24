@@ -9,6 +9,7 @@ import { getChecklistV3OT, type ChecklistV3Item } from '@/lib/services/taller-pl
 import { actualizarItem, subirFotoItem } from '@/lib/services/checklist-v2'
 import { iniciarOT, pausarOT } from '@/lib/services/ordenes-trabajo'
 import { getRecursosOT, solicitarRecurso, subirFotoRecurso, type OTRecurso } from '@/lib/services/ot-recursos'
+import { getNotasOT, subirFotoNota, agregarNotaOT, type OTNota } from '@/lib/services/ot-notas'
 import { tallerDB, newId, type TallerPending } from './taller-db'
 
 const FIRMA_BUCKET = 'calama-firmas'
@@ -216,6 +217,75 @@ export async function queueRecurso(params: {
   }
 }
 
+// ── Notas con foto (anexo del operador, MIG249) ─────────────────────────────
+async function fetchAndCacheNotas(otId: string): Promise<OTNota[]> {
+  const items = await getNotasOT(otId)
+  await tallerDB().cache.put({ key: `notas:${otId}`, value: items, updated_at: new Date().toISOString() })
+  return items
+}
+
+async function getCachedNotas(otId: string): Promise<OTNota[]> {
+  const row = await tallerDB().cache.get(`notas:${otId}`)
+  return (row?.value as OTNota[]) ?? []
+}
+
+/** Notas de la OT con las pendientes de sincronizar encima (para la UI). */
+export async function getNotasMecanico(otId: string): Promise<OTNota[]> {
+  let base: OTNota[]
+  if (isOnline()) {
+    try { base = await fetchAndCacheNotas(otId) } catch { base = await getCachedNotas(otId) }
+  } else {
+    base = await getCachedNotas(otId)
+  }
+  const pend = (await tallerDB().pending.where('ot_id').equals(otId).toArray())
+    .filter((p) => p.kind === 'nota')
+    .sort((a, b) => a.created_at.localeCompare(b.created_at))
+  const locales: OTNota[] = await Promise.all(pend.map(async (p) => {
+    const fotos: string[] = []
+    for (const bid of p.fotos_blob_ids ?? []) {
+      const b = await tallerDB().blobs.get(bid)
+      if (b) fotos.push(URL.createObjectURL(b.blob))
+    }
+    return {
+      id: p.client_uuid, ot_id: otId, texto: p.nota_texto ?? '',
+      fotos, autor: p.nota_autor ?? null, origen: 'operador',
+      created_at: p.created_at, client_uuid: p.client_uuid,
+    }
+  }))
+  // Evitar duplicados cuando la nota ya llegó al servidor (mismo client_uuid).
+  const enServer = new Set(base.map((n) => n.client_uuid).filter(Boolean))
+  return [...locales.filter((l) => !enServer.has(l.client_uuid)).reverse(), ...base]
+}
+
+export async function queueNota(params: {
+  otId: string
+  texto: string
+  autor?: string | null
+  fotos?: (File | Blob)[]
+}): Promise<void> {
+  const db = tallerDB()
+  const fotosIds: string[] = []
+  for (const f of params.fotos ?? []) {
+    const bid = newId()
+    await db.blobs.put({ blob_id: bid, blob: f, mime: (f as File).type || 'image/jpeg' })
+    fotosIds.push(bid)
+  }
+  const row: TallerPending = {
+    local_id: newId(), client_uuid: newId(), ot_id: params.otId, kind: 'nota',
+    nota_texto: params.texto, nota_autor: params.autor ?? null,
+    fotos_blob_ids: fotosIds.length ? fotosIds : undefined,
+    sync_status: 'pending', retries: 0, last_error: null, created_at: new Date().toISOString(),
+  }
+  await db.pending.put(row)
+  if (isOnline()) {
+    try { await syncTallerPending() } catch { /* queda en cola */ }
+    const after = await db.pending.get(row.local_id)
+    if (after?.sync_status === 'error') {
+      throw new Error(after.last_error ?? 'El servidor rechazó la nota')
+    }
+  }
+}
+
 // ── Encolar cambios ──────────────────────────────────────────────────────────
 export async function queueItem(params: {
   otId: string
@@ -341,6 +411,18 @@ export async function syncTallerPending(): Promise<{ ok: number; failed: number 
           clientUuid: p.client_uuid,   // idempotente: reintentos no duplican
           fotos: fotosUrls.length ? fotosUrls : null,
           instanceItemId: p.instance_item_id ?? null,
+        })
+        for (const bid of p.fotos_blob_ids ?? []) await db.blobs.delete(bid)
+      } else if (p.kind === 'nota') {
+        // Subir las fotos de la nota, luego insertarla (idempotente por client_uuid).
+        const fotosUrls: string[] = []
+        for (const bid of p.fotos_blob_ids ?? []) {
+          const b = await db.blobs.get(bid)
+          if (b) fotosUrls.push(await subirFotoNota(p.ot_id, b.blob))
+        }
+        await agregarNotaOT({
+          otId: p.ot_id, texto: p.nota_texto ?? '',
+          autor: p.nota_autor, fotos: fotosUrls, clientUuid: p.client_uuid,
         })
         for (const bid of p.fotos_blob_ids ?? []) await db.blobs.delete(bid)
       } else if (p.accion === 'finalizar') {

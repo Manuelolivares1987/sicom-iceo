@@ -41,6 +41,7 @@ import {
   Lock,
   Unlock,
   Trash2,
+  StickyNote,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -632,6 +633,50 @@ function EvidenciasTab({ otId, disabled }: { otId: string; disabled?: boolean })
           Sin evidencias
         </div>
       )}
+
+      {/* Notas del operador (anexo desde la app de taller, tipo='nota') */}
+      {(() => {
+        const notas = evidenciasList.filter((e: any) => e.tipo === 'nota')
+        if (notas.length === 0) return null
+        return (
+          <div className="rounded-lg border border-blue-200 bg-blue-50/40 p-3">
+            <h4 className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-blue-800">
+              <StickyNote className="h-4 w-4" /> Notas del operador ({notas.length})
+              <span className="text-[11px] font-normal text-gray-500">— anexos por si se escapó algo del checklist</span>
+            </h4>
+            <div className="space-y-2">
+              {notas.map((n: any) => {
+                const meta = (n.metadata ?? {}) as Record<string, any>
+                const fotos: string[] = Array.isArray(meta.fotos)
+                  ? meta.fotos.filter(Boolean)
+                  : (n.archivo_url ? [n.archivo_url] : [])
+                return (
+                  <div key={n.id} className="rounded-lg border border-gray-100 bg-white px-3 py-2">
+                    <p className="whitespace-pre-wrap text-sm text-gray-800">{n.descripcion}</p>
+                    {fotos.length > 0 && (
+                      <div className="mt-1.5 flex flex-wrap gap-1.5">
+                        {fotos.map((url: string, i: number) => {
+                          const esVideo = /\.(mp4|mov|webm|m4v|3gp)(\?|$)/i.test(url)
+                          return esVideo ? (
+                            <video key={i} src={url} controls className="h-16 w-16 rounded-lg border object-cover" />
+                          ) : (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img key={i} src={url} alt={`nota ${i + 1}`} onClick={() => window.open(url, '_blank')}
+                                 className="h-16 w-16 cursor-pointer rounded-lg border object-cover" />
+                          )
+                        })}
+                      </div>
+                    )}
+                    <p className="mt-1 text-[11px] text-gray-400">
+                      {meta.autor ? `${meta.autor} · ` : ''}{new Date(n.created_at).toLocaleString('es-CL')}
+                    </p>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )
+      })()}
 
       {/* Upload controls */}
       <div className="space-y-3">
