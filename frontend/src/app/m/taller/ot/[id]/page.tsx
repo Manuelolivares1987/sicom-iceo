@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import {
   ArrowLeft, Camera, Check, X, Minus, Play, Pause, CheckCircle2, Loader2, WifiOff, AlertTriangle, Clock,
-  Package, Plus, Gauge,
+  Package, Plus, Gauge, ChevronDown,
 } from 'lucide-react'
 import { Spinner } from '@/components/ui/spinner'
 import { Button } from '@/components/ui/button'
@@ -408,6 +408,27 @@ export default function MecanicoOTPage() {
     return g
   }, [visibles])
 
+  // Bloques abiertos (colapsables). Arrancan COLAPSADOS para no mostrar un mar
+  // de tareas: el operador abre el bloque que va a trabajar. Al abrir la OT se
+  // despliega el primer bloque con tareas pendientes para no partir en blanco.
+  const [bloquesAbiertos, setBloquesAbiertos] = useState<Set<string>>(new Set())
+  const [autoAbierto, setAutoAbierto] = useState(false)
+  useEffect(() => {
+    if (autoAbierto || grupos.length === 0) return
+    const primerPendiente = grupos.find((g) =>
+      g.items.some((i) => !i.resultado || i.resultado === 'pendiente'))
+    setBloquesAbiertos(new Set([(primerPendiente ?? grupos[0]).bloque]))
+    setAutoAbierto(true)
+  }, [grupos, autoAbierto])
+  function toggleBloque(bloque: string) {
+    setBloquesAbiertos((prev) => {
+      const next = new Set(prev)
+      if (next.has(bloque)) next.delete(bloque)
+      else next.add(bloque)
+      return next
+    })
+  }
+
   const total = visibles.length
   const hechos = visibles.filter((i) => i.resultado && i.resultado !== 'pendiente').length
   const pendientesOblig = visibles.filter((i) => i.obligatorio && (!i.resultado || i.resultado === 'pendiente')).length
@@ -537,11 +558,26 @@ export default function MecanicoOTPage() {
       ) : total === 0 ? (
         <p className="py-8 text-center text-sm text-gray-400">Esta OT no tiene checklist (¿se cargó con conexión?).</p>
       ) : (
-        grupos.map((g) => (
+        grupos.map((g) => {
+          const abierto = bloquesAbiertos.has(g.bloque)
+          const nTotal = g.items.length
+          const nHechas = g.items.filter((i) => i.resultado && i.resultado !== 'pendiente').length
+          const completo = nHechas === nTotal
+          return (
           <div key={g.bloque}>
-            <div className="sticky top-0 z-10 bg-gray-100 rounded px-2 py-1 text-xs font-semibold text-gray-700">
-              {bloqueLabel(g.bloque)}
-            </div>
+            <button
+              type="button"
+              onClick={() => toggleBloque(g.bloque)}
+              aria-expanded={abierto}
+              className="sticky top-0 z-10 flex w-full items-center gap-2 rounded bg-gray-100 px-2 py-2 text-left active:bg-gray-200">
+              <ChevronDown className={`h-4 w-4 shrink-0 text-gray-500 transition-transform ${abierto ? '' : '-rotate-90'}`} />
+              <span className="text-xs font-semibold text-gray-700">{bloqueLabel(g.bloque)}</span>
+              <span className={`ml-auto shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                completo ? 'bg-green-100 text-green-700' : 'bg-white text-gray-500'}`}>
+                {completo && <Check className="mr-0.5 inline h-2.5 w-2.5" />}{nHechas}/{nTotal}
+              </span>
+            </button>
+            {abierto && (
             <div className="space-y-2 pt-2">
               {g.items.map((it) => (
                 <div key={it.instance_item_id} className="rounded-xl border border-gray-200 bg-white p-3">
@@ -624,8 +660,10 @@ export default function MecanicoOTPage() {
                 </div>
               ))}
             </div>
+            )}
           </div>
-        ))
+          )
+        })
       )}
 
       {/* Modal finalizar con firma del técnico */}
