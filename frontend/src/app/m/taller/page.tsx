@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
-  Wrench, ChevronRight, RefreshCw, WifiOff, CloudOff, CheckCircle2, Play, Pause, User, LogOut,
+  Wrench, ChevronRight, ChevronDown, RefreshCw, WifiOff, CloudOff, CheckCircle2, Play, Pause, User, LogOut,
 } from 'lucide-react'
 import { Spinner } from '@/components/ui/spinner'
 import { useAuth } from '@/contexts/auth-context'
@@ -130,6 +130,18 @@ export default function MecanicoHomePage() {
       .map(([fecha, items]) => ({ fecha: fecha || null, label: diaLabel(fecha || null), items }))
   }, [misOts])
 
+  // Días plegados (colapsables). Por defecto todos desplegados; el operador
+  // pliega los que no le interesan para ver mejor los del día.
+  const [diasPlegados, setDiasPlegados] = useState<Set<string>>(new Set())
+  function toggleDia(clave: string) {
+    setDiasPlegados((prev) => {
+      const next = new Set(prev)
+      if (next.has(clave)) next.delete(clave)
+      else next.add(clave)
+      return next
+    })
+  }
+
   return (
     <div className="p-3 space-y-3">
       {/* Header */}
@@ -247,16 +259,24 @@ export default function MecanicoHomePage() {
         </p>
       ) : (
         <div className="space-y-4">
-          {gruposPorDia.map((grupo) => (
-            <div key={grupo.fecha ?? 'sin-fecha'} className="space-y-2">
-              {/* Encabezado del día (misma agrupación que el plan del jefe) */}
-              <div className="sticky top-0 z-10 flex items-center gap-2 rounded-lg bg-gray-100 px-2.5 py-1.5">
+          {gruposPorDia.map((grupo) => {
+            const clave = grupo.fecha ?? 'sin-fecha'
+            const plegado = diasPlegados.has(clave)
+            return (
+            <div key={clave} className="space-y-2">
+              {/* Encabezado del día — pulsable para plegar/desplegar */}
+              <button
+                type="button"
+                onClick={() => toggleDia(clave)}
+                aria-expanded={!plegado}
+                className="sticky top-0 z-10 flex w-full items-center gap-2 rounded-lg bg-gray-100 px-2.5 py-2 active:bg-gray-200">
+                <ChevronDown className={`h-4 w-4 text-gray-500 transition-transform ${plegado ? '-rotate-90' : ''}`} />
                 <span className="text-xs font-semibold text-gray-700">{grupo.label}</span>
                 <span className="ml-auto rounded-full bg-white px-2 py-0.5 text-[10px] font-medium text-gray-500">
                   {grupo.items.length} OT{grupo.items.length !== 1 ? 's' : ''}
                 </span>
-              </div>
-              {grupo.items.map((o) => {
+              </button>
+              {!plegado && grupo.items.map((o) => {
                 const b = estadoBadge(o.ot_estado)
                 const Icon = b.icon
                 const total = o.checklist_total ?? 0
@@ -295,7 +315,8 @@ export default function MecanicoHomePage() {
                 )
               })}
             </div>
-          ))}
+            )
+          })}
         </div>
       )}
     </div>
