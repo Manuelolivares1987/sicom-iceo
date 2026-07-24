@@ -19,6 +19,23 @@ import { Download } from 'lucide-react'
 
 const LS_KEY = 'taller-mecanico'
 
+// Etiqueta de día para agrupar las OTs igual que el plan del jefe de taller
+// (Hoy / Mañana / día de la semana + fecha). Recibe 'YYYY-MM-DD'.
+function diaLabel(fecha: string | null): string {
+  if (!fecha) return 'Sin fecha programada'
+  const hoy = new Date(); hoy.setHours(0, 0, 0, 0)
+  const [y, m, d] = fecha.split('-').map(Number)
+  const f = new Date(y, (m ?? 1) - 1, d ?? 1)
+  const diffDias = Math.round((f.getTime() - hoy.getTime()) / 86400000)
+  const dow = f.toLocaleDateString('es-CL', { weekday: 'long' })
+  const fmt = f.toLocaleDateString('es-CL', { day: 'numeric', month: 'short' })
+  const cap = dow.charAt(0).toUpperCase() + dow.slice(1)
+  if (diffDias === 0) return `Hoy · ${cap} ${fmt}`
+  if (diffDias === 1) return `Mañana · ${cap} ${fmt}`
+  if (diffDias === -1) return `Ayer · ${cap} ${fmt}`
+  return `${cap} ${fmt}`
+}
+
 function estadoBadge(estado: string) {
   switch (estado) {
     case 'en_ejecucion': return { cls: 'bg-amber-100 text-amber-800', label: 'En ejecución', icon: Play }
@@ -92,6 +109,26 @@ export default function MecanicoHomePage() {
     const m = mecanico.toLowerCase()
     return list.filter((o) => (o.cuadrilla ?? '').toLowerCase().includes(m))
   }, [ots, mecanico, esOperador, soloMias, esMia])
+
+  // Agrupar por día (fecha_programada), igual que el plan del jefe de taller.
+  // Los días ordenados cronológicamente; "sin fecha" al final. Dentro de cada
+  // día se conserva el orden de misOts (las del mecánico primero).
+  const gruposPorDia = useMemo(() => {
+    const m = new Map<string, MecanicoOT[]>()
+    for (const o of misOts) {
+      const k = o.fecha_programada ?? ''
+      const arr = m.get(k) ?? []
+      arr.push(o)
+      m.set(k, arr)
+    }
+    return Array.from(m.entries())
+      .sort(([a], [b]) => {
+        if (!a) return 1        // sin fecha al final
+        if (!b) return -1
+        return a.localeCompare(b)
+      })
+      .map(([fecha, items]) => ({ fecha: fecha || null, label: diaLabel(fecha || null), items }))
+  }, [misOts])
 
   return (
     <div className="p-3 space-y-3">
@@ -209,45 +246,56 @@ export default function MecanicoHomePage() {
             : 'No tienes OTs liberadas a ejecución.'}
         </p>
       ) : (
-        <div className="space-y-2">
-          {misOts.map((o) => {
-            const b = estadoBadge(o.ot_estado)
-            const Icon = b.icon
-            const total = o.checklist_total ?? 0
-            const hechos = o.checklist_completados ?? 0
-            return (
-              <Link key={o.ot_id} href={`/m/taller/ot/${o.ot_id}`}
-                    className="block rounded-xl border border-gray-200 bg-white p-3 active:bg-gray-50">
-                <div className="flex items-center gap-2">
-                  <span className="font-mono text-xs font-bold text-gray-900">{o.ot_folio}</span>
-                  {esOperador && esMia(o) && (
-                    <span className="rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-medium text-orange-700">
-                      ★ Mi nombre
-                    </span>
-                  )}
-                  <span className={`ml-auto flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${b.cls}`}>
-                    <Icon className="h-3 w-3" /> {b.label}
-                  </span>
-                </div>
-                <div className="mt-1 text-sm font-medium text-gray-800">
-                  {o.activo_codigo} {o.activo_patente && <span className="text-gray-500">· {o.activo_patente}</span>}
-                </div>
-                <div className="text-xs text-gray-500">{o.activo_nombre}</div>
-                <div className="mt-2 flex items-center justify-between">
-                  <div className="text-[11px] text-gray-500">
-                    {hechos}/{total} tareas · {Math.round(((o.tiempo_estimado_total_min ?? 0) / 60) * 10) / 10} h
-                  </div>
-                  <ChevronRight className="h-4 w-4 text-gray-400" />
-                </div>
-                {total > 0 && (
-                  <div className="mt-1.5 h-1.5 w-full rounded-full bg-gray-100">
-                    <div className="h-1.5 rounded-full bg-orange-500"
-                         style={{ width: `${Math.min(100, Math.round((hechos / total) * 100))}%` }} />
-                  </div>
-                )}
-              </Link>
-            )
-          })}
+        <div className="space-y-4">
+          {gruposPorDia.map((grupo) => (
+            <div key={grupo.fecha ?? 'sin-fecha'} className="space-y-2">
+              {/* Encabezado del día (misma agrupación que el plan del jefe) */}
+              <div className="sticky top-0 z-10 flex items-center gap-2 rounded-lg bg-gray-100 px-2.5 py-1.5">
+                <span className="text-xs font-semibold text-gray-700">{grupo.label}</span>
+                <span className="ml-auto rounded-full bg-white px-2 py-0.5 text-[10px] font-medium text-gray-500">
+                  {grupo.items.length} OT{grupo.items.length !== 1 ? 's' : ''}
+                </span>
+              </div>
+              {grupo.items.map((o) => {
+                const b = estadoBadge(o.ot_estado)
+                const Icon = b.icon
+                const total = o.checklist_total ?? 0
+                const hechos = o.checklist_completados ?? 0
+                return (
+                  <Link key={o.ot_id} href={`/m/taller/ot/${o.ot_id}`}
+                        className="block rounded-xl border border-gray-200 bg-white p-3 active:bg-gray-50">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-xs font-bold text-gray-900">{o.ot_folio}</span>
+                      {esOperador && esMia(o) && (
+                        <span className="rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-medium text-orange-700">
+                          ★ Mi nombre
+                        </span>
+                      )}
+                      <span className={`ml-auto flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${b.cls}`}>
+                        <Icon className="h-3 w-3" /> {b.label}
+                      </span>
+                    </div>
+                    <div className="mt-1 text-sm font-medium text-gray-800">
+                      {o.activo_codigo} {o.activo_patente && <span className="text-gray-500">· {o.activo_patente}</span>}
+                    </div>
+                    <div className="text-xs text-gray-500">{o.activo_nombre}</div>
+                    <div className="mt-2 flex items-center justify-between">
+                      <div className="text-[11px] text-gray-500">
+                        {hechos}/{total} tareas · {Math.round(((o.tiempo_estimado_total_min ?? 0) / 60) * 10) / 10} h
+                      </div>
+                      <ChevronRight className="h-4 w-4 text-gray-400" />
+                    </div>
+                    {total > 0 && (
+                      <div className="mt-1.5 h-1.5 w-full rounded-full bg-gray-100">
+                        <div className="h-1.5 rounded-full bg-orange-500"
+                             style={{ width: `${Math.min(100, Math.round((hechos / total) * 100))}%` }} />
+                      </div>
+                    )}
+                  </Link>
+                )
+              })}
+            </div>
+          ))}
         </div>
       )}
     </div>
