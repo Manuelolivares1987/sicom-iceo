@@ -4,7 +4,7 @@ import { Fragment, useEffect, useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   AlertTriangle, ClipboardList, Wrench, PlusCircle, Trash2, CheckCircle2, Loader2, Package, Ticket, Printer,
-  ChevronDown, ChevronRight,
+  ChevronDown, ChevronRight, StickyNote, ImageOff,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -13,11 +13,14 @@ import { Badge } from '@/components/ui/badge'
 import { Modal, ModalFooter } from '@/components/ui/modal'
 import { useToast } from '@/contexts/toast-context'
 import { useRequireAuth } from '@/hooks/use-require-auth'
+import { usePermissions } from '@/hooks/use-permissions'
 import {
   getNcRecepcion, planificarNcEquipo, asignarRecursosNcEquipo, getNcMaterialesEquipo,
-  registrarNcAdhoc, generarNcDesdeRecepcion,
-  getRecepcionesParaNc, getActivosParaNc, subirFotoNc, type NcRecepcion, type NcMaterial,
+  registrarNcAdhoc, generarNcDesdeRecepcion, setRecobroNc,
+  getRecepcionesParaNc, getActivosParaNc, subirFotoNc, RECOBRO_LABEL, RECOBRO_FUENTE_TXT,
+  type NcRecepcion, type NcMaterial, type RecobroValor,
 } from '@/lib/services/no-conformidades'
+import { getNotasOTs } from '@/lib/services/ot-notas'
 import { getProductos } from '@/lib/services/inventario'
 import {
   getRecursosPorHallazgo, getRecursosOT, getRecursosOTs, validarRecurso, agregarRecursoJefe, subirFotoRecurso,
@@ -68,6 +71,11 @@ type EquipoNC = {
   dias: number
   nMateriales: number
   nInsumosOperador: number
+  otIds: string[]          // OT del equipo (origen + correctiva) para leer sus notas
+  nNotas: number           // notas/anexos que dejó el operador
+  nRecobrables: number     // NC que se le cobran al cliente
+  nNoRecobrables: number   // NC que asume la empresa
+  nRecobroPorDefinir: number
 }
 
 export default function NoConformidadesPage() {
@@ -111,6 +119,7 @@ export default function NoConformidadesPage() {
         activoId: nc.activo_id, patente: nc.patente ?? nc.codigo ?? '—', nombre: nc.equipo,
         ncs: [], pendientes: [], sevMax: 'baja', estado: 'descartada',
         grupos: null, horas: 0, dias: 0, nMateriales: 0, nInsumosOperador: 0,
+        otIds: [], nNotas: 0, nRecobrables: 0, nNoRecobrables: 0, nRecobroPorDefinir: 0,
       }
       g.ncs.push(nc)
       if (!nc.plan_ot_id && ['registrada', 'con_recursos'].includes(nc.estado_planificacion)) g.pendientes.push(nc)
@@ -120,7 +129,15 @@ export default function NoConformidadesPage() {
       g.horas += nc.horas_estimadas ?? 0
       g.dias = Math.max(g.dias, nc.tiempo_estimado_dias ?? 0)
       g.nMateriales += nc.n_materiales
-      g.nInsumosOperador += nc.n_recursos_operador
+      g.nInsumosOperador += nc.n_recursos_operador ?? 0
+      // Recobro del conjunto: cuántas se le cobran al cliente y cuántas las paga la empresa
+      if (nc.recobro === 'cliente' || nc.recobro === 'compartido') g.nRecobrables += 1
+      else if (nc.recobro === 'empresa') g.nNoRecobrables += 1
+      else g.nRecobroPorDefinir += 1
+      // OT del equipo: de ahí salen las notas/anexos del operador. n_notas_operador
+      // ya cuenta las notas de la(s) OT de la NC → max (no sumar: se repetirían).
+      for (const ot of [nc.ot_id, nc.plan_ot_id]) if (ot && !g.otIds.includes(ot)) g.otIds.push(ot)
+      g.nNotas = Math.max(g.nNotas, nc.n_notas_operador ?? 0)
       m.set(nc.activo_id, g)
     }
     return Array.from(m.values()).sort((a, b) =>
@@ -128,13 +145,15 @@ export default function NoConformidadesPage() {
   }, [ncs])
 
   const invalidar = () => qc.invalidateQueries({ queryKey: ['nc-recepcion'] })
+  const todoAbierto = equipos.length > 0 && equipos.every((e) => expandido[e.activoId])
 
   const kpi = useMemo(() => ({
     total: equipos.length,
     sin: equipos.filter((e) => e.estado === 'registrada').length,
     con: equipos.filter((e) => e.estado === 'con_recursos').length,
     plan: equipos.filter((e) => ['planificada', 'en_ejecucion'].includes(e.estado)).length,
-  }), [equipos])
+    recobrables: ncs.filter((n) => n.recobro === 'cliente' || n.recobro === 'compartido').length,
+  }), [equipos, ncs])
 
   const planificar = async (eq: EquipoNC) => {
     setBusyId(eq.activoId)
@@ -156,6 +175,8 @@ export default function NoConformidadesPage() {
           <p className="text-sm text-muted-foreground">
             Las NC llegan solas desde el taller y la recepción, y aquí se trabajan como el taller:
             TODO el conjunto de la patente junto — recursos, vale de bodega y UNA OT correctiva por equipo.
+            Despliega un equipo para ver la foto y la observación de cada hallazgo, las notas que dejó el
+            operador y si el daño se le recobra al cliente (el chip de recobro se puede corregir con un click).
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -175,17 +196,25 @@ export default function NoConformidadesPage() {
         </div>
       </div>
 
-      <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
+      <div className="grid gap-3 grid-cols-2 md:grid-cols-5">
         <Kpi label="Equipos con NC" value={kpi.total} />
         <Kpi label="Sin recursos" value={kpi.sin} warn={kpi.sin > 0} />
         <Kpi label="Con recursos" value={kpi.con} />
         <Kpi label="Planificados" value={kpi.plan} />
+        <Kpi label="NC recobrables al cliente" value={kpi.recobrables} />
       </div>
 
-      <div className="flex gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         {FILTROS.map(([k, l]) => (
           <button key={k} onClick={() => setFiltro(k)} className={cn('rounded-full border px-3 py-1 text-xs', filtro === k ? 'bg-orange-600 text-white border-orange-600' : 'hover:bg-muted')}>{l}</button>
         ))}
+        {/* El detalle (foto, observación, notas) vive dentro de cada equipo: un
+            solo click para abrirlos todos y revisar sin ir uno por uno. */}
+        <button onClick={() => setExpandido(todoAbierto ? {} : Object.fromEntries(equipos.map((e) => [e.activoId, true])))}
+                className="ml-auto inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs hover:bg-muted">
+          {todoAbierto ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+          {todoAbierto ? 'Plegar todo' : 'Ver el detalle de todas'}
+        </button>
       </div>
 
       <Card>
@@ -194,6 +223,7 @@ export default function NoConformidadesPage() {
           <table className="w-full text-sm">
             <thead><tr className="text-xs text-muted-foreground border-b">
               <th className="text-left p-2">Equipo</th><th className="p-2">NC</th><th className="p-2">Sev.</th>
+              <th className="p-2">Recobro</th>
               <th className="text-left p-2">Recursos del conjunto</th>
               <th className="p-2">Estado</th><th className="p-2"></th>
             </tr></thead>
@@ -216,6 +246,9 @@ export default function NoConformidadesPage() {
                         <span className="rounded-full bg-orange-100 px-2 py-0.5 text-[11px] font-bold text-orange-700">{eq.ncs.length}</span>
                       </td>
                       <td className="p-2 text-center"><Badge variant={eq.sevMax as any} className="text-[10px]">{eq.sevMax}</Badge></td>
+                      <td className="p-2 text-center whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                        <RecobroResumenEquipo eq={eq} onDone={invalidar} />
+                      </td>
                       <td className="p-2 text-xs text-muted-foreground">
                         {eq.grupos || eq.horas > 0 || eq.nMateriales > 0
                           ? `${eq.grupos ?? '—'}${eq.horas ? ` · ${eq.horas}h` : ''}${eq.dias ? ` · ${eq.dias}d` : ''}${eq.nMateriales ? ` · ${eq.nMateriales} mat.` : ''}`
@@ -223,6 +256,13 @@ export default function NoConformidadesPage() {
                         {eq.nInsumosOperador > 0 && (
                           <span className="ml-1.5 rounded bg-orange-100 px-1.5 py-0.5 text-[10px] font-semibold text-orange-700 whitespace-nowrap">
                             {eq.nInsumosOperador} insumo{eq.nInsumosOperador > 1 ? 's' : ''} pedido{eq.nInsumosOperador > 1 ? 's' : ''} por operador
+                          </span>
+                        )}
+                        {eq.nNotas > 0 && (
+                          <span title="Notas con foto que dejó el operador en la OT — ábrelas desplegando el equipo"
+                                className="ml-1.5 inline-flex items-center gap-1 rounded bg-sky-100 px-1.5 py-0.5 text-[10px] font-semibold text-sky-700 whitespace-nowrap">
+                            <StickyNote className="h-3 w-3" />
+                            {eq.nNotas} nota{eq.nNotas > 1 ? 's' : ''} del operador
                           </span>
                         )}
                       </td>
@@ -242,17 +282,42 @@ export default function NoConformidadesPage() {
                       </td>
                     </tr>
                     {abierto && eq.ncs.map((nc) => (
-                      <tr key={nc.id} className="border-b bg-muted/20 text-xs">
-                        <td className="p-2 pl-8 text-muted-foreground" colSpan={2}>
-                          {nc.foto_url && (
-                            <a href={nc.foto_url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className="mr-2 inline-block align-middle">
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img src={nc.foto_url} alt="foto" className="h-8 w-8 rounded border object-cover hover:opacity-80" />
-                            </a>
-                          )}
-                          {nc.descripcion}
+                      <tr key={nc.id} className="border-b bg-muted/20 text-xs align-top">
+                        <td className="p-2 pl-8" colSpan={2}>
+                          <div className="flex gap-2">
+                            {/* La evidencia es lo primero que mira el jefe: foto grande y clickeable */}
+                            {nc.foto_url ? (
+                              <a href={nc.foto_url} target="_blank" rel="noreferrer" title="Ver la foto del hallazgo"
+                                 onClick={(e) => e.stopPropagation()} className="shrink-0">
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img src={nc.foto_url} alt="Evidencia de la NC" className="h-14 w-14 rounded border object-cover hover:opacity-80" />
+                              </a>
+                            ) : (
+                              <span title="Esta NC se levantó sin foto"
+                                    className="flex h-14 w-14 shrink-0 items-center justify-center rounded border border-dashed border-gray-300 text-gray-300">
+                                <ImageOff className="h-5 w-5" />
+                              </span>
+                            )}
+                            <div className="min-w-0">
+                              <p className="font-medium text-gray-800">{nc.descripcion}</p>
+                              {nc.observacion_item && (
+                                <p className="mt-0.5 text-[11px] text-gray-600">«{nc.observacion_item}»</p>
+                              )}
+                              <p className="mt-0.5 text-[10px] text-muted-foreground">
+                                {new Date(nc.created_at).toLocaleDateString('es-CL')}
+                                {nc.registrada_por_nombre ? ` · ${nc.registrada_por_nombre}` : ''}
+                                {nc.ot_folio ? ` · OT ${nc.ot_folio}` : ''}
+                              </p>
+                            </div>
+                          </div>
                         </td>
                         <td className="p-2 text-center"><Badge variant={nc.severidad as any} className="text-[10px]">{nc.severidad}</Badge></td>
+                        <td className="p-2 text-center whitespace-nowrap">
+                          <RecobroMenu ncIds={[nc.id]} actual={nc.recobro} onDone={invalidar}
+                                       titulo={`${RECOBRO_FUENTE_TXT[nc.recobro_fuente]}${nc.recobro_nota ? ` — «${nc.recobro_nota}»` : ''}`}>
+                            <RecobroChip valor={nc.recobro} fuente={nc.recobro_fuente} />
+                          </RecobroMenu>
+                        </td>
                         <td className="p-2 text-[11px] text-muted-foreground">
                           {nc.origen === 'recepcion_adhoc' ? 'ad-hoc' : 'checklist'}
                           {nc.n_recursos_operador > 0 && ` · ${nc.n_recursos_operador} insumo(s) del operador`}
@@ -265,10 +330,17 @@ export default function NoConformidadesPage() {
                         <td />
                       </tr>
                     ))}
+                    {abierto && eq.otIds.length > 0 && (
+                      <tr className="border-b bg-muted/20">
+                        <td colSpan={7} className="p-2 pl-8">
+                          <NotasOperadorEquipo otIds={eq.otIds} />
+                        </td>
+                      </tr>
+                    )}
                   </Fragment>
                 )
               })}
-              {!isLoading && equipos.length === 0 && <tr><td colSpan={6} className="p-6 text-center text-muted-foreground">Sin No Conformidades. Genera desde un checklist de recepción o registra una ad-hoc.</td></tr>}
+              {!isLoading && equipos.length === 0 && <tr><td colSpan={7} className="p-6 text-center text-muted-foreground">Sin No Conformidades. Genera desde un checklist de recepción o registra una ad-hoc.</td></tr>}
             </tbody>
           </table>
         </CardContent>
@@ -292,6 +364,153 @@ export default function NoConformidadesPage() {
 
 function Kpi({ label, value, warn }: { label: string; value: number; warn?: boolean }) {
   return <Card><CardContent className="p-3"><div className="text-xs text-muted-foreground">{label}</div><div className={cn('text-2xl font-bold', warn && 'text-amber-600')}>{value}</div></CardContent></Card>
+}
+
+// ── Recobro (MIG250) ────────────────────────────────────────────────────────
+// ¿El daño se le cobra al cliente o lo asume la empresa? La sugerencia viene de
+// la pauta / de lo que marcó terreno; el jefe de taller la confirma o corrige y
+// esa decisión manda (queda registrada con su nombre y fecha).
+const RECOBRO_OPCIONES: Array<{ v: RecobroValor; ayuda: string }> = [
+  { v: 'cliente',    ayuda: 'Daño del arrendatario — se le cobra' },
+  { v: 'compartido', ayuda: 'Se reparte entre cliente y empresa' },
+  { v: 'empresa',    ayuda: 'Desgaste normal / es nuestro — no se cobra' },
+  { v: 'evaluar',    ayuda: 'Falta información para decidir' },
+  { v: 'na',         ayuda: 'No corresponde recobro' },
+]
+
+function RecobroChip({ valor, fuente }: { valor: RecobroValor | null; fuente?: NcRecepcion['recobro_fuente'] }) {
+  if (!valor) {
+    return (
+      <span className="inline-flex items-center rounded-full border border-dashed border-gray-300 px-2 py-0.5 text-[10px] font-semibold text-gray-400">
+        definir
+      </span>
+    )
+  }
+  const l = RECOBRO_LABEL[valor]
+  return (
+    <span className={cn('inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold', l.cls)}>
+      {l.corto}
+      {/* Punto hueco = todavía es una sugerencia, el jefe no la ha confirmado */}
+      {fuente && fuente !== 'jefe' && <span className="opacity-50">◦</span>}
+    </span>
+  )
+}
+
+function RecobroMenu({ ncIds, actual, titulo, bulk, onDone, children }: {
+  ncIds: string[]; actual: RecobroValor | null; titulo?: string; bulk?: number
+  onDone: () => void; children: React.ReactNode
+}) {
+  const toast = useToast()
+  const { canEdit, canCreate } = usePermissions()
+  const puedeDefinir = canEdit('mantenimiento') || canCreate('mantenimiento')
+  const [open, setOpen] = useState(false)
+  const [busy, setBusy] = useState(false)
+
+  if (!puedeDefinir) return <span title={titulo}>{children}</span>
+
+  const aplicar = async (v: RecobroValor | null) => {
+    setBusy(true)
+    try {
+      const r = await setRecobroNc(ncIds, v)
+      toast.success(v
+        ? `${r.actualizadas} NC marcada(s) como «${RECOBRO_LABEL[v].txt}»`
+        : `${r.actualizadas} NC vuelven a lo que sugiere la pauta`)
+      setOpen(false)
+      onDone()
+    } catch (e) { toast.error(e instanceof Error ? e.message : 'Error al definir el recobro') } finally { setBusy(false) }
+  }
+
+  return (
+    <span className="relative inline-block">
+      <button type="button" title={titulo} disabled={busy} onClick={() => setOpen((o) => !o)}
+              className="inline-flex items-center rounded hover:opacity-75 disabled:opacity-50">
+        {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : children}
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 z-50 mt-1 w-60 rounded-lg border border-gray-200 bg-white p-1 text-left shadow-lg">
+            <p className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+              {bulk && bulk > 1 ? `Recobro de las ${bulk} NC del equipo` : '¿Quién paga esta NC?'}
+            </p>
+            {RECOBRO_OPCIONES.map((o) => (
+              <button key={o.v} type="button" onClick={() => aplicar(o.v)}
+                      className={cn('flex w-full flex-col rounded px-2 py-1.5 text-left hover:bg-gray-50',
+                                    actual === o.v && 'bg-gray-100')}>
+                <span className="text-xs font-semibold text-gray-800">{RECOBRO_LABEL[o.v].txt}</span>
+                <span className="text-[10px] text-gray-500">{o.ayuda}</span>
+              </button>
+            ))}
+            <button type="button" onClick={() => aplicar(null)}
+                    className="mt-0.5 w-full rounded border-t border-gray-100 px-2 py-1.5 text-left text-[10px] text-gray-500 hover:bg-gray-50">
+              Volver a lo que sugiere la pauta
+            </button>
+          </div>
+        </>
+      )}
+    </span>
+  )
+}
+
+/** Recobro del CONJUNTO del equipo: un chip si todas coinciden, si no el conteo. */
+function RecobroResumenEquipo({ eq, onDone }: { eq: EquipoNC; onDone: () => void }) {
+  const ids = eq.ncs.map((n) => n.id)
+  const primero = eq.ncs[0]?.recobro ?? null
+  const unico = eq.ncs.every((n) => n.recobro === primero) ? primero : null
+  const titulo = `${eq.nRecobrables} se le cobra(n) al cliente · ${eq.nNoRecobrables} las asume la empresa · ${eq.nRecobroPorDefinir} sin definir. Click para marcar las ${eq.ncs.length} NC del equipo.`
+  return (
+    <RecobroMenu ncIds={ids} actual={unico} titulo={titulo} bulk={eq.ncs.length} onDone={onDone}>
+      {unico ? <RecobroChip valor={unico} /> : (
+        <span className="inline-flex items-center gap-1 text-[10px] font-semibold">
+          {eq.nRecobrables > 0 && <span className="rounded-full bg-green-100 px-1.5 py-0.5 text-green-800" title="Recobrables al cliente">{eq.nRecobrables}</span>}
+          {eq.nNoRecobrables > 0 && <span className="rounded-full bg-rose-100 px-1.5 py-0.5 text-rose-800" title="Las asume la empresa">{eq.nNoRecobrables}</span>}
+          {eq.nRecobroPorDefinir > 0 && <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-gray-500" title="Sin definir">{eq.nRecobroPorDefinir}?</span>}
+        </span>
+      )}
+    </RecobroMenu>
+  )
+}
+
+// ── Notas / anexos del operador (MIG249) ────────────────────────────────────
+// Lo que el operador escribió en la OT y que no cabía en el checklist. El jefe
+// las tenía solo en la ficha de la OT; aquí las ve junto a las NC del equipo.
+function NotasOperadorEquipo({ otIds }: { otIds: string[] }) {
+  const { data: notas = [], isLoading } = useQuery({
+    queryKey: ['nc-notas-operador', ...otIds],
+    queryFn: () => getNotasOTs(otIds),
+    staleTime: 30_000,
+  })
+  if (isLoading) return <Spinner className="h-4 w-4" />
+  if (notas.length === 0) {
+    return <p className="text-[11px] text-gray-400">Sin notas del operador en las OT de este equipo.</p>
+  }
+  return (
+    <div className="rounded-lg border border-sky-200 bg-sky-50/60 p-2">
+      <p className="mb-1.5 flex items-center gap-1 text-xs font-semibold text-sky-900">
+        <StickyNote className="h-3.5 w-3.5" /> Notas del operador ({notas.length})
+      </p>
+      <div className="space-y-1.5">
+        {notas.map((n) => (
+          <div key={n.id} className="rounded border border-sky-100 bg-white px-2 py-1.5">
+            <p className="whitespace-pre-wrap text-xs text-gray-800">{n.texto}</p>
+            <p className="mt-0.5 text-[10px] text-gray-500">
+              {n.autor ?? 'Operador'} · {new Date(n.created_at).toLocaleString('es-CL')}
+            </p>
+            {n.fotos.length > 0 && (
+              <div className="mt-1 flex flex-wrap gap-1">
+                {n.fotos.map((url, i) => (
+                  <a key={i} href={url} target="_blank" rel="noreferrer" title="Abrir la foto de la nota">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={url} alt="Foto de la nota" className="h-14 w-14 rounded border object-cover hover:opacity-80" />
+                  </a>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
 }
 
 // Botón grande "Vale para bodega": SIEMPRE habilitado. Elegir la patente,
