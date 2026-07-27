@@ -604,7 +604,9 @@ function NcFichaModal({ nc, patente, onClose, onDone }: {
   const otIds = [nc.ot_id, nc.plan_ot_id].filter(Boolean) as string[]
 
   return (
-    <Modal open onClose={onClose} title={`NC de ${patente}`}>
+    // Más ancho que el modal por defecto: aquí conviven evidencia, recobro,
+    // recursos, insumos y notas.
+    <Modal open onClose={onClose} title={`NC de ${patente}`} className="sm:max-w-2xl">
       <div className="space-y-3">
         {/* ── Evidencia ── */}
         <div className="flex gap-3 rounded-lg border border-gray-200 bg-gray-50 p-2.5">
@@ -703,9 +705,9 @@ function NcFichaModal({ nc, patente, onClose, onDone }: {
           </div>
           <div className="space-y-1">
             {filas.map((m, i) => (
-              <div key={i} className="flex items-center gap-1">
+              <div key={i} className="flex min-w-0 items-center gap-1">
                 {m.solicitar ? (
-                  <div className="flex flex-1 items-center gap-1">
+                  <div className="flex min-w-0 flex-1 items-center gap-1">
                     <input value={m.descripcion ?? ''} placeholder="Material que no está en bodega…"
                            onChange={(e) => setMats((s) => (s ?? []).map((x, j) => j === i ? { ...x, descripcion: e.target.value } : x))}
                            className="flex-1 rounded border border-amber-300 bg-amber-50 px-2 py-1 text-sm" />
@@ -721,7 +723,7 @@ function NcFichaModal({ nc, patente, onClose, onDone }: {
                             const p = productos.find((x) => x.id === e.target.value)
                             setMats((s) => (s ?? []).map((x, j) => j === i ? { ...x, producto_id: e.target.value, descripcion: p ? `${p.codigo} · ${p.nombre}` : '' } : x))
                           }}
-                          className="flex-1 rounded border px-2 py-1 text-sm">
+                          className="flex-1 min-w-0 rounded border px-2 py-1 text-sm">
                     <option value="">{m.descripcion ? m.descripcion : '— Repuesto / material —'}</option>
                     {productosFiltrados.map((p) => <option key={p.id} value={p.id}>{p.codigo} · {p.nombre}</option>)}
                   </select>
@@ -849,7 +851,7 @@ function InformeRecobroModal({ equipo, onClose, onDone }: {
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={n.foto_url} alt="foto" className="h-8 w-8 shrink-0 rounded border object-cover" />
               )}
-              <span className="flex-1 truncate text-gray-700" title={n.descripcion}>{n.descripcion}</span>
+              <span className="min-w-0 flex-1 truncate text-gray-700" title={n.descripcion}>{n.descripcion}</span>
               <RecobroChip valor={n.recobro} />
               <span className="w-20 text-right text-[11px] text-gray-500">
                 {n.costo_materiales_estimado > 0 ? CLP(n.costo_materiales_estimado) : '—'}
@@ -1520,9 +1522,9 @@ function RecursosEquipoModal({ equipo, onClose, onDone }: { equipo: EquipoNC; on
           </div>
           <div className="space-y-1">
             {filas.map((m, i) => (
-              <div key={i} className="flex gap-1 items-center">
+              <div key={i} className="flex min-w-0 gap-1 items-center">
                 {m.solicitar ? (
-                  <div className="flex-1 flex items-center gap-1">
+                  <div className="flex-1 min-w-0 flex items-center gap-1">
                     <input value={m.descripcion ?? ''} placeholder="Material que no está en bodega…"
                       onChange={(e) => setMats((s) => (s ?? []).map((x, j) => j === i ? { ...x, descripcion: e.target.value } : x))}
                       className="flex-1 rounded border border-amber-300 bg-amber-50 px-2 py-1 text-sm" />
@@ -1539,7 +1541,7 @@ function RecursosEquipoModal({ equipo, onClose, onDone }: { equipo: EquipoNC; on
                       const p = productos.find((x) => x.id === e.target.value)
                       setMats((s) => (s ?? []).map((x, j) => j === i ? { ...x, producto_id: e.target.value, descripcion: p ? `${p.codigo} · ${p.nombre}` : '' } : x))
                     }}
-                    className="flex-1 rounded border px-2 py-1 text-sm">
+                    className="flex-1 min-w-0 rounded border px-2 py-1 text-sm">
                     <option value="">{m.descripcion ? m.descripcion : '— Repuesto / material —'}</option>
                     {productosFiltrados.map((p) => <option key={p.id} value={p.id}>{p.codigo} · {p.nombre}</option>)}
                   </select>
