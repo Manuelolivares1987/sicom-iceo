@@ -4,8 +4,9 @@ import { Fragment, useEffect, useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   AlertTriangle, ClipboardList, Wrench, PlusCircle, Trash2, CheckCircle2, Loader2, Package, Ticket, Printer,
-  ChevronDown, ChevronRight, StickyNote, ImageOff,
+  ChevronDown, ChevronRight, StickyNote, ImageOff, Receipt, ExternalLink,
 } from 'lucide-react'
+import Link from 'next/link'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
@@ -16,11 +17,13 @@ import { useRequireAuth } from '@/hooks/use-require-auth'
 import { usePermissions } from '@/hooks/use-permissions'
 import {
   getNcRecepcion, planificarNcEquipo, asignarRecursosNcEquipo, getNcMaterialesEquipo,
-  registrarNcAdhoc, generarNcDesdeRecepcion, setRecobroNc,
+  registrarNcAdhoc, generarNcDesdeRecepcion, setRecobroNc, armarInformeRecobro,
+  asignarRecursosNc, planificarNc, getNcMateriales,
   getRecepcionesParaNc, getActivosParaNc, subirFotoNc, RECOBRO_LABEL, RECOBRO_FUENTE_TXT,
   type NcRecepcion, type NcMaterial, type RecobroValor,
 } from '@/lib/services/no-conformidades'
 import { getNotasOTs } from '@/lib/services/ot-notas'
+import { getTarifasHH } from '@/lib/services/informe-recepcion'
 import { getProductos } from '@/lib/services/inventario'
 import {
   getRecursosPorHallazgo, getRecursosOT, getRecursosOTs, validarRecurso, agregarRecursoJefe, subirFotoRecurso,
@@ -85,6 +88,8 @@ export default function NoConformidadesPage() {
   const [filtro, setFiltro] = useState('')
   const { data: ncs = [], isLoading } = useQuery({ queryKey: ['nc-recepcion', filtro], queryFn: () => getNcRecepcion(filtro || undefined), staleTime: 20_000 })
   const [recursosEquipo, setRecursosEquipo] = useState<EquipoNC | null>(null)
+  const [fichaNc, setFichaNc] = useState<{ nc: NcRecepcion; patente: string } | null>(null)
+  const [recobroEquipo, setRecobroEquipo] = useState<EquipoNC | null>(null)
   const [genOpen, setGenOpen] = useState(false)
   const [adhocOpen, setAdhocOpen] = useState(false)
   const [valeOpen, setValeOpen] = useState(false)
@@ -271,6 +276,13 @@ export default function NoConformidadesPage() {
                         <Button size="sm" variant="outline" onClick={() => setRecursosEquipo(eq)}>
                           <Package className="h-3.5 w-3.5 mr-1" /> Recursos
                         </Button>
+                        {eq.nRecobrables > 0 && (
+                          <Button size="sm" variant="outline" className="ml-1 border-violet-300 text-violet-700 hover:bg-violet-50"
+                                  title="Pasar las NC recobrables de este equipo a un informe de recobro, valorizadas con los recursos ya cargados"
+                                  onClick={() => setRecobroEquipo(eq)}>
+                            <Receipt className="h-3.5 w-3.5 mr-1" /> Recobro ({eq.nRecobrables})
+                          </Button>
+                        )}
                         {eq.pendientes.length > 0 ? (
                           <Button size="sm" className="ml-1" disabled={busyId === eq.activoId} onClick={() => planificar(eq)}>
                             {busyId === eq.activoId ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wrench className="h-3.5 w-3.5 mr-1" />}
@@ -282,7 +294,9 @@ export default function NoConformidadesPage() {
                       </td>
                     </tr>
                     {abierto && eq.ncs.map((nc) => (
-                      <tr key={nc.id} className="border-b bg-muted/20 text-xs align-top">
+                      <tr key={nc.id} className="border-b bg-muted/20 text-xs align-top cursor-pointer hover:bg-muted/50"
+                          title="Abrir la ficha de esta NC: recursos, recobro e insumos"
+                          onClick={() => setFichaNc({ nc, patente: eq.patente })}>
                         <td className="p-2 pl-8" colSpan={2}>
                           <div className="flex gap-2">
                             {/* La evidencia es lo primero que mira el jefe: foto grande y clickeable */}
@@ -312,15 +326,29 @@ export default function NoConformidadesPage() {
                           </div>
                         </td>
                         <td className="p-2 text-center"><Badge variant={nc.severidad as any} className="text-[10px]">{nc.severidad}</Badge></td>
-                        <td className="p-2 text-center whitespace-nowrap">
+                        <td className="p-2 text-center whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                           <RecobroMenu ncIds={[nc.id]} actual={nc.recobro} onDone={invalidar}
                                        titulo={`${RECOBRO_FUENTE_TXT[nc.recobro_fuente]}${nc.recobro_nota ? ` — «${nc.recobro_nota}»` : ''}`}>
                             <RecobroChip valor={nc.recobro} fuente={nc.recobro_fuente} />
                           </RecobroMenu>
                         </td>
                         <td className="p-2 text-[11px] text-muted-foreground">
-                          {nc.origen === 'recepcion_adhoc' ? 'ad-hoc' : 'checklist'}
-                          {nc.n_recursos_operador > 0 && ` · ${nc.n_recursos_operador} insumo(s) del operador`}
+                          {nc.grupo_trabajo || nc.horas_estimadas || nc.n_materiales > 0 ? (
+                            <span className="text-gray-700">
+                              {nc.grupo_trabajo ?? '—'}
+                              {nc.horas_estimadas ? ` · ${nc.horas_estimadas}h` : ''}
+                              {nc.n_materiales > 0 ? ` · ${nc.n_materiales} mat.` : ''}
+                            </span>
+                          ) : <span className="text-amber-600">sin recursos — abrir ficha</span>}
+                          <span className="block">
+                            {nc.origen === 'recepcion_adhoc' ? 'ad-hoc' : 'checklist'}
+                            {nc.n_recursos_operador > 0 && ` · ${nc.n_recursos_operador} insumo(s) del operador`}
+                          </span>
+                          {nc.recobro_informe_folio && (
+                            <span className="mt-0.5 inline-flex items-center gap-1 rounded bg-violet-100 px-1.5 py-0.5 text-[10px] font-semibold text-violet-800">
+                              <Receipt className="h-3 w-3" /> {nc.recobro_informe_folio}
+                            </span>
+                          )}
                         </td>
                         <td className="p-2 text-center">
                           <Badge variant={(ESTADO_BADGE[nc.estado_planificacion]?.v) ?? 'default'} className="text-[10px]">
@@ -346,6 +374,16 @@ export default function NoConformidadesPage() {
         </CardContent>
       </Card>
 
+      {fichaNc && (
+        <NcFichaModal nc={fichaNc.nc} patente={fichaNc.patente}
+                      onClose={() => setFichaNc(null)}
+                      onDone={() => { setFichaNc(null); invalidar() }} />
+      )}
+      {recobroEquipo && (
+        <InformeRecobroModal equipo={recobroEquipo}
+                             onClose={() => setRecobroEquipo(null)}
+                             onDone={() => { setRecobroEquipo(null); invalidar() }} />
+      )}
       {recursosEquipo && <RecursosEquipoModal equipo={recursosEquipo} onClose={() => setRecursosEquipo(null)} onDone={() => { setRecursosEquipo(null); invalidar() }} />}
       {genOpen && <GenerarDesdeRecepcionModal onClose={() => setGenOpen(false)} onDone={() => { setGenOpen(false); invalidar() }} />}
       {adhocOpen && <RegistrarNcModal onClose={() => setAdhocOpen(false)} onDone={() => { setAdhocOpen(false); invalidar() }} />}
@@ -468,6 +506,382 @@ function RecobroResumenEquipo({ eq, onDone }: { eq: EquipoNC; onDone: () => void
         </span>
       )}
     </RecobroMenu>
+  )
+}
+
+// ── Ficha de UNA No Conformidad (MIG251) ────────────────────────────────────
+// Todo el análisis de la NC en un solo lugar: la evidencia, quién paga, los
+// recursos que necesita (grupo, horas, materiales), lo que pidió el operador y
+// las notas — y de ahí sale planificada o al informe de recobro.
+const CLP = (n: number) => `$${Math.round(n).toLocaleString('es-CL')}`
+
+function NcFichaModal({ nc, patente, onClose, onDone }: {
+  nc: NcRecepcion; patente: string; onClose: () => void; onDone: () => void
+}) {
+  const toast = useToast()
+  const qc = useQueryClient()
+  const { canEdit, canCreate } = usePermissions()
+  const puedeGestionar = canEdit('mantenimiento') || canCreate('mantenimiento')
+
+  const { data: prodRes } = useQuery({ queryKey: ['productos-nc'], queryFn: () => getProductos(), staleTime: 300_000 })
+  const productos = (prodRes?.data ?? []) as Array<{ id: string; codigo: string; nombre: string; categoria: string }>
+  const { data: categorias = [] } = useQuery({ queryKey: ['producto-categorias-activas'], queryFn: () => getCategoriasProducto(true), staleTime: 300_000 })
+  const { data: tecnicosCat = [] } = useQuery({ queryKey: ['taller-tecnicos-activos'], queryFn: () => getTallerTecnicos(), staleTime: 300_000 })
+  const { data: matsGuardados, isLoading: cargandoMats } = useQuery({
+    queryKey: ['nc-materiales', nc.id], queryFn: () => getNcMateriales(nc.id),
+  })
+
+  type MatRow = NcMaterial & { solicitar?: boolean; foto?: File | null }
+  const [mecanicos, setMecanicos] = useState<string[]>(() =>
+    (nc.grupo_trabajo ?? '').split(',').map((s) => s.trim()).filter(Boolean))
+  const [horas, setHoras] = useState(nc.horas_estimadas ? String(nc.horas_estimadas) : '')
+  const [dias, setDias] = useState(nc.tiempo_estimado_dias ? String(nc.tiempo_estimado_dias) : '')
+  const [recobro, setRecobro] = useState<RecobroValor | null>(nc.recobro)
+  const [recobroNota, setRecobroNota] = useState(nc.recobro_nota ?? '')
+  const [catFiltro, setCatFiltro] = useState('')
+  const [mats, setMats] = useState<MatRow[] | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [planificando, setPlanificando] = useState(false)
+
+  useEffect(() => {
+    if (mats !== null || cargandoMats) return
+    const previos = (matsGuardados ?? []).map((m: any) => ({
+      producto_id: m.producto_id ?? '', descripcion: m.descripcion ?? '', cantidad: Number(m.cantidad) || 1,
+    }))
+    setMats(previos.length ? previos : [{ producto_id: '', descripcion: '', cantidad: 1 }])
+  }, [matsGuardados, cargandoMats, mats])
+
+  const filas = mats ?? []
+  const productosFiltrados = catFiltro ? productos.filter((p) => p.categoria === catFiltro) : productos
+  const opcionesTecnicos = useMemo(() => {
+    const base = tecnicosCat.length > 0
+      ? tecnicosCat.map((t) => ({ nombre: t.nombre, especialidad: t.especialidad }))
+      : (MECANICOS as readonly string[]).map((m) => ({ nombre: m, especialidad: '' }))
+    const extra = mecanicos.filter((m) => !base.some((b) => b.nombre === m)).map((m) => ({ nombre: m, especialidad: '' }))
+    return [...base, ...extra]
+  }, [tecnicosCat, mecanicos])
+
+  const guardar = async () => {
+    setSaving(true)
+    try {
+      const materiales = filas
+        .filter((m) => !m.solicitar && (m.producto_id || (m.descripcion ?? '').trim()))
+        .map((m) => ({ producto_id: m.producto_id || null, descripcion: m.descripcion, cantidad: Number(m.cantidad) || 1 }))
+      await asignarRecursosNc({
+        ncId: nc.id,
+        grupo: mecanicos.length ? mecanicos.join(', ') : null,
+        horas: horas ? Number(horas) : null,
+        tiempoDias: dias ? Number(dias) : null,
+        materiales,
+      })
+      // Lo que no está en bodega se pide, ligado a ESTA NC (bodega ve la patente)
+      const solicitudes = filas.filter((m) => m.solicitar && (m.descripcion ?? '').trim())
+      for (const s of solicitudes) {
+        const fotoUrl = s.foto ? await subirFotoNc(s.foto) : null
+        await solicitarMaterialBodega({ descripcion: s.descripcion!, cantidad: Number(s.cantidad) || 1, ncId: nc.id, fotoUrl })
+      }
+      // La clasificación de recobro solo se toca si el jefe la cambió
+      if (recobro !== nc.recobro || (recobroNota.trim() || null) !== nc.recobro_nota) {
+        await setRecobroNc([nc.id], recobro, recobroNota.trim() || null)
+      }
+      toast.success(`Recursos de la NC guardados${solicitudes.length ? ` · ${solicitudes.length} solicitud(es) a bodega` : ''}`)
+      onDone()
+    } catch (e) { toast.error(e instanceof Error ? e.message : 'Error al guardar') } finally { setSaving(false) }
+  }
+
+  const planificar = async () => {
+    setPlanificando(true)
+    try {
+      const r: any = await planificarNc(nc.id)
+      toast.success(r?.mensaje === 'Ya tenía OT' ? 'Esta NC ya estaba en una OT correctiva' : 'OT correctiva creada para esta NC')
+      qc.invalidateQueries({ queryKey: ['ordenes-trabajo'] })
+      qc.invalidateQueries({ queryKey: ['nc-ot-por-agendar'] })
+      onDone()
+    } catch (e) { toast.error(e instanceof Error ? e.message : 'Error al planificar') } finally { setPlanificando(false) }
+  }
+
+  const yaPlanificada = !!nc.plan_ot_id
+  const otIds = [nc.ot_id, nc.plan_ot_id].filter(Boolean) as string[]
+
+  return (
+    <Modal open onClose={onClose} title={`NC de ${patente}`}>
+      <div className="space-y-3">
+        {/* ── Evidencia ── */}
+        <div className="flex gap-3 rounded-lg border border-gray-200 bg-gray-50 p-2.5">
+          {nc.foto_url ? (
+            <a href={nc.foto_url} target="_blank" rel="noreferrer" title="Abrir la foto en grande" className="shrink-0">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={nc.foto_url} alt="Evidencia de la NC" className="h-24 w-24 rounded border object-cover hover:opacity-80" />
+            </a>
+          ) : (
+            <span className="flex h-24 w-24 shrink-0 items-center justify-center rounded border border-dashed border-gray-300 text-gray-300">
+              <ImageOff className="h-6 w-6" />
+            </span>
+          )}
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold text-gray-800">{nc.descripcion}</p>
+            {nc.observacion_item && <p className="mt-0.5 text-xs text-gray-600">«{nc.observacion_item}»</p>}
+            <p className="mt-1 text-[11px] text-gray-500">
+              {new Date(nc.created_at).toLocaleDateString('es-CL')}
+              {nc.registrada_por_nombre ? ` · ${nc.registrada_por_nombre}` : ''}
+              {nc.ot_folio ? ` · OT ${nc.ot_folio}` : ''}
+            </p>
+            <div className="mt-1 flex flex-wrap items-center gap-1">
+              <Badge variant={nc.severidad as any} className="text-[10px]">{nc.severidad}</Badge>
+              <Badge variant={(ESTADO_BADGE[nc.estado_planificacion]?.v) ?? 'default'} className="text-[10px]">
+                {ESTADO_BADGE[nc.estado_planificacion]?.t ?? nc.estado_planificacion}
+              </Badge>
+              {nc.recobro_informe_folio && (
+                <Link href={`/dashboard/flota/recepcion/${nc.recobro_informe_id}/emitir`} target="_blank"
+                      className="inline-flex items-center gap-1 rounded bg-violet-100 px-1.5 py-0.5 text-[10px] font-semibold text-violet-800 hover:underline">
+                  <Receipt className="h-3 w-3" /> En el informe {nc.recobro_informe_folio}
+                  <ExternalLink className="h-3 w-3" />
+                </Link>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* ── ¿Quién paga? ── */}
+        <div className="rounded-lg border border-gray-200 p-2.5">
+          <p className="text-xs font-semibold text-gray-700">¿Se le recobra al cliente?</p>
+          <div className="mt-1.5 flex flex-wrap gap-1">
+            {RECOBRO_OPCIONES.map((o) => {
+              const on = recobro === o.v
+              return (
+                <button key={o.v} type="button" disabled={!puedeGestionar} onClick={() => setRecobro(o.v)} title={o.ayuda}
+                        className={cn('rounded border px-2 py-1 text-[11px] font-medium disabled:opacity-50',
+                                      on ? RECOBRO_LABEL[o.v].cls : 'border-gray-200 bg-white text-gray-600')}>
+                  {RECOBRO_LABEL[o.v].corto}
+                </button>
+              )
+            })}
+          </div>
+          <p className="mt-1 text-[10px] text-gray-500">
+            Sugerencia actual: <b>{nc.recobro ? RECOBRO_LABEL[nc.recobro].txt : 'ninguna'}</b> ({RECOBRO_FUENTE_TXT[nc.recobro_fuente]}).
+          </p>
+          <input value={recobroNota} onChange={(e) => setRecobroNota(e.target.value)} disabled={!puedeGestionar}
+                 placeholder="Justificación del recobro (la lee el encargado de cobros)…"
+                 className="mt-1.5 w-full rounded border border-gray-300 px-2 py-1.5 text-xs" />
+        </div>
+
+        {/* ── Recursos de ESTA NC ── */}
+        <div>
+          <label className="text-xs font-medium">Grupo de trabajo (mano de obra)</label>
+          <div className="mt-1 flex flex-wrap gap-1">
+            {opcionesTecnicos.map((t) => {
+              const on = mecanicos.includes(t.nombre)
+              return (
+                <button key={t.nombre} type="button" disabled={!puedeGestionar} title={t.especialidad || undefined}
+                        onClick={() => setMecanicos((p) => p.includes(t.nombre) ? p.filter((x) => x !== t.nombre) : [...p, t.nombre])}
+                        className={`rounded border px-2 py-1 text-[11px] disabled:opacity-50 ${on ? 'border-blue-500 bg-blue-500 text-white' : 'border-gray-200 bg-white text-gray-600'}`}>
+                  {t.nombre}
+                  {t.especialidad && <span className={`ml-1 text-[9px] ${on ? 'text-blue-100' : 'text-gray-400'}`}>{t.especialidad}</span>}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <label className="text-xs font-medium">Horas estimadas (HH)
+            <input type="number" value={horas} onChange={(e) => setHoras(e.target.value)} disabled={!puedeGestionar}
+                   className="mt-0.5 w-full rounded border px-2 py-1.5 text-sm" />
+          </label>
+          <label className="text-xs font-medium">Tiempo (días)
+            <input type="number" value={dias} onChange={(e) => setDias(e.target.value)} disabled={!puedeGestionar}
+                   className="mt-0.5 w-full rounded border px-2 py-1.5 text-sm" />
+          </label>
+        </div>
+
+        <div>
+          <div className="mb-1 flex items-center justify-between text-xs font-medium">
+            <span className="flex items-center gap-1"><Package className="h-3.5 w-3.5" /> Materiales de esta NC</span>
+            <select value={catFiltro} onChange={(e) => setCatFiltro(e.target.value)} className="rounded border px-1.5 py-0.5 text-[11px] text-gray-600">
+              <option value="">Todas las categorías</option>
+              {categorias.map((c) => <option key={c.codigo} value={c.codigo}>{c.nombre}</option>)}
+            </select>
+          </div>
+          <div className="space-y-1">
+            {filas.map((m, i) => (
+              <div key={i} className="flex items-center gap-1">
+                {m.solicitar ? (
+                  <div className="flex flex-1 items-center gap-1">
+                    <input value={m.descripcion ?? ''} placeholder="Material que no está en bodega…"
+                           onChange={(e) => setMats((s) => (s ?? []).map((x, j) => j === i ? { ...x, descripcion: e.target.value } : x))}
+                           className="flex-1 rounded border border-amber-300 bg-amber-50 px-2 py-1 text-sm" />
+                    <label className={`cursor-pointer rounded border px-1.5 py-1 text-[10px] whitespace-nowrap ${m.foto ? 'border-green-400 bg-green-50 text-green-700' : 'border-amber-300 bg-white text-amber-700'}`}>
+                      {m.foto ? '✓ foto' : '📷 foto'}
+                      <input type="file" accept="image/*" capture="environment" className="hidden"
+                             onChange={(e) => { const f = e.target.files?.[0] ?? null; setMats((s) => (s ?? []).map((x, j) => j === i ? { ...x, foto: f } : x)) }} />
+                    </label>
+                  </div>
+                ) : (
+                  <select value={m.producto_id ?? ''} disabled={!puedeGestionar}
+                          onChange={(e) => {
+                            const p = productos.find((x) => x.id === e.target.value)
+                            setMats((s) => (s ?? []).map((x, j) => j === i ? { ...x, producto_id: e.target.value, descripcion: p ? `${p.codigo} · ${p.nombre}` : '' } : x))
+                          }}
+                          className="flex-1 rounded border px-2 py-1 text-sm">
+                    <option value="">{m.descripcion ? m.descripcion : '— Repuesto / material —'}</option>
+                    {productosFiltrados.map((p) => <option key={p.id} value={p.id}>{p.codigo} · {p.nombre}</option>)}
+                  </select>
+                )}
+                <input type="number" value={m.cantidad} disabled={!puedeGestionar}
+                       onChange={(e) => setMats((s) => (s ?? []).map((x, j) => j === i ? { ...x, cantidad: Number(e.target.value) } : x))}
+                       className="w-14 rounded border px-2 py-1 text-sm" />
+                <button type="button" title="No está en bodega (solicitar)" disabled={!puedeGestionar}
+                        onClick={() => setMats((s) => (s ?? []).map((x, j) => j === i ? { ...x, solicitar: !x.solicitar, producto_id: '', descripcion: '' } : x))}
+                        className={`rounded border px-1.5 py-1 text-[10px] disabled:opacity-50 ${m.solicitar ? 'border-amber-400 bg-amber-100 text-amber-700' : 'border-gray-200 text-gray-500'}`}>
+                  {m.solicitar ? 'a bodega' : 'no hay'}
+                </button>
+                <button type="button" onClick={() => setMats((s) => (s ?? []).filter((_, j) => j !== i))} className="px-1 text-red-500"><Trash2 className="h-4 w-4" /></button>
+              </div>
+            ))}
+          </div>
+          <button type="button" onClick={() => setMats((s) => [...(s ?? []), { producto_id: '', descripcion: '', cantidad: 1 }])} className="mt-1 text-xs text-blue-600">+ Agregar material</button>
+          {nc.costo_materiales_estimado > 0 && (
+            <p className="mt-1 text-[10px] text-gray-500">
+              Materiales ya cargados: <b>{CLP(nc.costo_materiales_estimado)}</b> a costo de bodega — es lo que se lleva al informe de recobro.
+            </p>
+          )}
+        </div>
+
+        {/* ── Lo que pidió el operador desde este hallazgo ── */}
+        <InsumosOperadorNC nc={nc} />
+
+        {/* ── Notas del operador ── */}
+        {otIds.length > 0 && <NotasOperadorEquipo otIds={otIds} />}
+      </div>
+
+      <ModalFooter>
+        <Button variant="outline" onClick={onClose} disabled={saving}>Cerrar</Button>
+        {puedeGestionar && !yaPlanificada && (
+          <Button variant="outline" onClick={planificar} disabled={planificando || saving}
+                  title="Crea la OT correctiva solo de esta NC (para el resto del equipo usa «Planificar equipo»)">
+            {planificando ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Wrench className="h-4 w-4 mr-1" />}
+            Planificar solo esta NC
+          </Button>
+        )}
+        {puedeGestionar && (
+          <Button onClick={guardar} disabled={saving || mats === null}>
+            {saving ? 'Guardando…' : 'Guardar análisis'}
+          </Button>
+        )}
+      </ModalFooter>
+    </Modal>
+  )
+}
+
+// ── Informe de recobros del equipo (MIG251) ─────────────────────────────────
+// Cierra el ciclo: lo que el jefe clasificó como recobrable pasa a un informe
+// IR valorizado con los recursos que ya cargó, y el encargado de cobros lo
+// emite con firma y PDF en /dashboard/flota/recepcion.
+function InformeRecobroModal({ equipo, onClose, onDone }: {
+  equipo: EquipoNC; onClose: () => void; onDone: () => void
+}) {
+  const toast = useToast()
+  const [busy, setBusy] = useState(false)
+  const [tarifaId, setTarifaId] = useState('')
+  const [resultado, setResultado] = useState<{ informe_id: string; folio: string; informe_nuevo: boolean; hallazgos_creados: number; ya_estaban: number; costos_creados: number; total_cobrable: number } | null>(null)
+  const { data: tarifasRes } = useQuery({ queryKey: ['tarifas-hh'], queryFn: getTarifasHH, staleTime: 300_000 })
+  const tarifas = tarifasRes?.data ?? []
+  const tarifa = tarifas.find((t) => t.id === tarifaId) ?? null
+
+  const recobrables = equipo.ncs.filter((n) => n.recobro === 'cliente' || n.recobro === 'compartido')
+  const sinRecursos = recobrables.filter((n) => !n.grupo_trabajo && !n.horas_estimadas && n.n_materiales === 0)
+  const costoMat = recobrables.reduce((s, n) => s + Number(n.costo_materiales_estimado ?? 0), 0)
+  const horas = recobrables.reduce((s, n) => s + Number(n.horas_estimadas ?? 0), 0)
+
+  const armar = async () => {
+    setBusy(true)
+    try {
+      const r = await armarInformeRecobro({
+        activoId: equipo.activoId, ncIds: recobrables.map((n) => n.id), tarifaHhId: tarifaId || null,
+      })
+      setResultado(r)
+      toast.success(r.informe_nuevo
+        ? `Informe de recobro ${r.folio} creado con ${r.hallazgos_creados} hallazgo(s)`
+        : `${r.hallazgos_creados} hallazgo(s) agregados al informe ${r.folio}`)
+      onDone()
+    } catch (e) { toast.error(e instanceof Error ? e.message : 'Error al armar el informe') } finally { setBusy(false) }
+  }
+
+  return (
+    <Modal open onClose={onClose} title={`Informe de recobro · ${equipo.patente}`}>
+      <div className="space-y-3">
+        <p className="text-xs text-gray-600">
+          Pasan al informe las NC que clasificaste como <b>recobrables al cliente</b> (o compartidas), con
+          su foto, su observación y la plata que ya cargaste: materiales a costo de bodega y las horas
+          estimadas a tarifa HH. Después el encargado de cobros ajusta precios, firma y emite el PDF.
+        </p>
+
+        <div className="grid grid-cols-3 gap-2 text-center">
+          <div className="rounded-lg border p-2"><div className="text-[10px] text-gray-500">NC recobrables</div><div className="text-xl font-bold">{recobrables.length}</div></div>
+          <div className="rounded-lg border p-2"><div className="text-[10px] text-gray-500">Materiales</div><div className="text-xl font-bold">{CLP(costoMat)}</div></div>
+          <div className="rounded-lg border p-2"><div className="text-[10px] text-gray-500">Mano de obra</div><div className="text-xl font-bold">{horas} HH</div></div>
+        </div>
+
+        <label className="block text-xs font-medium">
+          Tarifa de mano de obra para valorizar las {horas} HH
+          <select value={tarifaId} onChange={(e) => setTarifaId(e.target.value)}
+                  className="mt-0.5 w-full rounded border px-2 py-1.5 text-sm">
+            <option value="">— La más económica (por defecto) —</option>
+            {tarifas.map((t) => <option key={t.id} value={t.id}>{t.nombre} · {CLP(Number(t.tarifa_clp))}/HH</option>)}
+          </select>
+          {tarifa && horas > 0 && (
+            <span className="mt-0.5 block text-[10px] text-gray-500">
+              Mano de obra estimada: <b>{CLP(horas * Number(tarifa.tarifa_clp))}</b> — el encargado de cobros la puede ajustar.
+            </span>
+          )}
+        </label>
+
+        {sinRecursos.length > 0 && (
+          <p className="rounded-lg border border-amber-200 bg-amber-50 p-2 text-[11px] text-amber-800">
+            <b>{sinRecursos.length}</b> de estas NC no tienen recursos cargados: entrarán al informe como
+            hallazgo <b>sin valorizar</b>. Si quieres cobrarlas, ábrelas primero y asígnales materiales/horas.
+          </p>
+        )}
+
+        <div className="max-h-56 space-y-1 overflow-y-auto rounded-lg border border-gray-100 bg-gray-50 p-2">
+          {recobrables.map((n) => (
+            <div key={n.id} className="flex items-center gap-2 rounded border border-gray-100 bg-white px-2 py-1.5 text-xs">
+              {n.foto_url && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={n.foto_url} alt="foto" className="h-8 w-8 shrink-0 rounded border object-cover" />
+              )}
+              <span className="flex-1 truncate text-gray-700" title={n.descripcion}>{n.descripcion}</span>
+              <RecobroChip valor={n.recobro} />
+              <span className="w-20 text-right text-[11px] text-gray-500">
+                {n.costo_materiales_estimado > 0 ? CLP(n.costo_materiales_estimado) : '—'}
+              </span>
+              {n.recobro_informe_folio && <Receipt className="h-3.5 w-3.5 text-violet-600" />}
+            </div>
+          ))}
+        </div>
+
+        {resultado && (
+          <div className="rounded-lg border border-green-200 bg-green-50 p-2.5 text-xs text-green-900">
+            <p className="font-semibold">Informe {resultado.folio} listo</p>
+            <p className="mt-0.5">
+              {resultado.hallazgos_creados} hallazgo(s) nuevos
+              {resultado.ya_estaban > 0 && ` · ${resultado.ya_estaban} ya estaban`}
+              {' · '}{resultado.costos_creados} ítem(s) de costo · cobrable {CLP(Number(resultado.total_cobrable))}
+            </p>
+            <Link href={`/dashboard/flota/recepcion/${resultado.informe_id}/emitir`} target="_blank"
+                  className="mt-1 inline-flex items-center gap-1 font-semibold text-green-800 underline">
+              Abrir el informe para valorizar y emitir <ExternalLink className="h-3 w-3" />
+            </Link>
+          </div>
+        )}
+      </div>
+      <ModalFooter>
+        <Button variant="outline" onClick={onClose}>Cerrar</Button>
+        <Button onClick={armar} disabled={busy || recobrables.length === 0}>
+          {busy ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Receipt className="h-4 w-4 mr-1" />}
+          {resultado ? 'Volver a sincronizar' : `Pasar ${recobrables.length} NC al informe`}
+        </Button>
+      </ModalFooter>
+    </Modal>
   )
 }
 

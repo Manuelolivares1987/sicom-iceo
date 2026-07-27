@@ -39,6 +39,12 @@ export type NcRecepcion = {
   recobro_nota: string | null
   /** Notas/anexos que dejó el operador en la OT de esta NC (MIG249). */
   n_notas_operador: number
+  /** Informe de recobro donde ya quedó cobrada esta NC (MIG251). */
+  recobro_informe_id: string | null
+  recobro_informe_folio: string | null
+  recobro_informe_estado: string | null
+  /** Plata ya comprometida en materiales de la NC (costo de bodega). */
+  costo_materiales_estimado: number
 }
 
 // Quién paga el hallazgo (default_cobrable_enum, MIG54).
@@ -166,6 +172,27 @@ export async function registrarNcAdhoc(p: {
   })
   if (error) throw error
   return data
+}
+
+/**
+ * Vuelca las NC recobrables del equipo a un informe de recobro (MIG251):
+ * reusa el informe abierto o crea uno en borrador, y pre-valoriza con los
+ * materiales y las horas que el jefe ya cargó en cada NC. Idempotente.
+ */
+export async function armarInformeRecobro(p: {
+  activoId: string; ncIds?: string[] | null; tarifaHhId?: string | null
+}): Promise<{
+  ok: boolean; informe_id: string; folio: string; informe_nuevo: boolean
+  hallazgos_creados: number; ya_estaban: number; costos_creados: number
+  total_cobrable: number; total: number
+}> {
+  const { data, error } = await supabase.rpc('rpc_nc_informe_recobro', {
+    p_activo_id: p.activoId,
+    p_nc_ids: p.ncIds ?? null,
+    p_tarifa_hh_id: p.tarifaHhId ?? null,
+  })
+  if (error) throw error
+  return data as any
 }
 
 export async function generarNcDesdeRecepcion(informeId: string) {
