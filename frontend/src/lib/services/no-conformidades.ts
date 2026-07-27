@@ -28,6 +28,53 @@ export type NcRecepcion = {
   checklist_item_ref: string | null
   /** Insumos que el operador pidió desde el hallazgo NO OK (MIG199). */
   n_recursos_operador: number
+  /** Contexto para leer la NC sin abrir nada más (MIG250). */
+  observacion_item: string | null
+  ot_folio: string | null
+  registrada_por_nombre: string | null
+  /** ¿Se le recobra al cliente? (MIG250) */
+  recobro: RecobroValor | null
+  /** De dónde salió el recobro: decisión del jefe, terreno, pauta o informe. */
+  recobro_fuente: 'jefe' | 'terreno' | 'pauta' | 'informe' | 'sin_definir'
+  recobro_nota: string | null
+  /** Notas/anexos que dejó el operador en la OT de esta NC (MIG249). */
+  n_notas_operador: number
+  /** Informe de recobro donde ya quedó cobrada esta NC (MIG251). */
+  recobro_informe_id: string | null
+  recobro_informe_folio: string | null
+  recobro_informe_estado: string | null
+  /** Plata ya comprometida en materiales de la NC (costo de bodega). */
+  costo_materiales_estimado: number
+}
+
+// Quién paga el hallazgo (default_cobrable_enum, MIG54).
+export type RecobroValor = 'cliente' | 'empresa' | 'compartido' | 'evaluar' | 'na'
+
+export const RECOBRO_LABEL: Record<RecobroValor, { txt: string; corto: string; cls: string }> = {
+  cliente:    { txt: 'Recobrable al cliente', corto: 'Recobrable',  cls: 'bg-green-100 text-green-800 border-green-200' },
+  compartido: { txt: 'Recobro compartido',    corto: 'Compartido',  cls: 'bg-teal-100 text-teal-800 border-teal-200' },
+  empresa:    { txt: 'No recobrable — lo asume la empresa', corto: 'No recobrable', cls: 'bg-rose-100 text-rose-800 border-rose-200' },
+  evaluar:    { txt: 'Por evaluar',           corto: 'Por evaluar', cls: 'bg-amber-100 text-amber-800 border-amber-200' },
+  na:         { txt: 'No aplica',             corto: 'No aplica',   cls: 'bg-gray-100 text-gray-600 border-gray-200' },
+}
+
+export const RECOBRO_FUENTE_TXT: Record<NcRecepcion['recobro_fuente'], string> = {
+  jefe: 'definido por el jefe de taller',
+  terreno: 'marcado en terreno al hacer el checklist',
+  pauta: 'sugerido por la pauta del ítem',
+  informe: 'del informe de recepción',
+  sin_definir: 'nadie lo ha definido',
+}
+
+/** El jefe fija/corrige el recobro de una NC o de todas las del equipo (MIG250). */
+export async function setRecobroNc(ncIds: string[], valor: RecobroValor | null, nota?: string | null) {
+  const { data, error } = await supabase.rpc('rpc_nc_set_recobro', {
+    p_nc_ids: ncIds,
+    p_valor: valor,
+    p_nota: nota ?? null,
+  })
+  if (error) throw error
+  return data as { ok: boolean; actualizadas: number; recobro: string | null }
 }
 
 export type NcMaterial = { descripcion?: string | null; producto_id?: string | null; cantidad: number; comentario?: string | null; nc_id?: string | null }
@@ -125,6 +172,27 @@ export async function registrarNcAdhoc(p: {
   })
   if (error) throw error
   return data
+}
+
+/**
+ * Vuelca las NC recobrables del equipo a un informe de recobro (MIG251):
+ * reusa el informe abierto o crea uno en borrador, y pre-valoriza con los
+ * materiales y las horas que el jefe ya cargó en cada NC. Idempotente.
+ */
+export async function armarInformeRecobro(p: {
+  activoId: string; ncIds?: string[] | null; tarifaHhId?: string | null
+}): Promise<{
+  ok: boolean; informe_id: string; folio: string; informe_nuevo: boolean
+  hallazgos_creados: number; ya_estaban: number; costos_creados: number
+  total_cobrable: number; total: number
+}> {
+  const { data, error } = await supabase.rpc('rpc_nc_informe_recobro', {
+    p_activo_id: p.activoId,
+    p_nc_ids: p.ncIds ?? null,
+    p_tarifa_hh_id: p.tarifaHhId ?? null,
+  })
+  if (error) throw error
+  return data as any
 }
 
 export async function generarNcDesdeRecepcion(informeId: string) {
