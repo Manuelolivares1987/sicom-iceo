@@ -513,8 +513,6 @@ function RecobroResumenEquipo({ eq, onDone }: { eq: EquipoNC; onDone: () => void
 // Todo el análisis de la NC en un solo lugar: la evidencia, quién paga, los
 // recursos que necesita (grupo, horas, materiales), lo que pidió el operador y
 // las notas — y de ahí sale planificada o al informe de recobro.
-const CLP = (n: number) => `$${Math.round(n).toLocaleString('es-CL')}`
-
 function NcFichaModal({ nc, patente, onClose, onDone }: {
   nc: NcRecepcion; patente: string; onClose: () => void; onDone: () => void
 }) {
@@ -741,11 +739,10 @@ function NcFichaModal({ nc, patente, onClose, onDone }: {
             ))}
           </div>
           <button type="button" onClick={() => setMats((s) => [...(s ?? []), { producto_id: '', descripcion: '', cantidad: 1 }])} className="mt-1 text-xs text-blue-600">+ Agregar material</button>
-          {nc.costo_materiales_estimado > 0 && (
-            <p className="mt-1 text-[10px] text-gray-500">
-              Materiales ya cargados: <b>{CLP(nc.costo_materiales_estimado)}</b> a costo de bodega — es lo que se lleva al informe de recobro.
-            </p>
-          )}
+          <p className="mt-1 text-[10px] text-gray-500">
+            Esta lista es la que viaja al informe de recobro (qué material y cuánta cantidad).
+            Los precios no van: los carga el planificador en el informe.
+          </p>
         </div>
 
         {/* ── Lo que pidió el operador desde este hallazgo ── */}
@@ -787,11 +784,10 @@ function InformeRecobroModal({ equipo, onClose, onDone }: {
   const [resultado, setResultado] = useState<{ informe_id: string; folio: string; informe_nuevo: boolean; hallazgos_creados: number; ya_estaban: number; costos_creados: number; total_cobrable: number } | null>(null)
   const { data: tarifasRes } = useQuery({ queryKey: ['tarifas-hh'], queryFn: getTarifasHH, staleTime: 300_000 })
   const tarifas = tarifasRes?.data ?? []
-  const tarifa = tarifas.find((t) => t.id === tarifaId) ?? null
 
   const recobrables = equipo.ncs.filter((n) => n.recobro === 'cliente' || n.recobro === 'compartido')
   const sinRecursos = recobrables.filter((n) => !n.grupo_trabajo && !n.horas_estimadas && n.n_materiales === 0)
-  const costoMat = recobrables.reduce((s, n) => s + Number(n.costo_materiales_estimado ?? 0), 0)
+  const nMateriales = recobrables.reduce((s, n) => s + Number(n.n_materiales ?? 0), 0)
   const horas = recobrables.reduce((s, n) => s + Number(n.horas_estimadas ?? 0), 0)
 
   const armar = async () => {
@@ -813,29 +809,31 @@ function InformeRecobroModal({ equipo, onClose, onDone }: {
       <div className="space-y-3">
         <p className="text-xs text-gray-600">
           Pasan al informe las NC que clasificaste como <b>recobrables al cliente</b> (o compartidas), con
-          su foto, su observación y la plata que ya cargaste: materiales a costo de bodega y las horas
-          estimadas a tarifa HH. Después el encargado de cobros ajusta precios, firma y emite el PDF.
+          su foto, su observación y el detalle de lo que hay que cobrar: qué material, cuánta cantidad y
+          cuántas horas. <b>Va sin valores</b> — los precios los carga el planificador en el informe, que
+          queda editable hasta que se emite.
         </p>
 
         <div className="grid grid-cols-3 gap-2 text-center">
           <div className="rounded-lg border p-2"><div className="text-[10px] text-gray-500">NC recobrables</div><div className="text-xl font-bold">{recobrables.length}</div></div>
-          <div className="rounded-lg border p-2"><div className="text-[10px] text-gray-500">Materiales</div><div className="text-xl font-bold">{CLP(costoMat)}</div></div>
+          <div className="rounded-lg border p-2"><div className="text-[10px] text-gray-500">Ítems de material</div><div className="text-xl font-bold">{nMateriales}</div></div>
           <div className="rounded-lg border p-2"><div className="text-[10px] text-gray-500">Mano de obra</div><div className="text-xl font-bold">{horas} HH</div></div>
         </div>
 
-        <label className="block text-xs font-medium">
-          Tarifa de mano de obra para valorizar las {horas} HH
-          <select value={tarifaId} onChange={(e) => setTarifaId(e.target.value)}
-                  className="mt-0.5 w-full rounded border px-2 py-1.5 text-sm">
-            <option value="">— La más económica (por defecto) —</option>
-            {tarifas.map((t) => <option key={t.id} value={t.id}>{t.nombre} · {CLP(Number(t.tarifa_clp))}/HH</option>)}
-          </select>
-          {tarifa && horas > 0 && (
+        {horas > 0 && (
+          <label className="block text-xs font-medium">
+            Especialidad de la mano de obra (opcional)
+            <select value={tarifaId} onChange={(e) => setTarifaId(e.target.value)}
+                    className="mt-0.5 w-full rounded border px-2 py-1.5 text-sm">
+              <option value="">— Sin especificar —</option>
+              {tarifas.map((t) => <option key={t.id} value={t.id}>{t.nombre}</option>)}
+            </select>
             <span className="mt-0.5 block text-[10px] text-gray-500">
-              Mano de obra estimada: <b>{CLP(horas * Number(tarifa.tarifa_clp))}</b> — el encargado de cobros la puede ajustar.
+              Solo nombra la línea de las {horas} HH para que el planificador sepa qué tarifa aplicar.
+              El valor lo pone él.
             </span>
-          )}
-        </label>
+          </label>
+        )}
 
         {sinRecursos.length > 0 && (
           <p className="rounded-lg border border-amber-200 bg-amber-50 p-2 text-[11px] text-amber-800">
@@ -853,8 +851,9 @@ function InformeRecobroModal({ equipo, onClose, onDone }: {
               )}
               <span className="min-w-0 flex-1 truncate text-gray-700" title={n.descripcion}>{n.descripcion}</span>
               <RecobroChip valor={n.recobro} />
-              <span className="w-20 text-right text-[11px] text-gray-500">
-                {n.costo_materiales_estimado > 0 ? CLP(n.costo_materiales_estimado) : '—'}
+              <span className="w-24 text-right text-[11px] text-gray-500">
+                {[n.n_materiales ? `${n.n_materiales} mat.` : null,
+                  n.horas_estimadas ? `${n.horas_estimadas}h` : null].filter(Boolean).join(' · ') || '—'}
               </span>
               {n.recobro_informe_folio && <Receipt className="h-3.5 w-3.5 text-violet-600" />}
             </div>
@@ -867,7 +866,7 @@ function InformeRecobroModal({ equipo, onClose, onDone }: {
             <p className="mt-0.5">
               {resultado.hallazgos_creados} hallazgo(s) nuevos
               {resultado.ya_estaban > 0 && ` · ${resultado.ya_estaban} ya estaban`}
-              {' · '}{resultado.costos_creados} ítem(s) de costo · cobrable {CLP(Number(resultado.total_cobrable))}
+              {' · '}{resultado.costos_creados} ítem(s) por valorizar
             </p>
             <Link href={`/dashboard/flota/recepcion/${resultado.informe_id}/emitir`} target="_blank"
                   className="mt-1 inline-flex items-center gap-1 font-semibold text-green-800 underline">
