@@ -250,6 +250,7 @@ export async function getNotasMecanico(otId: string): Promise<OTNota[]> {
       id: p.client_uuid, ot_id: otId, texto: p.nota_texto ?? '',
       fotos, autor: p.nota_autor ?? null, origen: 'operador',
       created_at: p.created_at, client_uuid: p.client_uuid,
+      nc_id: null,  // una nota que aún no sincroniza no puede tener NC
     }
   }))
   // Evitar duplicados cuando la nota ya llegó al servidor (mismo client_uuid).

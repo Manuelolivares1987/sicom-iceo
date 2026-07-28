@@ -12,6 +12,27 @@ export type OTNota = {
   origen: string | null
   created_at: string
   client_uuid?: string | null
+  /** NC que ya se levantó desde esta nota (MIG252). */
+  nc_id: string | null
+}
+
+/**
+ * Convierte la nota del operador en una No Conformidad (MIG252): conserva la
+ * foto y el AUTOR de la nota, y la deja ligada a la OT donde se escribió.
+ * Idempotente — convertir dos veces devuelve la misma NC.
+ */
+export async function convertirNotaEnNc(p: {
+  evidenciaId: string
+  severidad?: 'baja' | 'media' | 'alta' | 'critica'
+  descripcion?: string | null
+}): Promise<{ ok: boolean; nc_id: string; activo_id?: string; ya_existia: boolean }> {
+  const { data, error } = await supabase.rpc('rpc_nota_a_nc', {
+    p_evidencia_id: p.evidenciaId,
+    p_severidad: p.severidad ?? 'media',
+    p_descripcion: p.descripcion ?? null,
+  })
+  if (error) throw error
+  return data as any
 }
 
 /** Notas (tipo='nota') de una OT, más recientes primero. */
@@ -52,6 +73,7 @@ function mapNota(r: any): OTNota {
     origen: (meta.origen as string) ?? null,
     created_at: r.created_at,
     client_uuid: (meta.client_uuid as string) ?? null,
+    nc_id: (meta.nc_id as string) ?? null,
   }
 }
 

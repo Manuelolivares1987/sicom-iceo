@@ -22,7 +22,7 @@ import {
   getRecepcionesParaNc, getActivosParaNc, subirFotoNc, RECOBRO_LABEL, RECOBRO_FUENTE_TXT,
   type NcRecepcion, type NcMaterial, type RecobroValor,
 } from '@/lib/services/no-conformidades'
-import { getNotasOTs } from '@/lib/services/ot-notas'
+import { getNotasOTs, convertirNotaEnNc, type OTNota } from '@/lib/services/ot-notas'
 import { getTarifasHH } from '@/lib/services/informe-recepcion'
 import { getProductos } from '@/lib/services/inventario'
 import {
@@ -361,7 +361,7 @@ export default function NoConformidadesPage() {
                     {abierto && eq.otIds.length > 0 && (
                       <tr className="border-b bg-muted/20">
                         <td colSpan={7} className="p-2 pl-8">
-                          <NotasOperadorEquipo otIds={eq.otIds} />
+                          <NotasOperadorEquipo otIds={eq.otIds} onNcCreada={invalidar} />
                         </td>
                       </tr>
                     )}
@@ -890,7 +890,7 @@ function InformeRecobroModal({ equipo, onClose, onDone }: {
 // ── Notas / anexos del operador (MIG249) ────────────────────────────────────
 // Lo que el operador escribió en la OT y que no cabía en el checklist. El jefe
 // las tenía solo en la ficha de la OT; aquí las ve junto a las NC del equipo.
-function NotasOperadorEquipo({ otIds }: { otIds: string[] }) {
+function NotasOperadorEquipo({ otIds, onNcCreada }: { otIds: string[]; onNcCreada?: () => void }) {
   const { data: notas = [], isLoading } = useQuery({
     queryKey: ['nc-notas-operador', ...otIds],
     queryFn: () => getNotasOTs(otIds),
@@ -904,6 +904,7 @@ function NotasOperadorEquipo({ otIds }: { otIds: string[] }) {
     <div className="rounded-lg border border-sky-200 bg-sky-50/60 p-2">
       <p className="mb-1.5 flex items-center gap-1 text-xs font-semibold text-sky-900">
         <StickyNote className="h-3.5 w-3.5" /> Notas del operador ({notas.length})
+        <span className="font-normal text-[10px] text-sky-700">— si de una sale trabajo, conviértela en NC</span>
       </p>
       <div className="space-y-1.5">
         {notas.map((n) => (
@@ -922,9 +923,58 @@ function NotasOperadorEquipo({ otIds }: { otIds: string[] }) {
                 ))}
               </div>
             )}
+            <NotaAccionNc nota={n} onDone={onNcCreada} />
           </div>
         ))}
       </div>
+    </div>
+  )
+}
+
+// Nota → NC (MIG252): la NC nace con la foto y el autor de la nota, y entra al
+// mismo circuito (recursos → planificar → recobro).
+function NotaAccionNc({ nota, onDone }: { nota: OTNota; onDone?: () => void }) {
+  const toast = useToast()
+  const qc = useQueryClient()
+  const { canEdit, canCreate } = usePermissions()
+  const [sev, setSev] = useState<'baja' | 'media' | 'alta' | 'critica'>('media')
+  const [busy, setBusy] = useState(false)
+
+  if (!(canEdit('mantenimiento') || canCreate('mantenimiento'))) return null
+  if (nota.nc_id) {
+    return (
+      <p className="mt-1 inline-flex items-center gap-1 rounded bg-green-100 px-1.5 py-0.5 text-[10px] font-semibold text-green-800">
+        <CheckCircle2 className="h-3 w-3" /> Ya levantada como No Conformidad
+      </p>
+    )
+  }
+
+  const convertir = async () => {
+    setBusy(true)
+    try {
+      const r = await convertirNotaEnNc({ evidenciaId: nota.id, severidad: sev })
+      toast.success(r.ya_existia
+        ? 'Esta nota ya tenía su NC'
+        : 'NC levantada desde la nota — ya puedes asignarle recursos y clasificar el recobro')
+      qc.invalidateQueries({ queryKey: ['nc-notas-operador'] })
+      qc.invalidateQueries({ queryKey: ['nc-recepcion'] })
+      onDone?.()
+    } catch (e) { toast.error(e instanceof Error ? e.message : 'Error al convertir la nota') } finally { setBusy(false) }
+  }
+
+  return (
+    <div className="mt-1.5 flex items-center gap-1.5">
+      <select value={sev} onChange={(e) => setSev(e.target.value as typeof sev)}
+              className="rounded border border-gray-300 px-1.5 py-0.5 text-[11px]">
+        <option value="baja">Baja</option><option value="media">Media</option>
+        <option value="alta">Alta</option><option value="critica">Crítica</option>
+      </select>
+      <button type="button" onClick={convertir} disabled={busy}
+              title="Crea una NC con esta foto y este texto, a nombre del operador que la escribió"
+              className="inline-flex items-center gap-1 rounded border border-sky-300 bg-white px-2 py-1 text-[11px] font-semibold text-sky-700 hover:bg-sky-50 disabled:opacity-50">
+        {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <AlertTriangle className="h-3 w-3" />}
+        Convertir en NC
+      </button>
     </div>
   )
 }
