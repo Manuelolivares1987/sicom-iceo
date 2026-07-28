@@ -78,6 +78,7 @@ import { OTInfoHeader } from '@/components/ot/ot-info-header'
 import { OTActionBar } from '@/components/ot/ot-action-bar'
 import { InformeTecnicoSeccion } from '@/components/informe-intervencion/informe-tecnico-seccion'
 import { isImmutableState, isAwaitingClosure } from '@/domain/ot/transitions'
+import { convertirNotaEnNc } from '@/lib/services/ot-notas'
 
 // ---------------------------------------------------------------------------
 // Tabs
@@ -670,6 +671,7 @@ function EvidenciasTab({ otId, disabled }: { otId: string; disabled?: boolean })
                     <p className="mt-1 text-[11px] text-gray-400">
                       {meta.autor ? `${meta.autor} · ` : ''}{new Date(n.created_at).toLocaleString('es-CL')}
                     </p>
+                    <NotaANoConformidad notaId={n.id} ncId={meta.nc_id ?? null} otId={otId} />
                   </div>
                 )
               })}
@@ -1930,6 +1932,54 @@ export default function OrdenTrabajoDetailPage() {
           </div>
         </div>
       </ConfirmDialog>
+    </div>
+  )
+}
+
+// Nota del operador -> No Conformidad (MIG252). La NC nace con la foto y el
+// autor de la nota, y entra al circuito de la bandeja: recursos, planificacion
+// y clasificacion de recobro.
+function NotaANoConformidad({ notaId, ncId, otId }: { notaId: string; ncId: string | null; otId: string }) {
+  const qc = useQueryClient()
+  const { canEdit, canCreate } = usePermissions()
+  const [sev, setSev] = useState<'baja' | 'media' | 'alta' | 'critica'>('media')
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState<string | null>(null)
+
+  if (!(canEdit('mantenimiento') || canCreate('mantenimiento'))) return null
+  if (ncId) {
+    return (
+      <p className="mt-1.5 inline-flex items-center gap-1 rounded bg-green-100 px-2 py-0.5 text-[11px] font-semibold text-green-800">
+        <CheckCircle2 className="h-3 w-3" /> Ya levantada como No Conformidad
+      </p>
+    )
+  }
+
+  async function convertir() {
+    setBusy(true); setMsg(null)
+    try {
+      await convertirNotaEnNc({ evidenciaId: notaId, severidad: sev })
+      setMsg('NC creada — la encuentras en Taller → No Conformidades')
+      qc.invalidateQueries({ queryKey: ['evidencias-ot', otId] })
+      qc.invalidateQueries({ queryKey: ['nc-recepcion'] })
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : 'Error al convertir la nota')
+    } finally { setBusy(false) }
+  }
+
+  return (
+    <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+      <select value={sev} onChange={(e) => setSev(e.target.value as typeof sev)}
+              className="rounded border border-gray-300 px-1.5 py-0.5 text-[11px]">
+        <option value="baja">Baja</option><option value="media">Media</option>
+        <option value="alta">Alta</option><option value="critica">Critica</option>
+      </select>
+      <button type="button" onClick={convertir} disabled={busy}
+              title="Crea una NC con esta foto y este texto, a nombre del operador que la escribio"
+              className="inline-flex items-center gap-1 rounded border border-blue-300 bg-white px-2 py-1 text-[11px] font-semibold text-blue-700 hover:bg-blue-50 disabled:opacity-50">
+        <AlertTriangle className="h-3 w-3" /> {busy ? 'Creando...' : 'Convertir en NC'}
+      </button>
+      {msg && <span className="text-[11px] text-gray-600">{msg}</span>}
     </div>
   )
 }
