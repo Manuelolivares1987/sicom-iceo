@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useParams, useRouter } from 'next/navigation'
 import {
   AlertTriangle, CheckCircle2, FileCheck, PenTool, Send,
@@ -25,7 +26,10 @@ import {
   useAgregarCosto,
   useEmitirInformeRecepcion,
 } from '@/hooks/use-informe-recepcion'
-import { subirFirmaInforme } from '@/lib/services/informe-recepcion'
+import {
+  subirFirmaInforme, getInformeParaWord, getHallazgosParaWord, actualizarCabeceraInforme,
+} from '@/lib/services/informe-recepcion'
+import { generarInformeRecobroWord, descargarBlob } from '@/lib/docx/informe-recobro-word'
 import { generarPDFInforme } from '@/components/recepcion/pdf-informe'
 import { cn } from '@/lib/utils'
 
@@ -215,6 +219,18 @@ export default function EmitirInformeRecepcionPage() {
                   <div className="font-medium">{h.descripcion}</div>
                   <div className="text-xs text-gray-500">{h.seccion} · Gravedad: {h.gravedad}</div>
                   {h.observacion && <div className="text-xs italic text-gray-600 mt-1">"{h.observacion}"</div>}
+                  {/* Campos que exige el Word de devolución (MIG255) */}
+                  <div className="mt-1.5 grid gap-1 sm:grid-cols-3">
+                    <CampoWord label="Diagnóstico" valor={(h as any).diagnostico}
+                               disabled={informe.estado === 'emitido'}
+                               onSave={(txt) => updHal.mutate({ id: h.id, informeId: informeId!, patch: { diagnostico: txt } as any })} />
+                    <CampoWord label="Medida correctiva" valor={(h as any).medida_correctiva}
+                               disabled={informe.estado === 'emitido'}
+                               onSave={(txt) => updHal.mutate({ id: h.id, informeId: informeId!, patch: { medida_correctiva: txt } as any })} />
+                    <CampoWord label="Amerita recobro" valor={(h as any).amerita_recobro}
+                               disabled={informe.estado === 'emitido'}
+                               onSave={(txt) => updHal.mutate({ id: h.id, informeId: informeId!, patch: { amerita_recobro: txt } as any })} />
+                  </div>
                 </div>
                 <label className="flex items-center gap-1 text-xs">
                   <input
@@ -240,6 +256,9 @@ export default function EmitirInformeRecepcionPage() {
           ))}
         </CardContent>
       </Card>
+
+      {/* ─── Word de devolución (MIG255) ─── */}
+      <SeccionWord informeId={informeId!} bloqueado={informe.estado === 'emitido'} />
 
       {/* ─── Costos editables ─── */}
       <Card>
@@ -402,5 +421,146 @@ function SummaryCell({ label, value, color, big }: { label: string; value: strin
         {value}
       </div>
     </div>
+  )
+}
+
+// Campo del formato Word: se guarda al salir del input (igual que la observación).
+function CampoWord({ label, valor, disabled, onSave }: {
+  label: string; valor: string | null; disabled?: boolean; onSave: (txt: string) => void
+}) {
+  return (
+    <label className="block text-[11px] text-gray-500">
+      {label}
+      <input
+        defaultValue={valor ?? ''}
+        disabled={disabled}
+        placeholder="POR COMPLETAR"
+        onBlur={(e) => { if (e.target.value !== (valor ?? '')) onSave(e.target.value) }}
+        className="mt-0.5 w-full rounded border border-gray-300 px-2 py-1 text-xs disabled:bg-gray-50"
+      />
+    </label>
+  )
+}
+
+// ── Informe Word de devolución (MIG255) ─────────────────────────────────────
+// Completa el encabezado del formato oficial de Pillado y lo descarga en .docx
+// con las fotos de cada hallazgo incrustadas.
+const CAMPOS_CABECERA: { key: string; label: string }[] = [
+  { key: 'ciudad', label: 'Ciudad' },
+  { key: 'lugar_chequeo', label: 'Lugar de chequeo' },
+  { key: 'tecnico_cargo', label: 'Técnico a cargo' },
+  { key: 'elaborado_por', label: 'Elaborado por' },
+  { key: 'n_chasis', label: 'N° de chasis' },
+  { key: 'horometro', label: 'Horómetro' },
+  { key: 'kilometraje', label: 'Kilometraje' },
+  { key: 'meter_ingreso', label: 'Meter ingreso' },
+  { key: 'meter_salida', label: 'Meter salida' },
+]
+
+function SeccionWord({ informeId, bloqueado }: { informeId: string; bloqueado: boolean }) {
+  const qc = useQueryClient()
+  const [bajando, setBajando] = useState(false)
+  const [msg, setMsg] = useState<string | null>(null)
+  const { data: cab } = useQuery({
+    queryKey: ['informe-word-cabecera', informeId],
+    queryFn: () => getInformeParaWord(informeId),
+  })
+
+  const guardar = async (key: string, valor: string) => {
+    await actualizarCabeceraInforme(informeId, { [key]: valor || null } as any)
+    qc.invalidateQueries({ queryKey: ['informe-word-cabecera', informeId] })
+  }
+
+  const descargar = async () => {
+    setBajando(true); setMsg(null)
+    try {
+      const [informe, hallazgos] = await Promise.all([
+        getInformeParaWord(informeId),
+        getHallazgosParaWord(informeId),
+      ])
+      if (!informe) throw new Error('No se pudo leer el informe')
+      const blob = await generarInformeRecobroWord(
+        {
+          folio: informe.folio,
+          cliente_nombre: informe.cliente_nombre,
+          fecha_recepcion: informe.fecha_recepcion,
+          ciudad: informe.ciudad,
+          lugar_chequeo: informe.lugar_chequeo,
+          tecnico_cargo: informe.tecnico_cargo,
+          elaborado_por: informe.elaborado_por,
+          patente: informe.patente,
+          equipo_nombre: informe.equipo_nombre,
+          marca: informe.marca,
+          modelo: informe.modelo,
+          n_chasis: informe.n_chasis,
+          horometro: informe.horometro,
+          kilometraje: informe.kilometraje,
+          meter_ingreso: informe.meter_ingreso,
+          meter_salida: informe.meter_salida,
+          nota_final: informe.nota_final,
+          firmante_nombre: informe.encargado_nombre ?? informe.inspector_nombre,
+          firmante_cargo: 'Jefe de Mantenimiento',
+        },
+        hallazgos.map((h) => ({
+          descripcion: h.descripcion,
+          diagnostico: h.diagnostico,
+          medida_correctiva: h.medida_correctiva,
+          amerita_recobro: h.amerita_recobro,
+          observacion: h.observacion,
+          fotos: (h.fotos ?? []) as string[],
+        })),
+      )
+      const nombre = `informe_${informe.patente ?? informe.activo_codigo ?? 'equipo'} Devolucion.docx`
+      descargarBlob(blob, nombre)
+      setMsg(`Descargado: ${nombre}`)
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : 'Error al generar el Word')
+    } finally { setBajando(false) }
+  }
+
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base flex items-center gap-2">
+          <FileCheck className="h-5 w-5" /> Informe Word de devolución
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <p className="text-xs text-gray-500">
+          Genera el documento en el formato oficial de Pillado, con las fotos de cada hallazgo
+          incrustadas. Lo que quede vacío sale como <b>POR COMPLETAR</b> en el Word.
+        </p>
+        <div className="grid gap-2 sm:grid-cols-3">
+          {CAMPOS_CABECERA.map((c) => (
+            <label key={c.key} className="block text-[11px] text-gray-500">
+              {c.label}
+              <input
+                defaultValue={((cab ?? {}) as any)[c.key] ?? ''}
+                disabled={bloqueado}
+                placeholder="POR COMPLETAR"
+                onBlur={(e) => { if (e.target.value !== (((cab ?? {}) as any)[c.key] ?? '')) guardar(c.key, e.target.value) }}
+                className="mt-0.5 w-full rounded border border-gray-300 px-2 py-1 text-xs disabled:bg-gray-50"
+              />
+            </label>
+          ))}
+        </div>
+        <label className="block text-[11px] text-gray-500">
+          Nota final del informe (opcional)
+          <textarea
+            defaultValue={cab?.nota_final ?? ''}
+            disabled={bloqueado}
+            rows={2}
+            onBlur={(e) => { if (e.target.value !== (cab?.nota_final ?? '')) guardar('nota_final', e.target.value) }}
+            className="mt-0.5 w-full rounded border border-gray-300 px-2 py-1 text-xs disabled:bg-gray-50"
+          />
+        </label>
+        <div className="flex items-center gap-2">
+          <Button onClick={descargar} disabled={bajando}>
+            {bajando ? 'Generando…' : 'Descargar Word'}
+          </Button>
+          {msg && <span className="text-xs text-gray-600">{msg}</span>}
+        </div>
+      </CardContent>
+    </Card>
   )
 }

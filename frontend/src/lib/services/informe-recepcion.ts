@@ -235,6 +235,75 @@ export async function getInformesRecepcionLista(estado?: EstadoInformeRecepcion)
   return { data: data as InformeRecepcionListItem[] | null, error }
 }
 
+// ── Word de devolución (MIG255) ──────────────────────────────────────────────
+// Formato oficial de Pillado: encabezado del equipo + desviaciones + registro
+// fotográfico con Diagnóstico / Medida Correctiva / Amerita Recobro.
+
+export type InformeRecobroWord = {
+  id: string
+  folio: string | null
+  estado: string
+  cliente_nombre: string | null
+  fecha_recepcion: string | null
+  ciudad: string | null
+  lugar_chequeo: string | null
+  tecnico_cargo: string | null
+  elaborado_por: string | null
+  n_chasis: string | null
+  horometro: string | null
+  kilometraje: string | null
+  meter_ingreso: string | null
+  meter_salida: string | null
+  nota_final: string | null
+  patente: string | null
+  activo_codigo: string | null
+  equipo_nombre: string | null
+  equipo_tipo: string | null
+  marca: string | null
+  modelo: string | null
+  inspector_nombre: string | null
+  encargado_nombre: string | null
+}
+
+export type HallazgoWordRow = InformeHallazgo & {
+  diagnostico: string | null
+  medida_correctiva: string | null
+  amerita_recobro: string | null
+}
+
+/** Cabecera del informe con el equipo resuelto, para armar el Word. */
+export async function getInformeParaWord(informeId: string): Promise<InformeRecobroWord | null> {
+  const { data, error } = await supabase
+    .from('v_informe_recobro_word')
+    .select('*')
+    .eq('id', informeId)
+    .maybeSingle()
+  if (error) throw error
+  return (data as InformeRecobroWord | null) ?? null
+}
+
+/** Hallazgos con los campos del formato Word. */
+export async function getHallazgosParaWord(informeId: string): Promise<HallazgoWordRow[]> {
+  const { data, error } = await supabase
+    .from('informe_recepcion_hallazgos')
+    .select('*')
+    .eq('informe_id', informeId)
+    .order('created_at')
+  if (error) throw error
+  return (data ?? []) as HallazgoWordRow[]
+}
+
+/** Guarda los campos del encabezado que el usuario completa a mano. */
+export async function actualizarCabeceraInforme(
+  informeId: string,
+  patch: Partial<Pick<InformeRecobroWord,
+    'ciudad' | 'lugar_chequeo' | 'tecnico_cargo' | 'elaborado_por' |
+    'n_chasis' | 'horometro' | 'kilometraje' | 'meter_ingreso' | 'meter_salida' | 'nota_final'>>,
+) {
+  const { error } = await supabase.from('informes_recepcion').update(patch).eq('id', informeId)
+  if (error) throw error
+}
+
 export async function getTarifasHH() {
   const { data, error } = await supabase
     .from('tarifas_hh')
