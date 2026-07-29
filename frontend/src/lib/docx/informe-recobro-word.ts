@@ -106,6 +106,15 @@ function filaDato(label: string, valor: string): TableRow {
   })
 }
 
+// Las descripciones vienen de ítems de checklist («Funcionamiento de las
+// bocinas»), no de frases de defecto, así que anteponer «Equipo presenta» a
+// ciegas da textos rotos. Solo se antepone cuando la descripción no arranca ya
+// con un verbo/sujeto propio.
+function frase(desc: string): string {
+  const d = desc.trim()
+  return /^equipo\s/i.test(d) ? d : `Equipo: ${d}`
+}
+
 /** Genera el .docx y lo devuelve como Blob listo para descargar. */
 export async function generarInformeRecobroWord(
   informe: InformeWord,
@@ -177,7 +186,7 @@ export async function generarInformeRecobroWord(
   hallazgos.forEach((h, i) => {
     hijos.push(new Paragraph({
       spacing: { after: 60 },
-      children: [new TextRun({ text: `${i + 1}.- Equipo presenta ${h.descripcion}`, size: 20 })],
+      children: [new TextRun({ text: `${i + 1}.- ${frase(h.descripcion)}`, size: 20 })],
     }))
   })
 
@@ -191,7 +200,7 @@ export async function generarInformeRecobroWord(
     hijos.push(new Paragraph({
       spacing: { before: 240, after: 120 },
       children: [new TextRun({
-        text: `Hallazgo N°${i + 1}: Equipo presenta ${h.descripcion}`,
+        text: `Hallazgo N°${i + 1}: ${frase(h.descripcion)}`,
         bold: true, size: 20,
       })],
     }))
