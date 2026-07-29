@@ -435,6 +435,12 @@ export async function asignarPauta(activoId: string, pautaId: string): Promise<v
 export type TipoOtTaller = 'correctivo' | 'preventivo' | 'inspeccion'
 export type PrioridadTaller = 'emergencia' | 'alta' | 'normal' | 'baja'
 
+/**
+ * Programa el trabajo en el plan semanal. Por defecto REUTILIZA la OT abierta
+ * del mismo trabajo en vez de duplicarla (MIG256): así una tarea que se arrastra
+ * varias semanas mantiene un solo folio, con su checklist y su avance, hasta que
+ * se cierra. `reutilizar: false` fuerza una OT nueva.
+ */
 export async function programarOtTaller(params: {
   activoId: string
   tipo: TipoOtTaller
@@ -442,7 +448,8 @@ export async function programarOtTaller(params: {
   fecha: string | null
   responsableId: string | null
   planId: string | null
-}): Promise<{ id: string; folio: string; estado: string }> {
+  reutilizar?: boolean
+}): Promise<{ id: string; folio: string; estado: string; reutilizada?: boolean; mensaje?: string }> {
   const { data, error } = await supabase.rpc('rpc_programar_ot_taller', {
     p_activo_id: params.activoId,
     p_tipo: params.tipo,
@@ -450,7 +457,30 @@ export async function programarOtTaller(params: {
     p_fecha: params.fecha,
     p_responsable_id: params.responsableId,
     p_plan_mantenimiento_id: params.planId,
+    p_reutilizar: params.reutilizar ?? true,
   })
   if (error) throw error
-  return data as { id: string; folio: string; estado: string }
+  return data as { id: string; folio: string; estado: string; reutilizada?: boolean; mensaje?: string }
+}
+
+/** Una OT sigue «abierta» mientras no se ejecute, cierre ni cancele. Es el
+ *  complemento exacto del filtro de fn_ot_abierta_reutilizable (MIG256). */
+export const ESTADOS_OT_ABIERTA = ['creada', 'asignada', 'en_ejecucion', 'pausada'] as const
+
+/** OT abierta del mismo trabajo, para avisar ANTES de programar. */
+export async function getOtAbiertaDelTrabajo(
+  activoId: string, tipo: TipoOtTaller, planId: string | null,
+): Promise<{ id: string; folio: string; estado: string; fecha_programada: string | null } | null> {
+  let q = supabase
+    .from('ordenes_trabajo')
+    .select('id, folio, estado, fecha_programada, plan_mantenimiento_id')
+    .eq('activo_id', activoId)
+    .eq('tipo', tipo)
+    .in('estado', ESTADOS_OT_ABIERTA)
+    .order('created_at', { ascending: false })
+    .limit(1)
+  q = planId ? q.eq('plan_mantenimiento_id', planId) : q.is('plan_mantenimiento_id', null)
+  const { data, error } = await q
+  if (error) throw error
+  return (data?.[0] as any) ?? null
 }
