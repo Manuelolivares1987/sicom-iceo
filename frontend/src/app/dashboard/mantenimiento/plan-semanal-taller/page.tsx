@@ -48,7 +48,8 @@ import {
 } from '@/lib/services/taller-plan-semanal'
 import { getFlotaDashboard, type FlotaDashboardActivo } from '@/lib/services/flota-dashboard'
 import {
-  getPlanesActivo, getPreventivasDue, programarOtTaller, getEquiposPadre, getRtPorVencer,
+  getPlanesActivo, getPreventivasDue, programarOtTaller, getOtAbiertaDelTrabajo,
+  getEquiposPadre, getRtPorVencer,
   subirDocumentoRt, renovarRevisionTecnica, getRecepcionesPorPlanificar, programarRecepcion,
   getNcOtsPorAgendar,
   getDocumentosPorVencer, subirDocumentoCert, renovarCertificacion, TIPO_DOC_LABEL,
@@ -1358,6 +1359,14 @@ function ProgramarOtDialog({ target, planSemanalId, dias, onClose, onDone, agreg
   // Un equipo se puede programar para VARIOS días (multidía): el día soltado viene marcado.
   const [fechasSel, setFechasSel] = useState<Set<string>>(new Set([target.fecha]))
   const [enviando, setEnviando] = useState(false)
+  // [MIG256] Si el equipo ya tiene una OT abierta de este mismo trabajo, se
+  // sigue usando esa en vez de duplicarla semana a semana.
+  const [forzarNueva, setForzarNueva] = useState(false)
+  const { data: otAbierta } = useQuery({
+    queryKey: ['ot-abierta-trabajo', target.activoId, tipo, planId || null],
+    queryFn: () => getOtAbiertaDelTrabajo(
+      target.activoId, tipo, tipo === 'preventivo' ? (planId || null) : null),
+  })
 
   // Preseleccionar la primera pauta cuando cargan los planes (si no vino preset).
   useEffect(() => {
@@ -1384,11 +1393,15 @@ function ProgramarOtDialog({ target, planSemanalId, dias, onClose, onDone, agreg
         activoId: target.activoId, tipo, prioridad, fecha: fechas[0],
         responsableId: null,
         planId: tipo === 'preventivo' ? (planId || null) : null,
+        reutilizar: !forzarNueva,
       })
       for (const f of fechas) {
         await agregarJornada.mutateAsync({ planSemanalId, otId: r.id, fecha: f, cuadrilla })
       }
-      toast.success(`OT ${r.folio} programada (${fechas.length} día${fechas.length > 1 ? 's' : ''})`)
+      const nDias = `${fechas.length} día${fechas.length > 1 ? 's' : ''}`
+      toast.success(r.reutilizada
+        ? `Se siguió usando la OT ${r.folio} — ${nDias} en el plan, sin duplicarla`
+        : `OT ${r.folio} programada (${nDias})`)
       onDone()
     } catch (e) {
       toast.error((e as Error).message)
@@ -1400,6 +1413,24 @@ function ProgramarOtDialog({ target, planSemanalId, dias, onClose, onDone, agreg
   return (
     <Modal open onClose={onClose} title={`Programar · ${target.label}`}>
       <div className="space-y-3">
+        {/* [MIG256] El trabajo que se arrastra de una semana a otra sigue en la
+            misma OT: un solo folio, con su checklist y su avance, hasta cerrarla. */}
+        {otAbierta && (
+          <div className="rounded-lg border border-blue-200 bg-blue-50 p-2.5 text-xs">
+            <p className="font-semibold text-blue-900">
+              Este equipo ya tiene la OT {otAbierta.folio} abierta ({otAbierta.estado})
+              {otAbierta.fecha_programada ? ` · programada para el ${otAbierta.fecha_programada}` : ''}
+            </p>
+            <p className="mt-0.5 text-blue-800">
+              Se seguirá usando esa misma OT: mantiene su checklist y su avance, y solo se
+              le agregan los días de esta semana.
+            </p>
+            <label className="mt-1.5 flex items-center gap-1.5 text-[11px] text-blue-900">
+              <input type="checkbox" checked={forzarNueva} onChange={(e) => setForzarNueva(e.target.checked)} />
+              Crear una OT nueva de todas formas (es un trabajo distinto)
+            </label>
+          </div>
+        )}
         <div>
           <label className="text-xs font-medium">Tipo de trabajo</label>
           <select value={tipo} onChange={(e) => setTipo(e.target.value as TipoOtTaller)}
