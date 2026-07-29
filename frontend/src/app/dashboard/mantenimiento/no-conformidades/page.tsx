@@ -18,11 +18,15 @@ import { usePermissions } from '@/hooks/use-permissions'
 import {
   getNcRecepcion, planificarNcEquipo, asignarRecursosNcEquipo, getNcMaterialesEquipo,
   registrarNcAdhoc, generarNcDesdeRecepcion, setRecobroNc, armarInformeRecobro,
-  asignarRecursosNc, planificarNc, getNcMateriales,
+  guardarManoObraNc, planificarNc, getNcMateriales,
   getRecepcionesParaNc, getActivosParaNc, subirFotoNc, RECOBRO_LABEL, RECOBRO_FUENTE_TXT,
   type NcRecepcion, type NcMaterial, type RecobroValor,
 } from '@/lib/services/no-conformidades'
 import { getNotasOTs, convertirNotaEnNc, type OTNota } from '@/lib/services/ot-notas'
+import {
+  getInsumosNc, agregarInsumoNc, quitarInsumoNc, buscarInsumosConStock,
+  INSUMO_ESTADO, type ProductoConStock,
+} from '@/lib/services/nc-insumos'
 import { getTarifasHH } from '@/lib/services/informe-recepcion'
 import { getProductos } from '@/lib/services/inventario'
 import {
@@ -536,21 +540,9 @@ function NcFichaModal({ nc, patente, onClose, onDone }: {
   const [dias, setDias] = useState(nc.tiempo_estimado_dias ? String(nc.tiempo_estimado_dias) : '')
   const [recobro, setRecobro] = useState<RecobroValor | null>(nc.recobro)
   const [recobroNota, setRecobroNota] = useState(nc.recobro_nota ?? '')
-  const [catFiltro, setCatFiltro] = useState('')
-  const [mats, setMats] = useState<MatRow[] | null>(null)
   const [saving, setSaving] = useState(false)
   const [planificando, setPlanificando] = useState(false)
 
-  useEffect(() => {
-    if (mats !== null || cargandoMats) return
-    const previos = (matsGuardados ?? []).map((m: any) => ({
-      producto_id: m.producto_id ?? '', descripcion: m.descripcion ?? '', cantidad: Number(m.cantidad) || 1,
-    }))
-    setMats(previos.length ? previos : [{ producto_id: '', descripcion: '', cantidad: 1 }])
-  }, [matsGuardados, cargandoMats, mats])
-
-  const filas = mats ?? []
-  const productosFiltrados = catFiltro ? productos.filter((p) => p.categoria === catFiltro) : productos
   const opcionesTecnicos = useMemo(() => {
     const base = tecnicosCat.length > 0
       ? tecnicosCat.map((t) => ({ nombre: t.nombre, especialidad: t.especialidad }))
@@ -562,27 +554,19 @@ function NcFichaModal({ nc, patente, onClose, onDone }: {
   const guardar = async () => {
     setSaving(true)
     try {
-      const materiales = filas
-        .filter((m) => !m.solicitar && (m.producto_id || (m.descripcion ?? '').trim()))
-        .map((m) => ({ producto_id: m.producto_id || null, descripcion: m.descripcion, cantidad: Number(m.cantidad) || 1 }))
-      await asignarRecursosNc({
+      // Solo mano de obra: los insumos se piden uno a uno en su propio panel, y
+      // guardarlos aquí los borraría (fn_asignar_recursos_nc reescribe la lista).
+      await guardarManoObraNc({
         ncId: nc.id,
         grupo: mecanicos.length ? mecanicos.join(', ') : null,
         horas: horas ? Number(horas) : null,
         tiempoDias: dias ? Number(dias) : null,
-        materiales,
       })
-      // Lo que no está en bodega se pide, ligado a ESTA NC (bodega ve la patente)
-      const solicitudes = filas.filter((m) => m.solicitar && (m.descripcion ?? '').trim())
-      for (const s of solicitudes) {
-        const fotoUrl = s.foto ? await subirFotoNc(s.foto) : null
-        await solicitarMaterialBodega({ descripcion: s.descripcion!, cantidad: Number(s.cantidad) || 1, ncId: nc.id, fotoUrl })
-      }
       // La clasificación de recobro solo se toca si el jefe la cambió
       if (recobro !== nc.recobro || (recobroNota.trim() || null) !== nc.recobro_nota) {
         await setRecobroNc([nc.id], recobro, recobroNota.trim() || null)
       }
-      toast.success(`Recursos de la NC guardados${solicitudes.length ? ` · ${solicitudes.length} solicitud(es) a bodega` : ''}`)
+      toast.success('Análisis de la NC guardado')
       onDone()
     } catch (e) { toast.error(e instanceof Error ? e.message : 'Error al guardar') } finally { setSaving(false) }
   }
@@ -693,60 +677,8 @@ function NcFichaModal({ nc, patente, onClose, onDone }: {
           </label>
         </div>
 
-        <div>
-          <div className="mb-1 flex items-center justify-between text-xs font-medium">
-            <span className="flex items-center gap-1"><Package className="h-3.5 w-3.5" /> Materiales de esta NC</span>
-            <select value={catFiltro} onChange={(e) => setCatFiltro(e.target.value)} className="rounded border px-1.5 py-0.5 text-[11px] text-gray-600">
-              <option value="">Todas las categorías</option>
-              {categorias.map((c) => <option key={c.codigo} value={c.codigo}>{c.nombre}</option>)}
-            </select>
-          </div>
-          <div className="space-y-1">
-            {filas.map((m, i) => (
-              <div key={i} className="flex min-w-0 items-center gap-1">
-                {m.solicitar ? (
-                  <div className="flex min-w-0 flex-1 items-center gap-1">
-                    <input value={m.descripcion ?? ''} placeholder="Material que no está en bodega…"
-                           onChange={(e) => setMats((s) => (s ?? []).map((x, j) => j === i ? { ...x, descripcion: e.target.value } : x))}
-                           className="flex-1 rounded border border-amber-300 bg-amber-50 px-2 py-1 text-sm" />
-                    <label className={`cursor-pointer rounded border px-1.5 py-1 text-[10px] whitespace-nowrap ${m.foto ? 'border-green-400 bg-green-50 text-green-700' : 'border-amber-300 bg-white text-amber-700'}`}>
-                      {m.foto ? '✓ foto' : '📷 foto'}
-                      <input type="file" accept="image/*" capture="environment" className="hidden"
-                             onChange={(e) => { const f = e.target.files?.[0] ?? null; setMats((s) => (s ?? []).map((x, j) => j === i ? { ...x, foto: f } : x)) }} />
-                    </label>
-                  </div>
-                ) : (
-                  <select value={m.producto_id ?? ''} disabled={!puedeGestionar}
-                          onChange={(e) => {
-                            const p = productos.find((x) => x.id === e.target.value)
-                            setMats((s) => (s ?? []).map((x, j) => j === i ? { ...x, producto_id: e.target.value, descripcion: p ? `${p.codigo} · ${p.nombre}` : '' } : x))
-                          }}
-                          className="flex-1 min-w-0 rounded border px-2 py-1 text-sm">
-                    <option value="">{m.descripcion ? m.descripcion : '— Repuesto / material —'}</option>
-                    {productosFiltrados.map((p) => <option key={p.id} value={p.id}>{p.codigo} · {p.nombre}</option>)}
-                  </select>
-                )}
-                <input type="number" value={m.cantidad} disabled={!puedeGestionar}
-                       onChange={(e) => setMats((s) => (s ?? []).map((x, j) => j === i ? { ...x, cantidad: Number(e.target.value) } : x))}
-                       className="w-14 rounded border px-2 py-1 text-sm" />
-                <button type="button" title="No está en bodega (solicitar)" disabled={!puedeGestionar}
-                        onClick={() => setMats((s) => (s ?? []).map((x, j) => j === i ? { ...x, solicitar: !x.solicitar, producto_id: '', descripcion: '' } : x))}
-                        className={`rounded border px-1.5 py-1 text-[10px] disabled:opacity-50 ${m.solicitar ? 'border-amber-400 bg-amber-100 text-amber-700' : 'border-gray-200 text-gray-500'}`}>
-                  {m.solicitar ? 'a bodega' : 'no hay'}
-                </button>
-                <button type="button" onClick={() => setMats((s) => (s ?? []).filter((_, j) => j !== i))} className="px-1 text-red-500"><Trash2 className="h-4 w-4" /></button>
-              </div>
-            ))}
-          </div>
-          <button type="button" onClick={() => setMats((s) => [...(s ?? []), { producto_id: '', descripcion: '', cantidad: 1 }])} className="mt-1 text-xs text-blue-600">+ Agregar material</button>
-          <p className="mt-1 text-[10px] text-gray-500">
-            Esta lista es la que viaja al informe de recobro (qué material y cuánta cantidad).
-            Los precios no van: los carga el planificador en el informe.
-          </p>
-        </div>
-
-        {/* ── Lo que pidió el operador desde este hallazgo ── */}
-        <InsumosOperadorNC nc={nc} />
+        {/* ── UN solo lugar para pedir a bodega (MIG254) ── */}
+        <InsumosNC ncId={nc.id} puedeGestionar={puedeGestionar} otId={nc.plan_ot_id ?? nc.ot_id} />
 
         {/* ── Notas del operador ── */}
         {otIds.length > 0 && <NotasOperadorEquipo otIds={otIds} />}
@@ -762,12 +694,248 @@ function NcFichaModal({ nc, patente, onClose, onDone }: {
           </Button>
         )}
         {puedeGestionar && (
-          <Button onClick={guardar} disabled={saving || mats === null}>
+          <Button onClick={guardar} disabled={saving}>
             {saving ? 'Guardando…' : 'Guardar análisis'}
           </Button>
         )}
       </ModalFooter>
     </Modal>
+  )
+}
+
+// ── Insumos de la NC: UNA lista, UN botón (MIG254) ──────────────────────────
+// Antes había tres caminos para pedirle algo a bodega desde una NC y el jefe
+// tenía que adivinar cuál usar (dos de ellos nunca se usaron en producción).
+// Ahora: una lista con el estado real de cada insumo y un solo «+ Agregar»,
+// que muestra el stock al elegir. El sistema decide el circuito por dentro.
+function InsumosNC({ ncId, puedeGestionar, otId }: {
+  ncId: string; puedeGestionar: boolean; otId: string | null
+}) {
+  const toast = useToast()
+  const qc = useQueryClient()
+  const { data: insumos = [], isLoading } = useQuery({
+    queryKey: ['nc-insumos', ncId], queryFn: () => getInsumosNc(ncId), staleTime: 10_000,
+  })
+  const refrescar = () => {
+    qc.invalidateQueries({ queryKey: ['nc-insumos', ncId] })
+    qc.invalidateQueries({ queryKey: ['nc-recepcion'] })
+    qc.invalidateQueries({ queryKey: ['vale-equipos-listos'] })
+  }
+
+  const [abierto, setAbierto] = useState(false)
+  const [q, setQ] = useState('')
+  const [resultados, setResultados] = useState<ProductoConStock[]>([])
+  const [prod, setProd] = useState<ProductoConStock | null>(null)
+  const [cant, setCant] = useState('1')
+  const [foto, setFoto] = useState<File | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [cantidades, setCantidades] = useState<Record<string, string>>({})
+
+  useEffect(() => {
+    if (prod || q.trim().length < 2) { setResultados([]); return }
+    const t = setTimeout(async () => {
+      try { setResultados(await buscarInsumosConStock(q)) } catch { setResultados([]) }
+    }, 300)
+    return () => clearTimeout(t)
+  }, [q, prod])
+
+  const porAprobar = insumos.filter((i) => i.estado === 'solicitado').length
+  const paraVale = insumos.filter((i) => i.estado === 'aprobado').length
+
+  const agregar = async () => {
+    const n = Number(cant)
+    if (!n || n <= 0 || (!prod && q.trim().length < 3)) return
+    setBusy(true)
+    try {
+      const fotos = foto && otId ? [await subirFotoRecurso(otId, foto)] : null
+      const r = await agregarInsumoNc({
+        ncId, cantidad: n,
+        productoId: prod?.id ?? null,
+        descripcion: prod ? null : q.trim(),
+        unidad: prod?.unidad_medida ?? null,
+        fotos,
+      })
+      toast.success(r.sin_stock
+        ? 'Agregado — OJO: no hay stock, bodega tendrá que comprarlo'
+        : 'Insumo agregado: va en el próximo vale de bodega')
+      setQ(''); setProd(null); setCant('1'); setFoto(null); setAbierto(false)
+      refrescar()
+    } catch (e) { toast.error(e instanceof Error ? e.message : 'Error al agregar') } finally { setBusy(false) }
+  }
+
+  const validar = async (id: string, accion: 'aprobar' | 'rechazar', cantOriginal: number) => {
+    setBusy(true)
+    try {
+      const txt = cantidades[id]
+      const nota = accion === 'rechazar' ? (window.prompt('Motivo del rechazo (lo verá quien lo pidió):') ?? undefined) : undefined
+      await validarRecurso({
+        recursoId: id, accion,
+        cantidadAprobada: accion === 'aprobar' ? (txt ? Number(txt) : cantOriginal) : null,
+        nota: nota?.trim() || null,
+      })
+      refrescar()
+    } catch (e) { toast.error(e instanceof Error ? e.message : 'Error') } finally { setBusy(false) }
+  }
+
+  const quitar = async (i: (typeof insumos)[number]) => {
+    if (!window.confirm(`¿Quitar «${i.descripcion}» de esta NC?`)) return
+    setBusy(true)
+    try { await quitarInsumoNc(i.id, i.fuente); refrescar() }
+    catch (e) { toast.error(e instanceof Error ? e.message : 'Error') } finally { setBusy(false) }
+  }
+
+  return (
+    <div className="rounded-lg border border-orange-200 bg-orange-50/50 p-2.5">
+      <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
+        <p className="flex items-center gap-1 text-xs font-semibold text-orange-800">
+          <Package className="h-3.5 w-3.5" /> Insumos que necesita esta NC
+          {porAprobar > 0 && (
+            <span className="rounded-full bg-amber-200 px-1.5 py-0.5 text-[10px] font-bold text-amber-900">
+              {porAprobar} por aprobar
+            </span>
+          )}
+        </p>
+        {puedeGestionar && (
+          <button type="button" onClick={() => setAbierto((v) => !v)}
+                  className="rounded bg-orange-600 px-2.5 py-1 text-[11px] font-semibold text-white">
+            {abierto ? 'Cancelar' : '+ Agregar insumo'}
+          </button>
+        )}
+      </div>
+
+      {isLoading ? <Spinner className="h-4 w-4" /> : insumos.length === 0 ? (
+        <p className="text-[11px] text-gray-500">
+          Sin insumos todavía. Agrega lo que se necesita y viajará solo al vale de bodega del equipo.
+        </p>
+      ) : (
+        <div className="space-y-1.5">
+          {insumos.map((i) => {
+            const chip = INSUMO_ESTADO[i.estado] ?? { txt: i.estado, cls: 'bg-gray-100 text-gray-600' }
+            const enVale = i.estado === 'en_vale' || i.estado === 'entregado'
+            return (
+              <div key={`${i.fuente}-${i.id}`} className="rounded border border-orange-100 bg-white px-2 py-1.5">
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  <span className="min-w-0 flex-1 font-medium text-gray-800">{i.descripcion}</span>
+                  <span className="whitespace-nowrap text-gray-600">{i.cantidad} {i.unidad ?? 'un'}</span>
+                  {enVale && i.ticket_id ? (
+                    <a href={`/vale/${i.ticket_id}`} target="_blank" rel="noreferrer"
+                       title="Ver / volver a imprimir el vale"
+                       className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium underline decoration-dotted ${chip.cls}`}>
+                      <Printer className="h-3 w-3" /> {chip.txt}{i.ticket_folio ? ` · ${i.ticket_folio}` : ''}
+                    </a>
+                  ) : (
+                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${chip.cls}`}>{chip.txt}</span>
+                  )}
+                  {puedeGestionar && !enVale && i.estado !== 'solicitado' && (
+                    <button type="button" onClick={() => quitar(i)} disabled={busy}
+                            title="Quitar de esta NC" className="text-red-500 disabled:opacity-50">
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+                {(i.solicitado_nombre || i.comentario) && (
+                  <p className="mt-0.5 text-[10px] text-gray-500">
+                    {i.lo_agrego_el_jefe ? 'Agregado por jefatura' : `Lo pidió ${i.solicitado_nombre ?? 'el operador'}`}
+                    {i.comentario ? ` · «${i.comentario}»` : ''}
+                  </p>
+                )}
+                {(i.fotos?.length ?? 0) > 0 && (
+                  <div className="mt-1 flex gap-1">
+                    {(i.fotos ?? []).map((url, k) => (
+                      <a key={k} href={url} target="_blank" rel="noreferrer">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={url} alt="foto del insumo" className="h-12 w-12 rounded border object-cover hover:opacity-80" />
+                      </a>
+                    ))}
+                  </div>
+                )}
+                {puedeGestionar && i.estado === 'solicitado' && (
+                  <div className="mt-1 flex items-center gap-1.5">
+                    <input type="number" min="0" step="any"
+                           value={cantidades[i.id] ?? String(i.cantidad_pedida)}
+                           onChange={(e) => setCantidades((p) => ({ ...p, [i.id]: e.target.value }))}
+                           className="w-16 rounded border border-gray-300 px-1.5 py-0.5 text-xs" />
+                    <button type="button" onClick={() => validar(i.id, 'aprobar', i.cantidad_pedida)} disabled={busy}
+                            className="rounded bg-green-600 px-2 py-1 text-[11px] font-semibold text-white disabled:opacity-50">
+                      Aprobar
+                    </button>
+                    <button type="button" onClick={() => validar(i.id, 'rechazar', i.cantidad_pedida)} disabled={busy}
+                            className="rounded bg-red-600 px-2 py-1 text-[11px] font-semibold text-white disabled:opacity-50">
+                      Rechazar
+                    </button>
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {abierto && (
+        <div className="mt-2 space-y-1.5 rounded border border-orange-200 bg-white p-2">
+          {prod ? (
+            <div className="flex items-center gap-2 rounded border border-green-200 bg-green-50 px-2 py-1 text-xs">
+              <span className="min-w-0 flex-1 font-medium text-green-800">{prod.nombre}</span>
+              <span className={`whitespace-nowrap rounded px-1.5 py-0.5 text-[10px] font-semibold ${
+                prod.stock > 0 ? 'bg-green-200 text-green-900' : 'bg-red-100 text-red-700'}`}>
+                {prod.stock > 0 ? `${prod.stock} en bodega` : 'sin stock'}
+              </span>
+              <button type="button" onClick={() => { setProd(null); setQ('') }} className="text-[11px] text-green-700">cambiar</button>
+            </div>
+          ) : (
+            <div>
+              <input value={q} onChange={(e) => setQ(e.target.value)} autoFocus
+                     placeholder="Busca en bodega o describe el material…"
+                     className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm" />
+              {resultados.length > 0 && (
+                <div className="mt-1 overflow-hidden rounded border border-gray-200 bg-white">
+                  {resultados.map((r) => (
+                    <button key={r.id} type="button" onClick={() => { setProd(r); setResultados([]) }}
+                            className="flex w-full items-center gap-2 border-b border-gray-100 px-2 py-1.5 text-left text-xs last:border-0 hover:bg-gray-50">
+                      <span className="min-w-0 flex-1 truncate">{r.nombre}</span>
+                      {/* El stock a la vista: el jefe ya no adivina si hay */}
+                      <span className={`whitespace-nowrap rounded px-1.5 py-0.5 text-[10px] font-semibold ${
+                        r.stock > 0 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-700'}`}>
+                        {r.stock > 0 ? `${r.stock} disp.` : 'sin stock'}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {q.trim().length >= 3 && resultados.length === 0 && (
+                <p className="mt-1 text-[10px] text-gray-500">
+                  No está en el catálogo: se pedirá tal como lo escribiste y bodega lo comprará.
+                </p>
+              )}
+            </div>
+          )}
+          <div className="flex items-center gap-1.5">
+            <input type="number" min="0" value={cant} onChange={(e) => setCant(e.target.value)}
+                   placeholder="Cantidad" className="w-24 rounded border border-gray-300 px-2 py-1.5 text-sm" />
+            {otId && (
+              <label className={`cursor-pointer rounded border px-2 py-1.5 text-[11px] whitespace-nowrap ${
+                foto ? 'border-green-400 bg-green-50 text-green-700' : 'border-gray-300 text-gray-600'}`}>
+                {foto ? '✓ foto' : '📷 foto'}
+                <input type="file" accept="image/*" capture="environment" className="hidden"
+                       onChange={(e) => setFoto(e.target.files?.[0] ?? null)} />
+              </label>
+            )}
+            <button type="button" disabled={busy || !Number(cant) || (!prod && q.trim().length < 3)} onClick={agregar}
+                    className="rounded bg-orange-600 px-2.5 py-1.5 text-[11px] font-semibold text-white disabled:opacity-50">
+              {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Agregar'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      <p className="mt-1.5 text-[10px] text-gray-500">
+        {paraVale > 0
+          ? `${paraVale} insumo(s) esperando el vale. `
+          : ''}
+        Todo lo aprobado sale junto en el vale de bodega del equipo («Vale para bodega», arriba).
+        Si algo no tiene stock, bodega lo compra y vuelve como recibido para el vale.
+      </p>
+    </div>
   )
 }
 

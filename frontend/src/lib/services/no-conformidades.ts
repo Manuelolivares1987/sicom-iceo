@@ -108,6 +108,24 @@ export async function asignarRecursosNc(p: {
   return data
 }
 
+/**
+ * Guarda SOLO la mano de obra de la NC (MIG254). No usar asignarRecursosNc
+ * desde la ficha: esa borra y reescribe los materiales, y se llevaría por
+ * delante los insumos que se piden uno a uno en su panel.
+ */
+export async function guardarManoObraNc(p: {
+  ncId: string; grupo?: string | null; horas?: number | null; tiempoDias?: number | null
+}) {
+  const { data, error } = await supabase.rpc('rpc_nc_recursos_mo', {
+    p_nc_id: p.ncId,
+    p_grupo: p.grupo ?? null,
+    p_horas: p.horas ?? null,
+    p_tiempo_dias: p.tiempoDias ?? null,
+  })
+  if (error) throw error
+  return data
+}
+
 export async function planificarNc(ncId: string) {
   const { data, error } = await supabase.rpc('fn_planificar_nc', { p_nc_id: ncId })
   if (error) throw error
