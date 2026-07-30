@@ -41,10 +41,10 @@ import { RECURSO_ESTADO_LABEL, type OTRecurso } from '@/lib/services/ot-recursos
 import { buscarProductos } from '@/lib/services/ot-materiales'
 import { useNetworkStatus } from '@/hooks/use-calama-offline'
 import {
-  lunesDeIso, getJornadaEventos,
+  lunesDeIso, getJornadaEventos, getOtArrastre, descartarOt,
   CATEGORIA_TAREA_LABEL, CATEGORIAS_TAREA_LIBRE,
   type TallerPlanOTFull, type ChecklistV3Item, type TallerJornadaEvento,
-  type TallerTecnico, type CategoriaTareaTaller,
+  type TallerTecnico, type CategoriaTareaTaller, type TallerOtArrastre,
 } from '@/lib/services/taller-plan-semanal'
 import { getFlotaDashboard, type FlotaDashboardActivo } from '@/lib/services/flota-dashboard'
 import {
@@ -146,6 +146,14 @@ export default function PlanSemanalTallerPage() {
   const { data: docsDue } = useQuery({ queryKey: ['documentos-por-vencer', 30], queryFn: () => getDocumentosPorVencer(30), staleTime: 60_000 })
   const { data: recepciones } = useQuery({ queryKey: ['recepciones-por-planificar'], queryFn: getRecepcionesPorPlanificar, staleTime: 60_000 })
   const { data: ncOts } = useQuery({ queryKey: ['nc-ot-por-agendar'], queryFn: getNcOtsPorAgendar, staleTime: 60_000 })
+  // [MIG259] El trabajo abierto que NO está en esta semana. Antes no se veía en
+  // ninguna parte: si no se cerraba, solo volvía si alguien lo recordaba.
+  const { data: arrastre } = useQuery({
+    queryKey: ['taller-ot-arrastre', planSemanalId],
+    queryFn: () => getOtArrastre(planSemanalId),
+    enabled: !!planSemanalId,
+    staleTime: 60_000,
+  })
   const { data: kpi } = useKpiSemanalTaller(planSemanalId || null)
   const { data: cobertura } = useCoberturaPm()
 
@@ -167,6 +175,10 @@ export default function PlanSemanalTallerPage() {
   const [renovarRt, setRenovarRt] = useState<RtPorVencer | null>(null)
   const [renovarDoc, setRenovarDoc] = useState<DocumentoPorVencer | null>(null)
   const [recepTarget, setRecepTarget] = useState<{ activoId: string; label: string; fecha: string } | null>(null)
+  // [MIG259] Descartar una OT que ya no corresponde: exige motivo.
+  const [descartarTarget, setDescartarTarget] = useState<TallerOtArrastre | null>(null)
+  const [descartarMotivo, setDescartarMotivo] = useState('')
+  const [descartando, setDescartando] = useState(false)
   // Control de cambios: reprogramación de jornada en plan confirmado exige motivo.
   const [reprogTarget, setReprogTarget] = useState<{ planOtId: string; fechaDestino: string; label: string; diaActual: string } | null>(null)
   const [reprogMotivo, setReprogMotivo] = useState('')
@@ -288,6 +300,21 @@ export default function PlanSemanalTallerPage() {
         { planSemanalId, otId, fecha: fechaDestino, cuadrilla: n?.grupo_trabajo ?? null },
         {
           onSuccess: () => { toast.success('Correctivo de recepción agendado'); qc.invalidateQueries({ queryKey: ['nc-ot-por-agendar'] }) },
+          onError: (err) => toast.error((err as Error).message),
+        },
+      )
+    } else if (aActive.startsWith('arrastre:')) {
+      // [MIG259] arrastre:<otId> -> la MISMA OT abierta entra a esta semana.
+      // No se crea nada: se le agrega el día, con su checklist y sus horas.
+      const otId = aActive.replace('arrastre:', '')
+      const o = (arrastre ?? []).find((x) => x.ot_id === otId)
+      agregarJornada.mutate(
+        { planSemanalId, otId, fecha: fechaDestino, cuadrilla: o?.grupo_trabajo ?? null },
+        {
+          onSuccess: () => {
+            toast.success(`${o?.ot_folio ?? 'OT'} sumada a esta semana — sigue siendo la misma OT`)
+            qc.invalidateQueries({ queryKey: ['taller-ot-arrastre'] })
+          },
           onError: (err) => toast.error((err as Error).message),
         },
       )
@@ -609,6 +636,9 @@ export default function PlanSemanalTallerPage() {
                 )}
               </div>
 
+              {/* [MIG259] Lo que viene de semanas anteriores y no está en esta */}
+              <ArrastreCard items={arrastre ?? []} onDescartar={(o) => { setDescartarMotivo(''); setDescartarTarget(o) }} />
+
               {/* Recepción por planificar (marcadas 'R' en Sugerencias de estado) */}
               <RecepcionPorPlanificarCard items={recepciones ?? []} />
 
@@ -800,6 +830,76 @@ export default function PlanSemanalTallerPage() {
           }}
         />
       )}
+
+      {/* [MIG259] Descartar una OT que ya no corresponde: motivo obligatorio.
+          No se borra: queda cancelada, con su historial, y sus NC vuelven a la
+          bandeja para replanificarlas. */}
+      {descartarTarget && (
+        <Modal open onClose={() => setDescartarTarget(null)}
+               title={`Descartar OT ${descartarTarget.ot_folio}`}>
+          <div className="space-y-3">
+            <div className="rounded border bg-gray-50 p-2 text-xs">
+              <div className="font-mono font-semibold">
+                {descartarTarget.patente ?? descartarTarget.codigo} · {descartarTarget.ot_tipo} · {descartarTarget.ot_estado}
+              </div>
+              <div className="text-gray-500">
+                {descartarTarget.nunca_planificada
+                  ? 'Nunca se agendó en un plan.'
+                  : `Última vez en el plan: semana del ${descartarTarget.ultima_semana_en_plan} (${descartarTarget.semanas_atraso} semanas).`}
+              </div>
+            </div>
+
+            <p className="text-xs text-gray-600">
+              La OT queda <strong>cancelada</strong> —no se borra, su historial se conserva— y sale del plan.
+            </p>
+
+            {descartarTarget.ncs > 0 && (
+              <p className="rounded border border-orange-300 bg-orange-50 p-2 text-xs text-orange-900">
+                Tiene <strong>{descartarTarget.ncs} No Conformidades</strong>: vuelven a la bandeja para
+                replanificarlas. No se pierden.
+              </p>
+            )}
+            {descartarTarget.tiene_avance && (
+              <p className="rounded border border-red-300 bg-red-50 p-2 text-xs text-red-800">
+                Ojo: esta OT <strong>ya tiene avance</strong> (horas de mecánico o checklist respondido).
+                Si el trabajo se hizo, corresponde finalizarla, no descartarla.
+              </p>
+            )}
+
+            <div>
+              <label className="text-xs font-medium">
+                Motivo <span className="text-red-500">*</span>
+              </label>
+              <Input value={descartarMotivo} onChange={(e) => setDescartarMotivo(e.target.value)}
+                     placeholder="Ej: el equipo salió a arriendo, el trabajo lo hizo el proveedor…" />
+              <p className="mt-1 text-[11px] text-gray-400">Queda registrado en la OT con tu nombre y la fecha.</p>
+            </div>
+          </div>
+          <ModalFooter>
+            <Button variant="secondary" onClick={() => setDescartarTarget(null)}>Cancelar</Button>
+            <Button
+              className="bg-red-600 hover:bg-red-700"
+              disabled={descartando || descartarMotivo.trim().length < 5}
+              onClick={async () => {
+                setDescartando(true)
+                try {
+                  const r = await descartarOt(descartarTarget.ot_id, descartarMotivo.trim())
+                  toast.success(r?.mensaje ?? 'OT descartada')
+                  setDescartarTarget(null)
+                  qc.invalidateQueries({ queryKey: ['taller-ot-arrastre'] })
+                  qc.invalidateQueries({ queryKey: ['nc-ot-por-agendar'] })
+                  qc.invalidateQueries({ queryKey: ['taller', 'jornadas'] })
+                } catch (e) {
+                  toast.error(e instanceof Error ? e.message : 'No se pudo descartar la OT')
+                } finally {
+                  setDescartando(false)
+                }
+              }}>
+              {descartando ? 'Descartando…' : 'Descartar OT'}
+            </Button>
+          </ModalFooter>
+        </Modal>
+      )}
     </div>
   )
 }
@@ -924,6 +1024,119 @@ function PreventivaCard({ p }: { p: PreventivaDue }) {
         {!p.baseline_confiable && <AlertTriangle className="h-3 w-3 text-orange-500" />}
       </div>
       <div className="text-[10px] font-normal opacity-80">{ejeIcon} {p.detalle}</div>
+    </div>
+  )
+}
+
+// ── [MIG259] «Viene de semanas anteriores» ──────────────────────────────────
+// El agujero que cerró esta tarjeta: una OT que se agendaba y no se terminaba
+// desaparecía del plan. La semana nueva nace vacía y «Correctivos por agendar»
+// escondía toda OT que ya hubiera tenido un día. Quedaban abiertas semanas.
+const TIPO_CORTO: Record<string, string> = {
+  preventivo: 'PREV', correctivo: 'CORR', inspeccion: 'INSP',
+  inspeccion_recepcion: 'RECEP', lubricacion: 'LUB', abastecimiento: 'ABAST',
+  verificacion_disponibilidad: 'VERIF', inventario: 'INV', regularizacion: 'REGUL',
+}
+
+function ArrastreCard({ items, onDescartar }: {
+  items: TallerOtArrastre[]
+  onDescartar: (o: TallerOtArrastre) => void
+}) {
+  const [verSinAgendar, setVerSinAgendar] = useState(false)
+  const deAntes     = items.filter((i) => !i.nunca_planificada)
+  const sinAgendar  = items.filter((i) => i.nunca_planificada)
+  const visibles    = verSinAgendar ? [...deAntes, ...sinAgendar] : deAntes
+  const masAtrasada = deAntes.reduce((m, i) => Math.max(m, i.semanas_atraso), 0)
+
+  return (
+    <Card className="border-amber-300">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm flex flex-wrap items-center gap-2 text-amber-900">
+          <RefreshCw className="h-4 w-4" /> Viene de semanas anteriores ({deAntes.length})
+          {masAtrasada >= 3 && (
+            <span className="rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-700">
+              la más atrasada, {masAtrasada} semanas
+            </span>
+          )}
+          <span className="text-[10px] font-normal text-gray-400">
+            — OT abiertas que no están en esta semana. Arrástrala a un día → sigue siendo la MISMA OT.
+          </span>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="p-2">
+        {visibles.length === 0 ? (
+          <div className="text-xs text-gray-400 p-3 text-center">
+            Nada arrastrándose: todo el trabajo abierto está en el plan de esta semana.
+          </div>
+        ) : (
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {visibles.map((o) => <ArrastreChip key={o.ot_id} o={o} onDescartar={onDescartar} />)}
+          </div>
+        )}
+        {sinAgendar.length > 0 && (
+          <button
+            onClick={() => setVerSinAgendar((v) => !v)}
+            className="mt-1 text-[11px] text-amber-700 underline hover:text-amber-900">
+            {verSinAgendar
+              ? 'Ocultar las que nunca se agendaron'
+              : `+ ${sinAgendar.length} OT abiertas que nunca se agendaron`}
+          </button>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+function ArrastreChip({ o, onDescartar }: {
+  o: TallerOtArrastre
+  onDescartar: (o: TallerOtArrastre) => void
+}) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: `arrastre:${o.ot_id}` })
+  const style = transform
+    ? { transform: `translate3d(${transform.x}px,${transform.y}px,0)`, opacity: isDragging ? 0.5 : 1 }
+    : undefined
+  const atrasoColor = o.nunca_planificada ? 'bg-gray-200 text-gray-700'
+    : o.semanas_atraso >= 3 ? 'bg-red-200 text-red-800'
+    : o.semanas_atraso >= 1 ? 'bg-amber-200 text-amber-900'
+    : 'bg-gray-200 text-gray-700'
+  const enMarcha = o.ot_estado === 'en_ejecucion' || o.ot_estado === 'pausada'
+
+  return (
+    <div ref={setNodeRef} style={style}
+         className="relative shrink-0 w-[158px] rounded border border-amber-300 bg-amber-50 text-amber-900 px-2.5 py-1.5 shadow-sm text-[12px]">
+      {/* El botón va fuera del área arrastrable: descartar no debe soltar la OT en un día */}
+      <button
+        onClick={() => onDescartar(o)}
+        onPointerDown={(e) => e.stopPropagation()}
+        title="Descartar esta OT (pide motivo)"
+        className="absolute -right-1 -top-1 rounded-full bg-white p-0.5 text-gray-400 shadow hover:text-red-600">
+        <X className="h-3 w-3" />
+      </button>
+      <div {...listeners} {...attributes}
+           title={`${o.ot_folio} · ${o.ot_tipo} · ${o.ot_estado}${o.ultima_semana_en_plan ? ` · última vez en el plan: semana del ${o.ultima_semana_en_plan}` : ' · nunca se agendó'}${o.observaciones ? `\n${o.observaciones}` : ''}`}
+           className="cursor-grab active:cursor-grabbing text-center">
+        <div className="font-mono font-bold truncate">{o.patente ?? o.codigo}</div>
+        <div className="flex items-center justify-center gap-1 text-[9px]">
+          <span className="rounded bg-white/70 px-1 font-semibold">{TIPO_CORTO[o.ot_tipo] ?? o.ot_tipo}</span>
+          <span className={`rounded px-1 font-semibold ${atrasoColor}`}>
+            {o.nunca_planificada ? 'sin agendar' : `${o.semanas_atraso} sem`}
+          </span>
+        </div>
+        <div className="text-[9px] font-mono text-amber-700 truncate">{o.ot_folio}</div>
+        <div className="flex items-center justify-center gap-1 text-[9px]">
+          {enMarcha && (
+            <span className="rounded bg-blue-200 px-1 font-semibold text-blue-900">
+              {o.ot_estado === 'pausada' ? 'pausada' : 'en ejecución'}
+            </span>
+          )}
+          {o.ncs > 0 && (
+            <span className="rounded bg-orange-200 px-1 font-semibold text-orange-900">{o.ncs} NC</span>
+          )}
+          {o.tiene_avance && !enMarcha && (
+            <span className="rounded bg-emerald-200 px-1 font-semibold text-emerald-900">con avance</span>
+          )}
+        </div>
+      </div>
     </div>
   )
 }
