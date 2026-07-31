@@ -378,6 +378,9 @@ export type EnexItemResultado = {
   // Actividades críticas (MIG238): foto del antes y del después.
   foto_antes_url?: string | null
   foto_despues_url?: string | null
+  // [MIG265] Todo ítem lleva antes/después y admite varias fotos de cada uno.
+  fotos_antes?: string[]
+  fotos_despues?: string[]
   observacion?: string | null
 }
 
@@ -401,6 +404,8 @@ export async function ejecutarPauta(p: {
   firmaTecnicoUrl?: string | null; tecnicoNombre?: string | null
   firmaMandanteUrl?: string | null; firmanteMandante?: string | null
   clientUuid?: string | null
+  // [MIG265] Tiempo medido por la app de terreno.
+  inicioAt?: string | null; finAt?: string | null; duracionSegundos?: number | null
 }) {
   const { data, error } = await supabase.rpc('rpc_enex_ejecutar_pauta', {
     p_programacion_id: p.programacionId, p_items: p.items,
@@ -409,6 +414,8 @@ export async function ejecutarPauta(p: {
     p_firma_tecnico_url: p.firmaTecnicoUrl ?? null, p_tecnico_nombre: p.tecnicoNombre ?? null,
     p_firma_mandante_url: p.firmaMandanteUrl ?? null, p_firmante_mandante: p.firmanteMandante ?? null,
     p_client_uuid: p.clientUuid ?? null,
+    p_inicio_at: p.inicioAt ?? null, p_fin_at: p.finAt ?? null,
+    p_duracion_segundos: p.duracionSegundos ?? null,
   })
   if (error) throw error
   return data as { success: boolean; ejecucion_id: string; estado: string; cumplida: boolean; items: number }
@@ -548,6 +555,9 @@ export type EnexReporteItem = {
   valor_medicion: number | null
   dentro_tolerancia: boolean | null
   foto_url: string | null
+  // [MIG265] Evidencia del antes y del después de cada actividad.
+  fotos_antes: string[] | null
+  fotos_despues: string[] | null
   observacion: string | null
   item: {
     bloque: string | null; bloque_orden: number | null; orden: number | null
@@ -599,6 +609,7 @@ export async function getEjecucionReporte(id: string): Promise<{ reporte: EnexRe
   const { data: items, error: e2 } = await supabase
     .from('enex_ejecucion_items')
     .select(`id, resultado, valor_medicion, dentro_tolerancia, foto_url, observacion,
+      fotos_antes, fotos_despues,
       item:enex_pauta_items(bloque, bloque_orden, orden, codigo, descripcion, tipo_campo,
         unidad, valor_referencia, tolerancia_min, tolerancia_max)`)
     .eq('ejecucion_id', id)

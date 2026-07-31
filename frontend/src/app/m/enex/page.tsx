@@ -3,7 +3,7 @@
 // Terreno ENEX — lista de instalaciones programadas por período (MIG208).
 // El mantenedor elige una y ejecuta su pauta.
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
@@ -14,7 +14,7 @@ import { Spinner } from '@/components/ui/spinner'
 import {
   MESES, TIPO_INSTALACION_LABEL, MUNDO_LABEL, mundoDeLinea, type Mundo, type EnexPendiente,
 } from '@/lib/services/enex'
-import { getPendientesOffline, prepararEnexOffline, getEnexPendingCount, syncEnexPending } from '@/lib/offline/enex-offline'
+import { getPendientesOffline, prepararEnexOffline, getEnexPendingCount, syncEnexPending, ultimaDescargaEnex } from '@/lib/offline/enex-offline'
 import { useNetworkStatus } from '@/hooks/use-calama-offline'
 
 const MUNDO_KEY = 'enex-mundo-supervisor'
@@ -59,19 +59,36 @@ export default function EnexTerrenoHome() {
     networkMode: 'always', staleTime: 10_000, enabled: periodo !== null,
   })
 
-  // Descarga automática del mes para trabajar sin señal (una vez por período,
-  // al estar en línea). El botón manual sigue disponible como respaldo.
-  const [autoBajado, setAutoBajado] = useState<string>('')
+  // [MIG265] Descarga automática del mes para trabajar sin señal. Antes corría
+  // una sola vez por sesión y solo si ya había pendientes cargados: si el
+  // mantenedor abría la app y perdía señal enseguida, se quedaba sin nada.
+  // Ahora baja al abrir, al recuperar conexión y cada 10 minutos mientras esté
+  // en línea. Incluye las pautas y lo ya ejecutado de cada servicio.
+  const bajando = useRef(false)
+  const bajar = useCallback(async (forzado: boolean) => {
+    if (!periodo || bajando.current) return
+    if (typeof navigator !== 'undefined' && !navigator.onLine) return
+    const ultima = await ultimaDescargaEnex(anio, mes)
+    const vieja = !ultima || Date.now() - new Date(ultima).getTime() > 10 * 60 * 1000
+    if (!forzado && !vieja) {
+      setDescargaMsg(`listo para trabajar sin señal · ${new Date(ultima!).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })}`)
+      return
+    }
+    bajando.current = true
+    try {
+      const n = await prepararEnexOffline(anio, mes)
+      setDescargaMsg(`${n} servicios disponibles sin internet · ${new Date().toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })}`)
+    } catch { /* si falla, queda el botón manual */ } finally { bajando.current = false }
+  }, [periodo, anio, mes])
+
   useEffect(() => {
-    if (!periodo || !online) return
-    const clave = `${anio}-${mes}`
-    if (autoBajado === clave) return
-    if (pend.length === 0) return
-    setAutoBajado(clave)
-    prepararEnexOffline(anio, mes)
-      .then((n) => setDescargaMsg(`${n} servicios disponibles sin internet`))
-      .catch(() => { /* si falla, queda el botón manual */ })
-  }, [periodo, online, anio, mes, pend.length, autoBajado])
+    if (!periodo) return
+    void bajar(false)
+    const t = setInterval(() => void bajar(false), 10 * 60 * 1000)
+    const onOnline = () => void bajar(true)
+    window.addEventListener('online', onOnline)
+    return () => { clearInterval(t); window.removeEventListener('online', onOnline) }
+  }, [periodo, bajar, online])
   const { data: pendientesSync = 0 } = useQuery({
     queryKey: ['enex-pending-count'], queryFn: getEnexPendingCount, networkMode: 'always', refetchInterval: 4000,
   })

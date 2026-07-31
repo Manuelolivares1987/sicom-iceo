@@ -207,6 +207,10 @@ export function OtMantenimiento({ reporte, items, logoUrl }: Datos) {
     ...items.filter((i) => i.foto_url).map((i) => i.foto_url!),
     ...(reporte.evidencia_urls ?? []),
   ].slice(0, 6)
+  // [MIG265] Evidencia del antes/después por actividad: es lo que el mandante
+  // pide para dar el trabajo por hecho. Antes no salía en el informe.
+  const conAntesDespues = items.filter(
+    (i) => (i.fotos_antes?.length ?? 0) > 0 || (i.fotos_despues?.length ?? 0) > 0)
 
   return (
     <Document>
@@ -270,6 +274,33 @@ export function OtMantenimiento({ reporte, items, logoUrl }: Datos) {
           </View>
         </>)}
 
+        {/* [MIG265] Antes y después de cada actividad. Es la evidencia que
+            respalda el trabajo ante el mandante; antes no salía en el informe. */}
+        {conAntesDespues.length > 0 && (<>
+          <Text style={S.sectionTitle}>EVIDENCIA POR ACTIVIDAD — ANTES Y DESPUÉS</Text>
+          {conAntesDespues.map((i) => (
+            <View key={`ad-${i.id}`} style={{ marginBottom: 6 }} wrap={false}>
+              <Text style={{ fontSize: 7.5, fontWeight: 'bold', color: '#374151' }}>
+                {i.item?.codigo ? `${i.item.codigo} · ` : ''}{i.item?.descripcion ?? ''}
+              </Text>
+              <View style={S.fotosWrap}>
+                {(i.fotos_antes ?? []).map((u, k) => (
+                  <View key={`a${k}`}>
+                    <Text style={{ fontSize: 6.5, color: '#6b7280', marginLeft: 4 }}>ANTES</Text>
+                    <Image src={u} style={S.foto} />
+                  </View>
+                ))}
+                {(i.fotos_despues ?? []).map((u, k) => (
+                  <View key={`d${k}`}>
+                    <Text style={{ fontSize: 6.5, color: '#6b7280', marginLeft: 4 }}>DESPUÉS</Text>
+                    <Image src={u} style={S.foto} />
+                  </View>
+                ))}
+              </View>
+            </View>
+          ))}
+        </>)}
+
         <View style={S.firmasRow} wrap={false}>
           <View style={S.firmaCol}>
             {reporte.firma_tecnico_url ? <Image src={reporte.firma_tecnico_url} style={S.firmaImg} /> : <View style={{ height: 42 }} />}
@@ -325,7 +356,16 @@ export async function generarYGuardarInformeEnex(ejecucionId: string): Promise<s
   const logoUrl = await aDataUrl(`${window.location.origin}/images/logo_empresa_2.png`)
   reporte.firma_tecnico_url = await aDataUrl(reporte.firma_tecnico_url)
   reporte.firma_mandante_url = await aDataUrl(reporte.firma_mandante_url)
-  for (const it of items) it.foto_url = await aDataUrl(it.foto_url)
+  for (const it of items) {
+    it.foto_url = await aDataUrl(it.foto_url)
+    // [MIG265] Las galerías también: react-pdf necesita data URLs.
+    if (it.fotos_antes?.length) {
+      it.fotos_antes = (await Promise.all(it.fotos_antes.map((u) => aDataUrl(u)))).filter(Boolean) as string[]
+    }
+    if (it.fotos_despues?.length) {
+      it.fotos_despues = (await Promise.all(it.fotos_despues.map((u) => aDataUrl(u)))).filter(Boolean) as string[]
+    }
+  }
   reporte.evidencia_urls = (await Promise.all((reporte.evidencia_urls ?? []).map((u) => aDataUrl(u))))
     .filter(Boolean) as string[]
 
