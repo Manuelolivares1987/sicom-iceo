@@ -1,11 +1,11 @@
 'use client'
 
-import { Suspense, useEffect, useMemo, useState } from 'react'
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import {
   ShieldCheck, AlertTriangle, CheckCircle2, XCircle, MinusCircle,
   ClipboardList, Clock, PlusCircle, FileWarning, Gauge,
-  Calendar, ChevronLeft, ChevronRight, Play, Trash2, Layers,
+  Calendar, ChevronLeft, ChevronRight, ChevronDown, Play, Trash2, Layers, Save,
 } from 'lucide-react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
@@ -22,6 +22,8 @@ import {
   useAuditoriasPendientes, useAuditoriaItems, useEquiposParaAuditar,
   useIniciarAuditoria, useResolverAuditoria, useDiferidosActivo,
   useDiferirItem, useGenerarOtPendientes, useKpiCalidadTaller,
+  useGuardarAvanceAuditoria,
+  type AuditoriaItem,
 } from '@/hooks/use-control-calidad'
 import {
   getTareasSemanaCalidad, agregarTareaCalidad, actualizarTareaCalidad, eliminarTareaCalidad,
@@ -46,7 +48,15 @@ export default function AuditoriaCalidadPage() {
 function AuditoriaCalidadPageInner() {
   useRequireAuth()
   const { rol, canApprove } = usePermissions()
-  const puedeAuditar = rol === 'auditor_calidad' || rol === 'administrador' || canApprove('mantenimiento')
+  // [MIG260] Tiene que calzar con lo que acepta la base (fn_resolver_auditoria_calidad
+  // y rpc_guardar_avance_auditoria): solo auditor_calidad y administrador. Antes la
+  // pantalla también habilitaba a quien aprueba mantenimiento, y ese perfil marcaba
+  // los 188 ítems para recibir el rechazo recién al apretar Aprobar.
+  const puedeAuditar = rol === 'auditor_calidad' || rol === 'administrador'
+  // Planificar la semana de calidad lo permite un grupo más amplio
+  // (fn_calidad_plan_autorizado); generar el chequeo masivo, la jefatura.
+  const puedeGestionar = puedeAuditar || canApprove('mantenimiento')
+  const puedeGenerarMasivo = rol === 'administrador' || canApprove('mantenimiento')
 
   const [backfillRunning, setBackfillRunning] = useState(false)
   const [backfillMsg, setBackfillMsg] = useState<string | null>(null)
@@ -88,7 +98,7 @@ function AuditoriaCalidadPageInner() {
           Liberación a servicio. El auditor de calidad aprueba la calidad técnica + la
           documentación del equipo. Su firma es el visto bueno de calidad (ready-to-rent).
         </p>
-        {puedeAuditar && tab === 'auditorias' && (
+        {puedeGenerarMasivo && tab === 'auditorias' && (
           <div className="mt-3 flex flex-wrap items-center gap-3">
             <Button size="sm" variant="outline" disabled={backfillRunning}
               onClick={pasarDisponiblesPorCalidad}>
@@ -113,7 +123,7 @@ function AuditoriaCalidadPageInner() {
 
       {tab === 'plan' && (
         <PlanSemanalCalidad
-          puedeAuditar={puedeAuditar}
+          puedeAuditar={puedeGestionar}
           equipos={equipos as EquipoCalidad[]}
           onIniciarAuditoria={async (activoId, label) => {
             const r: any = await iniciar.mutateAsync({ activo_id: activoId })
@@ -139,8 +149,13 @@ function AuditoriaCalidadPageInner() {
       )}
 
       {!puedeAuditar && (
-        <Card><CardContent className="py-4 text-sm text-amber-700 flex items-center gap-2">
-          <AlertTriangle className="h-4 w-4" /> Solo el rol Auditor de Calidad puede resolver auditorías. Tienes vista de lectura.
+        <Card className="border-amber-300"><CardContent className="py-4 text-sm text-amber-800 flex items-start gap-2">
+          <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+          <span>
+            Tu perfil ({rol ?? 'sin rol'}) tiene <strong>vista de lectura</strong>. Marcar el checklist y
+            resolver la auditoría requiere el rol <strong>Auditor de Calidad</strong> — así lo exige la
+            base de datos, no solo la pantalla. Pídelo en Admin → Perfiles y roles antes de empezar.
+          </span>
         </CardContent></Card>
       )}
 
@@ -183,7 +198,16 @@ function AuditoriaCalidadPageInner() {
                   className={cn('w-full text-left rounded-lg border p-3 text-sm transition-colors',
                     sel?.auditoria_id === a.id ? 'border-emerald-500 bg-emerald-50' : 'hover:bg-muted')}>
                   <div className="font-semibold">{a.patente ?? a.codigo}</div>
-                  <div className="text-xs text-muted-foreground">{a.items_total} ítems · {a.folio ?? 'sin OT'}</div>
+                  <div className="text-xs text-muted-foreground">
+                    {/* [MIG260] El avance queda guardado: se puede retomar donde se dejó. */}
+                    {a.items_marcados ?? 0}/{a.items_total} marcados · {a.folio ?? 'sin OT'}
+                  </div>
+                  {(a.items_marcados ?? 0) > 0 && (a.items_marcados ?? 0) < a.items_total && (
+                    <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-gray-200">
+                      <div className="h-full bg-emerald-500"
+                           style={{ width: `${Math.round(((a.items_marcados ?? 0) / a.items_total) * 100)}%` }} />
+                    </div>
+                  )}
                 </button>
               ))}
             </CardContent>
@@ -257,12 +281,15 @@ function PlanSemanalCalidad({ puedeAuditar, equipos, onIniciarAuditoria }: {
   })
 
   // Equipo de la tarea (por patente o código en equipo_texto) → para "Auditar".
+  // Se comparan sin guiones ni espacios: escribir "JTYK88" o "jtyk 88" tiene que
+  // reconocer a JTYK-88, si no el botón AUDITAR simplemente no aparecía.
+  const normalizar = (s: string) => s.toUpperCase().replace(/[^A-Z0-9]/g, '')
   const equipoDeTarea = (t: CalidadPlanTarea): EquipoCalidad | undefined => {
     if (!t.equipo_texto) return undefined
-    const txt = t.equipo_texto.toUpperCase()
+    const txt = normalizar(t.equipo_texto)
     return equipos.find((e) =>
-      (e.patente && txt.includes(e.patente.toUpperCase())) ||
-      (e.codigo && txt.includes(e.codigo.toUpperCase())))
+      (e.patente && normalizar(e.patente).length >= 4 && txt.includes(normalizar(e.patente))) ||
+      (e.codigo && normalizar(e.codigo).length >= 4 && txt.includes(normalizar(e.codigo))))
   }
 
   const copiarSemana = async () => {
@@ -303,9 +330,9 @@ function PlanSemanalCalidad({ puedeAuditar, equipos, onIniciarAuditoria }: {
   // disponibles → resto. "En plan" si ya tienen una tarea esta semana.
   const enPlanSemana = (e: EquipoCalidad) =>
     tareas.some((t) => {
-      const txt = (t.equipo_texto ?? '').toUpperCase()
-      return (e.patente && txt.includes(e.patente.toUpperCase())) ||
-             (e.codigo && txt.includes(e.codigo.toUpperCase()))
+      const txt = normalizar(t.equipo_texto ?? '')
+      return (e.patente && normalizar(e.patente).length >= 4 && txt.includes(normalizar(e.patente))) ||
+             (e.codigo && normalizar(e.codigo).length >= 4 && txt.includes(normalizar(e.codigo)))
     })
   const ordenEq = (e: EquipoCalidad) =>
     e.estado === 'en_mantenimiento' ? 0 : e.estado === 'fuera_servicio' ? 1
@@ -576,6 +603,23 @@ function AuditoriaDetalle({ sel, puedeAuditar, onDone }: {
   const [firma, setFirma] = useState<string | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  // [MIG260] Autoguardado: el avance ya no vive solo en el navegador.
+  const guardarAvance = useGuardarAvanceAuditoria()
+  const [guardadoAt, setGuardadoAt] = useState<string | null>(null)
+  const [guardarErr, setGuardarErr] = useState<string | null>(null)
+  const [abiertos, setAbiertos] = useState<Record<string, boolean>>({})
+  const obsTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
+
+  const persistir = (items: Array<{ id: string; resultado?: string; observacion?: string | null }>) => {
+    if (!puedeAuditar || items.length === 0) return
+    guardarAvance.mutate({ auditoria_id: sel.auditoria_id, items }, {
+      onSuccess: () => {
+        setGuardarErr(null)
+        setGuardadoAt(new Date().toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' }))
+      },
+      onError: (e) => setGuardarErr((e as Error).message),
+    })
+  }
 
   // form diferir
   const [dDesc, setDDesc] = useState('')
@@ -586,11 +630,32 @@ function AuditoriaDetalle({ sel, puedeAuditar, onDone }: {
 
   const itemState = (id: string, dflt: Res): { resultado: Res; observacion: string } =>
     estado[id] ?? { resultado: dflt, observacion: '' }
-  const setItem = (id: string, dflt: Res, patch: Partial<{ resultado: Res; observacion: string }>) =>
+  const setItem = (id: string, dflt: Res, patch: Partial<{ resultado: Res; observacion: string }>) => {
     setEstado((s) => ({ ...s, [id]: { ...itemState(id, dflt), ...patch } }))
+    // El resultado se graba al toque; la observación, cuando el auditor deja de escribir.
+    if (patch.resultado !== undefined) persistir([{ id, resultado: patch.resultado }])
+    if (patch.observacion !== undefined) {
+      clearTimeout(obsTimers.current[id])
+      obsTimers.current[id] = setTimeout(() => persistir([{ id, observacion: patch.observacion ?? '' }]), 800)
+    }
+  }
 
   const tecnica = items.filter((i) => i.categoria === 'tecnica')
   const docs = items.filter((i) => i.categoria === 'documentacion')
+
+  // [MIG260] Los 188 ítems agrupados por sus 12 bloques, en el orden del Excel.
+  const bloquesDe = (list: AuditoriaItem[]): Array<[string, AuditoriaItem[]]> => {
+    const map: Record<string, AuditoriaItem[]> = {}
+    for (const it of list) {
+      const k = it.bloque ?? 'Sin bloque'
+      ;(map[k] ??= []).push(it)
+    }
+    return Object.entries(map).sort((a, b) =>
+      (a[1][0]?.bloque_orden ?? 99) - (b[1][0]?.bloque_orden ?? 99))
+  }
+
+  const marcados = items.filter((it: AuditoriaItem) => itemState(it.id, it.resultado).resultado !== 'pendiente').length
+  const noAplican = items.filter((it: AuditoriaItem) => !it.aplica_tipo).length
 
   const resumen = useMemo(() => {
     let critFail = 0, oblPend = 0
@@ -653,29 +718,76 @@ function AuditoriaDetalle({ sel, puedeAuditar, onDone }: {
     }
   }
 
-  const renderItems = (list: typeof items, titulo: string) => (
-    <div className="space-y-2">
-      <h3 className="text-sm font-semibold text-muted-foreground">{titulo}</h3>
-      {list.map((it) => {
-        const st = itemState(it.id, it.resultado)
-        return (
-          <div key={it.id} className={cn('rounded-lg border p-3 space-y-2', it.critico && 'border-red-200')}>
-            <div className="flex items-start justify-between gap-3">
-              <div className="text-sm">
-                <span className="font-medium">{it.descripcion}</span>
-                {it.critico && <Badge variant="critica" className="ml-2 text-[10px]">crítico</Badge>}
-                {it.referencia_cert_id && <Badge variant="default" className="ml-2 text-[10px]">cert. vinculada</Badge>}
-              </div>
-              <div className="flex gap-1 shrink-0">
-                <Tg active={st.resultado === 'ok'} c="green" onClick={() => setItem(it.id, it.resultado, { resultado: 'ok' })}><CheckCircle2 className="h-4 w-4" /></Tg>
-                <Tg active={st.resultado === 'no_ok'} c="red" onClick={() => setItem(it.id, it.resultado, { resultado: 'no_ok' })}><XCircle className="h-4 w-4" /></Tg>
-                <Tg active={st.resultado === 'na'} c="gray" onClick={() => setItem(it.id, it.resultado, { resultado: 'na' })}><MinusCircle className="h-4 w-4" /></Tg>
-              </div>
-            </div>
-            {st.resultado === 'no_ok' && (
-              <input className="w-full rounded border px-2 py-1 text-sm" placeholder="Observación del hallazgo"
-                value={st.observacion} onChange={(e) => setItem(it.id, it.resultado, { observacion: e.target.value })} />
+  /** Marca de una vez todos los ítems de una lista (bloque OK / no aplican N/A). */
+  const marcarLote = (list: typeof items, resultado: Res) => {
+    if (list.length === 0) return
+    setEstado((s) => {
+      const next = { ...s }
+      for (const it of list) next[it.id] = { ...itemState(it.id, it.resultado), resultado }
+      return next
+    })
+    persistir(list.map((it) => ({ id: it.id, resultado })))
+  }
+
+  const renderItem = (it: (typeof items)[number]) => {
+    const st = itemState(it.id, it.resultado)
+    return (
+      <div key={it.id} className={cn('rounded-lg border p-3 space-y-2', it.critico && 'border-red-200',
+                                     !it.aplica_tipo && 'bg-gray-50/70')}>
+        <div className="flex items-start justify-between gap-3">
+          <div className="text-sm">
+            <span className={cn('font-medium', !it.aplica_tipo && 'text-gray-500')}>{it.descripcion}</span>
+            {it.critico && <Badge variant="critica" className="ml-2 text-[10px]">crítico</Badge>}
+            {it.referencia_cert_id && <Badge variant="default" className="ml-2 text-[10px]">cert. vinculada</Badge>}
+            {!it.aplica_tipo && (
+              <span className="ml-2 rounded bg-gray-200 px-1 py-0.5 text-[10px] text-gray-600">
+                no corresponde a este tipo de equipo
+              </span>
             )}
+            {it.requiere_foto && (
+              <span className="ml-2 rounded bg-blue-100 px-1 py-0.5 text-[10px] text-blue-700">pide foto</span>
+            )}
+          </div>
+          <div className="flex gap-1 shrink-0">
+            <Tg active={st.resultado === 'ok'} c="green" onClick={() => setItem(it.id, it.resultado, { resultado: 'ok' })}><CheckCircle2 className="h-4 w-4" /></Tg>
+            <Tg active={st.resultado === 'no_ok'} c="red" onClick={() => setItem(it.id, it.resultado, { resultado: 'no_ok' })}><XCircle className="h-4 w-4" /></Tg>
+            <Tg active={st.resultado === 'na'} c="gray" onClick={() => setItem(it.id, it.resultado, { resultado: 'na' })}><MinusCircle className="h-4 w-4" /></Tg>
+          </div>
+        </div>
+        {st.resultado === 'no_ok' && (
+          <input className="w-full rounded border px-2 py-1 text-sm" placeholder="Observación del hallazgo"
+            value={st.observacion} onChange={(e) => setItem(it.id, it.resultado, { observacion: e.target.value })} />
+        )}
+      </div>
+    )
+  }
+
+  const renderItems = (list: typeof items, titulo: string) => (
+    <div className="space-y-3">
+      <h3 className="text-sm font-semibold text-muted-foreground">{titulo} ({list.length})</h3>
+      {bloquesDe(list).map(([bloque, its]) => {
+        const hechos = its.filter((it: AuditoriaItem) => itemState(it.id, it.resultado).resultado !== 'pendiente').length
+        const abierto = abiertos[bloque] ?? hechos < its.length
+        return (
+          <div key={bloque} className="rounded-lg border">
+            <div className="flex flex-wrap items-center gap-2 border-b bg-gray-50 px-3 py-2">
+              <button type="button" onClick={() => setAbiertos((a) => ({ ...a, [bloque]: !abierto }))}
+                      className="flex items-center gap-1 text-sm font-semibold capitalize">
+                {abierto ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                {bloque.replace(/^b\d*_?/, '').replace(/_/g, ' ')}
+              </button>
+              <span className={cn('rounded-full px-2 py-0.5 text-[11px] font-semibold',
+                hechos === its.length ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-600')}>
+                {hechos}/{its.length}
+              </span>
+              {puedeAuditar && hechos < its.length && (
+                <button type="button" onClick={() => marcarLote(its.filter((it: AuditoriaItem) => itemState(it.id, it.resultado).resultado === 'pendiente'), 'ok')}
+                        className="ml-auto rounded border border-green-300 bg-green-50 px-2 py-0.5 text-[11px] font-medium text-green-700 hover:bg-green-100">
+                  Todo el bloque OK
+                </button>
+              )}
+            </div>
+            {abierto && <div className="space-y-2 p-3">{its.map(renderItem)}</div>}
           </div>
         )
       })}
@@ -692,6 +804,37 @@ function AuditoriaDetalle({ sel, puedeAuditar, onDone }: {
       </CardHeader>
       <CardContent className="space-y-5">
         {isLoading && <Spinner className="h-5 w-5" />}
+
+        {/* [MIG260] Avance + autoguardado. El checklist va completo (V03, 188). */}
+        {items.length > 0 && (
+          <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-gray-50 px-3 py-2 text-xs">
+            <span className="font-semibold text-gray-700">
+              {marcados}/{items.length} ítems marcados
+            </span>
+            <div className="h-1.5 w-32 overflow-hidden rounded-full bg-gray-200">
+              <div className="h-full bg-emerald-500 transition-all"
+                   style={{ width: `${items.length ? Math.round((marcados / items.length) * 100) : 0}%` }} />
+            </div>
+            {noAplican > 0 && puedeAuditar && (
+              <button type="button"
+                onClick={() => marcarLote(items.filter((it) => !it.aplica_tipo &&
+                  itemState(it.id, it.resultado).resultado === 'pendiente'), 'na')}
+                className="rounded border border-gray-300 bg-white px-2 py-0.5 font-medium text-gray-600 hover:bg-gray-100">
+                Marcar N/A los {noAplican} que no corresponden a este equipo
+              </button>
+            )}
+            <span className="ml-auto flex items-center gap-1 text-gray-500">
+              {guardarAvance.isPending
+                ? <><Spinner className="h-3 w-3" /> guardando…</>
+                : guardarErr
+                  ? <span className="text-red-600">no se pudo guardar: {guardarErr}</span>
+                  : guardadoAt
+                    ? <><Save className="h-3 w-3" /> guardado {guardadoAt}</>
+                    : <>se guarda solo a medida que marcas</>}
+            </span>
+          </div>
+        )}
+
         {renderItems(tecnica, 'Calidad técnica')}
         {renderItems(docs, 'Documentación')}
 

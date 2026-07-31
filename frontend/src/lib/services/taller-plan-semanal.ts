@@ -281,6 +281,56 @@ export async function getBacklog(): Promise<TallerOTBacklog[]> {
   return (data ?? []) as TallerOTBacklog[]
 }
 
+/**
+ * OT abiertas que NO están en el plan de esta semana (MIG259). Es el trabajo que
+ * se arrastra: hasta ahora no aparecía en ningún bloque del plan semanal, así
+ * que solo volvía si alguien se acordaba de programarlo a mano.
+ */
+export type TallerOtArrastre = {
+  ot_id: string
+  ot_folio: string
+  ot_tipo: string
+  ot_estado: string
+  ot_prioridad: string
+  activo_id: string | null
+  patente: string | null
+  codigo: string | null
+  plan_mantenimiento_id: string | null
+  pm_nombre: string | null
+  fecha_programada: string | null
+  ultima_semana_en_plan: string | null
+  semanas_atraso: number
+  nunca_planificada: boolean
+  ncs: number
+  horas_estimadas: number | null
+  grupo_trabajo: string | null
+  /** Tiene horas de mecánico o checklist respondido: NO se descarta a la ligera. */
+  tiene_avance: boolean
+  responsable: string | null
+  observaciones: string | null
+}
+
+export async function getOtArrastre(planSemanalId: string): Promise<TallerOtArrastre[]> {
+  const { data, error } = await supabase.rpc('fn_taller_ot_arrastre', {
+    p_plan_semanal_id: planSemanalId,
+  })
+  if (error) throw error
+  return (data ?? []) as TallerOtArrastre[]
+}
+
+/** Descarta una OT que ya no corresponde: la cancela con motivo, la saca del
+ *  plan y devuelve sus NC a la bandeja para replanificar. */
+export async function descartarOt(otId: string, motivo: string) {
+  const { data, error } = await supabase.rpc('rpc_taller_descartar_ot', {
+    p_ot_id: otId, p_motivo: motivo,
+  })
+  if (error) throw error
+  return data as {
+    ot_id: string; folio: string; ncs_devueltas?: number
+    dias_sacados_del_plan?: number; mensaje: string
+  }
+}
+
 export async function getKpiSemanal(planSemanalId: string): Promise<TallerKpiSemanal | null> {
   const { data, error } = await supabase
     .from('v_taller_kpi_semanal').select('*')
