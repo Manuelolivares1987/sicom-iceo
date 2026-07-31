@@ -50,10 +50,35 @@ export type EnexPending = {
   created_at: string
 }
 
+/**
+ * [MIG265] Borrador de un servicio en curso. En terreno la pauta casi nunca se
+ * hace completa de una vez: el mantenedor ataca un punto, se le acaba la
+ * batería o cierra la app, y volvía a empezar de cero. El borrador guarda lo
+ * marcado y las fotos (como blobs locales) apenas se capturan.
+ */
+export type EnexDraftFoto = { id: string; url?: string; blob_id?: string }
+export type EnexDraftItem = {
+  resultado?: string | null
+  valor?: string | null
+  obs?: string | null
+  antes: EnexDraftFoto[]
+  despues: EnexDraftFoto[]
+}
+export type EnexDraft = {
+  programacion_id: string
+  ot_numero?: string | null
+  observacion?: string | null
+  firmante?: string | null
+  inicio_at?: string | null
+  items: Record<string, EnexDraftItem>
+  updated_at: string
+}
+
 class EnexTerrenoDB extends Dexie {
   cache!: Table<EnexCacheRow, string>
   pending!: Table<EnexPending, string>
   blobs!: Table<EnexBlob, string>
+  drafts!: Table<EnexDraft, string>
 
   constructor() {
     super('sicom-enex-terreno')
@@ -61,6 +86,13 @@ class EnexTerrenoDB extends Dexie {
       cache:   'key, updated_at',
       pending: 'local_id, programacion_id, sync_status, created_at',
       blobs:   'blob_id',
+    })
+    // v2: borradores del trabajo en curso (MIG265)
+    this.version(2).stores({
+      cache:   'key, updated_at',
+      pending: 'local_id, programacion_id, sync_status, created_at',
+      blobs:   'blob_id',
+      drafts:  'programacion_id, updated_at',
     })
   }
 }
