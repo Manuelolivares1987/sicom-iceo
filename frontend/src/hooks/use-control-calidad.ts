@@ -29,6 +29,12 @@ export type AuditoriaItem = {
   observacion: string | null
   foto_url: string | null
   referencia_cert_id: string | null
+  /** Bloque del checklist V03 para agrupar en pantalla (MIG260). */
+  bloque: string | null
+  bloque_orden: number | null
+  requiere_foto: boolean
+  /** false = no corresponde al tipo de este equipo; se carga igual. MIG260. */
+  aplica_tipo: boolean
 }
 
 // ── Queries ──────────────────────────────────────────────────────────────
@@ -194,6 +200,28 @@ export function useIniciarAuditoria() {
       qc.invalidateQueries({ queryKey: ['aud-pendientes'] })
       qc.invalidateQueries({ queryKey: ['equipos-para-auditar'] })
     },
+  })
+}
+
+/**
+ * Guardado parcial (MIG260). Antes los 188 ítems vivían solo en la memoria del
+ * navegador hasta apretar Aprobar: una recarga borraba horas de trabajo.
+ */
+export function useGuardarAvanceAuditoria() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (args: {
+      auditoria_id: string
+      items: Array<{ id: string; resultado?: string; observacion?: string | null; foto_url?: string | null }>
+    }) => {
+      const { data, error } = await supabase.rpc('rpc_guardar_avance_auditoria', {
+        p_auditoria_id: args.auditoria_id,
+        p_items: args.items,
+      })
+      if (error) throw error
+      return data as { guardados: number; marcados: number; total: number }
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['aud-pendientes'] }) },
   })
 }
 
