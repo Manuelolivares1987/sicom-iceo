@@ -8,7 +8,7 @@ import {
   subirEvidenciaEnex, subirFirmaEnex,
   type EnexPendiente, type EnexPautaItem, type EnexItemResultado,
 } from '@/lib/services/enex'
-import { enexDB, newId, type EnexPending, type EnexPendItem } from './enex-db'
+import { enexDB, newId, type EnexPending, type EnexPendItem, type EnexDraft } from './enex-db'
 
 const isOnline = () => (typeof navigator === 'undefined' ? true : navigator.onLine)
 const keyPend = (a: number, m: number) => `pend:${a}-${m}`
@@ -103,6 +103,36 @@ export async function ultimaDescargaEnex(anio: number, mes: number): Promise<str
   return (row?.value as { at?: string } | undefined)?.at ?? null
 }
 
+// ── Borrador del trabajo en curso ─────────────────────────────────────────
+// [MIG265] En terreno la pauta casi nunca se hace completa de una vez. Si el
+// mantenedor cerraba la app o se le apagaba el teléfono antes de «Guardar
+// avance», perdía todo lo marcado. Ahora cada cambio queda en el teléfono.
+
+/** Guarda una foto recién capturada como blob local y devuelve su id. */
+export async function guardarFotoLocal(file: File | Blob): Promise<string> {
+  const id = newId()
+  await enexDB().blobs.put({ blob_id: id, blob: file, mime: (file as File).type || 'image/jpeg' })
+  return id
+}
+
+export async function getFotoLocal(blobId: string): Promise<Blob | null> {
+  const b = await enexDB().blobs.get(blobId)
+  return b?.blob ?? null
+}
+
+export async function guardarDraft(draft: Omit<EnexDraft, 'updated_at'>): Promise<void> {
+  await enexDB().drafts.put({ ...draft, updated_at: new Date().toISOString() })
+}
+
+export async function getDraft(programacionId: string): Promise<EnexDraft | null> {
+  return (await enexDB().drafts.get(programacionId)) ?? null
+}
+
+/** Al cerrar cumplida: se borra el borrador y sus fotos ya encoladas. */
+export async function borrarDraft(programacionId: string): Promise<void> {
+  await enexDB().drafts.delete(programacionId)
+}
+
 // ── Encolar una ejecución ─────────────────────────────────────────────────
 export async function queueEjecucion(params: {
   programacionId: string
@@ -116,8 +146,10 @@ export async function queueEjecucion(params: {
     pauta_item_id: string; resultado?: string | null; valor_medicion?: string | null
     observacion?: string | null; file?: File | null; fotoUrl?: string | null
     // [MIG265] Antes/después en TODO ítem, con varias fotos cada uno: las
-    // nuevas viajan como File y las ya subidas como URL.
+    // nuevas viajan como File o como blob ya guardado por el borrador, y las
+    // que ya están en el servidor, como URL.
     antesFiles?: File[]; despuesFiles?: File[]
+    antesBlobIds?: string[]; despuesBlobIds?: string[]
     fotosAntesUrls?: string[]; fotosDespuesUrls?: string[]
   }>
   firmaTecFile?: Blob | null
@@ -142,8 +174,10 @@ export async function queueEjecucion(params: {
   for (const it of params.items) {
     let blobId: string | null = null
     if (it.file) { blobId = newId(); await db.blobs.put({ blob_id: blobId, blob: it.file, mime: it.file.type || 'image/jpeg' }) }
-    const antesIds = await guardarBlobs(it.antesFiles)
-    const despuesIds = await guardarBlobs(it.despuesFiles)
+    // Los blobs del borrador ya están en IndexedDB: se reutilizan tal cual en
+    // vez de duplicarlos.
+    const antesIds = [...(it.antesBlobIds ?? []), ...(await guardarBlobs(it.antesFiles))]
+    const despuesIds = [...(it.despuesBlobIds ?? []), ...(await guardarBlobs(it.despuesFiles))]
     items.push({
       pauta_item_id: it.pauta_item_id, resultado: it.resultado ?? null,
       valor_medicion: it.valor_medicion ?? null, observacion: it.observacion ?? null,
