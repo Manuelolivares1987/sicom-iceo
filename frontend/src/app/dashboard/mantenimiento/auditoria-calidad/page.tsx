@@ -5,7 +5,7 @@ import { useSearchParams } from 'next/navigation'
 import {
   ShieldCheck, AlertTriangle, CheckCircle2, XCircle, MinusCircle,
   ClipboardList, Clock, PlusCircle, FileWarning, Gauge,
-  Calendar, ChevronLeft, ChevronRight, ChevronDown, Play, Trash2, Layers, Save,
+  Calendar, ChevronLeft, ChevronRight, ChevronDown, Play, Trash2, Layers, Save, Camera,
 } from 'lucide-react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
@@ -31,6 +31,7 @@ import {
   type CalidadPlanTarea, type CalidadTareaTipo,
 } from '@/lib/services/calidad-plan'
 import { subirFirma } from '@/lib/services/verificacion'
+import { subirFotoItemAuditoria, getInformesSalida } from '@/lib/services/informe-salida'
 import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
 
@@ -212,6 +213,9 @@ function AuditoriaCalidadPageInner() {
               ))}
             </CardContent>
           </Card>
+
+          {/* [MIG263] Informes de salida emitidos: el documento del equipo. */}
+          <InformesSalidaCard />
         </div>
 
         {/* Detalle */}
@@ -587,6 +591,47 @@ function ProgramarTareaCalidadModal({ dias, equipos, inicial, onClose, onDone }:
   )
 }
 
+// [MIG263] Los informes ya emitidos, para encontrarlos sin buscar en la OT.
+function InformesSalidaCard() {
+  const { data: informes = [] } = useQuery({
+    queryKey: ['informes-salida'],
+    queryFn: () => getInformesSalida(15),
+    staleTime: 60_000,
+  })
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base flex items-center gap-2">
+          <ClipboardList className="h-4 w-4" /> Informes de salida ({informes.length})
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-1.5 max-h-72 overflow-auto">
+        {informes.length === 0 && (
+          <p className="py-3 text-center text-xs text-muted-foreground">
+            Todavía no se emite ninguno. Se genera al aprobar una auditoría.
+          </p>
+        )}
+        {informes.map((i) => (
+          <a key={i.auditoria_id} href={`/informe-salida/${i.auditoria_id}`} target="_blank" rel="noreferrer"
+             className="block rounded border p-2 text-xs hover:bg-muted">
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-semibold">{i.patente ?? i.codigo}</span>
+              <span className="font-mono text-[10px] text-gray-500">{i.folio}</span>
+            </div>
+            <div className="text-[11px] text-muted-foreground">
+              {i.items_ok}/{i.items_total} conformes · {i.fotos} fotos
+              {i.items_no_ok > 0 && <span className="text-red-600"> · {i.items_no_ok} hallazgos</span>}
+              {i.vigente
+                ? <span className="text-green-700"> · vigente</span>
+                : <span className="text-amber-700"> · vencido</span>}
+            </div>
+          </a>
+        ))}
+      </CardContent>
+    </Card>
+  )
+}
+
 function AuditoriaDetalle({ sel, puedeAuditar, onDone }: {
   sel: { auditoria_id: string; activo_id: string; label: string }; puedeAuditar: boolean; onDone: () => void
 }) {
@@ -609,8 +654,12 @@ function AuditoriaDetalle({ sel, puedeAuditar, onDone }: {
   const [guardarErr, setGuardarErr] = useState<string | null>(null)
   const [abiertos, setAbiertos] = useState<Record<string, boolean>>({})
   const obsTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
+  // [MIG263] Evidencia fotográfica por ítem: es la que sostiene el informe.
+  const [fotos, setFotos] = useState<Record<string, string>>({})
+  const [subiendo, setSubiendo] = useState<string | null>(null)
+  const [folioEmitido, setFolioEmitido] = useState<string | null>(null)
 
-  const persistir = (items: Array<{ id: string; resultado?: string; observacion?: string | null }>) => {
+  const persistir = (items: Array<{ id: string; resultado?: string; observacion?: string | null; foto_url?: string }>) => {
     if (!puedeAuditar || items.length === 0) return
     guardarAvance.mutate({ auditoria_id: sel.auditoria_id, items }, {
       onSuccess: () => {
@@ -669,12 +718,27 @@ function AuditoriaDetalle({ sel, puedeAuditar, onDone }: {
 
   const criticosPendientes = diferidos.filter((d: any) => d.diferible === false && d.estado === 'pendiente').length
 
+  // [MIG263] Puntos que no pueden ir sin foto: el hallazgo y los que el
+  // checklist marca. Se cuenta en pantalla para avisar antes, no al final.
+  const sinFoto = items.filter((it: AuditoriaItem) => {
+    const r = itemState(it.id, it.resultado).resultado
+    const tiene = !!(fotos[it.id] ?? it.foto_url)
+    return !tiene && (r === 'no_ok' || (it.requiere_foto && r === 'ok'))
+  })
+
   const enviar = async (resultado: 'aprobado' | 'aprobado_con_observaciones' | 'rechazado') => {
     setErr(null)
+    if (sinFoto.length > 0) {
+      setErr(`Faltan ${sinFoto.length} foto(s) de evidencia: «${sinFoto[0].descripcion}»` +
+             (sinFoto.length > 1 ? ` y ${sinFoto.length - 1} más.` : '.') +
+             ' El informe de salida se emite con la foto de cada hallazgo.')
+      return
+    }
     if (resultado !== 'rechazado') {
       if (resumen.critFail > 0) { setErr('Hay ítems críticos en NO OK: no se puede aprobar.'); return }
       if (resumen.oblPend > 0) { setErr('Faltan ítems obligatorios por marcar.'); return }
       if (criticosPendientes > 0) { setErr(`Hay ${criticosPendientes} pendiente(s) crítico(s) sin resolver. Bloquean la liberación.`); return }
+      if (!firma) { setErr('Falta la firma del auditor: es la que respalda el informe de salida.'); return }
     }
     setSaving(true)
     try {
@@ -684,19 +748,24 @@ function AuditoriaDetalle({ sel, puedeAuditar, onDone }: {
         if (error) throw error
         firmaUrl = data
       }
-      await resolver.mutateAsync({
+      const r = await resolver.mutateAsync({
         auditoria_id: sel.auditoria_id,
         resultado,
         items: items.map((it) => ({
           id: it.id,
           resultado: itemState(it.id, it.resultado).resultado === 'pendiente' ? 'na' : itemState(it.id, it.resultado).resultado,
           observacion: itemState(it.id, it.resultado).observacion || null,
+          foto_url: fotos[it.id] ?? it.foto_url ?? null,
         })),
         motivo_rechazo: resultado === 'rechazado' ? (motivo || 'Sin detalle') : null,
         observaciones: obs || null,
         firma_url: firmaUrl,
         dias_vigencia: dias,
       })
+      // [MIG263] Aprobada = informe de salida emitido. Se muestra el folio con
+      // el enlace, en vez de cerrar la ficha y dejar al auditor buscándolo.
+      const folio = (r as { folio?: string } | null)?.folio
+      if (folio) { setFolioEmitido(folio); return }
       onDone()
     } catch (e: unknown) {
       setErr(e instanceof Error ? e.message : 'Error al resolver la auditoría')
@@ -731,9 +800,13 @@ function AuditoriaDetalle({ sel, puedeAuditar, onDone }: {
 
   const renderItem = (it: (typeof items)[number]) => {
     const st = itemState(it.id, it.resultado)
+    const foto = fotos[it.id] ?? it.foto_url
+    // [MIG263] La foto es obligatoria en el hallazgo y donde el checklist la pide.
+    const fotoExigida = st.resultado === 'no_ok' || (it.requiere_foto && st.resultado === 'ok')
     return (
       <div key={it.id} className={cn('rounded-lg border p-3 space-y-2', it.critico && 'border-red-200',
-                                     !it.aplica_tipo && 'bg-gray-50/70')}>
+                                     !it.aplica_tipo && 'bg-gray-50/70',
+                                     fotoExigida && !foto && 'border-amber-400 bg-amber-50/40')}>
         <div className="flex items-start justify-between gap-3">
           <div className="text-sm">
             <span className={cn('font-medium', !it.aplica_tipo && 'text-gray-500')}>{it.descripcion}</span>
@@ -757,6 +830,46 @@ function AuditoriaDetalle({ sel, puedeAuditar, onDone }: {
         {st.resultado === 'no_ok' && (
           <input className="w-full rounded border px-2 py-1 text-sm" placeholder="Observación del hallazgo"
             value={st.observacion} onChange={(e) => setItem(it.id, it.resultado, { observacion: e.target.value })} />
+        )}
+
+        {/* [MIG263] Evidencia: la foto es la que sostiene el informe de salida. */}
+        {puedeAuditar && (
+          <div className="flex items-center gap-2">
+            {foto ? (
+              <a href={foto} target="_blank" rel="noreferrer" className="shrink-0">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={foto} alt="evidencia" className="h-14 w-14 rounded border object-cover" />
+              </a>
+            ) : (
+              <span className={cn('text-[11px]', fotoExigida ? 'font-medium text-amber-700' : 'text-gray-400')}>
+                {fotoExigida ? 'Falta la foto de este punto' : 'Sin foto'}
+              </span>
+            )}
+            <label className={cn('cursor-pointer rounded border px-2 py-1 text-[11px] font-medium',
+              subiendo === it.id ? 'bg-gray-100 text-gray-400'
+                : foto ? 'border-gray-300 text-gray-600 hover:bg-gray-50'
+                       : 'border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100')}>
+              <span className="flex items-center gap-1">
+                <Camera className="h-3.5 w-3.5" />
+                {subiendo === it.id ? 'subiendo…' : foto ? 'Reemplazar' : 'Tomar foto'}
+              </span>
+              <input type="file" accept="image/*" capture="environment" className="hidden"
+                disabled={subiendo === it.id}
+                onChange={async (e) => {
+                  const file = e.target.files?.[0]
+                  e.target.value = ''
+                  if (!file) return
+                  setSubiendo(it.id)
+                  try {
+                    const url = await subirFotoItemAuditoria(sel.auditoria_id, it.id, file)
+                    setFotos((f) => ({ ...f, [it.id]: url }))
+                    persistir([{ id: it.id, foto_url: url }])
+                  } catch (e2) {
+                    setGuardarErr(e2 instanceof Error ? e2.message : 'No se pudo subir la foto')
+                  } finally { setSubiendo(null) }
+                }} />
+            </label>
+          </div>
         )}
       </div>
     )
@@ -804,6 +917,29 @@ function AuditoriaDetalle({ sel, puedeAuditar, onDone }: {
       </CardHeader>
       <CardContent className="space-y-5">
         {isLoading && <Spinner className="h-5 w-5" />}
+
+        {/* [MIG263] Aprobada: el informe de salida ya está emitido. */}
+        {folioEmitido && (
+          <div className="rounded-lg border border-emerald-300 bg-emerald-50 p-4 text-sm">
+            <div className="flex items-center gap-2 font-semibold text-emerald-800">
+              <ShieldCheck className="h-5 w-5" /> Equipo liberado · Informe de salida {folioEmitido}
+            </div>
+            <p className="mt-1 text-emerald-900">
+              {sel.label} quedó operativo con su verificación vigente. El informe lleva la foto de
+              cada punto revisado y de cada hallazgo: es el documento que acompaña al equipo al arriendo.
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <a href={`/informe-salida/${sel.auditoria_id}`} target="_blank" rel="noreferrer"
+                 className="rounded bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700">
+                Ver / imprimir el informe
+              </a>
+              <button onClick={onDone}
+                      className="rounded border border-emerald-400 px-3 py-1.5 text-xs font-medium text-emerald-700">
+                Cerrar
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* [MIG260] Avance + autoguardado. El checklist va completo (V03, 188). */}
         {items.length > 0 && (
