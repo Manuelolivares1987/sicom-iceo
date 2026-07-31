@@ -4,7 +4,7 @@
 // - Overlay: refleja lo pendiente sobre la cache para la UI.
 
 import {
-  getTerrenoPendientes, getPautaItems, ejecutarPauta,
+  getTerrenoPendientes, getPautaItems, ejecutarPauta, getEjecucionItems,
   subirEvidenciaEnex, subirFirmaEnex,
   type EnexPendiente, type EnexPautaItem, type EnexItemResultado,
 } from '@/lib/services/enex'
@@ -53,14 +53,54 @@ export async function getPautaItemsOffline(pautaId: string): Promise<EnexPautaIt
   return (row?.value as EnexPautaItem[]) ?? []
 }
 
-// Pre-descargar todo lo del período para operar sin señal
+// ── Ítems ya registrados de una ejecución (para reabrir un trabajo) ────────
+// [MIG265] También se cachean: sin esto, reabrir un servicio sin señal perdía
+// de vista lo ya marcado y las fotos ya subidas.
+export type EnexEjecucionItemRow = {
+  pauta_item_id: string
+  resultado: string | null
+  valor_medicion: number | null
+  observacion: string | null
+  foto_url: string | null
+  foto_antes_url: string | null
+  foto_despues_url: string | null
+  fotos_antes: string[] | null
+  fotos_despues: string[] | null
+}
+const keyEjec = (ejecucionId: string) => `ejec:${ejecucionId}`
+
+export async function getEjecucionItemsOffline(ejecucionId: string): Promise<EnexEjecucionItemRow[]> {
+  if (isOnline()) {
+    try {
+      const rows = (await getEjecucionItems(ejecucionId)) as unknown as EnexEjecucionItemRow[]
+      await enexDB().cache.put({ key: keyEjec(ejecucionId), value: rows, updated_at: new Date().toISOString() })
+      return rows
+    } catch { /* cae a cache */ }
+  }
+  const row = await enexDB().cache.get(keyEjec(ejecucionId))
+  return (row?.value as EnexEjecucionItemRow[]) ?? []
+}
+
+// Pre-descargar todo lo del período para operar sin señal: pendientes, ítems de
+// cada pauta y lo ya ejecutado de cada servicio.
 export async function prepararEnexOffline(anio: number, mes: number): Promise<number> {
   const pend = await getTerrenoPendientes(anio, mes)
   await enexDB().cache.put({ key: keyPend(anio, mes), value: pend, updated_at: new Date().toISOString() })
   const pautas = Array.from(new Set(pend.map((p) => p.pauta_id).filter(Boolean))) as string[]
-  let n = 0
-  for (const pid of pautas) { try { await getPautaItemsOffline(pid); n++ } catch { /* sigue */ } }
+  for (const pid of pautas) { try { await getPautaItemsOffline(pid) } catch { /* sigue */ } }
+  const ejecuciones = pend.map((p) => p.ejecucion_id).filter(Boolean) as string[]
+  for (const eid of ejecuciones) { try { await getEjecucionItemsOffline(eid) } catch { /* sigue */ } }
+  await enexDB().cache.put({
+    key: `descarga:${anio}-${mes}`, value: { at: new Date().toISOString(), servicios: pend.length },
+    updated_at: new Date().toISOString(),
+  })
   return pend.length
+}
+
+/** Cuándo se bajó por última vez el período (para avisarlo en pantalla). */
+export async function ultimaDescargaEnex(anio: number, mes: number): Promise<string | null> {
+  const row = await enexDB().cache.get(`descarga:${anio}-${mes}`)
+  return (row?.value as { at?: string } | undefined)?.at ?? null
 }
 
 // ── Encolar una ejecución ─────────────────────────────────────────────────
@@ -75,31 +115,43 @@ export async function queueEjecucion(params: {
   items: Array<{
     pauta_item_id: string; resultado?: string | null; valor_medicion?: string | null
     observacion?: string | null; file?: File | null; fotoUrl?: string | null
-    // Actividades críticas: foto del antes y del después por ítem (MIG238).
-    antesFile?: File | null; despuesFile?: File | null
-    fotoAntesUrl?: string | null; fotoDespuesUrl?: string | null
+    // [MIG265] Antes/después en TODO ítem, con varias fotos cada uno: las
+    // nuevas viajan como File y las ya subidas como URL.
+    antesFiles?: File[]; despuesFiles?: File[]
+    fotosAntesUrls?: string[]; fotosDespuesUrls?: string[]
   }>
   firmaTecFile?: Blob | null
   firmaMandFile?: Blob | null
+  // [MIG265] Tiempo del trabajo en terreno.
+  inicioAt?: string | null
+  finAt?: string | null
+  duracionSegundos?: number | null
 }): Promise<{ synced: boolean }> {
   const db = enexDB()
   // Guardar blobs de fotos + firmas
   const items: EnexPendItem[] = []
+  const guardarBlobs = async (files: File[] | undefined): Promise<string[]> => {
+    const ids: string[] = []
+    for (const f of files ?? []) {
+      const id = newId()
+      await db.blobs.put({ blob_id: id, blob: f, mime: f.type || 'image/jpeg' })
+      ids.push(id)
+    }
+    return ids
+  }
   for (const it of params.items) {
     let blobId: string | null = null
     if (it.file) { blobId = newId(); await db.blobs.put({ blob_id: blobId, blob: it.file, mime: it.file.type || 'image/jpeg' }) }
-    let antesId: string | null = null
-    if (it.antesFile) { antesId = newId(); await db.blobs.put({ blob_id: antesId, blob: it.antesFile, mime: it.antesFile.type || 'image/jpeg' }) }
-    let despuesId: string | null = null
-    if (it.despuesFile) { despuesId = newId(); await db.blobs.put({ blob_id: despuesId, blob: it.despuesFile, mime: it.despuesFile.type || 'image/jpeg' }) }
+    const antesIds = await guardarBlobs(it.antesFiles)
+    const despuesIds = await guardarBlobs(it.despuesFiles)
     items.push({
       pauta_item_id: it.pauta_item_id, resultado: it.resultado ?? null,
       valor_medicion: it.valor_medicion ?? null, observacion: it.observacion ?? null,
-      foto_blob_id: blobId, foto_antes_blob_id: antesId, foto_despues_blob_id: despuesId,
-      // conservar urls ya subidas si venían (edición): las mandamos tal cual
+      foto_blob_id: blobId,
+      fotos_antes_blob_ids: antesIds, fotos_despues_blob_ids: despuesIds,
+      // las que ya estaban subidas viajan como URL y se conservan
+      fotos_antes_urls: it.fotosAntesUrls ?? [], fotos_despues_urls: it.fotosDespuesUrls ?? [],
       ...(it.fotoUrl && !blobId ? { foto_url_existente: it.fotoUrl } as unknown as object : {}),
-      ...(it.fotoAntesUrl && !antesId ? { foto_antes_url_existente: it.fotoAntesUrl } as unknown as object : {}),
-      ...(it.fotoDespuesUrl && !despuesId ? { foto_despues_url_existente: it.fotoDespuesUrl } as unknown as object : {}),
     })
   }
   let firmaTecId: string | null = null
@@ -113,6 +165,8 @@ export async function queueEjecucion(params: {
     ejecutor: params.ejecutor ?? null, tecnico_nombre: params.tecnicoNombre ?? null,
     observacion: params.observacion ?? null, firmante_mandante: params.firmanteMandante ?? null,
     items, firma_tec_blob_id: firmaTecId, firma_mand_blob_id: firmaMandId,
+    inicio_at: params.inicioAt ?? null, fin_at: params.finAt ?? null,
+    duracion_segundos: params.duracionSegundos ?? null,
     sync_status: 'pending', retries: 0, last_error: null, created_at: new Date().toISOString(),
   }
   // Reemplazar cualquier pendiente previo de la misma programación (última gana)
@@ -145,20 +199,28 @@ export async function syncEnexPending(): Promise<{ ok: number; failed: number }>
           const b = await db.blobs.get(it.foto_blob_id)
           if (b) fotoUrl = await subirEvidenciaEnex(new File([b.blob], 'foto.jpg', { type: b.mime }))
         }
-        let antesUrl: string | null = ex.foto_antes_url_existente ?? null
-        if (it.foto_antes_blob_id) {
-          const b = await db.blobs.get(it.foto_antes_blob_id)
-          if (b) antesUrl = await subirEvidenciaEnex(new File([b.blob], 'antes.jpg', { type: b.mime }))
+        // [MIG265] Galerías: primero lo ya subido, después lo capturado offline.
+        const subirGaleria = async (ids: string[] | undefined, nombre: string): Promise<string[]> => {
+          const urls: string[] = []
+          for (const id of ids ?? []) {
+            const b = await db.blobs.get(id)
+            if (b) urls.push(await subirEvidenciaEnex(new File([b.blob], nombre + '.jpg', { type: b.mime })))
+          }
+          return urls
         }
-        let despuesUrl: string | null = ex.foto_despues_url_existente ?? null
-        if (it.foto_despues_blob_id) {
-          const b = await db.blobs.get(it.foto_despues_blob_id)
-          if (b) despuesUrl = await subirEvidenciaEnex(new File([b.blob], 'despues.jpg', { type: b.mime }))
-        }
+        const antesPrev = it.fotos_antes_urls
+          ?? (ex.foto_antes_url_existente ? [ex.foto_antes_url_existente] : [])
+        const despuesPrev = it.fotos_despues_urls
+          ?? (ex.foto_despues_url_existente ? [ex.foto_despues_url_existente] : [])
+        const fotosAntes = [...antesPrev, ...(await subirGaleria(it.fotos_antes_blob_ids, 'antes'))]
+        const fotosDespues = [...despuesPrev, ...(await subirGaleria(it.fotos_despues_blob_ids, 'despues'))]
+
         itemsPayload.push({
           pauta_item_id: it.pauta_item_id, resultado: it.resultado ?? null,
           valor_medicion: it.valor_medicion ?? null, foto_url: fotoUrl,
-          foto_antes_url: antesUrl, foto_despues_url: despuesUrl, observacion: it.observacion ?? null,
+          foto_antes_url: fotosAntes[0] ?? null, foto_despues_url: fotosDespues[0] ?? null,
+          fotos_antes: fotosAntes, fotos_despues: fotosDespues,
+          observacion: it.observacion ?? null,
         })
       }
       // firmas
@@ -173,12 +235,16 @@ export async function syncEnexPending(): Promise<{ ok: number; failed: number }>
         firmaTecnicoUrl: firmaTecUrl, tecnicoNombre: p.tecnico_nombre,
         firmaMandanteUrl: firmaMandUrl, firmanteMandante: p.firmante_mandante,
         clientUuid: p.client_uuid,
+        inicioAt: p.inicio_at ?? null, finAt: p.fin_at ?? null,
+        duracionSegundos: p.duracion_segundos ?? null,
       })
       // limpiar blobs
       for (const it of p.items) {
         if (it.foto_blob_id) await db.blobs.delete(it.foto_blob_id)
         if (it.foto_antes_blob_id) await db.blobs.delete(it.foto_antes_blob_id)
         if (it.foto_despues_blob_id) await db.blobs.delete(it.foto_despues_blob_id)
+        for (const id of it.fotos_antes_blob_ids ?? []) await db.blobs.delete(id)
+        for (const id of it.fotos_despues_blob_ids ?? []) await db.blobs.delete(id)
       }
       if (p.firma_tec_blob_id) await db.blobs.delete(p.firma_tec_blob_id)
       if (p.firma_mand_blob_id) await db.blobs.delete(p.firma_mand_blob_id)

@@ -17,6 +17,12 @@ export type EnexPendItem = {
   // Actividades críticas (MIG238): foto del antes y del después por ítem.
   foto_antes_blob_id?: string | null
   foto_despues_blob_id?: string | null
+  // [MIG265] Ahora TODO ítem lleva antes/después y admite varias fotos.
+  // Las que ya están subidas viajan como URL; las nuevas, como blob local.
+  fotos_antes_blob_ids?: string[]
+  fotos_despues_blob_ids?: string[]
+  fotos_antes_urls?: string[]
+  fotos_despues_urls?: string[]
 }
 
 /** Ejecución pendiente de subir. */
@@ -33,6 +39,10 @@ export type EnexPending = {
   items: EnexPendItem[]
   firma_tec_blob_id?: string | null
   firma_mand_blob_id?: string | null
+  // [MIG265] Tiempo que tomó el trabajo, medido por la app.
+  inicio_at?: string | null
+  fin_at?: string | null
+  duracion_segundos?: number | null
   // control
   sync_status: 'pending' | 'error'
   retries: number

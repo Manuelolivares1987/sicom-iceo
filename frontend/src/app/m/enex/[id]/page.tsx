@@ -1,22 +1,28 @@
 'use client'
 
-// Ejecución de pauta en terreno (MIG208): el mantenedor marca cada ítem, mide
-// (con tolerancia automática), saca fotos, firma él y el mandante.
+// Ejecución de pauta en terreno (MIG208 · MIG265): el mantenedor marca cada
+// ítem, mide (con tolerancia automática), saca fotos del ANTES y del DESPUÉS
+// —varias si quiere—, firma él y el mandante. La app cronometra el trabajo y
+// cada ítem se puede comprimir para no perderse en pautas largas.
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import {
   ArrowLeft, Camera, Check, X, Minus, CheckCircle2, Loader2, Ruler, AlertTriangle, Repeat,
+  ChevronDown, ChevronRight, Timer, Plus, Trash2, WifiOff,
 } from 'lucide-react'
 import { Spinner } from '@/components/ui/spinner'
 import { Button } from '@/components/ui/button'
 import { SignaturePad } from '@/components/ui/signature-pad'
 import { useAuth } from '@/contexts/auth-context'
 import { useToast } from '@/contexts/toast-context'
-import { getEjecucionItems, getEjecucionIdDeProgramacion, type EnexPautaItem, type EnexPendiente } from '@/lib/services/enex'
+import { getEjecucionIdDeProgramacion, type EnexPautaItem, type EnexPendiente } from '@/lib/services/enex'
 import { generarYGuardarInformeEnex } from '@/components/enex/pdf-informe-enex'
-import { getPendientesOffline, getPautaItemsOffline, queueEjecucion } from '@/lib/offline/enex-offline'
+import {
+  getPendientesOffline, getPautaItemsOffline, getEjecucionItemsOffline, queueEjecucion,
+} from '@/lib/offline/enex-offline'
+import { useNetworkStatus } from '@/hooks/use-calama-offline'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 
 function dataUrlToBlob(dataUrl: string): Blob {
@@ -28,9 +34,10 @@ function dataUrlToBlob(dataUrl: string): Blob {
 }
 
 type Estado = {
-  resultado?: string; valor?: string; file?: File; fotoUrl?: string; obs?: string
-  // Actividades críticas: foto del antes y del después.
-  antesFile?: File; despuesFile?: File; fotoAntesUrl?: string; fotoDespuesUrl?: string
+  resultado?: string; valor?: string; obs?: string
+  // [MIG265] Galerías: fotos nuevas (File) y las ya subidas (URL).
+  antesFiles?: File[]; despuesFiles?: File[]
+  fotosAntes?: string[]; fotosDespues?: string[]
 }
 
 function toleranciaTexto(it: EnexPautaItem): string {
@@ -51,11 +58,26 @@ function dentroTol(it: EnexPautaItem, v: string | undefined): boolean | null {
   return okMin && okMax
 }
 
+const nAntes   = (st: Estado) => (st.fotosAntes?.length ?? 0) + (st.antesFiles?.length ?? 0)
+const nDespues = (st: Estado) => (st.fotosDespues?.length ?? 0) + (st.despuesFiles?.length ?? 0)
+/** Un ítem marcado N/A no necesita evidencia: no se hizo nada sobre él. */
+const exigeFotos = (st: Estado) => st.resultado !== 'na'
+const itemListo  = (st: Estado) =>
+  !exigeFotos(st) ? true : nAntes(st) > 0 && nDespues(st) > 0
+
+function hhmmss(seg: number): string {
+  const h = Math.floor(seg / 3600), m = Math.floor((seg % 3600) / 60), s = seg % 60
+  return h > 0
+    ? `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+    : `${m}:${String(s).padStart(2, '0')}`
+}
+
 export default function EnexEjecutarPage() {
   const params = useParams()
   const router = useRouter()
   const toast = useToast()
   const qc = useQueryClient()
+  const online = useNetworkStatus()
   const { perfil } = useAuth()
   const progId = params?.id as string
 
@@ -77,20 +99,42 @@ export default function EnexEjecutarPage() {
   const [firmaMand, setFirmaMand] = useState('')
   const [firmante, setFirmante] = useState('')
   const [guardando, setGuardando] = useState(false)
+  const [abiertos, setAbiertos] = useState<Record<string, boolean>>({})
   const fileRefs = useRef<Record<string, HTMLInputElement | null>>({})
-  const antesRefs = useRef<Record<string, HTMLInputElement | null>>({})
-  const despuesRefs = useRef<Record<string, HTMLInputElement | null>>({})
 
-  // Precargar lo ya registrado (si vuelve a editar)
+  // ── [MIG265] Cronómetro del trabajo ──────────────────────────────────────
+  // El inicio se guarda en el teléfono: si se recarga la página o se corta la
+  // señal, el tiempo sigue contando desde que se abrió el servicio.
+  const claveTimer = `enex-inicio:${progId}`
+  const [inicioAt, setInicioAt] = useState<string | null>(null)
+  const [ahora, setAhora] = useState<number>(() => Date.now())
+  useEffect(() => {
+    if (!progId) return
+    let ini = typeof localStorage !== 'undefined' ? localStorage.getItem(claveTimer) : null
+    if (!ini) {
+      ini = new Date().toISOString()
+      try { localStorage.setItem(claveTimer, ini) } catch { /* modo privado */ }
+    }
+    setInicioAt(ini)
+  }, [progId, claveTimer])
+  useEffect(() => {
+    const t = setInterval(() => setAhora(Date.now()), 1000)
+    return () => clearInterval(t)
+  }, [])
+  const segundos = inicioAt ? Math.max(0, Math.floor((ahora - new Date(inicioAt).getTime()) / 1000)) : 0
+
+  // Precargar lo ya registrado (funciona sin señal: queda en cache)
   useEffect(() => {
     if (!prog?.ejecucion_id) return
-    getEjecucionItems(prog.ejecucion_id).then((rows) => {
+    getEjecucionItemsOffline(prog.ejecucion_id).then((rows) => {
       const e: Record<string, Estado> = {}
-      for (const r of rows as Array<{ pauta_item_id: string; resultado: string | null; valor_medicion: number | null; foto_url: string | null; foto_antes_url: string | null; foto_despues_url: string | null; observacion: string | null }>) {
+      for (const r of rows) {
         e[r.pauta_item_id] = {
-          resultado: r.resultado ?? undefined, valor: r.valor_medicion?.toString(),
-          fotoUrl: r.foto_url ?? undefined, fotoAntesUrl: r.foto_antes_url ?? undefined,
-          fotoDespuesUrl: r.foto_despues_url ?? undefined, obs: r.observacion ?? undefined,
+          resultado: r.resultado ?? undefined,
+          valor: r.valor_medicion?.toString(),
+          obs: r.observacion ?? undefined,
+          fotosAntes: r.fotos_antes?.length ? r.fotos_antes : (r.foto_antes_url ? [r.foto_antes_url] : []),
+          fotosDespues: r.fotos_despues?.length ? r.fotos_despues : (r.foto_despues_url ? [r.foto_despues_url] : []),
         }
       }
       setEstado(e)
@@ -107,30 +151,67 @@ export default function EnexEjecutarPage() {
     return g
   }, [items])
 
-  function upd(id: string, patch: Partial<Estado>) { setEstado((p) => ({ ...p, [id]: { ...p[id], ...patch } })) }
+  const upd = useCallback((id: string, patch: Partial<Estado>) => {
+    setEstado((p) => ({ ...p, [id]: { ...p[id], ...patch } }))
+  }, [])
+
+  const agregarFotos = (id: string, tipo: 'antes' | 'despues', files: FileList) => {
+    const nuevas = Array.from(files)
+    setEstado((p) => {
+      const st = p[id] ?? {}
+      return {
+        ...p,
+        [id]: tipo === 'antes'
+          ? { ...st, antesFiles: [...(st.antesFiles ?? []), ...nuevas] }
+          : { ...st, despuesFiles: [...(st.despuesFiles ?? []), ...nuevas] },
+      }
+    })
+  }
+  const quitarFoto = (id: string, tipo: 'antes' | 'despues', idx: number, subida: boolean) => {
+    setEstado((p) => {
+      const st = p[id] ?? {}
+      if (tipo === 'antes') {
+        return subida
+          ? { ...p, [id]: { ...st, fotosAntes: (st.fotosAntes ?? []).filter((_, i) => i !== idx) } }
+          : { ...p, [id]: { ...st, antesFiles: (st.antesFiles ?? []).filter((_, i) => i !== idx) } }
+      }
+      return subida
+        ? { ...p, [id]: { ...st, fotosDespues: (st.fotosDespues ?? []).filter((_, i) => i !== idx) } }
+        : { ...p, [id]: { ...st, despuesFiles: (st.despuesFiles ?? []).filter((_, i) => i !== idx) } }
+    })
+  }
+
+  // Avance: cuántos ítems tienen su antes y su después
+  const listos = items.filter((it) => itemListo(estado[it.id] ?? {})).length
+  const faltanFotos = items.filter((it) => !itemListo(estado[it.id] ?? {}))
 
   async function guardar(conFirmaMandante: boolean) {
     if (!prog) return
     if (conFirmaMandante && !firmaMand) { toast.error('Falta la firma del mandante'); return }
-    // Actividades críticas: exigen foto del antes y del después para cerrar cumplida.
-    if (conFirmaMandante) {
-      const faltan = items.filter((it) => it.critico).filter((it) => {
-        const st = estado[it.id] ?? {}
-        return !(st.antesFile || st.fotoAntesUrl) || !(st.despuesFile || st.fotoDespuesUrl)
-      })
-      if (faltan.length) { toast.error(`Faltan fotos de antes/después en ${faltan.length} actividad(es) crítica(s)`); return }
+    // [MIG265] Cerrar cumplida exige el antes y el después de CADA actividad
+    // (salvo las marcadas N/A, donde no se intervino).
+    if (conFirmaMandante && faltanFotos.length > 0) {
+      toast.error(`Faltan fotos de antes/después en ${faltanFotos.length} actividad(es). ` +
+                  `La primera: ${faltanFotos[0].descripcion.slice(0, 40)}…`)
+      const primera = faltanFotos[0]
+      setAbiertos((a) => ({ ...a, [primera.id]: true }))
+      document.getElementById(`item-${primera.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      return
     }
     setGuardando(true)
     try {
+      const finAt = new Date().toISOString()
       const itemsPayload = items.map((it) => {
         const st = estado[it.id] ?? {}
         return {
           pauta_item_id: it.id, resultado: st.resultado ?? null, valor_medicion: st.valor ?? null,
-          observacion: st.obs ?? null, file: st.file ?? null, fotoUrl: st.fotoUrl ?? null,
-          antesFile: st.antesFile ?? null, despuesFile: st.despuesFile ?? null,
-          fotoAntesUrl: st.fotoAntesUrl ?? null, fotoDespuesUrl: st.fotoDespuesUrl ?? null,
+          observacion: st.obs ?? null,
+          antesFiles: st.antesFiles ?? [], despuesFiles: st.despuesFiles ?? [],
+          fotosAntesUrls: st.fotosAntes ?? [], fotosDespuesUrls: st.fotosDespues ?? [],
         }
-      }).filter((p) => p.resultado || p.valor_medicion || p.observacion || p.file || p.fotoUrl || p.antesFile || p.despuesFile || p.fotoAntesUrl || p.fotoDespuesUrl)
+      }).filter((p) => p.resultado || p.valor_medicion || p.observacion ||
+                       p.antesFiles.length || p.despuesFiles.length ||
+                       p.fotosAntesUrls.length || p.fotosDespuesUrls.length)
 
       const r = await queueEjecucion({
         programacionId: prog.programacion_id, conMandante: conFirmaMandante,
@@ -139,14 +220,16 @@ export default function EnexEjecutarPage() {
         firmanteMandante: firmante || null, items: itemsPayload,
         firmaTecFile: firmaTec ? dataUrlToBlob(firmaTec) : null,
         firmaMandFile: conFirmaMandante && firmaMand ? dataUrlToBlob(firmaMand) : null,
+        inicioAt, finAt, duracionSegundos: segundos,
       })
       qc.invalidateQueries({ queryKey: ['enex-terreno'] })
       qc.invalidateQueries({ queryKey: ['enex-pending-count'] })
       toast.success(r.synced
-        ? (conFirmaMandante ? 'Registrada y CUMPLIDA (firma del mandante)' : 'Ejecución guardada')
+        ? (conFirmaMandante ? `Registrada y CUMPLIDA · ${hhmmss(segundos)} de trabajo` : 'Ejecución guardada')
         : 'Guardada local — se sube sola al recuperar señal')
-      // Al cerrar cumplida (y con señal): generar el informe con el formato del
-      // mandante y dejarlo guardado en PDF. No bloquea la salida del técnico.
+      if (conFirmaMandante) {
+        try { localStorage.removeItem(claveTimer) } catch { /* no-op */ }
+      }
       if (conFirmaMandante && r.synced) {
         getEjecucionIdDeProgramacion(prog.programacion_id)
           .then((eid) => (eid ? generarYGuardarInformeEnex(eid) : null))
@@ -169,12 +252,30 @@ export default function EnexEjecutarPage() {
 
   return (
     <div className="p-3 space-y-3 pb-24">
-      <Link href="/m/enex" className="inline-flex items-center gap-1 text-sm text-gray-500"><ArrowLeft className="h-4 w-4" /> Servicios</Link>
+      <div className="flex items-center justify-between">
+        <Link href="/m/enex" className="inline-flex items-center gap-1 text-sm text-gray-500"><ArrowLeft className="h-4 w-4" /> Servicios</Link>
+        {/* [MIG265] Cronómetro: parte solo al abrir el servicio. */}
+        <div className="flex items-center gap-1 rounded-full bg-gray-900 px-2.5 py-1 text-xs font-bold text-white tabular-nums">
+          <Timer className="h-3.5 w-3.5" /> {hhmmss(segundos)}
+        </div>
+      </div>
 
       <div className="rounded-xl border border-gray-200 bg-white p-3">
         <div className="text-sm font-bold text-gray-900">{prog.instalacion}{prog.patente ? ` · ${prog.patente}` : ''}</div>
         <div className="text-xs text-gray-500">{prog.faena} · {prog.tipo_servicio === 'calibracion' ? 'Calibración' : 'Mantención'}</div>
         <div className="mt-1 text-[11px] text-gray-500">{prog.pauta_nombre}{prog.pauta_borrador ? ' (borrador)' : ''}</div>
+        {items.length > 0 && (
+          <div className="mt-2">
+            <div className="flex items-center justify-between text-[11px] text-gray-500">
+              <span>{listos}/{items.length} actividades con antes y después</span>
+              {!online && <span className="flex items-center gap-1 text-amber-600"><WifiOff className="h-3 w-3" /> sin señal</span>}
+            </div>
+            <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-gray-200">
+              <div className="h-full bg-blue-500 transition-all"
+                   style={{ width: `${items.length ? Math.round((listos / items.length) * 100) : 0}%` }} />
+            </div>
+          </div>
+        )}
       </div>
 
       {prog.es_recobro && !prog.cumplida && (
@@ -191,96 +292,159 @@ export default function EnexEjecutarPage() {
                className="rounded-lg border border-gray-200 px-3 py-2 text-sm" />
       </div>
 
-      {isLoading ? <div className="flex justify-center py-8"><Spinner /></div> : grupos.map((g) => (
+      {isLoading ? <div className="flex justify-center py-8"><Spinner /></div> : grupos.map((g) => {
+        const listosG = g.items.filter((it) => itemListo(estado[it.id] ?? {})).length
+        return (
         <div key={g.bloque}>
-          <div className="sticky top-0 z-10 bg-gray-100 rounded px-2 py-1 text-xs font-semibold text-gray-700">{g.bloque}</div>
+          <div className="sticky top-0 z-10 flex items-center justify-between gap-2 rounded bg-gray-100 px-2 py-1">
+            <span className="text-xs font-semibold text-gray-700">{g.bloque}</span>
+            <div className="flex items-center gap-2">
+              <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
+                listosG === g.items.length ? 'bg-green-200 text-green-800' : 'bg-white text-gray-500'}`}>
+                {listosG}/{g.items.length}
+              </span>
+              <button onClick={() => setAbiertos((a) => {
+                        const todos = { ...a }
+                        const algunoAbierto = g.items.some((it) => todos[it.id])
+                        for (const it of g.items) todos[it.id] = !algunoAbierto
+                        return todos
+                      })}
+                      className="text-[10px] font-semibold text-blue-600">
+                {g.items.some((it) => abiertos[it.id]) ? 'Comprimir' : 'Abrir'}
+              </button>
+            </div>
+          </div>
           <div className="space-y-2 pt-2">
             {g.items.map((it) => {
               const st = estado[it.id] ?? {}
               const dt = dentroTol(it, st.valor)
+              const abierto = abiertos[it.id] ?? false
+              const completo = itemListo(st)
               return (
-                <div key={it.id} className="rounded-xl border border-gray-200 bg-white p-3">
-                  <div className="flex items-start gap-1.5">
-                    {it.codigo && <span className="text-[10px] font-mono text-gray-400">{it.codigo}</span>}
-                    <p className="flex-1 text-sm text-gray-800">{it.descripcion}</p>
-                    <span className="text-[9px] text-gray-400">{it.periodicidad}</span>
-                  </div>
-
-                  {/* Campo por tipo */}
-                  {(it.tipo_campo === 'ok_nook' || it.tipo_campo === 'si_no') && (
-                    <div className="mt-2 flex gap-1.5">
-                      {(it.tipo_campo === 'ok_nook'
-                        ? [['ok', 'OK', 'bg-green-500', Check], ['no_ok', 'NO OK', 'bg-red-500', X], ['na', 'N/A', 'bg-gray-400', Minus]]
-                        : [['si', 'Sí', 'bg-green-500', Check], ['no', 'No', 'bg-red-500', X]]
-                      ).map(([val, label, color, Icon]) => {
-                        const active = st.resultado === val
-                        const I = Icon as typeof Check
-                        return (
-                          <button key={val as string} onClick={() => upd(it.id, { resultado: val as string })}
-                                  className={`flex h-9 flex-1 items-center justify-center gap-1 rounded-lg border text-xs font-semibold ${active ? `${color} border-transparent text-white` : 'border-gray-200 bg-white text-gray-500'}`}>
-                            <I className="h-3.5 w-3.5" /> {label as string}
-                          </button>
-                        )
-                      })}
-                    </div>
-                  )}
-                  {it.tipo_campo === 'medicion' && (
-                    <div className="mt-2 flex items-center gap-2">
-                      <input type="number" inputMode="decimal" value={st.valor ?? ''} onChange={(e) => upd(it.id, { valor: e.target.value })}
-                             placeholder={`valor ${it.unidad ?? ''}`} className="w-32 rounded-lg border border-gray-200 px-3 py-2 text-sm" />
-                      {(it.tolerancia_min != null || it.tolerancia_max != null) && (
-                        <span className="flex items-center gap-1 text-[11px] text-gray-500"><Ruler className="h-3 w-3" /> {toleranciaTexto(it)}</span>
-                      )}
-                      {dt === true && <span className="rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-semibold text-green-700">dentro</span>}
-                      {dt === false && <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold text-red-700">fuera de tolerancia</span>}
-                    </div>
-                  )}
-                  {it.tipo_campo === 'texto' && (
-                    <input value={st.obs ?? ''} onChange={(e) => upd(it.id, { obs: e.target.value })} placeholder="Anotar…"
-                           className="mt-2 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm" />
-                  )}
-
-                  {/* Evidencia fotográfica: crítica = antes/después; resto = una foto */}
-                  {it.critico ? (
-                    <div className="mt-2 rounded-lg border border-amber-300 bg-amber-50 p-2">
-                      <p className="mb-1.5 flex items-center gap-1 text-[11px] font-semibold text-amber-800">
-                        <AlertTriangle className="h-3.5 w-3.5" /> Actividad crítica — foto del antes y del después
-                      </p>
-                      <div className="flex gap-2">
-                        {(['antes', 'despues'] as const).map((tipo) => {
-                          const file = tipo === 'antes' ? st.antesFile : st.despuesFile
-                          const url = tipo === 'antes' ? st.fotoAntesUrl : st.fotoDespuesUrl
-                          const refMap = tipo === 'antes' ? antesRefs : despuesRefs
-                          return (
-                            <div key={tipo} className="flex-1">
-                              <button onClick={() => refMap.current[it.id]?.click()}
-                                      className={`flex w-full items-center justify-center gap-1 rounded-lg border px-2 py-2 text-[11px] font-semibold ${file || url ? 'border-green-400 bg-green-50 text-green-700' : 'border-amber-400 bg-white text-amber-700'}`}>
-                                {file || url ? <Check className="h-3.5 w-3.5" /> : <Camera className="h-3.5 w-3.5" />}
-                                {tipo === 'antes' ? 'Antes' : 'Después'}
-                              </button>
-                              {(file || url) && (
-                                // eslint-disable-next-line @next/next/no-img-element
-                                <img src={file ? URL.createObjectURL(file) : url!} alt={tipo} className="mt-1 h-12 w-full rounded border object-cover" />
-                              )}
-                              <input ref={(el) => { refMap.current[it.id] = el }} type="file" accept="image/*" capture="environment" className="hidden"
-                                     onChange={(e) => { const f = e.target.files?.[0]; if (f) upd(it.id, tipo === 'antes' ? { antesFile: f } : { despuesFile: f }); e.target.value = '' }} />
-                            </div>
-                          )
-                        })}
+                <div key={it.id} id={`item-${it.id}`}
+                     className={`rounded-xl border bg-white ${completo ? 'border-green-300' : 'border-gray-200'}`}>
+                  {/* Cabecera: siempre visible, se toca para comprimir/abrir */}
+                  <button onClick={() => setAbiertos((a) => ({ ...a, [it.id]: !abierto }))}
+                          className="flex w-full items-start gap-1.5 p-3 text-left">
+                    {abierto ? <ChevronDown className="mt-0.5 h-4 w-4 flex-shrink-0 text-gray-400" />
+                             : <ChevronRight className="mt-0.5 h-4 w-4 flex-shrink-0 text-gray-400" />}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-start gap-1.5">
+                        {it.codigo && <span className="text-[10px] font-mono text-gray-400">{it.codigo}</span>}
+                        <p className={`flex-1 text-sm text-gray-800 ${abierto ? '' : 'line-clamp-2'}`}>{it.descripcion}</p>
+                      </div>
+                      {/* Resumen cuando está comprimido */}
+                      <div className="mt-1 flex flex-wrap items-center gap-1">
+                        {st.resultado && (
+                          <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${
+                            st.resultado === 'ok' || st.resultado === 'si' ? 'bg-green-100 text-green-700'
+                            : st.resultado === 'na' ? 'bg-gray-100 text-gray-500'
+                            : 'bg-red-100 text-red-700'}`}>
+                            {st.resultado.toUpperCase().replace('_', ' ')}
+                          </span>
+                        )}
+                        {st.valor && <span className="rounded bg-blue-50 px-1.5 py-0.5 text-[10px] text-blue-700">{st.valor} {it.unidad ?? ''}</span>}
+                        <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${
+                          nAntes(st) > 0 ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
+                          antes {nAntes(st)}
+                        </span>
+                        <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${
+                          nDespues(st) > 0 ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
+                          después {nDespues(st)}
+                        </span>
+                        {it.critico && <span className="rounded bg-red-600 px-1 py-0.5 text-[9px] font-bold text-white">CRÍTICA</span>}
                       </div>
                     </div>
-                  ) : (
-                    <div className="mt-2 flex items-center gap-2">
-                      {(st.file || st.fotoUrl) ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={st.file ? URL.createObjectURL(st.file) : st.fotoUrl!} alt="ev" className="h-12 w-12 rounded-lg border object-cover" />
-                      ) : null}
-                      <button onClick={() => fileRefs.current[it.id]?.click()}
-                              className={`flex items-center gap-1 rounded-lg border px-2 py-1.5 text-[11px] font-semibold ${it.requiere_foto && !st.file && !st.fotoUrl ? 'border-blue-300 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-500'}`}>
-                        <Camera className="h-3.5 w-3.5" /> {it.requiere_foto ? 'Foto (pide)' : 'Foto'}
-                      </button>
-                      <input ref={(el) => { fileRefs.current[it.id] = el }} type="file" accept="image/*" capture="environment" className="hidden"
-                             onChange={(e) => { const f = e.target.files?.[0]; if (f) upd(it.id, { file: f }); e.target.value = '' }} />
+                  </button>
+
+                  {abierto && (
+                    <div className="border-t border-gray-100 p-3 pt-2">
+                      {/* Campo por tipo */}
+                      {(it.tipo_campo === 'ok_nook' || it.tipo_campo === 'si_no') && (
+                        <div className="flex gap-1.5">
+                          {(it.tipo_campo === 'ok_nook'
+                            ? [['ok', 'OK', 'bg-green-500', Check], ['no_ok', 'NO OK', 'bg-red-500', X], ['na', 'N/A', 'bg-gray-400', Minus]]
+                            : [['si', 'Sí', 'bg-green-500', Check], ['no', 'No', 'bg-red-500', X]]
+                          ).map(([val, label, color, Icon]) => {
+                            const active = st.resultado === val
+                            const I = Icon as typeof Check
+                            return (
+                              <button key={val as string} onClick={() => upd(it.id, { resultado: val as string })}
+                                      className={`flex h-9 flex-1 items-center justify-center gap-1 rounded-lg border text-xs font-semibold ${active ? `${color} border-transparent text-white` : 'border-gray-200 bg-white text-gray-500'}`}>
+                                <I className="h-3.5 w-3.5" /> {label as string}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      )}
+                      {it.tipo_campo === 'medicion' && (
+                        <div className="flex items-center gap-2">
+                          <input type="number" inputMode="decimal" value={st.valor ?? ''} onChange={(e) => upd(it.id, { valor: e.target.value })}
+                                 placeholder={`valor ${it.unidad ?? ''}`} className="w-32 rounded-lg border border-gray-200 px-3 py-2 text-sm" />
+                          {(it.tolerancia_min != null || it.tolerancia_max != null) && (
+                            <span className="flex items-center gap-1 text-[11px] text-gray-500"><Ruler className="h-3 w-3" /> {toleranciaTexto(it)}</span>
+                          )}
+                          {dt === true && <span className="rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-semibold text-green-700">dentro</span>}
+                          {dt === false && <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold text-red-700">fuera de tolerancia</span>}
+                        </div>
+                      )}
+                      {it.tipo_campo === 'texto' && (
+                        <input value={st.obs ?? ''} onChange={(e) => upd(it.id, { obs: e.target.value })} placeholder="Anotar…"
+                               className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm" />
+                      )}
+
+                      {/* [MIG265] Antes y después en TODA actividad, varias fotos */}
+                      <div className={`mt-2 rounded-lg border p-2 ${completo ? 'border-green-200 bg-green-50/40' : 'border-amber-300 bg-amber-50'}`}>
+                        <p className="mb-1.5 flex items-center gap-1 text-[11px] font-semibold text-gray-700">
+                          {completo ? <Check className="h-3.5 w-3.5 text-green-600" /> : <AlertTriangle className="h-3.5 w-3.5 text-amber-700" />}
+                          {st.resultado === 'na'
+                            ? 'Marcada N/A — no necesita evidencia'
+                            : 'Foto del antes y del después (puedes sacar varias)'}
+                        </p>
+                        <div className="grid grid-cols-2 gap-2">
+                          {(['antes', 'despues'] as const).map((tipo) => {
+                            const subidas = (tipo === 'antes' ? st.fotosAntes : st.fotosDespues) ?? []
+                            const nuevas  = (tipo === 'antes' ? st.antesFiles : st.despuesFiles) ?? []
+                            const total = subidas.length + nuevas.length
+                            const refKey = `${it.id}:${tipo}`
+                            return (
+                              <div key={tipo}>
+                                <button onClick={() => fileRefs.current[refKey]?.click()}
+                                        className={`flex w-full items-center justify-center gap-1 rounded-lg border px-2 py-2 text-[11px] font-semibold ${
+                                          total > 0 ? 'border-green-400 bg-green-50 text-green-700' : 'border-amber-400 bg-white text-amber-700'}`}>
+                                  {total > 0 ? <Plus className="h-3.5 w-3.5" /> : <Camera className="h-3.5 w-3.5" />}
+                                  {tipo === 'antes' ? 'Antes' : 'Después'}{total > 0 ? ` (${total})` : ''}
+                                </button>
+                                <div className="mt-1 flex flex-wrap gap-1">
+                                  {subidas.map((url, i) => (
+                                    <div key={`u${i}`} className="relative">
+                                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                                      <img src={url} alt={tipo} className="h-12 w-12 rounded border object-cover" />
+                                      <button onClick={() => quitarFoto(it.id, tipo, i, true)}
+                                              className="absolute -right-1 -top-1 rounded-full bg-white p-0.5 shadow">
+                                        <Trash2 className="h-3 w-3 text-red-500" />
+                                      </button>
+                                    </div>
+                                  ))}
+                                  {nuevas.map((f, i) => (
+                                    <div key={`n${i}`} className="relative">
+                                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                                      <img src={URL.createObjectURL(f)} alt={tipo} className="h-12 w-12 rounded border border-blue-300 object-cover" />
+                                      <button onClick={() => quitarFoto(it.id, tipo, i, false)}
+                                              className="absolute -right-1 -top-1 rounded-full bg-white p-0.5 shadow">
+                                        <Trash2 className="h-3 w-3 text-red-500" />
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
+                                <input ref={(el) => { fileRefs.current[refKey] = el }} type="file" accept="image/*"
+                                       capture="environment" multiple className="hidden"
+                                       onChange={(e) => { if (e.target.files?.length) agregarFotos(it.id, tipo, e.target.files); e.target.value = '' }} />
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -288,7 +452,8 @@ export default function EnexEjecutarPage() {
             })}
           </div>
         </div>
-      ))}
+        )
+      })}
 
       {/* Firmas */}
       <div className="rounded-xl border border-gray-200 bg-white p-3 space-y-3">
@@ -301,13 +466,20 @@ export default function EnexEjecutarPage() {
       </div>
 
       {/* Barra de acción */}
-      <div className="fixed inset-x-0 bottom-0 mx-auto flex max-w-[480px] gap-2 border-t bg-white p-3">
-        <Button variant="outline" className="flex-1" disabled={guardando} onClick={() => guardar(false)}>
-          {guardando ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : null} Guardar avance
-        </Button>
-        <Button className="flex-1" disabled={guardando || !firmaMand} onClick={() => guardar(true)}>
-          <CheckCircle2 className="h-4 w-4 mr-1" /> Cerrar (cumplida)
-        </Button>
+      <div className="fixed inset-x-0 bottom-0 mx-auto max-w-[480px] border-t bg-white p-3">
+        {faltanFotos.length > 0 && (
+          <p className="mb-1.5 text-center text-[11px] text-amber-700">
+            Faltan antes/después en {faltanFotos.length} actividad(es) para poder cerrar
+          </p>
+        )}
+        <div className="flex gap-2">
+          <Button variant="outline" className="flex-1" disabled={guardando} onClick={() => guardar(false)}>
+            {guardando ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : null} Guardar avance
+          </Button>
+          <Button className="flex-1" disabled={guardando || !firmaMand} onClick={() => guardar(true)}>
+            <CheckCircle2 className="h-4 w-4 mr-1" /> Cerrar (cumplida)
+          </Button>
+        </div>
       </div>
     </div>
   )
