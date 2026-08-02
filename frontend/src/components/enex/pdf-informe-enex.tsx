@@ -246,16 +246,23 @@ export function OtMantenimiento({ reporte, items, logoUrl }: Datos) {
         {bloques.map((g) => (
           <View key={g.bloque} wrap={false}>
             <Text style={[S.sectionTitle, { backgroundColor: '#f3f4f6', marginTop: 4 }]}>{g.bloque.replace(/^\d+\.\s*/, '').toUpperCase()}</Text>
+            {/* Anchos explícitos en las tres columnas: mezclar % con flex:1
+                dejaba el estado y la observación impresos uno encima del otro. */}
+            <View style={[S.row, { borderTopWidth: 0.5, borderTopColor: '#444' }]}>
+              <Text style={[S.th, { width: '58%', textAlign: 'left' }]}>ACTIVIDAD</Text>
+              <Text style={[S.th, { width: '14%' }]}>ESTADO</Text>
+              <Text style={[S.th, { width: '28%', borderRightWidth: 0 }]}>OBSERVACIÓN</Text>
+            </View>
             {g.items.map((i, k) => (
-              <View key={k} style={[S.row, k === 0 ? { borderTopWidth: 0.5, borderTopColor: '#444' } : {}]}>
+              <View key={k} style={S.row}>
                 <Text style={[S.cellLabel, { width: '58%' }]}>{i.item?.descripcion}</Text>
-                <Text style={[S.cellValue, { width: '14%', flex: 0, borderRightWidth: 0.5, borderRightColor: '#444', color: i.resultado === 'no_ok' ? '#b91c1c' : '#111' }]}>
+                <Text style={[S.cellValue, { width: '14%', flex: 0, textAlign: 'center', borderRightWidth: 0.5, borderRightColor: '#444', color: i.resultado === 'no_ok' ? '#b91c1c' : '#111' }]}>
                   {i.item?.tipo_campo === 'medicion'
                     ? (i.valor_medicion != null ? `${i.valor_medicion} ${i.item?.unidad ?? ''}` : '—')
                     : (RES_LABEL[i.resultado ?? ''] ?? '—')}
                 </Text>
-                <Text style={[S.cellValue, { fontWeight: 'normal', fontSize: 7, color: '#4b5563' }]}>
-                  Obs: {i.observacion ?? 'S/N'}
+                <Text style={[S.cellValue, { width: '28%', flex: 0, fontWeight: 'normal', fontSize: 7, color: '#4b5563' }]}>
+                  {i.observacion ?? '—'}
                 </Text>
               </View>
             ))}
