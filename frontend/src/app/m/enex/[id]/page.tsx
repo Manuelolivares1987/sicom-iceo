@@ -74,7 +74,17 @@ const trabajado = (st: Estado): boolean =>
        // evidencia no contaba para nadie.
        st.antes.length > 0 || st.despues.length > 0)
 const conEvidencia = (st: Estado): boolean => st.antes.length > 0 && st.despues.length > 0
-const itemListo = (st: Estado): boolean => !trabajado(st) || conEvidencia(st)
+
+/**
+ * El bloque 0 de toda pauta son los datos de encabezado del formulario
+ * (motivo del llamado, horas, RUT del técnico, identificación del surtidor):
+ * se escriben, no se intervienen. No piden foto ni se pliegan.
+ */
+const esDatoServicio = (it: EnexPautaItem): boolean => it.bloque_orden === 0
+
+/** ¿Le falta evidencia? Los datos del servicio nunca piden fotos. */
+const itemListo = (it: EnexPautaItem, st: Estado): boolean =>
+  esDatoServicio(it) || !trabajado(st) || conEvidencia(st)
 
 /** Lo trabajado necesita su dato: el resultado, la medición o la anotación. */
 function faltaDato(it: EnexPautaItem, st: Estado): boolean {
@@ -314,7 +324,7 @@ export default function EnexEjecutarPage() {
   }
 
   const trabajadas = items.filter((it) => trabajado(estado[it.id] ?? vacio()))
-  const faltanFotos = trabajadas.filter((it) => !conEvidencia(estado[it.id] ?? vacio()))
+  const faltanFotos = trabajadas.filter((it) => !itemListo(it, estado[it.id] ?? vacio()))
   const faltanDato = trabajadas.filter((it) => faltaDato(it, estado[it.id] ?? vacio()))
 
   /** Lleva al ítem que falta: abre su bloque, lo despliega y baja hasta él. */
@@ -471,8 +481,11 @@ export default function EnexEjecutarPage() {
 
       {isLoading ? <div className="flex justify-center py-8"><Spinner /></div> : grupos.map((g) => {
         const trabG = g.items.filter((it) => trabajado(estado[it.id] ?? vacio())).length
-        const faltaG = g.items.filter((it) => !itemListo(estado[it.id] ?? vacio())).length
-        const bloqueAbierto = bloques[g.bloque] ?? false
+        const faltaG = g.items.filter((it) => !itemListo(it, estado[it.id] ?? vacio())).length
+        // El bloque de datos del servicio parte abierto: son los campos que hay
+        // que llenar sí o sí, no tareas que se van atacando.
+        const bloqueDatos = g.items.every(esDatoServicio)
+        const bloqueAbierto = bloques[g.bloque] ?? bloqueDatos
         return (
         <div key={g.bloque}>
           {/* El bloque entero se pliega: en terreno se ataca un punto de la
@@ -497,23 +510,40 @@ export default function EnexEjecutarPage() {
 
           {bloqueAbierto && (
           <div className="space-y-2 pt-2">
-            <div className="flex justify-end">
-              <button onClick={() => setAbiertos((a) => {
-                        const todos = { ...a }
-                        const algunoAbierto = g.items.some((it) => todos[it.id])
-                        for (const it of g.items) todos[it.id] = !algunoAbierto
-                        return todos
-                      })}
-                      className="text-[11px] font-semibold text-blue-600">
-                {g.items.some((it) => abiertos[it.id]) ? 'Cerrar todas' : 'Abrir todas'}
-              </button>
-            </div>
+            {!bloqueDatos && (
+              <div className="flex justify-end">
+                <button onClick={() => setAbiertos((a) => {
+                          const todos = { ...a }
+                          const algunoAbierto = g.items.some((it) => todos[it.id])
+                          for (const it of g.items) todos[it.id] = !algunoAbierto
+                          return todos
+                        })}
+                        className="text-[11px] font-semibold text-blue-600">
+                  {g.items.some((it) => abiertos[it.id]) ? 'Cerrar todas' : 'Abrir todas'}
+                </button>
+              </div>
+            )}
             {g.items.map((it) => {
               const st = estado[it.id] ?? vacio()
               const dt = dentroTol(it, st.valor)
+              // Los datos del servicio se llenan de frente: ni se pliegan ni
+              // piden fotos, son el encabezado del formulario.
+              const dato = esDatoServicio(it)
               const abierto = abiertos[it.id] ?? false
               const trab = trabajado(st)
-              const falta = trab && !conEvidencia(st)
+              const falta = !dato && trab && !conEvidencia(st)
+              if (dato) return (
+                <div key={it.id} id={`item-${it.id}`}
+                     className={`rounded-xl border bg-white p-3 ${trab ? 'border-green-300' : 'border-gray-200'}`}>
+                  <div className="flex items-start gap-1.5">
+                    {it.codigo && <span className="mt-0.5 text-[10px] font-mono text-gray-400">{it.codigo}</span>}
+                    <p className="flex-1 text-sm text-gray-800">{it.descripcion}</p>
+                  </div>
+                  <input value={st.obs ?? ''} onChange={(e) => upd(it.id, { obs: e.target.value })}
+                         placeholder="Escribe aquí…"
+                         className="mt-2 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm" />
+                </div>
+              )
               return (
                 <div key={it.id} id={`item-${it.id}`}
                      className={`rounded-xl border bg-white ${
