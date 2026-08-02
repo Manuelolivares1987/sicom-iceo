@@ -352,8 +352,10 @@ export default function EnexEjecutarPage() {
       irAlItem(faltanDato[0])
       return
     }
-    if (conFirmaMandante && trabajadas.length === 0) {
-      toast.error('No hay ninguna actividad trabajada para cerrar el servicio')
+    // Llenar el encabezado no es haber trabajado: para cerrar tiene que haber
+    // al menos una actividad de la pauta hecha.
+    if (conFirmaMandante && trabajadas.filter((it) => !esDatoServicio(it)).length === 0) {
+      toast.error('No hay ninguna actividad de la pauta trabajada para cerrar el servicio')
       return
     }
     setGuardando(true)
