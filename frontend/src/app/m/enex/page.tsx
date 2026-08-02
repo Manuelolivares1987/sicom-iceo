@@ -139,6 +139,13 @@ export default function EnexTerrenoHome() {
     () => pendMundo.filter((p) => !p.cumplida && p.fecha_programada?.slice(0, 10) === hoyISO).length,
     [pendMundo, hoyISO])
   const pendMes = pendMundo.filter((p) => !p.cumplida).length
+  // Lo de hoy en el OTRO mundo: con el selector recordado del día anterior se
+  // veía «No tienes tareas para hoy» teniendo trabajo al lado.
+  const otroMundo: Mundo = mundo === 'lubricante' ? 'combustible' : 'lubricante'
+  const pendHoyOtro = useMemo(
+    () => pend.filter((p) => mundoDeLinea(p.linea) === otroMundo && !p.cumplida &&
+                            p.fecha_programada?.slice(0, 10) === hoyISO).length,
+    [pend, otroMundo, hoyISO])
   const conteoMundo = useMemo(() => ({
     combustible: pend.filter((p) => mundoDeLinea(p.linea) === 'combustible' && !p.cumplida).length,
     lubricante: pend.filter((p) => mundoDeLinea(p.linea) === 'lubricante' && !p.cumplida).length,
@@ -230,7 +237,14 @@ export default function EnexTerrenoHome() {
           {vista === 'hoy' ? (
             <>
               <Sun className="mx-auto mb-2 h-8 w-8 text-gray-300" />
-              <p>No tienes tareas para hoy{hoyISO && <> ({fmtDiaLargo(hoyISO)})</>}.</p>
+              <p>No tienes tareas para hoy{hoyISO && <> ({fmtDiaLargo(hoyISO)})</>}
+                {mundo && <> en <b>{MUNDO_LABEL[mundo]}</b></>}.</p>
+              {pendHoyOtro > 0 && (
+                <button onClick={() => elegirMundo(otroMundo)}
+                        className="mt-2 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-800">
+                  Hoy hay {pendHoyOtro} en {MUNDO_LABEL[otroMundo]} — ver
+                </button>
+              )}
               {pendMes > 0 && (
                 <button onClick={() => setVista('mes')} className="mt-2 rounded-lg border border-blue-300 bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-700">
                   Ver la agenda del mes ({pendMes})
@@ -251,7 +265,7 @@ export default function EnexTerrenoHome() {
             {/* Cabecera del día */}
             <div className={`sticky top-0 z-10 flex items-center gap-2 rounded-lg px-3 py-1.5 ${esHoy ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700'}`}>
               <CalendarDays className="h-3.5 w-3.5" />
-              <span className="text-xs font-bold capitalize">{dia.fecha === 'sin' ? 'Sin fecha asignada' : fmtDiaLargo(dia.fecha)}</span>
+              <span className="text-xs font-bold">{dia.fecha === 'sin' ? 'Sin fecha asignada' : fmtDiaLargo(dia.fecha)}</span>
               {esHoy && <span className="rounded-full bg-white/25 px-1.5 py-0.5 text-[10px] font-bold">HOY</span>}
               <span className={`ml-auto text-[11px] ${esHoy ? 'text-blue-100' : 'text-gray-500'}`}>
                 {porEjecutar > 0 ? `${porEjecutar} por ejecutar` : 'todo listo'}

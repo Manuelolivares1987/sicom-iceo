@@ -4,7 +4,7 @@
 // - Overlay: refleja lo pendiente sobre la cache para la UI.
 
 import {
-  getTerrenoPendientes, getPautaItems, ejecutarPauta, getEjecucionItems,
+  getTerrenoPendientes, getPautaItems, ejecutarPauta, getEjecucionItems, getPendientePorId,
   subirEvidenciaEnex, subirFirmaEnex,
   type EnexPendiente, type EnexPautaItem, type EnexItemResultado,
 } from '@/lib/services/enex'
@@ -38,6 +38,32 @@ export async function getPendientesOffline(anio: number, mes: number): Promise<E
 async function getCachedPend(anio: number, mes: number): Promise<EnexPendiente[]> {
   const row = await enexDB().cache.get(keyPend(anio, mes))
   return (row?.value as EnexPendiente[]) ?? []
+}
+
+/**
+ * Un servicio por su id, venga del mes que venga: primero en las caches de
+ * cualquier período, después al servidor. La pantalla de ejecución solo miraba
+ * el mes en curso, así que un trabajo de julio a medias quedaba inalcanzable
+ * el 1 de agosto.
+ */
+export async function getPendienteOffline(programacionId: string): Promise<EnexPendiente | null> {
+  const aplicarCola = async (r: EnexPendiente): Promise<EnexPendiente> => {
+    const p = await enexDB().pending.where('programacion_id').equals(programacionId).first()
+    if (!p) return r
+    return { ...r, estado: p.con_mandante ? 'cumplida' : 'ejecutada', cumplida: r.cumplida || p.con_mandante }
+  }
+  if (isOnline()) {
+    try {
+      const r = await getPendientePorId(programacionId)
+      if (r) return aplicarCola(r)
+    } catch { /* cae a la cache */ }
+  }
+  const cacheados = await enexDB().cache.where('key').startsWith('pend:').toArray()
+  for (const row of cacheados) {
+    const hit = ((row.value as EnexPendiente[]) ?? []).find((r) => r.programacion_id === programacionId)
+    if (hit) return aplicarCola(hit)
+  }
+  return null
 }
 
 // ── Ítems de pauta ────────────────────────────────────────────────────────
@@ -272,6 +298,25 @@ export async function syncEnexPending(): Promise<{ ok: number; failed: number }>
         inicioAt: p.inicio_at ?? null, finAt: p.fin_at ?? null,
         duracionSegundos: p.duracion_segundos ?? null,
       })
+      // El borrador apuntaba a los blobs que acabamos de subir y que estamos a
+      // punto de borrar. Si se deja así, al reabrir el servicio las fotos
+      // desaparecen de la pantalla (y la app se niega a cerrar por «falta
+      // evidencia») aunque el servidor ya las tenga. Se reemplazan por sus URL.
+      const draft = await db.drafts.get(p.programacion_id)
+      if (draft) {
+        p.items.forEach((it, idx) => {
+          const di = draft.items?.[it.pauta_item_id]
+          if (!di) return
+          const subidas = (urls: string[], previas: typeof di.antes, blobIds: string[] | undefined) => [
+            ...urls.map((u) => ({ id: `s-${u}`, url: u })),
+            // lo capturado DESPUÉS de encolar (blob que no viajó) se conserva
+            ...previas.filter((f) => f.blob_id && !(blobIds ?? []).includes(f.blob_id)),
+          ]
+          di.antes = subidas(itemsPayload[idx]?.fotos_antes ?? [], di.antes ?? [], it.fotos_antes_blob_ids)
+          di.despues = subidas(itemsPayload[idx]?.fotos_despues ?? [], di.despues ?? [], it.fotos_despues_blob_ids)
+        })
+        await db.drafts.put({ ...draft, updated_at: new Date().toISOString() })
+      }
       // limpiar blobs
       for (const it of p.items) {
         if (it.foto_blob_id) await db.blobs.delete(it.foto_blob_id)
