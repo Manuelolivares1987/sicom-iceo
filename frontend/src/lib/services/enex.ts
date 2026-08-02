@@ -391,6 +391,18 @@ export async function getTerrenoPendientes(anio: number, mes: number): Promise<E
   return (data ?? []) as EnexPendiente[]
 }
 
+/**
+ * Un servicio puntual, sin filtrar por período. La pantalla de ejecución lo
+ * buscaba solo dentro del mes en curso: un trabajo de julio abierto el 2 de
+ * agosto se quedaba en «Cargando servicio…» para siempre.
+ */
+export async function getPendientePorId(programacionId: string): Promise<EnexPendiente | null> {
+  const { data, error } = await supabase.from('v_enex_terreno_pendientes').select('*')
+    .eq('programacion_id', programacionId).maybeSingle()
+  if (error) throw error
+  return (data ?? null) as EnexPendiente | null
+}
+
 export async function getEjecucionItems(ejecucionId: string) {
   const { data, error } = await supabase.from('v_enex_ejecucion_items').select('*').eq('ejecucion_id', ejecucionId)
   if (error) throw error

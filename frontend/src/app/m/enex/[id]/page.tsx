@@ -24,7 +24,7 @@ import { useToast } from '@/contexts/toast-context'
 import { getEjecucionIdDeProgramacion, type EnexPautaItem, type EnexPendiente } from '@/lib/services/enex'
 import { generarYGuardarInformeEnex } from '@/components/enex/pdf-informe-enex'
 import {
-  getPendientesOffline, getPautaItemsOffline, getEjecucionItemsOffline, queueEjecucion,
+  getPendienteOffline, getPautaItemsOffline, getEjecucionItemsOffline, queueEjecucion,
   guardarFotoLocal, getFotoLocal, guardarDraft, getDraft, borrarDraft,
 } from '@/lib/offline/enex-offline'
 import { useNetworkStatus } from '@/hooks/use-calama-offline'
@@ -67,9 +67,22 @@ function dentroTol(it: EnexPautaItem, v: string | undefined): boolean | null {
  * N/A es una decisión explícita de "no aplica", tampoco pide fotos.
  */
 const trabajado = (st: Estado): boolean =>
-  (!!st.resultado && st.resultado !== 'na') || !!st.valor || !!st.obs?.trim()
+  st.resultado === 'na'
+    ? false
+    : (!!st.resultado || !!st.valor || !!st.obs?.trim() ||
+       // Sacar fotos ES intervenir: antes quedaban como «no intervenida» y su
+       // evidencia no contaba para nadie.
+       st.antes.length > 0 || st.despues.length > 0)
 const conEvidencia = (st: Estado): boolean => st.antes.length > 0 && st.despues.length > 0
 const itemListo = (st: Estado): boolean => !trabajado(st) || conEvidencia(st)
+
+/** Lo trabajado necesita su dato: el resultado, la medición o la anotación. */
+function faltaDato(it: EnexPautaItem, st: Estado): boolean {
+  if (!trabajado(st)) return false
+  if (it.tipo_campo === 'medicion') return !st.valor
+  if (it.tipo_campo === 'texto') return !st.obs?.trim()
+  return !st.resultado
+}
 
 function hhmmss(seg: number): string {
   const h = Math.floor(seg / 3600), m = Math.floor((seg % 3600) / 60), s = seg % 60
@@ -87,12 +100,13 @@ export default function EnexEjecutarPage() {
   const { perfil } = useAuth()
   const progId = params?.id as string
 
-  const hoyP = (() => { const d = new Date(); return { anio: d.getFullYear(), mes: d.getMonth() + 1 } })()
-  const { data: pendientes = [] } = useQuery({
-    queryKey: ['enex-terreno', hoyP.anio, hoyP.mes], queryFn: () => getPendientesOffline(hoyP.anio, hoyP.mes),
-    networkMode: 'always', staleTime: 10_000,
+  // El servicio se busca por su id, no dentro del mes en curso: un trabajo de
+  // julio abierto el 2 de agosto se quedaba en «Cargando servicio…» para
+  // siempre.
+  const { data: prog, isLoading: buscandoProg } = useQuery<EnexPendiente | null>({
+    queryKey: ['enex-servicio', progId], queryFn: () => getPendienteOffline(progId),
+    networkMode: 'always', staleTime: 10_000, enabled: !!progId,
   })
-  const prog: EnexPendiente | undefined = useMemo(() => pendientes.find((p) => p.programacion_id === progId), [pendientes, progId])
   const { data: items = [], isLoading } = useQuery({
     queryKey: ['enex-pauta-items', prog?.pauta_id], queryFn: () => getPautaItemsOffline(prog!.pauta_id!),
     enabled: !!prog?.pauta_id, networkMode: 'always',
@@ -111,27 +125,43 @@ export default function EnexEjecutarPage() {
   const fileRefs = useRef<Record<string, HTMLInputElement | null>>({})
 
   // ── Cronómetro ───────────────────────────────────────────────────────────
+  // Mide el TRABAJO, no el rato que la pantalla estuvo abierta: arranca con la
+  // primera marca real. Antes partía al abrir, así que mirar un servicio y
+  // dejarlo abierto inflaba la duración (y un inicio de ayer contaba horas).
   const claveTimer = `enex-inicio:${progId}`
   const [inicioAt, setInicioAt] = useState<string | null>(null)
   const [ahora, setAhora] = useState<number>(() => Date.now())
   useEffect(() => {
     if (!progId) return
-    let ini = typeof localStorage !== 'undefined' ? localStorage.getItem(claveTimer) : null
-    if (!ini) {
-      ini = new Date().toISOString()
-      try { localStorage.setItem(claveTimer, ini) } catch { /* modo privado */ }
+    const ini = typeof localStorage !== 'undefined' ? localStorage.getItem(claveTimer) : null
+    if (!ini) return
+    // Un inicio de otro día es basura: el trabajo no siguió toda la noche.
+    if (new Date(ini).toDateString() !== new Date().toDateString()) {
+      try { localStorage.removeItem(claveTimer) } catch { /* no-op */ }
+      return
     }
     setInicioAt(ini)
   }, [progId, claveTimer])
+  const arrancarCrono = useCallback(() => {
+    setInicioAt((prev) => {
+      if (prev) return prev
+      const ini = new Date().toISOString()
+      try { localStorage.setItem(claveTimer, ini) } catch { /* modo privado */ }
+      return ini
+    })
+  }, [claveTimer])
   useEffect(() => {
+    if (!inicioAt) return
     const t = setInterval(() => setAhora(Date.now()), 1000)
     return () => clearInterval(t)
-  }, [])
+  }, [inicioAt])
   const segundos = inicioAt ? Math.max(0, Math.floor((ahora - new Date(inicioAt).getTime()) / 1000)) : 0
 
   // ── Cargar: primero lo del servidor, encima el borrador local ────────────
+  // Espera a tener el servicio: si corría antes, `ejecucion_id` todavía no
+  // existía y lo ya registrado en el servidor nunca se leía.
   useEffect(() => {
-    if (!progId || cargado) return
+    if (!prog || cargado) return
     let cancel = false
     ;(async () => {
       const base: Record<string, Estado> = {}
@@ -166,12 +196,24 @@ export default function EnexEjecutarPage() {
             }
             return out
           }
+          // Red de seguridad: si el borrador apuntaba a blobs que ya no están
+          // (los borra la cola al subirlos), se conservan las del servidor en
+          // vez de dejar el ítem sin evidencia y bloquear el cierre.
+          const conservar = async (
+            locales: { id: string; url?: string; blob_id?: string }[], delServidor: Foto[],
+          ): Promise<Foto[]> => {
+            const vivas = await rehidratar(locales)
+            if (vivas.length >= (locales?.length ?? 0)) return vivas
+            const urls = new Set(vivas.map((f) => f.url).filter(Boolean))
+            return [...delServidor.filter((f) => f.url && !urls.has(f.url)), ...vivas]
+          }
+          const previo = base[itemId]
           base[itemId] = {
             resultado: di.resultado ?? undefined,
             valor: di.valor ?? undefined,
             obs: di.obs ?? undefined,
-            antes: await rehidratar(di.antes ?? []),
-            despues: await rehidratar(di.despues ?? []),
+            antes: await conservar(di.antes ?? [], previo?.antes ?? []),
+            despues: await conservar(di.despues ?? [], previo?.despues ?? []),
           }
         }
         if (d.ot_numero) setOtNumero(d.ot_numero)
@@ -182,7 +224,7 @@ export default function EnexEjecutarPage() {
       if (!cancel) { setEstado(base); setCargado(true) }
     })()
     return () => { cancel = true }
-  }, [progId, prog?.ejecucion_id, cargado])
+  }, [progId, prog, cargado])
 
   // ── Guardado automático del borrador ─────────────────────────────────────
   const draftTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -222,12 +264,14 @@ export default function EnexEjecutarPage() {
   }, [items])
 
   const upd = useCallback((id: string, patch: Partial<Estado>) => {
+    arrancarCrono()
     setEstado((p) => ({ ...p, [id]: { ...vacio(), ...p[id], ...patch } }))
-  }, [])
+  }, [arrancarCrono])
 
   // Las fotos se guardan en el teléfono apenas se sacan: si la app se cierra,
   // no se pierden.
   const agregarFotos = async (id: string, tipo: 'antes' | 'despues', files: FileList) => {
+    arrancarCrono()
     const nuevas: Foto[] = []
     for (const f of Array.from(files)) {
       try {
@@ -262,6 +306,13 @@ export default function EnexEjecutarPage() {
 
   const trabajadas = items.filter((it) => trabajado(estado[it.id] ?? vacio()))
   const faltanFotos = trabajadas.filter((it) => !conEvidencia(estado[it.id] ?? vacio()))
+  const faltanDato = trabajadas.filter((it) => faltaDato(it, estado[it.id] ?? vacio()))
+
+  /** Lleva al ítem que falta y lo abre. */
+  const irAlItem = (it: EnexPautaItem) => {
+    setAbiertos((a) => ({ ...a, [it.id]: true }))
+    document.getElementById(`item-${it.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }
 
   async function guardar(conFirmaMandante: boolean) {
     if (!prog) return
@@ -271,9 +322,13 @@ export default function EnexEjecutarPage() {
     if (conFirmaMandante && faltanFotos.length > 0) {
       toast.error(`Faltan fotos de antes/después en ${faltanFotos.length} actividad(es) trabajada(s). ` +
                   `La primera: ${faltanFotos[0].descripcion.slice(0, 40)}…`)
-      const primera = faltanFotos[0]
-      setAbiertos((a) => ({ ...a, [primera.id]: true }))
-      document.getElementById(`item-${primera.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      irAlItem(faltanFotos[0])
+      return
+    }
+    if (conFirmaMandante && faltanDato.length > 0) {
+      toast.error(`${faltanDato.length} actividad(es) con evidencia pero sin marcar. ` +
+                  `La primera: ${faltanDato[0].descripcion.slice(0, 40)}…`)
+      irAlItem(faltanDato[0])
       return
     }
     if (conFirmaMandante && trabajadas.length === 0) {
@@ -307,9 +362,10 @@ export default function EnexEjecutarPage() {
         inicioAt, finAt, duracionSegundos: segundos,
       })
       qc.invalidateQueries({ queryKey: ['enex-terreno'] })
+      qc.invalidateQueries({ queryKey: ['enex-servicio', progId] })
       qc.invalidateQueries({ queryKey: ['enex-pending-count'] })
       toast.success(r.synced
-        ? (conFirmaMandante ? `Registrada y CUMPLIDA · ${hhmmss(segundos)} de trabajo` : 'Ejecución guardada')
+        ? (conFirmaMandante ? `Registrada y CUMPLIDA · ${hhmmss(segundos)} de trabajo` : 'Avance guardado — puedes seguir')
         : 'Guardada local — se sube sola al recuperar señal')
       if (conFirmaMandante) {
         // Cerrado el servicio: el borrador y el cronómetro ya no hacen falta.
@@ -322,11 +378,21 @@ export default function EnexEjecutarPage() {
           .then((url) => { if (url) toast.success('Informe PDF generado y guardado') })
           .catch(() => toast.error('El informe PDF no se pudo generar — se puede generar desde el panel'))
       }
-      router.push('/m/enex')
+      // Guardar avance NO saca de la pantalla: en terreno se sigue trabajando
+      // el mismo punto. Solo el cierre vuelve a la lista de servicios.
+      if (conFirmaMandante) router.push('/m/enex')
     } catch (e) { toast.error((e as Error).message) } finally { setGuardando(false) }
   }
 
-  if (!prog) return <div className="p-6 text-center text-sm text-gray-400">Cargando servicio…</div>
+  if (!prog && buscandoProg) return <div className="p-6 text-center text-sm text-gray-400">Cargando servicio…</div>
+  if (!prog) return (
+    <div className="p-4 space-y-3">
+      <Link href="/m/enex" className="inline-flex items-center gap-1 text-sm text-gray-500"><ArrowLeft className="h-4 w-4" /> Volver</Link>
+      <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
+        No se encontró este servicio.{!online && ' Estás sin señal y no está descargado en el teléfono: ábrelo con conexión para bajarlo.'}
+      </div>
+    </div>
+  )
   if (!prog.pauta_id) return (
     <div className="p-4 space-y-3">
       <Link href="/m/enex" className="inline-flex items-center gap-1 text-sm text-gray-500"><ArrowLeft className="h-4 w-4" /> Volver</Link>
