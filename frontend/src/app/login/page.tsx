@@ -12,6 +12,20 @@ interface LoginForm {
   password: string
 }
 
+/**
+ * A dónde ir después de entrar. La app de terreno manda a la gente al login
+ * con `?next=/m/enex`: sin esto, el mantenedor terminaba en el panel de
+ * escritorio y tenía que buscar su pantalla a mano en el celular.
+ * Se lee de window para no obligar a un Suspense en el prerender, y solo se
+ * aceptan rutas internas.
+ */
+function destinoTrasEntrar(): string {
+  if (typeof window === 'undefined') return '/dashboard'
+  const next = new URLSearchParams(window.location.search).get('next')
+  if (next && next.startsWith('/') && !next.startsWith('//')) return next
+  return '/dashboard'
+}
+
 export default function LoginPage() {
   const router = useRouter()
   const { signIn, isAuthenticated, loading: authLoading } = useAuth()
@@ -27,7 +41,7 @@ export default function LoginPage() {
   // Redirect if already authenticated
   useEffect(() => {
     if (!authLoading && isAuthenticated) {
-      router.replace('/dashboard')
+      router.replace(destinoTrasEntrar())
     }
   }, [authLoading, isAuthenticated, router])
 
@@ -35,7 +49,7 @@ export default function LoginPage() {
     setError(null)
     try {
       await signIn(data.email, data.password)
-      router.push('/dashboard')
+      router.push(destinoTrasEntrar())
     } catch {
       setError('Credenciales inválidas. Verifique su correo y contraseña.')
     }
