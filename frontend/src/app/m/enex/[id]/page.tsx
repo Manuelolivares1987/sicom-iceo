@@ -123,6 +123,8 @@ export default function EnexEjecutarPage() {
   const [cargado, setCargado] = useState(false)
   const [borradorAt, setBorradorAt] = useState<string | null>(null)
   const fileRefs = useRef<Record<string, HTMLInputElement | null>>({})
+  // [MIG267] Actividades que ya están registradas en el servidor.
+  const enServidor = useRef<Set<string>>(new Set())
 
   // ── Cronómetro ───────────────────────────────────────────────────────────
   // Mide el TRABAJO, no el rato que la pantalla estuvo abierta: arranca con la
@@ -178,6 +180,11 @@ export default function EnexEjecutarPage() {
               antes: urls(r.fotos_antes, r.foto_antes_url),
               despues: urls(r.fotos_despues, r.foto_despues_url),
             }
+            // [MIG267] Se anota qué actividades ya existen en el servidor: son
+            // las únicas que pueden viajar vacías para borrarse. Una que nunca
+            // se cargó (sin señal ni cache) no se manda, para no borrar a
+            // ciegas lo que el servidor sí tiene.
+            enServidor.current.add(r.pauta_item_id)
           }
         } catch { /* sin señal y sin cache: se parte de cero */ }
       }
@@ -290,10 +297,10 @@ export default function EnexEjecutarPage() {
   const quitarFoto = (id: string, tipo: 'antes' | 'despues', fotoId: string) => {
     setEstado((p) => {
       const st = p[id] ?? vacio()
-      // Una foto ya subida no se puede borrar del informe desde el teléfono:
-      // el servidor conserva lo que recibió. Mejor decirlo que fingirlo.
+      // [MIG267] Quitar una foto ya subida ahora sí la saca del informe: el
+      // servidor acepta la galería tal cual queda al guardar.
       const f = (tipo === 'antes' ? st.antes : st.despues).find((x) => x.id === fotoId)
-      if (f?.url) toast.info('La foto ya está en el informe: se quita de la vista, no del informe')
+      if (f?.url) toast.info('Se sacará del informe al guardar')
       return {
         ...p,
         [id]: tipo === 'antes'
@@ -347,9 +354,13 @@ export default function EnexEjecutarPage() {
           fotosAntesUrls: st.antes.filter((f) => f.url).map((f) => f.url!),
           fotosDespuesUrls: st.despues.filter((f) => f.url).map((f) => f.url!),
         }
+      // [MIG267] Viaja lo que tiene algo Y también lo que quedó vacío pero ya
+      // existe en el servidor: así desmarcar una actividad o quitar una foto
+      // mal sacada se guarda de verdad. Lo que nunca se cargó no se manda.
       }).filter((p) => p.resultado || p.valor_medicion || p.observacion ||
                        p.antesBlobIds.length || p.despuesBlobIds.length ||
-                       p.fotosAntesUrls.length || p.fotosDespuesUrls.length)
+                       p.fotosAntesUrls.length || p.fotosDespuesUrls.length ||
+                       enServidor.current.has(p.pauta_item_id))
 
       const r = await queueEjecucion({
         programacionId: prog.programacion_id, conMandante: conFirmaMandante,
@@ -359,6 +370,9 @@ export default function EnexEjecutarPage() {
         firmaTecFile: firmaTec ? dataUrlToBlob(firmaTec) : null,
         firmaMandFile: conFirmaMandante && firmaMand ? dataUrlToBlob(firmaMand) : null,
         inicioAt, finAt, duracionSegundos: segundos,
+        // Lo que va arriba es el estado completo de la pantalla, así que el
+        // servidor puede vaciar lo que llegue vacío.
+        reemplazar: true,
       })
       qc.invalidateQueries({ queryKey: ['enex-terreno'] })
       qc.invalidateQueries({ queryKey: ['enex-servicio', progId] })

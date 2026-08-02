@@ -184,6 +184,9 @@ export async function queueEjecucion(params: {
   inicioAt?: string | null
   finAt?: string | null
   duracionSegundos?: number | null
+  // [MIG267] `items` trae el estado completo de la pantalla, incluidas las
+  // actividades que quedaron vacías a propósito.
+  reemplazar?: boolean
 }): Promise<{ synced: boolean }> {
   const db = enexDB()
   // Guardar blobs de fotos + firmas
@@ -227,6 +230,7 @@ export async function queueEjecucion(params: {
     items, firma_tec_blob_id: firmaTecId, firma_mand_blob_id: firmaMandId,
     inicio_at: params.inicioAt ?? null, fin_at: params.finAt ?? null,
     duracion_segundos: params.duracionSegundos ?? null,
+    reemplazar: params.reemplazar === true,
     sync_status: 'pending', retries: 0, last_error: null, created_at: new Date().toISOString(),
   }
   // Reemplazar cualquier pendiente previo de la misma programación (última gana)
@@ -297,6 +301,10 @@ export async function syncEnexPending(): Promise<{ ok: number; failed: number }>
         clientUuid: p.client_uuid,
         inicioAt: p.inicio_at ?? null, finAt: p.fin_at ?? null,
         duracionSegundos: p.duracion_segundos ?? null,
+        // [MIG267] Lo que va en el payload es el estado completo de la pantalla:
+        // lo que viaja vacío se vacía en el servidor. Las ejecuciones encoladas
+        // por la app anterior no llevan la marca y siguen siendo aditivas.
+        reemplazar: p.reemplazar === true,
       })
       // El borrador apuntaba a los blobs que acabamos de subir y que estamos a
       // punto de borrar. Si se deja así, al reabrir el servicio las fotos

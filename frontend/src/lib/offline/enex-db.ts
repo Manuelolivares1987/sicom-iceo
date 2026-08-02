@@ -43,6 +43,9 @@ export type EnexPending = {
   inicio_at?: string | null
   fin_at?: string | null
   duracion_segundos?: number | null
+  // [MIG267] El payload es el estado completo de la pantalla: lo que viaja
+  // vacío se vacía en el servidor (borrar una foto, desmarcar una actividad).
+  reemplazar?: boolean
   // control
   sync_status: 'pending' | 'error'
   retries: number
