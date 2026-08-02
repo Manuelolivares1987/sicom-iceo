@@ -120,6 +120,9 @@ export default function EnexEjecutarPage() {
   const [firmante, setFirmante] = useState('')
   const [guardando, setGuardando] = useState(false)
   const [abiertos, setAbiertos] = useState<Record<string, boolean>>({})
+  // Bloques de la pauta: parten todos cerrados. El mantenedor abre el punto
+  // que va a atacar y no tiene que pasar por encima del resto de la pauta.
+  const [bloques, setBloques] = useState<Record<string, boolean>>({})
   const [cargado, setCargado] = useState(false)
   const [borradorAt, setBorradorAt] = useState<string | null>(null)
   const fileRefs = useRef<Record<string, HTMLInputElement | null>>({})
@@ -314,10 +317,12 @@ export default function EnexEjecutarPage() {
   const faltanFotos = trabajadas.filter((it) => !conEvidencia(estado[it.id] ?? vacio()))
   const faltanDato = trabajadas.filter((it) => faltaDato(it, estado[it.id] ?? vacio()))
 
-  /** Lleva al ítem que falta y lo abre. */
+  /** Lleva al ítem que falta: abre su bloque, lo despliega y baja hasta él. */
   const irAlItem = (it: EnexPautaItem) => {
+    setBloques((b) => ({ ...b, [it.bloque]: true }))
     setAbiertos((a) => ({ ...a, [it.id]: true }))
-    document.getElementById(`item-${it.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    // El ítem no está en pantalla hasta que el bloque se abre.
+    setTimeout(() => document.getElementById(`item-${it.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 80)
   }
 
   async function guardar(conFirmaMandante: boolean) {
@@ -467,28 +472,42 @@ export default function EnexEjecutarPage() {
       {isLoading ? <div className="flex justify-center py-8"><Spinner /></div> : grupos.map((g) => {
         const trabG = g.items.filter((it) => trabajado(estado[it.id] ?? vacio())).length
         const faltaG = g.items.filter((it) => !itemListo(estado[it.id] ?? vacio())).length
+        const bloqueAbierto = bloques[g.bloque] ?? false
         return (
         <div key={g.bloque}>
-          <div className="sticky top-0 z-10 flex items-center justify-between gap-2 rounded bg-gray-100 px-2 py-1">
-            <span className="text-xs font-semibold text-gray-700">{g.bloque}</span>
-            <div className="flex items-center gap-2">
-              <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
-                faltaG > 0 ? 'bg-amber-200 text-amber-900'
-                : trabG > 0 ? 'bg-green-200 text-green-800' : 'bg-white text-gray-500'}`}>
-                {trabG}/{g.items.length}
+          {/* El bloque entero se pliega: en terreno se ataca un punto de la
+              pauta, se toca el bloque y recién ahí aparecen sus tareas. */}
+          <button onClick={() => setBloques((b) => ({ ...b, [g.bloque]: !bloqueAbierto }))}
+                  className={`sticky top-0 z-10 flex w-full items-center gap-2 rounded-lg border px-2.5 py-2.5 text-left ${
+                    faltaG > 0 ? 'border-amber-300 bg-amber-50'
+                    : trabG > 0 ? 'border-green-300 bg-green-50' : 'border-gray-200 bg-gray-100'}`}>
+            {bloqueAbierto ? <ChevronDown className="h-4 w-4 flex-shrink-0 text-gray-500" />
+                           : <ChevronRight className="h-4 w-4 flex-shrink-0 text-gray-500" />}
+            <span className="flex-1 text-sm font-semibold text-gray-800">{g.bloque}</span>
+            {faltaG > 0 && (
+              <span className="rounded-full bg-amber-200 px-1.5 py-0.5 text-[10px] font-bold text-amber-900">
+                {faltaG} sin foto
               </span>
+            )}
+            <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${
+              trabG > 0 ? 'bg-green-200 text-green-800' : 'bg-white text-gray-500'}`}>
+              {trabG}/{g.items.length}
+            </span>
+          </button>
+
+          {bloqueAbierto && (
+          <div className="space-y-2 pt-2">
+            <div className="flex justify-end">
               <button onClick={() => setAbiertos((a) => {
                         const todos = { ...a }
                         const algunoAbierto = g.items.some((it) => todos[it.id])
                         for (const it of g.items) todos[it.id] = !algunoAbierto
                         return todos
                       })}
-                      className="text-[10px] font-semibold text-blue-600">
-                {g.items.some((it) => abiertos[it.id]) ? 'Comprimir' : 'Abrir'}
+                      className="text-[11px] font-semibold text-blue-600">
+                {g.items.some((it) => abiertos[it.id]) ? 'Cerrar todas' : 'Abrir todas'}
               </button>
             </div>
-          </div>
-          <div className="space-y-2 pt-2">
             {g.items.map((it) => {
               const st = estado[it.id] ?? vacio()
               const dt = dentroTol(it, st.valor)
@@ -626,6 +645,7 @@ export default function EnexEjecutarPage() {
               )
             })}
           </div>
+          )}
         </div>
         )
       })}
