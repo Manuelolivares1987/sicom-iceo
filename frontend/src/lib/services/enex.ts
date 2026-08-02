@@ -418,6 +418,13 @@ export async function ejecutarPauta(p: {
   clientUuid?: string | null
   // [MIG265] Tiempo medido por la app de terreno.
   inicioAt?: string | null; finAt?: string | null; duracionSegundos?: number | null
+  /**
+   * [MIG267] La app manda el estado completo de lo que tiene en pantalla, así
+   * que lo que llega vacío se vacía: una foto mal sacada sale del informe y una
+   * actividad desmarcada deja de figurar. Sin esto, el servidor solo suma.
+   * Las firmas nunca se borran por esta vía.
+   */
+  reemplazar?: boolean
 }) {
   const { data, error } = await supabase.rpc('rpc_enex_ejecutar_pauta', {
     p_programacion_id: p.programacionId, p_items: p.items,
@@ -428,6 +435,7 @@ export async function ejecutarPauta(p: {
     p_client_uuid: p.clientUuid ?? null,
     p_inicio_at: p.inicioAt ?? null, p_fin_at: p.finAt ?? null,
     p_duracion_segundos: p.duracionSegundos ?? null,
+    p_reemplazar: p.reemplazar ?? false,
   })
   if (error) throw error
   return data as { success: boolean; ejecucion_id: string; estado: string; cumplida: boolean; items: number }
