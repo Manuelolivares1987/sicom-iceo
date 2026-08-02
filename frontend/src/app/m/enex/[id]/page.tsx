@@ -196,24 +196,19 @@ export default function EnexEjecutarPage() {
             }
             return out
           }
-          // Red de seguridad: si el borrador apuntaba a blobs que ya no están
-          // (los borra la cola al subirlos), se conservan las del servidor en
-          // vez de dejar el ítem sin evidencia y bloquear el cierre.
-          const conservar = async (
-            locales: { id: string; url?: string; blob_id?: string }[], delServidor: Foto[],
-          ): Promise<Foto[]> => {
-            const vivas = await rehidratar(locales)
-            if (vivas.length >= (locales?.length ?? 0)) return vivas
-            const urls = new Set(vivas.map((f) => f.url).filter(Boolean))
-            return [...delServidor.filter((f) => f.url && !urls.has(f.url)), ...vivas]
-          }
+          // Las fotos YA SUBIDAS las manda el servidor: el borrador solo aporta
+          // lo que todavía no viajó. Si el borrador pisaba la lista completa,
+          // una galería que quedó vacía en el teléfono (blobs ya subidos y
+          // borrados) escondía evidencia que sí existe y bloqueaba el cierre.
+          const sinSubir = (fotos: { id: string; url?: string; blob_id?: string }[] | undefined) =>
+            (fotos ?? []).filter((f) => !f.url)
           const previo = base[itemId]
           base[itemId] = {
             resultado: di.resultado ?? undefined,
             valor: di.valor ?? undefined,
             obs: di.obs ?? undefined,
-            antes: await conservar(di.antes ?? [], previo?.antes ?? []),
-            despues: await conservar(di.despues ?? [], previo?.despues ?? []),
+            antes: [...(previo?.antes ?? []), ...await rehidratar(sinSubir(di.antes))],
+            despues: [...(previo?.despues ?? []), ...await rehidratar(sinSubir(di.despues))],
           }
         }
         if (d.ot_numero) setOtNumero(d.ot_numero)
@@ -295,6 +290,10 @@ export default function EnexEjecutarPage() {
   const quitarFoto = (id: string, tipo: 'antes' | 'despues', fotoId: string) => {
     setEstado((p) => {
       const st = p[id] ?? vacio()
+      // Una foto ya subida no se puede borrar del informe desde el teléfono:
+      // el servidor conserva lo que recibió. Mejor decirlo que fingirlo.
+      const f = (tipo === 'antes' ? st.antes : st.despues).find((x) => x.id === fotoId)
+      if (f?.url) toast.info('La foto ya está en el informe: se quita de la vista, no del informe')
       return {
         ...p,
         [id]: tipo === 'antes'
