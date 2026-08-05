@@ -669,6 +669,14 @@ export default function MecanicoOTPage() {
       {/* Notas con foto (anexo para el jefe, por si se escapa algo del checklist) */}
       <NotasSection otId={otId} />
 
+      {/* Este equipo ya se inspeccionó completo: la OT trae solo las NC (MIG270) */}
+      {(items ?? [])[0]?.instance_arrastre && total > 0 && (
+        <p className="rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-[11px] text-orange-800">
+          <span className="font-semibold">Solo las no conformidades.</span>{' '}
+          El checklist completo ya se hizo en una OT anterior: aquí van las {total} tareas que salieron NO OK.
+        </p>
+      )}
+
       {/* Checklist */}
       {isLoading ? (
         <div className="flex justify-center py-8"><Spinner /></div>
@@ -708,7 +716,15 @@ export default function MecanicoOTPage() {
                   <div className="mt-1 flex flex-wrap gap-1">
                     {it.requiere_foto && <span className="text-[9px] px-1 rounded bg-blue-100 text-blue-700">pide foto</span>}
                     {it.critico && <span className="text-[9px] px-1 rounded bg-red-100 text-red-700">crítica</span>}
+                    {it.arrastre && <span className="text-[9px] px-1 rounded bg-orange-100 text-orange-700">no conformidad</span>}
                   </div>
+                  {/* Viene NO OK de la inspección anterior (MIG270) */}
+                  {it.arrastre && (
+                    <p className="mt-1 text-[11px] text-orange-700">
+                      Salió NO OK en la inspección anterior
+                      {it.arrastre_observacion ? `: ${it.arrastre_observacion}` : '.'}
+                    </p>
+                  )}
 
                   <div className="mt-2"><ResultRadio value={it.resultado} onChange={(v) => setResultado(it, v)} /></div>
 
