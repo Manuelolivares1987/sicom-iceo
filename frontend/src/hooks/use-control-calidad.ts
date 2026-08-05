@@ -203,6 +203,36 @@ export function useIniciarAuditoria() {
   })
 }
 
+export type AvanceItemPatch = {
+  id: string
+  resultado?: string
+  observacion?: string | null
+  foto_url?: string | null
+}
+
+/**
+ * Refleja en la lista cacheada lo que el RPC acaba de grabar, con el MISMO
+ * criterio que `rpc_guardar_avance_auditoria`: solo pisa los campos que
+ * viajaron en el patch (allá es un COALESCE por columna). Un patch que trae
+ * únicamente la foto no puede borrar la observación ya guardada.
+ */
+export function aplicarAvanceEnItems(
+  items: AuditoriaItem[],
+  patches: AvanceItemPatch[],
+): AuditoriaItem[] {
+  if (patches.length === 0) return items
+  return items.map((it) => {
+    const p = patches.find((x) => x.id === it.id)
+    if (!p) return it
+    return {
+      ...it,
+      resultado: (p.resultado ?? it.resultado) as AuditoriaItem['resultado'],
+      observacion: p.observacion !== undefined ? p.observacion : it.observacion,
+      foto_url: p.foto_url !== undefined ? p.foto_url : it.foto_url,
+    }
+  })
+}
+
 /**
  * Guardado parcial (MIG260). Antes los 188 ítems vivían solo en la memoria del
  * navegador hasta apretar Aprobar: una recarga borraba horas de trabajo.
@@ -221,7 +251,16 @@ export function useGuardarAvanceAuditoria() {
       if (error) throw error
       return data as { guardados: number; marcados: number; total: number }
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['aud-pendientes'] }) },
+    onSuccess: (_data, args) => {
+      // El caché de ítems dura 5 min (staleTime global): al volver a la
+      // auditoría dentro de esa ventana react-query devolvía la copia ANTERIOR
+      // al autoguardado y el comentario recién escrito se veía en blanco. Se
+      // escribe lo guardado en el caché en vez de invalidar y refetchear 188
+      // filas en cada pausa de tecleo.
+      qc.setQueryData(['aud-items', args.auditoria_id], (prev?: AuditoriaItem[]) =>
+        prev && aplicarAvanceEnItems(prev, args.items))
+      qc.invalidateQueries({ queryKey: ['aud-pendientes'] })
+    },
   })
 }
 
