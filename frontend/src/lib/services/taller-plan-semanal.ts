@@ -154,6 +154,14 @@ export type ChecklistV3Item = {
   es_custom: boolean
   /** Profundidad por neumático u otras mediciones del ítem (MIG203). */
   mediciones: { pos: string; mm: number | null }[] | null
+  /** El checklist completo ya se hizo antes: esta OT trae solo las NC (MIG270). */
+  instance_arrastre: boolean
+  arrastre_ot_folio: string | null
+  arrastre_fecha: string | null
+  /** Esta tarea viene de un ítem NO OK de la inspección anterior. */
+  arrastre: boolean
+  arrastre_observacion: string | null
+  arrastre_foto_url: string | null
 }
 
 export type TallerOTBacklog = {
@@ -645,6 +653,29 @@ export async function rpcV3EliminarCustom(itemId: string) {
   const { data, error } = await supabase.rpc('rpc_taller_v3_eliminar_custom', { p_item_id: itemId })
   if (error) throw error
   return data as { success: boolean }
+}
+
+/**
+ * Dejar en el checklist de la OT solo las no conformidades de la última
+ * inspección completa del equipo (MIG270). Lo automático lo hace el trigger al
+ * crear la OT; esto es el botón para las OT que ya existían.
+ */
+export async function rpcV3ArrastrarNc(otId: string) {
+  const { data, error } = await supabase.rpc('rpc_taller_v3_arrastrar_nc', { p_ot_id: otId })
+  if (error) throw error
+  return data as {
+    arrastre: boolean
+    motivo?: 'instancia_no_existe' | 'sin_inspeccion_completa_previa' | 'inspeccion_previa_sin_nc'
+    nc_arrastradas?: number
+    items_excluidos?: number
+  }
+}
+
+/** Devolver el checklist completo a una OT que traía solo las NC (MIG270). */
+export async function rpcV3RestaurarCompleto(otId: string) {
+  const { data, error } = await supabase.rpc('rpc_taller_v3_restaurar_completo', { p_ot_id: otId })
+  if (error) throw error
+  return data as { ok: boolean; items_restaurados: number }
 }
 
 /** Marcar "No aplica" (o restaurar) un BLOQUE completo del checklist (MIG223). */
