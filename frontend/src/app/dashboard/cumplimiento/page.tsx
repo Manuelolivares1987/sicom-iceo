@@ -32,10 +32,16 @@ import { formatDate } from '@/lib/utils'
 import {
   useAllCertificaciones,
   useCertificacionStats,
-  useCreateCertificacion,
 } from '@/hooks/use-certificaciones'
 import { useActivos } from '@/hooks/use-activos'
 import { getFaenas } from '@/lib/services/faenas'
+import {
+  TIPO_DOC_LABEL,
+  TIPOS_DOC_OPCIONES,
+  renovarCertificacion,
+  subirDocumentoCert,
+} from '@/lib/services/taller-planificacion'
+import { useQueryClient } from '@tanstack/react-query'
 
 // ---------------------------------------------------------------------------
 // Filter options
@@ -45,21 +51,16 @@ const estadoOptions: { value: string; label: string }[] = [
   { value: 'vigente', label: 'Vigente' },
   { value: 'por_vencer', label: 'Por Vencer' },
   { value: 'vencido', label: 'Vencido' },
+  { value: 'no_aplica', label: 'Sin vencimiento' },
 ]
 
+// Los tipos salen del enum real de la BD (TIPO_DOC_LABEL). Antes esta pantalla
+// mandaba 'SEC' / 'SOAP' / 'Revisión Técnica', valores que el enum no conoce, y
+// por eso NINGUN documento se podia guardar ni renovar.
 const tipoOptions: { value: string; label: string }[] = [
   { value: '', label: 'Todos' },
-  { value: 'SEC', label: 'SEC' },
-  { value: 'SEREMI', label: 'SEREMI' },
-  { value: 'SISS', label: 'SISS' },
-  { value: 'Revisión Técnica', label: 'Revisión Técnica' },
-  { value: 'SOAP', label: 'SOAP' },
-  { value: 'Calibración', label: 'Calibración' },
-  { value: 'Licencia', label: 'Licencia' },
-  { value: 'Otro', label: 'Otro' },
+  ...TIPOS_DOC_OPCIONES,
 ]
-
-const tipoCertValues = ['SEC', 'SEREMI', 'SISS', 'Revisión Técnica', 'SOAP', 'Calibración', 'Licencia', 'Otro']
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -69,6 +70,7 @@ function getEstadoBadge(estado: string) {
     vigente: { className: 'bg-green-100 text-green-700', label: 'Vigente' },
     por_vencer: { className: 'bg-yellow-100 text-yellow-700', label: 'Por Vencer' },
     vencido: { className: 'bg-red-100 text-red-700', label: 'Vencido' },
+    no_aplica: { className: 'bg-gray-100 text-gray-600', label: 'Sin vencimiento' },
   }
   const c = config[estado] || { className: 'bg-gray-100 text-gray-700', label: estado }
   return <Badge className={c.className}>{c.label}</Badge>
@@ -76,20 +78,20 @@ function getEstadoBadge(estado: string) {
 
 function getTipoBadge(tipo: string) {
   const colors: Record<string, string> = {
-    SEC: 'bg-blue-100 text-blue-700',
-    SEREMI: 'bg-purple-100 text-purple-700',
-    SISS: 'bg-cyan-100 text-cyan-700',
-    'Revisión Técnica': 'bg-indigo-100 text-indigo-700',
-    SOAP: 'bg-pillado-orange-100 text-pillado-orange-700',
-    Calibración: 'bg-pink-100 text-pink-700',
-    Licencia: 'bg-amber-100 text-amber-700',
-    Otro: 'bg-gray-100 text-gray-700',
+    sec: 'bg-blue-100 text-blue-700',
+    seremi: 'bg-purple-100 text-purple-700',
+    siss: 'bg-cyan-100 text-cyan-700',
+    revision_tecnica: 'bg-indigo-100 text-indigo-700',
+    soap: 'bg-pillado-orange-100 text-pillado-orange-700',
+    permiso_circulacion: 'bg-teal-100 text-teal-700',
+    calibracion: 'bg-pink-100 text-pink-700',
+    licencia_especial: 'bg-amber-100 text-amber-700',
   }
   return (
     <span
       className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${colors[tipo] || 'bg-gray-100 text-gray-700'}`}
     >
-      {tipo}
+      {TIPO_DOC_LABEL[tipo] ?? tipo}
     </span>
   )
 }
@@ -230,7 +232,7 @@ interface CertFormData {
 
 const emptyCertForm: CertFormData = {
   activo_id: '',
-  tipo: 'SEC',
+  tipo: 'revision_tecnica',
   fecha_emision: '',
   fecha_vencimiento: '',
   numero_certificado: '',
@@ -257,7 +259,8 @@ function CertificacionModal({
   const [form, setForm] = useState<CertFormData>({ ...emptyCertForm, ...initialData })
   const [file, setFile] = useState<File | undefined>(undefined)
   const [formError, setFormError] = useState('')
-  const createMutation = useCreateCertificacion()
+  const [saving, setSaving] = useState(false)
+  const queryClient = useQueryClient()
 
   // Reset form when modal opens with new data
   useEffect(() => {
@@ -284,26 +287,40 @@ function CertificacionModal({
       setFormError('Las fechas de emision y vencimiento son obligatorias.')
       return
     }
+    if (form.fecha_vencimiento < form.fecha_emision) {
+      setFormError('El vencimiento no puede ser anterior a la emision.')
+      return
+    }
 
+    // [MIG272] El guardado va por el RPC: valida el rol, calcula el estado y
+    // deja trazado quien cargo el papel. El archivo va al bucket 'documentos'
+    // (antes se subia a un bucket 'certificaciones' que no existe).
+    setSaving(true)
     try {
-      await createMutation.mutateAsync({
-        data: {
-          activo_id: form.activo_id,
-          tipo: form.tipo,
-          fecha_emision: form.fecha_emision,
-          fecha_vencimiento: form.fecha_vencimiento,
-          numero_certificado: form.numero_certificado || null,
-          entidad_certificadora: form.entidad_certificadora || null,
-          bloqueante: form.bloqueante,
-          estado: form.estado,
-          notas: form.notas || null,
-          created_by: null,
-        },
-        file,
+      let archivoUrl: string | null = null
+      if (file) archivoUrl = await subirDocumentoCert(form.activo_id, form.tipo, file)
+
+      await renovarCertificacion({
+        activoId: form.activo_id,
+        tipo: form.tipo,
+        fechaEmision: form.fecha_emision,
+        fechaVencimiento: form.fecha_vencimiento,
+        archivoUrl,
+        numero: form.numero_certificado || null,
+        entidad: form.entidad_certificadora || null,
+        bloqueante: form.bloqueante,
+        notas: form.notas || null,
       })
+
+      queryClient.invalidateQueries({ queryKey: ['certificaciones'] })
+      queryClient.invalidateQueries({ queryKey: ['certificaciones-activo'] })
+      queryClient.invalidateQueries({ queryKey: ['certificacion-stats'] })
+      queryClient.invalidateQueries({ queryKey: ['documentos-por-vencer'] })
       onClose()
     } catch (err: any) {
-      setFormError(err?.message ?? 'Error al crear certificacion.')
+      setFormError(err?.message ?? 'No se pudo guardar el documento.')
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -320,8 +337,8 @@ function CertificacionModal({
               onChange={(e) => updateField('tipo', e.target.value)}
               className="h-10 w-full appearance-none rounded-lg border border-gray-300 bg-white px-3 pr-8 text-sm text-gray-700 focus:border-pillado-green-500 focus:outline-none focus:ring-2 focus:ring-pillado-green-500/20"
             >
-              {tipoCertValues.map((t) => (
-                <option key={t} value={t}>{t}</option>
+              {TIPOS_DOC_OPCIONES.map((t) => (
+                <option key={t.value} value={t.value}>{t.label}</option>
               ))}
             </select>
             <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
@@ -408,8 +425,8 @@ function CertificacionModal({
           <Button type="button" variant="outline" onClick={onClose}>
             Cancelar
           </Button>
-          <Button type="submit" variant="primary" disabled={createMutation.isPending}>
-            {createMutation.isPending ? 'Guardando...' : 'Guardar'}
+          <Button type="submit" variant="primary" disabled={saving}>
+            {saving ? 'Guardando...' : 'Guardar'}
           </Button>
         </ModalFooter>
       </form>

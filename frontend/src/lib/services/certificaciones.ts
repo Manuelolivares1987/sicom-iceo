@@ -26,41 +26,11 @@ export async function getCertificacionesVencidas() {
   return { data: data as Certificacion[] | null, error }
 }
 
-export async function createCertificacion(
-  data: Omit<Certificacion, 'id' | 'created_at' | 'updated_at' | 'archivo_url'> & {
-    archivo_url?: string | null
-  },
-  file?: File
-) {
-  let archivoUrl: string | null = data.archivo_url ?? null
-
-  if (file) {
-    const fileExt = file.name.split('.').pop()
-    const filePath = `certificaciones/${data.activo_id}/${Date.now()}.${fileExt}`
-
-    const { error: uploadError } = await supabase.storage
-      .from('certificaciones')
-      .upload(filePath, file)
-
-    if (uploadError) {
-      return { data: null, error: uploadError }
-    }
-
-    const { data: { publicUrl } } = supabase.storage
-      .from('certificaciones')
-      .getPublicUrl(filePath)
-
-    archivoUrl = publicUrl
-  }
-
-  const { data: created, error } = await supabase
-    .from('certificaciones')
-    .insert({ ...data, archivo_url: archivoUrl })
-    .select('*, activo:activos(id, codigo, nombre, tipo)')
-    .single()
-
-  return { data: created as Certificacion | null, error }
-}
+// NOTA: crear/renovar documentación va SIEMPRE por `renovarCertificacion`
+// (RPC rpc_renovar_certificacion, MIG272) + `subirDocumentoCert` en
+// lib/services/taller-planificacion.ts. La versión anterior de este archivo
+// insertaba directo y subía el archivo a un bucket 'certificaciones' que no
+// existe, así que ningún papel se podía cargar desde /dashboard/cumplimiento.
 
 // Get all certifications with activo info
 export async function getAllCertificaciones(filters?: {

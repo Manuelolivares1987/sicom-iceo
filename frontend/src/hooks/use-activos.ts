@@ -14,9 +14,6 @@ import {
   getHistorialMantenimiento,
   getKPIActivo,
   getRankingActivos,
-  upsertCertificacion,
-  uploadCertificadoArchivo,
-  deleteCertificacion,
 } from '@/lib/services/activos'
 import type { Activo } from '@/types/database'
 
@@ -220,44 +217,7 @@ export function useRankingActivos() {
   })
 }
 
-export function useUpsertCertificacion() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: async (data: Parameters<typeof upsertCertificacion>[0]) => {
-      const { data: result, error } = await upsertCertificacion(data)
-      if (error) throw error
-      return result
-    },
-    onSuccess: (_data, vars) => {
-      queryClient.invalidateQueries({ queryKey: ['certificaciones-activo', vars.activo_id] })
-      queryClient.invalidateQueries({ queryKey: ['activo', vars.activo_id] })
-    },
-  })
-}
-
-export function useUploadCertificado() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: async ({ activoId, certId, file }: { activoId: string; certId: string; file: File }) => {
-      const { data, error } = await uploadCertificadoArchivo(activoId, certId, file)
-      if (error) throw error
-      return data
-    },
-    onSuccess: (_data, { activoId }) => {
-      queryClient.invalidateQueries({ queryKey: ['certificaciones-activo', activoId] })
-    },
-  })
-}
-
-export function useDeleteCertificacion() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: async ({ certId }: { certId: string; activoId: string }) => {
-      const { error } = await deleteCertificacion(certId)
-      if (error) throw error
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['certificaciones-activo'] })
-    },
-  })
-}
+// Crear/renovar/adjuntar documentación: ver renovarCertificacion,
+// subirDocumentoCert y adjuntarArchivoCertificacion en
+// lib/services/taller-planificacion.ts (RPCs de MIG272). Se dejó un solo camino
+// para que no vuelva a haber pantallas escribiendo con reglas distintas.

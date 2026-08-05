@@ -297,6 +297,15 @@ export const TIPO_DOC_LABEL: Record<string, string> = {
   otra: 'Otro',
 }
 
+// Todos los tipos de documento que acepta la BD (tipo_certificacion_enum),
+// ordenados por etiqueta. Es la lista que deben usar TODOS los formularios que
+// cargan papeles: si se escribe la lista a mano se vuelve a caer en el bug de
+// mandar un tipo que el enum no conoce.
+export const TIPOS_DOC_OPCIONES: { value: string; label: string }[] =
+  Object.entries(TIPO_DOC_LABEL)
+    .map(([value, label]) => ({ value, label }))
+    .sort((a, b) => a.label.localeCompare(b.label, 'es'))
+
 // Equipos con documentos vencidos o que vencen dentro de N días (todos los tipos).
 export async function getDocumentosPorVencer(diasAdelante = 30): Promise<DocumentoPorVencer[]> {
   const { data, error } = await supabase
@@ -318,10 +327,13 @@ export async function subirDocumentoCert(activoId: string, tipo: string, file: F
   return data.publicUrl
 }
 
-// Registra la renovación de cualquier documento -> certificaciones.
+// Registra la renovación (o el alta) de cualquier documento -> certificaciones.
+// [MIG272] Es la única puerta de entrada: valida el rol, calcula el estado y
+// deja registrado quién cargó el papel.
 export async function renovarCertificacion(p: {
   activoId: string; tipo: string; fechaEmision: string; fechaVencimiento: string
   archivoUrl?: string | null; numero?: string | null; entidad?: string | null
+  bloqueante?: boolean | null; notas?: string | null
 }) {
   const { data, error } = await supabase.rpc('rpc_renovar_certificacion', {
     p_activo_id: p.activoId,
@@ -331,6 +343,18 @@ export async function renovarCertificacion(p: {
     p_archivo_url: p.archivoUrl ?? null,
     p_numero: p.numero ?? null,
     p_entidad: p.entidad ?? null,
+    p_bloqueante: p.bloqueante ?? null,
+    p_notas: p.notas ?? null,
+  })
+  if (error) throw error
+  return data
+}
+
+// Adjunta el PDF/foto a un documento ya registrado (sin crear otra fila).
+export async function adjuntarArchivoCertificacion(certId: string, archivoUrl: string) {
+  const { data, error } = await supabase.rpc('rpc_adjuntar_archivo_certificacion', {
+    p_certificacion_id: certId,
+    p_archivo_url: archivoUrl,
   })
   if (error) throw error
   return data

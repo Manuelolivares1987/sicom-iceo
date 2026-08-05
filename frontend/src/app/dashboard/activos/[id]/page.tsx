@@ -69,9 +69,15 @@ import {
   useCertificacionesByActivo,
   useCostosByActivo,
   useHistorialMantenimiento,
-  useUpsertCertificacion,
-  useUploadCertificado,
 } from '@/hooks/use-activos'
+import { useQueryClient } from '@tanstack/react-query'
+import { useToast } from '@/contexts/toast-context'
+import {
+  TIPOS_DOC_OPCIONES,
+  subirDocumentoCert,
+  renovarCertificacion,
+  adjuntarArchivoCertificacion,
+} from '@/lib/services/taller-planificacion'
 import { useOEEActivo } from '@/hooks/use-flota'
 import { HistorialEstadosChart } from '@/components/flota/historial-estados-chart'
 import { useHistorialOSLegacyByActivo } from '@/hooks/use-historial-os-legacy'
@@ -499,31 +505,90 @@ function TabIdentificacion({ activo, onUpdate }: { activo: any; onUpdate: (field
 // ---------------------------------------------------------------------------
 // Tab: Certificaciones / Documentos (REESCRITO — con upload y alertas)
 // ---------------------------------------------------------------------------
+const EMPTY_DOC_FORM = {
+  tipo: 'revision_tecnica',
+  fecha_emision: '',
+  fecha_vencimiento: '',
+  entidad_certificadora: '',
+  numero_certificado: '',
+  bloqueante: true,
+}
+
 function TabCertificaciones({ activoId }: { activoId: string }) {
   const { data: certs, isLoading } = useCertificacionesByActivo(activoId)
-  const upsertCert = useUpsertCertificacion()
-  const uploadCert = useUploadCertificado()
+  const queryClient = useQueryClient()
+  const toast = useToast()
   const [showAdd, setShowAdd] = useState(false)
-  const [newCert, setNewCert] = useState({ tipo: 'revision_tecnica', fecha_emision: '', fecha_vencimiento: '', entidad_certificadora: '', numero_certificado: '', bloqueante: true })
+  const [newCert, setNewCert] = useState({ ...EMPTY_DOC_FORM })
   const [newFile, setNewFile] = useState<File | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [formError, setFormError] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [uploadingCertId, setUploadingCertId] = useState<string | null>(null)
+  const [subiendo, setSubiendo] = useState(false)
 
-  const handleAdd = () => {
-    upsertCert.mutate({
-      activo_id: activoId,
-      ...newCert,
-    }, {
-      onSuccess: (created: { id?: string } | undefined) => {
-        // Si adjuntaron el archivo en el mismo paso, súbelo a la fila recién creada.
-        if (newFile && created?.id) {
-          uploadCert.mutate({ activoId, certId: created.id, file: newFile })
-        }
-        setShowAdd(false)
-        setNewFile(null)
-        setNewCert({ tipo: 'revision_tecnica', fecha_emision: '', fecha_vencimiento: '', entidad_certificadora: '', numero_certificado: '', bloqueante: true })
-      },
+  const refrescar = () => {
+    queryClient.invalidateQueries({ queryKey: ['certificaciones-activo', activoId] })
+    queryClient.invalidateQueries({ queryKey: ['certificaciones'] })
+    queryClient.invalidateQueries({ queryKey: ['activo', activoId] })
+    queryClient.invalidateQueries({ queryKey: ['documentos-por-vencer'] })
+  }
+
+  // [MIG272] Alta y renovación pasan por el RPC: valida el rol, calcula el
+  // estado y deja registrado quién cargó el papel. Antes fallaba en silencio.
+  const handleAdd = async () => {
+    setFormError('')
+    if (!newCert.fecha_emision || !newCert.fecha_vencimiento) {
+      setFormError('Indica la fecha de emisión y la de vencimiento.')
+      return
+    }
+    if (newCert.fecha_vencimiento < newCert.fecha_emision) {
+      setFormError('El vencimiento no puede ser anterior a la emisión.')
+      return
+    }
+    setSaving(true)
+    try {
+      let archivoUrl: string | null = null
+      if (newFile) archivoUrl = await subirDocumentoCert(activoId, newCert.tipo, newFile)
+
+      await renovarCertificacion({
+        activoId,
+        tipo: newCert.tipo,
+        fechaEmision: newCert.fecha_emision,
+        fechaVencimiento: newCert.fecha_vencimiento,
+        archivoUrl,
+        numero: newCert.numero_certificado || null,
+        entidad: newCert.entidad_certificadora || null,
+        bloqueante: newCert.bloqueante,
+      })
+
+      refrescar()
+      toast.success(`${getTipoCertificacionLabel(newCert.tipo)} actualizado — vence ${newCert.fecha_vencimiento}`)
+      setShowAdd(false)
+      setNewFile(null)
+      setNewCert({ ...EMPTY_DOC_FORM })
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'No se pudo guardar el documento.'
+      setFormError(msg)
+      toast.error(msg)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // Renovar = cargar la versión nueva del mismo documento (queda el historial).
+  const handleRenovar = (c: any) => {
+    setNewCert({
+      tipo: c.tipo,
+      fecha_emision: todayISO(),
+      fecha_vencimiento: '',
+      entidad_certificadora: c.entidad_certificadora ?? '',
+      numero_certificado: '',
+      bloqueante: c.bloqueante ?? true,
     })
+    setNewFile(null)
+    setFormError('')
+    setShowAdd(true)
   }
 
   const handleFileUpload = (certId: string) => {
@@ -531,17 +596,28 @@ function TabCertificaciones({ activoId }: { activoId: string }) {
     fileInputRef.current?.click()
   }
 
-  const handleFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-    if (!file || !uploadingCertId) return
-    uploadCert.mutate({ activoId, certId: uploadingCertId, file })
-    setUploadingCertId(null)
+    const certId = uploadingCertId
     e.target.value = ''
+    setUploadingCertId(null)
+    if (!file || !certId) return
+
+    const cert = (certs as any[] | undefined)?.find((c) => c.id === certId)
+    setSubiendo(true)
+    try {
+      const url = await subirDocumentoCert(activoId, cert?.tipo ?? 'otra', file)
+      await adjuntarArchivoCertificacion(certId, url)
+      refrescar()
+      toast.success('Archivo adjuntado al documento.')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'No se pudo subir el archivo.')
+    } finally {
+      setSubiendo(false)
+    }
   }
 
   if (isLoading) return <div className="flex justify-center py-12"><Spinner className="h-8 w-8" /></div>
-
-  const certTypes = ['revision_tecnica', 'soap', 'permiso_circulacion', 'hermeticidad', 'tc8_sec', 'inscripcion_sec', 'seguro_rc', 'cert_gancho', 'fops_rops', 'calibracion', 'otra']
 
   return (
     <div className="space-y-4">
@@ -549,12 +625,12 @@ function TabCertificaciones({ activoId }: { activoId: string }) {
 
       <div className="flex justify-between items-center">
         <h3 className="text-base font-semibold">Documentos y Certificaciones</h3>
-        <Button size="sm" onClick={() => setShowAdd(!showAdd)}>
+        <Button size="sm" onClick={() => { setNewCert({ ...EMPTY_DOC_FORM }); setNewFile(null); setFormError(''); setShowAdd(!showAdd) }}>
           <Plus className="h-4 w-4 mr-1" /> Agregar
         </Button>
       </div>
 
-      {/* Form para agregar */}
+      {/* Form para agregar / renovar */}
       {showAdd && (
         <Card className="border-blue-200 bg-blue-50">
           <CardContent className="p-4 space-y-3">
@@ -563,7 +639,7 @@ function TabCertificaciones({ activoId }: { activoId: string }) {
                 <label className="text-xs font-medium text-gray-600">Tipo</label>
                 <select className="w-full rounded border px-2 py-1.5 text-sm mt-1"
                   value={newCert.tipo} onChange={(e) => setNewCert({ ...newCert, tipo: e.target.value })}>
-                  {certTypes.map((t) => <option key={t} value={t}>{getTipoCertificacionLabel(t)}</option>)}
+                  {TIPOS_DOC_OPCIONES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
                 </select>
               </div>
               <div>
@@ -605,11 +681,14 @@ function TabCertificaciones({ activoId }: { activoId: string }) {
               />
               {newFile && <p className="mt-1 text-[11px] text-gray-500">Se subirá: {newFile.name}</p>}
             </div>
+            {formError && (
+              <p className="rounded border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{formError}</p>
+            )}
             <div className="flex gap-2">
-              <Button size="sm" onClick={handleAdd} disabled={!newCert.fecha_emision || !newCert.fecha_vencimiento || upsertCert.isPending || uploadCert.isPending}>
-                <Save className="h-4 w-4 mr-1" /> Guardar
+              <Button size="sm" onClick={handleAdd} disabled={saving}>
+                <Save className="h-4 w-4 mr-1" /> {saving ? 'Guardando…' : 'Guardar'}
               </Button>
-              <Button size="sm" variant="outline" onClick={() => setShowAdd(false)}>Cancelar</Button>
+              <Button size="sm" variant="outline" onClick={() => setShowAdd(false)} disabled={saving}>Cancelar</Button>
             </div>
           </CardContent>
         </Card>
@@ -664,17 +743,20 @@ function TabCertificaciones({ activoId }: { activoId: string }) {
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
-                        {c.archivo_url ? (
+                        {c.archivo_url && (
                           <a href={c.archivo_url} target="_blank" rel="noopener noreferrer"
                             className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline">
                             <FileText className="h-3.5 w-3.5" /> Ver documento
                           </a>
-                        ) : (
-                          <Button variant="outline" size="sm" onClick={() => handleFileUpload(c.id)}
-                            disabled={uploadCert.isPending}>
-                            <Upload className="h-3.5 w-3.5 mr-1" /> Subir archivo
-                          </Button>
                         )}
+                        <Button variant="outline" size="sm" onClick={() => handleFileUpload(c.id)}
+                          disabled={subiendo}>
+                          <Upload className="h-3.5 w-3.5 mr-1" />
+                          {c.archivo_url ? 'Reemplazar archivo' : 'Subir archivo'}
+                        </Button>
+                        <Button size="sm" onClick={() => handleRenovar(c)}>
+                          <RefreshCw className="h-3.5 w-3.5 mr-1" /> Renovar
+                        </Button>
                       </div>
                     </div>
                   </CardContent>
