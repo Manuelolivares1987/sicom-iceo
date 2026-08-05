@@ -42,6 +42,25 @@ import { cn } from '@/lib/utils'
 
 type Step = 1 | 2 | 3 | 4 | 5
 
+/**
+ * El motivo real del rechazo lo manda la base (el trigger de cierre de OT dice
+ * exactamente qué falta: evidencia, ítems obligatorios, firma). Ese error NO es
+ * un `Error` de JS —Supabase devuelve un objeto plano— así que `instanceof
+ * Error` lo descartaba y en pantalla solo quedaba «Error al cerrar».
+ */
+function mensajeDeError(err: unknown, fallback: string): string {
+  if (err instanceof Error && err.message) return err.message
+  if (err && typeof err === 'object') {
+    const e = err as { message?: unknown; details?: unknown; hint?: unknown }
+    const partes = [e.message, e.details, e.hint].filter(
+      (p): p is string => typeof p === 'string' && p.trim() !== '',
+    )
+    if (partes.length > 0) return partes.join(' · ')
+  }
+  if (typeof err === 'string' && err.trim() !== '') return err
+  return fallback
+}
+
 export default function InspeccionRecepcionPage() {
   useRequireAuth()
   const { informeId } = useParams<{ informeId: string }>()
@@ -69,7 +88,7 @@ export default function InspeccionRecepcionPage() {
       }
       qc.invalidateQueries({ queryKey: ['informe-hallazgos', informeId] })
     } catch (e) {
-      setErrorMsg(e instanceof Error ? e.message : 'Error al volcar los hallazgos')
+      setErrorMsg(mensajeDeError(e, 'Error al volcar los hallazgos'))
     } finally { setRecobroBusy(false) }
   }
 
@@ -82,7 +101,7 @@ export default function InspeccionRecepcionPage() {
       const n = (data as { nc_generadas?: number } | null)?.nc_generadas ?? 0
       setCierreMsg(`Cierre parcial del día guardado · ${n} No Conformidad(es) nueva(s) generada(s) para el Jefe de Taller.`)
     } catch (e) {
-      setErrorMsg(e instanceof Error ? e.message : 'Error en el cierre parcial')
+      setErrorMsg(mensajeDeError(e, 'Error en el cierre parcial'))
     } finally { setCierreBusy(false) }
   }
 
@@ -130,7 +149,7 @@ export default function InspeccionRecepcionPage() {
       await cerrarMut.mutateAsync({ informeId, firmaTecnicoUrl: firmaUrl })
       router.push('/dashboard/flota')
     } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : 'Error al cerrar')
+      setErrorMsg(mensajeDeError(err, 'Error al cerrar'))
     } finally {
       setSaving(false)
     }
