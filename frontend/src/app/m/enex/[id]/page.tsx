@@ -131,7 +131,11 @@ export default function EnexEjecutarPage() {
   const [firmaMand, setFirmaMand] = useState('')
   const [firmante, setFirmante] = useState('')
   const [guardando, setGuardando] = useState(false)
+  // Las actividades de un bloque parten DESPLEGADAS: al abrir el bloque se ven
+  // todas listas para marcar, sin tener que apretar «Abrir todas». El que
+  // quiera compactar una actividad (o el bloque entero) igual puede.
   const [abiertos, setAbiertos] = useState<Record<string, boolean>>({})
+  const itemAbierto = useCallback((id: string) => abiertos[id] ?? true, [abiertos])
   // Bloques de la pauta: parten todos cerrados. El mantenedor abre el punto
   // que va a atacar y no tiene que pasar por encima del resto de la pauta.
   const [bloques, setBloques] = useState<Record<string, boolean>>({})
@@ -519,12 +523,12 @@ export default function EnexEjecutarPage() {
               <div className="flex justify-end">
                 <button onClick={() => setAbiertos((a) => {
                           const todos = { ...a }
-                          const algunoAbierto = g.items.some((it) => todos[it.id])
+                          const algunoAbierto = g.items.some((it) => todos[it.id] ?? true)
                           for (const it of g.items) todos[it.id] = !algunoAbierto
                           return todos
                         })}
                         className="text-[11px] font-semibold text-blue-600">
-                  {g.items.some((it) => abiertos[it.id]) ? 'Cerrar todas' : 'Abrir todas'}
+                  {g.items.some((it) => itemAbierto(it.id)) ? 'Cerrar todas' : 'Abrir todas'}
                 </button>
               </div>
             )}
@@ -534,7 +538,7 @@ export default function EnexEjecutarPage() {
               // Los datos del servicio se llenan de frente: ni se pliegan ni
               // piden fotos, son el encabezado del formulario.
               const dato = esDatoServicio(it)
-              const abierto = abiertos[it.id] ?? false
+              const abierto = itemAbierto(it.id)
               const trab = trabajado(st)
               const falta = !dato && trab && !conEvidencia(st)
               if (dato) return (
