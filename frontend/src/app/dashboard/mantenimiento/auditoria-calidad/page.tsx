@@ -677,15 +677,19 @@ function AuditoriaDetalle({ sel, puedeAuditar, onDone }: {
   const [dSeg, setDSeg] = useState(false)
   const [dMot, setDMot] = useState('')
 
-  const itemState = (id: string, dflt: Res): { resultado: Res; observacion: string } =>
-    estado[id] ?? { resultado: dflt, observacion: '' }
-  const setItem = (id: string, dflt: Res, patch: Partial<{ resultado: Res; observacion: string }>) => {
-    setEstado((s) => ({ ...s, [id]: { ...itemState(id, dflt), ...patch } }))
+  // El estado local parte vacío en cada visita: lo que no se haya tocado en
+  // ESTA sesión se lee del ítem que viene de la BD. Antes la observación caía a
+  // '' —no al valor guardado— y el comentario técnico se veía perdido al volver
+  // a la auditoría, aunque el autoguardado sí lo había grabado.
+  const itemState = (it: AuditoriaItem): { resultado: Res; observacion: string } =>
+    estado[it.id] ?? { resultado: it.resultado, observacion: it.observacion ?? '' }
+  const setItem = (it: AuditoriaItem, patch: Partial<{ resultado: Res; observacion: string }>) => {
+    setEstado((s) => ({ ...s, [it.id]: { ...itemState(it), ...patch } }))
     // El resultado se graba al toque; la observación, cuando el auditor deja de escribir.
-    if (patch.resultado !== undefined) persistir([{ id, resultado: patch.resultado }])
+    if (patch.resultado !== undefined) persistir([{ id: it.id, resultado: patch.resultado }])
     if (patch.observacion !== undefined) {
-      clearTimeout(obsTimers.current[id])
-      obsTimers.current[id] = setTimeout(() => persistir([{ id, observacion: patch.observacion ?? '' }]), 800)
+      clearTimeout(obsTimers.current[it.id])
+      obsTimers.current[it.id] = setTimeout(() => persistir([{ id: it.id, observacion: patch.observacion ?? '' }]), 800)
     }
   }
 
@@ -703,13 +707,13 @@ function AuditoriaDetalle({ sel, puedeAuditar, onDone }: {
       (a[1][0]?.bloque_orden ?? 99) - (b[1][0]?.bloque_orden ?? 99))
   }
 
-  const marcados = items.filter((it: AuditoriaItem) => itemState(it.id, it.resultado).resultado !== 'pendiente').length
+  const marcados = items.filter((it: AuditoriaItem) => itemState(it).resultado !== 'pendiente').length
   const noAplican = items.filter((it: AuditoriaItem) => !it.aplica_tipo).length
 
   const resumen = useMemo(() => {
     let critFail = 0, oblPend = 0
     for (const it of items) {
-      const r = itemState(it.id, it.resultado).resultado
+      const r = itemState(it).resultado
       if (it.critico && r === 'no_ok') critFail++
       if (it.obligatorio && r !== 'ok' && r !== 'na') oblPend++
     }
@@ -721,7 +725,7 @@ function AuditoriaDetalle({ sel, puedeAuditar, onDone }: {
   // [MIG263] Puntos que no pueden ir sin foto: el hallazgo y los que el
   // checklist marca. Se cuenta en pantalla para avisar antes, no al final.
   const sinFoto = items.filter((it: AuditoriaItem) => {
-    const r = itemState(it.id, it.resultado).resultado
+    const r = itemState(it).resultado
     const tiene = !!(fotos[it.id] ?? it.foto_url)
     return !tiene && (r === 'no_ok' || (it.requiere_foto && r === 'ok'))
   })
@@ -753,8 +757,8 @@ function AuditoriaDetalle({ sel, puedeAuditar, onDone }: {
         resultado,
         items: items.map((it) => ({
           id: it.id,
-          resultado: itemState(it.id, it.resultado).resultado === 'pendiente' ? 'na' : itemState(it.id, it.resultado).resultado,
-          observacion: itemState(it.id, it.resultado).observacion || null,
+          resultado: itemState(it).resultado === 'pendiente' ? 'na' : itemState(it).resultado,
+          observacion: itemState(it).observacion || null,
           foto_url: fotos[it.id] ?? it.foto_url ?? null,
         })),
         motivo_rechazo: resultado === 'rechazado' ? (motivo || 'Sin detalle') : null,
@@ -792,14 +796,14 @@ function AuditoriaDetalle({ sel, puedeAuditar, onDone }: {
     if (list.length === 0) return
     setEstado((s) => {
       const next = { ...s }
-      for (const it of list) next[it.id] = { ...itemState(it.id, it.resultado), resultado }
+      for (const it of list) next[it.id] = { ...itemState(it), resultado }
       return next
     })
     persistir(list.map((it) => ({ id: it.id, resultado })))
   }
 
   const renderItem = (it: (typeof items)[number]) => {
-    const st = itemState(it.id, it.resultado)
+    const st = itemState(it)
     const foto = fotos[it.id] ?? it.foto_url
     // [MIG263] La foto es obligatoria en el hallazgo y donde el checklist la pide.
     const fotoExigida = st.resultado === 'no_ok' || (it.requiere_foto && st.resultado === 'ok')
@@ -822,14 +826,14 @@ function AuditoriaDetalle({ sel, puedeAuditar, onDone }: {
             )}
           </div>
           <div className="flex gap-1 shrink-0">
-            <Tg active={st.resultado === 'ok'} c="green" onClick={() => setItem(it.id, it.resultado, { resultado: 'ok' })}><CheckCircle2 className="h-4 w-4" /></Tg>
-            <Tg active={st.resultado === 'no_ok'} c="red" onClick={() => setItem(it.id, it.resultado, { resultado: 'no_ok' })}><XCircle className="h-4 w-4" /></Tg>
-            <Tg active={st.resultado === 'na'} c="gray" onClick={() => setItem(it.id, it.resultado, { resultado: 'na' })}><MinusCircle className="h-4 w-4" /></Tg>
+            <Tg active={st.resultado === 'ok'} c="green" onClick={() => setItem(it, { resultado: 'ok' })}><CheckCircle2 className="h-4 w-4" /></Tg>
+            <Tg active={st.resultado === 'no_ok'} c="red" onClick={() => setItem(it, { resultado: 'no_ok' })}><XCircle className="h-4 w-4" /></Tg>
+            <Tg active={st.resultado === 'na'} c="gray" onClick={() => setItem(it, { resultado: 'na' })}><MinusCircle className="h-4 w-4" /></Tg>
           </div>
         </div>
         {st.resultado === 'no_ok' && (
           <input className="w-full rounded border px-2 py-1 text-sm" placeholder="Observación del hallazgo"
-            value={st.observacion} onChange={(e) => setItem(it.id, it.resultado, { observacion: e.target.value })} />
+            value={st.observacion} onChange={(e) => setItem(it, { observacion: e.target.value })} />
         )}
 
         {/* [MIG263] Evidencia: la foto es la que sostiene el informe de salida. */}
@@ -879,7 +883,7 @@ function AuditoriaDetalle({ sel, puedeAuditar, onDone }: {
     <div className="space-y-3">
       <h3 className="text-sm font-semibold text-muted-foreground">{titulo} ({list.length})</h3>
       {bloquesDe(list).map(([bloque, its]) => {
-        const hechos = its.filter((it: AuditoriaItem) => itemState(it.id, it.resultado).resultado !== 'pendiente').length
+        const hechos = its.filter((it: AuditoriaItem) => itemState(it).resultado !== 'pendiente').length
         const abierto = abiertos[bloque] ?? hechos < its.length
         return (
           <div key={bloque} className="rounded-lg border">
@@ -894,7 +898,7 @@ function AuditoriaDetalle({ sel, puedeAuditar, onDone }: {
                 {hechos}/{its.length}
               </span>
               {puedeAuditar && hechos < its.length && (
-                <button type="button" onClick={() => marcarLote(its.filter((it: AuditoriaItem) => itemState(it.id, it.resultado).resultado === 'pendiente'), 'ok')}
+                <button type="button" onClick={() => marcarLote(its.filter((it: AuditoriaItem) => itemState(it).resultado === 'pendiente'), 'ok')}
                         className="ml-auto rounded border border-green-300 bg-green-50 px-2 py-0.5 text-[11px] font-medium text-green-700 hover:bg-green-100">
                   Todo el bloque OK
                 </button>
@@ -954,7 +958,7 @@ function AuditoriaDetalle({ sel, puedeAuditar, onDone }: {
             {noAplican > 0 && puedeAuditar && (
               <button type="button"
                 onClick={() => marcarLote(items.filter((it) => !it.aplica_tipo &&
-                  itemState(it.id, it.resultado).resultado === 'pendiente'), 'na')}
+                  itemState(it).resultado === 'pendiente'), 'na')}
                 className="rounded border border-gray-300 bg-white px-2 py-0.5 font-medium text-gray-600 hover:bg-gray-100">
                 Marcar N/A los {noAplican} que no corresponden a este equipo
               </button>
