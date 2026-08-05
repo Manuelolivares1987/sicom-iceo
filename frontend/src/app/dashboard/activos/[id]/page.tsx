@@ -69,9 +69,21 @@ import {
   useCertificacionesByActivo,
   useCostosByActivo,
   useHistorialMantenimiento,
-  useUpsertCertificacion,
-  useUploadCertificado,
 } from '@/hooks/use-activos'
+import { useQueryClient } from '@tanstack/react-query'
+import { useToast } from '@/contexts/toast-context'
+import {
+  TIPOS_DOC_OPCIONES,
+  subirDocumentoCert,
+  renovarCertificacion,
+  adjuntarArchivoCertificacion,
+} from '@/lib/services/taller-planificacion'
+import {
+  documentosVigentes,
+  documentosReemplazados,
+  estadoDocumento,
+  diasParaVencer,
+} from '@/domain/activos/documentos'
 import { useOEEActivo } from '@/hooks/use-flota'
 import { HistorialEstadosChart } from '@/components/flota/historial-estados-chart'
 import { useHistorialOSLegacyByActivo } from '@/hooks/use-historial-os-legacy'
@@ -179,11 +191,12 @@ export default function ActivoDetailPage() {
   const todayStr = todayISO()
   const { data: oee } = useOEEActivo(id, firstOfMonth, todayStr)
 
-  // Alertas de certificaciones
+  // Alertas de certificaciones. Solo la versión vigente de cada papel: si se
+  // cuenta el histórico, el equipo queda marcado vencido aunque ya se renovó.
   const certsAlerta = useMemo(() => {
-    if (!certs) return { vencidas: 0, porVencer: 0, items: [] as any[] }
-    const vencidas = certs.filter((c: any) => c.estado === 'vencido')
-    const porVencer = certs.filter((c: any) => c.estado === 'por_vencer')
+    const vigentes = documentosVigentes(certs as any[] | undefined)
+    const vencidas = vigentes.filter((c: any) => estadoDocumento(c.fecha_vencimiento) === 'vencido')
+    const porVencer = vigentes.filter((c: any) => estadoDocumento(c.fecha_vencimiento) === 'por_vencer')
     return {
       vencidas: vencidas.length,
       porVencer: porVencer.length,
@@ -499,31 +512,96 @@ function TabIdentificacion({ activo, onUpdate }: { activo: any; onUpdate: (field
 // ---------------------------------------------------------------------------
 // Tab: Certificaciones / Documentos (REESCRITO — con upload y alertas)
 // ---------------------------------------------------------------------------
+const EMPTY_DOC_FORM = {
+  tipo: 'revision_tecnica',
+  fecha_emision: '',
+  fecha_vencimiento: '',
+  entidad_certificadora: '',
+  numero_certificado: '',
+  bloqueante: true,
+}
+
 function TabCertificaciones({ activoId }: { activoId: string }) {
   const { data: certs, isLoading } = useCertificacionesByActivo(activoId)
-  const upsertCert = useUpsertCertificacion()
-  const uploadCert = useUploadCertificado()
+  const queryClient = useQueryClient()
+  const toast = useToast()
   const [showAdd, setShowAdd] = useState(false)
-  const [newCert, setNewCert] = useState({ tipo: 'revision_tecnica', fecha_emision: '', fecha_vencimiento: '', entidad_certificadora: '', numero_certificado: '', bloqueante: true })
+  const [newCert, setNewCert] = useState({ ...EMPTY_DOC_FORM })
   const [newFile, setNewFile] = useState<File | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [formError, setFormError] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [uploadingCertId, setUploadingCertId] = useState<string | null>(null)
+  const [subiendo, setSubiendo] = useState(false)
+  const [verHistorial, setVerHistorial] = useState(false)
 
-  const handleAdd = () => {
-    upsertCert.mutate({
-      activo_id: activoId,
-      ...newCert,
-    }, {
-      onSuccess: (created: { id?: string } | undefined) => {
-        // Si adjuntaron el archivo en el mismo paso, súbelo a la fila recién creada.
-        if (newFile && created?.id) {
-          uploadCert.mutate({ activoId, certId: created.id, file: newFile })
-        }
-        setShowAdd(false)
-        setNewFile(null)
-        setNewCert({ tipo: 'revision_tecnica', fecha_emision: '', fecha_vencimiento: '', entidad_certificadora: '', numero_certificado: '', bloqueante: true })
-      },
+  // [MIG273] Renovar no pisa la fila: crea una versión nueva. Solo la última de
+  // cada tipo rige; las anteriores se muestran aparte y no marcan vencido.
+  const vigentes = useMemo(() => documentosVigentes(certs as any[] | undefined), [certs])
+  const reemplazados = useMemo(() => documentosReemplazados(certs as any[] | undefined), [certs])
+
+  const refrescar = () => {
+    queryClient.invalidateQueries({ queryKey: ['certificaciones-activo', activoId] })
+    queryClient.invalidateQueries({ queryKey: ['certificaciones'] })
+    queryClient.invalidateQueries({ queryKey: ['activo', activoId] })
+    queryClient.invalidateQueries({ queryKey: ['documentos-por-vencer'] })
+  }
+
+  // [MIG272] Alta y renovación pasan por el RPC: valida el rol, calcula el
+  // estado y deja registrado quién cargó el papel. Antes fallaba en silencio.
+  const handleAdd = async () => {
+    setFormError('')
+    if (!newCert.fecha_emision || !newCert.fecha_vencimiento) {
+      setFormError('Indica la fecha de emisión y la de vencimiento.')
+      return
+    }
+    if (newCert.fecha_vencimiento < newCert.fecha_emision) {
+      setFormError('El vencimiento no puede ser anterior a la emisión.')
+      return
+    }
+    setSaving(true)
+    try {
+      let archivoUrl: string | null = null
+      if (newFile) archivoUrl = await subirDocumentoCert(activoId, newCert.tipo, newFile)
+
+      await renovarCertificacion({
+        activoId,
+        tipo: newCert.tipo,
+        fechaEmision: newCert.fecha_emision,
+        fechaVencimiento: newCert.fecha_vencimiento,
+        archivoUrl,
+        numero: newCert.numero_certificado || null,
+        entidad: newCert.entidad_certificadora || null,
+        bloqueante: newCert.bloqueante,
+      })
+
+      refrescar()
+      toast.success(`${getTipoCertificacionLabel(newCert.tipo)} actualizado — vence ${newCert.fecha_vencimiento}`)
+      setShowAdd(false)
+      setNewFile(null)
+      setNewCert({ ...EMPTY_DOC_FORM })
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'No se pudo guardar el documento.'
+      setFormError(msg)
+      toast.error(msg)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // Renovar = cargar la versión nueva del mismo documento (queda el historial).
+  const handleRenovar = (c: any) => {
+    setNewCert({
+      tipo: c.tipo,
+      fecha_emision: todayISO(),
+      fecha_vencimiento: '',
+      entidad_certificadora: c.entidad_certificadora ?? '',
+      numero_certificado: '',
+      bloqueante: c.bloqueante ?? true,
     })
+    setNewFile(null)
+    setFormError('')
+    setShowAdd(true)
   }
 
   const handleFileUpload = (certId: string) => {
@@ -531,17 +609,28 @@ function TabCertificaciones({ activoId }: { activoId: string }) {
     fileInputRef.current?.click()
   }
 
-  const handleFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-    if (!file || !uploadingCertId) return
-    uploadCert.mutate({ activoId, certId: uploadingCertId, file })
-    setUploadingCertId(null)
+    const certId = uploadingCertId
     e.target.value = ''
+    setUploadingCertId(null)
+    if (!file || !certId) return
+
+    const cert = (certs as any[] | undefined)?.find((c) => c.id === certId)
+    setSubiendo(true)
+    try {
+      const url = await subirDocumentoCert(activoId, cert?.tipo ?? 'otra', file)
+      await adjuntarArchivoCertificacion(certId, url)
+      refrescar()
+      toast.success('Archivo adjuntado al documento.')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'No se pudo subir el archivo.')
+    } finally {
+      setSubiendo(false)
+    }
   }
 
   if (isLoading) return <div className="flex justify-center py-12"><Spinner className="h-8 w-8" /></div>
-
-  const certTypes = ['revision_tecnica', 'soap', 'permiso_circulacion', 'hermeticidad', 'tc8_sec', 'inscripcion_sec', 'seguro_rc', 'cert_gancho', 'fops_rops', 'calibracion', 'otra']
 
   return (
     <div className="space-y-4">
@@ -549,12 +638,12 @@ function TabCertificaciones({ activoId }: { activoId: string }) {
 
       <div className="flex justify-between items-center">
         <h3 className="text-base font-semibold">Documentos y Certificaciones</h3>
-        <Button size="sm" onClick={() => setShowAdd(!showAdd)}>
+        <Button size="sm" onClick={() => { setNewCert({ ...EMPTY_DOC_FORM }); setNewFile(null); setFormError(''); setShowAdd(!showAdd) }}>
           <Plus className="h-4 w-4 mr-1" /> Agregar
         </Button>
       </div>
 
-      {/* Form para agregar */}
+      {/* Form para agregar / renovar */}
       {showAdd && (
         <Card className="border-blue-200 bg-blue-50">
           <CardContent className="p-4 space-y-3">
@@ -563,7 +652,7 @@ function TabCertificaciones({ activoId }: { activoId: string }) {
                 <label className="text-xs font-medium text-gray-600">Tipo</label>
                 <select className="w-full rounded border px-2 py-1.5 text-sm mt-1"
                   value={newCert.tipo} onChange={(e) => setNewCert({ ...newCert, tipo: e.target.value })}>
-                  {certTypes.map((t) => <option key={t} value={t}>{getTipoCertificacionLabel(t)}</option>)}
+                  {TIPOS_DOC_OPCIONES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
                 </select>
               </div>
               <div>
@@ -605,85 +694,144 @@ function TabCertificaciones({ activoId }: { activoId: string }) {
               />
               {newFile && <p className="mt-1 text-[11px] text-gray-500">Se subirá: {newFile.name}</p>}
             </div>
+            {formError && (
+              <p className="rounded border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{formError}</p>
+            )}
             <div className="flex gap-2">
-              <Button size="sm" onClick={handleAdd} disabled={!newCert.fecha_emision || !newCert.fecha_vencimiento || upsertCert.isPending || uploadCert.isPending}>
-                <Save className="h-4 w-4 mr-1" /> Guardar
+              <Button size="sm" onClick={handleAdd} disabled={saving}>
+                <Save className="h-4 w-4 mr-1" /> {saving ? 'Guardando…' : 'Guardar'}
               </Button>
-              <Button size="sm" variant="outline" onClick={() => setShowAdd(false)}>Cancelar</Button>
+              <Button size="sm" variant="outline" onClick={() => setShowAdd(false)} disabled={saving}>Cancelar</Button>
             </div>
           </CardContent>
         </Card>
       )}
 
-      {/* Lista de certificaciones */}
-      {(!certs || certs.length === 0) ? (
+      {/* Lista de documentos: primero los que rigen hoy, y aparte las versiones
+          ya reemplazadas por una renovación (que NO deben marcar vencido). */}
+      {vigentes.length === 0 ? (
         <EmptyState icon={ShieldCheck} title="Sin certificaciones" description="Agregue los documentos del equipo." />
       ) : (
         <div className="space-y-2">
-          {(certs as any[])
-            .sort((a, b) => {
-              const order = { vencido: 0, por_vencer: 1, vigente: 2 }
-              return (order[a.estado as keyof typeof order] ?? 3) - (order[b.estado as keyof typeof order] ?? 3)
+          {vigentes
+            .sort((a: any, b: any) => {
+              const order = { vencido: 0, por_vencer: 1, vigente: 2, permanente: 3 }
+              return (order[estadoDocumento(a.fecha_vencimiento)] ?? 4) -
+                     (order[estadoDocumento(b.fecha_vencimiento)] ?? 4)
             })
-            .map((c: any) => {
-              const dias = getDiasRestantes(c.fecha_vencimiento)
-              return (
-                <Card key={c.id} className={cn(
-                  'border-l-4',
-                  c.estado === 'vencido' ? 'border-l-red-500' :
-                  c.estado === 'por_vencer' ? 'border-l-amber-500' :
-                  'border-l-green-500'
-                )}>
-                  <CardContent className="p-4">
-                    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-bold text-gray-900">
-                            {getTipoCertificacionLabel(c.tipo)}
-                          </span>
-                          <Badge className={getCertEstadoColor(c.estado)}>{getCertEstadoLabel(c.estado)}</Badge>
-                          {c.bloqueante && (
-                            <span className="flex items-center gap-0.5 text-xs text-red-600">
-                              <AlertTriangle className="h-3 w-3" /> Bloqueante
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex flex-wrap gap-3 text-xs text-gray-500">
-                          {c.numero_certificado && <span>N: {c.numero_certificado}</span>}
-                          {c.entidad_certificadora && <span>Entidad: {c.entidad_certificadora}</span>}
-                          <span>Emision: {formatDate(c.fecha_emision)}</span>
-                          <span className={cn(
-                            'font-semibold',
-                            c.estado === 'vencido' ? 'text-red-600' :
-                            c.estado === 'por_vencer' ? 'text-amber-600' : ''
-                          )}>
-                            Vence: {formatDate(c.fecha_vencimiento)}
-                            {dias < 0 ? ` (vencido hace ${Math.abs(dias)} dias)` :
-                             dias <= 45 ? ` (${dias} dias)` : ''}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {c.archivo_url ? (
-                          <a href={c.archivo_url} target="_blank" rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline">
-                            <FileText className="h-3.5 w-3.5" /> Ver documento
-                          </a>
-                        ) : (
-                          <Button variant="outline" size="sm" onClick={() => handleFileUpload(c.id)}
-                            disabled={uploadCert.isPending}>
-                            <Upload className="h-3.5 w-3.5 mr-1" /> Subir archivo
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              )
-            })}
+            .map((c: any) => (
+              <DocumentoCard
+                key={c.id}
+                c={c}
+                subiendo={subiendo}
+                onSubirArchivo={() => handleFileUpload(c.id)}
+                onRenovar={() => handleRenovar(c)}
+              />
+            ))}
+        </div>
+      )}
+
+      {reemplazados.length > 0 && (
+        <div className="pt-2">
+          <button
+            type="button"
+            onClick={() => setVerHistorial((v) => !v)}
+            className="inline-flex items-center gap-1 text-xs font-medium text-gray-500 hover:text-gray-700"
+          >
+            {verHistorial ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+            Versiones anteriores ({reemplazados.length}) — ya renovadas, no cuentan como vencidas
+          </button>
+          {verHistorial && (
+            <div className="mt-2 space-y-2 opacity-60">
+              {reemplazados.map((c: any) => (
+                <DocumentoCard key={c.id} c={c} reemplazado />
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
+  )
+}
+
+function DocumentoCard({ c, subiendo, reemplazado, onSubirArchivo, onRenovar }: {
+  c: any
+  subiendo?: boolean
+  reemplazado?: boolean
+  onSubirArchivo?: () => void
+  onRenovar?: () => void
+}) {
+  const estado = reemplazado ? 'reemplazado' : estadoDocumento(c.fecha_vencimiento)
+  const dias = diasParaVencer(c.fecha_vencimiento)
+
+  return (
+    <Card className={cn(
+      'border-l-4',
+      estado === 'reemplazado' ? 'border-l-gray-300' :
+      estado === 'vencido' ? 'border-l-red-500' :
+      estado === 'por_vencer' ? 'border-l-amber-500' :
+      estado === 'permanente' ? 'border-l-gray-400' :
+      'border-l-green-500'
+    )}>
+      <CardContent className="p-4">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-bold text-gray-900">
+                {getTipoCertificacionLabel(c.tipo)}
+              </span>
+              {estado === 'reemplazado' ? (
+                <Badge className="bg-gray-100 text-gray-600">Reemplazado</Badge>
+              ) : estado === 'permanente' ? (
+                <Badge className="bg-gray-100 text-gray-600">Sin vencimiento</Badge>
+              ) : (
+                <Badge className={getCertEstadoColor(estado)}>{getCertEstadoLabel(estado)}</Badge>
+              )}
+              {c.bloqueante && estado !== 'reemplazado' && (
+                <span className="flex items-center gap-0.5 text-xs text-red-600">
+                  <AlertTriangle className="h-3 w-3" /> Bloqueante
+                </span>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-3 text-xs text-gray-500">
+              {c.numero_certificado && <span>N: {c.numero_certificado}</span>}
+              {c.entidad_certificadora && <span>Entidad: {c.entidad_certificadora}</span>}
+              <span>Emision: {formatDate(c.fecha_emision)}</span>
+              {estado !== 'permanente' && (
+                <span className={cn(
+                  'font-semibold',
+                  estado === 'vencido' ? 'text-red-600' :
+                  estado === 'por_vencer' ? 'text-amber-600' : ''
+                )}>
+                  Vence: {formatDate(c.fecha_vencimiento)}
+                  {dias != null && (dias < 0 ? ` (vencido hace ${Math.abs(dias)} dias)` :
+                                    dias <= 45 ? ` (${dias} dias)` : '')}
+                </span>
+              )}
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {c.archivo_url && (
+              <a href={c.archivo_url} target="_blank" rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline">
+                <FileText className="h-3.5 w-3.5" /> Ver documento
+              </a>
+            )}
+            {!reemplazado && (
+              <>
+                <Button variant="outline" size="sm" onClick={onSubirArchivo} disabled={subiendo}>
+                  <Upload className="h-3.5 w-3.5 mr-1" />
+                  {c.archivo_url ? 'Reemplazar archivo' : 'Subir archivo'}
+                </Button>
+                <Button size="sm" onClick={onRenovar}>
+                  <RefreshCw className="h-3.5 w-3.5 mr-1" /> Renovar
+                </Button>
+              </>
+            )}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   )
 }
 

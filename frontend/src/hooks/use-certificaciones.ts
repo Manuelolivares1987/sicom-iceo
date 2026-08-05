@@ -1,13 +1,11 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import {
   getCertificaciones,
   getCertificacionesVencidas,
   getProximosVencimientos,
   getAllCertificaciones,
   getCertificacionStats,
-  createCertificacion,
 } from '@/lib/services/certificaciones'
-import type { Certificacion } from '@/types/database'
 
 // ── Queries ──────────────────────────────────────────────
 
@@ -70,30 +68,5 @@ export function useCertificacionStats() {
   })
 }
 
-// ── Mutations ────────────────────────────────────────────
-
-export function useCreateCertificacion() {
-  const queryClient = useQueryClient()
-
-  return useMutation({
-    mutationFn: async ({
-      data,
-      file,
-    }: {
-      data: Omit<Certificacion, 'id' | 'created_at' | 'updated_at' | 'archivo_url'> & {
-        archivo_url?: string | null
-      }
-      file?: File
-    }) => {
-      const { data: created, error } = await createCertificacion(data, file)
-      if (error) throw error
-      return created
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['certificaciones'] })
-      queryClient.invalidateQueries({ queryKey: ['certificacion-stats'] })
-      queryClient.invalidateQueries({ queryKey: ['certificaciones-vencidas'] })
-      queryClient.invalidateQueries({ queryKey: ['proximos-vencimientos'] })
-    },
-  })
-}
+// Las mutaciones de documentación viven en lib/services/taller-planificacion.ts
+// (renovarCertificacion / subirDocumentoCert / adjuntarArchivoCertificacion).
