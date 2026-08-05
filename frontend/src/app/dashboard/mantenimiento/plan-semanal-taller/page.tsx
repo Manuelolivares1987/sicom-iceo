@@ -2780,6 +2780,7 @@ function ChecklistV3Row({ item, otId, planId }: {
           {item.descripcion}
           {item.es_custom && <span className="ml-1 text-[9px] px-1 rounded bg-purple-100 text-purple-700">añadida</span>}
           {item.critico && <span className="ml-1 text-[9px] px-1 rounded bg-red-100 text-red-700">crítica</span>}
+          {item.arrastre && <span className="ml-1 text-[9px] px-1 rounded bg-orange-100 text-orange-700">no conformidad</span>}
         </span>
         {item.requiere_foto && <Camera className="h-3 w-3 text-gray-400 shrink-0" />}
         <div className="w-16 shrink-0">
