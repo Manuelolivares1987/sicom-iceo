@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import {
   ShieldCheck,
   AlertTriangle,
@@ -29,10 +29,8 @@ import {
   TableCell,
 } from '@/components/ui/table'
 import { formatDate } from '@/lib/utils'
-import {
-  useAllCertificaciones,
-  useCertificacionStats,
-} from '@/hooks/use-certificaciones'
+import { useAllCertificaciones } from '@/hooks/use-certificaciones'
+import { documentosVigentes, estadoDocumento } from '@/domain/activos/documentos'
 import { useActivos } from '@/hooks/use-activos'
 import { getFaenas } from '@/lib/services/faenas'
 import {
@@ -71,6 +69,7 @@ function getEstadoBadge(estado: string) {
     por_vencer: { className: 'bg-yellow-100 text-yellow-700', label: 'Por Vencer' },
     vencido: { className: 'bg-red-100 text-red-700', label: 'Vencido' },
     no_aplica: { className: 'bg-gray-100 text-gray-600', label: 'Sin vencimiento' },
+    permanente: { className: 'bg-gray-100 text-gray-600', label: 'Sin vencimiento' },
   }
   const c = config[estado] || { className: 'bg-gray-100 text-gray-700', label: estado }
   return <Badge className={c.className}>{c.label}</Badge>
@@ -451,7 +450,7 @@ function MobileCard({ cert, onRenovar }: { cert: any; onRenovar: (cert: any) => 
           </div>
           <div className="ml-2 flex shrink-0 items-center gap-2">
             {cert.bloqueante && <Lock className="h-4 w-4 text-red-500" />}
-            {getEstadoBadge(cert.estado)}
+            {getEstadoBadge(estadoDocumento(cert.fecha_vencimiento))}
           </div>
         </div>
         <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -510,14 +509,33 @@ export default function CumplimientoPage() {
     })
   }, [])
 
-  // Build filters
-  const filters: { estado?: string; tipo?: string; faena_id?: string } = {}
-  if (estadoFilter) filters.estado = estadoFilter
-  if (tipoFilter) filters.tipo = tipoFilter
-  if (faenaFilter) filters.faena_id = faenaFilter
+  // [MIG273] Se traen todas las filas y se filtra en cliente porque hay que
+  // quedarse primero con la ÚLTIMA versión de cada (equipo, documento): filtrar
+  // por estado en el servidor dejaba entrar versiones ya renovadas y el equipo
+  // seguía apareciendo con el papel vencido.
+  const { data: todas, isLoading, error } = useAllCertificaciones()
 
-  const { data: certificaciones, isLoading, error } = useAllCertificaciones(filters)
-  const { data: stats } = useCertificacionStats()
+  const vigentes = useMemo(
+    () => documentosVigentes(todas as any[] | undefined),
+    [todas]
+  )
+
+  const stats = useMemo(() => ({
+    total: vigentes.length,
+    vigentes: vigentes.filter((c: any) => estadoDocumento(c.fecha_vencimiento) === 'vigente').length,
+    por_vencer: vigentes.filter((c: any) => estadoDocumento(c.fecha_vencimiento) === 'por_vencer').length,
+    vencidas: vigentes.filter((c: any) => estadoDocumento(c.fecha_vencimiento) === 'vencido').length,
+  }), [vigentes])
+
+  const certificaciones = useMemo(() => vigentes.filter((c: any) => {
+    if (tipoFilter && c.tipo !== tipoFilter) return false
+    if (faenaFilter && c.activo?.faena_id !== faenaFilter) return false
+    if (estadoFilter) {
+      const e = estadoDocumento(c.fecha_vencimiento)
+      if (estadoFilter === 'no_aplica' ? e !== 'permanente' : e !== estadoFilter) return false
+    }
+    return true
+  }), [vigentes, tipoFilter, faenaFilter, estadoFilter])
 
   function handleNuevaCertificacion() {
     setModalTitle('Nueva Certificacion')
@@ -675,7 +693,7 @@ export default function CumplimientoPage() {
                           <TableCell className="text-sm text-gray-700">
                             {formatDate(cert.fecha_vencimiento)}
                           </TableCell>
-                          <TableCell>{getEstadoBadge(cert.estado)}</TableCell>
+                          <TableCell>{getEstadoBadge(estadoDocumento(cert.fecha_vencimiento))}</TableCell>
                           <TableCell className="text-center">
                             {cert.bloqueante && (
                               <Lock className="mx-auto h-4 w-4 text-red-500" />

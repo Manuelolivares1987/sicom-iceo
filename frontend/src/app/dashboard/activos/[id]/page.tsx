@@ -78,6 +78,12 @@ import {
   renovarCertificacion,
   adjuntarArchivoCertificacion,
 } from '@/lib/services/taller-planificacion'
+import {
+  documentosVigentes,
+  documentosReemplazados,
+  estadoDocumento,
+  diasParaVencer,
+} from '@/domain/activos/documentos'
 import { useOEEActivo } from '@/hooks/use-flota'
 import { HistorialEstadosChart } from '@/components/flota/historial-estados-chart'
 import { useHistorialOSLegacyByActivo } from '@/hooks/use-historial-os-legacy'
@@ -185,11 +191,12 @@ export default function ActivoDetailPage() {
   const todayStr = todayISO()
   const { data: oee } = useOEEActivo(id, firstOfMonth, todayStr)
 
-  // Alertas de certificaciones
+  // Alertas de certificaciones. Solo la versión vigente de cada papel: si se
+  // cuenta el histórico, el equipo queda marcado vencido aunque ya se renovó.
   const certsAlerta = useMemo(() => {
-    if (!certs) return { vencidas: 0, porVencer: 0, items: [] as any[] }
-    const vencidas = certs.filter((c: any) => c.estado === 'vencido')
-    const porVencer = certs.filter((c: any) => c.estado === 'por_vencer')
+    const vigentes = documentosVigentes(certs as any[] | undefined)
+    const vencidas = vigentes.filter((c: any) => estadoDocumento(c.fecha_vencimiento) === 'vencido')
+    const porVencer = vigentes.filter((c: any) => estadoDocumento(c.fecha_vencimiento) === 'por_vencer')
     return {
       vencidas: vencidas.length,
       porVencer: porVencer.length,
@@ -526,6 +533,12 @@ function TabCertificaciones({ activoId }: { activoId: string }) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [uploadingCertId, setUploadingCertId] = useState<string | null>(null)
   const [subiendo, setSubiendo] = useState(false)
+  const [verHistorial, setVerHistorial] = useState(false)
+
+  // [MIG273] Renovar no pisa la fila: crea una versión nueva. Solo la última de
+  // cada tipo rige; las anteriores se muestran aparte y no marcan vencido.
+  const vigentes = useMemo(() => documentosVigentes(certs as any[] | undefined), [certs])
+  const reemplazados = useMemo(() => documentosReemplazados(certs as any[] | undefined), [certs])
 
   const refrescar = () => {
     queryClient.invalidateQueries({ queryKey: ['certificaciones-activo', activoId] })
@@ -694,78 +707,131 @@ function TabCertificaciones({ activoId }: { activoId: string }) {
         </Card>
       )}
 
-      {/* Lista de certificaciones */}
-      {(!certs || certs.length === 0) ? (
+      {/* Lista de documentos: primero los que rigen hoy, y aparte las versiones
+          ya reemplazadas por una renovación (que NO deben marcar vencido). */}
+      {vigentes.length === 0 ? (
         <EmptyState icon={ShieldCheck} title="Sin certificaciones" description="Agregue los documentos del equipo." />
       ) : (
         <div className="space-y-2">
-          {(certs as any[])
-            .sort((a, b) => {
-              const order = { vencido: 0, por_vencer: 1, vigente: 2 }
-              return (order[a.estado as keyof typeof order] ?? 3) - (order[b.estado as keyof typeof order] ?? 3)
+          {vigentes
+            .sort((a: any, b: any) => {
+              const order = { vencido: 0, por_vencer: 1, vigente: 2, permanente: 3 }
+              return (order[estadoDocumento(a.fecha_vencimiento)] ?? 4) -
+                     (order[estadoDocumento(b.fecha_vencimiento)] ?? 4)
             })
-            .map((c: any) => {
-              const dias = getDiasRestantes(c.fecha_vencimiento)
-              return (
-                <Card key={c.id} className={cn(
-                  'border-l-4',
-                  c.estado === 'vencido' ? 'border-l-red-500' :
-                  c.estado === 'por_vencer' ? 'border-l-amber-500' :
-                  'border-l-green-500'
-                )}>
-                  <CardContent className="p-4">
-                    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-bold text-gray-900">
-                            {getTipoCertificacionLabel(c.tipo)}
-                          </span>
-                          <Badge className={getCertEstadoColor(c.estado)}>{getCertEstadoLabel(c.estado)}</Badge>
-                          {c.bloqueante && (
-                            <span className="flex items-center gap-0.5 text-xs text-red-600">
-                              <AlertTriangle className="h-3 w-3" /> Bloqueante
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex flex-wrap gap-3 text-xs text-gray-500">
-                          {c.numero_certificado && <span>N: {c.numero_certificado}</span>}
-                          {c.entidad_certificadora && <span>Entidad: {c.entidad_certificadora}</span>}
-                          <span>Emision: {formatDate(c.fecha_emision)}</span>
-                          <span className={cn(
-                            'font-semibold',
-                            c.estado === 'vencido' ? 'text-red-600' :
-                            c.estado === 'por_vencer' ? 'text-amber-600' : ''
-                          )}>
-                            Vence: {formatDate(c.fecha_vencimiento)}
-                            {dias < 0 ? ` (vencido hace ${Math.abs(dias)} dias)` :
-                             dias <= 45 ? ` (${dias} dias)` : ''}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {c.archivo_url && (
-                          <a href={c.archivo_url} target="_blank" rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline">
-                            <FileText className="h-3.5 w-3.5" /> Ver documento
-                          </a>
-                        )}
-                        <Button variant="outline" size="sm" onClick={() => handleFileUpload(c.id)}
-                          disabled={subiendo}>
-                          <Upload className="h-3.5 w-3.5 mr-1" />
-                          {c.archivo_url ? 'Reemplazar archivo' : 'Subir archivo'}
-                        </Button>
-                        <Button size="sm" onClick={() => handleRenovar(c)}>
-                          <RefreshCw className="h-3.5 w-3.5 mr-1" /> Renovar
-                        </Button>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              )
-            })}
+            .map((c: any) => (
+              <DocumentoCard
+                key={c.id}
+                c={c}
+                subiendo={subiendo}
+                onSubirArchivo={() => handleFileUpload(c.id)}
+                onRenovar={() => handleRenovar(c)}
+              />
+            ))}
+        </div>
+      )}
+
+      {reemplazados.length > 0 && (
+        <div className="pt-2">
+          <button
+            type="button"
+            onClick={() => setVerHistorial((v) => !v)}
+            className="inline-flex items-center gap-1 text-xs font-medium text-gray-500 hover:text-gray-700"
+          >
+            {verHistorial ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+            Versiones anteriores ({reemplazados.length}) — ya renovadas, no cuentan como vencidas
+          </button>
+          {verHistorial && (
+            <div className="mt-2 space-y-2 opacity-60">
+              {reemplazados.map((c: any) => (
+                <DocumentoCard key={c.id} c={c} reemplazado />
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
+  )
+}
+
+function DocumentoCard({ c, subiendo, reemplazado, onSubirArchivo, onRenovar }: {
+  c: any
+  subiendo?: boolean
+  reemplazado?: boolean
+  onSubirArchivo?: () => void
+  onRenovar?: () => void
+}) {
+  const estado = reemplazado ? 'reemplazado' : estadoDocumento(c.fecha_vencimiento)
+  const dias = diasParaVencer(c.fecha_vencimiento)
+
+  return (
+    <Card className={cn(
+      'border-l-4',
+      estado === 'reemplazado' ? 'border-l-gray-300' :
+      estado === 'vencido' ? 'border-l-red-500' :
+      estado === 'por_vencer' ? 'border-l-amber-500' :
+      estado === 'permanente' ? 'border-l-gray-400' :
+      'border-l-green-500'
+    )}>
+      <CardContent className="p-4">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-bold text-gray-900">
+                {getTipoCertificacionLabel(c.tipo)}
+              </span>
+              {estado === 'reemplazado' ? (
+                <Badge className="bg-gray-100 text-gray-600">Reemplazado</Badge>
+              ) : estado === 'permanente' ? (
+                <Badge className="bg-gray-100 text-gray-600">Sin vencimiento</Badge>
+              ) : (
+                <Badge className={getCertEstadoColor(estado)}>{getCertEstadoLabel(estado)}</Badge>
+              )}
+              {c.bloqueante && estado !== 'reemplazado' && (
+                <span className="flex items-center gap-0.5 text-xs text-red-600">
+                  <AlertTriangle className="h-3 w-3" /> Bloqueante
+                </span>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-3 text-xs text-gray-500">
+              {c.numero_certificado && <span>N: {c.numero_certificado}</span>}
+              {c.entidad_certificadora && <span>Entidad: {c.entidad_certificadora}</span>}
+              <span>Emision: {formatDate(c.fecha_emision)}</span>
+              {estado !== 'permanente' && (
+                <span className={cn(
+                  'font-semibold',
+                  estado === 'vencido' ? 'text-red-600' :
+                  estado === 'por_vencer' ? 'text-amber-600' : ''
+                )}>
+                  Vence: {formatDate(c.fecha_vencimiento)}
+                  {dias != null && (dias < 0 ? ` (vencido hace ${Math.abs(dias)} dias)` :
+                                    dias <= 45 ? ` (${dias} dias)` : '')}
+                </span>
+              )}
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {c.archivo_url && (
+              <a href={c.archivo_url} target="_blank" rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline">
+                <FileText className="h-3.5 w-3.5" /> Ver documento
+              </a>
+            )}
+            {!reemplazado && (
+              <>
+                <Button variant="outline" size="sm" onClick={onSubirArchivo} disabled={subiendo}>
+                  <Upload className="h-3.5 w-3.5 mr-1" />
+                  {c.archivo_url ? 'Reemplazar archivo' : 'Subir archivo'}
+                </Button>
+                <Button size="sm" onClick={onRenovar}>
+                  <RefreshCw className="h-3.5 w-3.5 mr-1" /> Renovar
+                </Button>
+              </>
+            )}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   )
 }
 
