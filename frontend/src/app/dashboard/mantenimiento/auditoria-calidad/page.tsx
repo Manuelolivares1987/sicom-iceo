@@ -37,6 +37,17 @@ import { cn } from '@/lib/utils'
 
 type Res = 'ok' | 'no_ok' | 'na' | 'pendiente'
 
+/** «hoy 15:02» / «ayer 18:40» / «el 31-07». Para retomar sin hacer cuentas. */
+function cuandoFue(iso: string): string {
+  const d = new Date(iso)
+  const hora = d.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })
+  const dia = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime()
+  const dias = Math.round((dia(new Date()) - dia(d)) / 86_400_000)
+  if (dias <= 0) return `hoy ${hora}`
+  if (dias === 1) return `ayer ${hora}`
+  return `el ${d.toLocaleDateString('es-CL', { day: '2-digit', month: '2-digit' })} ${hora}`
+}
+
 // useSearchParams exige Suspense en el prerender (Next 14).
 export default function AuditoriaCalidadPage() {
   return (
@@ -167,13 +178,23 @@ function AuditoriaCalidadPageInner() {
             <CardHeader><CardTitle className="text-base">Equipos para auditar</CardTitle></CardHeader>
             <CardContent className="space-y-2 max-h-72 overflow-auto">
               {equipos.length === 0 && <p className="text-sm text-muted-foreground py-4 text-center">Sin equipos en mantención.</p>}
-              {equipos.map((e: any) => (
+              {equipos.map((e: any) => {
+                // [MIG271] Si el equipo ya tiene auditoría abierta, el botón la
+                // retoma (la base ya no deja crear una segunda). Se dice
+                // «Continuar» para que nadie crea que parte de cero.
+                const abierta = pendientes.find((p: any) => p.activo_id === e.id)
+                return (
                 <div key={e.id} className="flex items-center justify-between rounded border p-2 text-sm">
                   <div>
                     <div className="font-medium">{e.patente ?? e.codigo}</div>
                     <div className="text-xs text-muted-foreground flex items-center gap-1">
                       {e.estado}
                       {e.estado_comercial === 'disponible' && <Badge variant="operativo" className="text-[9px]">disponible</Badge>}
+                      {abierta && (
+                        <span className="rounded bg-amber-100 px-1 py-0.5 text-[9px] text-amber-800">
+                          {abierta.items_marcados ?? 0}/{abierta.items_total} avanzado
+                        </span>
+                      )}
                     </div>
                   </div>
                   <Button size="sm" variant="outline" disabled={!puedeAuditar || iniciar.isPending}
@@ -181,10 +202,13 @@ function AuditoriaCalidadPageInner() {
                       const r: any = await iniciar.mutateAsync({ activo_id: e.id })
                       if (r?.auditoria_id) setSel({ auditoria_id: r.auditoria_id, activo_id: e.id, label: e.patente ?? e.codigo })
                     }}>
-                    <PlusCircle className="h-4 w-4 mr-1" /> Iniciar
+                    {abierta
+                      ? <><Play className="h-4 w-4 mr-1" /> Continuar</>
+                      : <><PlusCircle className="h-4 w-4 mr-1" /> Iniciar</>}
                   </Button>
                 </div>
-              ))}
+                )
+              })}
             </CardContent>
           </Card>
 
@@ -203,6 +227,12 @@ function AuditoriaCalidadPageInner() {
                     {/* [MIG260] El avance queda guardado: se puede retomar donde se dejó. */}
                     {a.items_marcados ?? 0}/{a.items_total} marcados · {a.folio ?? 'sin OT'}
                   </div>
+                  {/* [MIG271] Cuándo se dejó el trabajo, para el que vuelve al otro día. */}
+                  {a.ultima_actividad && (
+                    <div className="text-[11px] text-emerald-700">
+                      seguiste {cuandoFue(a.ultima_actividad)}
+                    </div>
+                  )}
                   {(a.items_marcados ?? 0) > 0 && (a.items_marcados ?? 0) < a.items_total && (
                     <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-gray-200">
                       <div className="h-full bg-emerald-500"
