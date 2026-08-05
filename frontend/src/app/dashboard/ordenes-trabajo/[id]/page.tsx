@@ -9,6 +9,7 @@ import { usePermissions } from '@/hooks/use-permissions'
 import {
   getJornadasDeOT, getChecklistV3OT, type ChecklistV3Item,
   rpcV3SetTiempo, rpcV3SetExcluido, rpcV3SetExcluidoBloque, rpcV3AgregarItem, rpcV3EliminarCustom,
+  rpcV3ArrastrarNc, rpcV3RestaurarCompleto,
   rpcLiberarEjecucion, rpcReabrirPreparacion,
 } from '@/lib/services/taller-plan-semanal'
 import {
@@ -226,8 +227,39 @@ function ChecklistTab({
   const [bloquesAbiertos, setBloquesAbiertos] = useState<Record<string, boolean>>({})
   const [busqueda, setBusqueda] = useState('')
   const [bloqueBusy, setBloqueBusy] = useState<string | null>(null)
+  // Arrastre de NC: el equipo ya se inspeccionó completo (MIG270)
+  const [arrastreBusy, setArrastreBusy] = useState(false)
+  const [arrastreMsg, setArrastreMsg] = useState<string | null>(null)
 
   function invalidate() { qc.invalidateQueries({ queryKey: ['checklist-v3', otId] }) }
+
+  async function dejarSoloNc() {
+    setArrastreBusy(true); setArrastreMsg(null)
+    try {
+      const r = await rpcV3ArrastrarNc(otId)
+      if (r.arrastre) {
+        setArrastreMsg(`Quedaron ${r.nc_arrastradas} no conformidades; ${r.items_excluidos} tareas ya conformes salieron del checklist.`)
+        invalidate()
+      } else {
+        setArrastreMsg(r.motivo === 'inspeccion_previa_sin_nc'
+          ? 'La inspección anterior de este equipo no dejó no conformidades: se mantiene el checklist completo.'
+          : 'Este equipo no tiene una inspección completa en los últimos 60 días: se mantiene el checklist completo.')
+      }
+    } catch (e) {
+      setArrastreMsg(e instanceof Error ? e.message : 'No se pudo dejar solo las no conformidades')
+    } finally { setArrastreBusy(false) }
+  }
+
+  async function restaurarCompleto() {
+    setArrastreBusy(true); setArrastreMsg(null)
+    try {
+      const r = await rpcV3RestaurarCompleto(otId)
+      setArrastreMsg(`Checklist completo restaurado (${r.items_restaurados} tareas devueltas).`)
+      invalidate()
+    } catch (e) {
+      setArrastreMsg(e instanceof Error ? e.message : 'No se pudo restaurar el checklist completo')
+    } finally { setArrastreBusy(false) }
+  }
 
   async function toggleBloqueExcluido(bloque: string, excluir: boolean) {
     setBloqueBusy(bloque)
@@ -303,6 +335,9 @@ function ChecklistTab({
   const activos = all.filter((i) => !i.excluido)
   const hechos = activos.filter((i) => i.resultado && i.resultado !== 'pendiente').length
   const tiempoTotal = activos.reduce((s, i) => s + (i.tiempo_min ?? 0), 0)
+  // El arrastre es de la instancia: todas las filas traen el mismo valor.
+  const soloNc = all[0]?.instance_arrastre ?? false
+  const arrastreOrigen = all.find((i) => i.arrastre_ot_folio || i.arrastre_fecha)
 
   return (
     <div className="space-y-4">
@@ -316,7 +351,7 @@ function ChecklistTab({
             Ajusta los tiempos, marca las tareas que no aplican y agrega las que falten.
             {prepActive ? ' Los cambios se guardan al instante.' : ' Cuando esté listo, libera a ejecución.'}
           </p>
-          <div className="mt-2">
+          <div className="mt-2 flex flex-wrap items-center gap-2">
             {prepActive ? (
               <Button variant="secondary" onClick={onTogglePrep}>
                 <CheckCircle2 className="h-4 w-4 mr-1" /> Listo, volver a ejecución
@@ -326,6 +361,13 @@ function ChecklistTab({
                 {liberando ? <Spinner size="sm" className="mr-1" /> : <Unlock className="h-4 w-4 mr-1" />}
                 Liberar a ejecución
               </Button>
+            )}
+            {!soloNc && !readOnly && (
+              <button onClick={dejarSoloNc} disabled={arrastreBusy}
+                      title="Si el equipo ya se inspeccionó completo hace poco, deja solo las tareas que salieron NO OK"
+                      className="inline-flex items-center gap-1 rounded-lg border border-amber-300 bg-white px-2 py-1.5 text-xs text-amber-800 hover:bg-amber-100 disabled:opacity-50">
+                {arrastreBusy ? <Spinner size="sm" /> : <History className="h-3.5 w-3.5" />} Dejar solo las no conformidades
+              </button>
             )}
           </div>
         </div>
@@ -354,6 +396,30 @@ function ChecklistTab({
         <div className="flex items-center gap-2 rounded-lg bg-amber-50 border border-amber-200 p-3 text-sm text-amber-700">
           <AlertTriangle className="h-4 w-4 shrink-0" /> Esta OT está cerrada. El checklist no puede modificarse.
         </div>
+      )}
+
+      {/* El equipo ya se inspeccionó completo: esta OT trae solo las NC (MIG270) */}
+      {soloNc && (
+        <div className="rounded-lg border border-orange-200 bg-orange-50 p-3 text-sm">
+          <div className="flex items-center gap-2 font-medium text-orange-800">
+            <History className="h-4 w-4 shrink-0" /> Solo las no conformidades
+          </div>
+          <p className="mt-1 text-xs text-orange-700">
+            Este equipo ya tenía el checklist completo hecho
+            {arrastreOrigen?.arrastre_ot_folio ? ` en la ${arrastreOrigen.arrastre_ot_folio}` : ''}
+            {arrastreOrigen?.arrastre_fecha ? ` (${formatDate(arrastreOrigen.arrastre_fecha)})` : ''}.
+            Esta OT trae solo las {activos.length} tareas que salieron NO OK; el resto quedó fuera.
+          </p>
+          {mode === 'edit' && !readOnly && (
+            <button onClick={restaurarCompleto} disabled={arrastreBusy}
+                    className="mt-2 inline-flex items-center gap-1 rounded-lg border border-orange-300 bg-white px-2 py-1 text-xs text-orange-700 hover:bg-orange-100 disabled:opacity-50">
+              {arrastreBusy ? <Spinner size="sm" /> : <Plus className="h-3.5 w-3.5" />} Incluir el checklist completo
+            </button>
+          )}
+        </div>
+      )}
+      {arrastreMsg && (
+        <p className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-600">{arrastreMsg}</p>
       )}
 
       <div className="flex flex-wrap items-center gap-3 rounded-lg bg-blue-50 border border-blue-200 p-3 text-sm text-blue-700">
@@ -439,6 +505,7 @@ function ChecklistTab({
                         {item.requiere_foto && <Camera className="inline h-3 w-3 ml-1 text-blue-500" />}
                         {item.critico && <span className="ml-1 text-[9px] px-1 rounded bg-red-100 text-red-700">crítica</span>}
                         {item.es_custom && <span className="ml-1 text-[9px] px-1 rounded bg-purple-100 text-purple-700">añadida</span>}
+                        {item.arrastre && <span className="ml-1 text-[9px] px-1 rounded bg-orange-100 text-orange-700">no conformidad</span>}
                       </span>
                       <Clock className="h-3.5 w-3.5 text-gray-400 shrink-0" />
                       <input
@@ -479,8 +546,22 @@ function ChecklistTab({
                           )}
                           {item.critico && <span className="text-[9px] px-1 rounded bg-red-100 text-red-700 font-medium">crítica</span>}
                           {item.es_custom && <span className="text-[9px] px-1 rounded bg-purple-100 text-purple-700">añadida</span>}
+                          {item.arrastre && <span className="text-[9px] px-1 rounded bg-orange-100 text-orange-700 font-medium">no conformidad</span>}
                           {item.tiempo_min != null && <span className="text-[10px] text-gray-400">· {item.tiempo_min} min</span>}
                         </div>
+                        {item.arrastre && (
+                          <p className="mt-1 flex items-start gap-1 text-xs text-orange-700">
+                            <History className="mt-0.5 h-3 w-3 shrink-0" />
+                            <span>
+                              Salió NO OK en la inspección anterior
+                              {item.arrastre_observacion ? `: ${item.arrastre_observacion}` : '.'}
+                              {item.arrastre_foto_url && (
+                                <a href={item.arrastre_foto_url} target="_blank" rel="noopener noreferrer"
+                                   className="ml-1 underline">ver foto</a>
+                              )}
+                            </span>
+                          </p>
+                        )}
                         {item.resultado === 'no_ok' && (
                           <p className="mt-1 text-xs font-medium text-red-600 flex items-center gap-1">
                             <AlertTriangle className="h-3 w-3" /> NO OK — generará No Conformidad
