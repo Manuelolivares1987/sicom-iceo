@@ -9,8 +9,13 @@ import {
   type ReactNode,
 } from 'react'
 import type { User } from '@supabase/supabase-js'
-import { supabase } from '@/lib/supabase'
+import { supabase, leerSesionPersistida } from '@/lib/supabase'
 import type { UsuarioPerfil } from '@/types/database'
+
+/** Lo que se espera a que la red valide la sesión antes de arrancar con la
+ *  guardada en el equipo. En terreno la señal es mala; más que esto es dejar al
+ *  operador mirando una pantalla en blanco. */
+const ARRANQUE_TIMEOUT_MS = 6000
 
 export type RolCalama =
   | 'jefe_sucursal'
@@ -26,6 +31,9 @@ interface AuthContextValue {
   loading: boolean
   error: string | null
   isAuthenticated: boolean
+  /** Hay sesión guardada en el equipo pero no se pudo revalidar contra el
+   *  servidor (típicamente, sin señal). Se trabaja con lo descargado. */
+  sesionSinValidar: boolean
   signIn: (email: string, password: string) => Promise<void>
   signOut: () => Promise<void>
 }
@@ -55,8 +63,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [rolCalama, setRolCalama] = useState<RolCalama | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [sesionSinValidar, setSesionSinValidar] = useState(false)
 
   const fetchPerfil = useCallback(async (userId: string) => {
+    // Primero lo último conocido: en terreno el perfil (rol, nombre) tiene que
+    // estar disponible de inmediato aunque la consulta no llegue nunca.
+    const cacheado = leerPerfilCache(userId)
+    if (cacheado) setPerfil(cacheado)
+
     const { data, error: perfilError } = await supabase
       .from('usuarios_perfil')
       .select('*')
@@ -99,32 +113,79 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      const currentUser = session?.user ?? null
-      setUser(currentUser)
-
-      if (currentUser) {
-        fetchPerfil(currentUser.id).finally(() => setLoading(false))
+    // El arranque NO puede depender de que la red conteste. `getSession()`
+    // refresca el token si venció, y sin señal esa promesa puede colgarse (o
+    // rechazar): antes eso dejaba `loading` en true para siempre y la app de
+    // terreno se quedaba en "Cargando…" eterno. Ahora, si no responde a tiempo,
+    // se arranca con la sesión guardada en el teléfono.
+    let resuelto = false
+    const arrancar = (u: User | null, desdeCache: boolean) => {
+      setUser(u)
+      if (resuelto) return
+      resuelto = true
+      setSesionSinValidar(desdeCache)
+      // El perfil tampoco puede frenar el arranque: si la consulta se cuelga,
+      // se sigue con el perfil cacheado y ya se completará cuando responda.
+      if (u) {
+        Promise.race([
+          fetchPerfil(u.id),
+          new Promise((r) => setTimeout(r, ARRANQUE_TIMEOUT_MS)),
+        ]).catch(() => undefined).finally(() => setLoading(false))
       } else {
         setLoading(false)
       }
-    })
+    }
+
+    const conCache = () => {
+      const local = leerSesionPersistida()
+      arrancar(local?.user ?? null, !!local)
+    }
+
+    const timer = setTimeout(() => {
+      if (resuelto) return
+      // eslint-disable-next-line no-console
+      console.warn('[auth] la sesión no se pudo validar a tiempo; se usa la guardada en el equipo')
+      conCache()
+    }, ARRANQUE_TIMEOUT_MS)
+
+    supabase.auth
+      .getSession()
+      .then(({ data: { session } }) => {
+        clearTimeout(timer)
+        if (session?.user) arrancar(session.user, false)
+        else conCache()
+      })
+      .catch(() => {
+        clearTimeout(timer)
+        conCache()
+      })
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((event, session) => {
       const currentUser = session?.user ?? null
-      setUser(currentUser)
 
+      // Un TOKEN_REFRESH_FAILED / INITIAL_SESSION sin sesión estando sin señal
+      // NO es un cierre de sesión: la sesión guardada sigue siendo válida y el
+      // operador debe poder seguir trabajando con lo descargado.
+      if (!currentUser && event !== 'SIGNED_OUT') {
+        const local = leerSesionPersistida()
+        if (local) { setUser(local.user); setSesionSinValidar(true); return }
+      }
+
+      setUser(currentUser)
       if (currentUser) {
+        setSesionSinValidar(false)
         fetchPerfil(currentUser.id)
       } else {
+        setSesionSinValidar(false)
         setPerfil(null)
         setRolCalama(null)
       }
     })
 
     return () => {
+      clearTimeout(timer)
       subscription.unsubscribe()
     }
   }, [fetchPerfil])
@@ -154,6 +215,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null)
     setPerfil(null)
     setRolCalama(null)
+    setSesionSinValidar(false)
 
     // Limpia BD offline de Calama y Taller + perfil cacheado: nunca dejar
     // datos del operador en un dispositivo despues del logout.
@@ -177,6 +239,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         loading,
         error,
         isAuthenticated: !!user,
+        sesionSinValidar,
         signIn,
         signOut,
       }}

@@ -14,12 +14,30 @@ const isOnline = () => (typeof navigator === 'undefined' ? true : navigator.onLi
 const keyPend = (a: number, m: number) => `pend:${a}-${m}`
 const keyItems = (pautaId: string) => `items:${pautaId}`
 
+/**
+ * Techo de espera para leer del servidor antes de conformarse con lo
+ * descargado.
+ *
+ * `navigator.onLine` dice "en línea" también cuando el teléfono está pegado a
+ * una antena que no cursa datos —lo habitual en faena—, y ahí la petición no
+ * falla: se queda esperando. Sin este techo la pantalla se quedaba en
+ * "Cargando…" para siempre teniendo la información en el equipo.
+ */
+const LECTURA_TIMEOUT_MS = 8000
+
+function conTimeout<T>(p: Promise<T>, ms = LECTURA_TIMEOUT_MS): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error('timeout de red')), ms)
+    p.then((v) => { clearTimeout(t); resolve(v) }, (e) => { clearTimeout(t); reject(e) })
+  })
+}
+
 // ── Pendientes por período ───────────────────────────────────────────────
 export async function getPendientesOffline(anio: number, mes: number): Promise<EnexPendiente[]> {
   let base: EnexPendiente[]
   if (isOnline()) {
     try {
-      base = await getTerrenoPendientes(anio, mes)
+      base = await conTimeout(getTerrenoPendientes(anio, mes))
       await enexDB().cache.put({ key: keyPend(anio, mes), value: base, updated_at: new Date().toISOString() })
     } catch { base = await getCachedPend(anio, mes) }
   } else {
@@ -54,7 +72,7 @@ export async function getPendienteOffline(programacionId: string): Promise<EnexP
   }
   if (isOnline()) {
     try {
-      const r = await getPendientePorId(programacionId)
+      const r = await conTimeout(getPendientePorId(programacionId))
       if (r) return aplicarCola(r)
     } catch { /* cae a la cache */ }
   }
@@ -70,7 +88,7 @@ export async function getPendienteOffline(programacionId: string): Promise<EnexP
 export async function getPautaItemsOffline(pautaId: string): Promise<EnexPautaItem[]> {
   if (isOnline()) {
     try {
-      const items = await getPautaItems(pautaId)
+      const items = await conTimeout(getPautaItems(pautaId))
       await enexDB().cache.put({ key: keyItems(pautaId), value: items, updated_at: new Date().toISOString() })
       return items
     } catch { /* cae a cache */ }
@@ -98,7 +116,7 @@ const keyEjec = (ejecucionId: string) => `ejec:${ejecucionId}`
 export async function getEjecucionItemsOffline(ejecucionId: string): Promise<EnexEjecucionItemRow[]> {
   if (isOnline()) {
     try {
-      const rows = (await getEjecucionItems(ejecucionId)) as unknown as EnexEjecucionItemRow[]
+      const rows = (await conTimeout(getEjecucionItems(ejecucionId))) as unknown as EnexEjecucionItemRow[]
       await enexDB().cache.put({ key: keyEjec(ejecucionId), value: rows, updated_at: new Date().toISOString() })
       return rows
     } catch { /* cae a cache */ }

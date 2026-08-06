@@ -29,6 +29,7 @@ import {
 } from '@/lib/offline/enex-offline'
 import { useNetworkStatus } from '@/hooks/use-calama-offline'
 import { useExigirSesion } from '@/hooks/use-exigir-sesion'
+import { SinSesionOffline } from '@/components/enex/sin-sesion-offline'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 
 function dataUrlToBlob(dataUrl: string): Blob {
@@ -109,7 +110,7 @@ export default function EnexEjecutarPage() {
   const qc = useQueryClient()
   const online = useNetworkStatus()
   const { perfil } = useAuth()
-  const { verificando } = useExigirSesion()
+  const { verificando, sinSesionOffline } = useExigirSesion()
   const progId = params?.id as string
 
   // El servicio se busca por su id, no dentro del mes en curso: un trabajo de
@@ -420,6 +421,7 @@ export default function EnexEjecutarPage() {
     } catch (e) { toast.error((e as Error).message) } finally { setGuardando(false) }
   }
 
+  if (sinSesionOffline) return <SinSesionOffline />
   if (verificando) return <div className="p-6 text-center text-sm text-gray-400">Cargando…</div>
   if (!prog && buscandoProg) return <div className="p-6 text-center text-sm text-gray-400">Cargando servicio…</div>
   if (!prog) return (
