@@ -17,6 +17,7 @@ import {
 import { getPendientesOffline, prepararEnexOffline, getEnexPendingCount, syncEnexPending, ultimaDescargaEnex } from '@/lib/offline/enex-offline'
 import { useNetworkStatus } from '@/hooks/use-calama-offline'
 import { useExigirSesion } from '@/hooks/use-exigir-sesion'
+import { SinSesionOffline } from '@/components/enex/sin-sesion-offline'
 
 const MUNDO_KEY = 'enex-mundo-supervisor'
 
@@ -34,7 +35,7 @@ function fmtDiaLargo(iso: string): string {
 export default function EnexTerrenoHome() {
   // El link de terreno se reparte tal cual: si no hay sesión, al login y de
   // vuelta acá.
-  const { verificando } = useExigirSesion()
+  const { verificando, sinSesionOffline } = useExigirSesion()
   // El período parte NULL y se fija tras el mount: la página se prerenderiza
   // en el build y usar new Date() en el primer render hidrata mal (React #418)
   // cuando la fecha del build difiere de la del teléfono.
@@ -156,6 +157,7 @@ export default function EnexTerrenoHome() {
   }), [pend])
 
   // Primer render (SSR/hidratación) sin fecha: contenido determinista.
+  if (sinSesionOffline) return <SinSesionOffline />
   if (verificando) return <div className="flex justify-center py-10"><Spinner /></div>
   if (!periodo) return <div className="flex justify-center py-10"><Spinner /></div>
 
