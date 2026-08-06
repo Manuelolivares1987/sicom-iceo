@@ -190,6 +190,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [fetchPerfil])
 
+  // Sin conexión no se intenta renovar el token. El proyecto tiene rotación de
+  // refresh token: si la renovación sale y la respuesta se pierde —lo típico con
+  // señal a medias— el teléfono se queda con el token viejo, y reintentarlo
+  // puede hacer que el servidor invalide la sesión entera. Estando offline el
+  // reintento no aporta nada (la sesión no caduca por tiempo), así que se pausa
+  // y se reanuda al recuperar señal. De paso, no gasta batería en faena.
+  useEffect(() => {
+    const pausar = () => { void supabase.auth.stopAutoRefresh() }
+    const reanudar = () => { void supabase.auth.startAutoRefresh() }
+
+    if (typeof navigator !== 'undefined' && !navigator.onLine) pausar()
+    window.addEventListener('offline', pausar)
+    window.addEventListener('online', reanudar)
+    return () => {
+      window.removeEventListener('offline', pausar)
+      window.removeEventListener('online', reanudar)
+    }
+  }, [])
+
   const signIn = useCallback(async (email: string, password: string) => {
     setError(null)
     const { error: authError } = await supabase.auth.signInWithPassword({
