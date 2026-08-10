@@ -42,6 +42,39 @@ const S = StyleSheet.create({
   foto: { width: 150, height: 110, objectFit: 'cover', margin: 4, borderWidth: 0.5, borderColor: '#999' },
   fotosWrap: { flexDirection: 'row', flexWrap: 'wrap' },
   footer: { position: 'absolute', bottom: 16, left: 28, right: 28, fontSize: 7, color: '#9ca3af', textAlign: 'center' },
+
+  // ── Resumen de la intervención ──
+  kpiRow: { flexDirection: 'row', marginTop: 4 },
+  kpiBox: {
+    flex: 1, borderWidth: 0.5, borderColor: '#444', padding: 4, marginRight: 3,
+    alignItems: 'center', backgroundColor: '#f9fafb',
+  },
+  kpiNum: { fontSize: 13, fontWeight: 'bold' },
+  kpiLbl: { fontSize: 6.5, color: '#4b5563', textAlign: 'center', marginTop: 1 },
+
+  // ── Anexo antes/después ──
+  fichaHead: {
+    flexDirection: 'row', backgroundColor: '#1f2937', padding: 4, marginTop: 8,
+    alignItems: 'center',
+  },
+  fichaNum: { fontSize: 8, fontWeight: 'bold', color: '#fff', width: 40 },
+  fichaTitulo: { flex: 1, fontSize: 8, fontWeight: 'bold', color: '#fff' },
+  fichaEstado: { fontSize: 7.5, fontWeight: 'bold', color: '#fff', paddingLeft: 6 },
+  adRow: { flexDirection: 'row', borderWidth: 0.5, borderColor: '#444', borderTopWidth: 0 },
+  adCol: { width: '50%', padding: 4 },
+  adColSep: { borderRightWidth: 0.5, borderRightColor: '#444' },
+  adTag: { fontSize: 7.5, fontWeight: 'bold', marginBottom: 3, textAlign: 'center', padding: 2 },
+  adTagAntes: { backgroundColor: '#fef3c7', color: '#92400e' },
+  adTagDespues: { backgroundColor: '#dcfce7', color: '#166534' },
+  adFoto: { width: 74, height: 56, objectFit: 'cover', borderWidth: 0.5, borderColor: '#9ca3af' },
+  adFotoCell: { width: 78, marginBottom: 3, alignItems: 'center' },
+  adFotoLbl: { fontSize: 5.5, color: '#6b7280', marginTop: 0.5 },
+  adVacio: { fontSize: 7, color: '#9ca3af', fontStyle: 'italic', textAlign: 'center', paddingVertical: 10 },
+  adObs: {
+    fontSize: 7.5, color: '#374151', paddingHorizontal: 4, paddingVertical: 3,
+    borderWidth: 0.5, borderTopWidth: 0, borderColor: '#444', backgroundColor: '#f9fafb',
+  },
+  nota: { fontSize: 7, color: '#6b7280', marginTop: 3, fontStyle: 'italic' },
 })
 
 // ── helpers de datos ─────────────────────────────────────────────────────────
@@ -61,11 +94,101 @@ function fmtFecha(iso?: string | null): string {
   return `${d}-${m}-${y}`
 }
 
+/** Hora local hh:mm de un timestamp (el que registró la app de terreno). */
+function fmtHora(ts?: string | null): string {
+  if (!ts) return ''
+  const d = new Date(ts)
+  if (isNaN(d.getTime())) return ''
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+}
+
+function fmtDuracion(seg?: number | null): string {
+  if (!seg || seg <= 0) return ''
+  const h = Math.floor(seg / 3600), m = Math.round((seg % 3600) / 60)
+  return h > 0 ? `${h} h ${String(m).padStart(2, '0')} min` : `${m} min`
+}
+
+/**
+ * Ancho de columna a prueba de bordes: con width en % los bordes y el padding
+ * suman de más y Yoga termina imprimiendo una celda encima de la otra. Con
+ * flexGrow/flexBasis el reparto es exacto sea cual sea el número de columnas.
+ */
+const col = (n: number) => ({ flexGrow: n, flexBasis: 0, flexShrink: 1, width: undefined })
+
+const nAntes = (i: EnexReporteItem) => i.fotos_antes?.length ?? 0
+const nDespues = (i: EnexReporteItem) => i.fotos_despues?.length ?? 0
+
+/** ¿La actividad fue realmente intervenida? Los datos del servicio (bloque 0)
+ *  y el registro fotográfico general no son actividades de pauta. */
+const esActividad = (i: EnexReporteItem): boolean => {
+  const b = i.item?.bloque ?? ''
+  const cod = i.item?.codigo ?? ''
+  return !b.startsWith('0.') && !cod.startsWith('DS.') && !cod.startsWith('FOT.')
+}
+
+const ESTADO_TXT: Record<string, string> = {
+  ok: 'CONFORME', no_ok: 'NO CONFORME', na: 'NO APLICA', si: 'SÍ', no: 'NO',
+}
+
 type Datos = { reporte: EnexReporte; items: EnexReporteItem[]; logoUrl: string }
+
+// ── Anexo: ficha de antes/después por actividad ──────────────────────────────
+// Es la evidencia con la que el mandante da el trabajo por hecho: cada punto
+// intervenido en su propia ficha, con las dos columnas enfrentadas y las fotos
+// numeradas para poder citarlas ("ficha 3, foto D2").
+function FichaAntesDespues({ it, n }: { it: EnexReporteItem; n: number }) {
+  const antes = it.fotos_antes ?? []
+  const despues = it.fotos_despues ?? []
+  // Una ficha partida a la mitad sale en blanco y se lleva por delante lo que
+  // venía después: si no cabe, que salte entera a la página siguiente. Las muy
+  // cargadas se dejan fluir, porque no caben enteras en ninguna página.
+  const cabeEntera = Math.max(antes.length, despues.length) <= 6
+  const estado = it.item?.tipo_campo === 'medicion' && it.valor_medicion != null
+    ? `${it.valor_medicion} ${it.item?.unidad ?? ''}`
+    : (ESTADO_TXT[it.resultado ?? ''] ?? 'SIN ESTADO')
+  const malo = it.resultado === 'no_ok' || it.resultado === 'no' || it.dentro_tolerancia === false
+
+  return (
+    <View wrap={!cabeEntera}>
+      <View style={S.fichaHead} wrap={false}>
+        <Text style={S.fichaNum}>N° {n}</Text>
+        <Text style={S.fichaTitulo}>
+          {it.item?.codigo ? `${it.item.codigo} · ` : ''}{it.item?.descripcion ?? ''}
+        </Text>
+        <Text style={[S.fichaEstado, { color: malo ? '#fca5a5' : '#86efac' }]}>{estado}</Text>
+      </View>
+      <View style={S.adRow}>
+        {([['ANTES', antes, 'A'], ['DESPUÉS', despues, 'D']] as const).map(([tag, fotos, pre]) => (
+          <View key={tag} style={[S.adCol, pre === 'A' ? S.adColSep : {}]}>
+            <Text style={[S.adTag, pre === 'A' ? S.adTagAntes : S.adTagDespues]}>
+              {tag}{fotos.length > 0 ? ` — ${fotos.length} foto${fotos.length !== 1 ? 's' : ''}` : ''}
+            </Text>
+            {fotos.length === 0 ? (
+              <Text style={S.adVacio}>Sin registro fotográfico</Text>
+            ) : (
+              <View style={S.fotosWrap}>
+                {fotos.map((u, k) => (
+                  <View key={k} style={S.adFotoCell}>
+                    <Image src={u} style={S.adFoto} />
+                    <Text style={S.adFotoLbl}>{pre}{k + 1}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
+        ))}
+      </View>
+      {it.observacion ? (
+        <Text style={S.adObs}>Observación del técnico: {it.observacion}</Text>
+      ) : null}
+    </View>
+  )
+}
 
 // ── CERTIFICADO DE CALIBRACIÓN (NCh1436 · PN.OM.DM.MN.F.01) ─────────────────
 export function CertificadoCalibracion({ reporte, items, logoUrl }: Datos) {
   const inst = reporte.programacion?.instalacion
+  const conAntesDespues = items.filter((i) => esActividad(i) && (nAntes(i) > 0 || nDespues(i) > 0))
   const corridas = Array.from({ length: 6 }, (_, k) => {
     const med = num(items, `C${k + 1}.MED`)
     const pat = num(items, `C${k + 1}.PAT`)
@@ -160,8 +283,17 @@ export function CertificadoCalibracion({ reporte, items, logoUrl }: Datos) {
         <Text style={[S.sectionTitle, { marginTop: 6 }]}>OBSERVACIONES</Text>
         <Text style={S.obsBox}>{[txt(items, 'CIE.OBS'), reporte.observacion].filter(Boolean).join(' · ') || ' '}</Text>
 
+        {/* La calibración también deja evidencia por punto (sellos, cabezal):
+            va en el mismo formato de ficha que la mantención. */}
+        {conAntesDespues.length > 0 && (
+          <View break>
+            <Text style={S.sectionTitle}>ANEXO FOTOGRÁFICO — ANTES Y DESPUÉS POR PUNTO VERIFICADO</Text>
+            {conAntesDespues.map((i, k) => <FichaAntesDespues key={`ad-${i.id}`} it={i} n={k + 1} />)}
+          </View>
+        )}
+
         {/* Firmas */}
-        <View style={S.firmasRow}>
+        <View style={S.firmasRow} wrap={false}>
           <View style={S.firmaCol}>
             {reporte.firma_tecnico_url ? <Image src={reporte.firma_tecnico_url} style={S.firmaImg} /> : <View style={{ height: 42 }} />}
             <View style={S.firmaLinea}>
@@ -184,7 +316,10 @@ export function CertificadoCalibracion({ reporte, items, logoUrl }: Datos) {
             </View>
           </View>
         </View>
-        <Text style={S.footer}>SICOM-ICEO · Pillado y Cía. Ltda. · Contrato ENEX/ESM VA_24_068 · Documento generado automáticamente desde la ejecución en terreno</Text>
+        <Text style={S.footer} fixed render={({ pageNumber, totalPages }) => (
+          `SICOM-ICEO · Pillado y Cía. Ltda. · Contrato ENEX/ESM VA_24_068 · ` +
+          `${inst?.nombre ?? ''} · ${fmtFecha(reporte.fecha_ejecucion)} · Página ${pageNumber} de ${totalPages}`
+        )} />
       </Page>
     </Document>
   )
@@ -196,9 +331,8 @@ export function OtMantenimiento({ reporte, items, logoUrl }: Datos) {
   // Bloques de pauta (excluye datos de servicio y registro fotográfico)
   const bloques: { bloque: string; items: EnexReporteItem[] }[] = []
   for (const it of items) {
+    if (!esActividad(it)) continue
     const b = it.item?.bloque ?? ''
-    const cod = it.item?.codigo ?? ''
-    if (b.startsWith('0.') || cod.startsWith('FOT.') || cod.startsWith('DS.')) continue
     let g = bloques.find((x) => x.bloque === b)
     if (!g) { g = { bloque: b, items: [] }; bloques.push(g) }
     g.items.push(it)
@@ -206,11 +340,32 @@ export function OtMantenimiento({ reporte, items, logoUrl }: Datos) {
   const fotos = [
     ...items.filter((i) => i.foto_url).map((i) => i.foto_url!),
     ...(reporte.evidencia_urls ?? []),
-  ].slice(0, 6)
+  ]
   // [MIG265] Evidencia del antes/después por actividad: es lo que el mandante
   // pide para dar el trabajo por hecho. Antes no salía en el informe.
-  const conAntesDespues = items.filter(
-    (i) => (i.fotos_antes?.length ?? 0) > 0 || (i.fotos_despues?.length ?? 0) > 0)
+  const conAntesDespues = items.filter((i) => esActividad(i) && (nAntes(i) > 0 || nDespues(i) > 0))
+  // La ficha del anexo se numera una sola vez y la tabla de la pauta la cita,
+  // para que el mandante salte de la actividad a su evidencia.
+  const fichaDe = new Map(conAntesDespues.map((i, k) => [i.id, k + 1]))
+
+  const actividades = items.filter(esActividad)
+  const cta = {
+    ejecutadas: actividades.length,
+    ok: actividades.filter((i) => i.resultado === 'ok' || i.resultado === 'si').length,
+    noOk: actividades.filter((i) => i.resultado === 'no_ok' || i.resultado === 'no' || i.dentro_tolerancia === false).length,
+    na: actividades.filter((i) => i.resultado === 'na').length,
+    antes: actividades.reduce((s, i) => s + nAntes(i), 0),
+    despues: actividades.reduce((s, i) => s + nDespues(i), 0),
+  }
+  const noConformes = actividades.filter(
+    (i) => i.resultado === 'no_ok' || i.resultado === 'no' || i.dentro_tolerancia === false)
+  // Trabajadas sin las dos caras de la evidencia: el mandante puede objetarlas.
+  const evidenciaIncompleta = actividades.filter(
+    (i) => i.resultado && i.resultado !== 'na' && (nAntes(i) === 0 || nDespues(i) === 0))
+
+  const horaIni = txt(items, 'DS.HORA_INI') || fmtHora(reporte.inicio_at)
+  const horaFin = txt(items, 'DS.HORA_FIN') || fmtHora(reporte.fin_at)
+  const duracion = fmtDuracion(reporte.duracion_segundos)
 
   return (
     <Document>
@@ -233,8 +388,11 @@ export function OtMantenimiento({ reporte, items, logoUrl }: Datos) {
           ['CLIENTE', 'ESM / ENEX'],
           ['EDS / PETROLERA', `${inst?.nombre ?? ''}${inst?.patente ? ' · ' + inst.patente : ''}`],
           ['FECHA', fmtFecha(reporte.fecha_ejecucion)],
-          ['HORA INICIO', txt(items, 'DS.HORA_INI')],
-          ['HORA TÉRMINO', txt(items, 'DS.HORA_FIN')],
+          ['HORA INICIO', horaIni],
+          ['HORA TÉRMINO', horaFin],
+          ['DURACIÓN EN TERRENO', duracion],
+          ['TÉCNICO(S) EJECUTOR(ES)', txt(items, 'DS.RUT_TEC') || reporte.tecnico_nombre || reporte.ejecutor || ''],
+          ['PAUTA APLICADA', `${reporte.pauta?.codigo ?? ''} ${reporte.pauta?.nombre ?? ''}${reporte.pauta?.version ? ' · v' + reporte.pauta.version : ''}`.trim()],
           ['MOTIVO DEL LLAMADO', txt(items, 'DS.MOTIVO')],
         ].map(([l, v], i) => (
           <View key={i} style={[S.row, i === 0 ? { borderTopWidth: 0.5, borderTopColor: '#444' } : {}]}>
@@ -242,70 +400,92 @@ export function OtMantenimiento({ reporte, items, logoUrl }: Datos) {
           </View>
         ))}
 
+        {/* Resumen de la intervención: lo que el supervisor del mandante mira
+            primero — cuánto se intervino y con cuánta evidencia se respalda. */}
+        <Text style={S.sectionTitle}>RESUMEN DE LA INTERVENCIÓN</Text>
+        <View style={S.kpiRow}>
+          {[
+            { n: String(cta.ejecutadas), l: 'Actividades\nintervenidas', c: '#111827' },
+            { n: String(cta.ok), l: 'Conformes', c: '#166534' },
+            { n: String(cta.noOk), l: 'No conformes', c: cta.noOk > 0 ? '#b91c1c' : '#111827' },
+            { n: String(cta.na), l: 'No aplica', c: '#6b7280' },
+            { n: String(cta.antes), l: 'Fotos ANTES', c: '#92400e' },
+            { n: String(cta.despues), l: 'Fotos DESPUÉS', c: '#166534' },
+          ].map((k, i) => (
+            <View key={i} style={[S.kpiBox, i === 5 ? { marginRight: 0 } : {}]}>
+              <Text style={[S.kpiNum, { color: k.c }]}>{k.n}</Text>
+              <Text style={S.kpiLbl}>{k.l}</Text>
+            </View>
+          ))}
+        </View>
+        <Text style={S.nota}>
+          Cada actividad intervenida se respalda con su ficha de antes y después en el anexo fotográfico
+          {conAntesDespues.length > 0 ? ` (fichas N° 1 a ${conAntesDespues.length})` : ''}.
+        </Text>
+
+        {/* Hallazgos: si algo quedó no conforme, va arriba y no enterrado en la
+            tabla — es lo que dispara la siguiente OT. */}
+        {noConformes.length > 0 && (<>
+          <Text style={[S.sectionTitle, { backgroundColor: '#fee2e2' }]}>HALLAZGOS NO CONFORMES ({noConformes.length})</Text>
+          {noConformes.map((i, k) => (
+            <View key={`nc-${i.id}`} style={[S.row, k === 0 ? { borderTopWidth: 0.5, borderTopColor: '#444' } : {}]}>
+              <Text style={[S.cellLabel, col(46)]}>{i.item?.codigo ? `${i.item.codigo} · ` : ''}{i.item?.descripcion}</Text>
+              <Text style={[S.cellValue, col(40), { fontWeight: 'normal', fontSize: 7.5, color: '#b91c1c', borderRightWidth: 0.5, borderRightColor: '#444' }]}>
+                {i.observacion ?? 'Sin detalle registrado en terreno'}
+              </Text>
+              <Text style={[S.cellValue, col(14), { textAlign: 'center', fontSize: 7, fontWeight: 'normal' }]}>
+                {fichaDe.get(i.id) ? `Ficha ${fichaDe.get(i.id)}` : '—'}
+              </Text>
+            </View>
+          ))}
+        </>)}
+
         <Text style={S.sectionTitle}>PAUTA DE REVISIÓN DE MANTENIMIENTO</Text>
         {bloques.map((g) => (
           <View key={g.bloque} wrap={false}>
             <Text style={[S.sectionTitle, { backgroundColor: '#f3f4f6', marginTop: 4 }]}>{g.bloque.replace(/^\d+\.\s*/, '').toUpperCase()}</Text>
-            {/* Anchos explícitos en las tres columnas: mezclar % con flex:1
-                dejaba el estado y la observación impresos uno encima del otro. */}
+            {/* Columnas por flexGrow, no por %: los bordes hacían que la última
+                celda terminara impresa encima de la del estado. */}
             <View style={[S.row, { borderTopWidth: 0.5, borderTopColor: '#444' }]}>
-              <Text style={[S.th, { width: '58%', textAlign: 'left' }]}>ACTIVIDAD</Text>
-              <Text style={[S.th, { width: '14%' }]}>ESTADO</Text>
-              <Text style={[S.th, { width: '28%', borderRightWidth: 0 }]}>OBSERVACIÓN</Text>
+              <Text style={[S.th, col(46), { textAlign: 'left' }]}>ACTIVIDAD</Text>
+              <Text style={[S.th, col(13)]}>ESTADO</Text>
+              <Text style={[S.th, col(25)]}>OBSERVACIÓN</Text>
+              <Text style={[S.th, col(16), { borderRightWidth: 0 }]}>EVIDENCIA</Text>
             </View>
-            {g.items.map((i, k) => (
-              <View key={k} style={S.row}>
-                <Text style={[S.cellLabel, { width: '58%' }]}>{i.item?.descripcion}</Text>
-                <Text style={[S.cellValue, { width: '14%', flex: 0, textAlign: 'center', borderRightWidth: 0.5, borderRightColor: '#444', color: i.resultado === 'no_ok' ? '#b91c1c' : '#111' }]}>
-                  {i.item?.tipo_campo === 'medicion'
-                    ? (i.valor_medicion != null ? `${i.valor_medicion} ${i.item?.unidad ?? ''}` : '—')
-                    : (RES_LABEL[i.resultado ?? ''] ?? '—')}
-                </Text>
-                <Text style={[S.cellValue, { width: '28%', flex: 0, fontWeight: 'normal', fontSize: 7, color: '#4b5563' }]}>
-                  {i.observacion ?? '—'}
-                </Text>
-              </View>
-            ))}
+            {g.items.map((i, k) => {
+              const a = nAntes(i), d = nDespues(i), ficha = fichaDe.get(i.id)
+              return (
+                <View key={k} style={S.row}>
+                  <Text style={[S.cellLabel, col(46)]}>
+                    {i.item?.codigo ? `${i.item.codigo}  ` : ''}{i.item?.descripcion}
+                  </Text>
+                  <Text style={[S.cellValue, col(13), { textAlign: 'center', borderRightWidth: 0.5, borderRightColor: '#444', color: i.resultado === 'no_ok' || i.resultado === 'no' ? '#b91c1c' : '#111' }]}>
+                    {i.item?.tipo_campo === 'medicion'
+                      ? (i.valor_medicion != null ? `${i.valor_medicion} ${i.item?.unidad ?? ''}` : '—')
+                      : (RES_LABEL[i.resultado ?? ''] ?? '—')}
+                  </Text>
+                  <Text style={[S.cellValue, col(25), { fontWeight: 'normal', fontSize: 7, color: '#4b5563', borderRightWidth: 0.5, borderRightColor: '#444' }]}>
+                    {i.observacion ?? '—'}
+                  </Text>
+                  <Text style={[S.cellValue, col(16), { textAlign: 'center', fontSize: 6.5, fontWeight: 'normal', color: a > 0 && d > 0 ? '#166534' : a + d > 0 ? '#92400e' : '#9ca3af' }]}>
+                    {a + d === 0 ? 'sin fotos' : `A:${a} / D:${d}${ficha ? `\nFicha ${ficha}` : ''}`}
+                  </Text>
+                </View>
+              )
+            })}
           </View>
         ))}
 
         {reporte.observacion && (<>
-          <Text style={S.sectionTitle}>OBSERVACIÓN GENERAL</Text>
+          <Text style={S.sectionTitle}>OBSERVACIÓN GENERAL DEL SERVICIO</Text>
           <Text style={S.obsBox}>{reporte.observacion}</Text>
         </>)}
 
         {fotos.length > 0 && (<>
-          <Text style={S.sectionTitle}>REGISTRO FOTOGRÁFICO — TÉCNICO EJECUTOR</Text>
+          <Text style={S.sectionTitle}>REGISTRO FOTOGRÁFICO COMPLEMENTARIO</Text>
           <View style={S.fotosWrap}>
             {fotos.map((u, i) => <Image key={i} src={u} style={S.foto} />)}
           </View>
-        </>)}
-
-        {/* [MIG265] Antes y después de cada actividad. Es la evidencia que
-            respalda el trabajo ante el mandante; antes no salía en el informe. */}
-        {conAntesDespues.length > 0 && (<>
-          <Text style={S.sectionTitle}>EVIDENCIA POR ACTIVIDAD — ANTES Y DESPUÉS</Text>
-          {conAntesDespues.map((i) => (
-            <View key={`ad-${i.id}`} style={{ marginBottom: 6 }} wrap={false}>
-              <Text style={{ fontSize: 7.5, fontWeight: 'bold', color: '#374151' }}>
-                {i.item?.codigo ? `${i.item.codigo} · ` : ''}{i.item?.descripcion ?? ''}
-              </Text>
-              <View style={S.fotosWrap}>
-                {(i.fotos_antes ?? []).map((u, k) => (
-                  <View key={`a${k}`}>
-                    <Text style={{ fontSize: 6.5, color: '#6b7280', marginLeft: 4 }}>ANTES</Text>
-                    <Image src={u} style={S.foto} />
-                  </View>
-                ))}
-                {(i.fotos_despues ?? []).map((u, k) => (
-                  <View key={`d${k}`}>
-                    <Text style={{ fontSize: 6.5, color: '#6b7280', marginLeft: 4 }}>DESPUÉS</Text>
-                    <Image src={u} style={S.foto} />
-                  </View>
-                ))}
-              </View>
-            </View>
-          ))}
         </>)}
 
         <View style={S.firmasRow} wrap={false}>
@@ -321,12 +501,45 @@ export function OtMantenimiento({ reporte, items, logoUrl }: Datos) {
             {reporte.firma_mandante_url ? <Image src={reporte.firma_mandante_url} style={S.firmaImg} /> : <View style={{ height: 42 }} />}
             <View style={S.firmaLinea}>
               <Text style={S.firmaNombre}>{reporte.firmante_mandante_nombre ?? ''}</Text>
-              <Text style={S.firmaCargo}>REVISADO POR (ESM / ENEX)</Text>
+              <Text style={S.firmaCargo}>
+                REVISADO POR (ESM / ENEX)
+                {reporte.firmante_mandante_at ? `\n${fmtFecha(reporte.firmante_mandante_at)} ${fmtHora(reporte.firmante_mandante_at)}` : ''}
+              </Text>
             </View>
           </View>
         </View>
-        <Text style={S.footer}>SICOM-ICEO · Pillado y Cía. Ltda. · Contrato ENEX/ESM VA_24_068 · Documento generado automáticamente desde la ejecución en terreno</Text>
+
+        <Text style={S.footer} fixed render={({ pageNumber, totalPages }) => (
+          `SICOM-ICEO · Pillado y Cía. Ltda. · Contrato ENEX/ESM VA_24_068 · ` +
+          `${inst?.nombre ?? ''} · ${fmtFecha(reporte.fecha_ejecucion)} · Página ${pageNumber} de ${totalPages}`
+        )} />
       </Page>
+
+      {/* [MIG265] Antes y después de cada actividad: la evidencia que respalda
+          el trabajo ante el mandante. Va en páginas propias — como anexo, y
+          porque intercalarlo con el cuerpo dejaba fichas impresas en blanco. */}
+      {conAntesDespues.length > 0 && (
+        <Page size="LETTER" style={S.page}>
+          <Text style={[S.sectionTitle, { marginTop: 0 }]}>ANEXO FOTOGRÁFICO — ANTES Y DESPUÉS POR ACTIVIDAD</Text>
+          <Text style={S.nota}>
+            {inst?.nombre ?? ''} · {fmtFecha(reporte.fecha_ejecucion)} ·
+            {' '}{conAntesDespues.length} actividad{conAntesDespues.length !== 1 ? 'es' : ''} con evidencia ·
+            {' '}{cta.antes} foto(s) del antes y {cta.despues} del después, en el orden en que las capturó el
+            técnico en terreno.
+          </Text>
+          {conAntesDespues.map((i, k) => <FichaAntesDespues key={`ad-${i.id}`} it={i} n={k + 1} />)}
+          {evidenciaIncompleta.length > 0 && (
+            <Text style={[S.nota, { marginTop: 6 }]}>
+              Nota: {evidenciaIncompleta.length} actividad(es) intervenida(s) quedaron sin una de las dos
+              caras de la evidencia (antes o después).
+            </Text>
+          )}
+          <Text style={S.footer} fixed render={({ pageNumber, totalPages }) => (
+            `SICOM-ICEO · Pillado y Cía. Ltda. · Anexo fotográfico · ` +
+            `${inst?.nombre ?? ''} · ${fmtFecha(reporte.fecha_ejecucion)} · Página ${pageNumber} de ${totalPages}`
+          )} />
+        </Page>
+      )}
     </Document>
   )
 }
@@ -353,6 +566,47 @@ export async function aDataUrl(url: string | null | undefined, timeoutMs = 8000)
   } catch { return null }
 }
 
+/**
+ * Las fotos llegan del teléfono sin comprimir (~2,3 MB cada una) y una visita
+ * trae decenas: embebidas tal cual, el PDF se va sobre los 100 MB y la
+ * generación revienta antes de terminar. Se reescalan a JPEG antes de entrar.
+ */
+async function aDataUrlComprimida(
+  url: string | null | undefined, maxPx = 1100, calidad = 0.72,
+): Promise<string | null> {
+  const original = await aDataUrl(url, 15_000)
+  if (!original) return null
+  try {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const el = new window.Image()
+      el.onload = () => resolve(el)
+      el.onerror = () => reject(new Error('imagen ilegible'))
+      el.src = original
+    })
+    const escala = Math.min(1, maxPx / Math.max(img.width, img.height))
+    if (escala >= 1 && original.length < 400_000) return original
+    const cv = document.createElement('canvas')
+    cv.width = Math.round(img.width * escala)
+    cv.height = Math.round(img.height * escala)
+    const ctx = cv.getContext('2d')
+    if (!ctx) return original
+    ctx.drawImage(img, 0, 0, cv.width, cv.height)
+    return cv.toDataURL('image/jpeg', calidad)
+  } catch {
+    return original   // si el canvas falla, mejor pesada que ausente
+  }
+}
+
+/** Descarga en paralelo con tope: 40 fotos de una vez tumban el teléfono. */
+async function enLotes<T, R>(xs: T[], n: number, fn: (x: T) => Promise<R>): Promise<R[]> {
+  const out: R[] = new Array(xs.length)
+  let i = 0
+  await Promise.all(Array.from({ length: Math.min(n, xs.length) }, async () => {
+    while (i < xs.length) { const k = i++; out[k] = await fn(xs[k]) }
+  }))
+  return out
+}
+
 // Genera el informe (formato según tipo de servicio), lo sube al bucket
 // documentos/enex-informes y guarda la URL en la ejecución. Devuelve la URL.
 export async function generarYGuardarInformeEnex(ejecucionId: string): Promise<string> {
@@ -363,27 +617,47 @@ export async function generarYGuardarInformeEnex(ejecucionId: string): Promise<s
   const logoUrl = await aDataUrl(`${window.location.origin}/images/logo_empresa_2.png`)
   reporte.firma_tecnico_url = await aDataUrl(reporte.firma_tecnico_url)
   reporte.firma_mandante_url = await aDataUrl(reporte.firma_mandante_url)
+
+  // [MIG265] Las galerías también: react-pdf necesita data URLs. Se resuelven
+  // todas juntas (antes era una tras otra: con 40 fotos se iba al timeout).
+  type Slot = { set: (v: string | null) => void; url: string }
+  const slots: Slot[] = []
   for (const it of items) {
-    it.foto_url = await aDataUrl(it.foto_url)
-    // [MIG265] Las galerías también: react-pdf necesita data URLs.
-    if (it.fotos_antes?.length) {
-      it.fotos_antes = (await Promise.all(it.fotos_antes.map((u) => aDataUrl(u)))).filter(Boolean) as string[]
-    }
-    if (it.fotos_despues?.length) {
-      it.fotos_despues = (await Promise.all(it.fotos_despues.map((u) => aDataUrl(u)))).filter(Boolean) as string[]
+    if (it.foto_url) slots.push({ url: it.foto_url, set: (v) => { it.foto_url = v } })
+    for (const campo of ['fotos_antes', 'fotos_despues'] as const) {
+      const arr = it[campo]
+      if (!arr?.length) continue
+      const resueltas: (string | null)[] = new Array(arr.length)
+      arr.forEach((u, k) => slots.push({ url: u, set: (v) => { resueltas[k] = v } }))
+      // El array final se arma después de resolver todos los slots.
+      ;(it as unknown as Record<string, unknown>)[`__${campo}`] = resueltas
     }
   }
-  reporte.evidencia_urls = (await Promise.all((reporte.evidencia_urls ?? []).map((u) => aDataUrl(u))))
-    .filter(Boolean) as string[]
+  const evidResueltas: (string | null)[] = new Array((reporte.evidencia_urls ?? []).length)
+  ;(reporte.evidencia_urls ?? []).forEach((u, k) => slots.push({ url: u, set: (v) => { evidResueltas[k] = v } }))
+
+  await enLotes(slots, 5, async (s) => s.set(await aDataUrlComprimida(s.url)))
+
+  for (const it of items) {
+    for (const campo of ['fotos_antes', 'fotos_despues'] as const) {
+      const pend = (it as unknown as Record<string, unknown>)[`__${campo}`] as (string | null)[] | undefined
+      if (pend) {
+        it[campo] = pend.filter(Boolean) as string[]
+        delete (it as unknown as Record<string, unknown>)[`__${campo}`]
+      }
+    }
+  }
+  reporte.evidencia_urls = evidResueltas.filter(Boolean) as string[]
 
   const esCalibracion = reporte.programacion?.tipo_servicio === 'calibracion'
   const doc = esCalibracion
     ? <CertificadoCalibracion reporte={reporte} items={items} logoUrl={logoUrl ?? ''} />
     : <OtMantenimiento reporte={reporte} items={items} logoUrl={logoUrl ?? ''} />
   // Timeout de seguridad: si react-pdf se cuelga, avisar en vez de esperar eterno.
+  // Un anexo de decenas de fotos toma su tiempo, de ahí el margen amplio.
   const blob = await Promise.race([
     pdf(doc).toBlob(),
-    new Promise<never>((_, rej) => setTimeout(() => rej(new Error('La generación del PDF tardó demasiado — reintenta')), 45_000)),
+    new Promise<never>((_, rej) => setTimeout(() => rej(new Error('La generación del PDF tardó demasiado — reintenta')), 120_000)),
   ])
 
   const fecha = (reporte.fecha_ejecucion ?? new Date().toISOString()).slice(0, 10)

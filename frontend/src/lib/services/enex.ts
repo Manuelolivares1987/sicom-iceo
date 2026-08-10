@@ -580,10 +580,12 @@ export type EnexReporteItem = {
   fotos_despues: string[] | null
   observacion: string | null
   item: {
+    id?: string
     bloque: string | null; bloque_orden: number | null; orden: number | null
     codigo: string | null; descripcion: string; tipo_campo: string | null
     unidad: string | null; valor_referencia: string | null
     tolerancia_min: number | null; tolerancia_max: number | null
+    periodicidad?: string | null; critico?: boolean | null; requiere_foto?: boolean | null
   } | null
 }
 
@@ -600,6 +602,11 @@ export type EnexReporte = {
   firma_mandante_url: string | null
   firmante_mandante_nombre: string | null
   firmante_mandante_at: string | null
+  // [MIG265] Tiempo real medido por la app de terreno.
+  inicio_at: string | null
+  fin_at: string | null
+  duracion_segundos: number | null
+  pauta_id: string | null
   programacion: {
     tipo_servicio: string
     fecha_programada: string | null
@@ -614,7 +621,9 @@ export type EnexReporte = {
   pauta: { codigo: string | null; nombre: string; tipo_servicio: string | null; version: number | null } | null
 }
 
-export async function getEjecucionReporte(id: string): Promise<{ reporte: EnexReporte | null; items: EnexReporteItem[] }> {
+export async function getEjecucionReporte(id: string): Promise<{
+  reporte: EnexReporte | null; items: EnexReporteItem[]
+}> {
   const { data, error } = await supabase
     .from('enex_ejecuciones')
     .select(`*,
@@ -630,13 +639,15 @@ export async function getEjecucionReporte(id: string): Promise<{ reporte: EnexRe
     .from('enex_ejecucion_items')
     .select(`id, resultado, valor_medicion, dentro_tolerancia, foto_url, observacion,
       fotos_antes, fotos_despues,
-      item:enex_pauta_items(bloque, bloque_orden, orden, codigo, descripcion, tipo_campo,
-        unidad, valor_referencia, tolerancia_min, tolerancia_max)`)
+      item:enex_pauta_items(id, bloque, bloque_orden, orden, codigo, descripcion, tipo_campo,
+        unidad, valor_referencia, tolerancia_min, tolerancia_max, periodicidad, critico, requiere_foto)`)
     .eq('ejecucion_id', id)
   if (e2) throw e2
-  return {
-    reporte: data as unknown as EnexReporte,
-    items: ((items ?? []) as unknown as EnexReporteItem[]).sort((a, b) =>
-      (a.item?.bloque_orden ?? 99) - (b.item?.bloque_orden ?? 99) || (a.item?.orden ?? 999) - (b.item?.orden ?? 999)),
-  }
+
+  // El informe refleja lo que hicieron en terreno: los ítems de la pauta que no
+  // se tocaron no van al documento del mandante.
+  const ejecutados = ((items ?? []) as unknown as EnexReporteItem[]).sort((a, b) =>
+    (a.item?.bloque_orden ?? 99) - (b.item?.bloque_orden ?? 99) || (a.item?.orden ?? 999) - (b.item?.orden ?? 999))
+
+  return { reporte: data as unknown as EnexReporte, items: ejecutados }
 }

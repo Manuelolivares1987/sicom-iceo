@@ -25,6 +25,22 @@ function fechaCL(iso: string | null): string {
   return `${d}-${m}-${y}`
 }
 
+function duracionCL(seg: number | null): string {
+  if (!seg || seg <= 0) return '—'
+  const h = Math.floor(seg / 3600), m = Math.round((seg % 3600) / 60)
+  return h > 0 ? `${h} h ${String(m).padStart(2, '0')} min` : `${m} min`
+}
+
+const nAntes = (i: EnexReporteItem) => i.fotos_antes?.length ?? 0
+const nDespues = (i: EnexReporteItem) => i.fotos_despues?.length ?? 0
+
+/** Los datos del servicio (bloque 0) no son actividades intervenidas. */
+const esActividad = (i: EnexReporteItem): boolean => {
+  const b = i.item?.bloque ?? ''
+  const cod = i.item?.codigo ?? ''
+  return !b.startsWith('0.') && !cod.startsWith('DS.') && !cod.startsWith('FOT.')
+}
+
 export default function EnexReportePage() {
   const params = useParams()
   const ejecId = params?.id as string
@@ -66,6 +82,12 @@ export default function EnexReportePage() {
     return g
   }, [items])
 
+  // Evidencia por actividad: la ficha se numera una vez y la tabla la cita.
+  const conAntesDespues = useMemo(
+    () => items.filter((i) => esActividad(i) && (nAntes(i) > 0 || nDespues(i) > 0)), [items])
+  const fichaDe = useMemo(
+    () => new Map(conAntesDespues.map((i, k) => [i.id, k + 1])), [conAntesDespues])
+
   if (sesionOk === null) return <div className="py-20 text-center text-gray-400">Verificando acceso…</div>
   if (sesionOk === false) {
     return (
@@ -86,7 +108,17 @@ export default function EnexReportePage() {
   const inst = reporte.programacion?.instalacion
   const periodo = reporte.programacion
     ? `${MESES[(reporte.programacion.periodo_mes ?? 1) - 1]} ${reporte.programacion.periodo_anio}` : '—'
-  const noOk = items.filter((i) => i.resultado === 'no_ok' || i.resultado === 'no' || i.dentro_tolerancia === false).length
+  const actividades = items.filter(esActividad)
+  const noOkItems = actividades.filter(
+    (i) => i.resultado === 'no_ok' || i.resultado === 'no' || i.dentro_tolerancia === false)
+  const noOk = noOkItems.length
+  const cta = {
+    ejecutadas: actividades.length,
+    ok: actividades.filter((i) => i.resultado === 'ok' || i.resultado === 'si').length,
+    na: actividades.filter((i) => i.resultado === 'na').length,
+    antes: actividades.reduce((s, i) => s + nAntes(i), 0),
+    despues: actividades.reduce((s, i) => s + nDespues(i), 0),
+  }
 
   return (
     <div className="mx-auto max-w-3xl bg-white p-6 print:max-w-full print:p-0">
@@ -132,6 +164,7 @@ export default function EnexReportePage() {
           <div><span className="text-gray-500">Pauta:</span> <b>{reporte.pauta?.codigo ?? '—'} v{reporte.pauta?.version ?? 1}</b></div>
           <div><span className="text-gray-500">Fecha de ejecución:</span> <b>{fechaCL(reporte.fecha_ejecucion)}</b></div>
           <div><span className="text-gray-500">Técnico:</span> <b>{reporte.tecnico_nombre ?? reporte.ejecutor ?? '—'}</b></div>
+          <div><span className="text-gray-500">Duración en terreno:</span> <b>{duracionCL(reporte.duracion_segundos)}</b></div>
           <div>
             <span className="text-gray-500">Resultado:</span>{' '}
             <b className={noOk > 0 ? 'text-red-700' : 'text-green-700'}>
@@ -139,6 +172,41 @@ export default function EnexReportePage() {
             </b>
           </div>
         </div>
+
+        {/* Resumen: cuánto se intervino y con cuánta evidencia se respalda */}
+        <div className="mt-4 grid grid-cols-3 gap-2 sm:grid-cols-6">
+          {[
+            { n: cta.ejecutadas, l: 'Actividades intervenidas', c: 'text-gray-900' },
+            { n: cta.ok, l: 'Conformes', c: 'text-green-700' },
+            { n: noOk, l: 'No conformes', c: noOk > 0 ? 'text-red-700' : 'text-gray-900' },
+            { n: cta.na, l: 'No aplica', c: 'text-gray-500' },
+            { n: cta.antes, l: 'Fotos ANTES', c: 'text-amber-700' },
+            { n: cta.despues, l: 'Fotos DESPUÉS', c: 'text-green-700' },
+          ].map((k, i) => (
+            <div key={i} className="rounded border border-gray-300 bg-gray-50 px-2 py-1.5 text-center">
+              <div className={`text-base font-bold ${k.c}`}>{k.n}</div>
+              <div className="text-[9px] leading-tight text-gray-500">{k.l}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Hallazgos no conformes arriba: es lo que dispara la siguiente OT */}
+        {noOk > 0 && (
+          <div className="mt-4 rounded border border-red-200 bg-red-50 p-3">
+            <h2 className="text-xs font-bold uppercase tracking-wide text-red-800">
+              Hallazgos no conformes ({noOk})
+            </h2>
+            <ul className="mt-1 space-y-0.5 text-[12px] text-red-900">
+              {noOkItems.map((i) => (
+                <li key={i.id}>
+                  <b>{i.item?.codigo ? `${i.item.codigo} · ` : ''}{i.item?.descripcion}</b>
+                  {' — '}{i.observacion ?? 'sin detalle registrado en terreno'}
+                  {fichaDe.get(i.id) && <span className="text-red-600"> (ficha {fichaDe.get(i.id)})</span>}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         {/* Ítems por bloque */}
         {bloques.map((b) => (
@@ -155,6 +223,14 @@ export default function EnexReportePage() {
                       <td className="py-1.5 pr-3">
                         {it.item?.descripcion}
                         {it.observacion && <div className="text-[11px] italic text-gray-500">{it.observacion}</div>}
+                      </td>
+                      <td className="w-20 py-1.5 text-right text-[10px] leading-tight">
+                        {nAntes(it) + nDespues(it) > 0 ? (
+                          <span className={nAntes(it) > 0 && nDespues(it) > 0 ? 'text-green-700' : 'text-amber-700'}>
+                            A:{nAntes(it)} / D:{nDespues(it)}
+                            {fichaDe.get(it.id) && <><br />ficha {fichaDe.get(it.id)}</>}
+                          </span>
+                        ) : esActividad(it) ? <span className="text-gray-300">sin fotos</span> : null}
                       </td>
                       <td className="w-40 py-1.5 text-right">
                         {esMedicion ? (
@@ -191,6 +267,68 @@ export default function EnexReportePage() {
             )}
           </div>
         ))}
+
+        {/* Anexo: antes y después de cada actividad intervenida */}
+        {conAntesDespues.length > 0 && (
+          <>
+            <h2 className="mt-6 border-b-2 border-gray-800 pb-1 text-sm font-bold uppercase tracking-wide">
+              Anexo fotográfico — antes y después por actividad
+            </h2>
+            <p className="mt-1 text-[11px] text-gray-500">
+              {conAntesDespues.length} actividad{conAntesDespues.length !== 1 ? 'es' : ''} con evidencia ·
+              {' '}{cta.antes} foto(s) del antes y {cta.despues} del después, en el orden en que las capturó
+              el técnico en terreno.
+            </p>
+            {conAntesDespues.map((it, k) => {
+              const malo = it.resultado === 'no_ok' || it.resultado === 'no' || it.dentro_tolerancia === false
+              return (
+                <div key={`ad-${it.id}`} className="rep-item mt-3 border border-gray-400">
+                  <div className="flex items-center gap-2 bg-gray-800 px-2 py-1 text-white">
+                    <span className="text-[11px] font-bold">N° {k + 1}</span>
+                    <span className="flex-1 text-[11px] font-bold">
+                      {it.item?.codigo ? `${it.item.codigo} · ` : ''}{it.item?.descripcion}
+                    </span>
+                    <span className={`text-[10px] font-bold ${malo ? 'text-red-300' : 'text-green-300'}`}>
+                      {it.item?.tipo_campo === 'medicion' && it.valor_medicion != null
+                        ? `${it.valor_medicion} ${it.item?.unidad ?? ''}`
+                        : (RESULTADO_LABEL[it.resultado ?? '']?.txt ?? 'SIN ESTADO')}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2">
+                    {([['ANTES', it.fotos_antes ?? [], 'A'], ['DESPUÉS', it.fotos_despues ?? [], 'D']] as const).map(
+                      ([tag, fotos, pre]) => (
+                        <div key={tag} className={pre === 'A' ? 'border-r border-gray-400 p-2' : 'p-2'}>
+                          <div className={`mb-1.5 rounded px-2 py-0.5 text-center text-[10px] font-bold ${
+                            pre === 'A' ? 'bg-amber-100 text-amber-800' : 'bg-green-100 text-green-800'}`}>
+                            {tag}{fotos.length > 0 ? ` — ${fotos.length} foto${fotos.length !== 1 ? 's' : ''}` : ''}
+                          </div>
+                          {fotos.length === 0 ? (
+                            <p className="py-4 text-center text-[10px] italic text-gray-400">Sin registro fotográfico</p>
+                          ) : (
+                            <div className="flex flex-wrap gap-1">
+                              {fotos.map((u, j) => (
+                                <figure key={j} className="w-[72px]">
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                                  <img src={u} alt={`${tag} ${j + 1}`}
+                                       className="h-14 w-[72px] rounded-sm border border-gray-300 object-cover" />
+                                  <figcaption className="text-center text-[8px] text-gray-400">{pre}{j + 1}</figcaption>
+                                </figure>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                  </div>
+                  {it.observacion && (
+                    <p className="border-t border-gray-300 bg-gray-50 px-2 py-1 text-[10px] text-gray-600">
+                      Observación del técnico: {it.observacion}
+                    </p>
+                  )}
+                </div>
+              )
+            })}
+          </>
+        )}
 
         {/* Evidencias generales + observación */}
         {(reporte.evidencia_urls?.length ?? 0) > 0 && (
