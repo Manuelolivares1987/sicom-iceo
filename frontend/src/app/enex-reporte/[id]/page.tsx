@@ -9,10 +9,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { Printer } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
-import {
-  getEjecucionReporte, MESES,
-  type EnexReporte, type EnexReporteItem, type EnexItemSinRegistro,
-} from '@/lib/services/enex'
+import { getEjecucionReporte, MESES, type EnexReporte, type EnexReporteItem } from '@/lib/services/enex'
 
 const RESULTADO_LABEL: Record<string, { txt: string; cls: string }> = {
   ok: { txt: 'OK', cls: 'bg-green-100 text-green-700' },
@@ -50,7 +47,6 @@ export default function EnexReportePage() {
   const [sesionOk, setSesionOk] = useState<boolean | null>(null)
   const [reporte, setReporte] = useState<EnexReporte | null>(null)
   const [items, setItems] = useState<EnexReporteItem[]>([])
-  const [sinRegistro, setSinRegistro] = useState<EnexItemSinRegistro[]>([])
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -69,7 +65,7 @@ export default function EnexReportePage() {
         const r = await getEjecucionReporte(ejecId)
         if (cancel) return
         if (!r.reporte) { setError('Ejecución no encontrada'); return }
-        setReporte(r.reporte); setItems(r.items); setSinRegistro(r.sinRegistro)
+        setReporte(r.reporte); setItems(r.items)
       } catch (e) { if (!cancel) setError((e as Error).message) }
     })()
     return () => { cancel = true }
@@ -118,7 +114,6 @@ export default function EnexReportePage() {
   const noOk = noOkItems.length
   const cta = {
     ejecutadas: actividades.length,
-    total: actividades.length + sinRegistro.length,
     ok: actividades.filter((i) => i.resultado === 'ok' || i.resultado === 'si').length,
     na: actividades.filter((i) => i.resultado === 'na').length,
     antes: actividades.reduce((s, i) => s + nAntes(i), 0),
@@ -181,7 +176,7 @@ export default function EnexReportePage() {
         {/* Resumen: cuánto se intervino y con cuánta evidencia se respalda */}
         <div className="mt-4 grid grid-cols-3 gap-2 sm:grid-cols-6">
           {[
-            { n: `${cta.ejecutadas}/${cta.total}`, l: 'Actividades intervenidas', c: 'text-gray-900' },
+            { n: cta.ejecutadas, l: 'Actividades intervenidas', c: 'text-gray-900' },
             { n: cta.ok, l: 'Conformes', c: 'text-green-700' },
             { n: noOk, l: 'No conformes', c: noOk > 0 ? 'text-red-700' : 'text-gray-900' },
             { n: cta.na, l: 'No aplica', c: 'text-gray-500' },
@@ -272,30 +267,6 @@ export default function EnexReportePage() {
             )}
           </div>
         ))}
-
-        {/* Actividades de la pauta que no quedaron registradas en la visita */}
-        {sinRegistro.length > 0 && (
-          <>
-            <h2 className="mt-5 border-b border-gray-300 pb-1 text-sm font-bold uppercase tracking-wide">
-              Actividades de la pauta sin registro en esta visita ({sinRegistro.length})
-            </h2>
-            <table className="mt-1 w-full text-[11px]">
-              <tbody>
-                {sinRegistro.map((i) => (
-                  <tr key={i.id} className="rep-item border-b border-gray-100 align-top">
-                    <td className="w-14 py-1 pr-2 font-mono text-[10px] text-gray-400">{i.codigo}</td>
-                    <td className="py-1 pr-3 text-gray-600">{i.descripcion}</td>
-                    <td className="w-24 py-1 text-right text-[10px] text-gray-400">{i.periodicidad ?? '—'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <p className="mt-1 text-[10px] italic text-gray-500">
-              Pueden corresponder a otra periodicidad del plan o no aplicar a esta instalación. Se listan
-              para trazabilidad del contrato.
-            </p>
-          </>
-        )}
 
         {/* Anexo: antes y después de cada actividad intervenida */}
         {conAntesDespues.length > 0 && (

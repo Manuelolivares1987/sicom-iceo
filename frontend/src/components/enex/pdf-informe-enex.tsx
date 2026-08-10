@@ -10,10 +10,7 @@
 
 import { Document, Page, Text, View, StyleSheet, Image, pdf } from '@react-pdf/renderer'
 import { supabase } from '@/lib/supabase'
-import {
-  getEjecucionReporte,
-  type EnexReporte, type EnexReporteItem, type EnexItemSinRegistro,
-} from '@/lib/services/enex'
+import { getEjecucionReporte, type EnexReporte, type EnexReporteItem } from '@/lib/services/enex'
 
 const S = StyleSheet.create({
   page: { padding: 28, fontSize: 9, fontFamily: 'Helvetica', color: '#111827' },
@@ -129,28 +126,11 @@ const esActividad = (i: EnexReporteItem): boolean => {
   return !b.startsWith('0.') && !cod.startsWith('DS.') && !cod.startsWith('FOT.')
 }
 
-/** Lo no registrado se resume por bloque: "1.1 Revisión… (trimestral) · 1.2 …". */
-function agruparSinRegistro(xs: EnexItemSinRegistro[]): { bloque: string; texto: string }[] {
-  const g: { bloque: string; partes: string[] }[] = []
-  for (const i of xs) {
-    const b = i.bloque ?? ''
-    let x = g.find((y) => y.bloque === b)
-    if (!x) { x = { bloque: b, partes: [] }; g.push(x) }
-    x.partes.push(`${i.codigo ? i.codigo + ' ' : ''}${i.descripcion}${i.periodicidad ? ` (${i.periodicidad})` : ''}`)
-  }
-  return g.map((x) => ({ bloque: x.bloque, texto: x.partes.join('  ·  ') }))
-}
-
 const ESTADO_TXT: Record<string, string> = {
   ok: 'CONFORME', no_ok: 'NO CONFORME', na: 'NO APLICA', si: 'SÍ', no: 'NO',
 }
 
-type Datos = {
-  reporte: EnexReporte
-  items: EnexReporteItem[]
-  logoUrl: string
-  sinRegistro?: EnexItemSinRegistro[]
-}
+type Datos = { reporte: EnexReporte; items: EnexReporteItem[]; logoUrl: string }
 
 // ── Anexo: ficha de antes/después por actividad ──────────────────────────────
 // Es la evidencia con la que el mandante da el trabajo por hecho: cada punto
@@ -346,7 +326,7 @@ export function CertificadoCalibracion({ reporte, items, logoUrl }: Datos) {
 }
 
 // ── OT MANTENIMIENTO INTERMEDIO (formato Kizeo del mandante) ────────────────
-export function OtMantenimiento({ reporte, items, logoUrl, sinRegistro = [] }: Datos) {
+export function OtMantenimiento({ reporte, items, logoUrl }: Datos) {
   const inst = reporte.programacion?.instalacion
   // Bloques de pauta (excluye datos de servicio y registro fotográfico)
   const bloques: { bloque: string; items: EnexReporteItem[] }[] = []
@@ -370,7 +350,6 @@ export function OtMantenimiento({ reporte, items, logoUrl, sinRegistro = [] }: D
 
   const actividades = items.filter(esActividad)
   const cta = {
-    total: actividades.length + sinRegistro.length,
     ejecutadas: actividades.length,
     ok: actividades.filter((i) => i.resultado === 'ok' || i.resultado === 'si').length,
     noOk: actividades.filter((i) => i.resultado === 'no_ok' || i.resultado === 'no' || i.dentro_tolerancia === false).length,
@@ -426,7 +405,7 @@ export function OtMantenimiento({ reporte, items, logoUrl, sinRegistro = [] }: D
         <Text style={S.sectionTitle}>RESUMEN DE LA INTERVENCIÓN</Text>
         <View style={S.kpiRow}>
           {[
-            { n: `${cta.ejecutadas}/${cta.total}`, l: 'Actividades\nintervenidas', c: '#111827' },
+            { n: String(cta.ejecutadas), l: 'Actividades\nintervenidas', c: '#111827' },
             { n: String(cta.ok), l: 'Conformes', c: '#166534' },
             { n: String(cta.noOk), l: 'No conformes', c: cta.noOk > 0 ? '#b91c1c' : '#111827' },
             { n: String(cta.na), l: 'No aplica', c: '#6b7280' },
@@ -496,28 +475,6 @@ export function OtMantenimiento({ reporte, items, logoUrl, sinRegistro = [] }: D
             })}
           </View>
         ))}
-
-        {/* Alcance real de la visita: lo que la pauta contempla y no se registró.
-            Sin esto el informe solo muestra lo hecho y nadie puede dimensionarlo. */}
-        {sinRegistro.length > 0 && (<>
-          <Text style={S.sectionTitle}>ACTIVIDADES DE LA PAUTA SIN REGISTRO EN ESTA VISITA ({sinRegistro.length})</Text>
-          {/* Agrupadas por bloque: en línea por línea eran dos páginas enteras
-              para algo que es contexto, no el cuerpo del informe. */}
-          {agruparSinRegistro(sinRegistro).map((g, k) => (
-            <View key={`sr-${g.bloque}`} style={[S.row, k === 0 ? { borderTopWidth: 0.5, borderTopColor: '#444' } : {}]}>
-              <Text style={[S.cellLabel, col(24), { fontSize: 7, fontWeight: 'bold' }]}>
-                {(g.bloque || 'Sin bloque').replace(/^\d+\.\s*/, '')}
-              </Text>
-              <Text style={[S.cellValue, col(76), { fontSize: 7, fontWeight: 'normal', color: '#4b5563' }]}>
-                {g.texto}
-              </Text>
-            </View>
-          ))}
-          <Text style={S.nota}>
-            Pueden corresponder a otra periodicidad del plan (anual, semestral, a requerimiento) o no haber
-            aplicado a esta instalación. Se listan para trazabilidad del contrato.
-          </Text>
-        </>)}
 
         {reporte.observacion && (<>
           <Text style={S.sectionTitle}>OBSERVACIÓN GENERAL DEL SERVICIO</Text>
@@ -653,7 +610,7 @@ async function enLotes<T, R>(xs: T[], n: number, fn: (x: T) => Promise<R>): Prom
 // Genera el informe (formato según tipo de servicio), lo sube al bucket
 // documentos/enex-informes y guarda la URL en la ejecución. Devuelve la URL.
 export async function generarYGuardarInformeEnex(ejecucionId: string): Promise<string> {
-  const { reporte, items, sinRegistro } = await getEjecucionReporte(ejecucionId)
+  const { reporte, items } = await getEjecucionReporte(ejecucionId)
   if (!reporte) throw new Error('Ejecución no encontrada')
 
   // Pre-cargar imágenes como data URLs (logo, firmas, fotos de ítems, evidencias)
@@ -695,7 +652,7 @@ export async function generarYGuardarInformeEnex(ejecucionId: string): Promise<s
   const esCalibracion = reporte.programacion?.tipo_servicio === 'calibracion'
   const doc = esCalibracion
     ? <CertificadoCalibracion reporte={reporte} items={items} logoUrl={logoUrl ?? ''} />
-    : <OtMantenimiento reporte={reporte} items={items} logoUrl={logoUrl ?? ''} sinRegistro={sinRegistro} />
+    : <OtMantenimiento reporte={reporte} items={items} logoUrl={logoUrl ?? ''} />
   // Timeout de seguridad: si react-pdf se cuelga, avisar en vez de esperar eterno.
   // Un anexo de decenas de fotos toma su tiempo, de ahí el margen amplio.
   const blob = await Promise.race([

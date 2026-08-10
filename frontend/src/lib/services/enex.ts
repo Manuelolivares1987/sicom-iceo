@@ -589,18 +589,6 @@ export type EnexReporteItem = {
   } | null
 }
 
-/** Ítem de la pauta que NO quedó registrado en la visita (para la cobertura). */
-export type EnexItemSinRegistro = {
-  id: string
-  bloque: string | null
-  bloque_orden: number | null
-  orden: number | null
-  codigo: string | null
-  descripcion: string
-  periodicidad: string | null
-  critico: boolean | null
-}
-
 export type EnexReporte = {
   id: string
   estado: string
@@ -634,7 +622,7 @@ export type EnexReporte = {
 }
 
 export async function getEjecucionReporte(id: string): Promise<{
-  reporte: EnexReporte | null; items: EnexReporteItem[]; sinRegistro: EnexItemSinRegistro[]
+  reporte: EnexReporte | null; items: EnexReporteItem[]
 }> {
   const { data, error } = await supabase
     .from('enex_ejecuciones')
@@ -646,7 +634,7 @@ export async function getEjecucionReporte(id: string): Promise<{
     .eq('id', id)
     .maybeSingle()
   if (error) throw error
-  if (!data) return { reporte: null, items: [], sinRegistro: [] }
+  if (!data) return { reporte: null, items: [] }
   const { data: items, error: e2 } = await supabase
     .from('enex_ejecucion_items')
     .select(`id, resultado, valor_medicion, dentro_tolerancia, foto_url, observacion,
@@ -656,24 +644,10 @@ export async function getEjecucionReporte(id: string): Promise<{
     .eq('ejecucion_id', id)
   if (e2) throw e2
 
+  // El informe refleja lo que hicieron en terreno: los ítems de la pauta que no
+  // se tocaron no van al documento del mandante.
   const ejecutados = ((items ?? []) as unknown as EnexReporteItem[]).sort((a, b) =>
     (a.item?.bloque_orden ?? 99) - (b.item?.bloque_orden ?? 99) || (a.item?.orden ?? 999) - (b.item?.orden ?? 999))
 
-  // Cobertura de la visita: qué exigía la pauta y no quedó registrado. Sin esto
-  // el informe solo muestra lo que se hizo y el mandante no puede dimensionarlo.
-  let sinRegistro: EnexItemSinRegistro[] = []
-  const pautaId = (data as { pauta_id?: string | null }).pauta_id
-  if (pautaId) {
-    const hechos = new Set(ejecutados.map((i) => i.item?.id).filter(Boolean) as string[])
-    const { data: todos, error: e3 } = await supabase
-      .from('enex_pauta_items')
-      .select('id, bloque, bloque_orden, orden, codigo, descripcion, periodicidad, critico')
-      .eq('pauta_id', pautaId).eq('activo', true)
-    if (e3) throw e3
-    sinRegistro = ((todos ?? []) as EnexItemSinRegistro[])
-      .filter((i) => !hechos.has(i.id))
-      .sort((a, b) => (a.bloque_orden ?? 99) - (b.bloque_orden ?? 99) || (a.orden ?? 999) - (b.orden ?? 999))
-  }
-
-  return { reporte: data as unknown as EnexReporte, items: ejecutados, sinRegistro }
+  return { reporte: data as unknown as EnexReporte, items: ejecutados }
 }

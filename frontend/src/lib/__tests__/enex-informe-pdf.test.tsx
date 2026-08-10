@@ -52,22 +52,15 @@ const items: EnexReporteItem[] = [
   item({ codigo: '2.6', descripcion: 'Inspección de calefactores', resultado: 'na' }),
 ]
 
-const sinRegistro = [{
-  id: 'x1', bloque: '3. Estanques', bloque_orden: 3, orden: 1, codigo: '3.1',
-  descripcion: 'Inspección de estanque de almacenamiento', periodicidad: 'anual', critico: false,
-}]
-
 describe('informe ENEX', () => {
   it('arma la OT de mantención con el anexo de antes y después', async () => {
-    const buf = await renderToBuffer(
-      <OtMantenimiento reporte={reporte} items={items} logoUrl={PX} sinRegistro={sinRegistro} />)
+    const buf = await renderToBuffer(<OtMantenimiento reporte={reporte} items={items} logoUrl={PX} />)
     expect(buf.length).toBeGreaterThan(1000)
   }, 30_000)
 
   it('arma la OT aunque la visita no traiga ninguna foto', async () => {
     const secos = items.map((i) => ({ ...i, fotos_antes: null, fotos_despues: null }))
-    const buf = await renderToBuffer(
-      <OtMantenimiento reporte={reporte} items={secos} logoUrl={PX} sinRegistro={[]} />)
+    const buf = await renderToBuffer(<OtMantenimiento reporte={reporte} items={secos} logoUrl={PX} />)
     expect(buf.length).toBeGreaterThan(1000)
   }, 30_000)
 
