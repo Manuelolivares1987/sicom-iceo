@@ -1,0 +1,222 @@
+'use client'
+
+// Firma remota del mandante (MIG276) — página PÚBLICA, sin sesión.
+// El supervisor de ENEX recibe el link por WhatsApp o correo, revisa lo que se
+// hizo (la pauta y las fotos del antes y después) y firma con el dedo. Recién
+// con esa firma el servicio cuenta como cumplido para el contrato.
+
+import { useCallback, useEffect, useState } from 'react'
+import { useParams } from 'next/navigation'
+import { CheckCircle2, AlertTriangle, Camera, ClipboardList } from 'lucide-react'
+import { Spinner } from '@/components/ui/spinner'
+import { SignaturePad } from '@/components/ui/signature-pad'
+import { getDatosFirma, registrarFirmaRemota, type EnexFirmaDatos } from '@/lib/services/enex'
+
+const RESULTADO: Record<string, { txt: string; cls: string }> = {
+  ok: { txt: 'Conforme', cls: 'bg-green-100 text-green-700' },
+  no_ok: { txt: 'No conforme', cls: 'bg-red-100 text-red-700' },
+  na: { txt: 'No aplica', cls: 'bg-gray-100 text-gray-500' },
+  si: { txt: 'Sí', cls: 'bg-green-100 text-green-700' },
+  no: { txt: 'No', cls: 'bg-red-100 text-red-700' },
+}
+
+function fechaCL(iso?: string | null): string {
+  if (!iso) return '—'
+  const [y, m, d] = iso.slice(0, 10).split('-')
+  return `${d}-${m}-${y}`
+}
+
+const MOTIVO: Record<string, string> = {
+  no_existe: 'Este link de firma no existe. Pide uno nuevo al planificador.',
+  revocado: 'Este link fue anulado. Pide uno nuevo al planificador.',
+  vencido: 'Este link venció. Pide uno nuevo al planificador.',
+}
+
+export default function FirmaEnexPage() {
+  const params = useParams()
+  const token = params?.token as string
+  const [datos, setDatos] = useState<EnexFirmaDatos | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [nombre, setNombre] = useState('')
+  const [firma, setFirma] = useState('')
+  const [enviando, setEnviando] = useState(false)
+  const [listo, setListo] = useState(false)
+
+  const cargar = useCallback(async () => {
+    try { setDatos(await getDatosFirma(token)) }
+    catch (e) { setError((e as Error).message) }
+  }, [token])
+
+  useEffect(() => { if (token) void cargar() }, [token, cargar])
+
+  async function firmar() {
+    if (!nombre.trim()) { setError('Escribe tu nombre'); return }
+    if (!firma) { setError('Falta la firma'); return }
+    setEnviando(true); setError(null)
+    try {
+      await registrarFirmaRemota(token, nombre.trim(), firma)
+      setListo(true)
+    } catch (e) { setError((e as Error).message) } finally { setEnviando(false) }
+  }
+
+  if (!datos && !error) return <div className="py-20 text-center text-gray-400"><Spinner /></div>
+
+  if (datos && !datos.ok) {
+    return (
+      <div className="mx-auto max-w-md px-4 py-16 text-center">
+        <AlertTriangle className="mx-auto h-10 w-10 text-amber-500" />
+        <p className="mt-3 text-sm text-gray-700">{MOTIVO[datos.motivo ?? ''] ?? 'El link no es válido.'}</p>
+      </div>
+    )
+  }
+
+  if (listo || datos?.ya_firmado) {
+    return (
+      <div className="mx-auto max-w-md px-4 py-16 text-center">
+        <CheckCircle2 className="mx-auto h-12 w-12 text-green-600" />
+        <h1 className="mt-3 text-lg font-bold text-gray-800">Servicio firmado</h1>
+        <p className="mt-1 text-sm text-gray-600">
+          {datos?.instalacion} · {fechaCL(datos?.fecha)}
+        </p>
+        {(listo || datos?.firmante) && (
+          <p className="mt-3 text-xs text-gray-500">
+            Firmado por {listo ? nombre : datos?.firmante}
+            {datos?.firmado_at && !listo ? ` el ${fechaCL(datos.firmado_at)}` : ''}.
+            Ya no hace falta hacer nada más.
+          </p>
+        )}
+      </div>
+    )
+  }
+
+  const d = datos!
+  const acts = d.actividades ?? []
+  const conFotos = acts.filter((a) => (a.fotos_antes?.length ?? 0) + (a.fotos_despues?.length ?? 0) > 0)
+  const noOk = acts.filter((a) => a.resultado === 'no_ok' || a.resultado === 'no')
+  const ds = d.datos_servicio ?? {}
+
+  return (
+    <div className="mx-auto max-w-2xl px-3 py-5">
+      <div className="rounded-xl border border-gray-200 bg-white p-4">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-blue-700">
+          Recepción conforme — ENEX / ESM
+        </p>
+        <h1 className="mt-0.5 text-lg font-bold leading-tight text-gray-900">{d.instalacion}</h1>
+        <p className="text-sm text-gray-500">
+          {d.faena} · {d.tipo_servicio === 'calibracion' ? 'Calibración' : 'Mantención'} · {fechaCL(d.fecha)}
+        </p>
+        <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-gray-600">
+          {ds['DS.HORA_INI'] && <div><span className="text-gray-400">Hora inicio:</span> <b>{ds['DS.HORA_INI']}</b></div>}
+          {ds['DS.HORA_FIN'] && <div><span className="text-gray-400">Hora término:</span> <b>{ds['DS.HORA_FIN']}</b></div>}
+          {d.tecnico && <div className="col-span-2"><span className="text-gray-400">Técnico:</span> <b>{d.tecnico}</b></div>}
+          {ds['DS.RUT_TEC'] && <div className="col-span-2"><span className="text-gray-400">Ejecutores:</span> {ds['DS.RUT_TEC']}</div>}
+          {ds['DS.MOTIVO'] && <div className="col-span-2"><span className="text-gray-400">Motivo:</span> {ds['DS.MOTIVO']}</div>}
+        </div>
+      </div>
+
+      {/* Lo que se hizo */}
+      <div className="mt-3 rounded-xl border border-gray-200 bg-white p-4">
+        <h2 className="flex items-center gap-1.5 text-sm font-bold text-gray-800">
+          <ClipboardList className="h-4 w-4 text-blue-700" /> Trabajo realizado ({acts.length})
+        </h2>
+        <ul className="mt-2 space-y-1.5">
+          {acts.map((a, i) => {
+            const r = a.resultado ? RESULTADO[a.resultado] : null
+            const na = a.fotos_antes?.length ?? 0, nd = a.fotos_despues?.length ?? 0
+            return (
+              <li key={i} className="flex items-start gap-2 border-b border-gray-100 pb-1.5 text-xs">
+                <span className="font-mono text-[10px] text-gray-400">{a.codigo}</span>
+                <span className="flex-1 text-gray-700">
+                  {a.descripcion}
+                  {a.observacion && <span className="block text-[11px] italic text-gray-500">{a.observacion}</span>}
+                  {na + nd > 0 && (
+                    <span className="mt-0.5 flex items-center gap-1 text-[10px] text-gray-400">
+                      <Camera className="h-3 w-3" /> {na} antes · {nd} después
+                    </span>
+                  )}
+                </span>
+                {r && <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${r.cls}`}>{r.txt}</span>}
+              </li>
+            )
+          })}
+        </ul>
+        {noOk.length > 0 && (
+          <p className="mt-2 rounded bg-red-50 p-2 text-[11px] text-red-800">
+            <b>{noOk.length} hallazgo(s) no conforme(s):</b>{' '}
+            {noOk.map((a) => a.descripcion).join(' · ')}
+          </p>
+        )}
+        {d.observacion && (
+          <p className="mt-2 text-[11px] text-gray-600"><span className="text-gray-400">Observación:</span> {d.observacion}</p>
+        )}
+      </div>
+
+      {/* Evidencia */}
+      {conFotos.length > 0 && (
+        <div className="mt-3 rounded-xl border border-gray-200 bg-white p-4">
+          <h2 className="text-sm font-bold text-gray-800">Evidencia — antes y después</h2>
+          {conFotos.map((a, i) => (
+            <div key={i} className="mt-3">
+              <p className="text-[11px] font-semibold text-gray-700">{a.codigo} · {a.descripcion}</p>
+              <div className="mt-1 grid grid-cols-2 gap-2">
+                {([['Antes', a.fotos_antes ?? []], ['Después', a.fotos_despues ?? []]] as const).map(([tag, fotos]) => (
+                  <div key={tag}>
+                    <p className={`rounded px-1.5 py-0.5 text-center text-[10px] font-bold ${
+                      tag === 'Antes' ? 'bg-amber-100 text-amber-800' : 'bg-green-100 text-green-800'}`}>
+                      {tag} ({fotos.length})
+                    </p>
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {fotos.length === 0
+                        ? <span className="py-2 text-[10px] italic text-gray-400">sin fotos</span>
+                        : fotos.map((u, k) => (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img key={k} src={u} alt={`${tag} ${k + 1}`}
+                               onClick={() => window.open(u, '_blank')}
+                               className="h-16 w-16 cursor-zoom-in rounded border object-cover" />
+                        ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+          {(d.evidencia_urls?.length ?? 0) > 0 && (
+            <div className="mt-3">
+              <p className="text-[11px] font-semibold text-gray-700">Registro complementario</p>
+              <div className="mt-1 flex flex-wrap gap-1">
+                {(d.evidencia_urls ?? []).map((u, k) => (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img key={k} src={u} alt={`evidencia ${k + 1}`} onClick={() => window.open(u, '_blank')}
+                       className="h-16 w-16 cursor-zoom-in rounded border object-cover" />
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Firma */}
+      <div className="mt-3 rounded-xl border-2 border-blue-300 bg-white p-4">
+        <h2 className="text-sm font-bold text-gray-800">Recepción conforme</h2>
+        <p className="mt-0.5 text-[11px] text-gray-500">
+          Al firmar, das por recibido el servicio y queda cumplido para el contrato.
+        </p>
+        <input value={nombre} onChange={(e) => setNombre(e.target.value)}
+               placeholder="Tu nombre y cargo"
+               className="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
+        <div className="mt-2">
+          <SignaturePad label="Firma" onCapture={setFirma} />
+        </div>
+        {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
+        <button onClick={firmar} disabled={enviando || !nombre.trim() || !firma}
+                className="mt-3 w-full rounded-lg bg-blue-700 py-3 text-sm font-semibold text-white disabled:opacity-50">
+          {enviando ? 'Enviando…' : 'Firmar y dar por recibido'}
+        </button>
+      </div>
+
+      <p className="mt-4 text-center text-[10px] text-gray-400">
+        SICOM-ICEO · Pillado y Cía. Ltda. · Contrato ENEX/ESM
+      </p>
+    </div>
+  )
+}
