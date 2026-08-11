@@ -9,7 +9,7 @@ import Link from 'next/link'
 import { useQuery } from '@tanstack/react-query'
 import {
   ArrowLeft, ChevronLeft, ChevronRight, FileText, Printer, CheckCircle2, Clock,
-  FileSpreadsheet, X,
+  FileSpreadsheet, X, RefreshCw,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -185,9 +185,22 @@ export default function EnexInformesPage() {
                       <td className="p-2 text-center">
                         <div className="flex items-center justify-center gap-1.5">
                           {r.informe_pdf_url ? (
-                            <Button size="sm" variant="primary" onClick={() => window.open(r.informe_pdf_url!, '_blank')}>
-                              <FileSpreadsheet className="h-3.5 w-3.5 mr-1" /> PDF
-                            </Button>
+                            <>
+                              <Button size="sm" variant="primary" onClick={() => window.open(r.informe_pdf_url!, '_blank')}>
+                                <FileSpreadsheet className="h-3.5 w-3.5 mr-1" /> PDF
+                              </Button>
+                              {/* El informe se rehace cuando cambia lo que dice: al firmar el
+                                  mandante, al completar los datos del servicio o al sumar fotos.
+                                  Sin esto, el PDF guardado quedaba congelado en su primera versión. */}
+                              <button title="Rehacer el informe con los datos actuales"
+                                      disabled={generando === r.ejecucion_id}
+                                      onClick={() => generar(r)}
+                                      className="rounded border p-1.5 text-gray-400 hover:text-blue-600 disabled:opacity-50">
+                                {generando === r.ejecucion_id
+                                  ? <Spinner className="h-3.5 w-3.5" />
+                                  : <RefreshCw className="h-3.5 w-3.5" />}
+                              </button>
+                            </>
                           ) : r.ejecucion_id ? (
                             <Button size="sm" variant="outline" disabled={generando === r.ejecucion_id}
                                     onClick={() => generar(r)}>
