@@ -1,9 +1,10 @@
 'use client'
 
-// Firma remota del mandante (MIG276) — página PÚBLICA, sin sesión.
-// El supervisor de ENEX recibe el link por WhatsApp o correo, revisa lo que se
-// hizo (la pauta y las fotos del antes y después) y firma con el dedo. Recién
-// con esa firma el servicio cuenta como cumplido para el contrato.
+// Firma remota (MIG276/277) — página PÚBLICA, sin sesión.
+// El informe lleva DOS firmas y cada una tiene su propio link: la del técnico
+// que ejecutó (Pillado) y la de quien recibe conforme por ESM/ENEX. Quien abre
+// el link revisa la pauta y las fotos del antes y después, y firma con el dedo.
+// Solo la firma del mandante cierra el servicio para el contrato.
 
 import { useCallback, useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
@@ -71,10 +72,16 @@ export default function FirmaEnexPage() {
   }
 
   if (listo || datos?.ya_firmado) {
+    const esTecnico = datos?.tipo === 'tecnico'
+    // Tras firmar, decir si falta la otra parte: son dos firmas distintas y la
+    // gente asume que con la suya el informe quedó completo.
+    const faltaOtra = esTecnico ? !datos?.firma_mandante_lista : !datos?.firma_tecnico_lista
     return (
       <div className="mx-auto max-w-md px-4 py-16 text-center">
         <CheckCircle2 className="mx-auto h-12 w-12 text-green-600" />
-        <h1 className="mt-3 text-lg font-bold text-gray-800">Servicio firmado</h1>
+        <h1 className="mt-3 text-lg font-bold text-gray-800">
+          {esTecnico ? 'Firma del técnico registrada' : 'Servicio recibido conforme'}
+        </h1>
         <p className="mt-1 text-sm text-gray-600">
           {datos?.instalacion} · {fechaCL(datos?.fecha)}
         </p>
@@ -82,14 +89,21 @@ export default function FirmaEnexPage() {
           <p className="mt-3 text-xs text-gray-500">
             Firmado por {listo ? nombre : datos?.firmante}
             {datos?.firmado_at && !listo ? ` el ${fechaCL(datos.firmado_at)}` : ''}.
-            Ya no hace falta hacer nada más.
           </p>
         )}
+        <p className="mt-3 text-xs text-gray-500">
+          {faltaOtra
+            ? esTecnico
+              ? 'Falta la recepción conforme de ESM / ENEX para cerrar el servicio.'
+              : 'Falta la firma del técnico ejecutor en el informe.'
+            : 'El informe quedó con las dos firmas. No hace falta nada más.'}
+        </p>
       </div>
     )
   }
 
   const d = datos!
+  const esTecnico = d.tipo === 'tecnico'
   const acts = d.actividades ?? []
   const conFotos = acts.filter((a) => (a.fotos_antes?.length ?? 0) + (a.fotos_despues?.length ?? 0) > 0)
   const noOk = acts.filter((a) => a.resultado === 'no_ok' || a.resultado === 'no')
@@ -98,8 +112,9 @@ export default function FirmaEnexPage() {
   return (
     <div className="mx-auto max-w-2xl px-3 py-5">
       <div className="rounded-xl border border-gray-200 bg-white p-4">
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-blue-700">
-          Recepción conforme — ENEX / ESM
+        <p className={`text-[11px] font-semibold uppercase tracking-wide ${
+          esTecnico ? 'text-emerald-700' : 'text-blue-700'}`}>
+          {esTecnico ? 'Firma del técnico ejecutor — Pillado' : 'Recepción conforme — ENEX / ESM'}
         </p>
         <h1 className="mt-0.5 text-lg font-bold leading-tight text-gray-900">{d.instalacion}</h1>
         <p className="text-sm text-gray-500">
@@ -195,22 +210,38 @@ export default function FirmaEnexPage() {
         </div>
       )}
 
-      {/* Firma */}
-      <div className="mt-3 rounded-xl border-2 border-blue-300 bg-white p-4">
-        <h2 className="text-sm font-bold text-gray-800">Recepción conforme</h2>
+      {/* Firma — el texto y el peso cambian según quién esté firmando */}
+      <div className={`mt-3 rounded-xl border-2 bg-white p-4 ${
+        esTecnico ? 'border-emerald-300' : 'border-blue-300'}`}>
+        <h2 className="text-sm font-bold text-gray-800">
+          {esTecnico ? 'Firma del técnico ejecutor' : 'Recepción conforme'}
+        </h2>
         <p className="mt-0.5 text-[11px] text-gray-500">
-          Al firmar, das por recibido el servicio y queda cumplido para el contrato.
+          {esTecnico
+            ? 'Al firmar, declaras que ejecutaste este trabajo tal como quedó registrado.'
+            : 'Al firmar, das por recibido el servicio y queda cumplido para el contrato.'}
+        </p>
+        {/* Estado de la otra firma: que nadie asuma que con la suya está listo */}
+        <p className="mt-1 text-[11px] text-gray-500">
+          {esTecnico
+            ? (d.firma_mandante_lista
+                ? `ESM / ENEX ya recibió conforme${d.mandante_nombre ? ` (${d.mandante_nombre})` : ''}.`
+                : 'Después falta la recepción conforme de ESM / ENEX.')
+            : (d.firma_tecnico_lista
+                ? `El técnico ejecutor ya firmó${d.tecnico_nombre ? ` (${d.tecnico_nombre})` : ''}.`
+                : 'El técnico ejecutor todavía no firma el informe.')}
         </p>
         <input value={nombre} onChange={(e) => setNombre(e.target.value)}
-               placeholder="Tu nombre y cargo"
+               placeholder={esTecnico ? 'Tu nombre y RUT' : 'Tu nombre y cargo'}
                className="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
         <div className="mt-2">
           <SignaturePad label="Firma" onCapture={setFirma} />
         </div>
         {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
         <button onClick={firmar} disabled={enviando || !nombre.trim() || !firma}
-                className="mt-3 w-full rounded-lg bg-blue-700 py-3 text-sm font-semibold text-white disabled:opacity-50">
-          {enviando ? 'Enviando…' : 'Firmar y dar por recibido'}
+                className={`mt-3 w-full rounded-lg py-3 text-sm font-semibold text-white disabled:opacity-50 ${
+                  esTecnico ? 'bg-emerald-700' : 'bg-blue-700'}`}>
+          {enviando ? 'Enviando…' : esTecnico ? 'Firmar como ejecutor' : 'Firmar y dar por recibido'}
         </button>
       </div>
 
