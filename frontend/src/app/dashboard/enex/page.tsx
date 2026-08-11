@@ -153,6 +153,10 @@ export default function EnexControlPage() {
             {dup.isPending ? <Spinner className="h-4 w-4" /> : <Copy className="h-4 w-4 mr-1" />} Copiar mes ant.
           </Button>
           )}
+          <Button variant="outline" onClick={() => window.location.href = '/dashboard/enex/plan'}
+                  title="Plan semanal: qué se hace cada día y en qué área">
+            <CalendarDays className="h-4 w-4 mr-1" /> Plan semanal
+          </Button>
           <Button variant="outline" onClick={() => window.location.href = '/dashboard/enex/informes'}
                   title="Certificados y OT en PDF generados en terreno — búsqueda por día/mes">
             <FileSpreadsheet className="h-4 w-4 mr-1" /> Informes

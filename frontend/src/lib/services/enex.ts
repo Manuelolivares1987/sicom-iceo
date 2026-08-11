@@ -33,6 +33,8 @@ export type EnexInstalacion = {
   // Camiones / equipos (MIG234): ubicación operativa + última calibración conocida.
   ubicacion: string | null
   ultima_calibracion: string | null
+  // Agrupador operativo del punto (MIG274): "Truck Shop Lomas 1". Lo usa el plan.
+  area: string | null
   activo: boolean
   orden: number
 }
@@ -560,6 +562,145 @@ export async function getReprogramaciones(): Promise<EnexReprogramacion[]> {
 
 export async function setReprogramacionPdf(id: string, url: string) {
   const { error } = await supabase.rpc('rpc_enex_reprogramacion_set_pdf', { p_id: id, p_url: url })
+  if (error) throw error
+}
+
+// ── Plan semanal de trabajo (MIG274) ───────────────────────────────────────
+// El trabajo no se hace "toda la pauta de una vez": se reparte por día y por
+// área ("lunes 10, Lomas 2, ítems 1.1 a 1.4"). El plan organiza esa semana; el
+// KPI del contrato lo sigue midiendo la programación trimestral.
+export type EnexPlanEstado = 'borrador' | 'publicado' | 'cerrado'
+export type EnexTareaEstado = 'pendiente' | 'en_proceso' | 'hecha' | 'no_realizada'
+
+export const TAREA_ESTADO_LABEL: Record<EnexTareaEstado, string> = {
+  pendiente: 'Pendiente', en_proceso: 'En proceso', hecha: 'Hecha', no_realizada: 'No realizada',
+}
+
+export type EnexPlan = {
+  id: string
+  faena_id: string
+  semana_inicio: string
+  semana_fin: string
+  nombre: string | null
+  estado: EnexPlanEstado
+  observacion: string | null
+  created_at: string
+}
+
+export type EnexPlanTarea = {
+  id: string
+  plan_id: string
+  faena_id: string
+  faena: string
+  semana_inicio: string
+  semana_fin: string
+  plan_estado: EnexPlanEstado
+  fecha: string
+  area: string | null
+  instalacion_id: string | null
+  instalacion: string | null
+  instalacion_codigo: string | null
+  pauta_item_id: string | null
+  codigo_item: string | null
+  actividad: string | null
+  bloque: string | null
+  bloque_orden: number | null
+  periodicidad: string | null
+  tipo_campo: string | null
+  alcance: string | null
+  comentario: string | null
+  estado: EnexTareaEstado
+  ejecucion_id: string | null
+  orden: number
+}
+
+/** Lunes de la semana de una fecha (el plan se ancla al lunes). */
+export function lunesDe(iso: string): string {
+  const [y, m, d] = iso.slice(0, 10).split('-').map(Number)
+  const dt = new Date(y, m - 1, d)
+  const dow = (dt.getDay() + 6) % 7          // 0 = lunes
+  dt.setDate(dt.getDate() - dow)
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`
+}
+
+export async function getPlanSemana(faenaId: string, semana: string): Promise<EnexPlan | null> {
+  const { data, error } = await supabase.from('enex_planes').select('*')
+    .eq('faena_id', faenaId).eq('semana_inicio', lunesDe(semana)).maybeSingle()
+  if (error) throw error
+  return (data ?? null) as EnexPlan | null
+}
+
+export async function getPlanTareas(planId: string): Promise<EnexPlanTarea[]> {
+  const { data, error } = await supabase.from('v_enex_plan_tareas').select('*')
+    .eq('plan_id', planId).order('fecha').order('orden')
+  if (error) throw error
+  return (data ?? []) as EnexPlanTarea[]
+}
+
+/** Tareas de un día (terreno). Solo de planes publicados. */
+export async function getPlanTareasDia(fecha: string): Promise<EnexPlanTarea[]> {
+  const { data, error } = await supabase.from('v_enex_plan_tareas').select('*')
+    .eq('fecha', fecha).eq('plan_estado', 'publicado').order('orden')
+  if (error) throw error
+  return (data ?? []) as EnexPlanTarea[]
+}
+
+export async function crearPlan(p: {
+  faenaId: string; semana: string; nombre?: string | null; observacion?: string | null
+}) {
+  const { data, error } = await supabase.rpc('rpc_enex_plan_guardar', {
+    p_faena_id: p.faenaId, p_semana: lunesDe(p.semana),
+    p_nombre: p.nombre ?? null, p_observacion: p.observacion ?? null,
+  })
+  if (error) throw error
+  return data as { success: boolean; plan_id: string; semana_inicio: string; semana_fin: string }
+}
+
+export type EnexTareaImport = {
+  fecha: string
+  area?: string | null
+  instalacion_id?: string | null
+  codigo_item?: string | null
+  alcance?: string | null
+  comentario?: string | null
+}
+
+export async function importarPlanTareas(planId: string, tareas: EnexTareaImport[], reemplazar = true) {
+  const { data, error } = await supabase.rpc('rpc_enex_plan_importar', {
+    p_plan_id: planId, p_tareas: tareas, p_reemplazar: reemplazar,
+  })
+  if (error) throw error
+  return data as { success: boolean; tareas: number; sin_actividad: number }
+}
+
+export async function guardarPlanTarea(p: {
+  id?: string | null; planId: string; fecha: string; area?: string | null
+  instalacionId?: string | null; pautaItemId?: string | null
+  alcance?: string | null; comentario?: string | null; estado?: EnexTareaEstado | null
+}) {
+  const { data, error } = await supabase.rpc('rpc_enex_plan_tarea_guardar', {
+    p_id: p.id ?? null, p_plan_id: p.planId, p_fecha: p.fecha, p_area: p.area ?? null,
+    p_instalacion_id: p.instalacionId ?? null, p_pauta_item_id: p.pautaItemId ?? null,
+    p_alcance: p.alcance ?? null, p_comentario: p.comentario ?? null, p_estado: p.estado ?? null,
+  })
+  if (error) throw error
+  return data as { success: boolean; tarea_id: string }
+}
+
+export async function eliminarPlanTarea(id: string) {
+  const { error } = await supabase.rpc('rpc_enex_plan_tarea_eliminar', { p_id: id })
+  if (error) throw error
+}
+
+export async function cambiarEstadoPlan(planId: string, estado: EnexPlanEstado) {
+  const { error } = await supabase.rpc('rpc_enex_plan_estado', { p_plan_id: planId, p_estado: estado })
+  if (error) throw error
+}
+
+export async function avanceTarea(id: string, estado: EnexTareaEstado, ejecucionId?: string | null) {
+  const { error } = await supabase.rpc('rpc_enex_plan_tarea_avance', {
+    p_id: id, p_estado: estado, p_ejecucion_id: ejecucionId ?? null,
+  })
   if (error) throw error
 }
 
