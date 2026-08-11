@@ -43,6 +43,7 @@ export default function EnexInformesPage() {
   // Un informe con decenas de fotos tarda: sin avance visible, el que aprieta
   // el botón cree que la app se colgó y lo vuelve a apretar.
   const [avance, setAvance] = useState<string>('')
+  const [linkFirma, setLinkFirma] = useState<{ url: string; instalacion: string } | null>(null)
 
   const { data: faenas = [] } = useQuery({ queryKey: ['enex-faenas'], queryFn: getFaenas, staleTime: 5 * 60_000 })
   const { data: informes = [], isLoading, refetch } = useQuery({
@@ -91,12 +92,14 @@ export default function EnexInformesPage() {
     if (!r.ejecucion_id) return
     try {
       const url = await crearLinkFirma(r.ejecucion_id)
+      // El link queda a la vista en la pantalla, no en un diálogo del
+      // navegador: window.prompt congela la pestaña hasta que alguien lo cierra.
+      setLinkFirma({ url, instalacion: r.instalacion })
       try {
         await navigator.clipboard.writeText(url)
         toast.success('Link de firma copiado — pégalo en WhatsApp o correo')
       } catch {
-        // Sin permiso de portapapeles (o http): al menos que lo vea y lo copie.
-        window.prompt('Copia este link y mándaselo al supervisor:', url)
+        toast.success('Link de firma listo — cópialo de la barra de arriba')
       }
     } catch (e) { toast.error((e as Error).message) }
   }
@@ -162,6 +165,32 @@ export default function EnexInformesPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Link de firma recién generado, a mano para copiarlo y mandarlo */}
+      {linkFirma && (
+        <Card className="border-blue-300">
+          <CardContent className="flex flex-wrap items-center gap-2 p-3">
+            <Send className="h-4 w-4 flex-shrink-0 text-blue-700" />
+            <div className="min-w-[240px] flex-1">
+              <p className="text-xs font-semibold text-gray-700">
+                Link de firma · {linkFirma.instalacion}
+              </p>
+              <input readOnly value={linkFirma.url}
+                     onFocus={(e) => e.currentTarget.select()}
+                     className="mt-0.5 w-full rounded border bg-gray-50 px-2 py-1 font-mono text-[11px] text-gray-600" />
+            </div>
+            <Button size="sm" variant="outline"
+                    onClick={() => { void navigator.clipboard.writeText(linkFirma.url).then(
+                      () => toast.success('Copiado'), () => toast.error('Cópialo a mano')) }}>
+              Copiar
+            </Button>
+            <span className="text-[11px] text-gray-500">Vence en 30 días · sirve una sola vez</span>
+            <button onClick={() => setLinkFirma(null)} className="text-gray-400 hover:text-gray-600">
+              <X className="h-4 w-4" />
+            </button>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Lista */}
       <Card>
