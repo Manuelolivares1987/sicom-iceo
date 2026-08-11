@@ -707,12 +707,25 @@ export async function avanceTarea(id: string, estado: EnexTareaEstado, ejecucion
 // ── Firma remota del mandante (MIG276) ─────────────────────────────────────
 // El supervisor de ENEX no siempre está el día del trabajo. Se le manda un link
 // con token y firma desde donde esté; recién ahí el servicio cuenta para el KPI.
+/** El informe lleva dos firmas: el técnico que ejecutó y quien recibe por ESM. */
+export type TipoFirma = 'tecnico' | 'mandante'
+
+export const FIRMA_LABEL: Record<TipoFirma, string> = {
+  tecnico: 'Técnico ejecutor (Pillado)',
+  mandante: 'Recepción ESM / ENEX',
+}
+
 export type EnexFirmaDatos = {
   ok: boolean
   motivo?: 'no_existe' | 'revocado' | 'vencido'
+  tipo?: TipoFirma
   ya_firmado?: boolean
   firmante?: string | null
   firmado_at?: string | null
+  firma_tecnico_lista?: boolean
+  firma_mandante_lista?: boolean
+  tecnico_nombre?: string | null
+  mandante_nombre?: string | null
   fecha?: string | null
   ot_numero?: string | null
   observacion?: string | null
@@ -732,9 +745,11 @@ export type EnexFirmaDatos = {
   datos_servicio?: Record<string, string>
 }
 
-/** Crea (o reusa) el link de firma de un servicio. Devuelve la URL completa. */
-export async function crearLinkFirma(ejecucionId: string): Promise<string> {
-  const { data, error } = await supabase.rpc('rpc_enex_firma_link', { p_ejecucion_id: ejecucionId })
+/** Crea (o reusa) el link de firma de un servicio, por firmante. */
+export async function crearLinkFirma(ejecucionId: string, tipo: TipoFirma): Promise<string> {
+  const { data, error } = await supabase.rpc('rpc_enex_firma_link', {
+    p_ejecucion_id: ejecucionId, p_tipo: tipo,
+  })
   if (error) throw error
   const { token } = data as { token: string }
   return `${window.location.origin}/firma-enex/${token}`
@@ -753,8 +768,10 @@ export async function registrarFirmaRemota(token: string, nombre: string, firmaD
   if (error) throw error
 }
 
-export async function revocarLinkFirma(ejecucionId: string) {
-  const { error } = await supabase.rpc('rpc_enex_firma_revocar', { p_ejecucion_id: ejecucionId })
+export async function revocarLinkFirma(ejecucionId: string, tipo?: TipoFirma) {
+  const { error } = await supabase.rpc('rpc_enex_firma_revocar', {
+    p_ejecucion_id: ejecucionId, p_tipo: tipo ?? null,
+  })
   if (error) throw error
 }
 
