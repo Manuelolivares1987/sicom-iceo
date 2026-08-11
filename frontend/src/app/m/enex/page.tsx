@@ -9,10 +9,12 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Building2, ChevronRight, ChevronLeft, CheckCircle2, Clock, RefreshCw, AlertTriangle,
   WifiOff, CloudOff, Download, Fuel, Droplets, Repeat, Check, CalendarDays, Sun,
+  ClipboardList,
 } from 'lucide-react'
 import { Spinner } from '@/components/ui/spinner'
 import {
-  MESES, TIPO_INSTALACION_LABEL, MUNDO_LABEL, mundoDeLinea, type Mundo, type EnexPendiente,
+  MESES, TIPO_INSTALACION_LABEL, MUNDO_LABEL, mundoDeLinea, getPlanTareasDia,
+  type Mundo, type EnexPendiente, type EnexPlanTarea,
 } from '@/lib/services/enex'
 import { getPendientesOffline, prepararEnexOffline, getEnexPendingCount, syncEnexPending, ultimaDescargaEnex } from '@/lib/offline/enex-offline'
 import { useNetworkStatus } from '@/hooks/use-calama-offline'
@@ -98,6 +100,13 @@ export default function EnexTerrenoHome() {
     queryKey: ['enex-pending-count'], queryFn: getEnexPendingCount, networkMode: 'always', refetchInterval: 4000,
   })
 
+  // [MIG274] Plan del día: qué actividades tocan hoy y en qué área. Requiere
+  // señal — sin ella queda la agenda por fecha programada, que sí va offline.
+  const { data: planHoy = [] } = useQuery({
+    queryKey: ['enex-plan-dia', hoyISO], queryFn: () => getPlanTareasDia(hoyISO),
+    enabled: !!hoyISO, staleTime: 60_000, retry: false,
+  })
+
   // Sincroniza al recuperar conexión
   useEffect(() => {
     const trySync = async () => {
@@ -139,6 +148,29 @@ export default function EnexTerrenoHome() {
   const diasVisibles = useMemo(
     () => (vista === 'hoy' ? porDia.filter((d) => d.fecha === hoyISO) : porDia),
     [porDia, vista, hoyISO])
+
+  // El plan del día agrupado por área, con el punto y los códigos que tocan.
+  // Cada grupo apunta al servicio del punto para poder ejecutarlo de una.
+  const planPorArea = useMemo(() => {
+    const grupos: { clave: string; area: string; tareas: EnexPlanTarea[] }[] = []
+    for (const t of planHoy) {
+      const clave = `${t.area ?? ''}|${t.instalacion_id ?? ''}`
+      let g = grupos.find((x) => x.clave === clave)
+      if (!g) { g = { clave, area: t.area || t.instalacion || 'Sin área', tareas: [] }; grupos.push(g) }
+      g.tareas.push(t)
+    }
+    return grupos.map((g) => {
+      // El punto exacto si el plan lo fijó; si no, los del área que estén
+      // programados este período (el técnico elige en cuál trabaja).
+      const instId = g.tareas.find((t) => t.instalacion_id)?.instalacion_id ?? null
+      const candidatos = instId
+        ? pend.filter((p) => p.instalacion_id === instId)
+        : pend.filter((p) => p.tipo_servicio === 'mantencion' &&
+            g.tareas.some((t) => t.area && p.instalacion.toLowerCase().includes(t.area.toLowerCase().replace('truck shop ', ''))))
+      const codigos = Array.from(new Set(g.tareas.map((t) => t.codigo_item).filter(Boolean) as string[]))
+      return { ...g, candidatos, codigos }
+    })
+  }, [planHoy, pend])
 
   const pendHoy = useMemo(
     () => pendMundo.filter((p) => !p.cumplida && p.fecha_programada?.slice(0, 10) === hoyISO).length,
@@ -234,6 +266,52 @@ export default function EnexTerrenoHome() {
           <button onClick={() => cambiarMes(-1)} className="rounded-lg border bg-white px-2 py-1.5"><ChevronLeft className="h-4 w-4" /></button>
           <span className="min-w-[120px] text-center text-sm font-semibold">{MESES[mes - 1]} {anio}</span>
           <button onClick={() => cambiarMes(1)} className="rounded-lg border bg-white px-2 py-1.5"><ChevronRight className="h-4 w-4" /></button>
+        </div>
+      )}
+
+      {/* [MIG274] Plan del día publicado por el planificador */}
+      {vista === 'hoy' && planPorArea.length > 0 && (
+        <div className="rounded-xl border-2 border-emerald-300 bg-emerald-50/60 p-2.5">
+          <div className="flex items-center gap-1.5">
+            <ClipboardList className="h-4 w-4 text-emerald-700" />
+            <p className="text-sm font-bold text-emerald-900">Plan de hoy</p>
+            <span className="ml-auto text-[11px] text-emerald-700">{planHoy.length} actividades</span>
+          </div>
+          <div className="mt-2 space-y-2">
+            {planPorArea.map((g) => (
+              <div key={g.clave} className="rounded-lg border border-emerald-200 bg-white p-2">
+                <p className="text-xs font-bold text-gray-800">{g.area}</p>
+                {g.tareas[0]?.alcance && <p className="text-[11px] text-gray-500">{g.tareas[0].alcance}</p>}
+                <ul className="mt-1 space-y-0.5">
+                  {g.tareas.map((t) => (
+                    <li key={t.id} className="flex items-start gap-1.5 text-[11px] text-gray-600">
+                      <span className="font-mono text-gray-400">{t.codigo_item}</span>
+                      <span className="flex-1">{t.actividad ?? '—'}</span>
+                      {t.estado === 'hecha' && <CheckCircle2 className="h-3 w-3 flex-shrink-0 text-green-600" />}
+                    </li>
+                  ))}
+                </ul>
+                {g.tareas[0]?.comentario && (
+                  <p className="mt-1 text-[10px] italic text-gray-500">{g.tareas[0].comentario}</p>
+                )}
+                {/* Un botón por punto candidato: entra al servicio ya filtrado
+                    a las actividades del plan, sin pasar por toda la pauta. */}
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                  {g.candidatos.length === 0 ? (
+                    <span className="text-[10px] text-amber-700">
+                      Sin servicio programado este mes para este punto — avisa al planificador
+                    </span>
+                  ) : g.candidatos.map((p) => (
+                    <Link key={p.programacion_id}
+                          href={`/m/enex/${p.programacion_id}?items=${encodeURIComponent(g.codigos.join(','))}`}
+                          className="rounded-lg bg-emerald-600 px-2.5 py-1.5 text-[11px] font-semibold text-white active:bg-emerald-700">
+                      {p.instalacion} <ChevronRight className="inline h-3 w-3" />
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

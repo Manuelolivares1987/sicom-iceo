@@ -11,10 +11,10 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
-import { useParams, useRouter } from 'next/navigation'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import {
   ArrowLeft, Camera, Check, X, Minus, CheckCircle2, Loader2, Ruler, AlertTriangle, Repeat,
-  ChevronDown, ChevronRight, Timer, Plus, Trash2, WifiOff, Save,
+  ChevronDown, ChevronRight, Timer, Plus, Trash2, WifiOff, Save, ClipboardList,
 } from 'lucide-react'
 import { Spinner } from '@/components/ui/spinner'
 import { Button } from '@/components/ui/button'
@@ -105,6 +105,7 @@ function hhmmss(seg: number): string {
 
 export default function EnexEjecutarPage() {
   const params = useParams()
+  const search = useSearchParams()
   const router = useRouter()
   const toast = useToast()
   const qc = useQueryClient()
@@ -275,15 +276,28 @@ export default function EnexEjecutarPage() {
     return () => { if (draftTimer.current) clearTimeout(draftTimer.current) }
   }, [estado, otNumero, obs, firmante, inicioAt, cargado, progId])
 
+  // [MIG274] Se entra desde el plan del día con las actividades que tocan
+  // (?items=1.1,1.2). Se muestran solo esas, más los datos del servicio, que
+  // hay que llenar igual. Un toque y se ve la pauta entera.
+  const codigosPlan = useMemo(() => {
+    const raw = search?.get('items') ?? ''
+    return raw ? raw.split(',').map((s) => s.trim()).filter(Boolean) : []
+  }, [search])
+  const [soloPlan, setSoloPlan] = useState(true)
+  const filtroActivo = codigosPlan.length > 0 && soloPlan
+
   const grupos = useMemo(() => {
+    const visibles = filtroActivo
+      ? items.filter((it) => esDatoServicio(it) || codigosPlan.includes((it.codigo ?? '').trim()))
+      : items
     const g: { bloque: string; items: EnexPautaItem[] }[] = []
-    for (const it of items) {
+    for (const it of visibles) {
       let x = g.find((y) => y.bloque === it.bloque)
       if (!x) { x = { bloque: it.bloque, items: [] }; g.push(x) }
       x.items.push(it)
     }
     return g
-  }, [items])
+  }, [items, filtroActivo, codigosPlan])
 
   const upd = useCallback((id: string, patch: Partial<Estado>) => {
     arrancarCrono()
@@ -480,6 +494,22 @@ export default function EnexEjecutarPage() {
         <div className="flex items-start gap-2 rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-800">
           <Repeat className="mt-0.5 h-4 w-4 flex-shrink-0" />
           <span><b>Este servicio es un RECOBRO.</b> Ya se atendió/calibró este punto en el trimestre; esta repetición se factura como adicional a ENEX.</span>
+        </div>
+      )}
+
+      {/* [MIG274] Se entró desde el plan del día: a la vista solo lo que toca. */}
+      {codigosPlan.length > 0 && (
+        <div className="flex items-start gap-2 rounded-xl border border-emerald-300 bg-emerald-50 p-2.5 text-xs text-emerald-900">
+          <ClipboardList className="mt-0.5 h-4 w-4 flex-shrink-0" />
+          <span className="flex-1">
+            {soloPlan
+              ? <>Estás viendo las <b>{codigosPlan.length} actividades del plan de hoy</b> ({codigosPlan.join(', ')}).</>
+              : <>Viendo la pauta completa. El plan de hoy son {codigosPlan.length} actividades.</>}
+          </span>
+          <button onClick={() => setSoloPlan((v) => !v)}
+                  className="rounded-lg border border-emerald-400 bg-white px-2 py-1 font-semibold text-emerald-700">
+            {soloPlan ? 'Ver toda la pauta' : 'Solo el plan'}
+          </button>
         </div>
       )}
 
