@@ -80,6 +80,10 @@ export type EnexPanelRow = {
   firmante_mandante_at: string | null
   cumplida: boolean
   informe_pdf_url: string | null
+  // [MIG278] La otra firma del informe: la del ejecutor de Pillado. `cumplida`
+  // sigue siendo la del mandante, que es la que vale para el KPI.
+  firma_tecnico_lista: boolean | null
+  tecnico_nombre: string | null
 }
 
 export type EnexKpi = {

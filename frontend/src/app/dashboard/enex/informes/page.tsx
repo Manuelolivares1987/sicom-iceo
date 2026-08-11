@@ -252,10 +252,27 @@ export default function EnexInformesPage() {
                       <td className="p-2">{r.tipo_servicio === 'calibracion' ? 'Calibración' : 'Mantención'}</td>
                       <td className="p-2 font-mono text-xs">{r.ot_numero ?? '—'}</td>
                       <td className="p-2 text-gray-600">{r.ejecutor ?? '—'}</td>
+                      {/* Son DOS firmas: decir cuál falta, no un "Falta firma"
+                          a secas que deja al planificador adivinando. */}
                       <td className="p-2 text-center">
-                        {r.cumplida
-                          ? <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-[11px] font-semibold text-green-700"><CheckCircle2 className="h-3 w-3" /> Cumplida</span>
-                          : <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800"><Clock className="h-3 w-3" /> Falta firma</span>}
+                        {r.cumplida ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-[11px] font-semibold text-green-700">
+                            <CheckCircle2 className="h-3 w-3" /> Cumplida
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800">
+                            <Clock className="h-3 w-3" />
+                            {r.firma_tecnico_lista ? 'Falta firma ESM' : 'Faltan las 2 firmas'}
+                          </span>
+                        )}
+                        {r.firma_tecnico_lista && (
+                          <span className="mt-0.5 block text-[10px] text-gray-400">
+                            técnico firmó{r.tecnico_nombre ? `: ${r.tecnico_nombre.split(',')[0]}` : ''}
+                          </span>
+                        )}
+                        {r.cumplida && !r.firma_tecnico_lista && (
+                          <span className="mt-0.5 block text-[10px] text-amber-700">falta firma del técnico</span>
+                        )}
                       </td>
                       <td className="p-2 text-center">
                         <div className="flex items-center justify-center gap-1.5">
