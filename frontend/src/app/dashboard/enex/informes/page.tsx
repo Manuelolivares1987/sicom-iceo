@@ -9,7 +9,7 @@ import Link from 'next/link'
 import { useQuery } from '@tanstack/react-query'
 import {
   ArrowLeft, ChevronLeft, ChevronRight, FileText, Printer, CheckCircle2, Clock,
-  FileSpreadsheet, X, RefreshCw,
+  FileSpreadsheet, X, RefreshCw, Send,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -18,7 +18,7 @@ import { Spinner } from '@/components/ui/spinner'
 import { useToast } from '@/contexts/toast-context'
 import { useRequireAuth } from '@/hooks/use-require-auth'
 import {
-  getFaenas, getInformesMes, MESES,
+  getFaenas, getInformesMes, MESES, crearLinkFirma,
   type EnexPanelRow, type TipoServicio,
 } from '@/lib/services/enex'
 import { generarYGuardarInformeEnex } from '@/components/enex/pdf-informe-enex'
@@ -80,6 +80,25 @@ export default function EnexInformesPage() {
       window.open(url, '_blank')
       refetch()
     } catch (e) { toast.error((e as Error).message) } finally { setGenerando(null); setAvance('') }
+  }
+
+  /**
+   * El supervisor de ENEX no siempre está el día del trabajo: se le manda un
+   * link y firma desde donde esté. El link se copia al portapapeles listo para
+   * pegar en WhatsApp o correo.
+   */
+  async function enviarAFirmar(r: EnexPanelRow) {
+    if (!r.ejecucion_id) return
+    try {
+      const url = await crearLinkFirma(r.ejecucion_id)
+      try {
+        await navigator.clipboard.writeText(url)
+        toast.success('Link de firma copiado — pégalo en WhatsApp o correo')
+      } catch {
+        // Sin permiso de portapapeles (o http): al menos que lo vea y lo copie.
+        window.prompt('Copia este link y mándaselo al supervisor:', url)
+      }
+    } catch (e) { toast.error((e as Error).message) }
   }
 
   return (
@@ -208,6 +227,14 @@ export default function EnexInformesPage() {
                               {generando === r.ejecucion_id ? (avance || 'Generando…') : 'Generar'}
                             </Button>
                           ) : null}
+                          {/* Falta la firma del mandante: se le manda el link */}
+                          {r.ejecucion_id && !r.cumplida && (
+                            <button title="Enviar link para que el mandante firme a distancia"
+                                    onClick={() => enviarAFirmar(r)}
+                                    className="rounded border border-blue-300 bg-blue-50 p-1.5 text-blue-700 hover:bg-blue-100">
+                              <Send className="h-3.5 w-3.5" />
+                            </button>
+                          )}
                           {r.ejecucion_id && (
                             <button title="Vista imprimible" onClick={() => window.open(`/enex-reporte/${r.ejecucion_id}`, '_blank')}
                                     className="rounded border p-1.5 text-gray-400 hover:text-gray-600">
