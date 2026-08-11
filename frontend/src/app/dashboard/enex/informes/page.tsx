@@ -40,6 +40,9 @@ export default function EnexInformesPage() {
   const [dia, setDia] = useState<string>('')          // yyyy-mm-dd opcional
   const [buscar, setBuscar] = useState('')
   const [generando, setGenerando] = useState<string | null>(null)
+  // Un informe con decenas de fotos tarda: sin avance visible, el que aprieta
+  // el botón cree que la app se colgó y lo vuelve a apretar.
+  const [avance, setAvance] = useState<string>('')
 
   const { data: faenas = [] } = useQuery({ queryKey: ['enex-faenas'], queryFn: getFaenas, staleTime: 5 * 60_000 })
   const { data: informes = [], isLoading, refetch } = useQuery({
@@ -69,12 +72,14 @@ export default function EnexInformesPage() {
   async function generar(r: EnexPanelRow) {
     if (!r.ejecucion_id) return
     setGenerando(r.ejecucion_id)
+    setAvance('')
     try {
-      const url = await generarYGuardarInformeEnex(r.ejecucion_id)
+      const url = await generarYGuardarInformeEnex(r.ejecucion_id, (hechas, total) =>
+        setAvance(`${hechas}/${total} fotos`))
       toast.success('Informe PDF generado')
       window.open(url, '_blank')
       refetch()
-    } catch (e) { toast.error((e as Error).message) } finally { setGenerando(null) }
+    } catch (e) { toast.error((e as Error).message) } finally { setGenerando(null); setAvance('') }
   }
 
   return (
@@ -187,7 +192,7 @@ export default function EnexInformesPage() {
                             <Button size="sm" variant="outline" disabled={generando === r.ejecucion_id}
                                     onClick={() => generar(r)}>
                               {generando === r.ejecucion_id ? <Spinner className="h-3.5 w-3.5 mr-1" /> : <FileSpreadsheet className="h-3.5 w-3.5 mr-1" />}
-                              Generar
+                              {generando === r.ejecucion_id ? (avance || 'Generando…') : 'Generar'}
                             </Button>
                           ) : null}
                           {r.ejecucion_id && (
