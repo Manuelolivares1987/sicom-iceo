@@ -566,50 +566,92 @@ export async function aDataUrl(url: string | null | undefined, timeoutMs = 8000)
   } catch { return null }
 }
 
+/** Bytes reales de un data URL (base64 infla ~4/3). */
+const pesoDataUrl = (s: string) => Math.round((s.length - (s.indexOf(',') + 1)) * 0.75)
+
 /**
- * Las fotos llegan del teléfono sin comprimir (~2,3 MB cada una) y una visita
- * trae decenas: embebidas tal cual, el PDF se va sobre los 100 MB y la
- * generación revienta antes de terminar. Se reescalan a JPEG antes de entrar.
+ * Las fotos de cámara llegan sin comprimir (~2,3 MB cada una) y una visita trae
+ * decenas: embebidas tal cual el PDF se va sobre los 100 MB. Se reescalan.
+ *
+ * Pero comprimir cuesta caro: `toDataURL` es SÍNCRONO y con 35 fotos dejaba la
+ * pestaña congelada varios minutos — el técnico creía que la app se colgó, y el
+ * timeout de seguridad ni siquiera saltaba porque el hilo estaba tomado. Así
+ * que: lo que ya viene liviano (WhatsApp deja ~200 KB) pasa directo sin tocar
+ * canvas, y lo que hay que comprimir se hace con OffscreenCanvas, que sí es
+ * asíncrono. react-pdf, medido, arma el documento en ~1 s: nunca fue el cuello.
  */
+const LIVIANA_BYTES = 500_000
+
 async function aDataUrlComprimida(
-  url: string | null | undefined, maxPx = 1100, calidad = 0.72,
+  url: string | null | undefined, maxPx = 1400, calidad = 0.72,
 ): Promise<string | null> {
-  const original = await aDataUrl(url, 15_000)
+  const original = await aDataUrl(url, 20_000)
   if (!original) return null
+  if (pesoDataUrl(original) <= LIVIANA_BYTES) return original
+
+  let bitmap: ImageBitmap | null = null
   try {
-    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
-      const el = new window.Image()
-      el.onload = () => resolve(el)
-      el.onerror = () => reject(new Error('imagen ilegible'))
-      el.src = original
-    })
-    const escala = Math.min(1, maxPx / Math.max(img.width, img.height))
-    if (escala >= 1 && original.length < 400_000) return original
+    const blob = await (await fetch(original)).blob()
+    bitmap = await createImageBitmap(blob)
+    const escala = Math.min(1, maxPx / Math.max(bitmap.width, bitmap.height))
+    const w = Math.max(1, Math.round(bitmap.width * escala))
+    const h = Math.max(1, Math.round(bitmap.height * escala))
+
+    if (typeof OffscreenCanvas !== 'undefined') {
+      const cv = new OffscreenCanvas(w, h)
+      const ctx = cv.getContext('2d')
+      if (!ctx) return original
+      ctx.drawImage(bitmap, 0, 0, w, h)
+      const out = await cv.convertToBlob({ type: 'image/jpeg', quality: calidad })
+      return await new Promise<string>((resolve) => {
+        const fr = new FileReader()
+        fr.onload = () => resolve(fr.result as string)
+        fr.onerror = () => resolve(original)
+        fr.readAsDataURL(out)
+      })
+    }
+
+    // Sin OffscreenCanvas (Safari antiguo): canvas normal, asumiendo el bloqueo.
     const cv = document.createElement('canvas')
-    cv.width = Math.round(img.width * escala)
-    cv.height = Math.round(img.height * escala)
+    cv.width = w; cv.height = h
     const ctx = cv.getContext('2d')
     if (!ctx) return original
-    ctx.drawImage(img, 0, 0, cv.width, cv.height)
+    ctx.drawImage(bitmap, 0, 0, w, h)
     return cv.toDataURL('image/jpeg', calidad)
   } catch {
     return original   // si el canvas falla, mejor pesada que ausente
+  } finally {
+    bitmap?.close()
   }
 }
 
-/** Descarga en paralelo con tope: 40 fotos de una vez tumban el teléfono. */
-async function enLotes<T, R>(xs: T[], n: number, fn: (x: T) => Promise<R>): Promise<R[]> {
+/**
+ * Descarga en paralelo con tope: 40 fotos de una vez tumban el teléfono. Entre
+ * foto y foto se cede el hilo, para que la pantalla siga respondiendo mientras
+ * se arma el informe.
+ */
+async function enLotes<T, R>(
+  xs: T[], n: number, fn: (x: T) => Promise<R>, avance?: (hechas: number, total: number) => void,
+): Promise<R[]> {
   const out: R[] = new Array(xs.length)
-  let i = 0
+  let i = 0, hechas = 0
   await Promise.all(Array.from({ length: Math.min(n, xs.length) }, async () => {
-    while (i < xs.length) { const k = i++; out[k] = await fn(xs[k]) }
+    while (i < xs.length) {
+      const k = i++
+      out[k] = await fn(xs[k])
+      avance?.(++hechas, xs.length)
+      await new Promise((r) => setTimeout(r, 0))
+    }
   }))
   return out
 }
 
 // Genera el informe (formato según tipo de servicio), lo sube al bucket
 // documentos/enex-informes y guarda la URL en la ejecución. Devuelve la URL.
-export async function generarYGuardarInformeEnex(ejecucionId: string): Promise<string> {
+export async function generarYGuardarInformeEnex(
+  ejecucionId: string,
+  onAvance?: (hechas: number, total: number) => void,
+): Promise<string> {
   const { reporte, items } = await getEjecucionReporte(ejecucionId)
   if (!reporte) throw new Error('Ejecución no encontrada')
 
@@ -636,7 +678,7 @@ export async function generarYGuardarInformeEnex(ejecucionId: string): Promise<s
   const evidResueltas: (string | null)[] = new Array((reporte.evidencia_urls ?? []).length)
   ;(reporte.evidencia_urls ?? []).forEach((u, k) => slots.push({ url: u, set: (v) => { evidResueltas[k] = v } }))
 
-  await enLotes(slots, 5, async (s) => s.set(await aDataUrlComprimida(s.url)))
+  await enLotes(slots, 4, async (s) => s.set(await aDataUrlComprimida(s.url)), onAvance)
 
   for (const it of items) {
     for (const campo of ['fotos_antes', 'fotos_despues'] as const) {
