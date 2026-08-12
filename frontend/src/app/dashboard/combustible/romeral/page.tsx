@@ -8,7 +8,7 @@ import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useQuery } from '@tanstack/react-query'
 import {
-  ArrowLeft, Fuel, ChevronLeft, ChevronRight, FileSpreadsheet, Ban, Truck, Search,
+  ArrowLeft, Fuel, ChevronLeft, ChevronRight, FileSpreadsheet, Ban, Truck, Search, Camera,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -111,18 +111,20 @@ export default function RomeralOficinaPage() {
       const d1 = wb.addWorksheet(`Despachos ${titulo}`)
       encabezar(d1, ['Fecha', 'Hora', 'Turno', 'Camión', 'Equipo', 'Descripción', 'CECO',
                      'Empresa', 'Lugar', 'Medidor inicial', 'Medidor final', 'Litros',
-                     'Operador', 'Estado', 'Motivo anulación', 'Observación'])
+                     'Operador', 'Foto inicial', 'Foto final', 'Sin foto: motivo',
+                     'Estado', 'Motivo anulación', 'Observación'])
       for (const d of filtrados) {
         d1.addRow([
           fmtFecha(d.fecha), d.hora ? d.hora.slice(0, 5) : '', d.turno ?? '', d.camion_patente ?? '',
           d.equipo ?? '', d.equipo_descripcion ?? '', d.ceco ?? '', d.ceco_empresa ?? '',
           d.ubicacion ?? '', d.meter_inicial != null ? Number(d.meter_inicial) : null,
           d.meter_final != null ? Number(d.meter_final) : null, Number(d.litros),
-          d.operador_nombre ?? '', d.anulado ? 'ANULADO' : 'Vigente',
-          d.anulado_motivo ?? '', d.observacion ?? '',
+          d.operador_nombre ?? '',
+          d.foto_meter_inicial_url ?? '', d.foto_meter_final_url ?? '', d.sin_foto_motivo ?? '',
+          d.anulado ? 'ANULADO' : 'Vigente', d.anulado_motivo ?? '', d.observacion ?? '',
         ])
       }
-      d1.columns.forEach((c, i) => { c.width = [11, 7, 8, 11, 20, 26, 14, 22, 20, 14, 14, 10, 20, 10, 24, 26][i] ?? 14 })
+      d1.columns.forEach((c, i) => { c.width = [11, 7, 8, 11, 20, 26, 14, 22, 20, 14, 14, 10, 20, 34, 34, 24, 10, 24, 26][i] ?? 14 })
       d1.getColumn(12).numFmt = '#,##0'
       // Total solo de lo vigente: lo anulado no suma, como en el papel tachado.
       const totalRow = d1.addRow(['', '', '', '', '', '', '', '', '', '', 'TOTAL', totalLitros])
@@ -325,6 +327,23 @@ export default function RomeralOficinaPage() {
                     <td className="whitespace-nowrap p-2 text-right text-[11px] text-gray-500">
                       {d.meter_inicial != null && d.meter_final != null
                         ? `${L(d.meter_inicial)} → ${L(d.meter_final)}` : '—'}
+                      {/* La foto del contador es lo que respalda los litros */}
+                      <span className="mt-0.5 flex items-center justify-end gap-1">
+                        {[d.foto_meter_inicial_url, d.foto_meter_final_url].map((u, i) => (
+                          u ? (
+                            <button key={i} onClick={() => window.open(u, '_blank')}
+                                    title={i === 0 ? 'Foto del medidor inicial' : 'Foto del medidor final'}
+                                    className="text-green-600 hover:text-green-800">
+                              <Camera className="h-3.5 w-3.5" />
+                            </button>
+                          ) : <Camera key={i} className="h-3.5 w-3.5 text-gray-200" />
+                        ))}
+                      </span>
+                      {d.sin_foto_motivo && (
+                        <span className="block text-[9px] italic text-amber-700" title={d.sin_foto_motivo}>
+                          sin foto
+                        </span>
+                      )}
                     </td>
                     <td className="p-2 text-right font-bold">{L(d.litros)}</td>
                     <td className="p-2 text-gray-600">{d.operador_nombre ?? '—'}</td>

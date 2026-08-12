@@ -9,7 +9,7 @@
 
 import Dexie, { type Table } from 'dexie'
 import {
-  getCatalogoFaena, registrarDespacho, getDespachosDia,
+  getCatalogoFaena, registrarDespacho, getDespachosDia, subirFotoMedidor,
   type CatalogoFaena, type CombDespacho, type DespachoInput,
 } from '@/lib/services/combustible-faena'
 
@@ -25,13 +25,19 @@ export type DespachoPendiente = DespachoInput & {
   ceco_nombre?: string | null
   ubicacion_nombre?: string | null
   camion_nombre?: string | null
+  // [MIG281] Las fotos del medidor esperan en el teléfono junto con la carga:
+  // se sacan sin señal y suben cuando aparece red.
+  foto_ini_blob?: string | null
+  foto_fin_blob?: string | null
 }
 
 type CacheRow = { key: string; value: unknown; updated_at: string }
+type BlobRow = { blob_id: string; blob: Blob; mime: string }
 
 class CombFaenaDB extends Dexie {
   cache!: Table<CacheRow, string>
   pending!: Table<DespachoPendiente, string>
+  blobs!: Table<BlobRow, string>
 
   constructor() {
     super('sicom-combustible-faena')
@@ -39,7 +45,25 @@ class CombFaenaDB extends Dexie {
       cache: 'key, updated_at',
       pending: 'local_id, sync_status, created_at',
     })
+    // v2: fotos del medidor guardadas en el teléfono hasta que haya señal
+    this.version(2).stores({
+      cache: 'key, updated_at',
+      pending: 'local_id, sync_status, created_at',
+      blobs: 'blob_id',
+    })
   }
+}
+
+/** Guarda una foto en el teléfono y devuelve su id local. */
+export async function guardarFotoLocal(file: File | Blob): Promise<string> {
+  const blob_id = nuevoId()
+  await combDB().blobs.put({ blob_id, blob: file, mime: file.type || 'image/jpeg' })
+  return blob_id
+}
+
+export async function getFotoLocal(blobId: string): Promise<Blob | null> {
+  const row = await combDB().blobs.get(blobId)
+  return row?.blob ?? null
 }
 
 let _db: CombFaenaDB | null = null
@@ -99,7 +123,9 @@ export async function ultimaDescarga(codigo: string): Promise<string | null> {
 // ── Cola de despachos ───────────────────────────────────────────────────────
 export async function guardarDespacho(
   p: DespachoInput,
-  etiquetas: Pick<DespachoPendiente, 'equipo_nombre' | 'ceco_nombre' | 'ubicacion_nombre' | 'camion_nombre'>,
+  etiquetas: Pick<DespachoPendiente,
+    'equipo_nombre' | 'ceco_nombre' | 'ubicacion_nombre' | 'camion_nombre'
+    | 'foto_ini_blob' | 'foto_fin_blob'>,
 ): Promise<{ enviado: boolean }> {
   const pend: DespachoPendiente = {
     ...p,
@@ -129,14 +155,42 @@ export async function pendientesDelDia(fecha: string): Promise<DespachoPendiente
   return todos.filter((p) => p.fecha === fecha)
 }
 
-/** Sube lo que haya en cola. Nunca borra sin confirmación del servidor. */
+/**
+ * Sube lo que haya en cola: primero las fotos, después la carga con sus URLs.
+ * Nunca borra sin confirmación del servidor.
+ */
 export async function sincronizar(): Promise<{ ok: number; failed: number }> {
   if (!isOnline()) return { ok: 0, failed: 0 }
   const cola = await combDB().pending.toArray()
   let ok = 0, failed = 0
   for (const p of cola) {
     try {
-      await conTimeout(registrarDespacho({ ...p, clientUuid: p.client_uuid }), 15_000)
+      // Las fotos van primero; si una ya subió antes, no se repite.
+      let urlIni = p.fotoMeterInicial ?? null
+      let urlFin = p.fotoMeterFinal ?? null
+      if (!urlIni && p.foto_ini_blob) {
+        const b = await getFotoLocal(p.foto_ini_blob)
+        if (b) {
+          urlIni = await conTimeout(subirFotoMedidor(b), 30_000)
+          await combDB().pending.update(p.local_id, { fotoMeterInicial: urlIni })
+        }
+      }
+      if (!urlFin && p.foto_fin_blob) {
+        const b = await getFotoLocal(p.foto_fin_blob)
+        if (b) {
+          urlFin = await conTimeout(subirFotoMedidor(b), 30_000)
+          await combDB().pending.update(p.local_id, { fotoMeterFinal: urlFin })
+        }
+      }
+
+      await conTimeout(registrarDespacho({
+        ...p, clientUuid: p.client_uuid,
+        fotoMeterInicial: urlIni, fotoMeterFinal: urlFin,
+      }), 20_000)
+
+      // Confirmado por el servidor: recién ahí se sueltan las fotos locales.
+      if (p.foto_ini_blob) await combDB().blobs.delete(p.foto_ini_blob)
+      if (p.foto_fin_blob) await combDB().blobs.delete(p.foto_fin_blob)
       await combDB().pending.delete(p.local_id)
       ok++
     } catch (e) {

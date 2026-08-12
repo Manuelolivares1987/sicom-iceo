@@ -13,7 +13,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Fuel, Plus, Check, WifiOff, CloudOff, RefreshCw, Search, X, Truck,
-  MapPin, Trash2, CheckCircle2, Download, ChevronDown,
+  MapPin, Trash2, CheckCircle2, Download, ChevronDown, Camera,
 } from 'lucide-react'
 import { Spinner } from '@/components/ui/spinner'
 import { useToast } from '@/contexts/toast-context'
@@ -26,7 +26,7 @@ import {
   type CatalogoFaena, type CombEquipo, type CombDespacho,
 } from '@/lib/services/combustible-faena'
 import {
-  getCatalogoOffline, descargarCatalogo, ultimaDescarga, guardarDespacho,
+  getCatalogoOffline, descargarCatalogo, ultimaDescarga, guardarDespacho, guardarFotoLocal,
   sincronizar, getDiaOffline, descartarPendiente, pendientesCount,
   type DespachoPendiente,
 } from '@/lib/offline/combustible-faena-offline'
@@ -79,6 +79,10 @@ export default function RomeralTerrenoPage() {
   const [litrosManual, setLitrosManual] = useState('')
   const [obs, setObs] = useState('')
   const [guardando, setGuardando] = useState(false)
+  type Foto = { file: File; preview: string }
+  const [fotoIni, setFotoIni] = useState<Foto | null>(null)
+  const [fotoFin, setFotoFin] = useState<Foto | null>(null)
+  const [sinFotoMotivo, setSinFotoMotivo] = useState('')
 
   const [servidor, setServidor] = useState<CombDespacho[]>([])
   const [locales, setLocales] = useState<DespachoPendiente[]>([])
@@ -175,6 +179,7 @@ export default function RomeralTerrenoPage() {
     try { ini = localStorage.getItem(K_METER) ?? '' } catch { /* no-op */ }
     setMeterIni(ini); setMeterFin(''); setLitrosManual('')
     setEquipo(null); setEquipoTexto(''); setBuscar(''); setUbicacionId(''); setObs('')
+    setFotoIni(null); setFotoFin(null); setSinFotoMotivo('')
     setAbierto(true)
   }
 
@@ -182,9 +187,16 @@ export default function RomeralTerrenoPage() {
     if (!cat) return
     if (!equipo && !equipoTexto.trim()) { toast.error('Indica a quién estás cargando'); return }
     if (litrosFinales == null || litrosFinales <= 0) { toast.error('Faltan los litros o el medidor'); return }
+    if ((!fotoIni || !fotoFin) && !sinFotoMotivo.trim()) {
+      toast.error('Saca la foto del medidor, o escribe por qué no pudiste')
+      return
+    }
     setGuardando(true)
     try {
       const ubic = cat.ubicaciones.find((u) => u.id === ubicacionId) ?? null
+      // Las fotos quedan en el teléfono y suben con la carga cuando haya señal.
+      const blobIni = fotoIni ? await guardarFotoLocal(fotoIni.file) : null
+      const blobFin = fotoFin ? await guardarFotoLocal(fotoFin.file) : null
       const { enviado } = await guardarDespacho({
         faenaId: cat.faena.id,
         fecha,
@@ -200,11 +212,14 @@ export default function RomeralTerrenoPage() {
         operadorNombre: operador.trim(),
         hora: horaAhora(),
         observacion: obs.trim() || null,
+        sinFotoMotivo: (!fotoIni || !fotoFin) ? sinFotoMotivo.trim() : null,
       }, {
         equipo_nombre: equipo?.nombre ?? equipoTexto.trim(),
         ceco_nombre: equipo?.ceco ?? null,
         ubicacion_nombre: ubic?.nombre ?? null,
         camion_nombre: camionLabel,
+        foto_ini_blob: blobIni,
+        foto_fin_blob: blobFin,
       })
       // El medidor final queda listo para la próxima carga
       if (num(meterFin) != null) { try { localStorage.setItem(K_METER, meterFin) } catch { /* no-op */ } }
@@ -502,23 +517,62 @@ export default function RomeralTerrenoPage() {
               </select>
             </div>
 
-            {/* Medidor */}
+            {/* Medidor: número y foto, uno al lado del otro */}
             <div>
               <label className="text-xs font-bold text-gray-700">Medidor del camión</label>
               <div className="mt-1 grid grid-cols-2 gap-2">
-                <div>
-                  <p className="text-[10px] text-gray-500">Inicial</p>
-                  <input value={meterIni} onChange={(e) => setMeterIni(e.target.value)}
-                         inputMode="decimal" placeholder="0"
-                         className="w-full rounded-lg border border-gray-300 px-3 py-3 text-lg font-bold" />
-                </div>
-                <div>
-                  <p className="text-[10px] text-gray-500">Final</p>
-                  <input value={meterFin} onChange={(e) => setMeterFin(e.target.value)}
-                         inputMode="decimal" placeholder="0"
-                         className="w-full rounded-lg border border-gray-300 px-3 py-3 text-lg font-bold" />
-                </div>
+                {([
+                  { k: 'ini' as const, label: 'Inicial', val: meterIni, set: setMeterIni,
+                    foto: fotoIni, setFoto: setFotoIni },
+                  { k: 'fin' as const, label: 'Final', val: meterFin, set: setMeterFin,
+                    foto: fotoFin, setFoto: setFotoFin },
+                ]).map((m) => (
+                  <div key={m.k}>
+                    <p className="text-[10px] text-gray-500">{m.label}</p>
+                    <input value={m.val} onChange={(e) => m.set(e.target.value)}
+                           inputMode="decimal" placeholder="0"
+                           className="w-full rounded-lg border border-gray-300 px-3 py-3 text-lg font-bold" />
+                    {/* La foto del contador es la prueba de los litros: el papel
+                        se puede escribir de memoria, la foto no. */}
+                    <label className={`mt-1 flex cursor-pointer items-center justify-center gap-1.5 rounded-lg border-2 py-2.5 text-xs font-bold ${
+                      m.foto ? 'border-green-400 bg-green-50 text-green-700' : 'border-orange-300 bg-orange-50 text-orange-700'}`}>
+                      {m.foto ? <Check className="h-4 w-4" /> : <Camera className="h-4 w-4" />}
+                      {m.foto ? 'Foto lista' : 'Foto medidor'}
+                      <input type="file" accept="image/*" capture="environment" className="hidden"
+                             onChange={(e) => {
+                               const f = e.target.files?.[0]
+                               if (f) m.setFoto({ file: f, preview: URL.createObjectURL(f) })
+                               e.target.value = ''
+                             }} />
+                    </label>
+                    {m.foto && (
+                      <div className="relative mt-1">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={m.foto.preview} alt={`medidor ${m.label}`}
+                             className="h-20 w-full rounded-lg border object-cover" />
+                        <button onClick={() => m.setFoto(null)}
+                                className="absolute right-1 top-1 rounded-full bg-white/90 p-1 text-red-600">
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))}
               </div>
+
+              {/* Sin las dos fotos no se guarda… salvo que diga por qué. En
+                  faena una cámara mojada o sin batería no puede dejar la carga
+                  sin registrar. */}
+              {(!fotoIni || !fotoFin) && (
+                <div className="mt-2 rounded-lg border border-amber-300 bg-amber-50 p-2">
+                  <p className="text-[11px] font-semibold text-amber-900">
+                    Faltan las fotos del medidor{!fotoIni && !fotoFin ? '' : !fotoIni ? ' (la inicial)' : ' (la final)'}.
+                  </p>
+                  <input value={sinFotoMotivo} onChange={(e) => setSinFotoMotivo(e.target.value)}
+                         placeholder="Si no puedes sacarla, escribe por qué"
+                         className="mt-1 w-full rounded border border-amber-300 px-2 py-2 text-xs" />
+                </div>
+              )}
               {litrosCalc != null ? (
                 <p className="mt-2 rounded-lg bg-orange-50 p-3 text-center text-lg font-bold text-orange-800">
                   {litrosCalc.toLocaleString('es-CL')} litros
@@ -548,7 +602,9 @@ export default function RomeralTerrenoPage() {
           </div>
 
           <div className="border-t bg-white p-3">
-            <button onClick={guardar} disabled={guardando || litrosFinales == null || litrosFinales <= 0}
+            <button onClick={guardar}
+                    disabled={guardando || litrosFinales == null || litrosFinales <= 0
+                              || ((!fotoIni || !fotoFin) && !sinFotoMotivo.trim())}
                     className="flex w-full items-center justify-center gap-2 rounded-2xl bg-orange-600 py-4 text-base font-bold text-white disabled:opacity-40">
               {guardando ? <Spinner className="h-5 w-5" /> : <Check className="h-5 w-5" />}
               Guardar carga{litrosFinales ? ` · ${litrosFinales.toLocaleString('es-CL')} L` : ''}
