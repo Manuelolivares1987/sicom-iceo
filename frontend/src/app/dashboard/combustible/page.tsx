@@ -74,6 +74,8 @@ export default function CombustiblePage() {
           { label: 'Ajustar stock',       description: 'Corregir litros físicos del estanque',     href: '/dashboard/combustible/ajuste',            icon: Wrench,         accent: 'purple', badge: 'Admin' },
           { label: 'Corregir patente',    description: 'Cambiar patente de un despacho ya hecho',  href: '/dashboard/combustible/corregir-despacho', icon: Wrench,         accent: 'amber',  badge: 'Admin' },
           { label: 'Vehículos externos',  description: 'Administrar patentes autorizadas (alta/edición/revocar)', href: '/dashboard/combustible/vehiculos-externos', icon: Truck,        accent: 'blue',   badge: 'Admin' },
+          // Faena Romeral: el operador registra en terreno y acá llega el consumo por CECO.
+          { label: 'Despachos Romeral',   description: 'Cargas en faena por equipo y CECO (CMP)',  href: '/dashboard/combustible/romeral',           icon: Fuel,           accent: 'amber',  badge: 'Nuevo' },
         ]}
       />
 
