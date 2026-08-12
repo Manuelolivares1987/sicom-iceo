@@ -51,6 +51,9 @@ export type CombDespacho = {
   anulado: boolean
   anulado_motivo: string | null
   created_at: string
+  foto_meter_inicial_url: string | null
+  foto_meter_final_url: string | null
+  sin_foto_motivo: string | null
 }
 
 /** Todo lo que la app de terreno necesita tener bajado para trabajar sin señal. */
@@ -122,6 +125,18 @@ export type DespachoInput = {
   kilometraje?: number | null
   observacion?: string | null
   clientUuid?: string | null
+  fotoMeterInicial?: string | null
+  fotoMeterFinal?: string | null
+  sinFotoMotivo?: string | null
+}
+
+/** Sube una foto del medidor al bucket de evidencias. */
+export async function subirFotoMedidor(file: File | Blob): Promise<string> {
+  const path = `romeral/${Date.now()}_${Math.floor(Math.random() * 1e6)}.jpg`
+  const { error } = await supabase.storage.from('evidencias-verificacion')
+    .upload(path, file, { contentType: 'image/jpeg' })
+  if (error) throw error
+  return supabase.storage.from('evidencias-verificacion').getPublicUrl(path).data.publicUrl
 }
 
 export async function registrarDespacho(p: DespachoInput) {
@@ -136,6 +151,9 @@ export async function registrarDespacho(p: DespachoInput) {
     p_camion_patente: p.camionPatente ?? null,
     p_horometro: p.horometro ?? null, p_kilometraje: p.kilometraje ?? null,
     p_observacion: p.observacion ?? null, p_client_uuid: p.clientUuid ?? null,
+    p_foto_meter_inicial: p.fotoMeterInicial ?? null,
+    p_foto_meter_final: p.fotoMeterFinal ?? null,
+    p_sin_foto_motivo: p.sinFotoMotivo ?? null,
   })
   if (error) throw error
   return data as { success: boolean; despacho_id: string; litros?: number; duplicado?: boolean }
