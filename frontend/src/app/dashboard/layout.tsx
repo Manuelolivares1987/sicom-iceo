@@ -13,13 +13,15 @@ export default function DashboardLayout({
   children: React.ReactNode
 }) {
   const { loading } = useRequireAuth()
-  const { esOperadorCalamaSolo, esSupervisorCalamaSolo, esOperadorTallerSolo } = usePermissions()
+  const { esOperadorCalamaSolo, esSupervisorCalamaSolo, esOperadorTallerSolo,
+          esOperadorCombustibleSolo } = usePermissions()
   const router = useRouter()
   const pathname = usePathname()
 
   // Guards de ruta:
   //  - OOCC: cualquier /dashboard/* → /m/calama.
   //  - Operador de Taller: cualquier /dashboard/* → /m/taller.
+  //  - Operador de Combustible: cualquier /dashboard/* → /m/romeral.
   //  - Supervisor Calama: cualquier /dashboard/* fuera de /dashboard/operacion-calama → /dashboard/operacion-calama.
   useEffect(() => {
     if (loading) return
@@ -31,10 +33,15 @@ export default function DashboardLayout({
       router.replace('/m/taller')
       return
     }
+    if (esOperadorCombustibleSolo()) {
+      router.replace('/m/romeral')
+      return
+    }
     if (esSupervisorCalamaSolo() && !pathname.startsWith('/dashboard/operacion-calama')) {
       router.replace('/dashboard/operacion-calama')
     }
-  }, [loading, pathname, esOperadorCalamaSolo, esSupervisorCalamaSolo, esOperadorTallerSolo, router])
+  }, [loading, pathname, esOperadorCalamaSolo, esSupervisorCalamaSolo, esOperadorTallerSolo,
+      esOperadorCombustibleSolo, router])
 
   if (loading) {
     return (
@@ -45,7 +52,7 @@ export default function DashboardLayout({
   }
 
   // Mientras se ejecuta el redirect, no rendereamos children prohibidos.
-  if (esOperadorTallerSolo()) {
+  if (esOperadorTallerSolo() || esOperadorCombustibleSolo()) {
     return (
       <div className="flex h-screen items-center justify-center">
         <Spinner size="lg" className="text-gray-400" />

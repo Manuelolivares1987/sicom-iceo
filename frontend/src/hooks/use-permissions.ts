@@ -324,6 +324,28 @@ const PERMISSIONS: Record<RolUsuario, Record<Module, Permission[]>> = {
     comercial: [],
     reporte_diario: [],
   },
+  // Operador de Combustible: SOLO registra los despachos del camión en faena
+  // desde la app movil offline /m/romeral. La cuenta es COMPARTIDA por los
+  // operadores que se turnan —cada uno escribe su nombre en la app—, asi que
+  // esa credencial circula: no puede ver contratos, costos ni flota.
+  operador_combustible: {
+    contratos: [],
+    activos: [],
+    ordenes_trabajo: [],
+    inventario: [],
+    mantenimiento: [],
+    abastecimiento: [],
+    cumplimiento: [],
+    kpi: [],
+    iceo: [],
+    reportes: [],
+    auditoria: [],
+    admin: [],
+    flota: [],
+    prevencion: [],
+    comercial: [],
+    reporte_diario: [],
+  },
   // Auditor de Calidad: control de calidad del taller (Gate 1 chequeo cruzado,
   // Gate 2 auditoria pre-operativo, diferidos). 'approve' en mantenimiento
   // habilita la liberacion a operativo.
@@ -447,6 +469,12 @@ export function usePermissions() {
     return rol === 'operador_taller'
   }
 
+  // Operador de Combustible: solo puede ver /m/romeral (el registro de sus
+  // despachos). La cuenta es compartida y vive en un teléfono en faena.
+  function esOperadorCombustibleSolo(): boolean {
+    return rol === 'operador_combustible'
+  }
+
   // Supervisor Calama "puro": rol_calama=supervisor_calama y NO admin global.
   // Solo puede ver /dashboard/operacion-calama/*.
   function esSupervisorCalamaSolo(): boolean {
@@ -518,6 +546,7 @@ export function usePermissions() {
     rol, rolCalama,
     esOperadorCalamaSolo, esSupervisorCalamaSolo, esRestringidoCalama,
     esOperadorTallerSolo,
+    esOperadorCombustibleSolo,
     esComercialSolo,
     tieneRolCalama, tieneAccesoDashboardCalama,
   }

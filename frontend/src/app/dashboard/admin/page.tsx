@@ -80,6 +80,7 @@ const rolBadgeColors: Record<RolUsuario, string> = {
   auditor_calidad: 'bg-emerald-100 text-emerald-700',
   rrhh_incentivos: 'bg-pink-100 text-pink-700',
   operador_taller: 'bg-orange-100 text-orange-700',
+  operador_combustible: 'bg-amber-100 text-amber-700',
 }
 
 const rolLabels: Record<RolUsuario, string> = {
@@ -100,6 +101,7 @@ const rolLabels: Record<RolUsuario, string> = {
   auditor_calidad: 'Auditor de Calidad',
   rrhh_incentivos: 'RRHH Incentivos',
   operador_taller: 'Operador de Taller',
+  operador_combustible: 'Operador de Combustible',
 }
 
 const tabs = [

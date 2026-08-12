@@ -27,6 +27,7 @@ const ROL_LABEL: Record<string, string> = {
   operador_abastecimiento: 'Operador Abastecimiento', comercial: 'Comercial', prevencionista: 'Prevencionista',
   colaborador: 'Colaborador', auditor: 'Auditor', auditor_calidad: 'Auditor de Calidad',
   rrhh_incentivos: 'RRHH Incentivos', operador_taller: 'Operador de Taller',
+  operador_combustible: 'Operador de Combustible',
 }
 const rolLabel = (r: string) => ROL_LABEL[r] ?? r
 
