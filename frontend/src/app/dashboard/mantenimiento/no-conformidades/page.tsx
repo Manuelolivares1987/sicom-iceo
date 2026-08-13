@@ -63,6 +63,16 @@ const ESTADO_EQUIPO: Record<string, { v: any; t: string }> = {
   resuelta: { v: 'operativo', t: 'Resuelto' },
   descartada: { v: 'default', t: 'Descartado' },
 }
+// De dónde salió el hallazgo. Lo que reporta el CLIENTE se dice con todas sus
+// letras: no es lo mismo que lo encuentre el taller a que lo reclame quien
+// está pagando el arriendo.
+const ORIGEN_TXT: Record<string, string> = {
+  recepcion_adhoc: 'ad-hoc',
+  checklist_cliente: 'reportado por el cliente',
+  auditoria_calidad: 'auditoría de calidad',
+  manual: 'registro manual',
+}
+
 const ORDEN_ESTADO = ['registrada', 'con_recursos', 'planificada', 'en_ejecucion', 'resuelta', 'descartada']
 const ORDEN_SEV = ['critica', 'alta', 'media', 'baja']
 const FILTROS = [['', 'Todas'], ['registrada', 'Sin recursos'], ['con_recursos', 'Con recursos'], ['planificada', 'Planificadas']] as const
@@ -106,6 +116,7 @@ type EquipoNC = {
   nRecobrables: number     // NC que se le cobran al cliente
   nNoRecobrables: number   // NC que asume la empresa
   nRecobroPorDefinir: number
+  nDelCliente: number      // hallazgos que reclamó el cliente por el QR
   paso: PasoClave          // qué falta hacer con este equipo
 }
 
@@ -166,7 +177,7 @@ export default function NoConformidadesPage() {
         ncs: [], pendientes: [], sevMax: 'baja', estado: 'descartada',
         grupos: null, horas: 0, dias: 0, nMateriales: 0, nInsumosOperador: 0,
         otIds: [], nNotas: 0, nRecobrables: 0, nNoRecobrables: 0, nRecobroPorDefinir: 0,
-        paso: 'listo',
+        nDelCliente: 0, paso: 'listo',
       }
       g.ncs.push(nc)
       if (!nc.plan_ot_id && ['registrada', 'con_recursos'].includes(nc.estado_planificacion)) g.pendientes.push(nc)
@@ -185,6 +196,7 @@ export default function NoConformidadesPage() {
       // ya cuenta las notas de la(s) OT de la NC → max (no sumar: se repetirían).
       for (const ot of [nc.ot_id, nc.plan_ot_id]) if (ot && !g.otIds.includes(ot)) g.otIds.push(ot)
       g.nNotas = Math.max(g.nNotas, nc.n_notas_operador ?? 0)
+      if (nc.origen === 'checklist_cliente') g.nDelCliente += 1
       m.set(nc.activo_id, g)
     }
     const otsConVale = new Set(equiposListos.map((e) => e.otId))
@@ -326,7 +338,7 @@ export default function NoConformidadesPage() {
               patente={eq.patente} nombre={eq.nombre} nNc={eq.ncs.length} sevMax={eq.sevMax}
               pasoLabel={PASO_TXT[eq.paso]} pasoHacer={pasoEq.hacer} pasoColor={pasoEq.color}
               nPendientes={eq.pendientes.length} nRecobrables={eq.nRecobrables}
-              nInsumosOperador={eq.nInsumosOperador}
+              nInsumosOperador={eq.nInsumosOperador} nDelCliente={eq.nDelCliente}
               recursosTxt={eq.grupos || eq.horas > 0 || eq.nMateriales > 0
                 ? `${eq.grupos ?? '—'}${eq.horas ? ` · ${eq.horas}h` : ''}${eq.nMateriales ? ` · ${eq.nMateriales} mat.` : ''}`
                 : 'Sin recursos asignados'}
@@ -412,6 +424,12 @@ export default function NoConformidadesPage() {
                         {eq.nInsumosOperador > 0 && (
                           <span className="ml-1.5 rounded bg-orange-100 px-1.5 py-0.5 text-[10px] font-semibold text-orange-700 whitespace-nowrap">
                             {eq.nInsumosOperador} insumo{eq.nInsumosOperador > 1 ? 's' : ''} pedido{eq.nInsumosOperador > 1 ? 's' : ''} por operador
+                          </span>
+                        )}
+                        {eq.nDelCliente > 0 && (
+                          <span title="El cliente reportó esto desde el QR del equipo"
+                                className="ml-1.5 rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-semibold text-blue-800 whitespace-nowrap">
+                            {eq.nDelCliente} del cliente
                           </span>
                         )}
                         {eq.nNotas > 0 && (
@@ -500,7 +518,7 @@ export default function NoConformidadesPage() {
                             </span>
                           ) : <span className="text-amber-600">sin recursos — abrir ficha</span>}
                           <span className="block">
-                            {nc.origen === 'recepcion_adhoc' ? 'ad-hoc' : 'checklist'}
+                            {ORIGEN_TXT[nc.origen] ?? 'checklist'}
                             {nc.n_recursos_operador > 0 && ` · ${nc.n_recursos_operador} insumo(s) del operador`}
                           </span>
                           {nc.recobro_informe_folio && (
