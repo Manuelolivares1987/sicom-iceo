@@ -42,7 +42,10 @@ export function EquipoQrCard({ activoId, codigo, nombre, qrPublicoHabilitado, on
     if (typeof window !== 'undefined') setOrigin(window.location.origin)
   }, [])
 
-  const url = origin ? `${origin}/equipo/${activoId}/checklist` : ''
+  // El QR abre el MENÚ del equipo, no una pantalla en particular. Antes iba
+  // derecho al checklist y el cliente nunca veía que también podía consultar
+  // los documentos o el historial: escaneaba y quedaba metido en el formulario.
+  const url = origin ? `${origin}/equipo/${activoId}` : ''
   const habilitadoConocido = typeof qrPublicoHabilitado === 'boolean'
   const deshabilitado = habilitadoConocido && qrPublicoHabilitado === false
 
