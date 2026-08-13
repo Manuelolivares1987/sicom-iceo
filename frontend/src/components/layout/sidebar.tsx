@@ -41,6 +41,7 @@ import {
   ShoppingCart,
   Building2,
 } from 'lucide-react'
+import { useNcPorDecidir } from '@/hooks/use-nc-por-decidir'
 import { cn } from '@/lib/utils'
 
 type NavItem = {
@@ -51,6 +52,10 @@ type NavItem = {
   extendedModule?: ExtendedModule
   badge?: string                  // 'Legacy' | 'Nuevo' | etc.
   tooltip?: string                // texto descriptivo opcional
+  // Cuenta viva de lo que espera una decisión. El jefe de taller no mira la
+  // campanita —anda en terreno—, así que el número tiene que estar en el menú
+  // por donde entra a trabajar.
+  contador?: 'nc-por-decidir'
 }
 
 type NavSubsection = {
@@ -90,7 +95,8 @@ const navGroups: NavGroup[] = [
         items: [
           { label: 'Panel Taller', href: '/dashboard/mantenimiento', icon: Wrench, module: 'mantenimiento' },
           { label: 'Plan semanal', href: '/dashboard/mantenimiento/plan-semanal-taller', icon: CalendarClock, module: 'mantenimiento' },
-          { label: 'No Conformidades', href: '/dashboard/mantenimiento/no-conformidades', icon: AlertTriangle, module: 'mantenimiento', badge: 'Nuevo' },
+          { label: 'No Conformidades', href: '/dashboard/mantenimiento/no-conformidades', icon: AlertTriangle, module: 'mantenimiento', contador: 'nc-por-decidir',
+            tooltip: 'Hallazgos por planificar y repuestos que el operador pide aprobar' },
           { label: 'Equipos auxiliares', href: '/dashboard/mantenimiento/auxiliares', icon: Layers, module: 'mantenimiento' },
         ],
       },
@@ -471,6 +477,8 @@ function SidebarLink({
 }) {
   const Icon = item.icon
   const title = item.tooltip ?? item.label
+  const { data: porDecidir = 0 } = useNcPorDecidir()
+  const n = item.contador === 'nc-por-decidir' ? porDecidir : 0
   return (
     <Link
       href={item.href}
@@ -489,6 +497,12 @@ function SidebarLink({
       {!collapsed && (
         <>
           <span className="truncate flex-1">{item.label}</span>
+          {n > 0 && (
+            <span title={`${n} esperando tu decisión`}
+                  className="rounded-full bg-pillado-orange-500 px-1.5 py-0.5 text-[10px] font-bold text-white">
+              {n}
+            </span>
+          )}
           {item.badge && (
             <span className={cn(
               'rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider',
