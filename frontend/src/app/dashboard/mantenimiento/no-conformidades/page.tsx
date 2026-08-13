@@ -64,6 +64,26 @@ const ORDEN_ESTADO = ['registrada', 'con_recursos', 'planificada', 'en_ejecucion
 const ORDEN_SEV = ['critica', 'alta', 'media', 'baja']
 const FILTROS = [['', 'Todas'], ['registrada', 'Sin recursos'], ['con_recursos', 'Con recursos'], ['planificada', 'Planificadas']] as const
 
+// ── El ciclo, dicho como pasos ──────────────────────────────────────────────
+// El jefe de taller preguntaba por qué no "le llegaban" las cosas: la bandeja
+// mostraba estados ('registrada', 'con_recursos') pero no QUÉ HACER con cada
+// equipo ni de quién dependía. Estas son las mismas etapas nombradas por la
+// acción que falta, y se pueden clickear para ver solo las que están ahí.
+type PasoClave = 'aprobar' | 'recursos' | 'planificar' | 'vale' | 'taller' | 'listo'
+
+const PASOS: { k: PasoClave; label: string; hacer: string; color: string }[] = [
+  { k: 'aprobar',    label: 'Insumos por aprobar', hacer: 'El operador pidió repuestos: aprobar o ajustar', color: 'bg-orange-600' },
+  { k: 'recursos',   label: 'Falta definir recursos', hacer: 'Asignar grupo, horas y materiales', color: 'bg-amber-500' },
+  { k: 'planificar', label: 'Listos para planificar', hacer: 'Crear la OT correctiva del equipo', color: 'bg-sky-600' },
+  { k: 'vale',       label: 'Esperando vale', hacer: 'Emitir el vale para que bodega prepare', color: 'bg-violet-600' },
+  { k: 'taller',     label: 'En taller', hacer: 'El trabajo está en ejecución', color: 'bg-emerald-600' },
+  { k: 'listo',      label: 'Resueltos', hacer: 'Sin nada pendiente', color: 'bg-gray-400' },
+]
+const PASO_TXT: Record<PasoClave, string> = {
+  aprobar: 'Aprobar insumos', recursos: 'Definir recursos', planificar: 'Planificar OT',
+  vale: 'Emitir vale', taller: 'En taller', listo: 'Resuelto',
+}
+
 // Conjunto de NC de una patente: en el taller TODO se gestiona por equipo (MIG209)
 type EquipoNC = {
   activoId: string
@@ -83,6 +103,20 @@ type EquipoNC = {
   nRecobrables: number     // NC que se le cobran al cliente
   nNoRecobrables: number   // NC que asume la empresa
   nRecobroPorDefinir: number
+  paso: PasoClave          // qué falta hacer con este equipo
+}
+
+/**
+ * En qué paso del ciclo está parado el equipo. Se mira lo que BLOQUEA primero:
+ * un insumo esperando aprobación detiene todo lo demás, aunque el resto del
+ * conjunto ya esté planificado.
+ */
+function pasoDelEquipo(eq: Omit<EquipoNC, 'paso'>, otsConValePendiente: Set<string>): PasoClave {
+  if (eq.nInsumosOperador > 0 && ['registrada', 'con_recursos'].includes(eq.estado)) return 'aprobar'
+  if (eq.otIds.some((id) => otsConValePendiente.has(id))) return 'vale'
+  if (eq.pendientes.length > 0) return eq.estado === 'registrada' ? 'recursos' : 'planificar'
+  if (eq.estado === 'en_ejecucion' || eq.estado === 'planificada') return 'taller'
+  return 'listo'
 }
 
 export default function NoConformidadesPage() {
@@ -129,6 +163,7 @@ export default function NoConformidadesPage() {
         ncs: [], pendientes: [], sevMax: 'baja', estado: 'descartada',
         grupos: null, horas: 0, dias: 0, nMateriales: 0, nInsumosOperador: 0,
         otIds: [], nNotas: 0, nRecobrables: 0, nNoRecobrables: 0, nRecobroPorDefinir: 0,
+        paso: 'listo',
       }
       g.ncs.push(nc)
       if (!nc.plan_ot_id && ['registrada', 'con_recursos'].includes(nc.estado_planificacion)) g.pendientes.push(nc)
@@ -149,18 +184,32 @@ export default function NoConformidadesPage() {
       g.nNotas = Math.max(g.nNotas, nc.n_notas_operador ?? 0)
       m.set(nc.activo_id, g)
     }
-    return Array.from(m.values()).sort((a, b) =>
-      ORDEN_ESTADO.indexOf(a.estado) - ORDEN_ESTADO.indexOf(b.estado) || a.patente.localeCompare(b.patente))
-  }, [ncs])
+    const otsConVale = new Set(equiposListos.map((e) => e.otId))
+    const lista = Array.from(m.values())
+    for (const eq of lista) eq.paso = pasoDelEquipo(eq, otsConVale)
+    // Primero lo que está trabado esperando al jefe, después lo que ya avanza.
+    return lista.sort((a, b) =>
+      PASOS.findIndex((p) => p.k === a.paso) - PASOS.findIndex((p) => p.k === b.paso)
+      || ORDEN_SEV.indexOf(a.sevMax) - ORDEN_SEV.indexOf(b.sevMax)
+      || a.patente.localeCompare(b.patente))
+  }, [ncs, equiposListos])
+
+  // Filtro por paso del ciclo: se aplica en pantalla, sin volver a consultar.
+  const [paso, setPaso] = useState<PasoClave | null>(null)
+  const visibles = useMemo(
+    () => (paso ? equipos.filter((e) => e.paso === paso) : equipos), [equipos, paso])
+  const conteoPaso = useMemo(() => {
+    const c = {} as Record<PasoClave, number>
+    for (const p of PASOS) c[p.k] = 0
+    for (const e of equipos) c[e.paso] += 1
+    return c
+  }, [equipos])
 
   const invalidar = () => qc.invalidateQueries({ queryKey: ['nc-recepcion'] })
   const todoAbierto = equipos.length > 0 && equipos.every((e) => expandido[e.activoId])
 
   const kpi = useMemo(() => ({
     total: equipos.length,
-    sin: equipos.filter((e) => e.estado === 'registrada').length,
-    con: equipos.filter((e) => e.estado === 'con_recursos').length,
-    plan: equipos.filter((e) => ['planificada', 'en_ejecucion'].includes(e.estado)).length,
     recobrables: ncs.filter((n) => n.recobro === 'cliente' || n.recobro === 'compartido').length,
   }), [equipos, ncs])
 
@@ -205,11 +254,39 @@ export default function NoConformidadesPage() {
         </div>
       </div>
 
-      <div className="grid gap-3 grid-cols-2 md:grid-cols-5">
+      {/* El ciclo de izquierda a derecha: cada casilla es lo que falta hacer.
+          Click para ver solo esos equipos. */}
+      <div className="grid gap-2 grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
+        {PASOS.map((p) => {
+          const n = conteoPaso[p.k] ?? 0
+          const activo = paso === p.k
+          return (
+            <button key={p.k} onClick={() => setPaso(activo ? null : p.k)} title={p.hacer}
+              className={cn('rounded-lg border p-3 text-left transition-colors',
+                activo ? 'border-gray-900 bg-gray-50 ring-1 ring-gray-900' : 'hover:bg-muted/50',
+                n === 0 && !activo && 'opacity-50')}>
+              <div className="flex items-center gap-1.5">
+                <span className={cn('h-2 w-2 shrink-0 rounded-full', p.color)} />
+                <span className="text-2xl font-bold leading-none">{n}</span>
+              </div>
+              <p className="mt-1 text-[11px] font-medium leading-tight text-gray-700">{p.label}</p>
+            </button>
+          )
+        })}
+      </div>
+      {paso && (
+        <p className="-mt-3 text-xs text-muted-foreground">
+          Mostrando {visibles.length} equipo{visibles.length === 1 ? '' : 's'} en «{PASOS.find((p) => p.k === paso)?.label}»
+          — {PASOS.find((p) => p.k === paso)?.hacer}.
+          <button onClick={() => setPaso(null)} className="ml-2 underline hover:text-gray-900">Ver todos</button>
+        </p>
+      )}
+
+      <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
         <Kpi label="Equipos con NC" value={kpi.total} />
-        <Kpi label="Sin recursos" value={kpi.sin} warn={kpi.sin > 0} />
-        <Kpi label="Con recursos" value={kpi.con} />
-        <Kpi label="Planificados" value={kpi.plan} />
+        <Kpi label="NC totales" value={ncs.length} />
+        <Kpi label="Esperando al jefe" value={conteoPaso.aprobar + conteoPaso.recursos + conteoPaso.planificar}
+             warn={(conteoPaso.aprobar + conteoPaso.recursos + conteoPaso.planificar) > 0} />
         <Kpi label="NC recobrables al cliente" value={kpi.recobrables} />
       </div>
 
@@ -237,9 +314,10 @@ export default function NoConformidadesPage() {
               <th className="p-2">Estado</th><th className="p-2"></th>
             </tr></thead>
             <tbody>
-              {equipos.map((eq) => {
+              {visibles.map((eq) => {
                 const abierto = expandido[eq.activoId] ?? false
                 const eb = ESTADO_EQUIPO[eq.estado] ?? { v: 'default', t: eq.estado }
+                const pasoEq = PASOS.find((p) => p.k === eq.paso)!
                 return (
                   <Fragment key={eq.activoId}>
                     <tr className="border-b hover:bg-muted/40 cursor-pointer"
@@ -275,7 +353,15 @@ export default function NoConformidadesPage() {
                           </span>
                         )}
                       </td>
-                      <td className="p-2 text-center"><Badge variant={eb.v} className="text-[10px]">{eb.t}</Badge></td>
+                      <td className="p-2 text-center">
+                        {/* Qué falta hacer, antes que en qué estado está: es lo
+                            primero que el jefe necesita saber al mirar la fila. */}
+                        <span title={pasoEq.hacer}
+                              className={cn('inline-block whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-bold text-white', pasoEq.color)}>
+                          {PASO_TXT[eq.paso]}
+                        </span>
+                        <Badge variant={eb.v} className="ml-1 text-[10px]">{eb.t}</Badge>
+                      </td>
                       <td className="p-2 whitespace-nowrap text-right" onClick={(e) => e.stopPropagation()}>
                         <Button size="sm" variant="outline" onClick={() => setRecursosEquipo(eq)}>
                           <Package className="h-3.5 w-3.5 mr-1" /> Recursos
@@ -372,7 +458,13 @@ export default function NoConformidadesPage() {
                   </Fragment>
                 )
               })}
-              {!isLoading && equipos.length === 0 && <tr><td colSpan={7} className="p-6 text-center text-muted-foreground">Sin No Conformidades. Genera desde un checklist de recepción o registra una ad-hoc.</td></tr>}
+              {!isLoading && visibles.length === 0 && (
+                <tr><td colSpan={7} className="p-6 text-center text-muted-foreground">
+                  {paso
+                    ? `Ningún equipo está en «${PASOS.find((p) => p.k === paso)?.label}».`
+                    : 'Sin No Conformidades. Genera desde un checklist de recepción o registra una ad-hoc.'}
+                </td></tr>
+              )}
             </tbody>
           </table>
         </CardContent>

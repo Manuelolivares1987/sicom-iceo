@@ -3,6 +3,8 @@ import {
   getAlertas,
   getAlertasNoLeidas,
   getConteoNoLeidas,
+  getConteoPorDecidir,
+  marcarInformativasLeidas,
   marcarLeida,
 } from '@/lib/services/alertas'
 import { useAuth } from '@/contexts/auth-context'
@@ -58,7 +60,44 @@ export function useConteoNoLeidas() {
   })
 }
 
+/** Solo lo que espera una decisión: es el número que va en la campanita. */
+export function useConteoPorDecidir() {
+  const { user } = useAuth()
+  const destinatarioId = user?.id
+
+  return useQuery({
+    queryKey: ['alertas-conteo-por-decidir', destinatarioId],
+    queryFn: async () => {
+      if (!destinatarioId) return 0
+      const { data, error } = await getConteoPorDecidir(destinatarioId)
+      if (error) throw error
+      return data
+    },
+    enabled: !!destinatarioId,
+    refetchInterval: 30_000,
+  })
+}
+
 // ── Mutations ────────────────────────────────────────────
+
+export function useMarcarInformativasLeidas() {
+  const queryClient = useQueryClient()
+  const { user } = useAuth()
+
+  return useMutation({
+    mutationFn: async () => {
+      if (!user?.id) return
+      const { error } = await marcarInformativasLeidas(user.id)
+      if (error) throw error
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['alertas'] })
+      queryClient.invalidateQueries({ queryKey: ['alertas-no-leidas'] })
+      queryClient.invalidateQueries({ queryKey: ['alertas-conteo-no-leidas'] })
+      queryClient.invalidateQueries({ queryKey: ['alertas-conteo-por-decidir'] })
+    },
+  })
+}
 
 export function useMarcarLeida() {
   const queryClient = useQueryClient()
@@ -73,6 +112,7 @@ export function useMarcarLeida() {
       queryClient.invalidateQueries({ queryKey: ['alertas'] })
       queryClient.invalidateQueries({ queryKey: ['alertas-no-leidas'] })
       queryClient.invalidateQueries({ queryKey: ['alertas-conteo-no-leidas'] })
+      queryClient.invalidateQueries({ queryKey: ['alertas-conteo-por-decidir'] })
     },
   })
 }
