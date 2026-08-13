@@ -7,10 +7,10 @@
 // aleatorias, tiempo mínimo de inspección y captura de GPS. Está pensado para
 // el operador propio, no para el cliente.
 //
-// Pero el QR lo escanea el cliente, y para él tiene que haber UN solo
-// checklist y el más simple: los 11 ítems de la inspección del arrendatario.
-// Los QR ya impresos y los links compartidos siguen apuntando aquí, así que
-// esta ruta redirige en vez de desaparecer.
+// Es la URL que quedó grabada en los QR ya impresos y pegados en los equipos.
+// Manda al MENÚ, no al checklist: el cliente que escanea puede venir por los
+// papeles o por el historial, y si cae directo en el formulario no se entera
+// de que existen. Desde el menú elige.
 // ============================================================================
 
 import { useEffect } from 'react'
@@ -22,7 +22,7 @@ export default function ChecklistPublicoRedirect() {
   const router = useRouter()
 
   useEffect(() => {
-    router.replace(`/equipo/${id}/checklist-cliente`)
+    router.replace(`/equipo/${id}`)
   }, [id, router])
 
   return (
