@@ -43,6 +43,7 @@ import { MECANICOS } from '@/lib/taller-grupos'
 import { getTallerTecnicos } from '@/lib/services/taller-plan-semanal'
 import { RepuestosPorAprobar } from '@/components/mantenimiento/repuestos-por-aprobar'
 import { NcEquipoCard } from '@/components/mantenimiento/nc-equipo-card'
+import { InformesRecobroEnCurso } from '@/components/mantenimiento/informes-recobro-en-curso'
 import { cn } from '@/lib/utils'
 
 const ESTADO_BADGE: Record<string, { v: any; t: string }> = {
@@ -259,6 +260,10 @@ export default function NoConformidadesPage() {
       {/* Lo que espera una decisión del jefe va primero, antes que cualquier
           tablero: es a lo que viene cuando abre esta página desde el taller. */}
       <RepuestosPorAprobar onCambio={invalidar} />
+
+      {/* Un informe armado y olvidado en borrador es plata que no se cobró:
+          se queda a la vista hasta que alguien lo termine. */}
+      <InformesRecobroEnCurso />
 
       {/* El ciclo de izquierda a derecha: cada casilla es lo que falta hacer.
           Click para ver solo esos equipos. */}
