@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useQuery } from '@tanstack/react-query'
 import { Spinner } from '@/components/ui/spinner'
 import { Badge } from '@/components/ui/badge'
-import { cn, formatCLP, formatDate } from '@/lib/utils'
+import { cn, formatDate } from '@/lib/utils'
 import {
   getSemaforoDot,
   getCriticidadColor,
@@ -13,7 +13,6 @@ import {
   getEstadoActivoLabel,
 } from '@/domain/activos/status'
 import { useFichaActivo } from '@/hooks/use-activos'
-import { HistorialMantenimientoPublico } from '@/components/qr/historial-mantenimiento-publico'
 import { supabase } from '@/lib/supabase'
 
 // Documentos del equipo para la ficha pública (QR): último por tipo, con
@@ -45,6 +44,34 @@ function getProximaColor(fecha: string | null) {
   if (diff < 0) return 'text-red-600 font-bold'
   if (diff <= 7) return 'text-yellow-600 font-semibold'
   return 'text-green-600'
+}
+
+// Una opción del menú del QR. Todas iguales de tamaño y peso: ninguna es la
+// "principal", depende de a qué vino el cliente.
+function OpcionMenu({
+  href, emoji, titulo, detalle, alerta, color,
+}: {
+  href: string; emoji: string; titulo: string; detalle: string
+  alerta?: string | null; color: 'green' | 'blue' | 'gray'
+}) {
+  const borde = {
+    green: 'border-pillado-green-600 bg-pillado-green-50/40 hover:bg-pillado-green-50',
+    blue: 'border-blue-500 bg-blue-50/40 hover:bg-blue-50',
+    gray: 'border-gray-400 bg-gray-50/60 hover:bg-gray-100',
+  }[color]
+  return (
+    <Link href={href} className={cn('flex items-center gap-3 rounded-xl border-2 px-4 py-3.5', borde)}>
+      <span className="text-2xl">{emoji}</span>
+      <span className="flex-1">
+        <span className="block text-sm font-bold text-gray-900">{titulo}</span>
+        <span className="block text-[11px] text-gray-500">
+          {detalle}
+          {alerta && <span className="ml-1 font-semibold text-red-600">· {alerta}</span>}
+        </span>
+      </span>
+      <span className="text-gray-400">›</span>
+    </Link>
+  )
 }
 
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
@@ -125,6 +152,29 @@ export default function FichaEquipoPage() {
             )}
           </div>
 
+          {/* ── El menú: a esto viene el cliente cuando escanea ───────────── */}
+          {/* Va antes que la ficha técnica. Quien escanea el QR trae una
+              pregunta concreta —los papeles, el checklist o qué le han hecho
+              al equipo— y tiene que poder elegir sin leer nada primero. */}
+          <div className="space-y-2 pt-1">
+            <OpcionMenu
+              href={`/equipo/${id}/documentos`} emoji="📄" color="green"
+              titulo="Documentación vigente"
+              detalle={docs.length > 0 ? `${docs.length} documentos del equipo` : 'Permisos, certificados y vigencias'}
+              alerta={docsVencidos > 0 ? `${docsVencidos} por renovar` : null}
+            />
+            <OpcionMenu
+              href={`/equipo/${id}/checklist-cliente`} emoji="✅" color="blue"
+              titulo="Checklist del equipo"
+              detalle="Inspección que realiza quien arrienda el equipo"
+            />
+            <OpcionMenu
+              href={`/equipo/${id}/historial`} emoji="🔧" color="gray"
+              titulo="Historial de mantenimiento"
+              detalle="Los trabajos que se le han hecho a este equipo"
+            />
+          </div>
+
           {/* Info rows */}
           <div>
             <Row
@@ -197,40 +247,11 @@ export default function FichaEquipoPage() {
                 }
               />
             )}
-            {f.costo_acumulado > 0 && (
-              <Row label="Costo acumulado" value={formatCLP(f.costo_acumulado)} />
-            )}
-            {f.mttr_horas != null && f.mttr_horas > 0 && (
-              <Row label="MTTR" value={`${Number(f.mttr_horas).toFixed(1)} hrs`} />
-            )}
-          </div>
-
-          {/* Menú del QR: documentación vigente + checklist del arrendatario */}
-          <div className="space-y-2">
-            <Link href={`/equipo/${id}/documentos`}
-                  className="flex items-center gap-3 rounded-xl border-2 border-pillado-green-600 bg-pillado-green-50/40 px-4 py-3 hover:bg-pillado-green-50">
-              <span className="text-2xl">📄</span>
-              <span className="flex-1">
-                <span className="block text-sm font-bold text-gray-900">Documentación vigente</span>
-                <span className="block text-[11px] text-gray-500">
-                  {docs.length > 0 ? `${docs.length} documentos del equipo` : 'Permisos, certificados y vigencias'}
-                  {docsVencidos > 0 && <span className="ml-1 font-semibold text-red-600">· {docsVencidos} por renovar</span>}
-                </span>
-              </span>
-              <span className="text-gray-400">›</span>
-            </Link>
-            <Link href={`/equipo/${id}/checklist-cliente`}
-                  className="flex items-center gap-3 rounded-xl border-2 border-blue-500 bg-blue-50/40 px-4 py-3 hover:bg-blue-50">
-              <span className="text-2xl">✅</span>
-              <span className="flex-1">
-                <span className="block text-sm font-bold text-gray-900">Checklist del equipo</span>
-                <span className="block text-[11px] text-gray-500">Inspección semanal que realiza quien arrienda el equipo</span>
-              </span>
-              <span className="text-gray-400">›</span>
-            </Link>
-            {/* Lo que se le ha hecho al equipo — sin costos: eso es
-                conversación comercial, no ficha técnica. */}
-            <HistorialMantenimientoPublico activoId={id} />
+            {/* El costo acumulado y el MTTR estaban acá a la vista del cliente.
+                Es la misma plata que dejamos fuera del historial: cuánto nos
+                cuesta mantener el equipo es conversación comercial, y el MTTR
+                es un indicador interno que además se presta para malentendidos.
+                Ambos siguen en la ficha interna del activo. */}
           </div>
 
           {/* QR value */}
