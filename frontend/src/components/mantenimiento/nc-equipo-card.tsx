@@ -23,6 +23,8 @@ export type NcEquipoCardProps = {
   nPendientes: number
   nRecobrables: number
   nInsumosOperador: number
+  /** Hallazgos que reclamó el cliente desde el QR: van destacados. */
+  nDelCliente: number
   recursosTxt: string
   abierto: boolean
   ocupado: boolean
@@ -47,6 +49,11 @@ export function NcEquipoCard(p: NcEquipoCardProps) {
               {p.nNc} NC
             </span>
             <Badge variant={p.sevMax as never} className="text-[10px]">{p.sevMax}</Badge>
+            {p.nDelCliente > 0 && (
+              <span className="rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-bold text-blue-800">
+                {p.nDelCliente} del cliente
+              </span>
+            )}
           </div>
           {p.nombre && <p className="truncate text-xs text-muted-foreground">{p.nombre}</p>}
 
