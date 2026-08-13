@@ -1,10 +1,11 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import {
   ClipboardCheck, CheckCircle2, XCircle, MinusCircle, Camera, MapPin,
-  AlertTriangle, Loader2, Truck,
+  AlertTriangle, Loader2, Truck, ArrowLeft,
 } from 'lucide-react'
 import { SignaturePad } from '@/components/ui/signature-pad'
 import {
@@ -105,7 +106,19 @@ export default function ChecklistClientePublicoPage() {
   }
 
   if (loading) return <Centro><Loader2 className="h-8 w-8 animate-spin text-gray-400" /></Centro>
-  if (err && !activo) return <Centro><div className="text-center"><AlertTriangle className="h-10 w-10 text-amber-500 mx-auto mb-2" /><p>{err}</p></div></Centro>
+  if (err && !activo) return (
+    <Centro>
+      <div className="text-center">
+        <AlertTriangle className="h-10 w-10 text-amber-500 mx-auto mb-2" />
+        <p>{err}</p>
+        {/* Que un error tampoco deje al cliente sin salida. */}
+        <Link href={`/equipo/${id}`}
+              className="mt-4 inline-flex items-center gap-1 text-sm font-medium text-gray-600 hover:text-gray-900">
+          <ArrowLeft className="h-4 w-4" /> Volver al menú del equipo
+        </Link>
+      </div>
+    </Centro>
+  )
 
   if (enviado) {
     return (
@@ -116,9 +129,16 @@ export default function ChecklistClientePublicoPage() {
           <p className="text-sm text-gray-600 mt-1">Gracias. El estado del equipo quedó registrado.</p>
           {enviado.tiene_novedad && (
             <div className="mt-4 rounded-lg bg-amber-50 border border-amber-200 p-3 text-sm text-amber-800">
-              Reportaste {enviado.items_no_ok} novedad(es). El taller será notificado para revisarlas.
+              Reportaste {enviado.items_no_ok} novedad(es). Ya le llegaron al jefe de taller
+              para que las revise.
             </div>
           )}
+          {/* Terminó el checklist: que pueda seguir a los papeles o al
+              historial en vez de quedarse en una pantalla sin salida. */}
+          <Link href={`/equipo/${id}`}
+                className="mt-5 inline-flex w-full items-center justify-center gap-1.5 rounded-lg border-2 border-gray-300 px-4 py-3 text-sm font-semibold text-gray-700 hover:bg-gray-50">
+            <ArrowLeft className="h-4 w-4" /> Volver al menú del equipo
+          </Link>
         </div>
       </Centro>
     )
@@ -127,6 +147,12 @@ export default function ChecklistClientePublicoPage() {
   return (
     <div className="min-h-screen bg-gray-50 pb-24">
       <div className="bg-white border-b p-4 sticky top-0 z-10">
+        {/* Sin esto, quien entra por el QR queda encerrado en el checklist:
+            no hay forma de llegar a los documentos ni al historial. */}
+        <Link href={`/equipo/${id}`}
+              className="mb-2 inline-flex items-center gap-1 text-xs font-medium text-gray-500 hover:text-gray-800">
+          <ArrowLeft className="h-3.5 w-3.5" /> Volver al menú
+        </Link>
         <div className="flex items-center gap-2">
           <Truck className="h-6 w-6 text-blue-600" />
           <div>

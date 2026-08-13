@@ -69,7 +69,7 @@ export default function DocumentosEquipoPage() {
         <div className="px-4 py-4 space-y-2">
           <Link href={`/equipo/${id}`}
                 className="inline-flex items-center gap-1 text-xs font-medium text-gray-500 hover:text-gray-700">
-            <ArrowLeft className="h-3.5 w-3.5" /> Volver a la ficha
+            <ArrowLeft className="h-3.5 w-3.5" /> Volver al menú
           </Link>
 
           {vencidos > 0 && (
