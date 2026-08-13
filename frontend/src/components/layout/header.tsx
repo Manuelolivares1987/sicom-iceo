@@ -13,7 +13,21 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/contexts/auth-context'
-import { useConteoNoLeidas, useAlertasNoLeidas, useMarcarLeida } from '@/hooks/use-alertas'
+import {
+  useAlertasNoLeidas, useMarcarLeida,
+  useConteoPorDecidir, useMarcarInformativasLeidas,
+} from '@/hooks/use-alertas'
+
+// Qué hay que hacer con la alerta, dicho en una palabra. Va junto al título
+// para que se entienda sin abrirla.
+const accionDe: Record<string, string> = {
+  recurso_solicitado:  'Aprobar',
+  recurso_por_comprar: 'Comprar',
+  recurso_recibido:    'Continuar OT',
+  vale_emitido:        'Preparar',
+  no_conformidad:      'Planificar',
+  bloqueante:          'Resolver',
+}
 
 // Adónde lleva una alerta según su entidad.
 function rutaAlerta(entidadTipo: string | null): string {
@@ -56,11 +70,18 @@ export default function Header({ onMenuToggle }: HeaderProps) {
   const router = useRouter()
   const [showUserMenu, setShowUserMenu] = useState(false)
   const [showNotif, setShowNotif] = useState(false)
+  // La campanita abre en lo que espera una decisión; lo informativo está al lado.
+  const [tab, setTab] = useState<'accion' | 'info'>('accion')
   const { perfil, signOut } = useAuth()
-  const { data: unreadCount = 0 } = useConteoNoLeidas()
+  const { data: unreadCount = 0 } = useConteoPorDecidir()
   const { data: alertasData } = useAlertasNoLeidas()
   const alertas = alertasData ?? []
   const marcarLeida = useMarcarLeida()
+  const marcarInformativas = useMarcarInformativasLeidas()
+
+  const porDecidir = useMemo(() => alertas.filter((a) => a.requiere_accion), [alertas])
+  const informativas = useMemo(() => alertas.filter((a) => !a.requiere_accion), [alertas])
+  const visibles = tab === 'accion' ? porDecidir : informativas
 
   const sevDot: Record<string, string> = {
     critical: 'bg-red-500', warning: 'bg-amber-500', info: 'bg-blue-500',
@@ -138,16 +159,47 @@ export default function Header({ onMenuToggle }: HeaderProps) {
         {showNotif && (
           <>
             <div className="fixed inset-0 z-40" onClick={() => setShowNotif(false)} />
-            <div className="absolute right-0 top-12 z-50 w-80 rounded-lg border border-gray-200 bg-white shadow-lg">
-              <div className="flex items-center justify-between border-b border-gray-100 px-4 py-2.5">
-                <p className="text-sm font-semibold text-gray-900">Notificaciones</p>
-                <span className="text-xs text-gray-400">{unreadCount} sin leer</span>
+            <div className="absolute right-0 top-12 z-50 w-96 rounded-lg border border-gray-200 bg-white shadow-lg">
+              <div className="flex border-b border-gray-100">
+                <button
+                  onClick={() => setTab('accion')}
+                  className={cn(
+                    'flex-1 px-4 py-2.5 text-sm font-semibold transition-colors',
+                    tab === 'accion'
+                      ? 'border-b-2 border-pillado-green-500 text-gray-900'
+                      : 'text-gray-500 hover:text-gray-700',
+                  )}
+                >
+                  Por decidir
+                  {porDecidir.length > 0 && (
+                    <span className="ml-1.5 rounded-full bg-pillado-orange-500 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                      {porDecidir.length}
+                    </span>
+                  )}
+                </button>
+                <button
+                  onClick={() => setTab('info')}
+                  className={cn(
+                    'flex-1 px-4 py-2.5 text-sm font-semibold transition-colors',
+                    tab === 'info'
+                      ? 'border-b-2 border-pillado-green-500 text-gray-900'
+                      : 'text-gray-500 hover:text-gray-700',
+                  )}
+                >
+                  Avisos
+                  {informativas.length > 0 && (
+                    <span className="ml-1.5 text-xs font-normal text-gray-400">{informativas.length}</span>
+                  )}
+                </button>
               </div>
+
               <div className="max-h-96 overflow-y-auto">
-                {alertas.length === 0 ? (
-                  <p className="px-4 py-6 text-center text-sm text-gray-400">Sin notificaciones nuevas.</p>
+                {visibles.length === 0 ? (
+                  <p className="px-4 py-6 text-center text-sm text-gray-400">
+                    {tab === 'accion' ? 'Nada esperando tu decisión.' : 'Sin avisos nuevos.'}
+                  </p>
                 ) : (
-                  alertas.slice(0, 20).map((a) => (
+                  visibles.slice(0, 30).map((a) => (
                     <button
                       key={a.id}
                       onClick={() => abrirAlerta(a.id, a.entidad_tipo)}
@@ -155,13 +207,31 @@ export default function Header({ onMenuToggle }: HeaderProps) {
                     >
                       <span className={cn('mt-1.5 h-2 w-2 shrink-0 rounded-full', sevDot[a.severidad] ?? 'bg-gray-400')} />
                       <span className="flex-1">
-                        <span className="block text-sm font-medium text-gray-800">{a.titulo}</span>
+                        <span className="block text-sm font-medium text-gray-800">
+                          {accionDe[a.tipo] && (
+                            <span className="mr-1.5 rounded bg-pillado-green-50 px-1.5 py-0.5 text-[10px] font-bold uppercase text-pillado-green-700">
+                              {accionDe[a.tipo]}
+                            </span>
+                          )}
+                          {a.titulo}
+                        </span>
                         {a.mensaje && <span className="block text-xs text-gray-500 line-clamp-2">{a.mensaje}</span>}
                       </span>
                     </button>
                   ))
                 )}
               </div>
+
+              {/* Los avisos se acumulan solos; que se puedan bajar de una vez. */}
+              {tab === 'info' && informativas.length > 0 && (
+                <button
+                  onClick={() => marcarInformativas.mutate()}
+                  disabled={marcarInformativas.isPending}
+                  className="w-full border-t border-gray-100 px-4 py-2.5 text-xs font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
+                >
+                  {marcarInformativas.isPending ? 'Marcando…' : `Marcar los ${informativas.length} avisos como leídos`}
+                </button>
+              )}
             </div>
           </>
         )}

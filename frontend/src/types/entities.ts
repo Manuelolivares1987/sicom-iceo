@@ -277,5 +277,7 @@ export interface Alerta {
   destinatario_id: string | null
   leida: boolean
   leida_en: string | null
+  /** Espera una decisión del destinatario, no solo informarlo (MIG283). */
+  requiere_accion: boolean
   created_at: string
 }
