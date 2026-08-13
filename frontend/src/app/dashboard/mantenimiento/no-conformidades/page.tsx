@@ -41,6 +41,8 @@ import { getCategoriasProducto } from '@/lib/services/producto-categorias'
 import { solicitarMaterialBodega } from '@/lib/services/bodega-solicitudes'
 import { MECANICOS } from '@/lib/taller-grupos'
 import { getTallerTecnicos } from '@/lib/services/taller-plan-semanal'
+import { RepuestosPorAprobar } from '@/components/mantenimiento/repuestos-por-aprobar'
+import { NcEquipoCard } from '@/components/mantenimiento/nc-equipo-card'
 import { cn } from '@/lib/utils'
 
 const ESTADO_BADGE: Record<string, { v: any; t: string }> = {
@@ -254,6 +256,10 @@ export default function NoConformidadesPage() {
         </div>
       </div>
 
+      {/* Lo que espera una decisión del jefe va primero, antes que cualquier
+          tablero: es a lo que viene cuando abre esta página desde el taller. */}
+      <RepuestosPorAprobar onCambio={invalidar} />
+
       {/* El ciclo de izquierda a derecha: cada casilla es lo que falta hacer.
           Click para ver solo esos equipos. */}
       <div className="grid gap-2 grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
@@ -303,7 +309,65 @@ export default function NoConformidadesPage() {
         </button>
       </div>
 
-      <Card>
+      {/* ── En el teléfono: una tarjeta por equipo ─────────────────────────── */}
+      <div className="space-y-2 md:hidden">
+        {isLoading && <Spinner className="h-5 w-5" />}
+        {visibles.map((eq) => {
+          const abierto = expandido[eq.activoId] ?? false
+          const pasoEq = PASOS.find((p) => p.k === eq.paso)!
+          return (
+            <NcEquipoCard
+              key={eq.activoId}
+              patente={eq.patente} nombre={eq.nombre} nNc={eq.ncs.length} sevMax={eq.sevMax}
+              pasoLabel={PASO_TXT[eq.paso]} pasoHacer={pasoEq.hacer} pasoColor={pasoEq.color}
+              nPendientes={eq.pendientes.length} nRecobrables={eq.nRecobrables}
+              nInsumosOperador={eq.nInsumosOperador}
+              recursosTxt={eq.grupos || eq.horas > 0 || eq.nMateriales > 0
+                ? `${eq.grupos ?? '—'}${eq.horas ? ` · ${eq.horas}h` : ''}${eq.nMateriales ? ` · ${eq.nMateriales} mat.` : ''}`
+                : 'Sin recursos asignados'}
+              abierto={abierto} ocupado={busyId === eq.activoId}
+              onToggle={() => setExpandido((p) => ({ ...p, [eq.activoId]: !abierto }))}
+              onRecursos={() => setRecursosEquipo(eq)}
+              onPlanificar={() => planificar(eq)}
+              onRecobro={() => setRecobroEquipo(eq)}
+            >
+              {/* Cada hallazgo con su foto: es lo que el jefe va a mirar. */}
+              <div className="space-y-1.5">
+                {eq.ncs.map((nc) => (
+                  <button key={nc.id} onClick={() => setFichaNc({ nc, patente: eq.patente })}
+                          className="flex w-full gap-2 rounded border bg-white p-2 text-left">
+                    {nc.foto_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={nc.foto_url} alt="Evidencia" className="h-12 w-12 shrink-0 rounded border object-cover" />
+                    ) : (
+                      <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded border border-dashed border-gray-300 text-gray-300">
+                        <ImageOff className="h-4 w-4" />
+                      </span>
+                    )}
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-xs font-medium text-gray-800">{nc.descripcion}</span>
+                      {nc.observacion_item && (
+                        <span className="mt-0.5 block text-[11px] text-gray-600">«{nc.observacion_item}»</span>
+                      )}
+                      <span className="mt-0.5 block text-[10px] text-muted-foreground">
+                        {ESTADO_BADGE[nc.estado_planificacion]?.t ?? nc.estado_planificacion} · {nc.severidad}
+                      </span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </NcEquipoCard>
+          )
+        })}
+        {!isLoading && visibles.length === 0 && (
+          <p className="rounded-lg border bg-white p-6 text-center text-sm text-muted-foreground">
+            {paso ? `Ningún equipo está en «${PASOS.find((p) => p.k === paso)?.label}».` : 'Sin No Conformidades.'}
+          </p>
+        )}
+      </div>
+
+      {/* ── En pantalla grande: la tabla completa ──────────────────────────── */}
+      <Card className="hidden md:block">
         <CardContent className="p-0 overflow-x-auto">
           {isLoading && <div className="p-4"><Spinner className="h-5 w-5" /></div>}
           <table className="w-full text-sm">
