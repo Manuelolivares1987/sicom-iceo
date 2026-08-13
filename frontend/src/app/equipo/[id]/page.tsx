@@ -13,6 +13,7 @@ import {
   getEstadoActivoLabel,
 } from '@/domain/activos/status'
 import { useFichaActivo } from '@/hooks/use-activos'
+import { HistorialMantenimientoPublico } from '@/components/qr/historial-mantenimiento-publico'
 import { supabase } from '@/lib/supabase'
 
 // Documentos del equipo para la ficha pública (QR): último por tipo, con
@@ -227,6 +228,9 @@ export default function FichaEquipoPage() {
               </span>
               <span className="text-gray-400">›</span>
             </Link>
+            {/* Lo que se le ha hecho al equipo — sin costos: eso es
+                conversación comercial, no ficha técnica. */}
+            <HistorialMantenimientoPublico activoId={id} />
           </div>
 
           {/* QR value */}
