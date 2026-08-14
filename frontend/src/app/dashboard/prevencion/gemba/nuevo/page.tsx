@@ -17,7 +17,9 @@ import {
 } from '@/hooks/use-gemba'
 import { useToast } from '@/hooks/use-toast'
 import { useAuth } from '@/contexts/auth-context'
-import { plantillaDeRol } from '@/lib/services/gemba'
+import {
+  plantillaDeRol, seccionesDelDia, contarItems, nombreDia, CADENCIA_LABEL,
+} from '@/lib/services/gemba'
 
 const CARGO_LABEL: Record<string, string> = {
   prevencionista: 'Prevencionista de Riesgos',
@@ -61,10 +63,14 @@ export default function NuevoGembaPage() {
     if (miPlantilla && !plantillaId) setPlantillaId(miPlantilla.id)
   }, [miPlantilla, plantillaId])
 
-  const totalItems = useMemo(
-    () => plantilla?.secciones?.reduce((acc, s) => acc + s.items.length, 0) ?? 0,
-    [plantilla]
-  )
+  // [MIG290] Lo que se va a cargar hoy: las secciones fijas más el bloque del
+  // día. No el checklist completo — el recorrido diario no lo abarca.
+  const seccionesHoy = useMemo(
+    () => seccionesDelDia(plantilla, fecha), [plantilla, fecha])
+  const totalItems = useMemo(() => contarItems(seccionesHoy), [seccionesHoy])
+  const bloqueDelDia = useMemo(
+    () => seccionesHoy.find((s) => s.dia != null) ?? null, [seccionesHoy])
+  const rota = (plantilla?.secciones ?? []).some((s) => s.dia != null)
 
   const puedeIniciar =
     !!plantillaId && !!fecha && (lugarTipo === 'taller' || !!faenaId)
@@ -131,9 +137,32 @@ export default function NuevoGembaPage() {
           />
 
           {plantilla && (
-            <p className="rounded bg-blue-50 p-3 text-xs text-blue-800">
-              {plantilla.descripcion} · {plantilla.secciones.length} secciones, {totalItems} ítems.
-            </p>
+            <div className="rounded bg-blue-50 p-3 text-xs text-blue-800">
+              <p>{plantilla.descripcion}</p>
+              {plantilla.cadencia && (
+                <p className="mt-1 font-semibold">
+                  Recorrido {CADENCIA_LABEL[plantilla.cadencia].toLowerCase()}.
+                </p>
+              )}
+              {/* Qué toca hoy: el jefe tiene que saber, antes de partir, que no
+                  va a llenar 28 ítems sino 12 — y cuáles. */}
+              {rota ? (
+                bloqueDelDia ? (
+                  <p className="mt-1">
+                    Hoy es <b>{nombreDia(fecha)}</b>: van las secciones fijas más
+                    el bloque <b>{bloqueDelDia.titulo.replace(/^[^·]+·\s*/, '')}</b> —
+                    {' '}<b>{totalItems} ítems</b>. El resto del checklist entra los otros días.
+                  </p>
+                ) : (
+                  <p className="mt-1">
+                    {nombreDia(fecha)}: sin bloque rotativo, va solo el núcleo fijo —
+                    {' '}<b>{totalItems} ítems</b>.
+                  </p>
+                )
+              ) : (
+                <p className="mt-1">{seccionesHoy.length} secciones, <b>{totalItems} ítems</b>.</p>
+              )}
+            </div>
           )}
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

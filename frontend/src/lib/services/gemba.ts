@@ -10,7 +10,50 @@ export type GembaEstadoHallazgo = 'abierta' | 'en_proceso' | 'cerrada'
 export interface GembaSeccion {
   titulo: string
   items: string[]
+  /**
+   * [MIG290] Sección rotativa: 1 = lunes … 5 = viernes. Sin `dia` la sección es
+   * fija y va en todos los recorridos. Así el recorrido diario del Jefe de
+   * Taller dura 10-15 min (7 fijos + el bloque del día) y en la semana cubre
+   * el taller completo — un checklist de 28 ítems diarios no se hace, se marca.
+   */
+  dia?: number | null
 }
+
+export type GembaCadencia = 'diaria' | 'semanal' | 'quincenal' | 'mensual'
+
+export const CADENCIA_LABEL: Record<GembaCadencia, string> = {
+  diaria: 'Diario', semanal: 'Semanal', quincenal: 'Quincenal', mensual: 'Mensual',
+}
+
+const DIA_NOMBRE = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado']
+
+/** Día de la semana (1 = lunes … 7 = domingo) de una fecha yyyy-mm-dd. */
+export function diaDeSemana(fechaIso: string): number {
+  const [y, m, d] = fechaIso.slice(0, 10).split('-').map(Number)
+  return ((new Date(y, m - 1, d).getDay() + 6) % 7) + 1
+}
+
+export const nombreDia = (fechaIso: string): string => {
+  const [y, m, d] = fechaIso.slice(0, 10).split('-').map(Number)
+  return DIA_NOMBRE[new Date(y, m - 1, d).getDay()]
+}
+
+/**
+ * Las secciones que le tocan a un recorrido en esa fecha: las fijas más la del
+ * día. Si es fin de semana (o la plantilla no tiene bloque para ese día), van
+ * solo las fijas — mejor un recorrido corto que uno que no se puede hacer.
+ */
+export function seccionesDelDia(
+  plantilla: Pick<GembaPlantilla, 'secciones'> | null | undefined, fechaIso: string,
+): GembaSeccion[] {
+  const secs = plantilla?.secciones ?? []
+  if (!secs.some((s) => s.dia != null)) return secs      // plantilla sin rotación
+  const hoy = diaDeSemana(fechaIso)
+  return secs.filter((s) => s.dia == null || s.dia === hoy)
+}
+
+export const contarItems = (secs: GembaSeccion[]): number =>
+  secs.reduce((n, s) => n + s.items.length, 0)
 
 export interface GembaPlantilla {
   id: string
@@ -27,6 +70,8 @@ export interface GembaPlantilla {
    * el mapeo vive en la BD, no en el código, para poder corregirlo sin deploy.
    */
   roles: string[]
+  /** [MIG290] Con qué frecuencia se espera el recorrido: diaria (JT), quincenal (JOp). */
+  cadencia: GembaCadencia | null
 }
 
 /** El checklist que le toca a un rol, si hay uno solo claro. */
@@ -223,8 +268,8 @@ export async function createGembaRecorrido(input: {
     .single()
   if (eRecorrido || !recorrido) return { data: null, error: eRecorrido }
 
-  // 3. Pre-cargar respuestas desde las secciones de la plantilla
-  const secciones = (plantilla.secciones ?? []) as GembaSeccion[]
+  // 3. Pre-cargar respuestas: las secciones fijas más el bloque del día (MIG290)
+  const secciones = seccionesDelDia(plantilla as GembaPlantilla, input.fecha)
   let orden = 0
   const filas = secciones.flatMap((sec) =>
     sec.items.map((item) => ({

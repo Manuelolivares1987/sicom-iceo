@@ -8,6 +8,7 @@ Digitaliza los recorridos de terreno del área de Prevención de Riesgos para **
 |---|---|
 | `database/production_run/288_recorridos_gemba.sql` | Tablas, RLS por permiso de módulo, vistas de resumen y seeds de las 3 plantillas |
 | `database/production_run/289_gemba_jefes_operaciones_calidad.sql` | Reorienta los checklists de los jefes: operación y calidad del equipo, no seguridad |
+| `database/production_run/290_gemba_cadencia_diaria_jt.sql` | Cadencia por checklist + el del Jefe de Taller partido en núcleo fijo diario y bloque rotativo |
 | `frontend/src/lib/services/gemba.ts` | Servicio Supabase (tipos, queries, mutaciones) |
 | `frontend/src/hooks/use-gemba.ts` | Hooks react-query |
 | `frontend/src/app/dashboard/prevencion/gemba/page.tsx` | Lista de recorridos + KPIs + plan de acción global |
@@ -19,11 +20,15 @@ Digitaliza los recorridos de terreno del área de Prevención de Riesgos para **
 
 - **`gemba_plantillas`** — checklists por cargo, secciones e ítems en JSONB. `roles TEXT[]` dice a qué rol se le propone cada uno. Seeds:
 
-  | Código | Rol | Foco | Tamaño |
-  |---|---|---|---|
-  | `GEMBA-PREV` | `prevencionista` | **Seguridad**: EPP, 5S, máquinas, eléctrico, SUSPEL, emergencias, ergonomía, conductas | 8 secc. / 36 ítems |
-  | `GEMBA-JT` | `jefe_mantenimiento` | **Operación y calidad del equipo**: cumplimiento del plan, qué frena el trabajo, calidad de lo ejecutado, gate de salida al cliente | 6 secc. / 28 ítems |
-  | `GEMBA-JOP` | `jefe_operaciones` | **El sistema y el cliente**: compromiso cumplido, calidad de lo entregado, el taller como sistema, obstáculos del equipo, faena | 5 secc. / 23 ítems |
+  | Código | Rol | Cadencia | Foco | Tamaño |
+  |---|---|---|---|---|
+  | `GEMBA-PREV` | `prevencionista` | semanal | **Seguridad**: EPP, 5S, máquinas, eléctrico, SUSPEL, emergencias, ergonomía, conductas | 36 ítems |
+  | `GEMBA-JT` | `jefe_mantenimiento` | **diaria** | **Operación y calidad del equipo**: cumplimiento del plan, qué frena el trabajo, calidad de lo ejecutado, gate de salida al cliente | 11-12 ítems por día (29 en la semana) |
+  | `GEMBA-JOP` | `jefe_operaciones` | **quincenal** | **El sistema y el cliente**: compromiso cumplido, calidad de lo entregado, el taller como sistema, obstáculos del equipo, faena | 23 ítems |
+
+  **Rotación (MIG290).** Una sección con `"dia"` en el JSONB (1 = lunes … 5 = viernes) solo se carga ese día; sin `dia` es fija. El recorrido diario del Jefe de Taller son 7 ítems fijos + el bloque del día, y en la semana cubre el taller completo. Un checklist de 28 ítems diarios no se hace: se marca todo "cumple" sin mirar. Fin de semana sin bloque → solo el núcleo fijo.
+
+  **Aviso de cadencia.** La portada del módulo compara el último recorrido propio contra la cadencia de su checklist y avisa cuando toca ("Todavía no has hecho el recorrido de hoy"). Se calcula sobre los datos existentes, sin un programa aparte que mantener.
 
   Los tres recorren, pero **no buscan lo mismo**: la inspección de seguridad es del prevencionista; los jefes miran que el trabajo fluya y que el equipo salga impecable. En los checklists de los jefes queda un solo ítem de seguridad ("no se tolera el riesgo evidente"), no una inspección.
 
@@ -56,7 +61,7 @@ Ninguna tabla tiene policy de DELETE: un recorrido no se borra.
 
 ## Flujo de uso
 
-1. **Nuevo recorrido** → el checklist del cargo viene preseleccionado (los otros siguen disponibles: a veces se cubre al otro). Se elige lugar (taller o faena), sector, acompañantes y foco. Al iniciar se pre-cargan todos los ítems.
+1. **Nuevo recorrido** → el checklist del cargo viene preseleccionado (los otros siguen disponibles: a veces se cubre al otro). La pantalla dice qué toca hoy ("Hoy es martes: fijas + Calidad de lo ejecutado — 11 ítems"). Se elige lugar (taller o faena), sector, acompañantes y foco. Al iniciar se pre-cargan los ítems del día.
 2. **En terreno** (móvil) → Cumple / No cumple / N/A + observación. Al marcar **No cumple** se abre el registro del hallazgo con acción correctiva, responsable y fecha compromiso.
 3. **Cierre** → solo cuando no quedan ítems pendientes; guarda hora de término y bloquea el checklist.
 4. **Seguimiento** → KPIs y plan de acción global en la portada del módulo.
@@ -70,7 +75,7 @@ Ninguna tabla tiene policy de DELETE: un recorrido no se borra.
 - Un "No cumple" puede quedar sin hallazgo (el modal tiene "Omitir" y el gate de cierre solo cuenta pendientes).
 
 **Fase 2 — que sea Lean y no una auditoría**
-- Programa/cadencia por cargo con recordatorio (sin ritmo, el programa muere en dos meses).
+- Recordatorio fuera de la app (correo o campanita) cuando toca el recorrido: hoy el aviso solo aparece al entrar al módulo.
 - Verificación de eficacia al cerrar una acción (quién verificó + foto), que alimente el ítem 3.2 del checklist del Jefe de Operaciones.
 - Tendencia por ítem/sección (los 5 que más fallan en 90 días) → materia prima de la reunión de mejora.
 - Cambiar el KPI estrella de "% cumplimiento" a "obstáculos levantados / resueltos en plazo / verificados": el % premia marcar *cumple*.

@@ -8,9 +8,26 @@ import { Spinner } from '@/components/ui/spinner'
 import { cn } from '@/lib/utils'
 import { useRequireAuth } from '@/hooks/use-require-auth'
 import { usePermissions } from '@/hooks/use-permissions'
-import { useGembaKpi, useGembaRecorridos, useGembaHallazgos } from '@/hooks/use-gemba'
+import { useAuth } from '@/contexts/auth-context'
+import { useGembaKpi, useGembaRecorridos, useGembaHallazgos, useGembaPlantillas } from '@/hooks/use-gemba'
+import { plantillaDeRol, CADENCIA_LABEL, type GembaCadencia } from '@/lib/services/gemba'
 
 const LUGAR_LABEL: Record<string, string> = { taller: 'Taller', faena: 'Faena' }
+
+/** Cada cuántos días se espera el recorrido según su cadencia. */
+const DIAS_CADENCIA: Record<GembaCadencia, number> = {
+  diaria: 1, semanal: 7, quincenal: 14, mensual: 30,
+}
+
+const hoyIso = () => {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+const diasEntre = (desdeIso: string, hastaIso: string): number => {
+  const p = (s: string) => { const [y, m, d] = s.slice(0, 10).split('-').map(Number); return new Date(y, m - 1, d).getTime() }
+  return Math.round((p(hastaIso) - p(desdeIso)) / 86_400_000)
+}
 
 export default function GembaPage() {
   useRequireAuth()
@@ -23,6 +40,20 @@ export default function GembaPage() {
   const { data: kpi, isLoading: loadingKpi } = useGembaKpi()
   const { data: recorridos, isLoading } = useGembaRecorridos(50)
   const { data: hallazgosAbiertos } = useGembaHallazgos(undefined, true)
+
+  // ── ¿Le toca recorrer hoy? ────────────────────────────────────────────────
+  // El recorrido del Jefe de Taller es DIARIO: sin un aviso, a la tercera
+  // semana nadie lo abre. Se calcula contra su último recorrido, no contra un
+  // programa aparte que habría que mantener.
+  const { perfil } = useAuth()
+  const { data: plantillas } = useGembaPlantillas()
+  const miPlantilla = plantillaDeRol(plantillas, perfil?.rol)
+  const miUltimo = (recorridos ?? []).find(
+    (r) => r.plantilla_id === miPlantilla?.id && r.responsable_id === perfil?.id)
+  const diasDesde = miUltimo ? diasEntre(miUltimo.fecha, hoyIso()) : null
+  const cadencia = miPlantilla?.cadencia ?? null
+  const toca = !!cadencia && puedeRecorrer &&
+    (diasDesde === null || diasDesde >= DIAS_CADENCIA[cadencia])
 
   if (isLoading || loadingKpi) {
     return (
@@ -54,6 +85,31 @@ export default function GembaPage() {
           </Link>
         )}
       </div>
+
+      {/* ── Te toca recorrer ── */}
+      {toca && (
+        <Link href="/dashboard/prevencion/gemba/nuevo" className="block">
+          <div className="flex items-center gap-3 rounded-lg border border-amber-300 bg-amber-50 p-4 transition-colors hover:bg-amber-100">
+            <Footprints className="h-5 w-5 shrink-0 text-amber-600" />
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-amber-900">
+                {cadencia === 'diaria'
+                  ? 'Todavía no has hecho el recorrido de hoy'
+                  : `Te toca tu recorrido ${CADENCIA_LABEL[cadencia!].toLowerCase()}`}
+              </p>
+              <p className="text-xs text-amber-800">
+                {diasDesde === null
+                  ? 'Es tu primer recorrido con este checklist.'
+                  : `Tu último recorrido fue hace ${diasDesde} día${diasDesde === 1 ? '' : 's'} (${miUltimo?.fecha}).`}
+                {' '}{miPlantilla?.nombre}
+              </p>
+            </div>
+            <span className="shrink-0 rounded bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white">
+              Iniciar
+            </span>
+          </div>
+        </Link>
+      )}
 
       {/* ── KPIs ── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
