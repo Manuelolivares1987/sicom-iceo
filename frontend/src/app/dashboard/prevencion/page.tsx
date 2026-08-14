@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
+import Link from 'next/link'
 import {
   HardHat,
   AlertTriangle,
@@ -12,6 +13,7 @@ import {
   Clock,
   Package,
   Truck,
+  Footprints,
 } from 'lucide-react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Spinner } from '@/components/ui/spinner'
@@ -134,6 +136,13 @@ export default function PrevencionPage() {
             Cumplimiento normativo: DS 43 (SUSPEL) · DS 148 (RESPEL) · DS 298 (Transporte SP)
           </p>
         </div>
+        <Link
+          href="/dashboard/prevencion/gemba"
+          className="inline-flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-800 transition-colors hover:bg-amber-100"
+        >
+          <Footprints className="h-4 w-4" />
+          Recorridos Gemba
+        </Link>
       </div>
 
       {/* ── Alertas críticas ── */}
