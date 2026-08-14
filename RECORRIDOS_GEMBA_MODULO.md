@@ -7,6 +7,7 @@ Digitaliza los recorridos de terreno del área de Prevención de Riesgos para **
 | Archivo | Descripción |
 |---|---|
 | `database/production_run/288_recorridos_gemba.sql` | Tablas, RLS por permiso de módulo, vistas de resumen y seeds de las 3 plantillas |
+| `database/production_run/289_gemba_jefes_operaciones_calidad.sql` | Reorienta los checklists de los jefes: operación y calidad del equipo, no seguridad |
 | `frontend/src/lib/services/gemba.ts` | Servicio Supabase (tipos, queries, mutaciones) |
 | `frontend/src/hooks/use-gemba.ts` | Hooks react-query |
 | `frontend/src/app/dashboard/prevencion/gemba/page.tsx` | Lista de recorridos + KPIs + plan de acción global |
@@ -17,9 +18,16 @@ Digitaliza los recorridos de terreno del área de Prevención de Riesgos para **
 ## Modelo de datos
 
 - **`gemba_plantillas`** — checklists por cargo, secciones e ítems en JSONB. `roles TEXT[]` dice a qué rol se le propone cada uno. Seeds:
-  - `GEMBA-PREV` · rol `prevencionista` — 8 secciones / 36 ítems (inspección operativa del taller)
-  - `GEMBA-JT` · rol `jefe_mantenimiento` — 6 secciones / 28 ítems (operativo + gestión del sector)
-  - `GEMBA-JOP` · rol `jefe_operaciones` — 7 secciones / 31 ítems (gestión y liderazgo, taller + faenas; la sección de faena se marca N/A en taller)
+
+  | Código | Rol | Foco | Tamaño |
+  |---|---|---|---|
+  | `GEMBA-PREV` | `prevencionista` | **Seguridad**: EPP, 5S, máquinas, eléctrico, SUSPEL, emergencias, ergonomía, conductas | 8 secc. / 36 ítems |
+  | `GEMBA-JT` | `jefe_mantenimiento` | **Operación y calidad del equipo**: cumplimiento del plan, qué frena el trabajo, calidad de lo ejecutado, gate de salida al cliente | 6 secc. / 28 ítems |
+  | `GEMBA-JOP` | `jefe_operaciones` | **El sistema y el cliente**: compromiso cumplido, calidad de lo entregado, el taller como sistema, obstáculos del equipo, faena | 5 secc. / 23 ítems |
+
+  Los tres recorren, pero **no buscan lo mismo**: la inspección de seguridad es del prevencionista; los jefes miran que el trabajo fluya y que el equipo salga impecable. En los checklists de los jefes queda un solo ítem de seguridad ("no se tolera el riesgo evidente"), no una inspección.
+
+  Los ítems de los jefes están escritos contra cosas que el sistema ya sabe (plan taller, OT, pauta, vale de bodega, NC, checklist de entrega, certificado, informe de salida): el recorrido se puede contrastar con el dato en vez de quedar en impresión.
 - **`gemba_recorridos`** — cada recorrido: fecha, taller o faena (`faena_id` → `faenas`), sector, responsable (`usuarios_perfil`), foco, estado `en_curso`/`cerrado`.
 - **`gemba_respuestas`** — ítems pre-cargados desde la plantilla al iniciar; `cumple` / `no_cumple` / `no_aplica` + observación.
 - **`gemba_hallazgos`** — plan de acción: hallazgo, acción correctiva, responsable, fecha compromiso, estado `abierta`/`en_proceso`/`cerrada`.
@@ -66,5 +74,6 @@ Ninguna tabla tiene policy de DELETE: un recorrido no se borra.
 - Verificación de eficacia al cerrar una acción (quién verificó + foto), que alimente el ítem 3.2 del checklist del Jefe de Operaciones.
 - Tendencia por ítem/sección (los 5 que más fallan en 90 días) → materia prima de la reunión de mejora.
 - Cambiar el KPI estrella de "% cumplimiento" a "obstáculos levantados / resueltos en plazo / verificados": el % premia marcar *cumple*.
-- Acortar GEMBA-JT y GEMBA-JOP a un recorrido corto con muestreo rotativo (ver propuesta en el PR).
+- Enganchar los ítems de los jefes con el dato del sistema (que el ítem "los vales pendientes llevan menos de 24 h" muestre la lista al lado, en vez de que el jefe lo verifique de memoria).
+- Sacar la sección de faena de `GEMBA-JOP` a su propia plantilla, en vez de marcarla N/A en cada recorrido de taller.
 - Administración de plantillas desde UI (hoy se editan por SQL en `gemba_plantillas.secciones`).
