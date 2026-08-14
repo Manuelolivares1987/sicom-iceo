@@ -10,11 +10,13 @@ Digitaliza los recorridos de terreno del área de Prevención de Riesgos para **
 | `database/production_run/289_gemba_jefes_operaciones_calidad.sql` | Reorienta los checklists de los jefes: operación y calidad del equipo, no seguridad |
 | `database/production_run/290_gemba_cadencia_diaria_jt.sql` | Cadencia por checklist + el del Jefe de Taller partido en núcleo fijo diario y bloque rotativo |
 | `database/production_run/291_gemba_prevencion_diaria_y_mensual.sql` | Prevención: caminata diaria de conducta + inspección planificada mensual |
+| `database/production_run/292_gemba_reportabilidad.sql` | Reporte de avance: esperados vs realizados por cadencia, responsables, ítems que más fallan, plan de acción |
 | `frontend/src/lib/services/gemba.ts` | Servicio Supabase (tipos, queries, mutaciones) |
 | `frontend/src/hooks/use-gemba.ts` | Hooks react-query |
 | `frontend/src/app/dashboard/prevencion/gemba/page.tsx` | Lista de recorridos + KPIs + plan de acción global |
 | `frontend/src/app/dashboard/prevencion/gemba/nuevo/page.tsx` | Iniciar recorrido (plantilla, taller/faena, foco) |
-| `frontend/src/app/dashboard/prevencion/gemba/[id]/page.tsx` | Ejecución del checklist, hallazgos y cierre |
+| `frontend/src/app/dashboard/prevencion/gemba/[id]/page.tsx` | Ejecución del checklist, hallazgos y cierre (mobile-first) |
+| `frontend/src/app/dashboard/prevencion/gemba/reporte/page.tsx` | Avance del programa, plan de acción, lo que más falla y quién recorrió |
 | `frontend/src/app/dashboard/prevencion/page.tsx` | (modificado) botón de acceso al módulo |
 
 ## Modelo de datos
@@ -62,6 +64,27 @@ Ninguna tabla tiene policy de DELETE: un recorrido no se borra.
    ```ts
    { label: 'Recorridos Gemba', href: '/dashboard/prevencion/gemba', icon: Footprints, module: 'prevencion' },
    ```
+
+## Uso en el teléfono
+
+El recorrido se hace caminando, así que las pantallas son mobile-first (el shell del dashboard ya trae sidebar en drawer bajo `lg`):
+- **Barra de avance sticky** arriba mientras se marca: con el teclado abierto y 12 ítems, saber cuánto falta sin volver arriba es la diferencia entre terminarlo y abandonarlo.
+- **Cumple / No cumple / N/A** en tres botones a lo ancho de 44 px de alto: se marca con el pulgar, sin apuntar.
+- **Cerrar recorrido** en barra fija abajo, bajo el pulgar, en vez de arriba después de bajar toda la lista.
+- Las tablas anchas (recorridos, plan de acción) son tarjetas: ninguna tabla de 6 columnas entra en un teléfono.
+
+Falta offline (ver Pendiente): hoy cada marca es un round-trip a Supabase.
+
+## Reportabilidad — `/dashboard/prevencion/gemba/reporte`
+
+Responde "¿se está cumpliendo el programa?", que es distinto de "¿cuántos recorridos hay?". `rpc_gemba_reporte(anio, mes)` devuelve en una llamada:
+
+- **Avance del programa**: esperados vs realizados por checklist. Los esperados salen de la cadencia — `fn_gemba_esperados()` cuenta **días hábiles** para la diaria, si no el programa quedaría siempre en rojo. Un mes en curso se mide hasta hoy, no hasta el 31.
+- **Plan de acción**: abiertos, en proceso, vencidos, cerrados, % cerrados dentro del plazo comprometido y días promedio de cierre.
+- **Lo que más falla (90 días)**: los ítems con más "no cumple" y cada cuántas revisiones fallan. Un ítem que falla ocho veces no es un descuido, es un proceso que no está.
+- **Quién recorrió**: recorridos por responsable, último, días sin recorrer.
+
+> **El avance del programa y el % del checklist se muestran separados a propósito.** El segundo sube marcando "cumple"; el primero no se puede falsear sin salir a terreno.
 
 ## Flujo de uso
 

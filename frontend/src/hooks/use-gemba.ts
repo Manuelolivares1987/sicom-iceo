@@ -12,6 +12,7 @@ import {
   updateGembaHallazgo,
   cerrarGembaRecorrido,
   getFaenasActivas,
+  getGembaReporte,
 } from '@/lib/services/gemba'
 
 export function useGembaPlantillas() {
@@ -79,6 +80,19 @@ export function useGembaHallazgos(recorridoId?: string, soloAbiertos = false) {
       if (error) throw error
       return data
     },
+  })
+}
+
+/** Reporte de avance del mes (MIG292). */
+export function useGembaReporte(anio: number, mes: number) {
+  return useQuery({
+    queryKey: ['gemba-reporte', anio, mes],
+    queryFn: async () => {
+      const { data, error } = await getGembaReporte(anio, mes)
+      if (error) throw error
+      return data
+    },
+    staleTime: 60_000,
   })
 }
 

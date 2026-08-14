@@ -162,49 +162,46 @@ export default function GembaRecorridoPage() {
   return (
     <div className="space-y-6">
       {/* ── Header ── */}
+      {/* Compacto en el teléfono: en terreno la pantalla la ocupa el checklist,
+          no el título. */}
       <div>
         <Link
           href="/dashboard/prevencion/gemba"
           className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700"
         >
-          <ArrowLeft className="h-4 w-4" /> Volver a recorridos
+          <ArrowLeft className="h-4 w-4" /> Volver
         </Link>
-        <div className="mt-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-              <Footprints className="h-7 w-7 text-amber-500" />
-              {recorrido.plantilla?.nombre ?? 'Recorrido Gemba'}
-              {cerrado && <Lock className="h-5 w-5 text-gray-400" />}
-            </h1>
-            <p className="text-sm text-gray-500 mt-1">
-              {recorrido.fecha} · {recorrido.lugar_tipo === 'faena' ? `Faena ${recorrido.faena?.nombre ?? ''}` : 'Taller'}
-              {recorrido.sector ? ` · ${recorrido.sector}` : ''}
-              {recorrido.foco ? ` · Foco: ${recorrido.foco}` : ''}
-            </p>
-          </div>
-          {!soloLectura && (
-            <Button onClick={() => setModalCierre(true)} disabled={stats.pendientes > 0}>
-              <CheckCircle2 className="h-4 w-4" />
-              {stats.pendientes > 0 ? `Faltan ${stats.pendientes} ítems` : 'Cerrar recorrido'}
-            </Button>
-          )}
-        </div>
+        <h1 className="mt-1 flex items-start gap-2 text-base font-bold leading-tight text-gray-900 sm:text-2xl">
+          <Footprints className="mt-0.5 h-5 w-5 shrink-0 text-amber-500 sm:h-7 sm:w-7" />
+          <span className="min-w-0">{recorrido.plantilla?.nombre ?? 'Recorrido Gemba'}</span>
+          {cerrado && <Lock className="mt-0.5 h-4 w-4 shrink-0 text-gray-400" />}
+        </h1>
+        <p className="mt-0.5 text-xs text-gray-500 sm:text-sm">
+          {recorrido.fecha} · {recorrido.lugar_tipo === 'faena' ? `Faena ${recorrido.faena?.nombre ?? ''}` : 'Taller'}
+          {recorrido.sector ? ` · ${recorrido.sector}` : ''}
+          {recorrido.foco ? ` · Foco: ${recorrido.foco}` : ''}
+        </p>
       </div>
 
-      {/* ── Barra de avance ── */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-        {[
-          { label: 'Cumple', value: stats.cumple, cls: 'text-green-700 bg-green-50 border-green-200' },
-          { label: 'No cumple', value: stats.noCumple, cls: 'text-red-700 bg-red-50 border-red-200' },
-          { label: 'No aplica', value: stats.na, cls: 'text-gray-600 bg-gray-50 border-gray-200' },
-          { label: 'Pendientes', value: stats.pendientes, cls: 'text-amber-700 bg-amber-50 border-amber-200' },
-          { label: '% Cumplimiento', value: stats.pct != null ? `${stats.pct}%` : '—', cls: 'text-blue-700 bg-blue-50 border-blue-200' },
-        ].map((s) => (
-          <div key={s.label} className={cn('rounded-lg border p-3 text-center', s.cls)}>
-            <div className="text-xl font-bold">{s.value}</div>
-            <div className="text-xs">{s.label}</div>
-          </div>
-        ))}
+      {/* ── Avance, siempre a la vista ── */}
+      {/* Sticky: con el teclado abierto y 12 ítems, saber cuánto falta sin
+          volver arriba es la diferencia entre terminarlo y abandonarlo. */}
+      <div className="sticky top-0 z-20 -mx-4 border-b border-gray-200 bg-white/95 px-4 py-2 backdrop-blur sm:mx-0 sm:rounded-lg sm:border">
+        <div className="flex items-center justify-between text-xs">
+          <span className="font-semibold text-gray-700">
+            {stats.total - stats.pendientes} de {stats.total} ítems
+          </span>
+          <span className="flex items-center gap-2">
+            <span className="text-green-700">{stats.cumple} ok</span>
+            {stats.noCumple > 0 && <span className="font-semibold text-red-700">{stats.noCumple} no</span>}
+            {stats.na > 0 && <span className="text-gray-400">{stats.na} n/a</span>}
+            {stats.pct != null && <span className="font-bold text-blue-700">{stats.pct}%</span>}
+          </span>
+        </div>
+        <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-gray-100">
+          <div className="h-full rounded-full bg-amber-500 transition-all"
+               style={{ width: `${stats.total ? ((stats.total - stats.pendientes) / stats.total) * 100 : 0}%` }} />
+        </div>
       </div>
 
       {/* ── Checklist por secciones ── */}
@@ -228,39 +225,43 @@ export default function GembaRecorridoPage() {
                       : 'border-gray-200'
                 )}
               >
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                  <p className="flex-1 text-sm text-gray-800">
-                    <span className="mr-2 font-mono text-xs text-gray-400">{r.orden}.</span>
-                    {r.item}
-                  </p>
-                  <div className="flex shrink-0 gap-1">
-                    {EVALS.map((ev) => (
-                      <button
-                        key={ev.value}
-                        type="button"
-                        disabled={soloLectura}
-                        onClick={() => setEvaluacion(r, ev.value)}
-                        className={cn(
-                          'rounded border px-2.5 py-1 text-xs font-medium transition-colors',
-                          r.evaluacion === ev.value
-                            ? ev.activeCls
-                            : 'border-gray-300 bg-white text-gray-600 hover:bg-gray-50',
-                          soloLectura && 'cursor-not-allowed opacity-60'
-                        )}
-                      >
-                        {ev.label}
-                      </button>
-                    ))}
-                  </div>
+                {/* El texto arriba y los tres botones a lo ancho: en el
+                    teléfono se marca con el pulgar, sin apuntar. */}
+                <p className="text-sm leading-snug text-gray-800">
+                  <span className="mr-2 font-mono text-xs text-gray-400">{r.orden}.</span>
+                  {r.item}
+                </p>
+                <div className="mt-2 grid grid-cols-3 gap-1.5">
+                  {EVALS.map((ev) => (
+                    <button
+                      key={ev.value}
+                      type="button"
+                      disabled={soloLectura}
+                      onClick={() => setEvaluacion(r, ev.value)}
+                      className={cn(
+                        'min-h-[44px] rounded-lg border text-sm font-semibold transition-colors',
+                        r.evaluacion === ev.value
+                          ? ev.activeCls
+                          : 'border-gray-300 bg-white text-gray-600 active:bg-gray-100 hover:bg-gray-50',
+                        soloLectura && 'cursor-not-allowed opacity-60'
+                      )}
+                    >
+                      {ev.label}
+                    </button>
+                  ))}
                 </div>
-                <input
-                  type="text"
-                  defaultValue={r.observacion ?? ''}
-                  disabled={soloLectura}
-                  placeholder="Observación / hallazgo concreto…"
-                  onBlur={(e) => guardarObservacion(r, e.target.value)}
-                  className="mt-2 w-full rounded border border-gray-200 bg-white px-2 py-1 text-xs text-gray-700 placeholder:text-gray-300 focus:border-gray-400 focus:outline-none disabled:bg-gray-50"
-                />
+                {/* La observación solo aparece cuando hay algo que decir: 12
+                    cajas de texto vacías es puro ruido para bajar. */}
+                {(!soloLectura || r.observacion) && (
+                  <input
+                    type="text"
+                    defaultValue={r.observacion ?? ''}
+                    disabled={soloLectura}
+                    placeholder="Observación (opcional)…"
+                    onBlur={(e) => guardarObservacion(r, e.target.value)}
+                    className="mt-2 min-h-[40px] w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 placeholder:text-gray-300 focus:border-gray-400 focus:outline-none disabled:bg-gray-50"
+                  />
+                )}
               </div>
             ))}
           </CardContent>
@@ -302,53 +303,53 @@ export default function GembaRecorridoPage() {
             </Button>
           )}
         </CardHeader>
-        <CardContent className="overflow-x-auto">
+        <CardContent>
           {hallazgos && hallazgos.length > 0 ? (
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="border-b text-left text-gray-500 uppercase">
-                  <th className="px-2 py-2">Hallazgo</th>
-                  <th className="px-2 py-2">Acción correctiva</th>
-                  <th className="px-2 py-2">Responsable</th>
-                  <th className="px-2 py-2">Compromiso</th>
-                  <th className="px-2 py-2">Estado</th>
-                </tr>
-              </thead>
-              <tbody>
-                {hallazgos.map((h) => (
-                  <tr key={h.id} className="border-b hover:bg-gray-50">
-                    <td className="px-2 py-2 max-w-md">{h.descripcion}</td>
-                    <td className="px-2 py-2 max-w-md text-gray-600">{h.accion_correctiva || '—'}</td>
-                    <td className="px-2 py-2">
-                      {h.responsable?.nombre_completo ?? h.responsable_texto ?? '—'}
-                    </td>
-                    <td className="px-2 py-2 whitespace-nowrap">{h.fecha_compromiso ?? '—'}</td>
-                    <td className="px-2 py-2">
-                      {/* El plan de acción sigue vivo aunque el recorrido esté
-                          cerrado: una acción se cierra semanas después. Solo
-                          se mira el permiso, no el estado del recorrido. */}
-                      <select
-                        value={h.estado}
-                        disabled={!canCreate('prevencion')}
-                        onChange={(e) => cambiarEstadoHallazgo(h.id, e.target.value as any)}
-                        className={cn(
-                          'rounded border px-1.5 py-0.5 text-xs',
-                          h.estado === 'cerrada'
-                            ? 'border-green-200 bg-green-50 text-green-700'
-                            : h.estado === 'en_proceso'
-                              ? 'border-blue-200 bg-blue-50 text-blue-700'
-                              : 'border-amber-200 bg-amber-50 text-amber-700'
-                        )}
-                      >
-                        <option value="abierta">Abierta</option>
-                        <option value="en_proceso">En proceso</option>
-                        <option value="cerrada">Cerrada</option>
-                      </select>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <ul className="space-y-2">
+              {hallazgos.map((h) => {
+                const vencido = h.estado !== 'cerrada' && !!h.fecha_compromiso &&
+                  h.fecha_compromiso < new Date().toISOString().slice(0, 10)
+                return (
+                  <li key={h.id} className={cn('rounded-lg border p-3',
+                    vencido ? 'border-red-200 bg-red-50/50' : 'border-gray-200')}>
+                    <p className="text-sm font-medium text-gray-800">{h.descripcion}</p>
+                    {h.accion_correctiva && (
+                      <p className="mt-0.5 text-xs text-gray-600">
+                        <span className="text-gray-400">Acción:</span> {h.accion_correctiva}
+                      </p>
+                    )}
+                    <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-gray-500">
+                      <span>{h.responsable?.nombre_completo ?? h.responsable_texto ?? 'Sin responsable'}</span>
+                      {h.fecha_compromiso && (
+                        <span className={vencido ? 'font-semibold text-red-700' : ''}>
+                          compromiso {h.fecha_compromiso}{vencido ? ' · vencido' : ''}
+                        </span>
+                      )}
+                    </div>
+                    {/* El plan de acción sigue vivo aunque el recorrido esté
+                        cerrado: una acción se cierra semanas después. Solo se
+                        mira el permiso, no el estado del recorrido. */}
+                    <select
+                      value={h.estado}
+                      disabled={!canCreate('prevencion')}
+                      onChange={(e) => cambiarEstadoHallazgo(h.id, e.target.value as any)}
+                      className={cn(
+                        'mt-2 min-h-[40px] w-full rounded-lg border px-2 text-sm font-medium sm:w-44',
+                        h.estado === 'cerrada'
+                          ? 'border-green-200 bg-green-50 text-green-700'
+                          : h.estado === 'en_proceso'
+                            ? 'border-blue-200 bg-blue-50 text-blue-700'
+                            : 'border-amber-200 bg-amber-50 text-amber-700'
+                      )}
+                    >
+                      <option value="abierta">Abierta</option>
+                      <option value="en_proceso">En proceso</option>
+                      <option value="cerrada">Cerrada</option>
+                    </select>
+                  </li>
+                )
+              })}
+            </ul>
           ) : (
             <p className="text-sm text-gray-400">
               Sin hallazgos registrados. Al marcar un ítem como &quot;No cumple&quot; se abre el
@@ -357,6 +358,29 @@ export default function GembaRecorridoPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* ── Cerrar el recorrido ── */}
+      {/* Barra fija abajo: es la acción final y en el teléfono queda bajo el
+          pulgar, sin tener que buscarla arriba después de bajar 12 ítems. */}
+      {!soloLectura && (
+        <>
+          <div className="h-16 sm:h-0" />
+          <div className="fixed inset-x-0 bottom-0 z-30 border-t border-gray-200 bg-white/95 p-3 backdrop-blur sm:static sm:border-0 sm:bg-transparent sm:p-0 sm:backdrop-blur-none">
+            <div className="mx-auto max-w-5xl">
+              <Button
+                onClick={() => setModalCierre(true)}
+                disabled={stats.pendientes > 0}
+                className="min-h-[48px] w-full text-base sm:w-auto"
+              >
+                <CheckCircle2 className="h-5 w-5" />
+                {stats.pendientes > 0
+                  ? `Faltan ${stats.pendientes} ítem${stats.pendientes === 1 ? '' : 's'}`
+                  : 'Cerrar recorrido'}
+              </Button>
+            </div>
+          </div>
+        </>
+      )}
 
       {/* ── Modal: registrar hallazgo ── */}
       <Modal

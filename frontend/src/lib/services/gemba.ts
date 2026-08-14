@@ -27,6 +27,9 @@ export const CADENCIA_LABEL: Record<GembaCadencia, string> = {
 
 const DIA_NOMBRE = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado']
 
+export const MESES_GEMBA = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
+
 /** Día de la semana (1 = lunes … 7 = domingo) de una fecha yyyy-mm-dd. */
 export function diaDeSemana(fechaIso: string): number {
   const [y, m, d] = fechaIso.slice(0, 10).split('-').map(Number)
@@ -362,6 +365,59 @@ export async function cerrarGembaRecorrido(id: string, observaciones?: string) {
     .select()
     .single()
   return { data: data as GembaRecorrido | null, error }
+}
+
+// ── Reporte de avance (MIG292) ───────────────────────────────────────────────
+// El avance del PROGRAMA (se recorre o no) va separado del % de cumplimiento
+// del checklist (qué tan bien salió): el segundo sube marcando "cumple", el
+// primero no se puede falsear sin salir a terreno.
+export interface GembaProgramaFila {
+  plantilla_id: string
+  codigo: string
+  nombre: string
+  cargo: string
+  cadencia: GembaCadencia | null
+  esperados: number
+  realizados: number
+  cerrados: number
+  hallazgos: number
+  pct_checklist: number | null
+}
+
+export interface GembaResponsableFila {
+  responsable_id: string | null
+  nombre: string
+  rol: string | null
+  recorridos: number
+  cerrados: number
+  ultimo: string | null
+  dias_sin_recorrer: number | null
+  hallazgos: number
+}
+
+export interface GembaItemCritico {
+  item: string
+  seccion: string
+  veces: number
+  evaluado: number
+  pct_falla: number | null
+}
+
+export interface GembaReporte {
+  periodo: { anio: number; mes: number; desde: string; hasta: string; en_curso: boolean }
+  programa: GembaProgramaFila[]
+  responsables: GembaResponsableFila[]
+  items_criticos: GembaItemCritico[]
+  hallazgos: {
+    abiertos: number; en_proceso: number; cerrados: number; vencidos: number
+    sin_plazo: number; cerrados_en_plazo: number; cerrados_con_plazo: number
+    dias_promedio_cierre: number | null
+  }
+}
+
+export async function getGembaReporte(anio: number, mes: number) {
+  const { data, error } = await supabase.rpc('rpc_gemba_reporte', { p_anio: anio, p_mes: mes })
+  return { data: data as GembaReporte | null, error }
 }
 
 export async function getFaenasActivas() {
