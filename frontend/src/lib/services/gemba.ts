@@ -1,0 +1,430 @@
+import { supabase } from '@/lib/supabase'
+
+// ── Types ────────────────────────────────────────────────
+
+export type GembaEvaluacion = 'cumple' | 'no_cumple' | 'no_aplica'
+export type GembaLugarTipo = 'taller' | 'faena'
+export type GembaEstadoRecorrido = 'en_curso' | 'cerrado'
+export type GembaEstadoHallazgo = 'abierta' | 'en_proceso' | 'cerrada'
+
+export interface GembaSeccion {
+  titulo: string
+  items: string[]
+  /**
+   * [MIG290] Sección rotativa: 1 = lunes … 5 = viernes. Sin `dia` la sección es
+   * fija y va en todos los recorridos. Así el recorrido diario del Jefe de
+   * Taller dura 10-15 min (7 fijos + el bloque del día) y en la semana cubre
+   * el taller completo — un checklist de 28 ítems diarios no se hace, se marca.
+   */
+  dia?: number | null
+}
+
+export type GembaCadencia = 'diaria' | 'semanal' | 'quincenal' | 'mensual'
+
+export const CADENCIA_LABEL: Record<GembaCadencia, string> = {
+  diaria: 'Diario', semanal: 'Semanal', quincenal: 'Quincenal', mensual: 'Mensual',
+}
+
+const DIA_NOMBRE = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado']
+
+export const MESES_GEMBA = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
+
+/** Día de la semana (1 = lunes … 7 = domingo) de una fecha yyyy-mm-dd. */
+export function diaDeSemana(fechaIso: string): number {
+  const [y, m, d] = fechaIso.slice(0, 10).split('-').map(Number)
+  return ((new Date(y, m - 1, d).getDay() + 6) % 7) + 1
+}
+
+export const nombreDia = (fechaIso: string): string => {
+  const [y, m, d] = fechaIso.slice(0, 10).split('-').map(Number)
+  return DIA_NOMBRE[new Date(y, m - 1, d).getDay()]
+}
+
+/**
+ * Las secciones que le tocan a un recorrido en esa fecha: las fijas más la del
+ * día. Si es fin de semana (o la plantilla no tiene bloque para ese día), van
+ * solo las fijas — mejor un recorrido corto que uno que no se puede hacer.
+ */
+export function seccionesDelDia(
+  plantilla: Pick<GembaPlantilla, 'secciones'> | null | undefined, fechaIso: string,
+): GembaSeccion[] {
+  const secs = plantilla?.secciones ?? []
+  if (!secs.some((s) => s.dia != null)) return secs      // plantilla sin rotación
+  const hoy = diaDeSemana(fechaIso)
+  return secs.filter((s) => s.dia == null || s.dia === hoy)
+}
+
+export const contarItems = (secs: GembaSeccion[]): number =>
+  secs.reduce((n, s) => n + s.items.length, 0)
+
+export interface GembaPlantilla {
+  id: string
+  codigo: string
+  nombre: string
+  cargo: string
+  ambito: 'taller' | 'faena' | 'ambos'
+  descripcion?: string
+  secciones: GembaSeccion[]
+  activo: boolean
+  /**
+   * [MIG288] Roles a los que se les propone este checklist. En este sistema no
+   * existe un rol `prevencionista`, y el jefe de taller es `jefe_mantenimiento`:
+   * el mapeo vive en la BD, no en el código, para poder corregirlo sin deploy.
+   */
+  roles: string[]
+  /** [MIG290] Con qué frecuencia se espera el recorrido: diaria (JT), quincenal (JOp). */
+  cadencia: GembaCadencia | null
+}
+
+/** Cada cuántos días se espera el recorrido según su cadencia. */
+export const DIAS_CADENCIA: Record<GembaCadencia, number> = {
+  diaria: 1, semanal: 7, quincenal: 14, mensual: 30,
+}
+
+/**
+ * Los checklists de un rol, del más frecuente al menos frecuente. Prevención
+ * lleva dos (caminata diaria + inspección planificada mensual), así que esto
+ * devuelve lista y no uno solo.
+ */
+export function plantillasDeRol(
+  plantillas: GembaPlantilla[] | null | undefined, rol: string | null | undefined,
+): GembaPlantilla[] {
+  if (!plantillas?.length || !rol) return []
+  return plantillas
+    .filter((p) => (p.roles ?? []).includes(rol))
+    .sort((a, b) => (DIAS_CADENCIA[a.cadencia ?? 'mensual'] ?? 99)
+                  - (DIAS_CADENCIA[b.cadencia ?? 'mensual'] ?? 99))
+}
+
+/** El que se propone por defecto: el más frecuente de los suyos. */
+export function plantillaDeRol(
+  plantillas: GembaPlantilla[] | null | undefined, rol: string | null | undefined,
+): GembaPlantilla | null {
+  return plantillasDeRol(plantillas, rol)[0] ?? null
+}
+
+export interface GembaRecorrido {
+  id: string
+  plantilla_id: string
+  fecha: string
+  hora_inicio?: string
+  hora_termino?: string
+  lugar_tipo: GembaLugarTipo
+  faena_id?: string
+  sector?: string
+  responsable_id?: string
+  acompanantes?: string
+  foco?: string
+  observaciones?: string
+  estado: GembaEstadoRecorrido
+  created_at: string
+  // Joined
+  plantilla?: Pick<GembaPlantilla, 'nombre' | 'cargo' | 'codigo'>
+  faena?: { nombre: string; codigo: string }
+  responsable?: { nombre_completo?: string; email?: string }
+  resumen?: GembaRecorridoResumen
+}
+
+export interface GembaRespuesta {
+  id: string
+  recorrido_id: string
+  seccion: string
+  orden: number
+  item: string
+  evaluacion?: GembaEvaluacion | null
+  observacion?: string
+}
+
+export interface GembaHallazgo {
+  id: string
+  recorrido_id: string
+  respuesta_id?: string
+  descripcion: string
+  accion_correctiva?: string
+  responsable_id?: string
+  responsable_texto?: string
+  fecha_compromiso?: string
+  estado: GembaEstadoHallazgo
+  fecha_cierre?: string
+  created_at: string
+  // Joined
+  responsable?: { nombre_completo?: string; email?: string }
+  recorrido?: { fecha: string; lugar_tipo: GembaLugarTipo; sector?: string }
+}
+
+export interface GembaRecorridoResumen {
+  recorrido_id: string
+  total_items: number
+  cumple: number
+  no_cumple: number
+  no_aplica: number
+  pendientes: number
+  pct_cumplimiento: number | null
+}
+
+export interface GembaKpi {
+  recorridos_mes: number
+  recorridos_en_curso: number
+  hallazgos_abiertos: number
+  hallazgos_vencidos: number
+  pct_cumplimiento_90d: number | null
+}
+
+// ── Queries ──────────────────────────────────────────────
+
+export async function getGembaPlantillas() {
+  const { data, error } = await supabase
+    .from('gemba_plantillas')
+    .select('*')
+    .eq('activo', true)
+    .order('nombre')
+  return { data: data as GembaPlantilla[] | null, error }
+}
+
+export async function getGembaKpi() {
+  const { data, error } = await supabase
+    .from('vw_gemba_kpi')
+    .select('*')
+    .maybeSingle()
+  return { data: data as GembaKpi | null, error }
+}
+
+export async function getGembaRecorridos(limit = 100) {
+  const { data, error } = await supabase
+    .from('gemba_recorridos')
+    .select(
+      '*, plantilla:gemba_plantillas(nombre, cargo, codigo), faena:faenas(nombre, codigo), responsable:usuarios_perfil(nombre_completo, email)'
+    )
+    .order('fecha', { ascending: false })
+    .order('created_at', { ascending: false })
+    .limit(limit)
+  if (error || !data) return { data: null, error }
+
+  // Adjuntar resumen (% cumplimiento) de la vista
+  const ids = data.map((r: any) => r.id)
+  const { data: resumenes } = await supabase
+    .from('vw_gemba_recorrido_resumen')
+    .select('*')
+    .in('recorrido_id', ids)
+  const porId = new Map((resumenes ?? []).map((s: any) => [s.recorrido_id, s]))
+  const enriched = data.map((r: any) => ({ ...r, resumen: porId.get(r.id) ?? null }))
+  return { data: enriched as GembaRecorrido[], error: null }
+}
+
+export async function getGembaRecorrido(id: string) {
+  const { data, error } = await supabase
+    .from('gemba_recorridos')
+    .select(
+      '*, plantilla:gemba_plantillas(nombre, cargo, codigo), faena:faenas(nombre, codigo), responsable:usuarios_perfil(nombre_completo, email)'
+    )
+    .eq('id', id)
+    .maybeSingle()
+  return { data: data as GembaRecorrido | null, error }
+}
+
+export async function getGembaRespuestas(recorridoId: string) {
+  const { data, error } = await supabase
+    .from('gemba_respuestas')
+    .select('*')
+    .eq('recorrido_id', recorridoId)
+    .order('orden')
+  return { data: data as GembaRespuesta[] | null, error }
+}
+
+export async function getGembaHallazgos(recorridoId?: string, soloAbiertos = false) {
+  let q = supabase
+    .from('gemba_hallazgos')
+    .select(
+      '*, responsable:usuarios_perfil(nombre_completo, email), recorrido:gemba_recorridos(fecha, lugar_tipo, sector)'
+    )
+  if (recorridoId) q = q.eq('recorrido_id', recorridoId)
+  if (soloAbiertos) q = q.neq('estado', 'cerrada')
+  const { data, error } = await q.order('created_at', { ascending: false })
+  return { data: data as GembaHallazgo[] | null, error }
+}
+
+// ── Mutations ────────────────────────────────────────────
+
+/**
+ * Crea un recorrido y pre-carga sus respuestas desde la plantilla elegida.
+ */
+export async function createGembaRecorrido(input: {
+  plantilla_id: string
+  fecha: string
+  lugar_tipo: GembaLugarTipo
+  faena_id?: string
+  sector?: string
+  acompanantes?: string
+  foco?: string
+  hora_inicio?: string
+}) {
+  const { data: auth } = await supabase.auth.getUser()
+  const uid = auth?.user?.id
+
+  // 1. Leer la plantilla
+  const { data: plantilla, error: ePlantilla } = await supabase
+    .from('gemba_plantillas')
+    .select('*')
+    .eq('id', input.plantilla_id)
+    .single()
+  if (ePlantilla || !plantilla) return { data: null, error: ePlantilla }
+
+  // 2. Crear el recorrido
+  const { data: recorrido, error: eRecorrido } = await supabase
+    .from('gemba_recorridos')
+    .insert({
+      plantilla_id: input.plantilla_id,
+      fecha: input.fecha,
+      hora_inicio: input.hora_inicio || null,
+      lugar_tipo: input.lugar_tipo,
+      faena_id: input.lugar_tipo === 'faena' ? input.faena_id : null,
+      sector: input.sector || null,
+      acompanantes: input.acompanantes || null,
+      foco: input.foco || null,
+      responsable_id: uid ?? null,
+      created_by: uid ?? null,
+    })
+    .select()
+    .single()
+  if (eRecorrido || !recorrido) return { data: null, error: eRecorrido }
+
+  // 3. Pre-cargar respuestas: las secciones fijas más el bloque del día (MIG290)
+  const secciones = seccionesDelDia(plantilla as GembaPlantilla, input.fecha)
+  let orden = 0
+  const filas = secciones.flatMap((sec) =>
+    sec.items.map((item) => ({
+      recorrido_id: recorrido.id,
+      seccion: sec.titulo,
+      orden: ++orden,
+      item,
+    }))
+  )
+  const { error: eRespuestas } = await supabase.from('gemba_respuestas').insert(filas)
+  if (eRespuestas) return { data: null, error: eRespuestas }
+
+  return { data: recorrido as GembaRecorrido, error: null }
+}
+
+export async function updateGembaRespuesta(
+  id: string,
+  cambios: { evaluacion?: GembaEvaluacion | null; observacion?: string }
+) {
+  const { data, error } = await supabase
+    .from('gemba_respuestas')
+    .update(cambios)
+    .eq('id', id)
+    .select()
+    .single()
+  return { data: data as GembaRespuesta | null, error }
+}
+
+export async function createGembaHallazgo(input: {
+  recorrido_id: string
+  respuesta_id?: string
+  descripcion: string
+  accion_correctiva?: string
+  responsable_texto?: string
+  fecha_compromiso?: string
+}) {
+  const { data: auth } = await supabase.auth.getUser()
+  const { data, error } = await supabase
+    .from('gemba_hallazgos')
+    .insert({ ...input, created_by: auth?.user?.id ?? null })
+    .select()
+    .single()
+  return { data: data as GembaHallazgo | null, error }
+}
+
+export async function updateGembaHallazgo(
+  id: string,
+  cambios: {
+    descripcion?: string
+    accion_correctiva?: string
+    responsable_texto?: string
+    fecha_compromiso?: string
+    estado?: GembaEstadoHallazgo
+    fecha_cierre?: string | null
+  }
+) {
+  const { data, error } = await supabase
+    .from('gemba_hallazgos')
+    .update(cambios)
+    .eq('id', id)
+    .select()
+    .single()
+  return { data: data as GembaHallazgo | null, error }
+}
+
+export async function cerrarGembaRecorrido(id: string, observaciones?: string) {
+  const hora = new Date().toTimeString().slice(0, 5)
+  const { data, error } = await supabase
+    .from('gemba_recorridos')
+    .update({ estado: 'cerrado', hora_termino: hora, observaciones: observaciones || null })
+    .eq('id', id)
+    .select()
+    .single()
+  return { data: data as GembaRecorrido | null, error }
+}
+
+// ── Reporte de avance (MIG292) ───────────────────────────────────────────────
+// El avance del PROGRAMA (se recorre o no) va separado del % de cumplimiento
+// del checklist (qué tan bien salió): el segundo sube marcando "cumple", el
+// primero no se puede falsear sin salir a terreno.
+export interface GembaProgramaFila {
+  plantilla_id: string
+  codigo: string
+  nombre: string
+  cargo: string
+  cadencia: GembaCadencia | null
+  esperados: number
+  realizados: number
+  cerrados: number
+  hallazgos: number
+  pct_checklist: number | null
+}
+
+export interface GembaResponsableFila {
+  responsable_id: string | null
+  nombre: string
+  rol: string | null
+  recorridos: number
+  cerrados: number
+  ultimo: string | null
+  dias_sin_recorrer: number | null
+  hallazgos: number
+}
+
+export interface GembaItemCritico {
+  item: string
+  seccion: string
+  veces: number
+  evaluado: number
+  pct_falla: number | null
+}
+
+export interface GembaReporte {
+  periodo: { anio: number; mes: number; desde: string; hasta: string; en_curso: boolean }
+  programa: GembaProgramaFila[]
+  responsables: GembaResponsableFila[]
+  items_criticos: GembaItemCritico[]
+  hallazgos: {
+    abiertos: number; en_proceso: number; cerrados: number; vencidos: number
+    sin_plazo: number; cerrados_en_plazo: number; cerrados_con_plazo: number
+    dias_promedio_cierre: number | null
+  }
+}
+
+export async function getGembaReporte(anio: number, mes: number) {
+  const { data, error } = await supabase.rpc('rpc_gemba_reporte', { p_anio: anio, p_mes: mes })
+  return { data: data as GembaReporte | null, error }
+}
+
+export async function getFaenasActivas() {
+  const { data, error } = await supabase
+    .from('faenas')
+    .select('id, nombre, codigo')
+    .eq('estado', 'activa')
+    .order('nombre')
+  return { data: data as Array<{ id: string; nombre: string; codigo: string }> | null, error }
+}

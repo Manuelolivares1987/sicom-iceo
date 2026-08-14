@@ -99,7 +99,8 @@ const PERMISSIONS: Record<RolUsuario, Record<Module, Permission[]>> = {
     auditoria: [],
     admin: [],
     flota: ['view','create','edit','export'],
-    prevencion: ['view'],
+    // [MIG288] Recorridos Gemba: el jefe hace su propio recorrido, no solo mira.
+    prevencion: ['view','create','edit'],
     comercial: ['view'],
     reporte_diario: ['view','export'],
   },
@@ -117,7 +118,8 @@ const PERMISSIONS: Record<RolUsuario, Record<Module, Permission[]>> = {
     auditoria: [],
     admin: [],
     flota: ['view','edit'],
-    prevencion: ['view'],
+    // [MIG288] Recorridos Gemba: el jefe hace su propio recorrido, no solo mira.
+    prevencion: ['view','create','edit'],
     comercial: [],
     reporte_diario: ['view','export'],
   },
