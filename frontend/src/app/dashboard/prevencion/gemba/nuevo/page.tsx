@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, Footprints } from 'lucide-react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
@@ -18,7 +18,7 @@ import {
 import { useToast } from '@/hooks/use-toast'
 import { useAuth } from '@/contexts/auth-context'
 import {
-  plantillaDeRol, seccionesDelDia, contarItems, nombreDia, CADENCIA_LABEL,
+  plantillasDeRol, seccionesDelDia, contarItems, nombreDia, CADENCIA_LABEL,
 } from '@/lib/services/gemba'
 
 const CARGO_LABEL: Record<string, string> = {
@@ -30,6 +30,7 @@ const CARGO_LABEL: Record<string, string> = {
 export default function NuevoGembaPage() {
   useRequireAuth()
   const router = useRouter()
+  const search = useSearchParams()
   const toast = useToast()
 
   const { perfil } = useAuth()
@@ -54,14 +55,22 @@ export default function NuevoGembaPage() {
     [plantillas, plantillaId]
   )
 
-  // [MIG288] El checklist del cargo viene preseleccionado: son 3 y sin esto
-  // cada uno tiene que acordarse de cuál es el suyo (y llenar el ajeno).
-  // Los otros dos siguen disponibles en la lista — a veces se cubre al otro.
-  const miPlantilla = useMemo(
-    () => plantillaDeRol(plantillas, perfil?.rol), [plantillas, perfil?.rol])
+  // [MIG288] El checklist del cargo viene preseleccionado: sin esto cada uno
+  // tiene que acordarse de cuál es el suyo (y llenar el ajeno). Los demás
+  // siguen disponibles en la lista — a veces se cubre al otro.
+  // [MIG291] Prevención tiene dos (caminata diaria e inspección mensual): se
+  // propone el más frecuente, y la portada linkea al otro cuando toca.
+  const misPlantillas = useMemo(
+    () => plantillasDeRol(plantillas, perfil?.rol), [plantillas, perfil?.rol])
+  const miPlantilla = misPlantillas[0] ?? null
+  const esMia = (id: string) => misPlantillas.some((p) => p.id === id)
+  const pedida = useMemo(
+    () => plantillas?.find((p) => p.id === search.get('plantilla')) ?? null,
+    [plantillas, search])
   useEffect(() => {
-    if (miPlantilla && !plantillaId) setPlantillaId(miPlantilla.id)
-  }, [miPlantilla, plantillaId])
+    const sugerida = pedida ?? miPlantilla
+    if (sugerida && !plantillaId) setPlantillaId(sugerida.id)
+  }, [pedida, miPlantilla, plantillaId])
 
   // [MIG290] Lo que se va a cargar hoy: las secciones fijas más el bloque del
   // día. No el checklist completo — el recorrido diario no lo abarca.
@@ -131,8 +140,8 @@ export default function NuevoGembaPage() {
             onChange={(e) => setPlantillaId(e.target.value)}
             options={(plantillas ?? []).map((p) => ({
               value: p.id,
-              label: `${p.nombre} — ${CARGO_LABEL[p.cargo] ?? p.cargo}`
-                + (p.id === miPlantilla?.id ? '  ★ el de tu cargo' : ''),
+              label: `${p.nombre}${p.cadencia ? ` — ${CADENCIA_LABEL[p.cadencia]}` : ''}`
+                + (esMia(p.id) ? '  ★ tuyo' : `  (${CARGO_LABEL[p.cargo] ?? p.cargo})`),
             }))}
           />
 

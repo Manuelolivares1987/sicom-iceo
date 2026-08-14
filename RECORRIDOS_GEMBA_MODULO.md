@@ -9,6 +9,7 @@ Digitaliza los recorridos de terreno del área de Prevención de Riesgos para **
 | `database/production_run/288_recorridos_gemba.sql` | Tablas, RLS por permiso de módulo, vistas de resumen y seeds de las 3 plantillas |
 | `database/production_run/289_gemba_jefes_operaciones_calidad.sql` | Reorienta los checklists de los jefes: operación y calidad del equipo, no seguridad |
 | `database/production_run/290_gemba_cadencia_diaria_jt.sql` | Cadencia por checklist + el del Jefe de Taller partido en núcleo fijo diario y bloque rotativo |
+| `database/production_run/291_gemba_prevencion_diaria_y_mensual.sql` | Prevención: caminata diaria de conducta + inspección planificada mensual |
 | `frontend/src/lib/services/gemba.ts` | Servicio Supabase (tipos, queries, mutaciones) |
 | `frontend/src/hooks/use-gemba.ts` | Hooks react-query |
 | `frontend/src/app/dashboard/prevencion/gemba/page.tsx` | Lista de recorridos + KPIs + plan de acción global |
@@ -22,9 +23,12 @@ Digitaliza los recorridos de terreno del área de Prevención de Riesgos para **
 
   | Código | Rol | Cadencia | Foco | Tamaño |
   |---|---|---|---|---|
-  | `GEMBA-PREV` | `prevencionista` | semanal | **Seguridad**: EPP, 5S, máquinas, eléctrico, SUSPEL, emergencias, ergonomía, conductas | 36 ítems |
-  | `GEMBA-JT` | `jefe_mantenimiento` | **diaria** | **Operación y calidad del equipo**: cumplimiento del plan, qué frena el trabajo, calidad de lo ejecutado, gate de salida al cliente | 11-12 ítems por día (29 en la semana) |
+  | `GEMBA-PREV-DIA` | `prevencionista` | **diaria** | **Conducta**: observar una tarea completa, hablar con quien la hace, corregir en el momento | 6 ítems |
+  | `GEMBA-PREV` | `prevencionista` | **mensual** | **Seguridad, inspección planificada**: EPP, 5S, máquinas, eléctrico, SUSPEL, emergencias, ergonomía, conductas | 36 ítems |
+  | `GEMBA-JT` | `jefe_mantenimiento` | **diaria** | **Operación y calidad del equipo**: cumplimiento del plan, qué frena el trabajo, calidad de lo ejecutado, gate de salida al cliente | 11-12 por día (30 en la semana) |
   | `GEMBA-JOP` | `jefe_operaciones` | **quincenal** | **El sistema y el cliente**: compromiso cumplido, calidad de lo entregado, el taller como sistema, obstáculos del equipo, faena | 23 ítems |
+
+  **Prevención lleva dos y no una rotativa (MIG291):** el checklist del Jefe de Taller se puede repartir en la semana porque es de operación; una inspección planificada a la que le falta un bloque deja de servir como evidencia del programa preventivo. Por eso la caminata diaria es una plantilla aparte y la inspección va entera una vez al mes.
 
   **Rotación (MIG290).** Una sección con `"dia"` en el JSONB (1 = lunes … 5 = viernes) solo se carga ese día; sin `dia` es fija. El recorrido diario del Jefe de Taller son 7 ítems fijos + el bloque del día, y en la semana cubre el taller completo. Un checklist de 28 ítems diarios no se hace: se marca todo "cumple" sin mirar. Fin de semana sin bloque → solo el núcleo fijo.
 

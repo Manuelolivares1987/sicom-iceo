@@ -10,14 +10,9 @@ import { useRequireAuth } from '@/hooks/use-require-auth'
 import { usePermissions } from '@/hooks/use-permissions'
 import { useAuth } from '@/contexts/auth-context'
 import { useGembaKpi, useGembaRecorridos, useGembaHallazgos, useGembaPlantillas } from '@/hooks/use-gemba'
-import { plantillaDeRol, CADENCIA_LABEL, type GembaCadencia } from '@/lib/services/gemba'
+import { plantillasDeRol, CADENCIA_LABEL, DIAS_CADENCIA } from '@/lib/services/gemba'
 
 const LUGAR_LABEL: Record<string, string> = { taller: 'Taller', faena: 'Faena' }
-
-/** Cada cuántos días se espera el recorrido según su cadencia. */
-const DIAS_CADENCIA: Record<GembaCadencia, number> = {
-  diaria: 1, semanal: 7, quincenal: 14, mensual: 30,
-}
 
 const hoyIso = () => {
   const d = new Date()
@@ -47,13 +42,17 @@ export default function GembaPage() {
   // programa aparte que habría que mantener.
   const { perfil } = useAuth()
   const { data: plantillas } = useGembaPlantillas()
-  const miPlantilla = plantillaDeRol(plantillas, perfil?.rol)
-  const miUltimo = (recorridos ?? []).find(
-    (r) => r.plantilla_id === miPlantilla?.id && r.responsable_id === perfil?.id)
-  const diasDesde = miUltimo ? diasEntre(miUltimo.fecha, hoyIso()) : null
-  const cadencia = miPlantilla?.cadencia ?? null
-  const toca = !!cadencia && puedeRecorrer &&
-    (diasDesde === null || diasDesde >= DIAS_CADENCIA[cadencia])
+  // [MIG291] Prevencion lleva DOS checklists (caminata diaria e inspeccion
+  // mensual): el aviso se calcula por checklist, no por persona.
+  const pendientes = (puedeRecorrer ? plantillasDeRol(plantillas, perfil?.rol) : [])
+    .filter((p) => p.cadencia)
+    .map((p) => {
+      const ultimo = (recorridos ?? []).find(
+        (r) => r.plantilla_id === p.id && r.responsable_id === perfil?.id)
+      const dias = ultimo ? diasEntre(ultimo.fecha, hoyIso()) : null
+      return { plantilla: p, ultimo, dias }
+    })
+    .filter((x) => x.dias === null || x.dias >= DIAS_CADENCIA[x.plantilla.cadencia!])
 
   if (isLoading || loadingKpi) {
     return (
@@ -87,21 +86,22 @@ export default function GembaPage() {
       </div>
 
       {/* ── Te toca recorrer ── */}
-      {toca && (
-        <Link href="/dashboard/prevencion/gemba/nuevo" className="block">
+      {pendientes.map(({ plantilla, ultimo, dias }) => (
+        <Link key={plantilla.id} className="block"
+              href={`/dashboard/prevencion/gemba/nuevo?plantilla=${plantilla.id}`}>
           <div className="flex items-center gap-3 rounded-lg border border-amber-300 bg-amber-50 p-4 transition-colors hover:bg-amber-100">
             <Footprints className="h-5 w-5 shrink-0 text-amber-600" />
             <div className="flex-1">
               <p className="text-sm font-semibold text-amber-900">
-                {cadencia === 'diaria'
+                {plantilla.cadencia === 'diaria'
                   ? 'Todavía no has hecho el recorrido de hoy'
-                  : `Te toca tu recorrido ${CADENCIA_LABEL[cadencia!].toLowerCase()}`}
+                  : `Te toca tu recorrido ${CADENCIA_LABEL[plantilla.cadencia!].toLowerCase()}`}
               </p>
               <p className="text-xs text-amber-800">
-                {diasDesde === null
+                {plantilla.nombre}.{' '}
+                {dias === null
                   ? 'Es tu primer recorrido con este checklist.'
-                  : `Tu último recorrido fue hace ${diasDesde} día${diasDesde === 1 ? '' : 's'} (${miUltimo?.fecha}).`}
-                {' '}{miPlantilla?.nombre}
+                  : `El último fue hace ${dias} día${dias === 1 ? '' : 's'} (${ultimo?.fecha}).`}
               </p>
             </div>
             <span className="shrink-0 rounded bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white">
@@ -109,7 +109,7 @@ export default function GembaPage() {
             </span>
           </div>
         </Link>
-      )}
+      ))}
 
       {/* ── KPIs ── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

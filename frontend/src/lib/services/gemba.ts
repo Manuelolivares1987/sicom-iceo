@@ -74,13 +74,31 @@ export interface GembaPlantilla {
   cadencia: GembaCadencia | null
 }
 
-/** El checklist que le toca a un rol, si hay uno solo claro. */
+/** Cada cuántos días se espera el recorrido según su cadencia. */
+export const DIAS_CADENCIA: Record<GembaCadencia, number> = {
+  diaria: 1, semanal: 7, quincenal: 14, mensual: 30,
+}
+
+/**
+ * Los checklists de un rol, del más frecuente al menos frecuente. Prevención
+ * lleva dos (caminata diaria + inspección planificada mensual), así que esto
+ * devuelve lista y no uno solo.
+ */
+export function plantillasDeRol(
+  plantillas: GembaPlantilla[] | null | undefined, rol: string | null | undefined,
+): GembaPlantilla[] {
+  if (!plantillas?.length || !rol) return []
+  return plantillas
+    .filter((p) => (p.roles ?? []).includes(rol))
+    .sort((a, b) => (DIAS_CADENCIA[a.cadencia ?? 'mensual'] ?? 99)
+                  - (DIAS_CADENCIA[b.cadencia ?? 'mensual'] ?? 99))
+}
+
+/** El que se propone por defecto: el más frecuente de los suyos. */
 export function plantillaDeRol(
   plantillas: GembaPlantilla[] | null | undefined, rol: string | null | undefined,
 ): GembaPlantilla | null {
-  if (!plantillas?.length || !rol) return null
-  const propias = plantillas.filter((p) => (p.roles ?? []).includes(rol))
-  return propias.length === 1 ? propias[0] : null
+  return plantillasDeRol(plantillas, rol)[0] ?? null
 }
 
 export interface GembaRecorrido {
