@@ -10,7 +10,10 @@
 
 import { Document, Page, Text, View, StyleSheet, Image, pdf } from '@react-pdf/renderer'
 import { supabase } from '@/lib/supabase'
-import { getEjecucionReporte, type EnexReporte, type EnexReporteItem } from '@/lib/services/enex'
+import {
+  getEjecucionReporte,
+  type EnexReporte, type EnexReporteItem, type EnexRequerimiento,
+} from '@/lib/services/enex'
 
 const S = StyleSheet.create({
   page: { padding: 28, fontSize: 9, fontFamily: 'Helvetica', color: '#111827' },
@@ -130,7 +133,58 @@ const ESTADO_TXT: Record<string, string> = {
   ok: 'CONFORME', no_ok: 'NO CONFORME', na: 'NO APLICA', si: 'SÍ', no: 'NO',
 }
 
-type Datos = { reporte: EnexReporte; items: EnexReporteItem[]; logoUrl: string }
+type Datos = {
+  reporte: EnexReporte; items: EnexReporteItem[]; logoUrl: string
+  // [MIG287] Lo que se le pide al mandante y va impreso en lo que él firma.
+  reqs?: EnexRequerimiento[]
+}
+
+// ── Comentarios y requerimientos al mandante (MIG287) ───────────────────────
+// El resto del informe dice lo que se hizo. Esto dice lo que hace falta y que
+// nadie puede resolver en terreno: comprar, autorizar, coordinar. Va antes de
+// las firmas, porque es lo que el mandante está dando por informado al firmar.
+const REQ_PRIO_COLOR: Record<string, string> = { alta: '#b91c1c', media: '#92400e', baja: '#4b5563' }
+
+function BloqueRequerimientos({ reqs }: { reqs: EnexRequerimiento[] }) {
+  if (!reqs.length) return null
+  const pedidos = reqs.filter((r) => r.tipo === 'requerimiento')
+  // Una lista corta salta entera a la página siguiente si no cabe; una larga se
+  // deja fluir, porque entera no cabría en ninguna.
+  return (
+    <View wrap={reqs.length > 6}>
+      <Text style={[S.sectionTitle, { backgroundColor: '#dbeafe' }]}>
+        COMENTARIOS Y REQUERIMIENTOS AL MANDANTE ({reqs.length})
+      </Text>
+      <View style={[S.row, { borderTopWidth: 0.5, borderTopColor: '#444' }]}>
+        <Text style={[S.th, col(8)]}>N°</Text>
+        <Text style={[S.th, col(18)]}>TIPO</Text>
+        <Text style={[S.th, col(54), { textAlign: 'left' }]}>DETALLE</Text>
+        <Text style={[S.th, col(20), { borderRightWidth: 0 }]}>ORIGEN / PLAZO</Text>
+      </View>
+      {reqs.map((r, k) => (
+        <View key={r.id} style={S.row}>
+          <Text style={[S.td, col(8)]}>{k + 1}</Text>
+          <Text style={[S.td, col(18), { fontWeight: 'bold', color: r.tipo === 'requerimiento' ? REQ_PRIO_COLOR[r.prioridad] ?? '#111' : '#4b5563' }]}>
+            {r.tipo === 'requerimiento' ? `REQUERIMIENTO\nPrioridad ${r.prioridad}` : 'COMENTARIO'}
+          </Text>
+          <Text style={[S.cellValue, col(54), { fontWeight: 'normal', fontSize: 7.5, borderRightWidth: 0.5, borderRightColor: '#444' }]}>
+            {r.titulo ? `${r.titulo}\n` : ''}{r.descripcion}
+          </Text>
+          <Text style={[S.td, col(20), { fontSize: 6.5, borderRightWidth: 0 }]}>
+            {r.item_codigo ? `Ítem ${r.item_codigo}` : '—'}
+            {r.plazo ? `\nAntes del ${fmtFecha(r.plazo)}` : ''}
+          </Text>
+        </View>
+      ))}
+      {pedidos.length > 0 && (
+        <Text style={S.nota}>
+          {pedidos.length} requerimiento(s) quedan a la espera de resolución del mandante. Al firmar este
+          informe, ESM / ENEX los da por informados.
+        </Text>
+      )}
+    </View>
+  )
+}
 
 // ── Anexo: ficha de antes/después por actividad ──────────────────────────────
 // Es la evidencia con la que el mandante da el trabajo por hecho: cada punto
@@ -186,7 +240,7 @@ function FichaAntesDespues({ it, n }: { it: EnexReporteItem; n: number }) {
 }
 
 // ── CERTIFICADO DE CALIBRACIÓN (NCh1436 · PN.OM.DM.MN.F.01) ─────────────────
-export function CertificadoCalibracion({ reporte, items, logoUrl }: Datos) {
+export function CertificadoCalibracion({ reporte, items, logoUrl, reqs = [] }: Datos) {
   const inst = reporte.programacion?.instalacion
   const conAntesDespues = items.filter((i) => esActividad(i) && (nAntes(i) > 0 || nDespues(i) > 0))
   const corridas = Array.from({ length: 6 }, (_, k) => {
@@ -283,6 +337,8 @@ export function CertificadoCalibracion({ reporte, items, logoUrl }: Datos) {
         <Text style={[S.sectionTitle, { marginTop: 6 }]}>OBSERVACIONES</Text>
         <Text style={S.obsBox}>{[txt(items, 'CIE.OBS'), reporte.observacion].filter(Boolean).join(' · ') || ' '}</Text>
 
+        <BloqueRequerimientos reqs={reqs} />
+
         {/* La calibración también deja evidencia por punto (sellos, cabezal):
             va en el mismo formato de ficha que la mantención. */}
         {conAntesDespues.length > 0 && (
@@ -326,7 +382,7 @@ export function CertificadoCalibracion({ reporte, items, logoUrl }: Datos) {
 }
 
 // ── OT MANTENIMIENTO INTERMEDIO (formato Kizeo del mandante) ────────────────
-export function OtMantenimiento({ reporte, items, logoUrl }: Datos) {
+export function OtMantenimiento({ reporte, items, logoUrl, reqs = [] }: Datos) {
   const inst = reporte.programacion?.instalacion
   // Bloques de pauta (excluye datos de servicio y registro fotográfico)
   const bloques: { bloque: string; items: EnexReporteItem[] }[] = []
@@ -439,6 +495,10 @@ export function OtMantenimiento({ reporte, items, logoUrl }: Datos) {
             </View>
           ))}
         </>)}
+
+        {/* [MIG287] Va en la página 1, junto a los hallazgos: es lo que el
+            mandante tiene que resolver y no puede quedar al final del anexo. */}
+        <BloqueRequerimientos reqs={reqs} />
 
         <Text style={S.sectionTitle}>PAUTA DE REVISIÓN DE MANTENIMIENTO</Text>
         {bloques.map((g) => (
@@ -652,7 +712,7 @@ export async function generarYGuardarInformeEnex(
   ejecucionId: string,
   onAvance?: (hechas: number, total: number) => void,
 ): Promise<string> {
-  const { reporte, items } = await getEjecucionReporte(ejecucionId)
+  const { reporte, items, requerimientos } = await getEjecucionReporte(ejecucionId)
   if (!reporte) throw new Error('Ejecución no encontrada')
 
   // Pre-cargar imágenes como data URLs (logo, firmas, fotos de ítems, evidencias)
@@ -693,8 +753,8 @@ export async function generarYGuardarInformeEnex(
 
   const esCalibracion = reporte.programacion?.tipo_servicio === 'calibracion'
   const doc = esCalibracion
-    ? <CertificadoCalibracion reporte={reporte} items={items} logoUrl={logoUrl ?? ''} />
-    : <OtMantenimiento reporte={reporte} items={items} logoUrl={logoUrl ?? ''} />
+    ? <CertificadoCalibracion reporte={reporte} items={items} logoUrl={logoUrl ?? ''} reqs={requerimientos} />
+    : <OtMantenimiento reporte={reporte} items={items} logoUrl={logoUrl ?? ''} reqs={requerimientos} />
   // Timeout de seguridad: si react-pdf se cuelga, avisar en vez de esperar eterno.
   // Un anexo de decenas de fotos toma su tiempo, de ahí el margen amplio.
   const blob = await Promise.race([

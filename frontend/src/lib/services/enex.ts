@@ -708,6 +708,83 @@ export async function avanceTarea(id: string, estado: EnexTareaEstado, ejecucion
   if (error) throw error
 }
 
+// ── Comentarios y requerimientos al mandante (MIG287) ──────────────────────
+// El informe cuenta lo que se hizo; esto cuenta lo que HAY QUE HACER y que
+// excede la visita (comprar, autorizar, coordinar). Sale impreso en el mismo
+// documento que ESM firma, así que al firmar queda informado de la necesidad.
+export type EnexReqTipo = 'comentario' | 'requerimiento'
+export type EnexReqPrioridad = 'baja' | 'media' | 'alta'
+
+export const REQ_TIPO_LABEL: Record<EnexReqTipo, string> = {
+  requerimiento: 'Requerimiento', comentario: 'Comentario',
+}
+export const REQ_PRIORIDAD_LABEL: Record<EnexReqPrioridad, string> = {
+  alta: 'Alta', media: 'Media', baja: 'Baja',
+}
+
+export type EnexRequerimiento = {
+  id: string
+  ejecucion_id: string
+  tipo: EnexReqTipo
+  prioridad: EnexReqPrioridad
+  titulo: string | null
+  descripcion: string
+  pauta_item_id: string | null
+  plazo: string | null
+  orden: number
+  item_codigo: string | null
+  item_descripcion: string | null
+  creado_por_nombre: string | null
+  informe_firmado: boolean
+  created_at: string
+  updated_at: string
+}
+
+/** Orden del documento: primero lo que pide acción, y dentro, lo más urgente. */
+const ordenReq = (a: EnexRequerimiento, b: EnexRequerimiento) => {
+  const t = (r: EnexRequerimiento) => (r.tipo === 'requerimiento' ? 0 : 1)
+  const p = (r: EnexRequerimiento) => ({ alta: 0, media: 1, baja: 2 }[r.prioridad] ?? 1)
+  return t(a) - t(b) || p(a) - p(b) || a.orden - b.orden
+}
+
+export async function getRequerimientos(ejecucionId: string): Promise<EnexRequerimiento[]> {
+  const { data, error } = await supabase.from('v_enex_requerimientos').select('*')
+    .eq('ejecucion_id', ejecucionId)
+  if (error) throw error
+  return ((data ?? []) as EnexRequerimiento[]).sort(ordenReq)
+}
+
+/** Cuántos lleva cada servicio: la lista de informes muestra el contador. */
+export async function getRequerimientosCount(ejecucionIds: string[]): Promise<Record<string, number>> {
+  if (ejecucionIds.length === 0) return {}
+  const { data, error } = await supabase.from('enex_requerimientos')
+    .select('ejecucion_id').in('ejecucion_id', ejecucionIds)
+  if (error) throw error
+  const out: Record<string, number> = {}
+  for (const r of (data ?? []) as { ejecucion_id: string }[]) {
+    out[r.ejecucion_id] = (out[r.ejecucion_id] ?? 0) + 1
+  }
+  return out
+}
+
+export async function guardarRequerimiento(p: {
+  id?: string | null; ejecucionId: string; tipo: EnexReqTipo; prioridad: EnexReqPrioridad
+  titulo?: string | null; descripcion: string; pautaItemId?: string | null; plazo?: string | null
+}) {
+  const { data, error } = await supabase.rpc('rpc_enex_requerimiento_guardar', {
+    p_id: p.id ?? null, p_ejecucion_id: p.ejecucionId, p_tipo: p.tipo, p_prioridad: p.prioridad,
+    p_titulo: p.titulo ?? null, p_descripcion: p.descripcion,
+    p_pauta_item_id: p.pautaItemId ?? null, p_plazo: p.plazo ?? null, p_orden: null,
+  })
+  if (error) throw error
+  return data as { success: boolean; requerimiento_id: string }
+}
+
+export async function eliminarRequerimiento(id: string) {
+  const { error } = await supabase.rpc('rpc_enex_requerimiento_eliminar', { p_id: id })
+  if (error) throw error
+}
+
 // ── Firma remota del mandante (MIG276) ─────────────────────────────────────
 // El supervisor de ENEX no siempre está el día del trabajo. Se le manda un link
 // con token y firma desde donde esté; recién ahí el servicio cuenta para el KPI.
@@ -745,6 +822,12 @@ export type EnexFirmaDatos = {
     resultado: string | null; valor: number | null; unidad: string | null
     observacion: string | null
     fotos_antes: string[] | null; fotos_despues: string[] | null
+  }[]
+  // [MIG287] Lo que se le pide al mandante, a la vista antes de que firme.
+  requerimientos?: {
+    id: string; tipo: EnexReqTipo; prioridad: EnexReqPrioridad
+    titulo: string | null; descripcion: string; plazo: string | null
+    item_codigo: string | null; item_descripcion: string | null
   }[]
   datos_servicio?: Record<string, string>
 }
@@ -838,7 +921,7 @@ export type EnexReporte = {
 }
 
 export async function getEjecucionReporte(id: string): Promise<{
-  reporte: EnexReporte | null; items: EnexReporteItem[]
+  reporte: EnexReporte | null; items: EnexReporteItem[]; requerimientos: EnexRequerimiento[]
 }> {
   const { data, error } = await supabase
     .from('enex_ejecuciones')
@@ -850,7 +933,7 @@ export async function getEjecucionReporte(id: string): Promise<{
     .eq('id', id)
     .maybeSingle()
   if (error) throw error
-  if (!data) return { reporte: null, items: [] }
+  if (!data) return { reporte: null, items: [], requerimientos: [] }
   const { data: items, error: e2 } = await supabase
     .from('enex_ejecucion_items')
     .select(`id, resultado, valor_medicion, dentro_tolerancia, foto_url, observacion,
@@ -865,5 +948,8 @@ export async function getEjecucionReporte(id: string): Promise<{
   const ejecutados = ((items ?? []) as unknown as EnexReporteItem[]).sort((a, b) =>
     (a.item?.bloque_orden ?? 99) - (b.item?.bloque_orden ?? 99) || (a.item?.orden ?? 999) - (b.item?.orden ?? 999))
 
-  return { reporte: data as unknown as EnexReporte, items: ejecutados }
+  // [MIG287] Los comentarios y requerimientos son parte del documento firmable.
+  const requerimientos = await getRequerimientos(id)
+
+  return { reporte: data as unknown as EnexReporte, items: ejecutados, requerimientos }
 }

@@ -9,7 +9,10 @@ import { useEffect, useMemo, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { Printer } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
-import { getEjecucionReporte, MESES, type EnexReporte, type EnexReporteItem } from '@/lib/services/enex'
+import {
+  getEjecucionReporte, MESES,
+  type EnexReporte, type EnexReporteItem, type EnexRequerimiento,
+} from '@/lib/services/enex'
 
 const RESULTADO_LABEL: Record<string, { txt: string; cls: string }> = {
   ok: { txt: 'OK', cls: 'bg-green-100 text-green-700' },
@@ -47,6 +50,8 @@ export default function EnexReportePage() {
   const [sesionOk, setSesionOk] = useState<boolean | null>(null)
   const [reporte, setReporte] = useState<EnexReporte | null>(null)
   const [items, setItems] = useState<EnexReporteItem[]>([])
+  // [MIG287] Lo que se le pide al mandante: va impreso en el mismo documento.
+  const [reqs, setReqs] = useState<EnexRequerimiento[]>([])
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -65,7 +70,7 @@ export default function EnexReportePage() {
         const r = await getEjecucionReporte(ejecId)
         if (cancel) return
         if (!r.reporte) { setError('Ejecución no encontrada'); return }
-        setReporte(r.reporte); setItems(r.items)
+        setReporte(r.reporte); setItems(r.items); setReqs(r.requerimientos)
       } catch (e) { if (!cancel) setError((e as Error).message) }
     })()
     return () => { cancel = true }
@@ -205,6 +210,33 @@ export default function EnexReportePage() {
                 </li>
               ))}
             </ul>
+          </div>
+        )}
+
+        {/* [MIG287] Lo que hay que hacer y no se resuelve en terreno. Junto a los
+            hallazgos, porque casi siempre es su consecuencia. */}
+        {reqs.length > 0 && (
+          <div className="rep-item mt-4 rounded border border-amber-300 bg-amber-50 p-3">
+            <h2 className="text-xs font-bold uppercase tracking-wide text-amber-900">
+              Comentarios y requerimientos al mandante ({reqs.length})
+            </h2>
+            <ul className="mt-1 space-y-1.5 text-[12px] text-gray-800">
+              {reqs.map((r, k) => (
+                <li key={r.id} className="border-b border-amber-200 pb-1 last:border-0">
+                  <span className="font-bold">
+                    {k + 1}. {r.tipo === 'requerimiento'
+                      ? `REQUERIMIENTO (prioridad ${r.prioridad})`
+                      : 'COMENTARIO'}
+                  </span>
+                  {r.item_codigo && <span className="text-gray-500"> · ítem {r.item_codigo}</span>}
+                  {r.plazo && <span className="font-semibold text-red-700"> · antes del {fechaCL(r.plazo)}</span>}
+                  <div>{r.titulo ? <b>{r.titulo} — </b> : null}{r.descripcion}</div>
+                </li>
+              ))}
+            </ul>
+            <p className="mt-1.5 text-[10px] italic text-amber-800">
+              Al firmar este informe, ESM / ENEX da por informados los requerimientos listados.
+            </p>
           </div>
         )}
 
