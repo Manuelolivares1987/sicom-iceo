@@ -9,7 +9,7 @@ import Link from 'next/link'
 import { useQuery } from '@tanstack/react-query'
 import {
   ArrowLeft, ChevronLeft, ChevronRight, FileText, Printer, CheckCircle2, Clock,
-  FileSpreadsheet, X, RefreshCw, Send,
+  FileSpreadsheet, X, RefreshCw, Send, MessageSquarePlus,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -18,10 +18,11 @@ import { Spinner } from '@/components/ui/spinner'
 import { useToast } from '@/contexts/toast-context'
 import { useRequireAuth } from '@/hooks/use-require-auth'
 import {
-  getFaenas, getInformesMes, MESES, crearLinkFirma,
+  getFaenas, getInformesMes, getRequerimientosCount, MESES, crearLinkFirma,
   type EnexPanelRow, type TipoServicio,
 } from '@/lib/services/enex'
 import { generarYGuardarInformeEnex } from '@/components/enex/pdf-informe-enex'
+import { RequerimientosModal } from '@/components/enex/requerimientos-modal'
 
 const hoy = () => { const d = new Date(); return { anio: d.getFullYear(), mes: d.getMonth() + 1 } }
 
@@ -45,11 +46,23 @@ export default function EnexInformesPage() {
   const [avance, setAvance] = useState<string>('')
   const [linkFirma, setLinkFirma] = useState<
     { instalacion: string; tecnico: string; mandante: string } | null>(null)
+  // [MIG287] Comentarios y requerimientos del servicio abierto en el modal.
+  const [reqDe, setReqDe] = useState<EnexPanelRow | null>(null)
 
   const { data: faenas = [] } = useQuery({ queryKey: ['enex-faenas'], queryFn: getFaenas, staleTime: 5 * 60_000 })
   const { data: informes = [], isLoading, refetch } = useQuery({
     queryKey: ['enex-informes', anio, mes, faenaSel],
     queryFn: () => getInformesMes(anio, mes, faenaSel || undefined),
+    staleTime: 15_000,
+  })
+
+  // Cuántos requerimientos lleva cada informe: se ve en la lista, sin abrir nada.
+  const ejecIds = useMemo(
+    () => informes.map((r) => r.ejecucion_id).filter(Boolean) as string[], [informes])
+  const { data: reqCount = {}, refetch: refetchReq } = useQuery({
+    queryKey: ['enex-informes-req', ejecIds],
+    queryFn: () => getRequerimientosCount(ejecIds),
+    enabled: ejecIds.length > 0,
     staleTime: 15_000,
   })
 
@@ -70,6 +83,7 @@ export default function EnexInformesPage() {
   }, [informes, tipoSel, dia, buscar])
 
   const conPdf = filtrados.filter((r) => r.informe_pdf_url).length
+  const conReq = filtrados.filter((r) => (reqCount[r.ejecucion_id ?? ''] ?? 0) > 0).length
 
   async function generar(r: EnexPanelRow) {
     if (!r.ejecucion_id) return
@@ -171,6 +185,7 @@ export default function EnexInformesPage() {
           </div>
           <div className="text-xs text-gray-500 pb-2">
             {filtrados.length} servicio{filtrados.length !== 1 ? 's' : ''} · {conPdf} con PDF
+            {conReq > 0 && <> · <span className="font-semibold text-amber-700">{conReq} con requerimientos</span></>}
           </div>
         </CardContent>
       </Card>
@@ -300,6 +315,27 @@ export default function EnexInformesPage() {
                               {generando === r.ejecucion_id ? (avance || 'Generando…') : 'Generar'}
                             </Button>
                           ) : null}
+                          {/* [MIG287] Comentarios y requerimientos al mandante: lo que
+                              hay que hacer y no se resolvió en terreno, impreso en el
+                              mismo documento que ESM firma. */}
+                          {r.ejecucion_id && (
+                            <button
+                              title={r.cumplida
+                                ? 'Ver los comentarios y requerimientos (el informe ya lo firmó ESM)'
+                                : 'Comentarios y requerimientos para el mandante'}
+                              onClick={() => setReqDe(r)}
+                              className={`relative rounded border p-1.5 ${
+                                (reqCount[r.ejecucion_id] ?? 0) > 0
+                                  ? 'border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100'
+                                  : 'text-gray-400 hover:text-amber-700'}`}>
+                              <MessageSquarePlus className="h-3.5 w-3.5" />
+                              {(reqCount[r.ejecucion_id] ?? 0) > 0 && (
+                                <span className="absolute -right-1.5 -top-1.5 rounded-full bg-amber-600 px-1 text-[9px] font-bold leading-4 text-white">
+                                  {reqCount[r.ejecucion_id]}
+                                </span>
+                              )}
+                            </button>
+                          )}
                           {/* Links de firma. Se ofrece siempre: aunque el mandante ya
                               haya recibido conforme, puede faltar la del técnico. */}
                           {r.ejecucion_id && (
@@ -325,6 +361,18 @@ export default function EnexInformesPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* [MIG287] Lo que se le pide al mandante, escrito en el informe que firma */}
+      {reqDe?.ejecucion_id && (
+        <RequerimientosModal
+          open onClose={() => setReqDe(null)}
+          ejecucionId={reqDe.ejecucion_id}
+          instalacion={reqDe.instalacion}
+          fecha={reqDe.fecha_ejecucion}
+          firmadoPorMandante={!!reqDe.firma_mandante_url}
+          onCambio={() => { refetchReq(); refetch() }}
+        />
+      )}
     </div>
   )
 }

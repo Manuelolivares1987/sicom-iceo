@@ -8,7 +8,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
-import { CheckCircle2, AlertTriangle, Camera, ClipboardList } from 'lucide-react'
+import { CheckCircle2, AlertTriangle, Camera, ClipboardList, MessageSquareWarning } from 'lucide-react'
 import { Spinner } from '@/components/ui/spinner'
 import { SignaturePad } from '@/components/ui/signature-pad'
 import { getDatosFirma, registrarFirmaRemota, type EnexFirmaDatos } from '@/lib/services/enex'
@@ -108,6 +108,8 @@ export default function FirmaEnexPage() {
   const conFotos = acts.filter((a) => (a.fotos_antes?.length ?? 0) + (a.fotos_despues?.length ?? 0) > 0)
   const noOk = acts.filter((a) => a.resultado === 'no_ok' || a.resultado === 'no')
   const ds = d.datos_servicio ?? {}
+  const reqs = d.requerimientos ?? []
+  const pedidos = reqs.filter((r) => r.tipo === 'requerimiento')
 
   return (
     <div className="mx-auto max-w-2xl px-3 py-5">
@@ -210,6 +212,47 @@ export default function FirmaEnexPage() {
         </div>
       )}
 
+      {/* [MIG287] Lo que hay que resolver y no se hace en terreno. Va pegado a la
+          firma a propósito: es parte de lo que el mandante está recibiendo. */}
+      {reqs.length > 0 && (
+        <div className="mt-3 rounded-xl border-2 border-amber-300 bg-amber-50/60 p-4">
+          <h2 className="flex items-center gap-1.5 text-sm font-bold text-amber-900">
+            <MessageSquareWarning className="h-4 w-4" /> Comentarios y requerimientos ({reqs.length})
+          </h2>
+          <p className="mt-0.5 text-[11px] text-amber-800">
+            Detectado durante el servicio y fuera del alcance de esta visita.
+          </p>
+          <ul className="mt-2 space-y-2">
+            {reqs.map((r, i) => (
+              <li key={r.id ?? i} className="rounded-lg border border-amber-200 bg-white p-2.5">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold uppercase ${
+                    r.tipo === 'requerimiento'
+                      ? r.prioridad === 'alta' ? 'bg-red-100 text-red-800'
+                        : r.prioridad === 'media' ? 'bg-amber-100 text-amber-800'
+                        : 'bg-gray-100 text-gray-600'
+                      : 'bg-gray-100 text-gray-600'}`}>
+                    {r.tipo === 'requerimiento' ? `Requerimiento · ${r.prioridad}` : 'Comentario'}
+                  </span>
+                  {r.item_codigo && (
+                    <span className="rounded bg-gray-100 px-1.5 py-0.5 font-mono text-[10px] text-gray-500">
+                      Ítem {r.item_codigo}
+                    </span>
+                  )}
+                  {r.plazo && (
+                    <span className="text-[10px] font-semibold text-red-700">
+                      antes del {fechaCL(r.plazo)}
+                    </span>
+                  )}
+                </div>
+                {r.titulo && <p className="mt-1 text-sm font-semibold text-gray-800">{r.titulo}</p>}
+                <p className="mt-0.5 whitespace-pre-wrap text-xs text-gray-700">{r.descripcion}</p>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {/* Firma — el texto y el peso cambian según quién esté firmando */}
       <div className={`mt-3 rounded-xl border-2 bg-white p-4 ${
         esTecnico ? 'border-emerald-300' : 'border-blue-300'}`}>
@@ -221,6 +264,11 @@ export default function FirmaEnexPage() {
             ? 'Al firmar, declaras que ejecutaste este trabajo tal como quedó registrado.'
             : 'Al firmar, das por recibido el servicio y queda cumplido para el contrato.'}
         </p>
+        {!esTecnico && pedidos.length > 0 && (
+          <p className="mt-1 rounded bg-amber-50 p-2 text-[11px] font-semibold text-amber-900">
+            También das por informados los {pedidos.length} requerimiento(s) del informe.
+          </p>
+        )}
         {/* Estado de la otra firma: que nadie asuma que con la suya está listo */}
         <p className="mt-1 text-[11px] text-gray-500">
           {esTecnico
