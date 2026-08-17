@@ -220,3 +220,50 @@ export async function actualizarExamen(i: ActualizarExamenInput) {
     .eq('id', i.examenId)
   if (error) throw error
 }
+
+// ============================================================================
+// Envío del reporte a pedido (MIG303)
+// ----------------------------------------------------------------------------
+// El aviso automático manda solo lo que toca por cadencia. Esto manda la foto
+// completa del momento, cuando prevención la necesita.
+//
+// Los destinatarios NO viajan desde el navegador: los decide el servidor según
+// la faena (MIG302). Si la UI pudiera elegir libremente a quién enviar, el
+// control de alcance de los externos no serviría de nada.
+// ============================================================================
+
+export type EnviarReporteInput = {
+  faena?: string | null
+  mensaje?: string | null
+  incluirVigentes?: boolean
+  /** Destinatario puntual adicional. Va en copia y queda registrado. */
+  destinatarioExtra?: string | null
+}
+
+export type EnviarReporteResultado = {
+  ok: true
+  enviados: number
+  destinatarios: string[]
+  items: number
+  vencidos: number
+}
+
+export async function enviarReporteDocumental(
+  input: EnviarReporteInput,
+): Promise<EnviarReporteResultado> {
+  // La sesión identifica quién envía; la base valida que pueda.
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session) throw new Error('Sesión expirada. Vuelve a entrar.')
+
+  const r = await fetch('/api/prevencion/enviar-reporte', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${session.access_token}`,
+    },
+    body: JSON.stringify(input),
+  })
+  const j = await r.json().catch(() => ({}))
+  if (!r.ok || !j?.ok) throw new Error(j?.error ?? 'No se pudo enviar el reporte.')
+  return j as EnviarReporteResultado
+}

@@ -4,7 +4,7 @@ import { useState } from 'react'
 import {
   ShieldAlert, Search, AlertTriangle, CheckCircle2, Clock, Ban,
   FileWarning, ChevronDown, ChevronRight, Save, Pencil,
-  Upload, Paperclip, History,
+  Upload, Paperclip, History, Mail,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -13,7 +13,7 @@ import { Spinner } from '@/components/ui/spinner'
 import { useRequireAuth } from '@/hooks/use-require-auth'
 import {
   useControlDocumental, useActualizarExamen,
-  useRenovarExamen, useHistorialExamen, abrirRespaldo,
+  useRenovarExamen, useHistorialExamen, abrirRespaldo, useEnviarReporte,
 } from '@/hooks/use-prevencion-personal'
 import type { PersonaControl, ExamenPersona, EstadoExamen } from '@/lib/services/prevencion-personal'
 
@@ -331,11 +331,129 @@ function FilaPersona({ p, faena }: { p: PersonaControl, faena: string | null }) 
   )
 }
 
+/**
+ * Envío del reporte a pedido. No deja escribir la lista de destinatarios: la
+ * decide el servidor según la faena, porque hay externos que solo pueden ver
+ * la suya. Sí permite sumar UNO puntual, que va en copia y queda registrado.
+ */
+function EnviarReporteModal({ faena, faenas, onCerrar }: {
+  faena: string | null
+  faenas: { faena: string, personas: number }[]
+  onCerrar: () => void
+}) {
+  const [destino, setDestino] = useState<string | null>(faena)
+  const [mensaje, setMensaje] = useState('')
+  const [extra, setExtra] = useState('')
+  const [incluirVigentes, setIncluirVigentes] = useState(false)
+  const enviar = useEnviarReporte()
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4">
+      <Card className="mt-10 w-full max-w-lg">
+        <CardContent className="space-y-3 py-4">
+          <div className="flex items-center justify-between">
+            <h2 className="flex items-center gap-2 text-lg font-bold">
+              <Mail className="h-5 w-5 text-blue-700" /> Enviar reporte documental
+            </h2>
+            <button onClick={onCerrar} className="text-sm text-muted-foreground hover:underline">
+              Cerrar
+            </button>
+          </div>
+
+          {enviar.isSuccess ? (
+            <div className="space-y-3">
+              <div className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
+                <b>Reporte enviado.</b> {enviar.data.items} ítem(s),{' '}
+                {enviar.data.vencidos} vencido(s), a {enviar.data.enviados} destinatario(s):
+                <div className="mt-1 text-[11px]">{enviar.data.destinatarios.join(', ')}</div>
+              </div>
+              <div className="flex justify-end">
+                <Button variant="primary" onClick={onCerrar}>Listo</Button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <label className="block">
+                <span className="text-[11px] uppercase text-muted-foreground">Faena</span>
+                <select
+                  value={destino ?? ''}
+                  onChange={(e) => setDestino(e.target.value || null)}
+                  className="w-full rounded-md border bg-background px-2 py-1.5 text-sm"
+                >
+                  <option value="">Todas las faenas</option>
+                  {faenas.map((f) => (
+                    <option key={f.faena} value={f.faena}>{f.faena} ({f.personas})</option>
+                  ))}
+                </select>
+                <span className="text-[11px] text-muted-foreground">
+                  Los destinatarios se toman de los configurados para la faena.
+                  Un externo solo recibe la suya.
+                </span>
+              </label>
+
+              <label className="block">
+                <span className="text-[11px] uppercase text-muted-foreground">
+                  Mensaje (opcional)
+                </span>
+                <textarea
+                  value={mensaje}
+                  onChange={(e) => setMensaje(e.target.value)}
+                  rows={3}
+                  placeholder="Ej.: Se adjunta el estado documental solicitado. Los vencimientos están en gestión con el laboratorio."
+                  className="w-full resize-y rounded-md border bg-background px-2 py-1.5 text-sm
+                             focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+              </label>
+
+              <label className="block">
+                <span className="text-[11px] uppercase text-muted-foreground">
+                  Copia adicional (opcional)
+                </span>
+                <Input
+                  value={extra}
+                  onChange={(e) => setExtra(e.target.value)}
+                  placeholder="correo@empresa.cl"
+                  className="h-8 text-sm"
+                />
+              </label>
+
+              <label className="flex items-center gap-2 text-xs">
+                <input type="checkbox" checked={incluirVigentes}
+                  onChange={(e) => setIncluirVigentes(e.target.checked)} />
+                Incluir también los exámenes vigentes (reporte completo)
+              </label>
+
+              {enviar.error && (
+                <div className="rounded bg-red-100 px-2 py-1.5 text-xs text-red-800">
+                  {(enviar.error as Error).message}
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2 pt-1">
+                <Button variant="outline" onClick={onCerrar}>Cancelar</Button>
+                <Button variant="primary" disabled={enviar.isPending}
+                  onClick={() => enviar.mutate({
+                    faena: destino, mensaje: mensaje.trim() || null,
+                    incluirVigentes, destinatarioExtra: extra.trim() || null,
+                  })}>
+                  <Mail className="mr-1 h-4 w-4" />
+                  {enviar.isPending ? 'Enviando…' : 'Enviar'}
+                </Button>
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
+
 export default function ControlDocumentalPersonalPage() {
   useRequireAuth()
   const [faena, setFaena] = useState<string | null>(null)
   const [q, setQ] = useState('')
   const [soloProblemas, setSoloProblemas] = useState(false)
+  const [enviando, setEnviando] = useState(false)
 
   const { data, isLoading, error } = useControlDocumental(faena)
 
@@ -349,16 +467,30 @@ export default function ControlDocumentalPersonalPage() {
 
   return (
     <div className="space-y-4 p-4 sm:p-6">
-      <div>
-        <h1 className="flex items-center gap-2 text-2xl font-bold">
-          <ShieldAlert className="h-6 w-6 text-amber-500" />
-          Control documental de personal
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          Exámenes ocupacionales y licencias, con vencimiento y semáforo.
-          Un examen sin registro cuenta como incumplimiento, no como conforme.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="flex items-center gap-2 text-2xl font-bold">
+            <ShieldAlert className="h-6 w-6 text-amber-500" />
+            Control documental de personal
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            Exámenes ocupacionales y licencias, con vencimiento y semáforo.
+            Un examen sin registro cuenta como incumplimiento, no como conforme.
+          </p>
+        </div>
+        <Button variant="primary" onClick={() => setEnviando(true)}>
+          <Mail className="mr-1.5 h-4 w-4" />
+          Enviar reporte por correo
+        </Button>
       </div>
+
+      {enviando && (
+        <EnviarReporteModal
+          faena={faena}
+          faenas={data?.faenas ?? []}
+          onCerrar={() => setEnviando(false)}
+        />
+      )}
 
       {isLoading && <div className="flex justify-center py-16"><Spinner /></div>}
       {error && (
