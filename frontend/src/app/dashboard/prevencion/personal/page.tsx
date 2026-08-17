@@ -4,13 +4,17 @@ import { useState } from 'react'
 import {
   ShieldAlert, Search, AlertTriangle, CheckCircle2, Clock, Ban,
   FileWarning, ChevronDown, ChevronRight, Save, Pencil,
+  Upload, Paperclip, History,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Spinner } from '@/components/ui/spinner'
 import { useRequireAuth } from '@/hooks/use-require-auth'
-import { useControlDocumental, useActualizarExamen } from '@/hooks/use-prevencion-personal'
+import {
+  useControlDocumental, useActualizarExamen,
+  useRenovarExamen, useHistorialExamen, abrirRespaldo,
+} from '@/hooks/use-prevencion-personal'
 import type { PersonaControl, ExamenPersona, EstadoExamen } from '@/lib/services/prevencion-personal'
 
 // ============================================================================
@@ -57,11 +61,23 @@ function Kpi({ label, value, tone, sub }: {
 /** Edición inline de un examen. Sin modal: en auditoría se corrigen varios seguidos. */
 function FilaExamen({ e, faena }: { e: ExamenPersona, faena: string | null }) {
   const [editando, setEditando] = useState(false)
+  const [renovando, setRenovando] = useState(false)
+  const [verHistorial, setVerHistorial] = useState(false)
   const [lab, setLab] = useState(e.laboratorio ?? '')
   const [venc, setVenc] = useState(e.fecha_vencimiento ?? '')
   const [obs, setObs] = useState(e.observacion ?? '')
   const [bloq, setBloq] = useState(e.observacion_bloqueante)
   const guardar = useActualizarExamen(faena)
+
+  // ── renovación ──
+  const renovar = useRenovarExamen(faena)
+  const [nVenc, setNVenc] = useState('')
+  const [nEmision, setNEmision] = useState('')
+  const [nLab, setNLab] = useState(e.laboratorio ?? '')
+  const [nObs, setNObs] = useState('')
+  const [archivo, setArchivo] = useState<File | null>(null)
+
+  const historial = useHistorialExamen(verHistorial ? e.id : null)
 
   const st = ESTADO[e.estado]
 
@@ -81,11 +97,123 @@ function FilaExamen({ e, faena }: { e: ExamenPersona, faena: string | null }) {
             ? (e.dias_restantes < 0 ? `hace ${-e.dias_restantes} d` : `en ${e.dias_restantes} d`)
             : ''}
         </span>
-        <button onClick={() => setEditando((v) => !v)}
-          className="text-[11px] font-medium text-blue-700 underline">
-          <Pencil className="inline h-3 w-3" />
-        </button>
+        <div className="flex items-center gap-1.5">
+          {e.archivo_path && (
+            <button onClick={() => abrirRespaldo(e.archivo_path!)}
+              title={e.archivo_nombre ?? 'Ver respaldo'}
+              className="text-[11px] font-medium text-blue-700 underline">
+              <Paperclip className="inline h-3 w-3" />
+            </button>
+          )}
+          {(e.versiones_anteriores ?? 0) > 0 && (
+            <button onClick={() => setVerHistorial((v) => !v)}
+              title={`${e.versiones_anteriores} versión(es) anterior(es)`}
+              className="text-[11px] text-muted-foreground underline">
+              <History className="inline h-3 w-3" /> {e.versiones_anteriores}
+            </button>
+          )}
+          <Button size="sm" variant="outline" className="h-6 px-2 text-[11px]"
+            onClick={() => { setRenovando((v) => !v); setEditando(false) }}>
+            <Upload className="mr-1 h-3 w-3" /> Renovar
+          </Button>
+          <button onClick={() => { setEditando((v) => !v); setRenovando(false) }}
+            className="text-[11px] font-medium text-blue-700 underline">
+            <Pencil className="inline h-3 w-3" />
+          </button>
+        </div>
       </div>
+
+      {/* ── Renovar: subir el nuevo examen ── */}
+      {renovando && (
+        <div className="mt-2 space-y-2 rounded-md border-2 border-emerald-300 bg-emerald-50/60 p-2">
+          <div className="text-xs font-semibold text-emerald-900">
+            Renovar {e.tipo_nombre}
+          </div>
+          <p className="text-[11px] text-emerald-800">
+            El examen actual pasa al historial, no se borra: hay que poder
+            demostrar si estaba vigente en la fecha de un incidente.
+          </p>
+          <div className="grid gap-2 sm:grid-cols-3">
+            <label className="block">
+              <span className="text-[10px] uppercase text-muted-foreground">Nuevo vencimiento *</span>
+              <Input type="date" value={nVenc} onChange={(ev) => setNVenc(ev.target.value)}
+                className="h-8 text-sm" />
+            </label>
+            <label className="block">
+              <span className="text-[10px] uppercase text-muted-foreground">Fecha del examen</span>
+              <Input type="date" value={nEmision} onChange={(ev) => setNEmision(ev.target.value)}
+                className="h-8 text-sm" />
+            </label>
+            <label className="block">
+              <span className="text-[10px] uppercase text-muted-foreground">Laboratorio</span>
+              <Input value={nLab} onChange={(ev) => setNLab(ev.target.value)} className="h-8 text-sm" />
+            </label>
+          </div>
+          <label className="block">
+            <span className="text-[10px] uppercase text-muted-foreground">
+              Respaldo (PDF o foto) — se guarda en un repositorio privado
+            </span>
+            <input type="file" accept=".pdf,image/*"
+              onChange={(ev) => setArchivo(ev.target.files?.[0] ?? null)}
+              className="block w-full text-xs file:mr-2 file:rounded file:border-0
+                         file:bg-emerald-600 file:px-2 file:py-1 file:text-white" />
+          </label>
+          <label className="block">
+            <span className="text-[10px] uppercase text-muted-foreground">Observación</span>
+            <Input value={nObs} onChange={(ev) => setNObs(ev.target.value)} className="h-8 text-sm" />
+          </label>
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] text-muted-foreground">
+              {archivo ? `Adjunto: ${archivo.name}` : 'Sin archivo adjunto'}
+            </span>
+            <div className="flex gap-2">
+              <Button size="sm" variant="outline" onClick={() => setRenovando(false)}>Cancelar</Button>
+              <Button size="sm" variant="primary" disabled={!nVenc || renovar.isPending}
+                onClick={() => renovar.mutate({
+                  examenId: e.id, personalId: e.personal_id, tipoCodigo: e.tipo_codigo,
+                  fechaVencimiento: nVenc, fechaEmision: nEmision || null,
+                  laboratorio: nLab, observacion: nObs, archivo,
+                }, { onSuccess: () => { setRenovando(false); setArchivo(null); setNVenc('') } })}>
+                <Upload className="mr-1 h-3.5 w-3.5" />
+                {renovar.isPending ? 'Subiendo…' : 'Renovar'}
+              </Button>
+            </div>
+          </div>
+          {renovar.error && (
+            <div className="rounded bg-red-100 px-2 py-1 text-[11px] text-red-800">
+              {renovar.error.message}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Historial de versiones ── */}
+      {verHistorial && (
+        <div className="mt-2 space-y-1 rounded-md border bg-muted/40 p-2">
+          <div className="text-[10px] font-semibold uppercase text-muted-foreground">
+            Versiones anteriores
+          </div>
+          {historial.isLoading && <div className="text-[11px] text-muted-foreground">Cargando…</div>}
+          {historial.data?.map((h) => (
+            <div key={h.id} className="flex flex-wrap items-center gap-2 text-[11px]">
+              <span className="text-muted-foreground">
+                {new Date(h.reemplazado_at).toLocaleDateString('es-CL')}
+              </span>
+              <span>vencía {fmt(h.fecha_vencimiento)}</span>
+              <span className="text-muted-foreground">{h.laboratorio ?? '—'}</span>
+              {h.archivo_path && (
+                <button onClick={() => abrirRespaldo(h.archivo_path!)}
+                  className="font-medium text-blue-700 underline">
+                  <Paperclip className="inline h-3 w-3" /> ver
+                </button>
+              )}
+            </div>
+          ))}
+          {historial.data?.length === 0 && (
+            <div className="text-[11px] text-muted-foreground">Sin versiones anteriores.</div>
+          )}
+        </div>
+      )}
 
       {!e.aplica && e.motivo_no_aplica && (
         <div className="mt-1 flex items-start gap-1 text-[11px] text-slate-600">
