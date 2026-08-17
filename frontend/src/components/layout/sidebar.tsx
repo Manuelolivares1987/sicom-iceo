@@ -84,6 +84,19 @@ const navGroups: NavGroup[] = [
     label: 'Operación',
     subsections: [
       {
+        label: 'Gerencia',
+        items: [
+          // Sin `module`: la autorización la resuelve la base
+          // (fn_panel_gerencia_puede_ver, MIG295). Quien no tenga el permiso
+          // entra y ve el aviso, no datos.
+          {
+            label: 'Panel de Gerencia', href: '/dashboard/gerencia', icon: Building2,
+            badge: 'Nuevo',
+            tooltip: 'Cuadrantes Coquimbo y Calama, semana a semana',
+          },
+        ],
+      },
+      {
         label: 'Órdenes de Trabajo',
         items: [
           { label: 'Mis OTs', href: '/dashboard/mis-ots', icon: ClipboardCheck, module: 'ordenes_trabajo' as Module },
