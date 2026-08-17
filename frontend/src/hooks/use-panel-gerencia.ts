@@ -2,7 +2,11 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   getPanelGerencia,
   guardarComentario,
+  corregirResumenCombustible,
+  corregirFluctuacionPunto,
   type GuardarComentarioInput,
+  type CorregirResumenInput,
+  type CorregirFluctuacionInput,
 } from '@/lib/services/panel-gerencia'
 
 /**
@@ -26,6 +30,28 @@ export function useGuardarComentario(semana?: string) {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (input: GuardarComentarioInput) => guardarComentario(input),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['panel-gerencia', semana ?? 'actual'] })
+    },
+  })
+}
+
+/** Corrección manual del cierre mensual de combustible de una faena. */
+export function useCorregirResumenCombustible(semana?: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: CorregirResumenInput) => corregirResumenCombustible(input),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['panel-gerencia', semana ?? 'actual'] })
+    },
+  })
+}
+
+/** Corrección (o carga inicial) de la fluctuación de un estanque. */
+export function useCorregirFluctuacion(semana?: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: CorregirFluctuacionInput) => corregirFluctuacionPunto(input),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['panel-gerencia', semana ?? 'actual'] })
     },

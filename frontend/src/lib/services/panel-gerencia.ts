@@ -105,6 +105,20 @@ export type EquipoDetenido = {
   fecha_compromiso: string | null
 }
 
+/** Fluctuación de un estanque. `origen` dice de dónde salió el número. */
+export type FluctuacionPunto = {
+  punto: string
+  litros_despachados: number | null
+  fluctuacion_lt: number | null
+  /** Fracción: -0.0192 = -1,92%. Null = no se pudo leer, falta carga manual. */
+  fluctuacion_pct: number | null
+  dias_cuadrados: number | null
+  origen: 'orpak' | 'excel' | 'manual'
+  corregido_manual: boolean
+  motivo_correccion: string | null
+  observacion: string | null
+}
+
 export type CierreCombustibleFaena = {
   codigo: string
   nombre: string
@@ -122,6 +136,13 @@ export type CierreCombustibleFaena = {
   detalle_por_empresa: { clave: string, litros: number }[]
   fuente_archivo: string | null
   cargado_at: string | null
+  corregido_manual: boolean
+  motivo_correccion: string | null
+  corregido_at: string | null
+  corregido_por_nombre: string | null
+  /** Lo que decía la planilla antes de la corrección. Evidencia en reunión. */
+  valores_originales: Record<string, unknown> | null
+  puntos: FluctuacionPunto[]
 }
 
 /**
@@ -133,9 +154,13 @@ export type CierreCombustibleFaena = {
  * `litros_total_periodo` y `trazado_en_sistema` es exactamente esa brecha.
  */
 export type CombustibleCoquimbo = {
+  periodo: { anio: number, mes: number }
   faenas: CierreCombustibleFaena[]
   litros_total_periodo: number
   con_cierre_cargado: number
+  corregidos_a_mano: number
+  /** Estanques con |fluctuación| > 0,5%, el umbral de gestión. */
+  puntos_fuera_umbral: number
   trazado_en_sistema: {
     movimientos_franke: number
     despachos_romeral: number
@@ -256,6 +281,76 @@ export type GuardarComentarioInput = {
   planAccion?: string | null
   responsable?: string | null
   fechaCompromiso?: string | null
+}
+
+// ============================================================================
+// Corrección manual de las cifras de combustible (MIG297)
+// ----------------------------------------------------------------------------
+// El valor que carga el script desde las planillas es SIEMPRE una propuesta:
+// las planillas de cierre no se dejan parsear de forma confiable (el teórico
+// viene precalculado para todo el mes, el último día está a medias, y cada
+// estanque tiene distinta cantidad de columnas). Quien manda es esta
+// corrección, y por eso el motivo es obligatorio: el número va al Gerente
+// General y alguien tiene que responder por él.
+// ============================================================================
+
+export type CorregirResumenInput = {
+  faenaCodigo: string
+  anio: number
+  mes: number
+  litrosVenta?: number | null
+  litrosTrasvasije?: number | null
+  fluctuacionLt?: number | null
+  /** Fracción, no porcentaje. La UI divide por 100 antes de mandar. */
+  fluctuacionPct?: number | null
+  transacciones?: number | null
+  motivo: string
+}
+
+export async function corregirResumenCombustible(i: CorregirResumenInput) {
+  const { data, error } = await supabase.rpc('fn_combustible_corregir_resumen', {
+    p_faena_codigo: i.faenaCodigo,
+    p_anio: i.anio,
+    p_mes: i.mes,
+    p_litros_venta: i.litrosVenta ?? null,
+    p_litros_trasvasije: i.litrosTrasvasije ?? null,
+    p_fluctuacion_lt: i.fluctuacionLt ?? null,
+    p_fluctuacion_pct: i.fluctuacionPct ?? null,
+    p_transacciones: i.transacciones ?? null,
+    p_motivo: i.motivo,
+  })
+  if (error) throw error
+  return data
+}
+
+export type CorregirFluctuacionInput = {
+  faenaCodigo: string
+  anio: number
+  mes: number
+  punto: string
+  litrosDespachados?: number | null
+  fluctuacionLt?: number | null
+  fluctuacionPct?: number | null
+  diasCuadrados?: number | null
+  observacion?: string | null
+  motivo: string
+}
+
+export async function corregirFluctuacionPunto(i: CorregirFluctuacionInput) {
+  const { data, error } = await supabase.rpc('fn_combustible_corregir_fluctuacion', {
+    p_faena_codigo: i.faenaCodigo,
+    p_anio: i.anio,
+    p_mes: i.mes,
+    p_punto: i.punto,
+    p_litros_despachados: i.litrosDespachados ?? null,
+    p_fluctuacion_lt: i.fluctuacionLt ?? null,
+    p_fluctuacion_pct: i.fluctuacionPct ?? null,
+    p_dias_cuadrados: i.diasCuadrados ?? null,
+    p_observacion: i.observacion ?? null,
+    p_motivo: i.motivo,
+  })
+  if (error) throw error
+  return data
 }
 
 /**

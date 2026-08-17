@@ -64,6 +64,96 @@ const topN = (obj, n = 20) => Object.entries(obj)
   .sort((a, b) => b[1] - a[1]).slice(0, n)
   .map(([clave, litros]) => ({ clave, litros: Math.round(litros) }))
 
+const txt = (c) => String(val(c) ?? '').trim().toUpperCase()
+
+/**
+ * Fluctuación por estanque desde el "Cierre" de Romeral (hojas BIMODAL, MINA,
+ * CASA FUERZA). Cada hoja es un cuadre diario: teórico vs. físico.
+ *
+ * Dos trampas que obligan a no leer el mes completo:
+ *  1. El teórico viene precalculado para los 31 días, así que los días
+ *     futuros traen físico = 0 y una "variación" de -teórico. Sumar todo daba
+ *     -289% en BIMODAL.
+ *  2. El último día suele estar a medias: el 13-ago MINA registra 30.000 L de
+ *     recepción sin lectura física (-11.700 L de falsa variación).
+ *
+ * Por eso se corta en el último día con despachos o ventas REALES. Con ese
+ * corte el resultado cuadra con el total que la propia planilla calcula
+ * (BIMODAL -291 L, MINA +1.097 L). Aun así es una heurística: el valor queda
+ * marcado origen='excel' y gerencia lo corrige desde el panel si no cuadra.
+ */
+async function leerFluctuacionesRomeral(archivo, anio, mes) {
+  const wb = new ExcelJS.Workbook()
+  await wb.xlsx.readFile(archivo)
+  const out = []
+
+  for (const ws of wb.worksheets) {
+    // Solo las hojas de estanque: tienen el par FINAL TEORICO / FINAL FISICO.
+    let cVar = null, cVen = null, cTeo = null, cFis = null, cRec = null, cDes = null
+    for (let col = 1; col <= 30; col++) {
+      const g = txt(ws.getRow(4).getCell(col)), s = txt(ws.getRow(5).getCell(col))
+      if (g.startsWith('VARIACION') && s === 'LITROS') cVar = col
+      if (g === 'TOTAL' && s === 'VENTAS')             cVen = col
+      if (g === 'FINAL' && s === 'TEORICO')            cTeo = col
+      if (g === 'FINAL' && s === 'FISICO')             cFis = col
+      if (s === 'RECEP.')                              cRec = col
+      if (s.includes('ORPAK'))                         cDes = col
+    }
+    if (cTeo == null || cFis == null || cVar == null) continue
+
+    const filas = []
+    for (let r = 6; r <= ws.rowCount; r++) {
+      const d = num(val(ws.getRow(r).getCell(1)))
+      if (!d || d < 1 || d > 31) continue
+      const g = (c) => (c == null ? 0 : (num(val(ws.getRow(r).getCell(c))) ?? 0))
+      filas.push({ d, rec: g(cRec), des: g(cDes), ven: g(cVen),
+                   teo: g(cTeo), fis: g(cFis), v: g(cVar) })
+    }
+    const ultimo = Math.max(0, ...filas.filter((f) => f.des > 0 || f.ven > 0).map((f) => f.d))
+    if (!ultimo) continue
+    const usar = filas.filter((f) => f.d <= ultimo && f.fis > 0)
+    if (!usar.length) continue
+
+    const fluct = usar.reduce((a, f) => a + f.v, 0)
+    const desp = usar.reduce((a, f) => a + f.des, 0)
+    const ventas = usar.reduce((a, f) => a + f.ven, 0)
+    const base = ventas || desp
+    const pct = base ? fluct / base : null
+
+    // ── Filtro de plausibilidad ────────────────────────────────────────────
+    // En combustible una fluctuación mensual sobre 5% no existe: es un error
+    // de lectura. Las hojas de CAMIÓN dan 40%, 63% y 87% porque son estanques
+    // móviles y su columna de "ventas" significa otra cosa que en un estanque
+    // fijo. Cargar ese número sería peor que no cargar nada: gerencia lo vería
+    // como una merma catastrófica inexistente.
+    //
+    // Se registra igual el punto —para que se sepa que existe y que falta—,
+    // pero con la fluctuación en NULL y la nota de por qué. Gerencia lo
+    // completa desde el panel.
+    const PLAUSIBLE = pct != null && Math.abs(pct) <= 0.05
+
+    out.push({
+      faena_codigo: 'ROMERAL',
+      anio, mes,
+      punto: ws.name.trim(),
+      litros_despachados: Math.round(base),
+      fluctuacion_lt: PLAUSIBLE ? Math.round(fluct) : null,
+      fluctuacion_pct: PLAUSIBLE ? pct : null,
+      dias_cuadrados: usar.length,
+      ultimo_dia_cuadre: `${anio}-${String(mes).padStart(2, '0')}-${String(ultimo).padStart(2, '0')}`,
+      fuente_archivo: basename(archivo),
+      plausible: PLAUSIBLE,
+      observacion: PLAUSIBLE ? null
+        : `Requiere carga manual. La lectura automática de la hoja "${ws.name.trim()}" `
+          + `dio ${(pct * 100).toFixed(1)}% sobre ${Math.round(base).toLocaleString('es-CL')} L, `
+          + 'valor implausible para combustible (umbral 5%). Las hojas de camión '
+          + 'son estanques móviles y su columna de ventas no es comparable con la '
+          + 'de un estanque fijo.',
+    })
+  }
+  return out
+}
+
 const buscarArchivos = (dir, patron) => {
   const out = []
   const walk = (d) => {
@@ -198,10 +288,31 @@ for (const a of buscarArchivos(join(RAIZ, 'FRANKE'), /Control Suministro.*\.xlsx
   else console.warn(`⚠ sin datos utilizables: ${a}`)
 }
 
+const fluctuaciones = []
+
 for (const a of buscarArchivos(join(RAIZ, 'CMP ROMERAL'), /^BBDD MES.*\.xlsx$/i)) {
   const r = await leerRomeral(a)
   if (r) { registros.push(r); console.log(`✓ Romeral ${r.anio}-${String(r.mes).padStart(2, '0')}  ${r.transacciones} transacciones  ${r.litros_total.toLocaleString('es-CL')} L`) }
   else console.warn(`⚠ sin datos utilizables: ${a}`)
+}
+
+// Fluctuación por estanque. Se toma el período del BBDD ya leído: la celda
+// "MES:" del propio cierre está desactualizada (dice mayo y enero en un
+// archivo de agosto), así que no se puede usar como fuente del período.
+const periodoRomeral = registros.find((r) => r.faena_codigo === 'ROMERAL')
+if (periodoRomeral) {
+  for (const a of buscarArchivos(join(RAIZ, 'CMP ROMERAL'), /Cierre Romeral.*\.xlsx$/i)) {
+    const fs = await leerFluctuacionesRomeral(a, periodoRomeral.anio, periodoRomeral.mes)
+    for (const f of fs) {
+      fluctuaciones.push(f)
+      if (f.plausible) {
+        const p = (f.fluctuacion_pct * 100).toFixed(2) + '%'
+        console.log(`  · ${f.punto.padEnd(14)} ${String(f.fluctuacion_lt).padStart(7)} L  ${p.padStart(8)}  (${f.dias_cuadrados} días)`)
+      } else {
+        console.log(`  ⚠ ${f.punto.padEnd(14)} lectura implausible → queda para carga MANUAL`)
+      }
+    }
+  }
 }
 
 if (!registros.length) {
@@ -211,7 +322,7 @@ if (!registros.length) {
 
 if (DRY) {
   console.log('\n--dry-run: no se escribió nada en la base.\n')
-  console.log(JSON.stringify(registros, null, 2))
+  console.log(JSON.stringify({ registros, fluctuaciones }, null, 2))
   process.exit(0)
 }
 
@@ -229,14 +340,29 @@ for (const r of registros) {
       fluctuacion_lt, fluctuacion_pct, dias_con_registro, fecha_min, fecha_max,
       detalle_por_punto, detalle_por_empresa, fuente_archivo
     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+    -- Si gerencia ya corrigió esta fila a mano, el cargador NO la pisa: se
+    -- limita a refrescar la trazabilidad del archivo. Un recargue accidental
+    -- no puede borrar una corrección hecha para una reunión de directorio.
     ON CONFLICT (faena_codigo, anio, mes) DO UPDATE SET
-      transacciones = EXCLUDED.transacciones,
-      litros_venta = EXCLUDED.litros_venta,
-      litros_trasvasije = EXCLUDED.litros_trasvasije,
-      litros_total = EXCLUDED.litros_total,
+      transacciones = CASE WHEN combustible_faena_resumen_mensual.corregido_manual
+                           THEN combustible_faena_resumen_mensual.transacciones
+                           ELSE EXCLUDED.transacciones END,
+      litros_venta = CASE WHEN combustible_faena_resumen_mensual.corregido_manual
+                          THEN combustible_faena_resumen_mensual.litros_venta
+                          ELSE EXCLUDED.litros_venta END,
+      litros_trasvasije = CASE WHEN combustible_faena_resumen_mensual.corregido_manual
+                               THEN combustible_faena_resumen_mensual.litros_trasvasije
+                               ELSE EXCLUDED.litros_trasvasije END,
+      litros_total = CASE WHEN combustible_faena_resumen_mensual.corregido_manual
+                          THEN combustible_faena_resumen_mensual.litros_total
+                          ELSE EXCLUDED.litros_total END,
+      fluctuacion_lt = CASE WHEN combustible_faena_resumen_mensual.corregido_manual
+                            THEN combustible_faena_resumen_mensual.fluctuacion_lt
+                            ELSE EXCLUDED.fluctuacion_lt END,
+      fluctuacion_pct = CASE WHEN combustible_faena_resumen_mensual.corregido_manual
+                             THEN combustible_faena_resumen_mensual.fluctuacion_pct
+                             ELSE EXCLUDED.fluctuacion_pct END,
       stock_inicial = EXCLUDED.stock_inicial,
-      fluctuacion_lt = EXCLUDED.fluctuacion_lt,
-      fluctuacion_pct = EXCLUDED.fluctuacion_pct,
       dias_con_registro = EXCLUDED.dias_con_registro,
       fecha_min = EXCLUDED.fecha_min,
       fecha_max = EXCLUDED.fecha_max,
@@ -254,5 +380,39 @@ for (const r of registros) {
   ])
 }
 
+// ── Fluctuación por estanque ───────────────────────────────────────────────
+// Misma regla: lo corregido a mano manda sobre lo que traiga la planilla.
+for (const f of fluctuaciones) {
+  await client.query(`
+    INSERT INTO combustible_fluctuacion_punto (
+      faena_codigo, anio, mes, punto, litros_despachados,
+      fluctuacion_lt, fluctuacion_pct, dias_cuadrados, ultimo_dia_cuadre,
+      origen, fuente_archivo, observacion
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'excel',$10,$11)
+    ON CONFLICT (faena_codigo, anio, mes, punto) DO UPDATE SET
+      litros_despachados = CASE WHEN combustible_fluctuacion_punto.corregido_manual
+                                THEN combustible_fluctuacion_punto.litros_despachados
+                                ELSE EXCLUDED.litros_despachados END,
+      fluctuacion_lt = CASE WHEN combustible_fluctuacion_punto.corregido_manual
+                            THEN combustible_fluctuacion_punto.fluctuacion_lt
+                            ELSE EXCLUDED.fluctuacion_lt END,
+      fluctuacion_pct = CASE WHEN combustible_fluctuacion_punto.corregido_manual
+                             THEN combustible_fluctuacion_punto.fluctuacion_pct
+                             ELSE EXCLUDED.fluctuacion_pct END,
+      dias_cuadrados = EXCLUDED.dias_cuadrados,
+      ultimo_dia_cuadre = EXCLUDED.ultimo_dia_cuadre,
+      fuente_archivo = EXCLUDED.fuente_archivo,
+      observacion = CASE WHEN combustible_fluctuacion_punto.corregido_manual
+                         THEN combustible_fluctuacion_punto.observacion
+                         ELSE EXCLUDED.observacion END,
+      updated_at = NOW()
+  `, [
+    f.faena_codigo, f.anio, f.mes, f.punto, f.litros_despachados,
+    f.fluctuacion_lt, f.fluctuacion_pct, f.dias_cuadrados, f.ultimo_dia_cuadre,
+    f.fuente_archivo, f.observacion,
+  ])
+}
+
 await client.end()
-console.log(`\n✓ ${registros.length} cierre(s) cargado(s) en combustible_faena_resumen_mensual.`)
+console.log(`\n✓ ${registros.length} cierre(s) y ${fluctuaciones.length} fluctuación(es) por estanque cargadas.`)
+console.log('  Las filas ya corregidas a mano por gerencia NO fueron modificadas.')

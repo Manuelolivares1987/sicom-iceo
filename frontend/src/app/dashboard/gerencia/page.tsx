@@ -5,14 +5,17 @@ import Link from 'next/link'
 import {
   Building2, Wrench, Fuel, AlertTriangle, CheckCircle2, Clock,
   MessageSquare, Save, ChevronLeft, ChevronRight, Database, Mountain,
-  TrendingDown, FileWarning, CalendarDays,
+  TrendingDown, FileWarning, CalendarDays, Pencil,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Spinner } from '@/components/ui/spinner'
 import { useRequireAuth } from '@/hooks/use-require-auth'
-import { usePanelGerencia, useGuardarComentario } from '@/hooks/use-panel-gerencia'
+import {
+  usePanelGerencia, useGuardarComentario,
+  useCorregirResumenCombustible, useCorregirFluctuacion,
+} from '@/hooks/use-panel-gerencia'
 import type {
   EquipoDetenido, FaenaEnex, PanelTaller, CalidadDato,
   CierreCombustibleFaena, CombustibleCoquimbo,
@@ -269,12 +272,113 @@ function TallerBloque({ t }: { t: PanelTaller }) {
 }
 
 /**
+ * Formulario de corrección manual. El motivo es obligatorio —lo exige también
+ * la base— porque este número llega al Gerente General y alguien tiene que
+ * responder por él. Los campos vacíos no se tocan: se corrige la fluctuación
+ * sin reescribir los litros.
+ */
+function CorreccionManual({
+  titulo, ayuda, campos, onGuardar, guardando, error,
+}: {
+  titulo: string
+  ayuda?: string
+  campos: { key: string, label: string, valor: string, sufijo?: string }[]
+  guardando: boolean
+  error?: string | null
+  onGuardar: (valores: Record<string, string>, motivo: string) => void
+}) {
+  const [abierto, setAbierto] = useState(false)
+  const [vals, setVals] = useState<Record<string, string>>(
+    () => Object.fromEntries(campos.map((c) => [c.key, c.valor])))
+  const [motivo, setMotivo] = useState('')
+
+  if (!abierto) {
+    return (
+      <button onClick={() => setAbierto(true)}
+        className="flex items-center gap-1 text-[11px] font-medium text-blue-700 underline">
+        <Pencil className="h-3 w-3" /> Corregir a mano
+      </button>
+    )
+  }
+
+  return (
+    <div className="space-y-2 rounded-lg border-2 border-blue-300 bg-blue-50/60 p-3">
+      <div className="text-xs font-semibold text-blue-900">{titulo}</div>
+      {ayuda && <p className="text-[11px] text-blue-800">{ayuda}</p>}
+
+      <div className="grid gap-2 sm:grid-cols-2">
+        {campos.map((c) => (
+          <label key={c.key} className="block">
+            <span className="text-[10px] uppercase text-muted-foreground">{c.label}</span>
+            <div className="flex items-center gap-1">
+              <Input
+                value={vals[c.key] ?? ''}
+                onChange={(e) => setVals((v) => ({ ...v, [c.key]: e.target.value }))}
+                inputMode="decimal"
+                placeholder="—"
+                className="h-8 text-sm"
+              />
+              {c.sufijo && <span className="text-[11px] text-muted-foreground">{c.sufijo}</span>}
+            </div>
+          </label>
+        ))}
+      </div>
+
+      <label className="block">
+        <span className="text-[10px] uppercase text-muted-foreground">
+          Motivo de la corrección (obligatorio)
+        </span>
+        <textarea
+          value={motivo}
+          onChange={(e) => setMotivo(e.target.value)}
+          rows={2}
+          placeholder="Ej.: el cierre de la planilla no incluía el trasvasije del día 12"
+          className="w-full resize-y rounded-md border bg-background px-2 py-1.5 text-sm
+                     focus:outline-none focus:ring-2 focus:ring-ring"
+        />
+      </label>
+
+      {error && (
+        <div className="rounded bg-red-100 px-2 py-1 text-[11px] text-red-800">{error}</div>
+      )}
+
+      <div className="flex justify-end gap-2">
+        <Button size="sm" variant="outline" onClick={() => { setAbierto(false); setMotivo('') }}>
+          Cancelar
+        </Button>
+        <Button size="sm" variant="primary"
+          disabled={guardando || motivo.trim().length === 0}
+          onClick={() => onGuardar(vals, motivo.trim())}>
+          <Save className="mr-1 h-3.5 w-3.5" />
+          {guardando ? 'Guardando…' : 'Guardar corrección'}
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+const aNum = (s: string): number | null => {
+  // Acepta "1.234,5" y "1234.5". En Chile el separador de miles es el punto,
+  // así que un parseFloat directo convierte 1.234 en 1,234.
+  const t = String(s ?? '').trim().replace(/\./g, '').replace(',', '.')
+  if (t === '') return null
+  const n = Number(t)
+  return Number.isFinite(n) ? n : null
+}
+
+/**
  * Cierre mensual de combustible de una faena. Los litros vienen de la planilla
  * de operación, no del sistema, así que la tarjeta declara siempre el archivo
  * de origen: un número de gerencia sin dueño no se puede defender en reunión.
  */
-function FaenaCombustible({ f }: { f: CierreCombustibleFaena }) {
+function FaenaCombustible({ f, periodo, semana }: {
+  f: CierreCombustibleFaena
+  periodo: { anio: number, mes: number }
+  semana: string
+}) {
   const [abierto, setAbierto] = useState(false)
+  const corregirResumen = useCorregirResumenCombustible(semana)
+  const corregirPunto = useCorregirFluctuacion(semana)
   // La fluctuación llega como fracción (-0.0008 = -0,08%). En combustible el
   // umbral de gestión habitual es 0,5%.
   const fluctPct = f.fluctuacion_pct != null ? f.fluctuacion_pct * 100 : null
@@ -329,6 +433,103 @@ function FaenaCombustible({ f }: { f: CierreCombustibleFaena }) {
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* ── Fluctuación por estanque ── */}
+      {f.puntos.length > 0 && (
+        <div className="space-y-1.5 rounded-md border bg-muted/30 p-2">
+          <div className="text-[10px] font-semibold uppercase text-muted-foreground">
+            Fluctuación por estanque
+          </div>
+          {f.puntos.map((pt) => {
+            const p = pt.fluctuacion_pct != null ? pt.fluctuacion_pct * 100 : null
+            const fuera = p != null && Math.abs(p) > 0.5
+            return (
+              <div key={pt.punto} className="rounded border bg-card px-2 py-1.5">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex min-w-0 items-center gap-1.5">
+                    <span className="truncate text-xs font-medium">{pt.punto}</span>
+                    {pt.corregido_manual && (
+                      <span className="rounded bg-blue-100 px-1 text-[9px] font-semibold text-blue-800">
+                        MANUAL
+                      </span>
+                    )}
+                  </div>
+                  <span className={`shrink-0 text-sm font-bold ${
+                    p == null ? 'text-muted-foreground' : fuera ? 'text-red-600' : 'text-emerald-600'}`}>
+                    {p == null ? 'sin dato' : `${p.toFixed(2)}%`}
+                  </span>
+                </div>
+                <div className="text-[10px] text-muted-foreground">
+                  {pt.fluctuacion_lt != null && <>{pt.fluctuacion_lt} L · </>}
+                  {pt.litros_despachados != null
+                    && <>{Math.round(pt.litros_despachados).toLocaleString('es-CL')} L despachados · </>}
+                  {pt.dias_cuadrados} días
+                </div>
+                {pt.observacion && (
+                  <div className="mt-1 rounded bg-amber-50 px-1.5 py-1 text-[10px] text-amber-900">
+                    {pt.observacion}
+                  </div>
+                )}
+                <div className="mt-1">
+                  <CorreccionManual
+                    titulo={`Corregir fluctuación — ${pt.punto}`}
+                    ayuda="Deja en blanco lo que no quieras cambiar. Si das litros de fluctuación y litros despachados, el porcentaje se calcula solo."
+                    guardando={corregirPunto.isPending}
+                    error={corregirPunto.error?.message}
+                    campos={[
+                      { key: 'fl', label: 'Fluctuación', valor: pt.fluctuacion_lt?.toString() ?? '', sufijo: 'L' },
+                      { key: 'de', label: 'Despachados', valor: pt.litros_despachados?.toString() ?? '', sufijo: 'L' },
+                      { key: 'pc', label: 'Fluctuación', valor: p != null ? p.toFixed(2) : '', sufijo: '%' },
+                      { key: 'di', label: 'Días cuadrados', valor: pt.dias_cuadrados?.toString() ?? '' },
+                    ]}
+                    onGuardar={(v, motivo) => corregirPunto.mutate({
+                      faenaCodigo: f.codigo, anio: periodo.anio, mes: periodo.mes,
+                      punto: pt.punto,
+                      fluctuacionLt: aNum(v.fl),
+                      litrosDespachados: aNum(v.de),
+                      // La UI habla en %, la base guarda fracción.
+                      fluctuacionPct: aNum(v.pc) != null ? aNum(v.pc)! / 100 : null,
+                      diasCuadrados: aNum(v.di),
+                      motivo,
+                    })}
+                  />
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* ── Corrección del total de la faena ── */}
+      <CorreccionManual
+        titulo={`Corregir cierre — ${f.nombre}`}
+        ayuda="Corrige el total de la faena. Solo se modifica lo que escribas; el resto queda como vino de la planilla."
+        guardando={corregirResumen.isPending}
+        error={corregirResumen.error?.message}
+        campos={[
+          { key: 'lv', label: 'Litros venta', valor: String(Math.round(f.litros_venta)), sufijo: 'L' },
+          { key: 'lt', label: 'Litros trasvasije', valor: String(Math.round(f.litros_trasvasije)), sufijo: 'L' },
+          { key: 'fl', label: 'Fluctuación', valor: f.fluctuacion_lt?.toString() ?? '', sufijo: 'L' },
+          { key: 'fp', label: 'Fluctuación', valor: fluctPct != null ? fluctPct.toFixed(3) : '', sufijo: '%' },
+        ]}
+        onGuardar={(v, motivo) => corregirResumen.mutate({
+          faenaCodigo: f.codigo, anio: periodo.anio, mes: periodo.mes,
+          litrosVenta: aNum(v.lv),
+          litrosTrasvasije: aNum(v.lt),
+          fluctuacionLt: aNum(v.fl),
+          fluctuacionPct: aNum(v.fp) != null ? aNum(v.fp)! / 100 : null,
+          motivo,
+        })}
+      />
+
+      {f.corregido_manual && (
+        <div className="rounded bg-blue-50 px-2 py-1 text-[10px] text-blue-900">
+          <b>Corregido a mano</b>
+          {f.corregido_por_nombre ? ` por ${f.corregido_por_nombre}` : ''}
+          {f.corregido_at ? ` el ${fmtFecha(f.corregido_at.slice(0, 10))}` : ''}.
+          {f.motivo_correccion && <> Motivo: {f.motivo_correccion}</>}
         </div>
       )}
 
@@ -757,7 +958,8 @@ export default function PanelGerenciaPage() {
                   )}
                   <div className="grid gap-3 sm:grid-cols-2">
                     {data.coquimbo.combustible.faenas.map((f) => (
-                      <FaenaCombustible key={f.codigo} f={f} />
+                      <FaenaCombustible key={f.codigo} f={f}
+                        periodo={data.coquimbo.combustible.periodo} semana={semana} />
                     ))}
                   </div>
                   <BrechaTrazabilidad c={data.coquimbo.combustible} />

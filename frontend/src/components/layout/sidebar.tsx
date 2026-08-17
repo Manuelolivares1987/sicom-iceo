@@ -75,12 +75,6 @@ const navGroups: NavGroup[] = [
   {
     items: [
       { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-      // Sin `module`: la autorización la resuelve la base (fn_panel_gerencia_puede_ver,
-      // MIG295). Quien no tenga el permiso ve la página con el aviso, no datos.
-      {
-        label: 'Panel de Gerencia', href: '/dashboard/gerencia', icon: Building2,
-        badge: 'Nuevo', tooltip: 'Cuadrantes Coquimbo y Calama, semana a semana',
-      },
       { label: 'Reporte Diario', href: '/dashboard/reporte-diario', icon: CalendarClock, module: 'reporte_diario' },
       { label: 'Reporte Flota (público)', href: '/reporte-flota', icon: Share2, badge: 'Link' },
     ],
@@ -89,6 +83,19 @@ const navGroups: NavGroup[] = [
   {
     label: 'Operación',
     subsections: [
+      {
+        label: 'Gerencia',
+        items: [
+          // Sin `module`: la autorización la resuelve la base
+          // (fn_panel_gerencia_puede_ver, MIG295). Quien no tenga el permiso
+          // entra y ve el aviso, no datos.
+          {
+            label: 'Panel de Gerencia', href: '/dashboard/gerencia', icon: Building2,
+            badge: 'Nuevo',
+            tooltip: 'Cuadrantes Coquimbo y Calama, semana a semana',
+          },
+        ],
+      },
       {
         label: 'Órdenes de Trabajo',
         items: [
