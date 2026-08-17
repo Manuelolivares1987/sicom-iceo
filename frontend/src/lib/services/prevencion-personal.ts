@@ -267,3 +267,110 @@ export async function enviarReporteDocumental(
   if (!r.ok || !j?.ok) throw new Error(j?.error ?? 'No se pudo enviar el reporte.')
   return j as EnviarReporteResultado
 }
+
+// ============================================================================
+// Gestión de los ítems de una persona
+// ----------------------------------------------------------------------------
+// Sacar una exigencia (ej. la licencia de mina a quien no entra a mina) NO es
+// borrarla: es declararla EXENTA con su motivo. Un ítem borrado desaparece sin
+// dejar rastro y al recargar la planilla vuelve a aparecer como brecha; uno
+// exento queda dicho, con quién lo decidió y por qué, que es lo que hay que
+// mostrarle a una auditoría.
+//
+// El borrado real existe solo para lo que nunca debió estar (un tipo creado por
+// error), y por eso está separado y en rojo en la interfaz.
+// ============================================================================
+
+export type TipoExamen = {
+  codigo: string
+  nombre: string
+  categoria: string
+  orden: number
+}
+
+export async function getTiposExamen() {
+  const { data, error } = await supabase
+    .from('prevencion_examen_tipos')
+    .select('codigo, nombre, categoria, orden')
+    .eq('activo', true)
+    .order('orden')
+  if (error) throw error
+  return (data ?? []) as TipoExamen[]
+}
+
+/** Declara que la exigencia no aplica a esta persona. El motivo es obligatorio. */
+export async function marcarNoAplica(examenId: string, motivo: string) {
+  const m = motivo.trim()
+  if (!m) throw new Error('Indica por qué no aplica: queda como respaldo ante auditoría.')
+  const { error } = await supabase
+    .from('prevencion_examenes')
+    .update({
+      aplica: false,
+      motivo_no_aplica: m,
+      // Una exención no arrastra el estado anterior: si mañana vuelve a
+      // exigirse, se parte de cero y no de una fecha vieja que confunde.
+      observacion_bloqueante: false,
+    })
+    .eq('id', examenId)
+  if (error) throw error
+}
+
+/** Vuelve a exigir algo que estaba exento. */
+export async function marcarAplica(examenId: string) {
+  const { error } = await supabase
+    .from('prevencion_examenes')
+    .update({ aplica: true, motivo_no_aplica: null })
+    .eq('id', examenId)
+  if (error) throw error
+}
+
+/** Agrega a la persona un tipo que no tenía registrado. */
+export async function agregarExamen(personalId: string, tipoCodigo: string) {
+  const { error } = await supabase
+    .from('prevencion_examenes')
+    .insert({ personal_id: personalId, tipo_codigo: tipoCodigo, aplica: true })
+  if (error) {
+    if (error.code === '23505') throw new Error('Esa persona ya tiene ese ítem.')
+    throw error
+  }
+}
+
+/**
+ * Borrado real. Solo para lo que nunca debió existir: pierde el historial de
+ * versiones del ítem (cascade). Para "esta persona no lo necesita" va
+ * marcarNoAplica, que sí deja constancia.
+ */
+export async function eliminarExamen(examenId: string) {
+  const { error } = await supabase
+    .from('prevencion_examenes')
+    .delete()
+    .eq('id', examenId)
+  if (error) throw error
+}
+
+export type ActualizarPersonaInput = {
+  personalId: string
+  faenaCodigo?: string | null
+  cargo?: string | null
+  activo?: boolean
+  observacion?: string | null
+}
+
+/**
+ * Datos de la persona. Desactivar en vez de borrar: alguien que ya no trabaja
+ * sale de los tableros y de las alertas, pero su historial documental queda
+ * —hay fiscalizaciones que preguntan por gente que ya no está—.
+ */
+export async function actualizarPersona(i: ActualizarPersonaInput) {
+  const patch: Record<string, unknown> = {}
+  if (i.faenaCodigo !== undefined) patch.faena_codigo = i.faenaCodigo || null
+  if (i.cargo !== undefined) patch.cargo = i.cargo || null
+  if (i.activo !== undefined) patch.activo = i.activo
+  if (i.observacion !== undefined) patch.observacion = i.observacion || null
+
+  const { error } = await supabase
+    .from('prevencion_personal')
+    .update(patch)
+    .eq('id', i.personalId)
+  if (error) throw error
+}

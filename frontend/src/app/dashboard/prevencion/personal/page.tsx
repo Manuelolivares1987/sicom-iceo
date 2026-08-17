@@ -4,7 +4,7 @@ import { useState } from 'react'
 import {
   ShieldAlert, Search, AlertTriangle, CheckCircle2, Clock, Ban,
   FileWarning, ChevronDown, ChevronRight, Save, Pencil,
-  Upload, Paperclip, History, Mail,
+  Upload, Paperclip, History, Mail, Trash2, Plus,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -14,6 +14,7 @@ import { useRequireAuth } from '@/hooks/use-require-auth'
 import {
   useControlDocumental, useActualizarExamen,
   useRenovarExamen, useHistorialExamen, abrirRespaldo, useEnviarReporte,
+  useGestionExamen, useActualizarPersona, useTiposExamen,
 } from '@/hooks/use-prevencion-personal'
 import type { PersonaControl, ExamenPersona, EstadoExamen } from '@/lib/services/prevencion-personal'
 
@@ -40,6 +41,17 @@ const GENERAL: Record<PersonaControl['estado_general'], { label: string, clase: 
   por_vencer:  { label: 'Por vencer',  clase: 'border-amber-300 bg-amber-50',   icon: Clock },
   conforme:    { label: 'Conforme',    clase: 'bg-card',                        icon: CheckCircle2 },
 }
+
+// Motivos habituales de exención, como atajo. Que se escriban igual siempre
+// importa: una exención redactada de 15 formas distintas no se puede auditar
+// ni contar.
+const MOTIVOS_EXENCION = [
+  'No conduce en faena',
+  'No ingresa a mina',
+  'No ingresa a planta',
+  'Sin trabajo en altura física',
+  'No aplica al cargo',
+]
 
 const fmt = (s: string | null) =>
   s ? new Date(s + 'T12:00:00').toLocaleDateString('es-CL',
@@ -78,6 +90,11 @@ function FilaExamen({ e, faena }: { e: ExamenPersona, faena: string | null }) {
   const [archivo, setArchivo] = useState<File | null>(null)
 
   const historial = useHistorialExamen(verHistorial ? e.id : null)
+
+  // ── sacar / reponer la exigencia ──
+  const gestion = useGestionExamen(faena)
+  const [motivoExento, setMotivoExento] = useState('')
+  const [confirmarBorrar, setConfirmarBorrar] = useState(false)
 
   const st = ESTADO[e.estado]
 
@@ -264,6 +281,190 @@ function FilaExamen({ e, faena }: { e: ExamenPersona, faena: string | null }) {
               {guardar.error.message}
             </div>
           )}
+
+          {/* ── Sacar la exigencia ── */}
+          <div className="space-y-2 border-t pt-2">
+            {e.aplica ? (
+              <>
+                <div className="text-[11px] font-medium text-muted-foreground">
+                  ¿Esta persona no necesita este {e.categoria === 'licencia' ? 'documento' : 'examen'}?
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {MOTIVOS_EXENCION.map((m) => (
+                    <button key={m} onClick={() => setMotivoExento(m)}
+                      className={`rounded border px-2 py-0.5 text-[11px] transition-colors
+                        ${motivoExento === m ? 'border-slate-500 bg-slate-200 font-medium' : 'bg-card hover:bg-accent'}`}>
+                      {m}
+                    </button>
+                  ))}
+                </div>
+                <Input
+                  value={motivoExento}
+                  onChange={(ev) => setMotivoExento(ev.target.value)}
+                  placeholder="…o escribe el motivo"
+                  className="h-8 text-sm"
+                />
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[10px] text-muted-foreground">
+                    Queda registrado como exención, no se borra: es lo que se
+                    le muestra a una auditoría.
+                  </span>
+                  <Button size="sm" variant="outline"
+                    disabled={!motivoExento.trim() || gestion.noAplica.isPending}
+                    onClick={() => gestion.noAplica.mutate(
+                      { examenId: e.id, motivo: motivoExento },
+                      { onSuccess: () => { setEditando(false); setMotivoExento('') } })}>
+                    <Ban className="mr-1 h-3.5 w-3.5" />
+                    {gestion.noAplica.isPending ? 'Guardando…' : 'No aplica'}
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[11px] text-muted-foreground">
+                  Exento: {e.motivo_no_aplica}
+                </span>
+                <Button size="sm" variant="outline" disabled={gestion.volverAExigir.isPending}
+                  onClick={() => gestion.volverAExigir.mutate(e.id,
+                    { onSuccess: () => setEditando(false) })}>
+                  Volver a exigir
+                </Button>
+              </div>
+            )}
+
+            {/* Borrado real: separado y advertido, porque pierde el historial. */}
+            <div className="flex items-center justify-between gap-2 pt-1">
+              {confirmarBorrar ? (
+                <>
+                  <span className="text-[11px] text-red-700">
+                    Se borra el ítem y su historial de versiones. ¿Seguro?
+                  </span>
+                  <div className="flex gap-1.5">
+                    <Button size="sm" variant="outline" onClick={() => setConfirmarBorrar(false)}>
+                      No
+                    </Button>
+                    <Button size="sm" variant="danger" disabled={gestion.eliminar.isPending}
+                      onClick={() => gestion.eliminar.mutate(e.id)}>
+                      Sí, borrar
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <button onClick={() => setConfirmarBorrar(true)}
+                  className="ml-auto text-[11px] text-red-700 underline">
+                  <Trash2 className="mr-0.5 inline h-3 w-3" />
+                  Borrar del todo
+                </button>
+              )}
+            </div>
+            {(gestion.noAplica.error || gestion.eliminar.error || gestion.volverAExigir.error) && (
+              <div className="rounded bg-red-100 px-2 py-1 text-[11px] text-red-800">
+                {(gestion.noAplica.error ?? gestion.eliminar.error
+                  ?? gestion.volverAExigir.error as Error)?.message}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Sumar un examen o licencia que la persona no tenía registrado, y editar sus
+ * datos. Solo ofrece los tipos que le faltan: no tiene sentido mostrar los que
+ * ya están y que el usuario descubra el error al guardar.
+ */
+function AgregarItem({ p, faena }: { p: PersonaControl, faena: string | null }) {
+  const [abierto, setAbierto] = useState(false)
+  const [editandoPersona, setEditandoPersona] = useState(false)
+  const [faenaEd, setFaenaEd] = useState(p.faena_codigo ?? '')
+  const [cargoEd, setCargoEd] = useState(p.cargo ?? '')
+  const { data: tipos } = useTiposExamen()
+  const gestion = useGestionExamen(faena)
+  const actualizar = useActualizarPersona(faena)
+
+  const yaTiene = new Set(p.examenes.map((e) => e.tipo_codigo))
+  const faltantes = (tipos ?? []).filter((t) => !yaTiene.has(t.codigo))
+
+  return (
+    <div className="space-y-2 pt-1">
+      <div className="flex flex-wrap items-center gap-3">
+        {faltantes.length > 0 && (
+          <button onClick={() => setAbierto((v) => !v)}
+            className="text-[11px] font-medium text-blue-700 underline">
+            <Plus className="mr-0.5 inline h-3 w-3" />
+            Agregar examen o licencia ({faltantes.length} disponible{faltantes.length === 1 ? '' : 's'})
+          </button>
+        )}
+        <button onClick={() => setEditandoPersona((v) => !v)}
+          className="text-[11px] font-medium text-blue-700 underline">
+          <Pencil className="mr-0.5 inline h-3 w-3" /> Editar datos de la persona
+        </button>
+      </div>
+
+      {abierto && faltantes.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 rounded-md border bg-muted/40 p-2">
+          {faltantes.map((t) => (
+            <button key={t.codigo}
+              disabled={gestion.agregar.isPending}
+              onClick={() => gestion.agregar.mutate(
+                { personalId: p.personal_id, tipoCodigo: t.codigo },
+                { onSuccess: () => setAbierto(false) })}
+              className="rounded border bg-card px-2 py-1 text-[11px] transition-colors hover:bg-accent">
+              <Plus className="mr-0.5 inline h-3 w-3" />{t.nombre}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {editandoPersona && (
+        <div className="space-y-2 rounded-md border border-blue-300 bg-blue-50/60 p-2">
+          <div className="grid gap-2 sm:grid-cols-2">
+            <label className="block">
+              <span className="text-[10px] uppercase text-muted-foreground">Faena</span>
+              <Input value={faenaEd} onChange={(e) => setFaenaEd(e.target.value)}
+                placeholder="ROMERAL" className="h-8 text-sm" />
+            </label>
+            <label className="block">
+              <span className="text-[10px] uppercase text-muted-foreground">Cargo</span>
+              <Input value={cargoEd} onChange={(e) => setCargoEd(e.target.value)}
+                className="h-8 text-sm" />
+            </label>
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            {/* Desactivar en vez de borrar: quien ya no trabaja sale de los
+                tableros y de las alertas, pero su historial documental queda —
+                hay fiscalizaciones que preguntan por gente que ya no está. */}
+            <button
+              onClick={() => actualizar.mutate({ personalId: p.personal_id, activo: !p.activo })}
+              className="text-[11px] text-amber-700 underline">
+              {p.activo ? 'Marcar como ya no vigente' : 'Reactivar en el control'}
+            </button>
+            <div className="flex gap-2">
+              <Button size="sm" variant="outline" onClick={() => setEditandoPersona(false)}>
+                Cancelar
+              </Button>
+              <Button size="sm" variant="primary" disabled={actualizar.isPending}
+                onClick={() => actualizar.mutate({
+                  personalId: p.personal_id,
+                  faenaCodigo: faenaEd.trim().toUpperCase() || null,
+                  cargo: cargoEd.trim() || null,
+                }, { onSuccess: () => setEditandoPersona(false) })}>
+                <Save className="mr-1 h-3.5 w-3.5" />
+                {actualizar.isPending ? 'Guardando…' : 'Guardar'}
+              </Button>
+            </div>
+          </div>
+          <p className="text-[10px] text-muted-foreground">
+            Al cambiar la faena, esta persona pasa a aparecer en el reporte de
+            esa faena y en el correo de sus destinatarios.
+          </p>
+          {(actualizar.error || gestion.agregar.error) && (
+            <div className="rounded bg-red-100 px-2 py-1 text-[11px] text-red-800">
+              {((actualizar.error ?? gestion.agregar.error) as Error).message}
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -325,6 +526,7 @@ function FilaPersona({ p, faena }: { p: PersonaControl, faena: string | null }) 
               Observación de la planilla: {p.observacion}
             </div>
           )}
+          <AgregarItem p={p} faena={faena} />
         </div>
       )}
     </div>
