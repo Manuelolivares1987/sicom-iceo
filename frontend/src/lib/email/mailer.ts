@@ -36,17 +36,24 @@ export function parseRecipients(envValue: string | undefined): string[] {
 
 export async function sendMail(opts: {
   to: string[]
+  /** Copia. Se usa para destinatarios externos que van informados, no a cargo. */
+  cc?: string[]
   subject: string
   html: string
   text?: string
   replyTo?: string
 }): Promise<{ ok: boolean; id?: string; error?: string }> {
   if (!mailerConfigured()) return { ok: false, error: 'SMTP no configurado' }
-  if (opts.to.length === 0) return { ok: false, error: 'Sin destinatarios' }
+  const cc = opts.cc ?? []
+  if (opts.to.length === 0 && cc.length === 0) return { ok: false, error: 'Sin destinatarios' }
   try {
     const info = await getTransport().sendMail({
       from: mailFrom(),
-      to: opts.to.join(', '),
+      // Un correo solo con copia no tiene destinatario visible y muchos
+      // servidores lo tratan como spam: si no hay "para", el remitente se
+      // pone a sí mismo.
+      to: opts.to.length > 0 ? opts.to.join(', ') : mailFrom(),
+      cc: cc.length > 0 ? cc.join(', ') : undefined,
       subject: opts.subject,
       html: opts.html,
       text: opts.text,

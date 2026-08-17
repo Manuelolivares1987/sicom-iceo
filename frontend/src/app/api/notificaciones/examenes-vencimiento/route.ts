@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { sendMail, parseRecipients, mailerConfigured } from '@/lib/email/mailer'
+import { sendMail, mailerConfigured } from '@/lib/email/mailer'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -16,8 +16,19 @@ export const dynamic = 'force-dynamic'
 // envío falla, no se marcan y se reintentan al día siguiente — mejor un aviso
 // repetido que uno perdido.
 //
-// Requiere en el servidor: CRON_SECRET, SUPABASE_SERVICE_ROLE_KEY, SMTP_*,
-// y PREVENCION_EMAIL_TO (o NC_EMAIL_TO como respaldo).
+// NO USA service_role. Esa clave abre toda la base sin restricción, y ponerla
+// en las variables de Netlify para leer ~20 filas es desproporcionado: si se
+// filtra, se filtra el sistema completo, datos de salud del personal incluidos.
+// En su lugar, el MISMO CRON_SECRET que autentica la llamada habilita
+// exactamente dos funciones en la base (MIG301), y nada más. La clave anónima
+// por sí sola no abre nada.
+//
+// Los destinatarios NO son una variable de entorno: viven en la base
+// (prevencion_alertas_destinatarios, MIG302) porque cada uno declara de qué
+// faenas puede recibir información. Un externo acotado a una faena recibe un
+// correo que contiene solo esa faena.
+//
+// Requiere en el servidor: CRON_SECRET y SMTP_*.
 // ============================================================================
 
 type Alerta = {
@@ -56,33 +67,101 @@ export async function POST(req: Request) {
   }
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-  if (!url || !serviceKey) {
-    return NextResponse.json({ error: 'Falta SUPABASE_SERVICE_ROLE_KEY.' }, { status: 500 })
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  if (!url || !anonKey) {
+    return NextResponse.json({ error: 'Falta la configuración de Supabase.' }, { status: 500 })
   }
 
-  const to = parseRecipients(
-    process.env.PREVENCION_EMAIL_TO || process.env.NC_EMAIL_TO)
-  if (!mailerConfigured() || to.length === 0) {
-    return NextResponse.json({ error: 'SMTP o PREVENCION_EMAIL_TO no configurados.' }, { status: 500 })
+  if (!mailerConfigured()) {
+    return NextResponse.json({ error: 'SMTP no configurado.' }, { status: 500 })
   }
 
-  const sb = createClient(url, serviceKey, { auth: { persistSession: false } })
+  // Clave anónima + secreto: la anónima sola no abre nada, y el secreto solo
+  // habilita estas dos funciones (MIG301).
+  const sb = createClient(url, anonKey, { auth: { persistSession: false } })
 
-  const { data, error } = await sb.rpc('fn_prevencion_alertas_pendientes')
+  const { data, error } = await sb.rpc('fn_prevencion_alertas_pendientes_cron', {
+    p_secreto: secret,
+  })
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  const filas = (data ?? []) as Alerta[]
-  if (filas.length === 0) return NextResponse.json({ ok: true, enviadas: 0 })
+  const todas = (data ?? []) as Alerta[]
+  if (todas.length === 0) return NextResponse.json({ ok: true, enviadas: 0 })
 
-  // Lo más urgente primero: el correo se lee de arriba hacia abajo y en dos
-  // líneas tiene que quedar claro quién no puede entrar a faena mañana.
-  filas.sort((a, b) => {
-    const na = NIVEL[a.nivel as keyof typeof NIVEL]?.orden ?? 9
-    const nb = NIVEL[b.nivel as keyof typeof NIVEL]?.orden ?? 9
-    return na - nb || (a.dias_restantes ?? 0) - (b.dias_restantes ?? 0)
+  // ── Un correo POR FAENA ─────────────────────────────────────────────────
+  // No es una preferencia de formato: es control de alcance. Hay
+  // destinatarios externos que solo pueden ver su propia faena (MIG302), y la
+  // única forma de garantizarlo es que el correo que reciben contenga
+  // únicamente esa faena. Un correo global con todo adentro no se puede
+  // "filtrar por destinatario" una vez enviado.
+  const porFaena: Record<string, Alerta[]> = {}
+  for (const f of todas) {
+    const k = f.faena_codigo ?? '(sin faena)'
+    ;(porFaena[k] ??= []).push(f)
+  }
+
+  const enviados: { faena: string, destinatarios: number, alertas: number }[] = []
+  const omitidos: { faena: string, motivo: string }[] = []
+  const marcadas: string[] = []
+
+  for (const [faena, filas] of Object.entries(porFaena)) {
+    // Lo más urgente primero: el correo se lee de arriba hacia abajo y en dos
+    // líneas tiene que quedar claro quién no puede entrar a faena mañana.
+    filas.sort((a: Alerta, b: Alerta) => {
+      const na = NIVEL[a.nivel as keyof typeof NIVEL]?.orden ?? 9
+      const nb = NIVEL[b.nivel as keyof typeof NIVEL]?.orden ?? 9
+      return na - nb || (a.dias_restantes ?? 0) - (b.dias_restantes ?? 0)
+    })
+
+    const { data: dest, error: errDest } = await sb.rpc('fn_prevencion_destinatarios_cron', {
+      p_secreto: secret,
+      p_faena: faena === '(sin faena)' ? null : faena,
+    })
+    if (errDest) return NextResponse.json({ error: errDest.message }, { status: 500 })
+
+    const filasDest = (dest ?? []) as { email: string, modo: string }[]
+    const to = filasDest.filter((d) => d.modo === 'para').map((d) => d.email)
+    const cc = filasDest.filter((d) => d.modo === 'copia').map((d) => d.email)
+
+    // Sin destinatarios no se marca como avisado: si se marcara, el aviso se
+    // perdería para siempre al configurar el correo más tarde.
+    if (to.length === 0 && cc.length === 0) {
+      omitidos.push({ faena, motivo: 'sin destinatarios configurados' })
+      continue
+    }
+
+    const r = await enviarCorreoFaena(faena, filas, to, cc)
+    if (!r.ok) {
+      omitidos.push({ faena, motivo: r.error ?? 'error de envío' })
+      continue
+    }
+    enviados.push({ faena, destinatarios: to.length + cc.length, alertas: filas.length })
+    marcadas.push(...filas.map((f: Alerta) => f.examen_id))
+  }
+
+  if (marcadas.length > 0) {
+    const { error: errMarcar } = await sb.rpc('fn_prevencion_marcar_alertas_cron', {
+      p_secreto: secret,
+      p_ids: marcadas,
+      p_destinatarios: enviados.map((e) => `${e.faena}:${e.destinatarios}`).join(', '),
+    })
+    if (errMarcar) {
+      return NextResponse.json({ ok: true, enviadas: marcadas.length, aviso: errMarcar.message })
+    }
+  }
+
+  return NextResponse.json({
+    ok: true,
+    enviadas: marcadas.length,
+    correos: enviados,
+    omitidos: omitidos.length > 0 ? omitidos : undefined,
   })
+}
 
+/** Arma y envía el correo de UNA faena. */
+async function enviarCorreoFaena(
+  faena: string, filas: Alerta[], to: string[], cc: string[],
+) {
   const vencidos = filas.filter((f) => f.nivel === 'vencido' || f.nivel === 'sin_dato')
   const proximos = filas.filter((f) => f.nivel !== 'vencido' && f.nivel !== 'sin_dato')
 
@@ -116,7 +195,7 @@ export async function POST(req: Request) {
   const base = process.env.NEXT_PUBLIC_SITE_URL || 'https://pilladoiceo.netlify.app'
   const html = `
     <div style="font-family:system-ui,Arial,sans-serif;font-size:14px;color:#222;max-width:760px">
-      <h2 style="margin:0 0 4px">Control documental de personal — exámenes por vencer</h2>
+      <h2 style="margin:0 0 4px">Control documental de personal — ${esc(faena)}</h2>
       <p style="margin:0 0 12px;color:#555">
         ${vencidos.length > 0
           ? `<b style="color:#B91C1C">${vencidos.length} examen(es) VENCIDO(S)</b> y ${proximos.length} por vencer.`
@@ -133,30 +212,8 @@ export async function POST(req: Request) {
     </div>`
 
   const asunto = vencidos.length > 0
-    ? `🔴 ${vencidos.length} examen(es) vencido(s) · Control documental PILLADO`
-    : `⚠ ${proximos.length} examen(es) por vencer · Control documental PILLADO`
+    ? `🔴 ${vencidos.length} examen(es) vencido(s) · ${faena} · PILLADO`
+    : `⚠ ${proximos.length} examen(es) por vencer · ${faena} · PILLADO`
 
-  const r = await sendMail({ to, subject: asunto, html })
-  if (!r.ok) {
-    // No se marcan: se reintenta mañana. Un aviso repetido es preferible a uno
-    // perdido cuando lo que está en juego es acreditar gente en faena.
-    return NextResponse.json({ error: r.error ?? 'Error al enviar.' }, { status: 502 })
-  }
-
-  const { error: errMarcar } = await sb.rpc('fn_prevencion_marcar_alertas', {
-    p_ids: filas.map((f) => f.examen_id),
-    p_destinatarios: to.join(', '),
-  })
-  if (errMarcar) {
-    // El correo salió; solo falló el registro. Se informa para no perder la
-    // pista, pero no se trata como fallo de envío.
-    return NextResponse.json({ ok: true, enviadas: filas.length, aviso: errMarcar.message })
-  }
-
-  return NextResponse.json({
-    ok: true,
-    enviadas: filas.length,
-    vencidos: vencidos.length,
-    por_vencer: proximos.length,
-  })
+  return sendMail({ to, cc, subject: asunto, html })
 }
