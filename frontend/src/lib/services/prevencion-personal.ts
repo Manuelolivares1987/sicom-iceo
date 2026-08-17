@@ -22,7 +22,16 @@ export type EstadoExamen =
 
 export type ExamenPersona = {
   id: string
+  personal_id: string
   tipo_codigo: string
+  archivo_path?: string | null
+  archivo_nombre?: string | null
+  renovado_at?: string | null
+  fecha_emision_real?: string | null
+  /** Cuántas veces se renovó. >0 habilita ver el historial. */
+  versiones_anteriores?: number
+  /** Urgencia según el escalamiento de MIG299 (ventana de 60 días). */
+  nivel_alerta?: 'vencido' | 'critico' | 'urgente' | 'alto' | 'medio' | 'ninguno' | 'sin_dato' | null
   tipo_nombre: string
   categoria: string
   orden: number
@@ -83,6 +92,103 @@ export async function getControlDocumental(faena?: string | null) {
   })
   if (error) throw error
   return data as ControlDocumental
+}
+
+// ============================================================================
+// Renovación con respaldo (MIG299)
+// ----------------------------------------------------------------------------
+// El bucket es PRIVADO: un examen ocupacional es un dato de salud de una
+// persona identificada. Se guarda el path (no la URL) y se lee con URL firmada
+// temporal — una URL firmada guardada en base sería basura al caducar.
+// ============================================================================
+
+export const BUCKET_EXAMENES = 'examenes-personal'
+
+/** Ruta canónica: agrupa por persona y tipo, versionada por fecha de subida. */
+export function examenPath(personalId: string, tipoCodigo: string, nombreArchivo: string) {
+  const ext = (nombreArchivo.split('.').pop() ?? 'pdf').toLowerCase().slice(0, 5)
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-')
+  return `personal/${personalId}/${tipoCodigo}/${stamp}.${ext}`
+}
+
+export async function subirArchivoExamen(
+  personalId: string, tipoCodigo: string, archivo: File,
+) {
+  const path = examenPath(personalId, tipoCodigo, archivo.name)
+  const { error } = await supabase.storage
+    .from(BUCKET_EXAMENES)
+    // upsert:false — cada renovación es un archivo nuevo, nunca se pisa el
+    // anterior: el historial tiene que poder abrirse.
+    .upload(path, archivo, { upsert: false, contentType: archivo.type || undefined })
+  if (error) throw error
+  return path
+}
+
+/** URL temporal para ver el respaldo. Caduca (por defecto 1 hora). */
+export async function getUrlFirmadaExamen(path: string, expiresIn = 3600) {
+  const { data, error } = await supabase.storage
+    .from(BUCKET_EXAMENES)
+    .createSignedUrl(path, expiresIn)
+  if (error) throw error
+  return data?.signedUrl ?? null
+}
+
+export type RenovarExamenInput = {
+  examenId: string
+  personalId: string
+  tipoCodigo: string
+  fechaVencimiento: string
+  fechaEmision?: string | null
+  laboratorio?: string | null
+  observacion?: string | null
+  archivo?: File | null
+}
+
+/**
+ * Renueva el examen. Si viene archivo, se sube primero al bucket privado y
+ * recién entonces se llama al RPC: así nunca queda una fecha nueva apuntando a
+ * un respaldo que no se alcanzó a subir.
+ */
+export async function renovarExamen(i: RenovarExamenInput) {
+  let path: string | null = null
+  let nombre: string | null = null
+  if (i.archivo) {
+    path = await subirArchivoExamen(i.personalId, i.tipoCodigo, i.archivo)
+    nombre = i.archivo.name
+  }
+
+  const { data, error } = await supabase.rpc('fn_prevencion_renovar_examen', {
+    p_examen_id: i.examenId,
+    p_fecha_vencimiento: i.fechaVencimiento,
+    p_fecha_emision: i.fechaEmision ?? null,
+    p_laboratorio: i.laboratorio ?? null,
+    p_archivo_path: path,
+    p_archivo_nombre: nombre,
+    p_observacion: i.observacion ?? null,
+  })
+  if (error) throw error
+  return data
+}
+
+export type VersionExamen = {
+  id: string
+  laboratorio: string | null
+  fecha_vencimiento: string | null
+  observacion: string | null
+  archivo_path: string | null
+  reemplazado_at: string
+  motivo: string | null
+}
+
+/** Versiones anteriores: responde "¿estaba vigente el día del incidente?". */
+export async function getHistorialExamen(examenId: string) {
+  const { data, error } = await supabase
+    .from('prevencion_examen_historial')
+    .select('id, laboratorio, fecha_vencimiento, observacion, archivo_path, reemplazado_at, motivo')
+    .eq('examen_id', examenId)
+    .order('reemplazado_at', { ascending: false })
+  if (error) throw error
+  return (data ?? []) as VersionExamen[]
 }
 
 export type ActualizarExamenInput = {
