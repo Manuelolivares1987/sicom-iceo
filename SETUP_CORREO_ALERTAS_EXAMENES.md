@@ -57,7 +57,7 @@ Queda corriendo todos los días a las **08:00 de Chile**.
 ## Probar antes de esperar al día siguiente
 
 ```bash
-curl -X POST https://pilladoiceo.netlify.app/api/notificaciones/examenes-vencimiento \
+curl -X POST https://pilladoiceo.netlify.app/api/notificaciones/examenes-vencimiento/ \
   -H "x-cron-secret: EL_VALOR_REAL"
 ```
 
@@ -69,6 +69,10 @@ Respuestas posibles:
 | `{"ok":true,"enviadas":0}` | no había nada que avisar hoy (correcto, no es error) |
 | `{"error":"SMTP o PREVENCION_EMAIL_TO no configurados."}` | falta el paso 2 o el redeploy |
 | `{"error":"No autorizado."}` | el `CRON_SECRET` no coincide |
+
+> **La barra final de la URL es obligatoria.** Sin ella el sitio responde 308
+> (redirect) y el cron no lo sigue: correría todos los días sin enviar nada y
+> sin dar error visible.
 
 ---
 
