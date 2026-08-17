@@ -51,6 +51,14 @@ type NavItem = {
   icon: any
   module?: Module
   extendedModule?: ExtendedModule
+  // Cargos que ven este item. Se usa cuando el módulo NO es el eje correcto:
+  // los Recorridos Gemba, por ejemplo, exigen el mismo permiso ('prevencion')
+  // para los tres cargos, pero cada uno entra por su propia pantalla —el
+  // prevencionista por Prevención, taller y operaciones por Operación—.
+  // Si se declaran `module` y `roles` juntos, deben cumplirse LOS DOS: el
+  // módulo sigue siendo el que valida contra la base, y `roles` solo decide
+  // dónde aparece el acceso.
+  roles?: string[]
   badge?: string                  // 'Legacy' | 'Nuevo' | etc.
   tooltip?: string                // texto descriptivo opcional
   // Cuenta viva de lo que espera una decisión. El jefe de taller no mira la
@@ -69,6 +77,16 @@ type NavGroup = {
   items?: NavItem[]               // grupo flat (compatibilidad)
   subsections?: NavSubsection[]   // grupo con sub-secciones
 }
+
+// Los Recorridos Gemba son una práctica de tres cargos, pero cada uno entra
+// por SU pantalla: prevención vive en Prevención, y taller y operaciones en
+// Operación. Es el mismo módulo y el mismo permiso —lo que cambia es dónde
+// aparece el acceso, para que el prevencionista no tenga que pasar por
+// Operación ni al revés.
+const GEMBA_OPERACION = [
+  'administrador', 'subgerente_operaciones', 'jefe_mantenimiento', 'jefe_operaciones',
+]
+const GEMBA_PREVENCION = ['administrador', 'prevencionista']
 
 // Grupos lógicos en la sidebar. Separador visual entre cada grupo.
 const navGroups: NavGroup[] = [
@@ -119,8 +137,10 @@ const navGroups: NavGroup[] = [
         label: 'Recorridos de terreno',
         items: [
           { label: 'Recorridos Gemba', href: '/dashboard/gemba', icon: Footprints, module: 'prevencion',
-            badge: 'Nuevo', tooltip: 'Checklist de terreno por cargo: jefe de taller, jefe de operaciones y prevención' },
-          { label: 'Cumplimiento de recorridos', href: '/dashboard/gemba/reporte', icon: BarChart3, module: 'prevencion',
+            roles: GEMBA_OPERACION, badge: 'Nuevo',
+            tooltip: 'Tu checklist de terreno: diario para el jefe de taller, quincenal para el jefe de operaciones' },
+          { label: 'Cumplimiento de recorridos', href: '/dashboard/gemba/reporte', icon: BarChart3,
+            module: 'prevencion', roles: GEMBA_OPERACION,
             tooltip: 'Quién hizo su recorrido y qué hallazgos siguen abiertos' },
         ],
       },
@@ -237,6 +257,21 @@ const navGroups: NavGroup[] = [
     label: 'Compliance',
     items: [
       { label: 'Prevención', href: '/dashboard/prevencion', icon: HardHat, module: 'prevencion' },
+      // El Gemba de prevención vive acá, no en Operación: son sus dos
+      // checklists (caminata diaria e inspección planificada mensual) y el
+      // prevencionista no tiene por qué entrar al menú de taller para hacerlos.
+      { label: 'Recorridos Gemba', href: '/dashboard/gemba', icon: Footprints,
+        module: 'prevencion', roles: GEMBA_PREVENCION, badge: 'Nuevo',
+        tooltip: 'Caminata diaria de seguridad e inspección planificada mensual' },
+      { label: 'Cumplimiento de recorridos', href: '/dashboard/gemba/reporte', icon: BarChart3,
+        module: 'prevencion', roles: GEMBA_PREVENCION,
+        tooltip: 'Historial de recorridos y hallazgos abiertos' },
+      // La bitácora de cada equipo: todo lo que le pasó a ese camión —OT,
+      // checklists, hallazgos, informes— en una línea de tiempo. Es la fuente
+      // que prevención necesita para investigar un incidente.
+      { label: 'Bitácora de equipos', href: '/dashboard/flota/bitacora', icon: FileText,
+        module: 'prevencion', roles: GEMBA_PREVENCION, badge: 'Nuevo',
+        tooltip: 'Historial completo de cada camión: intervenciones, hallazgos e informes' },
       { label: 'Cumplimiento', href: '/dashboard/cumplimiento', icon: ShieldCheck, module: 'cumplimiento' },
     ],
   },
@@ -399,6 +434,10 @@ export default function Sidebar({ collapsed, onToggle, onClose }: SidebarProps) 
             if (supervisorCalamaSolo) {
               return item.extendedModule === 'operacion_calama' && item.href !== '/m/calama'
             }
+            // `roles` acota POR CARGO dónde aparece el acceso; el módulo sigue
+            // siendo el que decide si la persona puede o no. Si el item declara
+            // los dos, tienen que cumplirse ambos.
+            if (item.roles && !item.roles.includes(perfil?.rol ?? '')) return false
             if (item.module) return canView(item.module)
             if (item.extendedModule) return canViewExtended(item.extendedModule)
             return true

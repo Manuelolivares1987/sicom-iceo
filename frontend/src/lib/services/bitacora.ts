@@ -25,6 +25,34 @@ export async function getBitacoraEquipo(activoId: string) {
   return { data: (data ?? []) as BitacoraEvento[], error }
 }
 
+export type ActivoBitacora = {
+  id: string
+  codigo: string
+  patente: string | null
+  nombre: string | null
+  tipo: string | null
+  estado: string | null
+  operacion: string | null
+  cliente_actual: string | null
+}
+
+/**
+ * Listado de equipos para elegir de cuál ver la bitácora.
+ *
+ * Existe porque la bitácora solo era alcanzable desde la ficha del activo, y
+ * hay cargos —prevención, sin acceso al módulo de activos— que necesitan
+ * llegar al historial de un camión para investigar un incidente sin pasar por
+ * el inventario completo.
+ */
+export async function getActivosParaBitacora() {
+  const { data, error } = await supabase
+    .from('activos')
+    .select('id, codigo, patente, nombre, tipo, estado, operacion, cliente_actual')
+    .order('operacion', { ascending: true, nullsFirst: false })
+    .order('codigo', { ascending: true })
+  return { data: (data ?? []) as ActivoBitacora[], error }
+}
+
 export async function getActivoBasico(activoId: string) {
   const { data, error } = await supabase
     .from('activos')

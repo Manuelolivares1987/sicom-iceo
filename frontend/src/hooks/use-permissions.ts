@@ -143,23 +143,32 @@ const PERMISSIONS: Record<RolUsuario, Record<Module, Permission[]>> = {
     comercial: ['view','create','edit','export'],
     reporte_diario: [],
   },
+  // El prevencionista ve SOLO lo suyo: prevención (con sus recorridos Gemba),
+  // cumplimiento normativo, y la bitácora de cada equipo —que es la fuente que
+  // necesita para investigar un incidente—.
+  //
+  // Se le quitaron activos, órdenes de trabajo, reportes y reporte diario: no
+  // son su trabajo y le llenaban el menú de pantallas que nunca usa. La
+  // bitácora NO depende de esos módulos: entra por /dashboard/flota/bitacora,
+  // que se le muestra por cargo, y la lectura la autoriza la RLS de la base
+  // (pol_authenticated_select_activos), no esta matriz.
   prevencionista: {
     contratos: [],
-    activos: ['view'],
-    ordenes_trabajo: ['view'],
+    activos: [],
+    ordenes_trabajo: [],
     inventario: [],
     mantenimiento: [],
     abastecimiento: [],
     cumplimiento: ['view','create','edit','export'],
     kpi: [],
     iceo: [],
-    reportes: ['view','export'],
+    reportes: [],
     auditoria: [],
     admin: [],
-    flota: ['view'],
+    flota: [],
     prevencion: ['view','create','edit','delete','export'],
     comercial: [],
-    reporte_diario: ['view','export'],
+    reporte_diario: [],
   },
   colaborador: {
     contratos: [],
