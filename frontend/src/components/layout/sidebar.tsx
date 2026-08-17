@@ -60,6 +60,11 @@ type NavItem = {
   // módulo sigue siendo el que valida contra la base, y `roles` solo decide
   // dónde aparece el acceso.
   roles?: string[]
+  // Cargos que NO ven este item aunque tengan el módulo. Se usa cuando el
+  // mismo destino ya aparece en otro grupo más cercano a su trabajo: al
+  // prevencionista los equipos le llegan por Prevención (control documental),
+  // así que el mismo link en Flota sería un duplicado.
+  excluirRoles?: string[]
   badge?: string                  // 'Legacy' | 'Nuevo' | etc.
   tooltip?: string                // texto descriptivo opcional
   // Cuenta viva de lo que espera una decisión. El jefe de taller no mira la
@@ -224,6 +229,9 @@ const navGroups: NavGroup[] = [
       { label: 'Check-List Entrega', href: '/dashboard/flota/checklist-salida', icon: ClipboardCheck, module: 'flota', badge: 'V02' },
       { label: 'Estado Flota', href: '/dashboard/flota/estado-flota', icon: ShieldCheck, module: 'flota', badge: 'Nuevo' },
       { label: 'Equipos y Bitácora (QR)', href: '/dashboard/activos', icon: QrCode, module: 'activos',
+        // Al prevencionista este mismo destino le llega por Prevención, con el
+        // nombre de lo que va a buscar ahí (Documentos de equipos).
+        excluirRoles: ['prevencionista'],
         tooltip: 'Listado de equipos; entra a uno para ver su QR y la bitácora completa' },
     ],
   },
@@ -272,12 +280,13 @@ const navGroups: NavGroup[] = [
       { label: 'Cumplimiento de recorridos', href: '/dashboard/gemba/reporte', icon: BarChart3,
         module: 'prevencion', roles: GEMBA_PREVENCION,
         tooltip: 'Historial de recorridos y hallazgos abiertos' },
-      // La bitácora de cada equipo: todo lo que le pasó a ese camión —OT,
-      // checklists, hallazgos, informes— en una línea de tiempo. Es la fuente
-      // que prevención necesita para investigar un incidente.
-      { label: 'Bitácora de equipos', href: '/dashboard/flota/bitacora', icon: FileText,
-        module: 'prevencion', roles: GEMBA_PREVENCION, badge: 'Nuevo',
-        tooltip: 'Historial completo de cada camión: intervenciones, hallazgos e informes' },
+      // Control documental de EQUIPOS: se entra por el listado y la ficha de
+      // cada activo tiene la pestaña Documentos, con alertas de vencimiento y
+      // carga del respaldo. Es el complemento del control documental de
+      // personal —los dos frentes que pide auditoría—.
+      { label: 'Documentos de equipos', href: '/dashboard/activos', icon: QrCode,
+        module: 'activos', roles: GEMBA_PREVENCION,
+        tooltip: 'Listado de equipos; entra a uno y abre la pestaña Documentos (SOAP, revisión técnica, TC8, hermeticidad)' },
       { label: 'Cumplimiento', href: '/dashboard/cumplimiento', icon: ShieldCheck, module: 'cumplimiento' },
     ],
   },
@@ -444,6 +453,7 @@ export default function Sidebar({ collapsed, onToggle, onClose }: SidebarProps) 
             // siendo el que decide si la persona puede o no. Si el item declara
             // los dos, tienen que cumplirse ambos.
             if (item.roles && !item.roles.includes(perfil?.rol ?? '')) return false
+            if (item.excluirRoles?.includes(perfil?.rol ?? '')) return false
             if (item.module) return canView(item.module)
             if (item.extendedModule) return canViewExtended(item.extendedModule)
             return true

@@ -156,11 +156,11 @@ export default function PrevencionPage() {
             Recorridos Gemba
           </Link>
           <Link
-            href="/dashboard/flota/bitacora"
+            href="/dashboard/activos"
             className="inline-flex items-center gap-2 rounded-lg border border-blue-300 bg-blue-50 px-4 py-2 text-sm font-medium text-blue-800 transition-colors hover:bg-blue-100"
           >
             <FileText className="h-4 w-4" />
-            Bitácora de equipos
+            Documentos de equipos
           </Link>
         </div>
       </div>
