@@ -3,7 +3,7 @@
 import { useMemo, useState, useEffect } from 'react'
 import Link from 'next/link'
 import {
-  Building2, Wrench, Fuel, AlertTriangle, CheckCircle2,
+  Building2, Wrench, Fuel, AlertTriangle, CheckCircle2, Clock,
   MessageSquare, Save, ChevronLeft, ChevronRight, Database, Mountain,
   TrendingDown, FileWarning, CalendarDays,
 } from 'lucide-react'
@@ -15,6 +15,7 @@ import { useRequireAuth } from '@/hooks/use-require-auth'
 import { usePanelGerencia, useGuardarComentario } from '@/hooks/use-panel-gerencia'
 import type {
   EquipoDetenido, FaenaEnex, PanelTaller, CalidadDato,
+  CierreCombustibleFaena, CombustibleCoquimbo,
 } from '@/lib/services/panel-gerencia'
 
 // ============================================================================
@@ -171,26 +172,200 @@ function ComentarioEditor({
   )
 }
 
+/**
+ * Taller. Se muestra en dos bloques deliberadamente separados: lo que produjo
+ * el proceso digital este mes, y el arrastre heredado. Sumarlos hacía ver 50 OT
+ * abiertas como si el checklist digital las hubiera generado, cuando 43 vienen
+ * de junio y julio.
+ */
 function TallerBloque({ t }: { t: PanelTaller }) {
+  const p = t.periodo
+  const origenes = Object.entries(p.nc_por_origen ?? {})
+  const digital = origenes
+    .filter(([k]) => k === 'ejecucion_ot' || k === 'inspeccion_ot')
+    .reduce((a, [, v]) => a + v, 0)
+
   return (
-    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-      <Metric label="OT abiertas" value={t.ot_abiertas}
-        tone={t.ot_abiertas > 30 ? 'bad' : t.ot_abiertas > 15 ? 'warn' : 'ok'}
-        sub={`${t.ot_correctivas} corr · ${t.ot_preventivas} prev`} />
-      <Metric label="Backlog prom." value={t.backlog_dias_prom != null ? `${t.backlog_dias_prom} d` : '—'}
-        tone={(t.backlog_dias_prom ?? 0) > 30 ? 'bad' : (t.backlog_dias_prom ?? 0) > 15 ? 'warn' : 'ok'}
-        sub={t.backlog_mas_antigua ? `más antigua ${fmtFecha(t.backlog_mas_antigua)}` : undefined} />
-      <Metric label="Sin responsable" value={t.ot_sin_responsable}
-        tone={t.ot_sin_responsable > 0 ? 'warn' : 'ok'}
-        sub={`${t.ot_en_ejecucion} en ejecución`} />
-      <Metric label="NC abiertas" value={t.nc_abiertas}
-        tone={t.nc_criticas_abiertas > 0 ? 'bad' : t.nc_abiertas > 0 ? 'warn' : 'ok'}
-        sub={`${t.nc_criticas_abiertas} de severidad alta`} />
-      <div className="col-span-2 sm:col-span-4 flex flex-wrap gap-x-4 gap-y-1 px-1 text-[11px] text-muted-foreground">
-        <span>Creadas en el período: <b className="text-foreground">{t.ot_creadas_periodo}</b></span>
-        <span>Cerradas: <b className={t.ot_cerradas_periodo < t.ot_creadas_periodo ? 'text-red-600' : 'text-emerald-600'}>
-          {t.ot_cerradas_periodo}</b></span>
-        <span>NC nuevas: <b className="text-foreground">{t.nc_periodo}</b></span>
+    <div className="space-y-3">
+      {/* Proceso digital — el mes en curso */}
+      <div>
+        <div className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-emerald-700">
+          <CheckCircle2 className="h-3.5 w-3.5" />
+          Proceso digital — este mes
+        </div>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <Metric label="OT creadas" value={p.ot_creadas}
+            sub={`${p.ot_correctivas} corr · ${p.ot_preventivas} prev`} />
+          <Metric label="OT cerradas" value={p.ot_cerradas}
+            tone={p.ot_cerradas < p.ot_creadas ? 'warn' : 'ok'}
+            sub={`${p.ot_abiertas} siguen abiertas`} />
+          <Metric label="NC detectadas" value={p.nc_creadas}
+            tone={p.nc_creadas > 0 ? 'ok' : 'warn'}
+            sub={digital > 0 ? `${digital} desde checklist` : 'ninguna desde checklist'} />
+          <Metric label="NC sin resolver" value={p.nc_abiertas}
+            tone={p.nc_abiertas === p.nc_creadas && p.nc_creadas > 0 ? 'bad' : 'warn'}
+            sub={`${p.nc_altas} de severidad alta`} />
+        </div>
+        <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 px-1 text-[11px] text-muted-foreground">
+          {p.ot_primera && (
+            <span>OT: <b className="text-foreground">{fmtFecha(p.ot_primera)} → {fmtFecha(p.ot_ultima)}</b></span>
+          )}
+          {p.nc_primera && (
+            <span>NC: <b className="text-foreground">{fmtFecha(p.nc_primera)} → {fmtFecha(p.nc_ultima)}</b></span>
+          )}
+          {origenes.length > 0 && (
+            <span>Origen: {origenes.map(([k, v]) => `${k.replace('_', ' ')} ${v}`).join(' · ')}</span>
+          )}
+        </div>
+      </div>
+
+      {/* Resumen por fecha */}
+      {t.por_fecha?.length > 0 && (
+        <div className="rounded-lg border bg-muted/30 p-2">
+          <div className="mb-1.5 flex items-center justify-between text-[11px] font-medium text-muted-foreground">
+            <span>Actividad día a día</span>
+            <span>{t.por_fecha.length} día{t.por_fecha.length === 1 ? '' : 's'} con registro</span>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {t.por_fecha.map((d) => (
+              <div key={d.fecha}
+                className="rounded border bg-card px-2 py-1 text-center"
+                title={`${d.ot} OT · ${d.nc} NC`}>
+                <div className="text-[10px] text-muted-foreground">{fmtFecha(d.fecha)}</div>
+                <div className="flex items-center justify-center gap-1.5 text-xs font-semibold">
+                  {d.ot > 0 && <span className="text-blue-700">{d.ot} OT</span>}
+                  {d.nc > 0 && <span className="text-amber-700">{d.nc} NC</span>}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Arrastre */}
+      {(t.arrastre.ot_abiertas > 0 || t.arrastre.nc_abiertas > 0) && (
+        <div>
+          <div className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-amber-700">
+            <Clock className="h-3.5 w-3.5" />
+            Arrastre de meses anteriores
+          </div>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <Metric label="OT abiertas" value={t.arrastre.ot_abiertas}
+              tone={t.arrastre.ot_abiertas > 30 ? 'bad' : 'warn'}
+              sub={t.arrastre.ot_mas_antigua ? `desde ${fmtFecha(t.arrastre.ot_mas_antigua)}` : undefined} />
+            <Metric label="Antigüedad prom." value={t.arrastre.ot_dias_prom != null ? `${t.arrastre.ot_dias_prom} d` : '—'}
+              tone={(t.arrastre.ot_dias_prom ?? 0) > 30 ? 'bad' : 'warn'} />
+            <Metric label="NC sin resolver" value={t.arrastre.nc_abiertas}
+              tone={t.arrastre.nc_abiertas > 20 ? 'bad' : 'warn'}
+              sub={t.arrastre.nc_mas_antigua ? `desde ${fmtFecha(t.arrastre.nc_mas_antigua)}` : undefined} />
+            <Metric label="Sin responsable" value={t.ot_sin_responsable}
+              tone={t.ot_sin_responsable > 0 ? 'warn' : 'ok'}
+              sub={`${t.ot_en_ejecucion} en ejecución`} />
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Cierre mensual de combustible de una faena. Los litros vienen de la planilla
+ * de operación, no del sistema, así que la tarjeta declara siempre el archivo
+ * de origen: un número de gerencia sin dueño no se puede defender en reunión.
+ */
+function FaenaCombustible({ f }: { f: CierreCombustibleFaena }) {
+  const [abierto, setAbierto] = useState(false)
+  // La fluctuación llega como fracción (-0.0008 = -0,08%). En combustible el
+  // umbral de gestión habitual es 0,5%.
+  const fluctPct = f.fluctuacion_pct != null ? f.fluctuacion_pct * 100 : null
+  const fluctFuera = fluctPct != null && Math.abs(fluctPct) > 0.5
+
+  return (
+    <div className="space-y-2 rounded-lg border p-3">
+      <div className="flex items-baseline justify-between gap-2">
+        <div className="text-sm font-semibold">{f.nombre}</div>
+        <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium text-emerald-800">
+          {f.transacciones} transacciones
+        </span>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <Metric label="Litros del mes" value={Math.round(f.litros_total).toLocaleString('es-CL')}
+          sub={f.litros_trasvasije > 0
+            ? `${Math.round(f.litros_venta).toLocaleString('es-CL')} venta · ${Math.round(f.litros_trasvasije).toLocaleString('es-CL')} trasv.`
+            : 'despacho a equipos'} />
+        <Metric label="Fluctuación"
+          value={fluctPct != null ? `${fluctPct.toFixed(2)}%` : '—'}
+          tone={fluctPct == null ? 'neutral' : fluctFuera ? 'bad' : 'ok'}
+          sub={f.fluctuacion_lt != null ? `${f.fluctuacion_lt} L` : 'no declarada en el cierre'} />
+      </div>
+
+      <div className="text-[11px] text-muted-foreground">
+        {f.dias_con_registro} días con registro · {fmtFecha(f.fecha_min)} → {fmtFecha(f.fecha_max)}
+      </div>
+
+      <button onClick={() => setAbierto((v) => !v)}
+        className="text-[11px] font-medium text-blue-700 underline">
+        {abierto ? 'Ocultar detalle' : 'Ver detalle por punto y cliente'}
+      </button>
+
+      {abierto && (
+        <div className="grid gap-2 sm:grid-cols-2">
+          <div>
+            <div className="mb-1 text-[10px] uppercase text-muted-foreground">Por punto</div>
+            {f.detalle_por_punto.slice(0, 6).map((d) => (
+              <div key={d.clave} className="flex justify-between gap-2 text-[11px]">
+                <span className="truncate">{d.clave}</span>
+                <b>{d.litros.toLocaleString('es-CL')}</b>
+              </div>
+            ))}
+          </div>
+          <div>
+            <div className="mb-1 text-[10px] uppercase text-muted-foreground">Por cliente</div>
+            {f.detalle_por_empresa.slice(0, 6).map((d) => (
+              <div key={d.clave} className="flex justify-between gap-2 text-[11px]">
+                <span className="truncate">{d.clave}</span>
+                <b>{d.litros.toLocaleString('es-CL')}</b>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {f.fuente_archivo && (
+        <div className="truncate text-[10px] text-muted-foreground" title={f.fuente_archivo}>
+          Fuente: {f.fuente_archivo}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/**
+ * La brecha entre lo que se controla (Excel) y lo que está trazado en el
+ * sistema. Es la pregunta de gerencia sobre combustible: no "¿cuánto se
+ * despachó?" sino "¿cuánto de eso puedo auditar?".
+ */
+function BrechaTrazabilidad({ c }: { c: CombustibleCoquimbo }) {
+  const trazado = c.trazado_en_sistema.movimientos_franke + c.trazado_en_sistema.despachos_romeral
+  if (c.con_cierre_cargado === 0) return null
+  return (
+    <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+      <div className="flex items-start gap-2">
+        <FileWarning className="mt-0.5 h-4 w-4 shrink-0" />
+        <div>
+          <b>{Math.round(c.litros_total_periodo).toLocaleString('es-CL')} litros</b> controlados
+          este mes en planillas de operación, contra <b>{trazado}</b> movimiento
+          {trazado === 1 ? '' : 's'} registrado{trazado === 1 ? '' : 's'} en el sistema.
+          El volumen se está midiendo; lo que falta es la trazabilidad transaccional
+          —quién despachó, a qué equipo, con qué respaldo—.
+          <div className="mt-1 text-[11px] opacity-80">
+            Infraestructura ya montada y ociosa: {c.infraestructura.camiones_activos} camiones,{' '}
+            {c.infraestructura.estanques_fijos} estanques fijos,{' '}
+            {c.infraestructura.romeral_ubicaciones} ubicaciones y{' '}
+            {c.infraestructura.romeral_equipos} equipos configurados en Romeral.
+          </div>
+        </div>
       </div>
     </div>
   )
@@ -574,43 +749,18 @@ export default function PanelGerenciaPage() {
                     <Fuel className="h-4 w-4" /> Control de combustible
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="grid gap-3 sm:grid-cols-2">
-                  <div className="space-y-2 rounded-lg border p-3">
-                    <div className="text-sm font-semibold">Franke</div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <Metric label="Movimientos" value={data.coquimbo.combustible.franke.movimientos_periodo}
-                        tone={data.coquimbo.combustible.franke.movimientos_periodo === 0 ? 'bad' : 'ok'} />
-                      <Metric label="Litros" value={data.coquimbo.combustible.franke.litros_periodo.toLocaleString('es-CL')} />
-                    </div>
-                    <div className="text-[11px] text-muted-foreground">
-                      {data.coquimbo.combustible.franke.camiones_activos} camiones ·{' '}
-                      {data.coquimbo.combustible.franke.estanques_fijos} estanques fijos ·
-                      último movimiento {fmtFecha(data.coquimbo.combustible.franke.ultimo_movimiento)}
-                    </div>
-                    {data.coquimbo.combustible.franke.movimientos_periodo === 0 && (
-                      <div className="rounded bg-red-50 px-2 py-1 text-[11px] text-red-700">
-                        Sin movimientos registrados en el período.
-                      </div>
-                    )}
+                <CardContent className="space-y-3">
+                  {data.coquimbo.combustible.faenas.length === 0 && (
+                    <p className="py-3 text-center text-sm text-muted-foreground">
+                      No hay cierre de combustible cargado para este mes.
+                    </p>
+                  )}
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {data.coquimbo.combustible.faenas.map((f) => (
+                      <FaenaCombustible key={f.codigo} f={f} />
+                    ))}
                   </div>
-                  <div className="space-y-2 rounded-lg border p-3">
-                    <div className="text-sm font-semibold">Romeral</div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <Metric label="Despachos" value={data.coquimbo.combustible.romeral.despachos_periodo}
-                        tone={data.coquimbo.combustible.romeral.despachos_periodo === 0 ? 'bad' : 'ok'} />
-                      <Metric label="Litros" value={data.coquimbo.combustible.romeral.litros_periodo.toLocaleString('es-CL')} />
-                    </div>
-                    <div className="text-[11px] text-muted-foreground">
-                      {data.coquimbo.combustible.romeral.ubicaciones} ubicaciones ·{' '}
-                      {data.coquimbo.combustible.romeral.equipos} equipos configurados
-                    </div>
-                    {data.coquimbo.combustible.romeral.despachos_total === 0 && (
-                      <div className="rounded bg-red-50 px-2 py-1 text-[11px] text-red-700">
-                        La app de terreno está configurada pero todavía no se ha
-                        registrado ningún despacho.
-                      </div>
-                    )}
-                  </div>
+                  <BrechaTrazabilidad c={data.coquimbo.combustible} />
                 </CardContent>
               </Card>
 

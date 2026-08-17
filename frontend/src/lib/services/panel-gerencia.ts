@@ -23,7 +23,40 @@ export type CalidadDato = {
   cron_estados_activo: boolean
 }
 
+/**
+ * Taller. Separa tres cosas que MIG295 mezclaba en un solo total:
+ *  · `periodo`  — lo que produjo el proceso digital en el mes en curso.
+ *  · `arrastre` — lo abierto que nació antes (pasivo del proceso anterior).
+ *  · totales vivos — la suma, para cuando lo que importa es la carga real.
+ * El checklist digital con OT y NC arrancó en agosto 2026, así que sumarlos
+ * hacía ver el proceso nuevo como responsable de un backlog que heredó.
+ */
 export type PanelTaller = {
+  periodo: {
+    ot_creadas: number
+    ot_abiertas: number
+    ot_cerradas: number
+    ot_correctivas: number
+    ot_preventivas: number
+    ot_primera: string | null
+    ot_ultima: string | null
+    nc_creadas: number
+    nc_abiertas: number
+    nc_altas: number
+    nc_primera: string | null
+    nc_ultima: string | null
+    nc_por_origen: Record<string, number>
+  }
+  arrastre: {
+    ot_abiertas: number
+    ot_mas_antigua: string | null
+    ot_dias_prom: number | null
+    nc_abiertas: number
+    nc_mas_antigua: string | null
+  }
+  /** Día a día del período; solo días con actividad. */
+  por_fecha: { fecha: string, ot: number, nc: number }[]
+
   ot_abiertas: number
   ot_correctivas: number
   ot_preventivas: number
@@ -72,22 +105,48 @@ export type EquipoDetenido = {
   fecha_compromiso: string | null
 }
 
+export type CierreCombustibleFaena = {
+  codigo: string
+  nombre: string
+  transacciones: number
+  litros_venta: number
+  litros_trasvasije: number
+  litros_total: number
+  fluctuacion_lt: number | null
+  /** Fracción, no porcentaje: -0.0008 = -0,08%. */
+  fluctuacion_pct: number | null
+  dias_con_registro: number | null
+  fecha_min: string | null
+  fecha_max: string | null
+  detalle_por_punto: { clave: string, litros: number }[]
+  detalle_por_empresa: { clave: string, litros: number }[]
+  fuente_archivo: string | null
+  cargado_at: string | null
+}
+
+/**
+ * Combustible de faenas. La distinción central:
+ *  · CONTROLADO — hay cierre mensual cargado (viene de las planillas Excel de
+ *    operación). El negocio se está midiendo.
+ *  · TRAZADO    — además hay movimientos registrados en el sistema.
+ * Hoy Franke y Romeral están controlados pero no trazados; la diferencia entre
+ * `litros_total_periodo` y `trazado_en_sistema` es exactamente esa brecha.
+ */
 export type CombustibleCoquimbo = {
-  franke: {
-    movimientos_periodo: number
-    litros_periodo: number
+  faenas: CierreCombustibleFaena[]
+  litros_total_periodo: number
+  con_cierre_cargado: number
+  trazado_en_sistema: {
+    movimientos_franke: number
+    despachos_romeral: number
     ultimo_movimiento: string | null
+    ultimo_despacho: string | null
+  }
+  infraestructura: {
     camiones_activos: number
     estanques_fijos: number
-    dias_cuadre: number
-  }
-  romeral: {
-    ubicaciones: number
-    equipos: number
-    despachos_periodo: number
-    litros_periodo: number
-    despachos_total: number
-    ultimo_despacho: string | null
+    romeral_ubicaciones: number
+    romeral_equipos: number
   }
 }
 
