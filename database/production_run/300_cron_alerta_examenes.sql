@@ -31,8 +31,13 @@ SELECT cron.schedule(
     'alerta-examenes-personal',
     '0 12 * * *',          -- 08:00 en Chile continental (UTC-4)
     $cron$
+    -- La barra final NO es cosmética: el sitio usa trailingSlash, así que la
+    -- URL sin barra responde 308 (redirect) y net.http_post NO sigue
+    -- redirects. Sin la barra el cron correría todos los días sin enviar nada
+    -- y sin dar error visible. Verificado: sin barra → 308, con barra → 401
+    -- ante secreto inválido, que es la respuesta correcta.
     SELECT net.http_post(
-        url     := 'https://pilladoiceo.netlify.app/api/notificaciones/examenes-vencimiento',
+        url     := 'https://pilladoiceo.netlify.app/api/notificaciones/examenes-vencimiento/',
         headers := jsonb_build_object(
                        'Content-Type',  'application/json',
                        'x-cron-secret', '<CRON_SECRET>'),
