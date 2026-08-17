@@ -1,8 +1,11 @@
 'use client'
 
 import { useMemo, useState } from 'react'
+import Link from 'next/link'
 import {
   HardHat,
+  Footprints,
+  FileText,
   AlertTriangle,
   FileWarning,
   FlaskConical,
@@ -133,6 +136,25 @@ export default function PrevencionPage() {
           <p className="text-sm text-gray-500 mt-1">
             Cumplimiento normativo: DS 43 (SUSPEL) · DS 148 (RESPEL) · DS 298 (Transporte SP)
           </p>
+        </div>
+        {/* Los dos accesos propios de prevención: su recorrido de terreno y el
+            historial de un equipo, que es lo que se necesita para investigar
+            un incidente. */}
+        <div className="flex flex-wrap gap-2">
+          <Link
+            href="/dashboard/gemba"
+            className="inline-flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-800 transition-colors hover:bg-amber-100"
+          >
+            <Footprints className="h-4 w-4" />
+            Recorridos Gemba
+          </Link>
+          <Link
+            href="/dashboard/flota/bitacora"
+            className="inline-flex items-center gap-2 rounded-lg border border-blue-300 bg-blue-50 px-4 py-2 text-sm font-medium text-blue-800 transition-colors hover:bg-blue-100"
+          >
+            <FileText className="h-4 w-4" />
+            Bitácora de equipos
+          </Link>
         </div>
       </div>
 
