@@ -166,7 +166,7 @@ export default function GembaRecorridoPage() {
           no el título. */}
       <div>
         <Link
-          href="/dashboard/prevencion/gemba"
+          href="/dashboard/gemba"
           className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700"
         >
           <ArrowLeft className="h-4 w-4" /> Volver

@@ -76,14 +76,14 @@ export default function GembaPage() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Link href="/dashboard/prevencion/gemba/reporte" className="flex-1 sm:flex-none">
+          <Link href="/dashboard/gemba/reporte" className="flex-1 sm:flex-none">
             <Button variant="outline" className="w-full">
               <TrendingUp className="h-4 w-4" />
               Avance
             </Button>
           </Link>
           {puedeRecorrer && (
-            <Link href="/dashboard/prevencion/gemba/nuevo" className="flex-1 sm:flex-none">
+            <Link href="/dashboard/gemba/nuevo" className="flex-1 sm:flex-none">
               <Button className="w-full">
                 <Plus className="h-4 w-4" />
                 Nuevo recorrido
@@ -96,7 +96,7 @@ export default function GembaPage() {
       {/* ── Te toca recorrer ── */}
       {pendientes.map(({ plantilla, ultimo, dias }) => (
         <Link key={plantilla.id} className="block"
-              href={`/dashboard/prevencion/gemba/nuevo?plantilla=${plantilla.id}`}>
+              href={`/dashboard/gemba/nuevo?plantilla=${plantilla.id}`}>
           <div className="flex items-center gap-3 rounded-lg border border-amber-300 bg-amber-50 p-4 transition-colors hover:bg-amber-100">
             <Footprints className="h-5 w-5 shrink-0 text-amber-600" />
             <div className="flex-1">
@@ -177,7 +177,7 @@ export default function GembaPage() {
             <ul className="divide-y divide-gray-100">
               {recorridos.map((r) => (
                 <li key={r.id}>
-                  <Link href={`/dashboard/prevencion/gemba/${r.id}`}
+                  <Link href={`/dashboard/gemba/${r.id}`}
                         className="-mx-2 flex items-center gap-3 rounded-lg px-2 py-3 hover:bg-gray-50">
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium text-gray-800">
@@ -240,7 +240,7 @@ export default function GembaPage() {
                   h.fecha_compromiso < new Date().toISOString().slice(0, 10)
                 return (
                   <li key={h.id}>
-                    <Link href={`/dashboard/prevencion/gemba/${h.recorrido_id}`}
+                    <Link href={`/dashboard/gemba/${h.recorrido_id}`}
                           className={cn('block rounded-lg border p-3 hover:bg-gray-50',
                             vencido ? 'border-red-200 bg-red-50/50' : 'border-gray-200')}>
                       <div className="flex items-start justify-between gap-2">

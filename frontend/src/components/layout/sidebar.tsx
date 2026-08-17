@@ -40,6 +40,7 @@ import {
   Lightbulb,
   ShoppingCart,
   Building2,
+  Footprints,
 } from 'lucide-react'
 import { useNcPorDecidir } from '@/hooks/use-nc-por-decidir'
 import { cn } from '@/lib/utils'
@@ -101,6 +102,26 @@ const navGroups: NavGroup[] = [
         items: [
           { label: 'Mis OTs', href: '/dashboard/mis-ots', icon: ClipboardCheck, module: 'ordenes_trabajo' as Module },
           { label: 'Todas las OTs', href: '/dashboard/ordenes-trabajo', icon: ClipboardList, module: 'ordenes_trabajo' },
+        ],
+      },
+      {
+        // Los recorridos NO son un módulo de prevención: son una práctica de
+        // tres cargos (jefe de taller a diario, jefe de operaciones quincenal,
+        // prevención diaria y mensual). Mientras vivieron dentro de
+        // /dashboard/prevencion no aparecían en el menú y acumularon 0
+        // recorridos en dos meses: nadie hace una caminata diaria si tiene que
+        // acordarse de una URL.
+        //
+        // El módulo es 'prevencion' porque es el mismo permiso que exige la
+        // base (fn_gemba_puede_gestionar, MIG288) y los tres cargos lo tienen
+        // con create. Si menú y base se separan, aparece el peor error: el
+        // botón se ve y la base rechaza al guardar.
+        label: 'Recorridos de terreno',
+        items: [
+          { label: 'Recorridos Gemba', href: '/dashboard/gemba', icon: Footprints, module: 'prevencion',
+            badge: 'Nuevo', tooltip: 'Checklist de terreno por cargo: jefe de taller, jefe de operaciones y prevención' },
+          { label: 'Cumplimiento de recorridos', href: '/dashboard/gemba/reporte', icon: BarChart3, module: 'prevencion',
+            tooltip: 'Quién hizo su recorrido y qué hallazgos siguen abiertos' },
         ],
       },
       {

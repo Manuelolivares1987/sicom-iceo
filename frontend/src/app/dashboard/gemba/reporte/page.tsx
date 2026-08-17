@@ -105,7 +105,7 @@ export default function GembaReportePage() {
     <div className="space-y-4 pb-6">
       {/* ── Encabezado + selector de mes ── */}
       <div>
-        <Link href="/dashboard/prevencion/gemba"
+        <Link href="/dashboard/gemba"
               className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700">
           <ArrowLeft className="h-4 w-4" /> Volver a recorridos
         </Link>

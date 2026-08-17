@@ -98,7 +98,7 @@ export default function NuevoGembaPage() {
       })
       if (recorrido) {
         toast.success('Recorrido iniciado — checklist pre-cargado')
-        router.push(`/dashboard/prevencion/gemba/${recorrido.id}`)
+        router.push(`/dashboard/gemba/${recorrido.id}`)
       }
     } catch (e: any) {
       toast.error(`No se pudo iniciar el recorrido: ${e?.message ?? 'error desconocido'}`)
@@ -117,7 +117,7 @@ export default function NuevoGembaPage() {
     <div className="mx-auto max-w-2xl space-y-6">
       <div>
         <Link
-          href="/dashboard/prevencion/gemba"
+          href="/dashboard/gemba"
           className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700"
         >
           <ArrowLeft className="h-4 w-4" /> Volver a recorridos
@@ -244,7 +244,7 @@ export default function NuevoGembaPage() {
           />
 
           <div className="flex justify-end gap-2 pt-2">
-            <Link href="/dashboard/prevencion/gemba">
+            <Link href="/dashboard/gemba">
               <Button variant="ghost">Cancelar</Button>
             </Link>
             <Button onClick={iniciar} disabled={!puedeIniciar} loading={crear.isPending}>
