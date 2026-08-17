@@ -24,6 +24,24 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
+  async redirects() {
+    return [
+      // Los Recorridos Gemba salieron de Prevención: no son un módulo de
+      // prevención, son una práctica de tres cargos (jefe de taller, jefe de
+      // operaciones y prevención). Se conserva la ruta vieja porque hay
+      // favoritos y links en la documentación de puesta en marcha.
+      {
+        source: '/dashboard/prevencion/gemba',
+        destination: '/dashboard/gemba',
+        permanent: true,
+      },
+      {
+        source: '/dashboard/prevencion/gemba/:path*',
+        destination: '/dashboard/gemba/:path*',
+        permanent: true,
+      },
+    ]
+  },
 }
 
 module.exports = withPWA(nextConfig)
