@@ -14,8 +14,12 @@
  *   - operador_abastecimiento → AbastecimientoDashboard
  *   - comercial → CommercialDashboard (existente)
  *
- * Otros roles (auditor, prevencionista, rrhh_incentivos) caen a Legacy con
- * vista de KPI/alertas. Se documentan como pendientes en DASHBOARDS_POR_ROL.md.
+ *   - prevencionista → PrevencionDashboard (MIG303): documental de personal
+ *     y de equipos, y sus recorridos de terreno. Antes caía a Legacy, que le
+ *     mostraba OT, ICEO e inventario: nada de su trabajo.
+ *
+ * Otros roles (auditor, rrhh_incentivos) caen a Legacy con vista de
+ * KPI/alertas. Se documentan como pendientes en DASHBOARDS_POR_ROL.md.
  */
 
 import { useAuth } from '@/contexts/auth-context'
@@ -27,6 +31,7 @@ import { MantenimientoDashboard } from './roles/mantenimiento-dashboard'
 import { TecnicoDashboard } from './roles/tecnico-dashboard'
 import { BodegueroDashboard } from './roles/bodeguero-dashboard'
 import { AbastecimientoDashboard } from './roles/abastecimiento-dashboard'
+import { PrevencionDashboard } from './roles/prevencion-dashboard'
 
 interface RoleDashboardRouterProps {
   fallback: React.ReactNode
@@ -52,6 +57,9 @@ export function RoleDashboardRouter({ fallback }: RoleDashboardRouterProps) {
     case 'planificador':
       return <MantenimientoDashboard />
 
+    case 'prevencionista':
+      return <PrevencionDashboard />
+
     case 'tecnico_mantenimiento':
       return <TecnicoDashboard />
 
@@ -65,7 +73,6 @@ export function RoleDashboardRouter({ fallback }: RoleDashboardRouterProps) {
       return <CommercialDashboard />
 
     case 'auditor':
-    case 'prevencionista':
     case 'rrhh_incentivos':
     case 'colaborador':
     default:

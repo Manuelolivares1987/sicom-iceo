@@ -5,8 +5,10 @@ import {
   renovarExamen,
   getHistorialExamen,
   getUrlFirmadaExamen,
+  enviarReporteDocumental,
   type ActualizarExamenInput,
   type RenovarExamenInput,
+  type EnviarReporteInput,
 } from '@/lib/services/prevencion-personal'
 
 export function useControlDocumental(faena?: string | null) {
@@ -57,4 +59,11 @@ export async function abrirRespaldo(path: string) {
   const url = await getUrlFirmadaExamen(path)
   if (url) window.open(url, '_blank', 'noopener,noreferrer')
   return url
+}
+
+/** Envío del reporte documental por correo, a pedido. */
+export function useEnviarReporte() {
+  return useMutation({
+    mutationFn: (input: EnviarReporteInput) => enviarReporteDocumental(input),
+  })
 }
