@@ -41,6 +41,7 @@ import {
   ShoppingCart,
   Building2,
   Footprints,
+  ShieldAlert,
 } from 'lucide-react'
 import { useNcPorDecidir } from '@/hooks/use-nc-por-decidir'
 import { cn } from '@/lib/utils'
@@ -257,6 +258,11 @@ const navGroups: NavGroup[] = [
     label: 'Compliance',
     items: [
       { label: 'Prevención', href: '/dashboard/prevencion', icon: HardHat, module: 'prevencion' },
+      // Sin `roles`: lo ve todo el que tenga el módulo, incluido el jefe de
+      // operaciones —es quien responde por la gente que entra a faena—.
+      { label: 'Control documental personal', href: '/dashboard/prevencion/personal',
+        icon: ShieldAlert, module: 'prevencion', badge: 'Nuevo',
+        tooltip: 'Exámenes ocupacionales y licencias con vencimiento — requerido por auditoría' },
       // El Gemba de prevención vive acá, no en Operación: son sus dos
       // checklists (caminata diaria e inspección planificada mensual) y el
       // prevencionista no tiene por qué entrar al menú de taller para hacerlos.

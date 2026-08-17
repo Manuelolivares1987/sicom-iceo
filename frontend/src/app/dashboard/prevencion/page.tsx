@@ -142,6 +142,13 @@ export default function PrevencionPage() {
             un incidente. */}
         <div className="flex flex-wrap gap-2">
           <Link
+            href="/dashboard/prevencion/personal"
+            className="inline-flex items-center gap-2 rounded-lg border border-red-300 bg-red-50 px-4 py-2 text-sm font-medium text-red-800 transition-colors hover:bg-red-100"
+          >
+            <ShieldAlert className="h-4 w-4" />
+            Control documental personal
+          </Link>
+          <Link
             href="/dashboard/gemba"
             className="inline-flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-800 transition-colors hover:bg-amber-100"
           >
