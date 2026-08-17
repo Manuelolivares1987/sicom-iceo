@@ -7,9 +7,13 @@
 //
 // La planilla tiene DOS bloques apilados en la misma hoja "Personal":
 //   bloque 1 (fila 4 = encabezado): 5 exámenes, cada uno Laboratorio+Vencimiento
-//   bloque 2 (otra fila de encabezado más abajo): licencias municipal/planta/mina
+//   bloque 2 (fila 22 hoy): licencias de conducir municipal / planta / mina
 // El segundo bloque se detecta buscando la fila que repite "Nro Contrato", no
 // por número de fila fijo: la planilla crece hacia abajo cada mes.
+//
+// Las licencias son tan críticas como los exámenes: sin licencia interna
+// vigente la persona no puede conducir en faena, y sin la municipal no puede
+// conducir en absoluto.
 //
 // Uso:
 //   node cargar-examenes-personal.mjs "<ruta.xlsx>" [--faena ROMERAL] [--dry-run]
@@ -95,11 +99,50 @@ await wb.xlsx.readFile(resolve(ARCHIVO))
 const ws = wb.getWorksheet('Personal')
 if (!ws) { console.error('No existe la hoja "Personal".'); process.exit(1) }
 
-// El bloque 2 arranca donde se repite el encabezado. Todo lo que venga después
-// son licencias, no exámenes, y se ignora en esta carga (estructura distinta).
+// El bloque 2 arranca donde se repite el encabezado "Nro Contrato".
 let finBloque1 = ws.rowCount
+let iniBloque2 = 0
 for (let r = 6; r <= ws.rowCount; r++) {
-  if (txt(ws.getRow(r).getCell(1)).toLowerCase().startsWith('nro contrato')) { finBloque1 = r - 1; break }
+  if (txt(ws.getRow(r).getCell(1)).toLowerCase().startsWith('nro contrato')) {
+    finBloque1 = r - 1
+    iniBloque2 = r + 1     // los datos empiezan justo debajo del encabezado
+    break
+  }
+}
+
+// Columnas del bloque 2: 8 Licencia Municipal · 9 Licencia Planta · 10 Licencia Mina.
+// Las columnas 6 y 7 ("Pre-Ocupacionales - AyD" y "Psicosensotécnico") no son
+// fechas sino un estado de gestión ("Ok", "Pendiente Kapacitaccion") que ya
+// viene capturado del bloque 1 como observación; no se cargan dos veces.
+const LICENCIAS = [
+  { codigo: 'licencia_municipal', col: 8 },
+  { codigo: 'licencia_planta',    col: 9 },
+  { codigo: 'licencia_mina',      col: 10 },
+]
+
+/** Licencias por RUT, leídas del segundo bloque. */
+const licenciasPorRut = new Map()
+if (iniBloque2) {
+  for (let r = iniBloque2; r <= ws.rowCount; r++) {
+    const row = ws.getRow(r)
+    const rut = normalizaRut(txt(row.getCell(3)))
+    if (!rut) continue
+    const accion = txt(row.getCell(11))
+    const items = []
+    for (const l of LICENCIAS) {
+      const f = fecha(row.getCell(l.col))
+      const t = txt(row.getCell(l.col))
+      if (esExencion(t)) {
+        items.push({ tipo: l.codigo, aplica: false, motivo: t })
+      } else {
+        // Vacío se registra igual, como sin dato: una licencia que nadie
+        // declaró no es una licencia vigente. Si la persona no conduce, se
+        // marca exenta a propósito desde la pantalla.
+        items.push({ tipo: l.codigo, aplica: true, laboratorio: null, vencimiento: f, bloqueante: false })
+      }
+    }
+    licenciasPorRut.set(rut, { items, accion })
+  }
 }
 
 const personas = []
@@ -138,12 +181,30 @@ for (let r = 5; r <= finBloque1; r++) {
         : false,
     })
   }
-  // Los tipos que no aparecieron quedan explícitos como sin dato: en control
-  // documental una celda vacía es incumplimiento, no ausencia de obligación.
+  // Los tipos de EXAMEN que no aparecieron quedan explícitos como sin dato: en
+  // control documental una celda vacía es incumplimiento, no ausencia de
+  // obligación. (Las licencias se agregan más abajo, desde el bloque 2.)
   for (const t of TIPOS) {
     if (!examenes.some((e) => e.tipo === t.codigo)) {
       examenes.push({ tipo: t.codigo, aplica: true, laboratorio: null, vencimiento: null,
         observacion: obsPersona || null, bloqueante: false })
+    }
+  }
+
+  // ── Licencias de conducir (bloque 2) ──
+  const lic = licenciasPorRut.get(rut)
+  if (lic) {
+    // Si el psicosensotécnico está exento porque la persona no conduce, las
+    // licencias tampoco aplican: no tiene sentido exigirle una licencia de
+    // faena a quien no maneja. Se hereda el motivo para que quede dicho.
+    const noConduce = examenes.find(
+      (e) => e.tipo === 'psicosensotecnico' && !e.aplica)
+    for (const item of lic.items) {
+      if (noConduce && item.aplica && !item.vencimiento) {
+        examenes.push({ tipo: item.tipo, aplica: false, motivo: noConduce.motivo })
+      } else {
+        examenes.push({ ...item, observacion: lic.accion || obsPersona || null })
+      }
     }
   }
 
