@@ -31,30 +31,35 @@ import { copiarReporteFiabilidad } from '@/lib/reporte-fiabilidad-email'
 const ESTADO_COLORES: Record<string, string> = {
   A: '#16A34A', C: '#15803D', L: '#4F46E5', U: '#0891B2', D: '#2563EB',
   H: '#A855F7', R: '#06B6D4', M: '#F59E0B', T: '#FB923C', F: '#DC2626', V: '#9333EA',
+  S: '#64748B',
 }
 const ESTADO_LABELS: Record<string, string> = {
   A: 'Arrendado', C: 'En contrato', D: 'Disponible', H: 'Habilitación', R: 'Recepción',
   M: 'Mantención', T: 'Taller', F: 'Fuera de servicio', V: 'Venta',
   U: 'Uso interno', L: 'Leasing',
+  // 'S' está fuera del cálculo de disponibilidad (MIG306), pero se sigue
+  // dibujando: el equipo existe y hay que poder verlo en la matriz.
+  S: 'Siniestrado / fuera de control',
 }
-const ESTADO_ORDEN = ['A', 'C', 'L', 'U', 'D', 'H', 'R', 'M', 'T', 'F', 'V']
+const ESTADO_ORDEN = ['A', 'C', 'L', 'U', 'D', 'H', 'R', 'M', 'T', 'F', 'V', 'S']
 
 // ─── Categorías de la torta/tabla: cada equipo se clasifica por su ESTADO del
 // último día (un estado = una categoría). Es la vista que ve la organización. ──
 const ESTADO_A_CATEGORIA: Record<string, string> = {
   A: 'Arriendo comercial', C: 'Contratos', D: 'Disponible', L: 'Leasing operativo',
   U: 'Uso interno', V: 'Venta', M: 'Mantención', T: 'Taller', F: 'Fuera de servicio',
-  H: 'Habilitación', R: 'Recepción',
+  H: 'Habilitación', R: 'Recepción', S: 'Fuera de flota',
 }
 const CATEGORIA_ORDEN = [
   'Arriendo comercial', 'Contratos', 'Leasing operativo', 'Uso interno', 'Disponible',
   'Mantención', 'Taller', 'Fuera de servicio', 'Habilitación', 'Recepción', 'Venta',
+  'Fuera de flota',
 ]
 const CATEGORIA_COLOR: Record<string, string> = {
   'Arriendo comercial': '#16A34A', 'Contratos': '#15803D', 'Leasing operativo': '#4F46E5',
   'Uso interno': '#0891B2', 'Disponible': '#2563EB', 'Mantención': '#F59E0B',
   'Taller': '#FB923C', 'Fuera de servicio': '#DC2626', 'Habilitación': '#A855F7',
-  'Recepción': '#06B6D4', 'Venta': '#9333EA',
+  'Recepción': '#06B6D4', 'Venta': '#9333EA', 'Fuera de flota': '#64748B',
 }
 
 // ─── Helpers ───────────────────────────────────────────

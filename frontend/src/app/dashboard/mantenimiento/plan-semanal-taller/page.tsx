@@ -69,6 +69,7 @@ const ESTADO_INFO: Record<string, { label: string; cls: string }> = {
   C: { label: 'En contrato',    cls: 'bg-green-100 text-green-700' },
   D: { label: 'Disponible',     cls: 'bg-blue-100 text-blue-700' },
   R: { label: 'Tránsito',       cls: 'bg-cyan-100 text-cyan-700' },
+  S: { label: 'Fuera de flota', cls: 'bg-slate-200 text-slate-700' },
   U: { label: 'Uso interno',    cls: 'bg-sky-100 text-sky-700' },
   L: { label: 'Leasing',        cls: 'bg-indigo-100 text-indigo-700' },
   V: { label: 'En venta',       cls: 'bg-purple-100 text-purple-700' },

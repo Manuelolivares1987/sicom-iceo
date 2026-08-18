@@ -29,7 +29,7 @@ import { cambiarContratoActivo } from '@/lib/services/contrato-activo'
 import { cargarContratosActivos, crearContratoRapido, type ContratoOption } from '@/lib/services/geocercas'
 import { Building2, Plus, MapPin } from 'lucide-react'
 
-type EstadoCodigo = 'A' | 'C' | 'D' | 'H' | 'R' | 'M' | 'T' | 'F' | 'V' | 'U' | 'L'
+type EstadoCodigo = 'A' | 'C' | 'D' | 'H' | 'R' | 'M' | 'T' | 'F' | 'V' | 'U' | 'L' | 'S'
 
 // Ubicación real del equipo según el GPS (fn_activo_geocerca_actual)
 type GpsGeo = {
@@ -68,7 +68,7 @@ const ESTADO_OPTIONS: Array<{
   value: EstadoCodigo
   label: string
   helpText: string
-  group: 'productivo' | 'no_productivo' | 'mantencion'
+  group: 'productivo' | 'no_productivo' | 'mantencion' | 'fuera_control'
 }> = [
   { value: 'A', label: 'A — Arrendado',         group: 'productivo',     helpText: 'Equipo en faena del cliente generando ingreso' },
   { value: 'C', label: 'C — Contrato',          group: 'productivo',     helpText: 'Bajo contrato de largo plazo (arriendo continuo)' },
@@ -81,6 +81,7 @@ const ESTADO_OPTIONS: Array<{
   { value: 'M', label: 'M — Mantención (>1 día)', group: 'mantencion',   helpText: 'Mantención programada o que dura más de un día' },
   { value: 'T', label: 'T — Taller (correctivo)', group: 'mantencion',   helpText: 'Reparación correctiva, falla operativa' },
   { value: 'F', label: 'F — Fuera de Servicio', group: 'mantencion',     helpText: 'Equipo no operativo: documentación vencida, falla mayor o restricción normativa' },
+  { value: 'S', label: 'S — Siniestrado / fuera de control', group: 'fuera_control', helpText: 'Robo, pérdida total o incautación. NO cuenta en disponibilidad: se excluye del cálculo en vez de sumarse a los días caídos' },
 ]
 
 export function CambiarEstadoModal({ open, onClose, activo, estadoInicial, fechaInicial }: CambiarEstadoModalProps) {
@@ -260,6 +261,8 @@ export function CambiarEstadoModal({ open, onClose, activo, estadoInicial, fecha
   }, [nuevoEstado])
 
   const requiereOT = nuevoEstado === 'M' || nuevoEstado === 'T' || nuevoEstado === 'F'
+  // 'S' es lo contrario de una OT: el equipo no está y no hay nada que reparar.
+  const fueraDeControl = nuevoEstado === 'S'
   // La verificación ready-to-rent solo se ADVIERTE (no bloquea) al TRANSICIONAR
   // a disponible, y solo si el equipo NO estaba ya disponible. La gestión de la
   // verificación la hace el planificador (decisión Manuel 2026-07-22); aquí solo
@@ -502,6 +505,11 @@ export function CambiarEstadoModal({ open, onClose, activo, estadoInicial, fecha
           </optgroup>
           <optgroup label="Mantención / Servicio">
             {ESTADO_OPTIONS.filter((o) => o.group === 'mantencion').map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </optgroup>
+          <optgroup label="Fuera de control (no cuenta en disponibilidad)">
+            {ESTADO_OPTIONS.filter((o) => o.group === 'fuera_control').map((o) => (
               <option key={o.value} value={o.value}>{o.label}</option>
             ))}
           </optgroup>
@@ -932,6 +940,25 @@ export function CambiarEstadoModal({ open, onClose, activo, estadoInicial, fecha
               <strong>Atención:</strong> al pasar este equipo a Fuera de Servicio
               estando con cliente, se generará automáticamente una <em>no
               conformidad</em> que afectará el indicador de Calidad de Servicio.
+            </div>
+          </div>
+        )}
+
+        {/* ── Aviso al marcar S ── */}
+        {fueraDeControl && (
+          <div className="flex gap-2 rounded-lg border border-slate-300 bg-slate-50 p-3 text-sm text-slate-800">
+            <AlertTriangle className="h-5 w-5 shrink-0" />
+            <div>
+              <strong>Sale del cálculo de disponibilidad.</strong> Los días en
+              este estado no cuentan como disponibles ni como detenidos: se
+              excluyen del denominador, porque el equipo dejó de ser flota
+              operable y no hay mantención que pueda recuperarlo.
+              <div className="mt-1">
+                No se crea OT ni no conformidad. El equipo sigue visible en el
+                Panel de Gerencia, en el bloque <em>Fuera de flota</em>, con los
+                días transcurridos y el motivo. Describe en el motivo la denuncia
+                o el siniestro: es lo que después se lee en ese bloque.
+              </div>
             </div>
           </div>
         )}

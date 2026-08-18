@@ -294,6 +294,26 @@ export type Excepcion = {
   tiene_plan: boolean
 }
 
+/**
+ * Equipo en estado 'S' (robo, siniestro total, incautación). Sus días se
+ * excluyen del cálculo de disponibilidad —no se suman a los detenidos— pero el
+ * equipo NO desaparece del panel: sigue habiendo un seguro y un contrato que
+ * alguien tiene que cerrar. Ver MIG306.
+ */
+export type FueraDeFlota = {
+  activo_id: string
+  codigo: string
+  patente: string | null
+  nombre: string | null
+  operacion: string
+  desde: string
+  dias: number
+  dias_en_periodo: number
+  motivo: string | null
+  cliente_actual: string | null
+  contrato_activo: boolean
+}
+
 export type Compromiso = {
   id: string
   semana: string
@@ -329,6 +349,8 @@ export type PanelGerencia = {
   excepciones: Excepcion[]
   /** Planes de acción de todos los ámbitos, consolidados (MIG305). */
   compromisos: Compromiso[]
+  /** Equipos excluidos del cálculo de disponibilidad, pero a la vista (MIG306). */
+  fuera_de_flota: FueraDeFlota[]
   coquimbo: {
     taller: PanelTaller
     combustible: CombustibleCoquimbo

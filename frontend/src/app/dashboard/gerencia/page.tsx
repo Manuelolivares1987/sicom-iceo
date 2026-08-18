@@ -17,6 +17,7 @@ import { ComentarioEditor, fmtFecha, iso, lunesDe } from '@/components/gerencia/
 import { BandaCalidad, FranjaKpi } from '@/components/gerencia/portada'
 import { PanelExcepciones } from '@/components/gerencia/excepciones'
 import { PanelCompromisos } from '@/components/gerencia/compromisos'
+import { PanelFueraDeFlota } from '@/components/gerencia/fuera-de-flota'
 import {
   CuadranteCalama, CuadranteCoquimbo,
 } from '@/components/gerencia/detalle-cuadrantes'
@@ -157,6 +158,9 @@ export default function PanelGerenciaPage() {
             guardando={guardar.isPending}
             onGuardarPlan={guardarPlanDeExcepcion}
           />
+
+          {/* 3b · Lo que se sacó del cálculo, para que no desaparezca */}
+          <PanelFueraDeFlota equipos={data.fuera_de_flota} />
 
           {/* 4 · ¿Quién responde por qué? */}
           <div className="grid gap-4 lg:grid-cols-3">

@@ -2,12 +2,14 @@ import { supabase } from '@/lib/supabase'
 
 // ── Estados del dia (estado_codigo) ────────────────────────
 export type EstadoCodigo =
-  | 'A' | 'C' | 'D' | 'H' | 'R' | 'M' | 'T' | 'F' | 'V' | 'U' | 'L'
+  | 'A' | 'C' | 'D' | 'H' | 'R' | 'M' | 'T' | 'F' | 'V' | 'U' | 'L' | 'S'
 
 export const ESTADO_CODIGO_LABELS: Record<EstadoCodigo, string> = {
   A: 'Arrendado', C: 'En contrato', D: 'Disponible', H: 'Habilitación',
   R: 'Recepción', M: 'Mantención', T: 'Taller', F: 'Fuera de servicio',
   V: 'Venta', U: 'Uso interno', L: 'Leasing',
+  // 'S' NO cuenta en disponibilidad: se excluye del denominador (MIG306).
+  S: 'Siniestrado / fuera de control',
 }
 
 export const ESTADO_CODIGO_COLORS: Record<EstadoCodigo, string> = {
@@ -22,10 +24,11 @@ export const ESTADO_CODIGO_COLORS: Record<EstadoCodigo, string> = {
   V: 'bg-pink-100 text-pink-700 border-pink-300',
   U: 'bg-teal-100 text-teal-700 border-teal-300',
   L: 'bg-violet-100 text-violet-700 border-violet-300',
+  S: 'bg-slate-200 text-slate-700 border-slate-400',
 }
 
 export const ESTADO_CODIGO_ORDEN: EstadoCodigo[] =
-  ['A', 'C', 'L', 'U', 'D', 'R', 'H', 'M', 'T', 'F', 'V']
+  ['A', 'C', 'L', 'U', 'D', 'R', 'H', 'M', 'T', 'F', 'V', 'S']
 
 // ── Tipos ──────────────────────────────────────────────────
 export interface PropuestaCierreRow {
