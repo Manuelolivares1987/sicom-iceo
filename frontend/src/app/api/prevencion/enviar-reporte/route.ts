@@ -40,10 +40,12 @@ type Item = {
 const ESTADO_UI: Record<string, { label: string, color: string, fondo: string, orden: number }> = {
   vencido:       { label: 'VENCIDO',    color: '#B91C1C', fondo: '#FEE2E2', orden: 1 },
   sin_dato:      { label: 'SIN DATO',   color: '#B91C1C', fondo: '#FEE2E2', orden: 2 },
-  observado:     { label: 'OBSERVADO',  color: '#C2410C', fondo: '#FFEDD5', orden: 3 },
-  por_vencer_30: { label: '≤ 30 días',  color: '#B45309', fondo: '#FEF3C7', orden: 4 },
-  por_vencer_60: { label: '≤ 60 días',  color: '#4D7C0F', fondo: '#ECFCCB', orden: 5 },
-  vigente:       { label: 'Vigente',    color: '#15803D', fondo: '#DCFCE7', orden: 6 },
+  por_vencer_7:  { label: 'ESTA SEMANA',color: '#B91C1C', fondo: '#FEE2E2', orden: 3 },
+  observado:     { label: 'OBSERVADO',  color: '#C2410C', fondo: '#FFEDD5', orden: 4 },
+  por_vencer_14: { label: '≤ 14 días',  color: '#C2410C', fondo: '#FFEDD5', orden: 5 },
+  por_vencer_30: { label: '≤ 30 días',  color: '#B45309', fondo: '#FEF3C7', orden: 6 },
+  por_vencer_60: { label: '≤ 60 días',  color: '#4D7C0F', fondo: '#ECFCCB', orden: 7 },
+  vigente:       { label: 'Vigente',    color: '#15803D', fondo: '#DCFCE7', orden: 8 },
 }
 
 const esc = (s: unknown) =>
@@ -130,8 +132,10 @@ export async function POST(req: Request) {
   }
 
   // ── 4. Correo ──
-  const vencidos = items.filter((i) => i.estado === 'vencido' || i.estado === 'sin_dato')
-  const resto = items.filter((i) => i.estado !== 'vencido' && i.estado !== 'sin_dato')
+  // Lo que vence dentro de 7 dias va arriba junto a lo vencido: en la practica
+  // ya es urgente, porque agendar con el laboratorio toma dias.
+  const vencidos = items.filter((i) => ['vencido','sin_dato','por_vencer_7'].includes(i.estado))
+  const resto = items.filter((i) => !['vencido','sin_dato','por_vencer_7'].includes(i.estado))
 
   const fila = (i: Item) => {
     const st = ESTADO_UI[i.estado] ?? ESTADO_UI.por_vencer_60
@@ -174,7 +178,7 @@ export async function POST(req: Request) {
       </p>
       ${body.mensaje ? `<div style="margin:12px 0;padding:10px 12px;background:#F1F5F9;
           border-left:3px solid #64748B;border-radius:4px;white-space:pre-wrap">${esc(body.mensaje)}</div>` : ''}
-      ${tabla('Vencidos o sin registro', vencidos, '#B91C1C', '#FEE2E2')}
+      ${tabla('Vencidos, sin registro o que vencen esta semana', vencidos, '#B91C1C', '#FEE2E2')}
       ${tabla('Por vencer u observados', resto, '#B45309', '#FEF3C7')}
       <p style="margin:16px 0 0;font-size:12px;color:#888">
         Enviado desde SICOM-ICEO por ${esc(quien)} ·

@@ -22,8 +22,9 @@ import { supabase } from '@/lib/supabase'
 type Dash = {
   generado_at: string
   personal: {
-    personas: number, no_conformes: number, observados: number,
+    personas: number, no_conformes: number, criticos: number, observados: number,
     por_vencer: number, conformes: number, exam_vencidos: number, exam_sin_dato: number
+    exam_criticos: number
   }
   personal_urgente: {
     persona: string, rut: string, tipo: string,
@@ -127,7 +128,8 @@ export function PrevencionDashboard() {
             sub="vencidos o sin dato" href="/dashboard/prevencion/personal" />
           <Kpi label="Observados" value={p.observados} tone="warn"
             sub="mandante no acepta" href="/dashboard/prevencion/personal" />
-          <Kpi label="Por vencer" value={p.por_vencer} tone="warn" sub="≤30 días" />
+          <Kpi label="Vence esta semana" value={p.exam_criticos} tone="bad"
+            sub="≤7 días" href="/dashboard/prevencion/personal" />
           <Kpi label="Conformes" value={p.conformes} tone="ok" />
         </div>
 
