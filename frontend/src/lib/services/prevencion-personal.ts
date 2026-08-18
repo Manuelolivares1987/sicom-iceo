@@ -17,7 +17,7 @@ import { supabase } from '@/lib/supabase'
  *                  incumplimiento, nunca conformidad.
  */
 export type EstadoExamen =
-  | 'vigente' | 'por_vencer_60' | 'por_vencer_30'
+  | 'vigente' | 'por_vencer_60' | 'por_vencer_30' | 'por_vencer_14' | 'por_vencer_7'
   | 'vencido' | 'sin_dato' | 'observado' | 'no_aplica'
 
 export type ExamenPersona = {
@@ -65,7 +65,10 @@ export type PersonaControl = {
   vigentes: number
   no_aplica: number
   proximo_vencimiento: string | null
-  estado_general: 'no_conforme' | 'observado' | 'por_vencer' | 'conforme'
+  /** El peor estado de sus ítems. 'critico' = algo vence dentro de 7 días. */
+  estado_general: 'no_conforme' | 'critico' | 'observado' | 'por_vencer' | 'conforme'
+  /** Días hasta el vencimiento más próximo que aún cuenta. Ordena a quién llamar primero. */
+  dias_al_proximo: number | null
   examenes: ExamenPersona[]
 }
 
@@ -75,12 +78,14 @@ export type ControlDocumental = {
   resumen: {
     personas: number
     no_conformes: number
+    criticos: number
     observados: number
     por_vencer: number
     conformes: number
     examenes_vencidos: number
     examenes_sin_dato: number
     examenes_observados: number
+    examenes_criticos: number
   }
   personas: PersonaControl[]
   faenas: { faena: string, personas: number }[]

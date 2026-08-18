@@ -4,7 +4,7 @@ import { useState } from 'react'
 import {
   ShieldAlert, Search, AlertTriangle, CheckCircle2, Clock, Ban,
   FileWarning, ChevronDown, ChevronRight, Save, Pencil,
-  Upload, Paperclip, History, Mail, Trash2, Plus,
+  Upload, Paperclip, History, Mail, Trash2, Plus, AlarmClock,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -25,10 +25,16 @@ import type { PersonaControl, ExamenPersona, EstadoExamen } from '@/lib/services
 // de un vencimiento hasta que alguien la abría.
 // ============================================================================
 
+// El color y la etiqueta salen de la MISMA escala que decide la cadencia del
+// correo (fn_prevencion_nivel_alerta, MIG304). Antes la pantalla agrupaba todo
+// 1-30 días en un solo cajón y quien vencía en 4 se veía igual que quien vencía
+// en 28: imposible saber a quién llamar primero.
 const ESTADO: Record<EstadoExamen, { label: string, clase: string }> = {
   vencido:       { label: 'Vencido',     clase: 'bg-red-100 text-red-800 border-red-200' },
   sin_dato:      { label: 'Sin dato',    clase: 'bg-red-50 text-red-700 border-red-200' },
+  por_vencer_7:  { label: 'ESTA SEMANA', clase: 'bg-red-600 text-white border-red-700' },
   observado:     { label: 'Observado',   clase: 'bg-orange-100 text-orange-800 border-orange-200' },
+  por_vencer_14: { label: '≤14 días',    clase: 'bg-orange-100 text-orange-800 border-orange-300' },
   por_vencer_30: { label: '≤30 días',    clase: 'bg-amber-100 text-amber-800 border-amber-200' },
   por_vencer_60: { label: '≤60 días',    clase: 'bg-yellow-50 text-yellow-800 border-yellow-200' },
   vigente:       { label: 'Vigente',     clase: 'bg-emerald-50 text-emerald-800 border-emerald-200' },
@@ -37,6 +43,7 @@ const ESTADO: Record<EstadoExamen, { label: string, clase: string }> = {
 
 const GENERAL: Record<PersonaControl['estado_general'], { label: string, clase: string, icon: any }> = {
   no_conforme: { label: 'No conforme', clase: 'border-red-300 bg-red-50',       icon: AlertTriangle },
+  critico:     { label: 'Vence esta semana', clase: 'border-red-400 bg-red-50', icon: AlarmClock },
   observado:   { label: 'Observado',   clase: 'border-orange-300 bg-orange-50', icon: FileWarning },
   por_vencer:  { label: 'Por vencer',  clase: 'border-amber-300 bg-amber-50',   icon: Clock },
   conforme:    { label: 'Conforme',    clase: 'bg-card',                        icon: CheckCircle2 },
@@ -707,12 +714,26 @@ export default function ControlDocumentalPersonalPage() {
             <Kpi label="Personas" value={data.resumen.personas} tone="neutral" />
             <Kpi label="No conformes" value={data.resumen.no_conformes} tone="bad"
               sub="vencidos o sin dato" />
+            <Kpi label="Vence esta semana" value={data.resumen.examenes_criticos} tone="bad"
+              sub="≤7 días — hay que actuar ya" />
             <Kpi label="Observados" value={data.resumen.observados} tone="warn"
               sub="mandante no acepta" />
-            <Kpi label="Por vencer" value={data.resumen.por_vencer} tone="warn" sub="≤30 días" />
+            <Kpi label="Por vencer" value={data.resumen.por_vencer} tone="warn" sub="8 a 30 días" />
             <Kpi label="Conformes" value={data.resumen.conformes} tone="ok" />
-            <Kpi label="Exámenes vencidos" value={data.resumen.examenes_vencidos} tone="bad" />
           </div>
+
+          {data.resumen.examenes_criticos > 0 && (
+            <div className="flex items-start gap-2 rounded-lg border-2 border-red-400 bg-red-50 px-3 py-2 text-sm text-red-900">
+              <AlarmClock className="mt-0.5 h-4 w-4 shrink-0" />
+              <span>
+                <b>{data.resumen.examenes_criticos} documento
+                {data.resumen.examenes_criticos === 1 ? '' : 's'} vence
+                {data.resumen.examenes_criticos === 1 ? '' : 'n'} dentro de 7 días.</b>{' '}
+                Renovar un examen toma días de agenda con el laboratorio: si se
+                deja para el vencimiento, la persona queda sin poder entrar a faena.
+              </span>
+            </div>
+          )}
 
           {data.resumen.no_conformes > 0 && (
             <div className="flex items-start gap-2 rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-900">
