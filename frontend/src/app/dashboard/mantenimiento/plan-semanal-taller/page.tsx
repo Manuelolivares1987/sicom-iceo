@@ -9,6 +9,7 @@ import {
   Calendar, ArrowLeft, ChevronLeft, ChevronRight, Lock, Unlock, AlertTriangle, Trash2, User,
   Play, Pause, CheckCircle2, BarChart3, ShieldAlert, RefreshCw, Wrench, Layers, FileSpreadsheet,
   Truck, Mail, Pencil, Plus, Clock, Camera, ExternalLink, ListChecks, Upload, Package, X, Search,
+  Smartphone,
 } from 'lucide-react'
 import { exportarPlanSemanalExcel, descargarBlob } from '@/lib/export/plan-semanal-excel'
 import { buildPlanSemanalTallerEmailHtml } from '@/lib/email/plan-semanal-taller-email'
@@ -491,6 +492,15 @@ export default function PlanSemanalTallerPage() {
           >
             {descargarSemana.isPending ? <Spinner className="h-4 w-4 mr-1" /> : <Upload className="h-4 w-4 mr-1 rotate-180" />}
             Descargar semana
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => window.open('/m/taller', '_blank', 'noopener')}
+            title="Abre la misma pantalla que ve el mecánico en su teléfono, con todas las OTs liberadas"
+          >
+            <Smartphone className="h-4 w-4 mr-1" />
+            Ver como el mecánico
           </Button>
           {otsSinLiberar.length > 0 && (
             <Button
@@ -2097,15 +2107,40 @@ function JornadaCard({ jornada, onAsignar, onDetalle, onQuitar, onIniciar, onPau
         {jornada.avance_objetivo_pct && (
           <div className="text-[9px] text-gray-500 mt-0.5">Meta {jornada.avance_objetivo_pct}%</div>
         )}
-        {(jornada.checklist_total ?? 0) > 0 && (
-          <div className="flex items-center gap-1 mt-0.5 text-[9px] text-gray-500">
-            <ListChecks className="h-3 w-3" />
-            {jornada.checklist_completados ?? 0}/{jornada.checklist_total} tareas
-            {(jornada.tiempo_estimado_total_min ?? 0) > 0 && (
-              <span className="ml-1">· {Math.round((jornada.tiempo_estimado_total_min ?? 0))}min</span>
-            )}
-          </div>
-        )}
+        {(jornada.checklist_total ?? 0) > 0 && (() => {
+          const hechos = jornada.checklist_completados ?? 0
+          const total  = jornada.checklist_total ?? 0
+          const pct    = total > 0 ? Math.round((hechos / total) * 100) : 0
+          // Liberada y sin un solo ítem marcado es la señal que hay que ver de
+          // lejos: el mecánico la tiene en el teléfono y no la ha empezado.
+          const sinEmpezar = Boolean(jornada.preparacion_ok_at) && hechos === 0 && !finalizada
+          const barra = pct >= 90 ? 'bg-green-500'
+                      : pct >= 40 ? 'bg-amber-500'
+                      : sinEmpezar ? 'bg-red-400' : 'bg-gray-300'
+          return (
+            <div className="mt-1">
+              <div className="flex items-center gap-1 text-[9px] text-gray-600">
+                <ListChecks className="h-3 w-3" />
+                <span className="font-semibold tabular-nums">{hechos}/{total}</span>
+                <span>ítems</span>
+                <span className="ml-auto font-bold tabular-nums">{pct}%</span>
+              </div>
+              <div className="mt-0.5 h-1.5 w-full overflow-hidden rounded-full bg-gray-200">
+                <div className={`h-full ${barra}`} style={{ width: `${Math.max(pct, 2)}%` }} />
+              </div>
+              {sinEmpezar && (
+                <div className="mt-0.5 text-[9px] font-semibold text-red-600">
+                  liberada · sin iniciar
+                </div>
+              )}
+              {(jornada.tiempo_estimado_total_min ?? 0) > 0 && (
+                <div className="text-[9px] text-gray-400">
+                  {Math.round(jornada.tiempo_estimado_total_min ?? 0)} min estimados
+                </div>
+              )}
+            </div>
+          )
+        })()}
       </div>
 
       {/* Acciones */}
