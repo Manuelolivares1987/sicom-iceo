@@ -653,7 +653,9 @@ export default function PlanSemanalTallerPage() {
               {/* Recepción por planificar (marcadas 'R' en Sugerencias de estado) */}
               <RecepcionPorPlanificarCard items={recepciones ?? []} />
 
-              {/* Correctivos de recepción por agendar (NC ya planificadas) */}
+              {/* NC ya planificadas (OT creada) esperando día en el plan.
+                  Llegan de CUALQUIER origen —inspección, ejecución, auditoría,
+                  checklist del cliente, recepción— no sólo de recepción. */}
               <NcOtPorAgendarCard items={ncOts ?? []} />
 
               {/* Preventivas sugeridas (arrástralas a un día) */}
@@ -1157,13 +1159,19 @@ function NcOtPorAgendarCard({ items }: { items: NcOtPorAgendar[] }) {
     <Card className="border-orange-200">
       <CardHeader className="pb-2">
         <CardTitle className="text-sm flex items-center gap-2 text-orange-800">
-          <AlertTriangle className="h-4 w-4" /> Correctivos de recepción por agendar ({items.length})
-          <span className="text-[10px] font-normal text-gray-400">— No Conformidades ya planificadas (con recursos). Arrástralas a un día.</span>
+          <AlertTriangle className="h-4 w-4" /> No conformidades por agendar ({items.length})
+          <span className="text-[10px] font-normal text-gray-400">
+            — OT correctivas creadas desde NC en la bandeja de No Conformidades.
+            Arrástralas a un día para que el mecánico las vea.
+          </span>
         </CardTitle>
       </CardHeader>
       <CardContent className="p-2">
         {items.length === 0 ? (
-          <div className="text-xs text-gray-400 p-3 text-center">Sin correctivos de recepción pendientes de agendar.</div>
+          <div className="text-xs text-gray-400 p-3 text-center">
+            Sin NC pendientes de agendar. Las que aún no tienen OT se planifican en
+            Mantenimiento → No Conformidades.
+          </div>
         ) : (
           <div className="flex gap-2 overflow-x-auto pb-1">
             {items.map((n) => <NcOtCard key={n.ot_id} n={n} />)}
