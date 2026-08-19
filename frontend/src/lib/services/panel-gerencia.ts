@@ -216,6 +216,124 @@ export type Comentario = {
   updated_at: string
 }
 
+// ============================================================================
+// Portada del panel (MIG305)
+// ----------------------------------------------------------------------------
+// Tres bloques que no existían y que son los que hacen que el panel se pueda
+// leer de arriba abajo: el resumen del negocio completo con su período
+// anterior, la lista única de lo que está fuera de norma, y los compromisos
+// consolidados con estado propio.
+// ============================================================================
+
+/** Cada KPI trae su valor y el del mismo tramo del mes anterior. */
+export type PanelResumen = {
+  periodo: { desde: string, hasta: string }
+  periodo_anterior: { desde: string, hasta: string }
+  dias_comparados: number
+  disponibilidad: {
+    actual: number | null
+    anterior: number | null
+    meta: number
+    equipos: number
+    bajo_meta: number
+  }
+  taller: {
+    creadas: number
+    cerradas: number
+    creadas_ant: number
+    cerradas_ant: number
+    abiertas_total: number
+    arrastre: number
+    sin_responsable: number
+  }
+  nc: {
+    creadas: number
+    creadas_ant: number
+    abiertas: number
+    criticas: number
+  }
+  enex: {
+    actual: number | null
+    anterior: number | null
+    faenas: number
+    sin_plan: number
+    facturacion_sin_control: number
+    facturacion_total: number | null
+  }
+  combustible: {
+    litros: number
+    litros_ant: number
+    puntos_fuera: number
+    con_cierre: number
+    /** Fracción: 0.0206 = 2,06%. */
+    fluctuacion_peor_pct: number | null
+  }
+  compromisos: { pendientes: number, vencidos: number, cumplidos: number }
+}
+
+export type SeveridadExcepcion = 'critica' | 'alta' | 'media'
+
+/**
+ * Una desviación concreta que alguien tiene que resolver. Viene ya ordenada de
+ * la base por severidad y, dentro de la misma severidad, por plata en juego y
+ * por si tiene o no plan de acción escrito.
+ */
+export type Excepcion = {
+  clave: string
+  cuadrante: 'coquimbo' | 'calama' | 'global'
+  categoria: 'equipo' | 'contrato' | 'combustible' | 'taller' | 'dato'
+  severidad: SeveridadExcepcion
+  orden: number
+  titulo: string
+  detalle: string
+  metrica: string
+  impacto_clp: number | null
+  href: string | null
+  activo_id: string | null
+  enex_faena_id: string | null
+  tiene_plan: boolean
+}
+
+/**
+ * Equipo en estado 'S' (robo, siniestro total, incautación). Sus días se
+ * excluyen del cálculo de disponibilidad —no se suman a los detenidos— pero el
+ * equipo NO desaparece del panel: sigue habiendo un seguro y un contrato que
+ * alguien tiene que cerrar. Ver MIG306.
+ */
+export type FueraDeFlota = {
+  activo_id: string
+  codigo: string
+  patente: string | null
+  nombre: string | null
+  operacion: string
+  desde: string
+  dias: number
+  dias_en_periodo: number
+  motivo: string | null
+  cliente_actual: string | null
+  contrato_activo: boolean
+}
+
+export type Compromiso = {
+  id: string
+  semana: string
+  ambito: 'semana' | 'cuadrante' | 'equipo' | 'faena_enex'
+  cuadrante: string | null
+  activo_id: string | null
+  enex_faena_id: string | null
+  /** Código de equipo, nombre de faena o del cuadrante. */
+  referencia: string
+  plan_accion: string
+  texto: string | null
+  responsable: string | null
+  fecha_compromiso: string | null
+  compromiso_estado: 'pendiente' | 'cumplido' | 'anulado'
+  cumplido_at: string | null
+  dias_restantes: number | null
+  vencido: boolean
+  antiguedad_dias: number
+}
+
 export type PanelGerencia = {
   semana: {
     inicio: string
@@ -225,6 +343,14 @@ export type PanelGerencia = {
     generado_at: string
   }
   calidad_dato: CalidadDato
+  /** Portada: KPI del negocio completo con comparación (MIG305). */
+  resumen: PanelResumen
+  /** Lo que está fuera de norma, ya ordenado por severidad (MIG305). */
+  excepciones: Excepcion[]
+  /** Planes de acción de todos los ámbitos, consolidados (MIG305). */
+  compromisos: Compromiso[]
+  /** Equipos excluidos del cálculo de disponibilidad, pero a la vista (MIG306). */
+  fuera_de_flota: FueraDeFlota[]
   coquimbo: {
     taller: PanelTaller
     combustible: CombustibleCoquimbo
@@ -242,7 +368,14 @@ export type PanelGerencia = {
     facturacion_total: number | null
     faenas_sin_plan: number
     taller: PanelTaller
-    disponibilidad: { equipos: number, promedio: number | null }
+    disponibilidad: {
+      equipos: number
+      promedio: number | null
+      // MIG305 los agregó también en Calama: antes sólo Coquimbo tenía detalle,
+      // lo que hacía que el cuadrante se viera vacío sin estarlo.
+      bajo_90: number
+      detalle: EquipoDisponibilidad[]
+    }
     detenidos: EquipoDetenido[]
     comentario: Comentario | null
   }
@@ -348,6 +481,22 @@ export async function corregirFluctuacionPunto(i: CorregirFluctuacionInput) {
     p_dias_cuadrados: i.diasCuadrados ?? null,
     p_observacion: i.observacion ?? null,
     p_motivo: i.motivo,
+  })
+  if (error) throw error
+  return data
+}
+
+/**
+ * Cierra, anula o reabre un compromiso. Sin esto la lista de planes de acción
+ * sólo crece y a la tercera semana nadie la mira.
+ */
+export async function cambiarEstadoCompromiso(
+  id: string,
+  estado: 'pendiente' | 'cumplido' | 'anulado',
+) {
+  const { data, error } = await supabase.rpc('fn_panel_compromiso_estado', {
+    p_id: id,
+    p_estado: estado,
   })
   if (error) throw error
   return data

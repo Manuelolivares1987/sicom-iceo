@@ -98,17 +98,19 @@ export default function MecanicoHomePage() {
 
   const conMiNombre = useMemo(() => (ots ?? []).filter(esMia).length, [ots, esMia])
 
+  // Todos ven TODAS las OTs liberadas; el nombre sólo ordena y filtra.
+  //
+  // Antes, un perfil que no fuera operador_taller caía en `if (!mecanico)
+  // return []` y veía la pantalla vacía: el jefe y el administrador no tenían
+  // forma de mirar la ejecución del personal, ni siquiera entrando a la URL.
+  // Además el filtro era por `cuadrilla`, así que las OTs sin cuadrilla
+  // asignada eran invisibles para cualquier nombre que se eligiera.
   const misOts = useMemo(() => {
     const list = ots ?? []
-    if (esOperador) {
-      if (soloMias) return list.filter(esMia)
-      // Todas, pero las del mecánico elegido primero.
-      return [...list].sort((a, b) => Number(esMia(b)) - Number(esMia(a)))
-    }
-    if (!mecanico) return []
-    const m = mecanico.toLowerCase()
-    return list.filter((o) => (o.cuadrilla ?? '').toLowerCase().includes(m))
-  }, [ots, mecanico, esOperador, soloMias, esMia])
+    if (soloMias) return list.filter(esMia)
+    // Todas, pero las del mecánico elegido primero.
+    return [...list].sort((a, b) => Number(esMia(b)) - Number(esMia(a)))
+  }, [ots, soloMias, esMia])
 
   // Agrupar por día (fecha_programada), igual que el plan del jefe de taller.
   // Los días ordenados cronológicamente; "sin fecha" al final. Dentro de cada
@@ -153,7 +155,7 @@ export default function MecanicoHomePage() {
           <div>
             <h1 className="text-base font-bold text-gray-900 leading-tight">Taller — Mecánico</h1>
             <p className="text-[11px] text-gray-500">
-              {esOperador ? (mecanico || 'Elige tu nombre') : 'Checklist de ejecución'}
+              {esOperador ? (mecanico || 'Elige tu nombre') : 'Supervisión de ejecución'}
             </p>
           </div>
         </div>
@@ -184,9 +186,9 @@ export default function MecanicoHomePage() {
         )}
       </div>
 
-      {/* Filtro del operador: todas las liberadas vs. las que traen su nombre */}
-      {esOperador && (
-        <div className="flex gap-2">
+      {/* Todas las liberadas vs. las que traen el nombre elegido. El jefe y el
+          administrador lo usan para supervisar sin hacerse pasar por nadie. */}
+      <div className="flex gap-2">
           <button onClick={() => setSoloMias(false)}
                   className={`rounded-full px-3 py-1.5 text-sm border ${
                     !soloMias ? 'bg-orange-600 text-white border-orange-600'
@@ -197,20 +199,19 @@ export default function MecanicoHomePage() {
                   className={`rounded-full px-3 py-1.5 text-sm border ${
                     soloMias ? 'bg-orange-600 text-white border-orange-600'
                              : 'bg-white text-gray-700 border-gray-300'}`}>
-            Con mi nombre ({conMiNombre})
+            {esOperador ? 'Con mi nombre' : 'Del mecánico elegido'} ({conMiNombre})
           </button>
-        </div>
-      )}
+      </div>
 
       {/* Selector de mecánico: en la cuenta compartida del operador cada uno
           elige su nombre (catálogo de técnicos); perfiles del dashboard usan
           la lista corta legacy. */}
       <div>
         <div className="flex items-center gap-1 mb-1 text-xs font-medium text-gray-500">
-          <User className="h-3.5 w-3.5" /> Soy:
+          <User className="h-3.5 w-3.5" /> {esOperador ? 'Soy:' : 'Destacar mecánico:'}
         </div>
         <div className="flex flex-wrap gap-2">
-          {(esOperador ? nombresPicker : [...MECANICOS]).map((m) => (
+          {nombresPicker.map((m) => (
             <button key={m} onClick={() => elegir(m)}
                     className={`rounded-full px-3 py-1.5 text-sm border ${
                       mecanico === m ? 'bg-orange-600 text-white border-orange-600'
@@ -238,24 +239,24 @@ export default function MecanicoHomePage() {
       {/* Lista */}
       <div className="flex items-center justify-between pt-1">
         <h2 className="text-sm font-semibold text-gray-700">
-          {esOperador ? (soloMias ? 'OTs con mi nombre' : 'OTs liberadas a ejecución') : 'Mis OTs liberadas'}
+          {soloMias
+            ? (esOperador ? 'OTs con mi nombre' : `OTs de ${mecanico || 'el mecánico elegido'}`)
+            : 'OTs liberadas a ejecución'}
         </h2>
         <button onClick={() => refetch()} className="text-gray-400 hover:text-gray-600" disabled={isFetching}>
           <RefreshCw className={`h-4 w-4 ${isFetching ? 'animate-spin' : ''}`} />
         </button>
       </div>
 
-      {!esOperador && !mecanico ? (
-        <p className="py-8 text-center text-sm text-gray-400">Elige tu nombre para ver tus OTs.</p>
-      ) : isLoading ? (
+      {isLoading ? (
         <div className="flex justify-center py-8"><Spinner /></div>
       ) : misOts.length === 0 ? (
         <p className="py-8 text-center text-sm text-gray-400">
-          {esOperador
-            ? (soloMias
-                ? (mecanico ? 'No hay OTs liberadas con tu nombre — revisa "Todas".' : 'Elige tu nombre arriba para ver tus OTs.')
-                : 'No hay OTs liberadas a ejecución.')
-            : 'No tienes OTs liberadas a ejecución.'}
+          {soloMias
+            ? (mecanico
+                ? `No hay OTs liberadas con el nombre de ${mecanico} — revisa "Todas".`
+                : 'Elige un nombre arriba, o revisa "Todas".')
+            : 'No hay OTs liberadas a ejecución. Libéralas desde el Plan Taller.'}
         </p>
       ) : (
         <div className="space-y-4">

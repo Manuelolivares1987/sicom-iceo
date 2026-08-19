@@ -4,6 +4,7 @@ import {
   guardarComentario,
   corregirResumenCombustible,
   corregirFluctuacionPunto,
+  cambiarEstadoCompromiso,
   type GuardarComentarioInput,
   type CorregirResumenInput,
   type CorregirFluctuacionInput,
@@ -41,6 +42,18 @@ export function useCorregirResumenCombustible(semana?: string) {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (input: CorregirResumenInput) => corregirResumenCombustible(input),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['panel-gerencia', semana ?? 'actual'] })
+    },
+  })
+}
+
+/** Marca un compromiso como cumplido / anulado, o lo reabre. */
+export function useEstadoCompromiso(semana?: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (v: { id: string, estado: 'pendiente' | 'cumplido' | 'anulado' }) =>
+      cambiarEstadoCompromiso(v.id, v.estado),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['panel-gerencia', semana ?? 'actual'] })
     },
