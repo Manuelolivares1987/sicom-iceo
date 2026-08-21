@@ -58,6 +58,19 @@ export const ESTADO_FLOTA_A_FICHA: Record<string, 'operativo' | 'en_mantenimient
   F: 'fuera_servicio', S: 'fuera_servicio',
 }
 
+// Qué equipos cierra el planificador todos los días. Es la misma lista que
+// filtra fn_sugerencias_estado_gps en la base: si no está aquí, el equipo NO
+// aparece en Sugerencias y su último estado puede ser de hace meses. Mostrarle
+// ese código a alguien sería peor que no mostrar nada — una bomba quedaría
+// marcada "en Taller" desde mayo.
+export const TIPOS_FLOTA_PLANIFICADOR = [
+  'camion_cisterna', 'camion', 'camioneta', 'lubrimovil', 'equipo_menor',
+] as const
+
+export function esFlotaDelPlanificador(tipo: string | null | undefined): boolean {
+  return !!tipo && (TIPOS_FLOTA_PLANIFICADOR as readonly string[]).includes(tipo)
+}
+
 export function estadoFlotaLabel(codigo: string | null | undefined): string {
   if (!codigo) return 'Sin estado'
   return ESTADO_FLOTA_LABEL[codigo] ?? codigo
