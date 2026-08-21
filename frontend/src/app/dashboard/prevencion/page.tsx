@@ -27,6 +27,7 @@ import {
   useRespelMovimientos,
   useCertificacionesBloqueantes,
 } from '@/hooks/use-prevencion'
+import { PortalesExternosCard } from '@/components/prevencion/portales-externos-card'
 
 function StatCard({
   label,
@@ -164,6 +165,9 @@ export default function PrevencionPage() {
           </Link>
         </div>
       </div>
+
+      {/* ── Lo que el mandante ve de nosotros ── */}
+      <PortalesExternosCard />
 
       {/* ── Alertas críticas ── */}
       {resumen && (resumen.certificaciones_vencidas > 0 || resumen.bodegas_autorizacion_vencida > 0 || resumen.documentos_vencidos > 0) && (
