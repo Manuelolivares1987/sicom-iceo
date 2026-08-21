@@ -24,6 +24,9 @@ export function useConfirmarEstado() {
       qc.invalidateQueries({ queryKey: ['fiabilidad-activo'] })
       qc.invalidateQueries({ queryKey: ['oee-fiabilidad-activo'] })
       qc.invalidateQueries({ queryKey: ['activos'] })
+      // MIG307: la ficha del equipo se sincroniza con lo confirmado aquí.
+      qc.invalidateQueries({ queryKey: ['activo'] })
+      qc.invalidateQueries({ queryKey: ['estados-planificador'] })
       qc.invalidateQueries({ queryKey: ['flota-vehicular'] })
     },
   })

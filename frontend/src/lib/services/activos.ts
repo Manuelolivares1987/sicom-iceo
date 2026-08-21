@@ -32,6 +32,27 @@ export async function getActivos(filters?: ActivoFilters) {
   return { data: data as Activo[] | null, error }
 }
 
+// ── Estado del planificador (MIG307) ───────────────────────────────────────
+// El estado que manda es el que el planificador confirma cada día en
+// Sugerencias GPS y queda en estado_diario_flota. activos.estado se sincroniza
+// desde ahí, pero habla otro idioma (operativo / en_mantenimiento / ...): para
+// que el listado de Activos diga lo mismo que ve el planificador se lee el
+// código directo.
+export interface EstadoPlanificador {
+  activo_id: string
+  estado_codigo: string | null
+  fecha_estado: string | null
+  confirmado_hoy: boolean | null
+  dias_desde_confirmacion: number | null
+}
+
+export async function getEstadosPlanificador() {
+  const { data, error } = await supabase
+    .from('v_activos_estado_planificador')
+    .select('activo_id, estado_codigo, fecha_estado, confirmado_hoy, dias_desde_confirmacion')
+  return { data: data as EstadoPlanificador[] | null, error }
+}
+
 export async function getActivoById(id: string) {
   const { data, error } = await supabase
     .from('activos')

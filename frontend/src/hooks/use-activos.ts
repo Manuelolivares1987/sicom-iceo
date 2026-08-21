@@ -14,6 +14,7 @@ import {
   getHistorialMantenimiento,
   getKPIActivo,
   getRankingActivos,
+  getEstadosPlanificador,
 } from '@/lib/services/activos'
 import type { Activo } from '@/types/database'
 
@@ -27,6 +28,21 @@ export function useActivos(filters?: Record<string, unknown>) {
       if (error) throw error
       return data
     },
+  })
+}
+
+// Estado confirmado por el planificador (Sugerencias GPS) para toda la flota,
+// en un solo viaje. Se cachea corto: el planificador cierra el día y quiere
+// verlo reflejado al volver al listado.
+export function useEstadosPlanificador() {
+  return useQuery({
+    queryKey: ['estados-planificador'],
+    queryFn: async () => {
+      const { data, error } = await getEstadosPlanificador()
+      if (error) throw error
+      return data ?? []
+    },
+    staleTime: 60_000,
   })
 }
 

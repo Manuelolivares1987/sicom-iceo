@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import Link from 'next/link'
 import {
@@ -28,7 +28,9 @@ import {
 } from '@/components/ui/table'
 import { Spinner } from '@/components/ui/spinner'
 import { cn, getSemaforoColor, getCriticidadColor } from '@/lib/utils'
-import { useActivos } from '@/hooks/use-activos'
+import { useActivos, useEstadosPlanificador } from '@/hooks/use-activos'
+import { EstadoFlotaPill } from '@/components/flota/estado-flota-pill'
+import { ESTADO_FLOTA_LABEL, ESTADO_FLOTA_OPCIONES } from '@/lib/estado-flota'
 import { getFaenas } from '@/lib/services/faenas'
 import type { Activo, TipoActivo, EstadoActivo, Criticidad } from '@/types/database'
 
@@ -54,13 +56,12 @@ const tipoOptions: { value: string; label: string }[] = [
   { value: 'equipo_menor', label: 'Equipo Menor' },
 ]
 
+// El filtro de estado usa los códigos del planificador (A/C/D/...), no los
+// estados internos de la ficha: es el mismo idioma de Sugerencias GPS, que es
+// donde el estado se decide (MIG307).
 const estadoOptions: { value: string; label: string }[] = [
   { value: '', label: 'Todos' },
-  { value: 'operativo', label: 'Operativo' },
-  { value: 'en_mantenimiento', label: 'En Mantenimiento' },
-  { value: 'fuera_servicio', label: 'Fuera de Servicio' },
-  { value: 'dado_baja', label: 'Dado de Baja' },
-  { value: 'en_transito', label: 'En Tránsito' },
+  ...ESTADO_FLOTA_OPCIONES.map((c) => ({ value: c, label: `${c} · ${ESTADO_FLOTA_LABEL[c]}` })),
 ]
 
 const criticidadOptions: { value: string; label: string }[] = [
@@ -104,10 +105,18 @@ const tipoLabels: Record<string, string> = {
   equipo_menor: 'Equipo Menor',
 }
 
+type EstadoPlan = {
+  activo_id: string
+  estado_codigo: string | null
+  fecha_estado: string | null
+  confirmado_hoy: boolean | null
+  dias_desde_confirmacion: number | null
+}
+
 // ---------------------------------------------------------------------------
 // Card sub-component
 // ---------------------------------------------------------------------------
-function ActivoCard({ activo }: { activo: Activo }) {
+function ActivoCard({ activo, estadoPlan }: { activo: Activo; estadoPlan?: EstadoPlan }) {
   const marcaNombre = activo.modelo?.marca?.nombre ?? ''
   const modeloNombre = activo.modelo?.nombre ?? ''
   const faenaNombre = activo.faena?.nombre ?? '—'
@@ -125,9 +134,20 @@ function ActivoCard({ activo }: { activo: Activo }) {
               <p className="text-xs text-gray-500">{activo.nombre ?? activo.codigo}</p>
             </div>
           </div>
-          <Badge variant={(activo.estado) as any}>
-            {estadoLabels[activo.estado] || activo.estado}
-          </Badge>
+          {estadoPlan?.estado_codigo ? (
+            <EstadoFlotaPill
+              codigo={estadoPlan.estado_codigo}
+              title={
+                estadoPlan.confirmado_hoy
+                  ? 'Confirmado hoy por el planificador'
+                  : `Último día cerrado por el planificador: ${estadoPlan.fecha_estado?.slice(0, 10) ?? '—'}`
+              }
+            />
+          ) : (
+            <Badge variant={(activo.estado) as any}>
+              {estadoLabels[activo.estado] || activo.estado}
+            </Badge>
+          )}
         </div>
 
         {/* Type & criticidad */}
@@ -135,8 +155,11 @@ function ActivoCard({ activo }: { activo: Activo }) {
           <span className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-semibold text-gray-600">
             {tipoLabels[activo.tipo] || activo.tipo}
           </span>
-          <Badge className={getCriticidadColor(activo.criticidad)}>
-            {criticidadLabels[activo.criticidad]}
+          <Badge
+            className={getCriticidadColor(activo.criticidad)}
+            title="Criticidad del equipo: cuánto duele que se detenga. No es una alarma ni el estado de hoy."
+          >
+            Criticidad {criticidadLabels[activo.criticidad]?.toLowerCase()}
           </Badge>
         </div>
 
@@ -190,24 +213,39 @@ export default function ActivosPage() {
     },
   })
 
-  // Build filters for the hook
+  // Build filters for the hook. El estado NO va al servidor: se filtra por el
+  // código del planificador, que vive en otra tabla (estado_diario_flota).
   const filters: Record<string, unknown> = {}
   if (tipoFilter) filters.tipo = tipoFilter
   if (faenaFilter) filters.faena_id = faenaFilter
-  if (estadoFilter) filters.estado = estadoFilter
   if (criticidadFilter) filters.criticidad = criticidadFilter
 
   const { data: activos, isLoading, error } = useActivos(filters)
+  const { data: estadosPlan } = useEstadosPlanificador()
 
-  // Client-side text search on top of server-filtered results
+  const estadoPorActivo = useMemo(() => {
+    const m: Record<string, EstadoPlan> = {}
+    for (const e of estadosPlan ?? []) m[e.activo_id] = e as EstadoPlan
+    return m
+  }, [estadosPlan])
+
+  // Client-side text search + estado del planificador
   const filtered = (activos ?? []).filter((a) => {
+    if (estadoFilter && estadoPorActivo[a.id]?.estado_codigo !== estadoFilter) return false
     if (!search) return true
     const s = search.toLowerCase()
     return (
       a.codigo.toLowerCase().includes(s) ||
-      (a.nombre ?? '').toLowerCase().includes(s)
+      (a.nombre ?? '').toLowerCase().includes(s) ||
+      (a.patente ?? '').toLowerCase().includes(s)
     )
   })
+
+  // Cuántos equipos aún no tienen el día cerrado: el planificador necesita
+  // saberlo sin ir a buscarlo a Sugerencias.
+  const sinCerrarHoy = (activos ?? []).filter(
+    (a) => estadoPorActivo[a.id] && !estadoPorActivo[a.id].confirmado_hoy,
+  ).length
 
   const faenaOptions: { value: string; label: string }[] = [
     { value: '', label: 'Todas' },
@@ -247,8 +285,22 @@ export default function ActivosPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">Activos</h1>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Activos</h1>
+          <p className="mt-1 text-sm text-gray-500">
+            El estado que se muestra es el que confirma el planificador en{' '}
+            <Link href="/dashboard/flota/sugerencias" className="font-medium text-pillado-green-600 hover:underline">
+              Sugerencias de estado (GPS)
+            </Link>
+            . La ficha no tiene un estado propio.
+            {sinCerrarHoy > 0 && (
+              <span className="ml-1 text-amber-600">
+                {sinCerrarHoy} equipo{sinCerrarHoy > 1 ? 's' : ''} sin cerrar el día de hoy.
+              </span>
+            )}
+          </p>
+        </div>
         <div className="flex gap-1 rounded-lg bg-gray-100 p-1">
           <button
             onClick={() => setViewMode('grid')}
@@ -329,7 +381,7 @@ export default function ActivosPage() {
       {!isLoading && !error && viewMode === 'grid' && (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {filtered.map((activo) => (
-            <ActivoCard key={activo.id} activo={activo} />
+            <ActivoCard key={activo.id} activo={activo} estadoPlan={estadoPorActivo[activo.id]} />
           ))}
         </div>
       )}
@@ -340,13 +392,15 @@ export default function ActivosPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Estado</TableHead>
+                <TableHead></TableHead>
+                <TableHead>Estado (planificador)</TableHead>
                 <TableHead>Código</TableHead>
+                <TableHead>Patente</TableHead>
                 <TableHead>Nombre</TableHead>
                 <TableHead>Tipo</TableHead>
                 <TableHead>Marca / Modelo</TableHead>
                 <TableHead>Faena</TableHead>
-                <TableHead>Criticidad</TableHead>
+                <TableHead>Criticidad (clasificación)</TableHead>
                 <TableHead className="text-right">Km / Hrs</TableHead>
               </TableRow>
             </TableHeader>
@@ -356,9 +410,24 @@ export default function ActivosPage() {
                   <TableCell>
                     <span className={cn('inline-flex h-3 w-3 rounded-full', getSemaforoColor(a.estado))} />
                   </TableCell>
+                  <TableCell>
+                    {estadoPorActivo[a.id]?.estado_codigo ? (
+                      <EstadoFlotaPill
+                        codigo={estadoPorActivo[a.id].estado_codigo}
+                        title={
+                          estadoPorActivo[a.id].confirmado_hoy
+                            ? 'Confirmado hoy por el planificador'
+                            : `Último día cerrado: ${estadoPorActivo[a.id].fecha_estado?.slice(0, 10) ?? '—'}`
+                        }
+                      />
+                    ) : (
+                      <span className="text-xs text-gray-400">{estadoLabels[a.estado] || a.estado}</span>
+                    )}
+                  </TableCell>
                   <TableCell className="font-mono text-xs font-semibold">
                     <Link href={`/dashboard/activos/${a.id}`} className="text-pillado-green-600 hover:underline">{a.codigo}</Link>
                   </TableCell>
+                  <TableCell className="font-mono text-xs text-gray-600">{a.patente ?? '—'}</TableCell>
                   <TableCell className="font-medium">
                     <Link href={`/dashboard/activos/${a.id}`} className="hover:text-pillado-green-600 hover:underline">{a.nombre ?? a.codigo}</Link>
                   </TableCell>
@@ -368,7 +437,10 @@ export default function ActivosPage() {
                   </TableCell>
                   <TableCell className="text-xs text-gray-500">{a.faena?.nombre ?? '—'}</TableCell>
                   <TableCell>
-                    <Badge className={getCriticidadColor(a.criticidad)}>
+                    <Badge
+                      className={getCriticidadColor(a.criticidad)}
+                      title="Criticidad del equipo: cuánto duele que se detenga. No es una alarma ni el estado de hoy."
+                    >
                       {criticidadLabels[a.criticidad]}
                     </Badge>
                   </TableCell>
