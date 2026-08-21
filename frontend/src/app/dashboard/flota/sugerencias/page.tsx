@@ -12,8 +12,11 @@ import { errorMessage, todayISO } from '@/lib/utils'
 import { useSugerenciasEstado, useConfirmarEstado } from '@/hooks/use-sugerencias-estado'
 import { CambiarEstadoModal } from '@/components/flota/cambiar-estado-modal'
 import { supabase } from '@/lib/supabase'
+import type { EstadoFlotaCodigo } from '@/lib/estado-flota'
+import { ESTADO_FLOTA_COLOR, ESTADO_FLOTA_LABEL, ESTADO_FLOTA_OPCIONES } from '@/lib/estado-flota'
+import { EstadoFlotaPill } from '@/components/flota/estado-flota-pill'
 
-type EstadoCodigo = 'A' | 'C' | 'D' | 'H' | 'R' | 'M' | 'T' | 'F' | 'V' | 'U' | 'L'
+type EstadoCodigo = EstadoFlotaCodigo
 type ActivoModal = {
   id: string
   patente?: string | null
@@ -26,23 +29,15 @@ type ActivoModal = {
   ubicacion_actual?: string | null
 }
 
-const COLOR: Record<string, string> = {
-  A: '#16A34A', C: '#15803D', L: '#4F46E5', U: '#0891B2', D: '#2563EB',
-  H: '#A855F7', R: '#06B6D4', M: '#F59E0B', T: '#FB923C', F: '#DC2626', V: '#9333EA',
-}
-const LABEL: Record<string, string> = {
-  A: 'Arrendado', C: 'En contrato', D: 'Disponible', H: 'Habilitación', R: 'Recepción',
-  M: 'Mantención', T: 'Taller', F: 'Fuera de servicio', V: 'Venta', U: 'Uso interno', L: 'Leasing',
-}
-const OPCIONES = ['A', 'C', 'D', 'H', 'R', 'M', 'T', 'F', 'U', 'L', 'V']
+// El vocabulario vive en @/lib/estado-flota: si se escribe aquí a mano vuelve
+// a pasar lo de 'S' (MIG306), que la lista lo mostraba como una píldora gris
+// sin nombre porque esta pantalla no lo conocía.
+const COLOR = ESTADO_FLOTA_COLOR
+const LABEL = ESTADO_FLOTA_LABEL
+const OPCIONES = ESTADO_FLOTA_OPCIONES
 
 function Pill({ e }: { e: string | null }) {
-  if (!e) return <span className="text-gray-300">—</span>
-  return (
-    <span className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs font-semibold text-white" style={{ background: COLOR[e] ?? '#9CA3AF' }}>
-      {e} · {LABEL[e] ?? e}
-    </span>
-  )
+  return <EstadoFlotaPill codigo={e} />
 }
 
 export default function SugerenciasEstadoPage() {

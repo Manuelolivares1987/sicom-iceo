@@ -71,7 +71,10 @@ export interface Activo {
   tipo: TipoActivo
   numero_serie: string | null
   criticidad: Criticidad
+  // Estado operativo de la ficha. Se sincroniza desde el estado que confirma
+  // el planificador en Sugerencias GPS (MIG307); no se edita a mano.
   estado: EstadoActivo
+  patente: string | null
   fecha_alta: string | null
   fecha_baja: string | null
   ubicacion_detalle: string | null
