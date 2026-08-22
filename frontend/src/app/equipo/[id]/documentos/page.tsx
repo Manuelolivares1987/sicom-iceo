@@ -3,7 +3,6 @@
 // Documentación vigente del equipo — pública, se llega desde el menú del QR.
 // Lista el último documento por tipo con su vigencia y el PDF para revisar.
 
-import { useState } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { useQuery } from '@tanstack/react-query'
@@ -16,7 +15,6 @@ import { supabase } from '@/lib/supabase'
 
 interface DocPublico {
   tipo: string
-  basico: boolean
   fecha_emision: string | null
   fecha_vencimiento: string | null
   dias_restantes: number | null
@@ -35,7 +33,6 @@ const ORDEN_ESTADO: Record<string, number> = { vencido: 0, por_vencer: 1, vigent
 export default function DocumentosEquipoPage() {
   const params = useParams()
   const id = params.id as string
-  const [verTecnicos, setVerTecnicos] = useState(false)
   const { data: ficha } = useFichaActivo(id)
   const { data: docs = [], isLoading } = useQuery({
     queryKey: ['docs-publicos', id],
@@ -49,18 +46,10 @@ export default function DocumentosEquipoPage() {
   })
 
   const f = ficha as any
-  // El RPC ya devuelve los básicos primero y en orden de lectura (MIG315).
-  // Acá sólo se separan en dos grupos: lo que habilita al camión a circular, y
-  // los certificados técnicos. Antes iban los 21 en una sola lista y el SOAP
-  // quedaba al mismo nivel que el inventario de neumáticos.
-  const ordenar = (arr: DocPublico[]) =>
-    [...arr].sort((a, b) =>
-      (ORDEN_ESTADO[a.estado] ?? 9) - (ORDEN_ESTADO[b.estado] ?? 9) ||
-      (TIPO_DOC_LABEL[a.tipo] ?? a.tipo).localeCompare(TIPO_DOC_LABEL[b.tipo] ?? b.tipo))
-  const basicos = docs.filter((d) => d.basico)
-  const tecnicos = ordenar(docs.filter((d) => !d.basico))
+  const ordenados = [...docs].sort((a, b) =>
+    (ORDEN_ESTADO[a.estado] ?? 9) - (ORDEN_ESTADO[b.estado] ?? 9) ||
+    (TIPO_DOC_LABEL[a.tipo] ?? a.tipo).localeCompare(TIPO_DOC_LABEL[b.tipo] ?? b.tipo))
   const vencidos = docs.filter((d) => d.estado === 'vencido').length
-  const basicosVencidos = basicos.filter((d) => d.estado === 'vencido').length
 
   return (
     <div className="flex min-h-screen items-start justify-center bg-gray-100 px-4 py-8">
@@ -84,31 +73,19 @@ export default function DocumentosEquipoPage() {
           </Link>
 
           {vencidos > 0 && (
-            <div className={cn(
-              'flex items-start gap-2 rounded-lg border px-3 py-2 text-xs font-medium',
-              basicosVencidos > 0
-                ? 'border-red-200 bg-red-50 text-red-700'
-                : 'border-amber-200 bg-amber-50 text-amber-800',
-            )}>
-              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-              <span>
-                {basicosVencidos > 0
-                  ? `${basicosVencidos} documento${basicosVencidos > 1 ? 's' : ''} del vehículo vencido${basicosVencidos > 1 ? 's' : ''}: el equipo no debería circular.`
-                  : `${vencidos} certificado${vencidos > 1 ? 's' : ''} técnico${vencidos > 1 ? 's' : ''} por renovar. La documentación del vehículo está al día.`}
-              </span>
+            <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
+              <AlertTriangle className="h-4 w-4 shrink-0" />
+              {vencidos} documento{vencidos > 1 ? 's' : ''} requiere{vencidos > 1 ? 'n' : ''} renovación.
             </div>
           )}
 
           {isLoading ? (
             <div className="flex justify-center py-10"><Spinner /></div>
-          ) : docs.length === 0 ? (
+          ) : ordenados.length === 0 ? (
             <p className="py-10 text-center text-sm text-gray-400">Este equipo aún no tiene documentos cargados.</p>
           ) : (
             <div className="space-y-1.5">
-              <p className="pt-1 text-[10px] font-bold uppercase tracking-wide text-gray-400">
-                Documentación del vehículo
-              </p>
-              {[...basicos, ...(verTecnicos ? tecnicos : [])].map((d) => {
+              {ordenados.map((d) => {
                 const ui = ESTADO_UI[d.estado] ?? ESTADO_UI.permanente
                 return (
                   <div key={d.tipo} className="flex items-center gap-2 rounded-lg border border-gray-100 bg-gray-50/60 px-2.5 py-2">
@@ -136,15 +113,6 @@ export default function DocumentosEquipoPage() {
                   </div>
                 )
               })}
-
-              {tecnicos.length > 0 && (
-                <button
-                  onClick={() => setVerTecnicos((v) => !v)}
-                  className="w-full py-2 text-[11px] font-semibold text-gray-500 hover:text-gray-700"
-                >
-                  {verTecnicos ? 'Ocultar' : 'Ver'} otros {tecnicos.length} certificados técnicos
-                </button>
-              )}
             </div>
           )}
         </div>

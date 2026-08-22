@@ -95,6 +95,7 @@ type PortalData = {
     cliente: string | null
     faena_codigo: string | null
     ver_archivos_personal: boolean
+    separa_basicos: boolean
     generado_at: string
   }
   equipos: Equipo[]
@@ -325,7 +326,10 @@ function FilaDocEquipo({ d }: { d: DocEquipo }) {
   )
 }
 
-function FichaEquipo({ eq }: { eq: Equipo }) {
+// `separaBasicos` viene del portal, no de una regla del sistema: qué documento
+// es "básico" lo define el contrato con ese mandante (MIG316). Un portal sin
+// lista configurada muestra todo junto, que es como estaba antes.
+function FichaEquipo({ eq, separaBasicos }: { eq: Equipo; separaBasicos: boolean }) {
   const [verTecnicos, setVerTecnicos] = useState(false)
   const [verTodoHistorial, setVerTodoHistorial] = useState(false)
 
@@ -333,17 +337,19 @@ function FichaEquipo({ eq }: { eq: Equipo }) {
   // permiso, SOAP, revisión técnica, gases, padrón, póliza y —en un aljibe—
   // TC8 y hermeticidad. El resto son certificados técnicos: importan, pero son
   // la segunda pregunta. El catálogo vive en la base (MIG315).
-  const basicos = useMemo(() => eq.documentos.filter((d) => d.basico), [eq.documentos])
+  const basicos = useMemo(
+    () => (separaBasicos ? eq.documentos.filter((d) => d.basico) : eq.documentos),
+    [eq.documentos, separaBasicos],
+  )
   const tecnicos = useMemo(
     () =>
-      eq.documentos
-        .filter((d) => !d.basico)
+      (separaBasicos ? eq.documentos.filter((d) => !d.basico) : [])
         .sort(
           (a, b) =>
             ORDEN_NIVEL[docUI(a.estado).nivel] - ORDEN_NIVEL[docUI(b.estado).nivel] ||
             (TIPO_DOC_LABEL[a.tipo] ?? a.tipo).localeCompare(TIPO_DOC_LABEL[b.tipo] ?? b.tipo, 'es'),
         ),
-    [eq.documentos],
+    [eq.documentos, separaBasicos],
   )
 
   const basicosPend = basicos.filter((d) => esPendiente(d.estado))
@@ -370,19 +376,19 @@ function FichaEquipo({ eq }: { eq: Equipo }) {
         )}
         <Chip nivel={basicosPend.length ? 'rojo' : 'verde'}>
           {basicosPend.length
-            ? `${basicosPend.length} habilitante(s) por regularizar`
-            : 'Habilitante al día'}
+            ? `${basicosPend.length} ${separaBasicos ? 'habilitante(s)' : 'documento(s)'} por regularizar`
+            : separaBasicos ? 'Habilitante al día' : 'Documentación al día'}
         </Chip>
       </header>
 
       {/* ── Documentación básica ── */}
       <div className="px-4 pb-1 pt-3">
         <h4 className="mb-1 text-[10px] font-bold uppercase tracking-wide text-slate-400">
-          Documentación del vehículo
+          {separaBasicos ? 'Documentación del vehículo' : 'Documentación'}
         </h4>
         {basicos.length === 0 ? (
           <p className="py-4 text-center text-xs text-slate-400">
-            Sin documentación básica registrada para este equipo.
+            Sin documentación registrada para este equipo.
           </p>
         ) : (
           <div className="overflow-x-auto">
@@ -629,11 +635,15 @@ export default function PortalPrevencionPage() {
     // Habilitantes y técnicos se cuentan separados a propósito. Sumarlos en un
     // solo número mezcla "el camión no puede circular" con "falta el
     // certificado del aire acondicionado", que no son la misma conversación.
+    // Sin separación configurada, todo documento de equipo pesa igual: si no
+    // se distingue, no se puede decir "los habilitantes están al día".
+    const separa = data.portal.separa_basicos
     return {
       equipos: data.equipos.length,
       personas: data.personal.length,
-      eqBasicos: cuenta(docsEq.filter((d) => d.basico), ['rojo', 'naranjo']),
-      eqTecnicos: cuenta(docsEq.filter((d) => !d.basico), ['rojo', 'naranjo']),
+      separa,
+      eqBasicos: cuenta(separa ? docsEq.filter((d) => d.basico) : docsEq, ['rojo', 'naranjo']),
+      eqTecnicos: separa ? cuenta(docsEq.filter((d) => !d.basico), ['rojo', 'naranjo']) : 0,
       pePendientes: cuenta(docsPe, ['rojo', 'naranjo']),
       porVencer: cuenta(docsEq, ['amarillo']) + cuenta(docsPe, ['amarillo']),
     }
@@ -742,13 +752,17 @@ export default function PortalPrevencionPage() {
             <div>
               <p className={cn('text-sm font-semibold', grave ? 'text-red-800' : 'text-emerald-800')}>
                 {grave
-                  ? `${resumen!.eqBasicos} documento${resumen!.eqBasicos > 1 ? 's' : ''} habilitante${resumen!.eqBasicos > 1 ? 's' : ''} por regularizar`
-                  : `Los ${resumen?.equipos ?? 0} equipos tienen su documentación habilitante al día`}
+                  ? `${resumen!.eqBasicos} documento${resumen!.eqBasicos > 1 ? 's' : ''}${resumen!.separa ? ' habilitante' : ''}${resumen!.eqBasicos > 1 && resumen!.separa ? 's' : ''} por regularizar`
+                  : `Los ${resumen?.equipos ?? 0} equipos tienen su documentación${resumen?.separa ? ' habilitante' : ''} al día`}
               </p>
               <p className={cn('mt-0.5 text-xs leading-relaxed', grave ? 'text-red-700' : 'text-emerald-700')}>
-                {grave
-                  ? 'Permiso de circulación, SOAP, revisión técnica u otro documento que habilita al equipo a circular y operar.'
-                  : 'Permiso de circulación, SOAP, revisión técnica y demás documentación habilitante, vigentes a la fecha de esta consulta.'}
+                {resumen?.separa
+                  ? grave
+                    ? 'Permiso de circulación, SOAP, revisión técnica u otro documento que habilita al equipo a circular y operar.'
+                    : 'Permiso de circulación, SOAP, revisión técnica y demás documentación habilitante, vigentes a la fecha de esta consulta.'
+                  : grave
+                    ? 'Documentos vencidos, observados o en proceso de carga.'
+                    : 'Sin documentos vencidos ni observados a la fecha de esta consulta.'}
               </p>
             </div>
           </div>
@@ -791,7 +805,9 @@ export default function PortalPrevencionPage() {
             <p className="py-8 text-center text-sm text-slate-400">Sin equipos asociados a este portal.</p>
           ) : (
             <div className="space-y-4">
-              {data.equipos.map((eq) => <FichaEquipo key={eq.activo_id} eq={eq} />)}
+              {data.equipos.map((eq) => (
+                <FichaEquipo key={eq.activo_id} eq={eq} separaBasicos={data.portal.separa_basicos} />
+              ))}
             </div>
           )}
         </Seccion>
