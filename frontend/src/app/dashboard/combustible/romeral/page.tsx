@@ -1,373 +1,406 @@
 'use client'
 
-// Despacho de combustible en faena — vista de oficina (MIG279).
-// Lo que el operador anota en terreno llega acá: el detalle por carga y el
-// consumo acumulado por CECO, que es lo que el cliente pide para su control.
+// ============================================================================
+// Control diario de combustible — Romeral (MIG321)
+// ----------------------------------------------------------------------------
+// La pantalla de la Secretaría Técnica. No es un tablero para mirar: es una
+// lista de lo que hay que resolver.
+//
+// LA DECISIÓN QUE ORDENA TODO: el día tiene DOS estados, no uno.
+//   · Volumen — varilla contra cuentalitros. Se cierra siempre, el mismo día.
+//   · Imputación — a quién se le cargó. Depende de Orpak, y en agosto Orpak
+//     llegó una vez en nueve días.
+// Mostrarlos juntos, como hoy, hace que un mes entero se vea "atrasado" cuando
+// en realidad el volumen está medido y lo que falta es saber a quién imputarlo.
+//
+// Control por excepción: hoy se revisa el 100 % de las transacciones, y revisar
+// todo es no revisar nada. Acá sólo aparece lo que se sale del patrón.
+// ============================================================================
 
 import { useMemo, useState } from 'react'
-import Link from 'next/link'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  ArrowLeft, Fuel, ChevronLeft, ChevronRight, FileSpreadsheet, Ban, Truck, Search, Camera,
+  Fuel, AlertTriangle, CheckCircle2, Clock, Ruler, Gauge, Truck,
+  FileWarning, Check, ChevronRight,
 } from 'lucide-react'
-import { Card, CardContent } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Spinner } from '@/components/ui/spinner'
-import { useToast } from '@/contexts/toast-context'
 import { useRequireAuth } from '@/hooks/use-require-auth'
+import { useToast } from '@/contexts/toast-context'
+import { cn, errorMessage, formatDate } from '@/lib/utils'
+import { FAENA_ROMERAL, getFaenaPorCodigo } from '@/lib/services/combustible-faena'
 import {
-  FAENA_ROMERAL, getFaenaPorCodigo, getDespachosRango, getConsumoPorCeco, anularDespacho,
-} from '@/lib/services/combustible-faena'
-import { MESES } from '@/lib/services/enex'
+  getControlDiario, getExcepciones, confirmarCeco,
+  type ControlDia, type Excepcion,
+} from '@/lib/services/combustible-cierre'
 
-const hoy = () => { const d = new Date(); return { anio: d.getFullYear(), mes: d.getMonth() + 1 } }
-const pad = (n: number) => String(n).padStart(2, '0')
-const finDeMes = (a: number, m: number) => new Date(a, m, 0).getDate()
+const miles = (n: number | null | undefined) =>
+  n == null ? '—' : Number(n).toLocaleString('es-CL', { maximumFractionDigits: 0 })
 
-function fmtFecha(iso?: string | null): string {
-  if (!iso) return '—'
-  const [y, m, d] = iso.slice(0, 10).split('-')
-  return `${d}-${m}-${y}`
+const VOLUMEN_UI: Record<string, { label: string; cls: string }> = {
+  cuadrado:   { label: 'Cuadrado',    cls: 'bg-emerald-100 text-emerald-800' },
+  revisar:    { label: 'Revisar',     cls: 'bg-amber-100 text-amber-800' },
+  // Sin contador leído no hay control cruzado. No es verde ni rojo: es que no
+  // se puede saber, y esa es una tercera cosa.
+  incompleto: { label: 'Sin contador', cls: 'bg-orange-100 text-orange-800' },
+  borrador:   { label: 'Sin firmar',  cls: 'bg-blue-100 text-blue-800' },
+  sin_cierre: { label: 'Sin cerrar',  cls: 'bg-gray-100 text-gray-500' },
 }
-const L = (n: number | string | null | undefined) =>
-  Math.round(Number(n ?? 0)).toLocaleString('es-CL')
+const IMPUTACION_UI: Record<string, { label: string; cls: string }> = {
+  completa:   { label: 'Completa',    cls: 'bg-emerald-100 text-emerald-800' },
+  incompleta: { label: 'Falta CECO',  cls: 'bg-amber-100 text-amber-800' },
+  sin_datos:  { label: 'Sin Orpak',   cls: 'bg-red-100 text-red-700' },
+}
+const EXCEPCION_UI: Record<string, { label: string; icono: any; cls: string }> = {
+  ceco_por_confirmar:       { label: 'CECO por confirmar',   icono: FileWarning, cls: 'text-blue-600' },
+  despacho_sin_ceco:        { label: 'Carga sin CECO',       icono: FileWarning, cls: 'text-amber-600' },
+  fuera_de_tolerancia:      { label: 'Fuera de tolerancia',  icono: Gauge,       cls: 'text-red-600' },
+  contador_sin_leer:        { label: 'Contador sin leer',    icono: Gauge,       cls: 'text-orange-600' },
+  medicion_sin_foto:        { label: 'Medición sin foto',    icono: AlertTriangle, cls: 'text-amber-600' },
+  recepcion_con_diferencia: { label: 'Guía no coincide',     icono: Truck,       cls: 'text-amber-600' },
+}
 
-export default function RomeralOficinaPage() {
+function Pill({ cls, children }: { cls: string; children: React.ReactNode }) {
+  return (
+    <span className={cn('inline-block rounded px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide', cls)}>
+      {children}
+    </span>
+  )
+}
+
+export default function ControlCombustibleRomeralPage() {
   useRequireAuth()
   const toast = useToast()
-  const [{ anio, mes }, setPeriodo] = useState(hoy())
-  const [buscar, setBuscar] = useState('')
-  const [vista, setVista] = useState<'detalle' | 'ceco'>('detalle')
-  const [anulando, setAnulando] = useState<string | null>(null)
-  const [motivo, setMotivo] = useState('')
-  const [exportando, setExportando] = useState(false)
+  const qc = useQueryClient()
 
-  const desde = `${anio}-${pad(mes)}-01`
-  const hasta = `${anio}-${pad(mes)}-${pad(finDeMes(anio, mes))}`
+  const hoy = new Date()
+  const [desde, setDesde] = useState(
+    `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-01`,
+  )
+  const [hasta, setHasta] = useState(
+    `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${String(hoy.getDate()).padStart(2, '0')}`,
+  )
 
   const { data: faena } = useQuery({
-    queryKey: ['faena', FAENA_ROMERAL], queryFn: () => getFaenaPorCodigo(FAENA_ROMERAL), staleTime: 60 * 60_000,
-  })
-  const { data: despachos = [], isLoading, refetch } = useQuery({
-    queryKey: ['comb-faena-desp', faena?.id, desde, hasta],
-    queryFn: () => getDespachosRango(faena!.id, desde, hasta),
-    enabled: !!faena?.id, staleTime: 15_000,
-  })
-  const { data: porCeco = [] } = useQuery({
-    queryKey: ['comb-faena-ceco', faena?.id, desde],
-    queryFn: () => getConsumoPorCeco(faena!.id, desde),
-    enabled: !!faena?.id, staleTime: 15_000,
+    queryKey: ['faena', FAENA_ROMERAL],
+    queryFn: () => getFaenaPorCodigo(FAENA_ROMERAL),
   })
 
-  function cambiarMes(d: number) {
-    let m = mes + d, a = anio
-    if (m < 1) { m = 12; a-- } else if (m > 12) { m = 1; a++ }
-    setPeriodo({ anio: a, mes: m })
-  }
+  const { data: dias, isLoading } = useQuery({
+    queryKey: ['comb-control-diario', faena?.id, desde, hasta],
+    queryFn: () => getControlDiario(faena!.id, desde, hasta),
+    enabled: !!faena?.id,
+  })
 
-  const filtrados = useMemo(() => {
-    const q = buscar.trim().toLowerCase()
-    if (!q) return despachos
-    return despachos.filter((d) =>
-      (d.equipo ?? '').toLowerCase().includes(q) ||
-      (d.ceco ?? '').toLowerCase().includes(q) ||
-      (d.ubicacion ?? '').toLowerCase().includes(q) ||
-      (d.operador_nombre ?? '').toLowerCase().includes(q) ||
-      (d.camion_patente ?? '').toLowerCase().includes(q))
-  }, [despachos, buscar])
+  const { data: excepciones } = useQuery({
+    queryKey: ['comb-excepciones', faena?.id],
+    queryFn: () => getExcepciones(faena!.id),
+    enabled: !!faena?.id,
+  })
 
-  const totalLitros = filtrados.filter((d) => !d.anulado).reduce((s, d) => s + Number(d.litros), 0)
-  const porDia = useMemo(() => {
-    const m = new Map<string, number>()
-    for (const d of despachos) if (!d.anulado) m.set(d.fecha, (m.get(d.fecha) ?? 0) + Number(d.litros))
-    return Array.from(m.entries()).sort((a, b) => b[0].localeCompare(a[0]))
-  }, [despachos])
+  const confirmar = useMutation({
+    mutationFn: ({ id, codigo }: { id: string; codigo?: string }) => confirmarCeco(id, codigo),
+    onSuccess: (r) => {
+      qc.invalidateQueries({ queryKey: ['comb-excepciones'] })
+      qc.invalidateQueries({ queryKey: ['comb-control-diario'] })
+      toast.success(
+        r.fusionado_con
+          ? `Fusionado con el CECO existente · ${r.despachos_movidos} carga(s) reapuntada(s)`
+          : 'CECO confirmado',
+      )
+    },
+    onError: (e) => toast.error(errorMessage(e, 'No se pudo confirmar')),
+  })
 
-  /**
-   * Excel del registro: una hoja con el detalle de cada carga, otra con el
-   * consumo por CECO y otra con el total por día. Es lo que se le pasa al
-   * cliente y lo que reemplaza al papel que hoy se transcribe a mano.
-   */
-  async function exportar() {
-    setExportando(true)
-    try {
-      const ExcelJS = (await import('exceljs')).default
-      const wb = new ExcelJS.Workbook()
-      wb.creator = 'SICOM-ICEO · Pillado y Cía. Ltda.'
-      wb.created = new Date()
-      const titulo = `${MESES[mes - 1]} ${anio}`
+  const resumen = useMemo(() => {
+    const d = dias ?? []
+    return {
+      dias: d.length,
+      volumenCerrado: d.filter((x) => x.volumen_estado === 'cuadrado').length,
+      volumenRevisar: d.filter((x) => x.volumen_estado === 'revisar').length,
+      volumenSinCerrar: d.filter((x) => x.volumen_estado === 'sin_cierre').length,
+      volumenIncompleto: d.filter((x) => x.volumen_estado === 'incompleto').length,
+      // Lo que de verdad hay que decirle al mandante: cuántos días de
+      // imputación están esperando data que no depende de nosotros.
+      sinOrpak: d.filter((x) => x.imputacion_estado === 'sin_datos').length,
+      litrosSinImputar: d
+        .filter((x) => x.imputacion_estado === 'sin_datos')
+        .reduce((a, x) => a + Number(x.v_mec ?? 0), 0),
+    }
+  }, [dias])
 
-      const encabezar = (ws: import('exceljs').Worksheet, cols: string[]) => {
-        const row = ws.getRow(1)
-        cols.forEach((c, i) => { row.getCell(i + 1).value = c })
-        row.font = { bold: true, color: { argb: 'FFFFFFFF' } }
-        row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFC2410C' } }
-        row.alignment = { vertical: 'middle' }
-        ws.views = [{ state: 'frozen', ySplit: 1 }]
-      }
-
-      // Detalle
-      const d1 = wb.addWorksheet(`Despachos ${titulo}`)
-      encabezar(d1, ['Fecha', 'Hora', 'Turno', 'Camión', 'Equipo', 'Descripción', 'CECO',
-                     'Empresa', 'Lugar', 'Medidor inicial', 'Medidor final', 'Litros',
-                     'Operador', 'Foto inicial', 'Foto final', 'Sin foto: motivo',
-                     'Estado', 'Motivo anulación', 'Observación'])
-      for (const d of filtrados) {
-        d1.addRow([
-          fmtFecha(d.fecha), d.hora ? d.hora.slice(0, 5) : '', d.turno ?? '', d.camion_patente ?? '',
-          d.equipo ?? '', d.equipo_descripcion ?? '', d.ceco ?? '', d.ceco_empresa ?? '',
-          d.ubicacion ?? '', d.meter_inicial != null ? Number(d.meter_inicial) : null,
-          d.meter_final != null ? Number(d.meter_final) : null, Number(d.litros),
-          d.operador_nombre ?? '',
-          d.foto_meter_inicial_url ?? '', d.foto_meter_final_url ?? '', d.sin_foto_motivo ?? '',
-          d.anulado ? 'ANULADO' : 'Vigente', d.anulado_motivo ?? '', d.observacion ?? '',
-        ])
-      }
-      d1.columns.forEach((c, i) => { c.width = [11, 7, 8, 11, 20, 26, 14, 22, 20, 14, 14, 10, 20, 34, 34, 24, 10, 24, 26][i] ?? 14 })
-      d1.getColumn(12).numFmt = '#,##0'
-      // Total solo de lo vigente: lo anulado no suma, como en el papel tachado.
-      const totalRow = d1.addRow(['', '', '', '', '', '', '', '', '', '', 'TOTAL', totalLitros])
-      totalRow.font = { bold: true }
-      totalRow.getCell(12).numFmt = '#,##0'
-
-      // Consumo por CECO
-      const d2 = wb.addWorksheet('Consumo por CECO')
-      encabezar(d2, ['CECO', 'Empresa', 'Equipos', 'Cargas', 'Litros', '% del mes'])
-      for (const c of porCeco) {
-        d2.addRow([c.ceco ?? '(sin CECO)', c.ceco_empresa ?? '', Number(c.equipos),
-                   Number(c.despachos), Number(c.litros),
-                   totalLitros > 0 ? Number(c.litros) / totalLitros : 0])
-      }
-      d2.columns.forEach((c, i) => { c.width = [16, 28, 10, 10, 12, 11][i] ?? 14 })
-      d2.getColumn(5).numFmt = '#,##0'
-      d2.getColumn(6).numFmt = '0%'
-
-      // Total por día
-      const d3 = wb.addWorksheet('Por día')
-      encabezar(d3, ['Fecha', 'Cargas', 'Litros'])
-      for (const [f, litros] of porDia) {
-        d3.addRow([fmtFecha(f), despachos.filter((x) => x.fecha === f && !x.anulado).length, litros])
-      }
-      d3.columns.forEach((c, i) => { c.width = [14, 10, 12][i] ?? 14 })
-      d3.getColumn(3).numFmt = '#,##0'
-
-      const buf = await wb.xlsx.writeBuffer()
-      const blob = new Blob([buf], {
-        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      })
-      const a = document.createElement('a')
-      a.href = URL.createObjectURL(blob)
-      a.download = `Romeral_despachos_${anio}-${pad(mes)}.xlsx`
-      a.click()
-      URL.revokeObjectURL(a.href)
-      toast.success('Excel descargado')
-    } catch (e) { toast.error(`No se pudo generar el Excel: ${(e as Error).message}`) }
-    finally { setExportando(false) }
-  }
-
-  // El motivo se pide en la propia pantalla: window.prompt congela la pestaña.
-  async function anular() {
-    if (!anulando || !motivo.trim()) return
-    try {
-      await anularDespacho(anulando, motivo.trim())
-      toast.success('Carga anulada')
-      setAnulando(null); setMotivo(''); refetch()
-    } catch (e) { toast.error((e as Error).message) }
-  }
+  const porTipo = useMemo(() => {
+    const m = new Map<string, Excepcion[]>()
+    for (const e of excepciones ?? []) {
+      const arr = m.get(e.tipo) ?? []
+      arr.push(e)
+      m.set(e.tipo, arr)
+    }
+    return m
+  }, [excepciones])
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <div className="space-y-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <Link href="/dashboard/combustible" className="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700">
-            <ArrowLeft className="h-3.5 w-3.5" /> Combustible
-          </Link>
-          <h1 className="flex items-center gap-2 text-xl font-bold">
-            <Fuel className="h-5 w-5 text-orange-600" /> Despachos en faena — Romeral
+          <h1 className="flex items-center gap-2 text-2xl font-bold text-gray-900">
+            <Fuel className="h-7 w-7 text-orange-500" />
+            Control diario de combustible
           </h1>
-          <p className="mt-0.5 text-sm text-gray-500">
-            Lo que el operador registra en terreno, con su CECO y lugar.
+          <p className="mt-1 max-w-2xl text-sm text-gray-500">
+            Faena Romeral. El día tiene dos cierres independientes: el de <strong>volumen</strong>
+            {' '}se cierra siempre el mismo día con varilla y contador; el de <strong>imputación</strong>
+            {' '}espera a Orpak y no bloquea al primero.
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <button onClick={() => cambiarMes(-1)} className="rounded-lg border px-2 py-1.5 hover:bg-gray-50"><ChevronLeft className="h-4 w-4" /></button>
-          <span className="min-w-[130px] text-center text-sm font-semibold">{MESES[mes - 1]} {anio}</span>
-          <button onClick={() => cambiarMes(1)} className="rounded-lg border px-2 py-1.5 hover:bg-gray-50"><ChevronRight className="h-4 w-4" /></button>
-          <Button variant="outline" onClick={exportar} disabled={filtrados.length === 0 || exportando}>
-            {exportando ? <Spinner className="mr-1 h-4 w-4" /> : <FileSpreadsheet className="mr-1 h-4 w-4" />}
-            Descargar Excel
-          </Button>
+        <div className="flex gap-2">
+          <div>
+            <label className="block text-[10px] uppercase text-gray-400">Desde</label>
+            <input type="date" value={desde} onChange={(e) => setDesde(e.target.value)}
+                   className="h-9 rounded border border-gray-300 px-2 text-sm" />
+          </div>
+          <div>
+            <label className="block text-[10px] uppercase text-gray-400">Hasta</label>
+            <input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)}
+                   className="h-9 rounded border border-gray-300 px-2 text-sm" />
+          </div>
         </div>
       </div>
 
-      {/* Totales */}
-      <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-        {[
-          { l: 'Litros del mes', v: `${L(totalLitros)} L`, c: 'text-orange-700' },
-          { l: 'Cargas', v: L(filtrados.filter((d) => !d.anulado).length), c: 'text-gray-900' },
-          { l: 'Días con despacho', v: L(porDia.length), c: 'text-gray-900' },
-          { l: 'CECOs con consumo', v: L(porCeco.length), c: 'text-gray-900' },
-        ].map((k, i) => (
-          <Card key={i}><CardContent className="p-3">
-            <p className="text-xs text-gray-500">{k.l}</p>
-            <p className={`text-xl font-bold ${k.c}`}>{k.v}</p>
-          </CardContent></Card>
-        ))}
-      </div>
-
-      <Card>
-        <CardContent className="flex flex-wrap items-center gap-3 p-3">
-          <div className="flex overflow-hidden rounded-lg border">
-            {([['detalle', 'Detalle'], ['ceco', 'Consumo por CECO']] as const).map(([id, label]) => (
-              <button key={id} onClick={() => setVista(id)}
-                      className={`px-3 py-1.5 text-xs font-semibold ${
-                        vista === id ? 'bg-orange-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
-                {label}
-              </button>
-            ))}
-          </div>
-          <div className="relative min-w-[220px] flex-1">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-400" />
-            <Input value={buscar} onChange={(e) => setBuscar(e.target.value)}
-                   placeholder="Equipo, CECO, lugar, operador o camión…" className="h-9 pl-8" />
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Anular una carga: se registra el motivo, no se borra. El papel tampoco
-          se rompe — se tacha y se explica. */}
-      {anulando && (
-        <Card className="border-red-300">
-          <CardContent className="flex flex-wrap items-end gap-2 p-3">
-            <div className="min-w-[260px] flex-1">
-              <label className="text-xs font-semibold text-red-800">¿Por qué se anula esta carga?</label>
-              <Input value={motivo} onChange={(e) => setMotivo(e.target.value)}
-                     placeholder="Ej: se anotó dos veces / litros equivocados" className="h-9" autoFocus />
+      {/* Lo primero: si hay días de imputación esperando, decirlo con número */}
+      {resumen.sinOrpak > 0 && (
+        <Card className="border-amber-300 bg-amber-50">
+          <CardContent className="flex items-start gap-3 p-4">
+            <Clock className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+            <div>
+              <p className="text-sm font-bold text-amber-900">
+                {resumen.sinOrpak} día{resumen.sinOrpak > 1 ? 's' : ''} con el volumen medido y la imputación pendiente
+              </p>
+              <p className="mt-0.5 text-xs leading-relaxed text-amber-800">
+                Son {miles(resumen.litrosSinImputar)} L que salieron y están medidos por contador, pero
+                todavía no se sabe a qué CECO imputarlos porque falta la descarga de Orpak. El cierre
+                de volumen de esos días igual se puede firmar.
+              </p>
             </div>
-            <Button size="sm" variant="primary" disabled={!motivo.trim()} onClick={anular}>Anular</Button>
-            <Button size="sm" variant="outline" onClick={() => { setAnulando(null); setMotivo('') }}>Cancelar</Button>
           </CardContent>
         </Card>
       )}
 
-      {isLoading ? (
-        <div className="flex justify-center py-10"><Spinner /></div>
-      ) : vista === 'ceco' ? (
-        <Card><CardContent className="p-0">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b text-xs text-gray-500">
-                <th className="p-2 text-left">CECO</th>
-                <th className="p-2 text-left">Empresa</th>
-                <th className="p-2 text-right">Equipos</th>
-                <th className="p-2 text-right">Cargas</th>
-                <th className="p-2 text-right">Litros</th>
-                <th className="p-2 text-right">% del mes</th>
-              </tr>
-            </thead>
-            <tbody>
-              {porCeco.map((c) => (
-                <tr key={c.ceco_id ?? 'sin'} className="border-b hover:bg-gray-50/50">
-                  <td className="p-2 font-mono text-xs font-semibold">{c.ceco ?? '(sin CECO)'}</td>
-                  <td className="p-2 text-gray-600">{c.ceco_empresa ?? '—'}</td>
-                  <td className="p-2 text-right text-gray-600">{c.equipos}</td>
-                  <td className="p-2 text-right text-gray-600">{c.despachos}</td>
-                  <td className="p-2 text-right font-bold">{L(c.litros)} L</td>
-                  <td className="p-2 text-right text-gray-500">
-                    {totalLitros > 0 ? `${Math.round((Number(c.litros) / totalLitros) * 100)}%` : '—'}
-                  </td>
-                </tr>
-              ))}
-              {porCeco.length === 0 && (
-                <tr><td colSpan={6} className="py-10 text-center text-sm text-gray-400">
-                  Sin despachos registrados en {MESES[mes - 1]} {anio}.
-                </td></tr>
-              )}
-            </tbody>
-          </table>
-        </CardContent></Card>
-      ) : (
-        <Card><CardContent className="p-0">
-          <div className="overflow-x-auto">
+      {/* Cifras del período */}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {[
+          { label: 'Días con volumen cuadrado', valor: resumen.volumenCerrado, icono: CheckCircle2, cls: 'text-emerald-600' },
+          { label: 'Días para revisar', valor: resumen.volumenRevisar, icono: AlertTriangle, cls: 'text-amber-600' },
+          { label: 'Días sin contador leído', valor: resumen.volumenIncompleto, icono: Gauge, cls: 'text-orange-500' },
+          { label: 'Excepciones abiertas', valor: excepciones?.length ?? 0, icono: FileWarning, cls: 'text-blue-600' },
+        ].map((k) => (
+          <Card key={k.label}>
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-medium text-gray-500">{k.label}</span>
+                <k.icono className={cn('h-4 w-4', k.cls)} />
+              </div>
+              <p className="mt-2 text-3xl font-bold tabular-nums text-gray-900">{k.valor}</p>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {/* Excepciones: lo que hay que resolver */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base text-gray-700">Qué hay que resolver</CardTitle>
+          <p className="text-xs text-gray-500">
+            Sólo lo que se sale del patrón. Revisar el cien por ciento es no revisar nada.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {(excepciones ?? []).length === 0 ? (
+            <p className="py-6 text-center text-sm text-gray-400">
+              Nada pendiente en este momento.
+            </p>
+          ) : (
+            Array.from(porTipo.entries()).map(([tipo, lista]) => {
+              const ui = EXCEPCION_UI[tipo] ?? { label: tipo, icono: FileWarning, cls: 'text-gray-500' }
+              return (
+                <div key={tipo}>
+                  <p className="mb-1.5 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-gray-500">
+                    <ui.icono className={cn('h-4 w-4', ui.cls)} />
+                    {ui.label} <span className="text-gray-400">({lista.length})</span>
+                  </p>
+                  <div className="overflow-hidden rounded-lg border border-gray-200">
+                    {lista.slice(0, 12).map((e, i) => (
+                      <div key={`${tipo}-${i}`}
+                           className="flex items-center gap-3 border-b border-gray-100 px-3 py-2 last:border-0">
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium text-gray-800">{e.referencia}</p>
+                          <p className="truncate text-xs text-gray-500">
+                            {e.fecha ? `${formatDate(e.fecha)} · ` : ''}{e.detalle}
+                          </p>
+                        </div>
+                        {e.litros != null && (
+                          <span className="shrink-0 text-sm font-semibold tabular-nums text-gray-600">
+                            {miles(e.litros)} L
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                    {lista.length > 12 && (
+                      <p className="px-3 py-2 text-xs text-gray-400">y {lista.length - 12} más</p>
+                    )}
+                  </div>
+                </div>
+              )
+            })
+          )}
+        </CardContent>
+      </Card>
+
+      {/* El mes, día por día */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base text-gray-700">Día por día</CardTitle>
+        </CardHeader>
+        <CardContent className="overflow-x-auto p-0">
+          {isLoading ? (
+            <div className="flex justify-center py-10"><Spinner className="h-6 w-6" /></div>
+          ) : (dias ?? []).length === 0 ? (
+            <p className="py-10 text-center text-sm text-gray-400">
+              Sin movimiento registrado en el período.
+            </p>
+          ) : (
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b text-xs text-gray-500">
-                  <th className="p-2 text-left">Fecha</th>
-                  <th className="p-2 text-left">Turno</th>
-                  <th className="p-2 text-left">Camión</th>
-                  <th className="p-2 text-left">Equipo</th>
-                  <th className="p-2 text-left">CECO</th>
-                  <th className="p-2 text-left">Lugar</th>
-                  <th className="p-2 text-right">Medidor</th>
-                  <th className="p-2 text-right">Litros</th>
-                  <th className="p-2 text-left">Operador</th>
-                  <th className="p-2" />
+                <tr className="border-b bg-gray-50 text-left text-[11px] uppercase tracking-wide text-gray-500">
+                  <th className="px-3 py-2">Día</th>
+                  <th className="px-3 py-2">Volumen</th>
+                  <th className="px-3 py-2 text-right">Varilla</th>
+                  <th className="px-3 py-2 text-right">Contador</th>
+                  <th className="px-3 py-2 text-right">Dif.</th>
+                  <th className="px-3 py-2">Imputación</th>
+                  <th className="px-3 py-2 text-right">Cargas</th>
+                  <th className="px-3 py-2 text-right">Recibido</th>
+                  <th className="px-3 py-2">Midió</th>
                 </tr>
               </thead>
               <tbody>
-                {filtrados.map((d) => (
-                  <tr key={d.id} className={`border-b hover:bg-gray-50/50 ${d.anulado ? 'opacity-50' : ''}`}>
-                    <td className="whitespace-nowrap p-2">
-                      {fmtFecha(d.fecha)}
-                      {d.hora && <span className="text-gray-400"> {d.hora.slice(0, 5)}</span>}
-                    </td>
-                    <td className="p-2 text-gray-600">{d.turno ?? '—'}</td>
-                    <td className="p-2">
-                      <span className="inline-flex items-center gap-1 text-xs text-gray-600">
-                        <Truck className="h-3 w-3" />{d.camion_patente ?? '—'}
-                      </span>
-                    </td>
-                    <td className="p-2 font-medium">
-                      {d.anulado ? <span className="line-through">{d.equipo}</span> : d.equipo}
-                      {d.equipo_descripcion && <span className="block text-[10px] text-gray-400">{d.equipo_descripcion}</span>}
-                    </td>
-                    <td className="p-2 font-mono text-xs">{d.ceco ?? '—'}</td>
-                    <td className="p-2 text-gray-600">{d.ubicacion ?? '—'}</td>
-                    <td className="whitespace-nowrap p-2 text-right text-[11px] text-gray-500">
-                      {d.meter_inicial != null && d.meter_final != null
-                        ? `${L(d.meter_inicial)} → ${L(d.meter_final)}` : '—'}
-                      {/* La foto del contador es lo que respalda los litros */}
-                      <span className="mt-0.5 flex items-center justify-end gap-1">
-                        {[d.foto_meter_inicial_url, d.foto_meter_final_url].map((u, i) => (
-                          u ? (
-                            <button key={i} onClick={() => window.open(u, '_blank')}
-                                    title={i === 0 ? 'Foto del medidor inicial' : 'Foto del medidor final'}
-                                    className="text-green-600 hover:text-green-800">
-                              <Camera className="h-3.5 w-3.5" />
-                            </button>
-                          ) : <Camera key={i} className="h-3.5 w-3.5 text-gray-200" />
-                        ))}
-                      </span>
-                      {d.sin_foto_motivo && (
-                        <span className="block text-[9px] italic text-amber-700" title={d.sin_foto_motivo}>
-                          sin foto
-                        </span>
-                      )}
-                    </td>
-                    <td className="p-2 text-right font-bold">{L(d.litros)}</td>
-                    <td className="p-2 text-gray-600">{d.operador_nombre ?? '—'}</td>
-                    <td className="p-2 text-right">
-                      {!d.anulado && (
-                        <button onClick={() => { setAnulando(d.id); setMotivo('') }} title="Anular esta carga"
-                                className="text-gray-300 hover:text-red-600">
-                          <Ban className="h-4 w-4" />
-                        </button>
-                      )}
-                      {d.anulado && <span className="text-[10px] text-red-600">anulada</span>}
-                    </td>
-                  </tr>
-                ))}
-                {filtrados.length === 0 && (
-                  <tr><td colSpan={10} className="py-10 text-center text-sm text-gray-400">
-                    Sin despachos en {MESES[mes - 1]} {anio}.
-                  </td></tr>
-                )}
+                {(dias ?? []).map((d: ControlDia) => {
+                  const v = VOLUMEN_UI[d.volumen_estado] ?? VOLUMEN_UI.sin_cierre
+                  const im = IMPUTACION_UI[d.imputacion_estado] ?? IMPUTACION_UI.sin_datos
+                  return (
+                    <tr key={d.fecha} className="border-b last:border-0 hover:bg-gray-50">
+                      <td className="whitespace-nowrap px-3 py-2 font-medium">{formatDate(d.fecha)}</td>
+                      <td className="px-3 py-2">
+                        <Pill cls={v.cls}>{v.label}</Pill>
+                        {(d.puntos_medidos ?? 0) > 0 && (
+                          <span className="ml-1.5 text-xs text-gray-400">
+                            {d.puntos_medidos}/{d.puntos_total}
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 text-right tabular-nums text-gray-600">{miles(d.v_fis)}</td>
+                      <td className="px-3 py-2 text-right tabular-nums text-gray-600">{miles(d.v_mec)}</td>
+                      <td className={cn(
+                        'px-3 py-2 text-right font-semibold tabular-nums',
+                        (d.puntos_fuera_tolerancia ?? 0) > 0 ? 'text-amber-700' : 'text-gray-500',
+                      )}>
+                        {d.var1 != null ? `${Number(d.var1) > 0 ? '+' : ''}${miles(d.var1)}` : '—'}
+                      </td>
+                      <td className="px-3 py-2">
+                        <Pill cls={im.cls}>{im.label}</Pill>
+                        {(d.sin_ceco ?? 0) > 0 && (
+                          <span className="ml-1.5 text-xs font-semibold text-amber-700">{d.sin_ceco}</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 text-right tabular-nums text-gray-600">{d.despachos ?? '—'}</td>
+                      <td className="px-3 py-2 text-right tabular-nums text-gray-600">{miles(d.litros_recibidos)}</td>
+                      <td className="truncate px-3 py-2 text-xs text-gray-500">{d.medido_por ?? '—'}</td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
-          </div>
-        </CardContent></Card>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* CECO anotados en terreno: la acción está acá */}
+      {(porTipo.get('ceco_por_confirmar') ?? []).length > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base text-gray-700">CECO anotados en terreno</CardTitle>
+            <p className="text-xs text-gray-500">
+              Los escribió quien despachó porque no estaban en el catálogo. Confirmar uno lo incorpora;
+              si el código ya existía, las cargas se reapuntan al bueno sin duplicar.
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {(porTipo.get('ceco_por_confirmar') ?? []).map((e, i) => (
+              <div key={i} className="flex flex-wrap items-center gap-3 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2.5">
+                <div className="min-w-0 flex-1">
+                  <p className="font-mono text-sm font-bold text-gray-900">{e.referencia}</p>
+                  <p className="text-xs text-gray-600">{e.detalle}</p>
+                </div>
+                <span className="shrink-0 text-sm tabular-nums text-gray-600">
+                  {e.cantidad} carga{e.cantidad === 1 ? '' : 's'} · {miles(e.litros)} L
+                </span>
+                <ConfirmarCeco
+                  codigo={e.referencia ?? ''}
+                  onConfirmar={(codigo) => {
+                    // La vista trae el código, no el id: se resuelve por código.
+                    void confirmarPorCodigo(codigo, e.referencia ?? '', confirmar)
+                  }}
+                  pendiente={confirmar.isPending}
+                />
+              </div>
+            ))}
+          </CardContent>
+        </Card>
       )}
+    </div>
+  )
+}
+
+/**
+ * La vista de excepciones expone el código del CECO, no su id. Para confirmar
+ * hay que resolverlo — se hace acá y no en la vista para que la vista siga
+ * sirviendo a cualquier consumidor sin arrastrar ids internos.
+ */
+async function confirmarPorCodigo(
+  codigoNuevo: string,
+  codigoActual: string,
+  mut: { mutate: (v: { id: string; codigo?: string }) => void },
+) {
+  const { supabase } = await import('@/lib/supabase')
+  const { data } = await supabase
+    .from('combustible_faena_cecos')
+    .select('id').eq('codigo', codigoActual).eq('confirmado', false).limit(1).maybeSingle()
+  if (data?.id) mut.mutate({ id: data.id, codigo: codigoNuevo || undefined })
+}
+
+function ConfirmarCeco({
+  codigo, onConfirmar, pendiente,
+}: {
+  codigo: string
+  onConfirmar: (codigo: string) => void
+  pendiente: boolean
+}) {
+  const [valor, setValor] = useState(codigo)
+  return (
+    <div className="flex shrink-0 items-center gap-2">
+      <input
+        value={valor}
+        onChange={(e) => setValor(e.target.value)}
+        className="h-9 w-32 rounded border border-gray-300 px-2 font-mono text-sm"
+        aria-label="Código de CECO"
+      />
+      <button
+        onClick={() => onConfirmar(valor)}
+        disabled={pendiente}
+        className="inline-flex h-9 items-center gap-1 rounded bg-blue-600 px-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+      >
+        <Check className="h-4 w-4" /> Confirmar
+      </button>
     </div>
   )
 }
