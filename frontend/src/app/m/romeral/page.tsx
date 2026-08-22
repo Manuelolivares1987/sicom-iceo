@@ -11,9 +11,10 @@
 // llega puesto con el final de la carga anterior, que es como corre la corrida.
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
 import {
   Fuel, Plus, Check, WifiOff, CloudOff, RefreshCw, Search, X, Truck,
-  MapPin, Trash2, CheckCircle2, Download, ChevronDown, Camera,
+  MapPin, Trash2, CheckCircle2, Download, ChevronDown, Camera, Ruler, ChevronRight,
 } from 'lucide-react'
 import { Spinner } from '@/components/ui/spinner'
 import { useToast } from '@/contexts/toast-context'
@@ -73,6 +74,9 @@ export default function RomeralTerrenoPage() {
   const [buscar, setBuscar] = useState('')
   const [equipo, setEquipo] = useState<CombEquipo | null>(null)
   const [equipoTexto, setEquipoTexto] = useState('')
+  // [MIG318] Muchos CECO no están en la base. Quien carga los anota acá
+  // mismo: no bloquea el despacho y no se pierde el dato.
+  const [cecoTexto, setCecoTexto] = useState('')
   const [ubicacionId, setUbicacionId] = useState('')
   const [meterIni, setMeterIni] = useState('')
   const [meterFin, setMeterFin] = useState('')
@@ -178,7 +182,7 @@ export default function RomeralTerrenoPage() {
     let ini = ''
     try { ini = localStorage.getItem(K_METER) ?? '' } catch { /* no-op */ }
     setMeterIni(ini); setMeterFin(''); setLitrosManual('')
-    setEquipo(null); setEquipoTexto(''); setBuscar(''); setUbicacionId(''); setObs('')
+    setEquipo(null); setEquipoTexto(''); setCecoTexto(''); setBuscar(''); setUbicacionId(''); setObs('')
     setFotoIni(null); setFotoFin(null); setSinFotoMotivo('')
     setAbierto(true)
   }
@@ -205,6 +209,7 @@ export default function RomeralTerrenoPage() {
         camionPatente: camionId ? null : (camionOtro.trim() || null),
         equipoId: equipo?.id ?? null,
         equipoTexto: equipo ? null : equipoTexto.trim(),
+        cecoTexto: equipo?.ceco ? null : (cecoTexto.trim() || null),
         ubicacionId: ubicacionId || null,
         meterInicial: num(meterIni),
         meterFinal: num(meterFin),
@@ -215,7 +220,7 @@ export default function RomeralTerrenoPage() {
         sinFotoMotivo: (!fotoIni || !fotoFin) ? sinFotoMotivo.trim() : null,
       }, {
         equipo_nombre: equipo?.nombre ?? equipoTexto.trim(),
-        ceco_nombre: equipo?.ceco ?? null,
+        ceco_nombre: equipo?.ceco ?? (cecoTexto.trim() || null),
         ubicacion_nombre: ubic?.nombre ?? null,
         camion_nombre: camionLabel,
         foto_ini_blob: blobIni,
@@ -265,6 +270,24 @@ export default function RomeralTerrenoPage() {
           {online ? 'En línea' : 'Sin señal'}
         </div>
       </div>
+
+      {/* [MIG317] El cierre del turno es la otra mitad del trabajo de terreno:
+          el despacho lo hace el operador del camión, el varillaje lo hace el
+          encargado de estación. Están separados a propósito, pero se llega de
+          uno al otro sin salir de la app. */}
+      <Link
+        href="/m/romeral/cierre"
+        className="flex items-center gap-3 rounded-xl border-2 border-gray-800 bg-white p-3 active:bg-gray-50"
+      >
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-gray-800 text-white">
+          <Ruler className="h-5 w-5" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-bold text-gray-900">Cierre del turno</p>
+          <p className="text-[11px] text-gray-500">Varilla y contadores de los 7 puntos</p>
+        </div>
+        <ChevronRight className="h-5 w-5 shrink-0 text-gray-400" />
+      </Link>
 
       {porSubir > 0 && (
         <div className="flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 p-2 text-xs text-amber-800">
@@ -506,6 +529,29 @@ export default function RomeralTerrenoPage() {
                 </>
               )}
             </div>
+
+            {/* CECO: sólo cuando el catálogo no lo trae. Si el equipo tiene su
+                CECO, no se pregunta nada — pedir lo que ya se sabe es la forma
+                más rápida de que dejen de usar la app. */}
+            {(equipoTexto.trim() !== '' || (equipo && !equipo.ceco)) && (
+              <div className="rounded-lg border-2 border-amber-300 bg-amber-50 p-3">
+                <label className="text-xs font-bold text-amber-900">
+                  ¿A qué CECO va? <span className="font-normal">Este equipo no lo tiene cargado.</span>
+                </label>
+                <input
+                  value={cecoTexto}
+                  onChange={(e) => setCecoTexto(e.target.value)}
+                  inputMode="numeric"
+                  placeholder="Número de CECO"
+                  className="mt-1.5 w-full rounded-lg border-2 border-amber-300 bg-white px-3 py-3 text-base font-semibold tabular-nums"
+                />
+                <p className="mt-1.5 text-[11px] leading-relaxed text-amber-800">
+                  Si no lo sabe, déjelo vacío y siga: la carga se registra igual y queda
+                  marcada para completarla. Lo que anote acá queda pendiente de confirmar,
+                  no entra solo al catálogo.
+                </p>
+              </div>
+            )}
 
             {/* Lugar */}
             <div>
