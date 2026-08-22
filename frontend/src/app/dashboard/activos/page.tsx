@@ -30,7 +30,7 @@ import { Spinner } from '@/components/ui/spinner'
 import { cn, getSemaforoColor, getCriticidadColor } from '@/lib/utils'
 import { useActivos, useEstadosPlanificador } from '@/hooks/use-activos'
 import { EstadoFlotaPill } from '@/components/flota/estado-flota-pill'
-import { ESTADO_FLOTA_LABEL, ESTADO_FLOTA_OPCIONES } from '@/lib/estado-flota'
+import { ESTADO_FLOTA_LABEL, ESTADO_FLOTA_OPCIONES, esFlotaDelPlanificador } from '@/lib/estado-flota'
 import { getFaenas } from '@/lib/services/faenas'
 import type { Activo, TipoActivo, EstadoActivo, Criticidad } from '@/types/database'
 
@@ -134,7 +134,7 @@ function ActivoCard({ activo, estadoPlan }: { activo: Activo; estadoPlan?: Estad
               <p className="text-xs text-gray-500">{activo.nombre ?? activo.codigo}</p>
             </div>
           </div>
-          {estadoPlan?.estado_codigo ? (
+          {esFlotaDelPlanificador(activo.tipo) && estadoPlan?.estado_codigo ? (
             <EstadoFlotaPill
               codigo={estadoPlan.estado_codigo}
               title={
@@ -231,7 +231,10 @@ export default function ActivosPage() {
 
   // Client-side text search + estado del planificador
   const filtered = (activos ?? []).filter((a) => {
-    if (estadoFilter && estadoPorActivo[a.id]?.estado_codigo !== estadoFilter) return false
+    if (estadoFilter) {
+      if (!esFlotaDelPlanificador(a.tipo)) return false
+      if (estadoPorActivo[a.id]?.estado_codigo !== estadoFilter) return false
+    }
     if (!search) return true
     const s = search.toLowerCase()
     return (
@@ -244,7 +247,10 @@ export default function ActivosPage() {
   // Cuántos equipos aún no tienen el día cerrado: el planificador necesita
   // saberlo sin ir a buscarlo a Sugerencias.
   const sinCerrarHoy = (activos ?? []).filter(
-    (a) => estadoPorActivo[a.id] && !estadoPorActivo[a.id].confirmado_hoy,
+    (a) =>
+      esFlotaDelPlanificador(a.tipo) &&
+      estadoPorActivo[a.id] &&
+      !estadoPorActivo[a.id].confirmado_hoy,
   ).length
 
   const faenaOptions: { value: string; label: string }[] = [
@@ -293,7 +299,8 @@ export default function ActivosPage() {
             <Link href="/dashboard/flota/sugerencias" className="font-medium text-pillado-green-600 hover:underline">
               Sugerencias de estado (GPS)
             </Link>
-            . La ficha no tiene un estado propio.
+            . La ficha no tiene un estado propio. Los equipos fijos (surtidores, estanques,
+            bombas) no se cierran a diario: muestran su estado de mantención.
             {sinCerrarHoy > 0 && (
               <span className="ml-1 text-amber-600">
                 {sinCerrarHoy} equipo{sinCerrarHoy > 1 ? 's' : ''} sin cerrar el día de hoy.
@@ -411,7 +418,7 @@ export default function ActivosPage() {
                     <span className={cn('inline-flex h-3 w-3 rounded-full', getSemaforoColor(a.estado))} />
                   </TableCell>
                   <TableCell>
-                    {estadoPorActivo[a.id]?.estado_codigo ? (
+                    {esFlotaDelPlanificador(a.tipo) && estadoPorActivo[a.id]?.estado_codigo ? (
                       <EstadoFlotaPill
                         codigo={estadoPorActivo[a.id].estado_codigo}
                         title={

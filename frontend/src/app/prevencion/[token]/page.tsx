@@ -282,7 +282,9 @@ function FilaPersona({
     setAbriendo(examenId)
     setErrorArchivo(null)
     try {
-      const r = await fetch('/api/prevencion/portal-archivo', {
+      // Con la barra final: next.config usa trailingSlash, y sin ella el POST
+      // se va en un 308 antes de llegar.
+      const r = await fetch('/api/prevencion/portal-archivo/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token, examen_id: examenId }),
