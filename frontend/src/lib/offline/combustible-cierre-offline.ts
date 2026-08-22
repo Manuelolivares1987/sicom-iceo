@@ -15,7 +15,7 @@
 
 import Dexie, { type Table } from 'dexie'
 import {
-  getPuntosMedicion, getCierreAnterior, guardarCierre,
+  getPuntosMedicion, getCierreAnterior, guardarCierre, subirFotoMedicion,
   type PuntoMedicion, type LecturaPunto, type LecturaMedidor, type CierreInput,
 } from '@/lib/services/combustible-cierre'
 
@@ -36,15 +36,25 @@ export type BorradorCierre = {
 }
 
 type CacheRow = { key: string; value: unknown; updated_at: string }
+type BlobRow = { blob_id: string; blob: Blob; mime: string }
 
 class CierreDB extends Dexie {
   cache!: Table<CacheRow, string>
   borradores!: Table<BorradorCierre, string>
+  blobs!: Table<BlobRow, string>
   constructor() {
     super('sicom-combustible-cierre')
     this.version(1).stores({
       cache: 'key, updated_at',
       borradores: 'clave, sync_status, actualizado_at',
+    })
+    // v2: la foto de cada medición espera en el teléfono hasta que haya señal.
+    // Se saca junto con el número, no después: si se deja para la oficina deja
+    // de ser la foto de esa medición.
+    this.version(2).stores({
+      cache: 'key, updated_at',
+      borradores: 'clave, sync_status, actualizado_at',
+      blobs: 'blob_id',
     })
   }
 }
@@ -62,6 +72,25 @@ const uuid = () =>
 
 export const claveCierre = (faenaId: string, fecha: string, turno: string) =>
   `${faenaId}|${fecha}|${turno}`
+
+/**
+ * Guarda una foto en el teléfono y devuelve una referencia local.
+ * Se marca con el prefijo `local:` para que el resto del código sepa que
+ * todavía no es una URL: al subir el turno se cambia por la definitiva.
+ */
+export async function guardarFotoLocal(file: File | Blob): Promise<string> {
+  const blob_id = uuid()
+  await db().blobs.put({ blob_id, blob: file, mime: file.type || 'image/jpeg' })
+  return `local:${blob_id}`
+}
+
+export async function getFotoLocal(ref: string): Promise<Blob | null> {
+  if (!ref?.startsWith('local:')) return null
+  const row = await db().blobs.get(ref.slice(6))
+  return row?.blob ?? null
+}
+
+export const esFotoLocal = (ref?: string | null) => !!ref?.startsWith('local:')
 
 // ── Catálogo ────────────────────────────────────────────────────────────────
 const K_PUNTOS = 'puntos-medicion'
@@ -124,7 +153,29 @@ export async function guardarBorrador(b: BorradorCierre) {
   return b
 }
 
+/**
+ * Sube las fotos que todavía están en el teléfono y reemplaza la referencia
+ * local por la URL definitiva. Si una falla, se deja como está y se reintenta
+ * en el próximo envío: nunca se pierde ni se borra la foto local.
+ */
+async function subirFotosPendientes(b: BorradorCierre) {
+  for (const p of Object.values(b.puntos)) {
+    if (!esFotoLocal(p.foto_url)) continue
+    const blob = await getFotoLocal(p.foto_url!)
+    if (!blob) continue
+    try { p.foto_url = await subirFotoMedicion(blob) } catch { /* se reintenta */ }
+  }
+  for (const m of Object.values(b.medidores)) {
+    if (!esFotoLocal(m.foto_url)) continue
+    const blob = await getFotoLocal(m.foto_url!)
+    if (!blob) continue
+    try { m.foto_url = await subirFotoMedicion(blob) } catch { /* se reintenta */ }
+  }
+  await db().borradores.put(b)
+}
+
 export async function subirBorrador(b: BorradorCierre, firmar: boolean) {
+  await subirFotosPendientes(b)
   const input: CierreInput = {
     faenaId: b.faena_id,
     fecha: b.fecha,
