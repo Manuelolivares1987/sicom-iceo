@@ -244,14 +244,17 @@ export default function ActivosPage() {
     )
   })
 
-  // Cuántos equipos aún no tienen el día cerrado: el planificador necesita
-  // saberlo sin ir a buscarlo a Sugerencias.
-  const sinCerrarHoy = (activos ?? []).filter(
-    (a) =>
-      esFlotaDelPlanificador(a.tipo) &&
-      estadoPorActivo[a.id] &&
-      !estadoPorActivo[a.id].confirmado_hoy,
-  ).length
+  // Hace cuánto se cerró el día por última vez. No se avisa "faltan N por
+  // cerrar hoy": a las 9 de la mañana eso es cierto para toda la flota y no
+  // significa nada malo — el equipo arrastra el estado de ayer, que es lo
+  // correcto. Lo que sí importa es un día SALTADO, y eso se ve en la brecha.
+  const diasDesdeCierre = useMemo(() => {
+    const dias = (activos ?? [])
+      .filter((a) => esFlotaDelPlanificador(a.tipo))
+      .map((a) => estadoPorActivo[a.id]?.dias_desde_confirmacion)
+      .filter((d): d is number => d != null)
+    return dias.length ? Math.min(...dias) : null
+  }, [activos, estadoPorActivo])
 
   const faenaOptions: { value: string; label: string }[] = [
     { value: '', label: 'Todas' },
@@ -301,9 +304,9 @@ export default function ActivosPage() {
             </Link>
             . La ficha no tiene un estado propio. Los equipos fijos (surtidores, estanques,
             bombas) no se cierran a diario: muestran su estado de mantención.
-            {sinCerrarHoy > 0 && (
-              <span className="ml-1 text-amber-600">
-                {sinCerrarHoy} equipo{sinCerrarHoy > 1 ? 's' : ''} sin cerrar el día de hoy.
+            {diasDesdeCierre != null && diasDesdeCierre >= 2 && (
+              <span className="ml-1 font-medium text-amber-600">
+                El último cierre de flota fue hace {diasDesdeCierre} días.
               </span>
             )}
           </p>
