@@ -128,6 +128,11 @@ export type DespachoInput = {
   fotoMeterInicial?: string | null
   fotoMeterFinal?: string | null
   sinFotoMotivo?: string | null
+  // [MIG318] Lo que el catálogo todavía no tiene y quien despacha sí sabe.
+  cecoTexto?: string | null
+  tipoMovimiento?: 'venta' | 'trasvasije' | 'recirculacion' | 'calibracion'
+  flota?: string | null
+  destinoEstanqueId?: string | null
 }
 
 /** Sube una foto del medidor al bucket de evidencias. */
@@ -154,9 +159,16 @@ export async function registrarDespacho(p: DespachoInput) {
     p_foto_meter_inicial: p.fotoMeterInicial ?? null,
     p_foto_meter_final: p.fotoMeterFinal ?? null,
     p_sin_foto_motivo: p.sinFotoMotivo ?? null,
+    p_ceco_texto: p.cecoTexto ?? null,
+    p_tipo_movimiento: p.tipoMovimiento ?? 'venta',
+    p_flota: p.flota ?? null,
+    p_destino_estanque_id: p.destinoEstanqueId ?? null,
   })
   if (error) throw error
-  return data as { success: boolean; despacho_id: string; litros?: number; duplicado?: boolean }
+  return data as {
+    success: boolean; despacho_id: string; litros?: number; duplicado?: boolean
+    ceco_id?: string | null; ceco_anotado?: boolean
+  }
 }
 
 export async function getDespachosDia(faenaId: string, fecha: string): Promise<CombDespacho[]> {
