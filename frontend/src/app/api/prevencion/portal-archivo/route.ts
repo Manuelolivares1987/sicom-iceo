@@ -22,7 +22,7 @@ const BUCKET = 'examenes-personal'
 const VIGENCIA_SEG = 300
 
 export async function POST(req: Request) {
-  let body: { token?: string; examen_id?: string }
+  let body: { token?: string; examen_id?: string; acceso_id?: string }
   try {
     body = await req.json()
   } catch {
@@ -31,7 +31,8 @@ export async function POST(req: Request) {
 
   const token = (body.token ?? '').trim()
   const examenId = (body.examen_id ?? '').trim()
-  if (!token || !examenId) {
+  const accesoId = (body.acceso_id ?? '').trim()
+  if (!token || !examenId || !accesoId) {
     return NextResponse.json({ error: 'Faltan datos.' }, { status: 400 })
   }
 
@@ -50,11 +51,13 @@ export async function POST(req: Request) {
     )
   }
 
-  // 1. La base decide si este token puede ver este examen.
+  // 1. La base decide si este token, con este ingreso identificado (MIG313),
+  //    puede ver este examen.
   const publico = createClient(url, anonKey, { auth: { persistSession: false } })
   const { data: path, error } = await publico.rpc('fn_portal_prevencion_archivo', {
     p_token: token,
     p_examen_id: examenId,
+    p_acceso_id: accesoId,
   })
   if (error || !path) {
     return NextResponse.json({ error: 'Documento no disponible.' }, { status: 403 })
