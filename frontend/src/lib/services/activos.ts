@@ -182,6 +182,66 @@ export async function getHistorialMantenimiento(activoId: string) {
   return { data, error }
 }
 
+// ── Historial de mantenimiento (MIG310) ────────────────────────────────────
+// Una fila por intervención, con el detalle de lo que se hizo. Incluye las
+// órdenes de servicio anteriores al sistema: sin ellas el equipo parece recién
+// nacido el día que arrancó SICOM.
+export interface TareaHistorial {
+  descripcion: string
+  seccion: string | null
+  resultado: string | null
+  observacion: string | null
+  foto_url: string | null
+}
+export interface RepuestoHistorial {
+  producto: string
+  cantidad: number
+  costo: number | null
+}
+export interface HallazgoHistorial {
+  descripcion: string
+  severidad: string | null
+  resuelto: boolean | null
+  estado: string | null
+}
+export interface IntervencionHistorial {
+  activo_id: string
+  origen: 'ot' | 'os_legacy'
+  ref_id: string
+  folio: string
+  tipo: string
+  estado: string
+  fecha: string | null
+  fecha_inicio: string | null
+  fecha_termino: string | null
+  trabajo_realizado: string | null
+  motivo: string | null
+  km_al_cierre: number | null
+  horas_al_cierre: number | null
+  horas_hombre: number | null
+  costo: number | null
+  responsable: string | null
+  supervisor: string | null
+  tareas_total: number
+  tareas_ok: number
+  tareas_no_ok: number
+  repuestos_total: number
+  evidencias_total: number
+  hallazgos_total: number
+  fuente: string | null
+  tareas: TareaHistorial[]
+  repuestos: RepuestoHistorial[]
+  hallazgos: HallazgoHistorial[]
+}
+
+export async function getHistorialMantenimientoEquipo(activoId: string, limite = 100) {
+  const { data, error } = await supabase.rpc('fn_historial_mantenimiento_equipo', {
+    p_activo_id: activoId,
+    p_limite: limite,
+  })
+  return { data: (data ?? []) as IntervencionHistorial[], error }
+}
+
 // Get KPIs per asset via RPC
 export async function getKPIActivo(activoId: string) {
   const { data, error } = await supabase.rpc('rpc_kpi_activo', {

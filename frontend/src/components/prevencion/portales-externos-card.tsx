@@ -11,7 +11,7 @@
 
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Link2, Copy, Check, EyeOff, Eye, Ban, Users, Truck } from 'lucide-react'
+import { Link2, Copy, Check, EyeOff, Eye, Ban, Users, Truck, UserCheck } from 'lucide-react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Spinner } from '@/components/ui/spinner'
 import { supabase } from '@/lib/supabase'
@@ -26,10 +26,22 @@ type Portal = {
   faena_codigo: string | null
   activo_ids: string[] | null
   ver_archivos_personal: boolean
+  requiere_identificacion: boolean
+  emails_autorizados: string[] | null
   activo: boolean
   expira_at: string | null
   usos: number
   last_used_at: string | null
+}
+
+type Acceso = {
+  id: string
+  portal_id: string
+  nombre: string
+  email: string
+  entrada_at: string
+  ultima_vista: string
+  vistas: number
 }
 
 function baseUrl() {
@@ -48,10 +60,25 @@ export function PortalesExternosCard() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('portales_prevencion')
-        .select('id, token, nombre, cliente, faena_codigo, activo_ids, ver_archivos_personal, activo, expira_at, usos, last_used_at')
+        .select('id, token, nombre, cliente, faena_codigo, activo_ids, ver_archivos_personal, requiere_identificacion, emails_autorizados, activo, expira_at, usos, last_used_at')
         .order('created_at', { ascending: false })
       if (error) throw error
       return (data ?? []) as Portal[]
+    },
+  })
+
+  // Quién entró. Es la mitad del valor del portal: poder responder "Karen lo
+  // vio el martes" sin depender de la memoria de nadie.
+  const { data: accesos } = useQuery({
+    queryKey: ['portal-prevencion-accesos'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('portal_prevencion_accesos')
+        .select('id, portal_id, nombre, email, entrada_at, ultima_vista, vistas')
+        .order('entrada_at', { ascending: false })
+        .limit(50)
+      if (error) throw error
+      return (data ?? []) as Acceso[]
     },
   })
 
@@ -142,10 +169,45 @@ export function PortalesExternosCard() {
                     {p.ver_archivos_personal ? 'Entrega respaldos de personal' : 'Sin respaldos de personal'}
                   </span>
                   <span>
+                    {p.requiere_identificacion
+                      ? `Ingreso identificado · ${p.emails_autorizados?.length ?? 0} correo(s) propios`
+                      : 'Sin identificación'}
+                  </span>
+                  <span>
                     {p.usos} consulta{p.usos === 1 ? '' : 's'}
                     {p.last_used_at ? ` · última ${new Date(p.last_used_at).toLocaleDateString('es-CL')}` : ''}
                   </span>
                 </div>
+
+                {(() => {
+                  const ingresos = (accesos ?? []).filter((x) => x.portal_id === p.id).slice(0, 4)
+                  if (ingresos.length === 0) {
+                    return (
+                      <p className="mt-2 text-[11px] italic text-gray-400">
+                        Nadie ha ingresado todavía.
+                      </p>
+                    )
+                  }
+                  return (
+                    <div className="mt-2 space-y-0.5 rounded bg-gray-50 px-2 py-1.5">
+                      <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">
+                        Últimos ingresos
+                      </p>
+                      {ingresos.map((x) => (
+                        <p key={x.id} className="flex items-center gap-1.5 text-[11px] text-gray-600">
+                          <UserCheck className="h-3 w-3 shrink-0 text-gray-400" />
+                          <span className="font-medium">{x.nombre}</span>
+                          <span className="text-gray-400">{x.email}</span>
+                          <span className="ml-auto shrink-0 text-gray-400">
+                            {new Date(x.entrada_at).toLocaleString('es-CL', {
+                              day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
+                            })}
+                          </span>
+                        </p>
+                      ))}
+                    </div>
+                  )
+                })()}
 
                 <div className="mt-2 flex flex-wrap items-center gap-2">
                   <code className="min-w-0 flex-1 truncate rounded bg-gray-100 px-2 py-1 font-mono text-[10px] text-gray-600">

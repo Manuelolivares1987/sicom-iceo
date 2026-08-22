@@ -36,6 +36,7 @@ import {
   CheckCircle2,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { HistorialMantenimiento } from '@/components/activos/historial-mantenimiento'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
@@ -68,7 +69,6 @@ import {
   usePlanesByActivo,
   useCertificacionesByActivo,
   useCostosByActivo,
-  useHistorialMantenimiento,
 } from '@/hooks/use-activos'
 import { useQueryClient } from '@tanstack/react-query'
 import { useToast } from '@/contexts/toast-context'
@@ -86,7 +86,6 @@ import {
 } from '@/domain/activos/documentos'
 import { useOEEActivo } from '@/hooks/use-flota'
 import { HistorialEstadosChart } from '@/components/flota/historial-estados-chart'
-import { useHistorialOSLegacyByActivo } from '@/hooks/use-historial-os-legacy'
 import { CambiarContratoModal } from '@/components/activos/cambiar-contrato-modal'
 import { CarpetaCertificados } from '@/components/activos/carpeta-certificados'
 import { HistoricoContratosCard } from '@/components/activos/historico-contratos-card'
@@ -838,30 +837,47 @@ function DocumentoCard({ c, subiendo, reemplazado, onSubirArchivo, onRenovar }: 
 // ---------------------------------------------------------------------------
 // Tabs reutilizados (simplificados)
 // ---------------------------------------------------------------------------
+// El historial de mantenimiento reemplaza la lista de folios (MIG310). La
+// pregunta que le hacen a un equipo no es cuántas OT tuvo, es qué le hicieron.
+// Debajo quedan las OT abiertas, que son trabajo pendiente, no historia.
 function TabOTs({ activoId }: { activoId: string }) {
-  const { data: ots, isLoading } = useOTsByActivo(activoId)
-  if (isLoading) return <div className="flex justify-center py-12"><Spinner className="h-8 w-8" /></div>
-  if (!ots || ots.length === 0) return <EmptyState icon={Wrench} title="Sin ordenes de trabajo" description="Este activo no tiene OTs registradas." />
+  const { data: ots } = useOTsByActivo(activoId)
+  const abiertas = (ots ?? []).filter(
+    (ot: any) => !['ejecutada_ok', 'ejecutada_con_observaciones', 'cerrada', 'anulada'].includes(ot.estado),
+  )
 
   return (
-    <div className="space-y-2">
-      {ots.map((ot: any) => (
-        <Card key={ot.id}>
-          <CardContent className="p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-2">
-            <div className="flex items-center gap-3">
-              <Link href={`/dashboard/ordenes-trabajo/${ot.id}`} className="font-mono text-sm font-bold text-blue-600 hover:underline">{ot.folio}</Link>
-              <Badge variant="default">{ot.tipo}</Badge>
-              <Badge className={getEstadoOTColor(ot.estado)}>{getEstadoOTLabel(ot.estado)}</Badge>
-              <Badge className={getPrioridadColor(ot.prioridad)}>{ot.prioridad}</Badge>
-            </div>
-            <div className="flex items-center gap-4 text-xs text-gray-500">
-              <span>{ot.fecha_programada ? formatDate(ot.fecha_programada) : '—'}</span>
-              <span className="font-semibold">{ot.costo_total ? formatCLP(ot.costo_total) : '—'}</span>
-              <span>{ot.responsable?.nombre_completo ?? '—'}</span>
-            </div>
-          </CardContent>
-        </Card>
-      ))}
+    <div className="space-y-5">
+      {abiertas.length > 0 && (
+        <div>
+          <h3 className="mb-2 text-sm font-semibold text-gray-900">
+            En curso ({abiertas.length})
+          </h3>
+          <div className="space-y-2">
+            {abiertas.map((ot: any) => (
+              <Card key={ot.id}>
+                <CardContent className="flex flex-col gap-2 p-4 md:flex-row md:items-center md:justify-between">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <Link href={`/dashboard/ordenes-trabajo/${ot.id}`} className="font-mono text-sm font-bold text-blue-600 hover:underline">{ot.folio}</Link>
+                    <Badge variant="default">{ot.tipo}</Badge>
+                    <Badge className={getEstadoOTColor(ot.estado)}>{getEstadoOTLabel(ot.estado)}</Badge>
+                    <Badge className={getPrioridadColor(ot.prioridad)}>{ot.prioridad}</Badge>
+                  </div>
+                  <div className="flex items-center gap-4 text-xs text-gray-500">
+                    <span>{ot.fecha_programada ? formatDate(ot.fecha_programada) : '—'}</span>
+                    <span>{ot.responsable?.nombre_completo ?? 'sin responsable'}</span>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div>
+        <h3 className="mb-2 text-sm font-semibold text-gray-900">Historial de mantenimiento</h3>
+        <HistorialMantenimiento activoId={activoId} />
+      </div>
     </div>
   )
 }
@@ -911,8 +927,8 @@ function TabCostos({ activoId }: { activoId: string }) {
 }
 
 function TabHistorial({ activoId, contratoRefreshKey }: { activoId: string; contratoRefreshKey?: number }) {
-  const { data: historial, isLoading } = useHistorialMantenimiento(activoId)
-  const { data: legacy, isLoading: loadingLegacy } = useHistorialOSLegacyByActivo(activoId)
+  // El historial de intervenciones lo trae HistorialMantenimiento en una sola
+  // consulta (MIG310). Aquí sólo quedan los arriendos, que son otra historia.
   const { data: arriendos } = useHistorialArriendos(activoId)
 
   return (
@@ -968,89 +984,21 @@ function TabHistorial({ activoId, contratoRefreshKey }: { activoId: string; cont
       {/* Gráfico histórico anual de estados (barras apiladas) */}
       <HistorialEstadosChart activoId={activoId} />
 
-      {/* ── Historial OS legacy (importado del Excel pre-sistema) ── */}
-      {!loadingLegacy && legacy && legacy.length > 0 && (
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base flex items-center gap-2">
-              <History className="h-4 w-4 text-amber-700" />
-              Histórico previo (OS Auditoría, {legacy.length})
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-0 overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Fecha</TableHead>
-                  <TableHead>OS</TableHead>
-                  <TableHead>Tipo</TableHead>
-                  <TableHead className="text-right">Horómetro</TableHead>
-                  <TableHead className="text-right">Kilometraje</TableHead>
-                  <TableHead className="text-right">Hs MO</TableHead>
-                  <TableHead className="text-right">% Cumpl.</TableHead>
-                  <TableHead>Responsable</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {legacy.map((os) => {
-                  const tiposActivos = [
-                    os.flag_mant_prev && 'MP',
-                    os.flag_correctivo && 'Corr.',
-                    os.flag_neumaticos && 'Neum.',
-                    os.flag_rev_tec && 'RT',
-                    os.flag_hab_estado && 'Hab.',
-                    os.flag_serv_externo && 'Ext.',
-                  ].filter(Boolean).join(' · ')
-                  return (
-                    <TableRow key={os.id} className="text-xs">
-                      <TableCell className="whitespace-nowrap">{os.fecha_recepcion ? formatDate(os.fecha_recepcion) : '—'}</TableCell>
-                      <TableCell className="font-mono font-semibold">{os.os_cqbo ?? os.os_numero}</TableCell>
-                      <TableCell>{tiposActivos || os.tipo_principal}</TableCell>
-                      <TableCell className="text-right tabular-nums">{os.horometro ? os.horometro.toLocaleString('es-CL') : '—'}</TableCell>
-                      <TableCell className="text-right tabular-nums">{os.kilometraje ? os.kilometraje.toLocaleString('es-CL') : '—'}</TableCell>
-                      <TableCell className="text-right tabular-nums">{os.horas_mo ? `${os.horas_mo} h` : '—'}</TableCell>
-                      <TableCell className="text-right tabular-nums">{os.cumplimiento_pct != null ? `${os.cumplimiento_pct}%` : '—'}</TableCell>
-                      <TableCell className="text-gray-600">{os.responsable ?? '—'}</TableCell>
-                    </TableRow>
-                  )
-                })}
-              </TableBody>
-            </Table>
-            <div className="p-2 text-[10px] text-gray-500 border-t">
-              MP=Mant. Preventiva · Corr.=Correctivo · Neum.=Neumáticos · RT=Rev. Técnica · Hab.=Habilitación/Estado · Ext.=Servicio externo
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Historial de intervenciones (OTs del sistema actual) */}
-      {isLoading && <div className="flex justify-center py-6"><Spinner className="h-8 w-8" /></div>}
-      {!isLoading && (!historial || historial.length === 0) && (!legacy || legacy.length === 0) && (
-        <EmptyState icon={History} title="Sin intervenciones" description="El equipo no registra OTs todavía." />
-      )}
-      {!isLoading && historial && historial.length > 0 && (
-    <div className="space-y-2">
-      <div className="text-sm font-semibold text-gray-700 mt-2">OTs del sistema ({historial.length})</div>
-      {(historial as any[]).map((item: any, idx: number) => (
-        <Card key={item.id ?? idx}>
-          <CardContent className="p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-gray-500">{item.fecha_programada ? formatDate(item.fecha_programada) : '—'}</span>
-              {item.folio && (
-                <Link href={`/dashboard/ordenes-trabajo/${item.ot_id ?? item.id}`} className="font-mono text-sm font-bold text-blue-600 hover:underline">{item.folio}</Link>
-              )}
-              <Badge variant="default">{item.tipo}</Badge>
-              <Badge className={getEstadoOTColor(item.estado)}>{getEstadoOTLabel(item.estado)}</Badge>
-            </div>
-            <div className="flex gap-3 text-xs text-gray-500">
-              {item.costo_total > 0 && <span>{formatCLP(item.costo_total)}</span>}
-              {item.responsable && <span>{item.responsable}</span>}
-            </div>
-          </CardContent>
-        </Card>
-      ))}
-    </div>
-      )}
+      {/* ── Historial de mantenimiento (MIG310) ──
+          Antes esto eran tres bloques que contaban la misma historia en tres
+          formatos: una tabla de OS antiguas, una lista de OTs y un link a la
+          bitácora. Ahora es una sola línea de vida del equipo, con el detalle
+          de lo que se hizo en cada intervención. */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Wrench className="h-4 w-4 text-blue-700" /> Historial de mantenimiento
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <HistorialMantenimiento activoId={activoId} />
+        </CardContent>
+      </Card>
     </div>
   )
 }
