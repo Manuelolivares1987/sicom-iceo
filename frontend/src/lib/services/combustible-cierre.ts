@@ -48,6 +48,10 @@ export type LecturaPunto = {
   temperatura_c: number | null
   sin_medicion: boolean
   motivo_sin_medicion: string | null
+  // [MIG319] La foto de la varilla. En combustible la medición no se puede
+  // volver a verificar: mañana el estanque tiene otro nivel.
+  foto_url?: string | null
+  sin_foto_motivo?: string | null
 }
 
 export type LecturaMedidor = {
@@ -55,6 +59,8 @@ export type LecturaMedidor = {
   numeral_ini: number | null
   numeral_fin: number | null
   calibracion: number
+  foto_url?: string | null
+  sin_foto_motivo?: string | null
 }
 
 export type CierreInput = {
@@ -159,6 +165,16 @@ export async function guardarCierre(p: CierreInput) {
   })
   if (error) throw error
   return data as { cierre_id: string; firmado: boolean }
+}
+
+/** Sube la foto de una medición y devuelve su URL pública. */
+export async function subirFotoMedicion(file: File | Blob): Promise<string> {
+  const path = `romeral-cierre/${Date.now()}_${Math.floor(Math.random() * 1e6)}.jpg`
+  const { error } = await supabase.storage
+    .from('evidencias-verificacion')
+    .upload(path, file, { contentType: 'image/jpeg' })
+  if (error) throw error
+  return supabase.storage.from('evidencias-verificacion').getPublicUrl(path).data.publicUrl
 }
 
 /** Anota un CECO que no está en el catálogo. No lo duplica si ya existe. */

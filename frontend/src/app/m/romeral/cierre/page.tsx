@@ -29,7 +29,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import {
   ArrowLeft, ArrowRight, Check, CloudOff, Gauge, Download, RefreshCw,
-  AlertTriangle, CheckCircle2, Ruler, Truck, Building2, Ban, Save,
+  AlertTriangle, CheckCircle2, Ruler, Truck, Building2, Ban, Save, Camera, X,
 } from 'lucide-react'
 import { Spinner } from '@/components/ui/spinner'
 import { useToast } from '@/contexts/toast-context'
@@ -47,6 +47,7 @@ import {
   descargarCatalogoCierre, getPuntosOffline, ultimaDescargaCierre,
   descargarMedicionAnterior, getMedicionAnteriorOffline,
   crearBorrador, guardarBorrador, subirBorrador,
+  guardarFotoLocal, getFotoLocal, esFotoLocal,
   type BorradorCierre,
 } from '@/lib/offline/combustible-cierre-offline'
 
@@ -89,6 +90,94 @@ function CampoNumero({
         <span className="w-8 shrink-0 text-lg font-semibold text-gray-400">{sufijo}</span>
       </div>
     </label>
+  )
+}
+
+/**
+ * La foto de una medición. En combustible no es un adjunto: es el documento.
+ * Un nivel de varilla o un numeral no se pueden volver a verificar — mañana el
+ * estanque tiene otro nivel. Por eso se saca junto con el número y no después.
+ *
+ * Se guarda en el teléfono al instante y sube cuando hay señal. Si no se puede
+ * sacar (cámara mojada, sin batería, lugar donde no se saca el teléfono), se
+ * escribe por qué: obligar a una foto imposible termina en mediciones sin
+ * registrar, que es peor.
+ */
+function FotoMedicion({
+  valor, motivo, onFoto, onMotivo, etiqueta = 'Foto de la medición',
+}: {
+  valor?: string | null
+  motivo?: string | null
+  onFoto: (ref: string | null) => void
+  onMotivo: (m: string) => void
+  etiqueta?: string
+}) {
+  const [preview, setPreview] = useState<string | null>(null)
+
+  // La foto que espera en el teléfono también se tiene que poder mirar.
+  useEffect(() => {
+    let vivo = true
+    let url: string | null = null
+    if (!valor) { setPreview(null); return }
+    if (esFotoLocal(valor)) {
+      getFotoLocal(valor).then((b) => {
+        if (!vivo || !b) return
+        url = URL.createObjectURL(b)
+        setPreview(url)
+      })
+    } else {
+      setPreview(valor)
+    }
+    return () => { vivo = false; if (url) URL.revokeObjectURL(url) }
+  }, [valor])
+
+  return (
+    <div className="space-y-2">
+      {valor ? (
+        <div className="relative">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={preview ?? ''}
+            alt={etiqueta}
+            className="h-32 w-full rounded-xl border-2 border-emerald-400 object-cover"
+          />
+          <button
+            onClick={() => onFoto(null)}
+            className="absolute right-2 top-2 rounded-full bg-white/95 p-2 text-red-600 shadow"
+            aria-label="Quitar la foto"
+          >
+            <X className="h-4 w-4" />
+          </button>
+          <span className="absolute bottom-2 left-2 rounded bg-emerald-600 px-2 py-0.5 text-xs font-bold text-white">
+            Foto lista
+          </span>
+        </div>
+      ) : (
+        <>
+          <label className="flex h-14 cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-dashed border-amber-400 bg-amber-50 text-lg font-bold text-amber-800">
+            <Camera className="h-5 w-5" />
+            {etiqueta}
+            <input
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              onChange={async (e) => {
+                const f = e.target.files?.[0]
+                if (f) onFoto(await guardarFotoLocal(f))
+                e.target.value = ''
+              }}
+            />
+          </label>
+          <input
+            value={motivo ?? ''}
+            onChange={(e) => onMotivo(e.target.value)}
+            placeholder="Si no puede sacarla, escriba por qué"
+            className="h-12 w-full rounded-xl border-2 border-gray-300 px-3 text-base"
+          />
+        </>
+      )}
+    </div>
   )
 }
 
@@ -226,15 +315,28 @@ export default function CierreRomeralPage() {
   const total = puntosOrdenados.length
 
   const resumen = useMemo(() => {
-    if (!borrador) return { medidos: 0, saltados: 0, revisar: 0 }
+    if (!borrador) return { medidos: 0, saltados: 0, revisar: 0, sinFoto: [] as string[] }
     let medidos = 0, saltados = 0, revisar = 0
+    // Lo que va a rechazar la firma, contado ANTES de apretar el botón: llegar
+    // al final y que te digan que falta una foto de un estanque que quedó a
+    // dos kilómetros es la mejor forma de que dejen de usar la app.
+    const sinFoto: string[] = []
     for (const p of puntosOrdenados) {
       const l = borrador.puntos[p.id]
       if (l?.sin_medicion) { saltados++; continue }
       const c = calcPunto(p)
       if (c.completo) { medidos++; if (!c.cuadra) revisar++ }
+      if (l?.mf != null && !l.foto_url && !(l.sin_foto_motivo ?? '').trim()) {
+        sinFoto.push(p.nombre)
+      }
+      for (const m of p.medidores) {
+        const lm = borrador.medidores[m.id]
+        if (lm?.numeral_fin != null && !lm.foto_url && !(lm.sin_foto_motivo ?? '').trim()) {
+          sinFoto.push(m.etiqueta ?? `${p.nombre} · ${m.surtidor} ${m.numero}`)
+        }
+      }
     }
-    return { medidos, saltados, revisar }
+    return { medidos, saltados, revisar, sinFoto }
   }, [borrador, puntosOrdenados, calcPunto])
 
   const subir = async (firmar: boolean) => {
@@ -416,8 +518,29 @@ export default function CierreRomeralPage() {
             />
           </div>
 
+          {resumen.sinFoto.length > 0 && (
+            <div className="rounded-xl border-2 border-amber-400 bg-amber-50 p-4">
+              <p className="flex items-start gap-2 text-base font-bold text-amber-900">
+                <Camera className="mt-0.5 h-5 w-5 shrink-0" />
+                Faltan {resumen.sinFoto.length} foto{resumen.sinFoto.length > 1 ? 's' : ''}
+              </p>
+              <p className="mt-1 text-sm text-amber-800">
+                En combustible la medición no se puede volver a verificar: mañana el estanque
+                tiene otro nivel. Vuelva atrás y sáquelas, o escriba por qué no pudo.
+              </p>
+              <ul className="mt-2 space-y-0.5 text-sm font-medium text-amber-900">
+                {resumen.sinFoto.slice(0, 6).map((n) => <li key={n}>· {n}</li>)}
+                {resumen.sinFoto.length > 6 && <li>· y {resumen.sinFoto.length - 6} más</li>}
+              </ul>
+            </div>
+          )}
+
           <div className="space-y-2">
-            <BotonGrande onClick={() => subir(true)} disabled={subiendo || !online} icono={Check}>
+            <BotonGrande
+              onClick={() => subir(true)}
+              disabled={subiendo || !online || resumen.sinFoto.length > 0}
+              icono={Check}
+            >
               {subiendo ? <Spinner className="h-5 w-5" /> : 'Firmar y enviar'}
             </BotonGrande>
             <BotonGrande onClick={() => subir(false)} variante="secundario" disabled={subiendo || !online} icono={Save}>
@@ -546,6 +669,18 @@ export default function CierreRomeralPage() {
                   Revíselo antes de seguir.
                 </p>
               )}
+
+              {/* La foto de la varilla. Aparece cuando ya hay un número que
+                  respaldar: pedirla antes es pedir la foto de nada. */}
+              {lec?.mf != null && (
+                <FotoMedicion
+                  etiqueta="Foto de la varilla"
+                  valor={lec.foto_url}
+                  motivo={lec.sin_foto_motivo}
+                  onFoto={(ref) => setPunto(p.id, 'foto_url', ref)}
+                  onMotivo={(m) => setPunto(p.id, 'sin_foto_motivo', m)}
+                />
+              )}
             </div>
 
             {/* Los contadores */}
@@ -592,6 +727,16 @@ export default function CierreRomeralPage() {
                         <p className="text-sm font-semibold text-gray-600">
                           Salieron <span className="tabular-nums text-gray-900">{miles(lm.numeral_fin - ini)}</span> L por este contador
                         </p>
+                      )}
+
+                      {lm?.numeral_fin != null && (
+                        <FotoMedicion
+                          etiqueta="Foto del contador"
+                          valor={lm.foto_url}
+                          motivo={lm.sin_foto_motivo}
+                          onFoto={(ref) => setMedidor(m.id, 'foto_url', ref)}
+                          onMotivo={(mm) => setMedidor(m.id, 'sin_foto_motivo', mm)}
+                        />
                       )}
                     </div>
                   )
