@@ -259,6 +259,8 @@ const navGroups: NavGroup[] = [
         tooltip: 'Repuestos pedidos por el taller sin stock: solicitar la OC (la emite Softland), ver en qué está cada compra y cuándo llega' },
       { label: 'Combustible Franke', href: '/dashboard/combustible/franke', icon: Fuel, extendedModule: 'bodega', badge: 'Nuevo',
         tooltip: 'Camiones petroleros, cargas, trasvasije y cuadre diario — operación Franke' },
+      { label: 'Combustible Romeral', href: '/dashboard/combustible/romeral', icon: Fuel, extendedModule: 'bodega', badge: 'Nuevo',
+        tooltip: 'Cierre de volumen y de imputación, excepciones y CECO por confirmar — faena Romeral' },
     ],
   },
   // Compliance

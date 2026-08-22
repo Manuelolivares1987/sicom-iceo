@@ -77,6 +77,11 @@ export default function RomeralTerrenoPage() {
   // [MIG318] Muchos CECO no están en la base. Quien carga los anota acá
   // mismo: no bloquea el despacho y no se pierde el dato.
   const [cecoTexto, setCecoTexto] = useState('')
+  // [MIG318] No todo lo que sale del camión es una venta. Clasificarlo acá, en
+  // el momento, es lo que hoy se hace en oficina tres días después mirando la
+  // columna "Registro Manual" del Excel.
+  const [tipoMov, setTipoMov] = useState<'venta' | 'trasvasije' | 'recirculacion' | 'calibracion'>('venta')
+  const [destinoId, setDestinoId] = useState('')
   const [ubicacionId, setUbicacionId] = useState('')
   const [meterIni, setMeterIni] = useState('')
   const [meterFin, setMeterFin] = useState('')
@@ -183,6 +188,7 @@ export default function RomeralTerrenoPage() {
     try { ini = localStorage.getItem(K_METER) ?? '' } catch { /* no-op */ }
     setMeterIni(ini); setMeterFin(''); setLitrosManual('')
     setEquipo(null); setEquipoTexto(''); setCecoTexto(''); setBuscar(''); setUbicacionId(''); setObs('')
+    setTipoMov('venta'); setDestinoId('')
     setFotoIni(null); setFotoFin(null); setSinFotoMotivo('')
     setAbierto(true)
   }
@@ -210,6 +216,8 @@ export default function RomeralTerrenoPage() {
         equipoId: equipo?.id ?? null,
         equipoTexto: equipo ? null : equipoTexto.trim(),
         cecoTexto: equipo?.ceco ? null : (cecoTexto.trim() || null),
+        tipoMovimiento: tipoMov,
+        destinoEstanqueId: tipoMov === 'trasvasije' ? (destinoId || null) : null,
         ubicacionId: ubicacionId || null,
         meterInicial: num(meterIni),
         meterFinal: num(meterFin),
@@ -285,6 +293,20 @@ export default function RomeralTerrenoPage() {
         <div className="min-w-0 flex-1">
           <p className="text-sm font-bold text-gray-900">Cierre del turno</p>
           <p className="text-[11px] text-gray-500">Varilla y contadores de los 7 puntos</p>
+        </div>
+        <ChevronRight className="h-5 w-5 shrink-0 text-gray-400" />
+      </Link>
+
+      <Link
+        href="/m/romeral/recepcion"
+        className="flex items-center gap-3 rounded-xl border-2 border-gray-300 bg-white p-3 active:bg-gray-50"
+      >
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-gray-600 text-white">
+          <Download className="h-5 w-5" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-bold text-gray-900">Recibir camión</p>
+          <p className="text-[11px] text-gray-500">Guía de flota primaria, con foto</p>
         </div>
         <ChevronRight className="h-5 w-5 shrink-0 text-gray-400" />
       </Link>
@@ -481,9 +503,57 @@ export default function RomeralTerrenoPage() {
           </div>
 
           <div className="flex-1 space-y-4 overflow-y-auto p-3 pb-28">
+            {/* Qué clase de movimiento es. Por defecto venta, que es el 95 % de
+                los casos: el que sólo carga equipos no toca este botón nunca. */}
+            <div>
+              <label className="text-xs font-bold text-gray-700">¿Qué estás haciendo?</label>
+              <div className="mt-1 grid grid-cols-2 gap-1.5">
+                {([
+                  ['venta', 'Cargar equipo'],
+                  ['trasvasije', 'Pasar a otro estanque'],
+                  ['recirculacion', 'Recirculación'],
+                  ['calibracion', 'Calibración'],
+                ] as const).map(([k, label]) => (
+                  <button
+                    key={k}
+                    onClick={() => setTipoMov(k)}
+                    className={`rounded-lg border-2 py-2.5 text-xs font-bold ${
+                      tipoMov === k
+                        ? 'border-orange-500 bg-orange-50 text-orange-800'
+                        : 'border-gray-200 bg-white text-gray-500'}`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              {tipoMov !== 'venta' && (
+                <p className="mt-1.5 rounded-lg bg-blue-50 px-2.5 py-2 text-[11px] leading-relaxed text-blue-800">
+                  Esto no es una venta: sale del estanque pero no se le factura a nadie.
+                  Queda separado en el cierre.
+                </p>
+              )}
+            </div>
+
+            {/* A dónde va el trasvasije: sin esto el litro sale de un lado y no
+                entra a ninguno, que es como se pierden en el cuadre. */}
+            {tipoMov === 'trasvasije' && (
+              <div>
+                <label className="text-xs font-bold text-gray-700">¿A qué estanque?</label>
+                <select value={destinoId} onChange={(e) => setDestinoId(e.target.value)}
+                        className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-3 text-sm">
+                  <option value="">— Elige el destino —</option>
+                  {cat.camiones.filter((c) => c.id !== camionId).map((c) => (
+                    <option key={c.id} value={c.id}>{c.nombre}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             {/* A quién se carga */}
             <div>
-              <label className="text-xs font-bold text-gray-700">¿A quién estás cargando?</label>
+              <label className="text-xs font-bold text-gray-700">
+                {tipoMov === 'venta' ? '¿A quién estás cargando?' : '¿A qué equipo / destino?'}
+              </label>
               {equipo ? (
                 <div className="mt-1 flex items-center gap-2 rounded-lg border-2 border-orange-400 bg-orange-50 p-3">
                   <div className="flex-1">
