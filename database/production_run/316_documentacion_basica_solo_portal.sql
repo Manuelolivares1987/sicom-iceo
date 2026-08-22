@@ -238,7 +238,11 @@ $function$;
 GRANT EXECUTE ON FUNCTION public.rpc_documentos_activo_publico(uuid) TO anon, authenticated;
 
 -- ── 4. Retirar el catálogo global ──────────────────────────────────────────
--- Nadie más lo usa: la clasificación es del portal.
+-- destructivo-ok: documento_tipos_config nace y muere hoy. La creó MIG315 hace
+-- minutos, no la referencia ninguna otra tabla, vista o función, y no guarda
+-- dato de operación: es la lista de tipos que ahora vive en la fila del portal.
+-- Dejarla como tabla vacía y huérfana invita a que alguien la vuelva a usar y
+-- reponga la regla global que este archivo viene a deshacer.
 DROP FUNCTION IF EXISTS public.fn_documento_es_basico(text);
 DROP FUNCTION IF EXISTS public.fn_documento_orden(text);
 DROP TABLE IF EXISTS public.documento_tipos_config;
