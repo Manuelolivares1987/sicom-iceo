@@ -37,6 +37,7 @@ import { estadoFlotaLabel, estadoFlotaColor } from '@/lib/estado-flota'
 // ── Tipos del RPC ──────────────────────────────────────────────────────────
 type DocEquipo = {
   tipo: string
+  basico: boolean
   numero_certificado: string | null
   entidad_certificadora: string | null
   fecha_emision: string | null
@@ -128,6 +129,15 @@ const ESTADO_DOC: Record<string, { label: string; nivel: Nivel }> = {
   no_aplica:     { label: 'No aplica',         nivel: 'gris' },
 }
 const docUI = (estado: string) => ESTADO_DOC[estado] ?? { label: estado, nivel: 'gris' as Nivel }
+
+// 'no_aplica' significa dos cosas distintas segun de que hable. En un examen
+// de personal es "no aplica a este cargo". En un papel del vehiculo es
+// "no vence" — el padron y la poliza no caducan. Decirle "No aplica" al padron
+// de un camion le abre una pregunta al mandante que no tiene por que hacerse.
+const docEquipoUI = (estado: string) =>
+  estado === 'no_aplica'
+    ? { label: 'Sin vencimiento', nivel: 'gris' as Nivel }
+    : docUI(estado)
 const ORDEN_NIVEL: Record<Nivel, number> = { rojo: 0, naranjo: 1, amarillo: 2, verde: 3, gris: 4 }
 
 const ESTADO_PERSONA: Record<string, { label: string; nivel: Nivel }> = {
@@ -264,7 +274,7 @@ function Ingreso({ token, onEntrar }: { token: string; onEntrar: (s: Sesion) => 
 
 // ── Documento de un equipo ─────────────────────────────────────────────────
 function FilaDocEquipo({ d }: { d: DocEquipo }) {
-  const ui = docUI(d.estado)
+  const ui = docEquipoUI(d.estado)
   return (
     <tr className="border-b border-slate-100 last:border-0">
       <td className="py-2 pr-3">
@@ -316,19 +326,29 @@ function FilaDocEquipo({ d }: { d: DocEquipo }) {
 }
 
 function FichaEquipo({ eq }: { eq: Equipo }) {
-  const [ver, setVer] = useState<'pendientes' | 'todo' | 'mantenimiento'>('pendientes')
+  const [verTecnicos, setVerTecnicos] = useState(false)
+  const [verTodoHistorial, setVerTodoHistorial] = useState(false)
 
-  const docs = useMemo(
+  // La documentación básica es la que habilita al camión a circular y operar:
+  // permiso, SOAP, revisión técnica, gases, padrón, póliza y —en un aljibe—
+  // TC8 y hermeticidad. El resto son certificados técnicos: importan, pero son
+  // la segunda pregunta. El catálogo vive en la base (MIG315).
+  const basicos = useMemo(() => eq.documentos.filter((d) => d.basico), [eq.documentos])
+  const tecnicos = useMemo(
     () =>
-      [...eq.documentos].sort(
-        (a, b) =>
-          ORDEN_NIVEL[docUI(a.estado).nivel] - ORDEN_NIVEL[docUI(b.estado).nivel] ||
-          (TIPO_DOC_LABEL[a.tipo] ?? a.tipo).localeCompare(TIPO_DOC_LABEL[b.tipo] ?? b.tipo, 'es'),
-      ),
+      eq.documentos
+        .filter((d) => !d.basico)
+        .sort(
+          (a, b) =>
+            ORDEN_NIVEL[docUI(a.estado).nivel] - ORDEN_NIVEL[docUI(b.estado).nivel] ||
+            (TIPO_DOC_LABEL[a.tipo] ?? a.tipo).localeCompare(TIPO_DOC_LABEL[b.tipo] ?? b.tipo, 'es'),
+        ),
     [eq.documentos],
   )
-  const pendientes = docs.filter((d) => esPendiente(d.estado))
-  const visibles = ver === 'todo' ? docs : pendientes
+
+  const basicosPend = basicos.filter((d) => esPendiente(d.estado))
+  const tecnicosPend = tecnicos.filter((d) => esPendiente(d.estado))
+  const historial = verTodoHistorial ? eq.mantenimiento : eq.mantenimiento.slice(0, 5)
 
   return (
     <article className="overflow-hidden rounded-xl border border-slate-200 bg-white">
@@ -348,42 +368,85 @@ function FichaEquipo({ eq }: { eq: Equipo }) {
             {estadoFlotaLabel(eq.estado_codigo)}
           </span>
         )}
-        <Chip nivel={pendientes.length ? 'rojo' : 'verde'}>
-          {pendientes.length ? `${pendientes.length} por regularizar` : 'Documentación al día'}
+        <Chip nivel={basicosPend.length ? 'rojo' : 'verde'}>
+          {basicosPend.length
+            ? `${basicosPend.length} habilitante(s) por regularizar`
+            : 'Habilitante al día'}
         </Chip>
       </header>
 
-      <nav className="flex gap-4 border-b border-slate-100 px-4">
-        {([
-          ['pendientes', `Por regularizar (${pendientes.length})`],
-          ['todo', `Documentación (${docs.length})`],
-          ['mantenimiento', `Mantenimiento (${eq.mantenimiento.length})`],
-        ] as const).map(([k, label]) => (
-          <button
-            key={k}
-            onClick={() => setVer(k)}
-            className={cn(
-              '-mb-px border-b-2 py-2 text-[11px] font-semibold transition-colors',
-              ver === k
-                ? 'border-slate-800 text-slate-900'
-                : 'border-transparent text-slate-400 hover:text-slate-600',
-            )}
-          >
-            {label}
-          </button>
-        ))}
-      </nav>
+      {/* ── Documentación básica ── */}
+      <div className="px-4 pb-1 pt-3">
+        <h4 className="mb-1 text-[10px] font-bold uppercase tracking-wide text-slate-400">
+          Documentación del vehículo
+        </h4>
+        {basicos.length === 0 ? (
+          <p className="py-4 text-center text-xs text-slate-400">
+            Sin documentación básica registrada para este equipo.
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-slate-200 text-left text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                  <th className="py-1.5 pr-3">Documento</th>
+                  <th className="py-1.5 pr-3">Vence</th>
+                  <th className="py-1.5 pr-3">Plazo</th>
+                  <th className="py-1.5 pr-3">Estado</th>
+                  <th className="py-1.5 text-right">Respaldo</th>
+                </tr>
+              </thead>
+              <tbody>
+                {basicos.map((d) => <FilaDocEquipo key={d.tipo} d={d} />)}
+              </tbody>
+            </table>
+          </div>
+        )}
 
-      <div className="px-4 py-2">
-        {ver === 'mantenimiento' ? (
-          eq.mantenimiento.length === 0 ? (
-            <p className="py-6 text-center text-xs text-slate-400">
-              Sin intervenciones registradas para este equipo.
-            </p>
-          ) : (
-            <ol className="space-y-2 py-1">
-              {eq.mantenimiento.map((m, idx) => (
-                <li key={idx} className="flex gap-3 border-b border-slate-100 pb-2 last:border-0">
+        {/* Los técnicos existen y algunos están vencidos: se dice cuántos y se
+            pueden abrir. Colapsarlos ordena la lectura; esconderlos sería
+            maquillar. */}
+        {tecnicos.length > 0 && (
+          <>
+            <button
+              onClick={() => setVerTecnicos((v) => !v)}
+              className="mt-1 flex w-full items-center justify-center gap-1 py-2 text-[11px] font-semibold text-slate-500 hover:text-slate-700"
+            >
+              {verTecnicos ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+              {verTecnicos ? 'Ocultar' : 'Ver'} otros {tecnicos.length} certificados técnicos
+              {tecnicosPend.length > 0 && (
+                <span className="font-bold text-amber-600">
+                  · {tecnicosPend.length} por regularizar
+                </span>
+              )}
+            </button>
+            {verTecnicos && (
+              <div className="overflow-x-auto border-t border-slate-100 pt-1">
+                <table className="w-full">
+                  <tbody>
+                    {tecnicos.map((d) => <FilaDocEquipo key={d.tipo} d={d} />)}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* ── Historial de mantenimiento, en la misma vista ── */}
+      <div className="border-t border-slate-100 bg-slate-50/40 px-4 py-3">
+        <h4 className="mb-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">
+          Historial de mantenimiento
+        </h4>
+        {eq.mantenimiento.length === 0 ? (
+          <p className="py-3 text-center text-xs text-slate-400">
+            Sin intervenciones registradas para este equipo.
+          </p>
+        ) : (
+          <>
+            <ol className="space-y-2">
+              {historial.map((m, idx) => (
+                <li key={idx} className="flex gap-3 border-b border-slate-200/70 pb-2 last:border-0">
                   <Wrench className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-300" />
                   <div className="min-w-0 flex-1">
                     <p className="text-[11px] font-semibold text-slate-700">
@@ -401,28 +464,18 @@ function FichaEquipo({ eq }: { eq: Equipo }) {
                 </li>
               ))}
             </ol>
-          )
-        ) : visibles.length === 0 ? (
-          <p className="py-6 text-center text-xs text-slate-400">
-            No hay documentos por regularizar en este equipo.
-          </p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-slate-200 text-left text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-                  <th className="py-1.5 pr-3">Documento</th>
-                  <th className="py-1.5 pr-3">Vence</th>
-                  <th className="py-1.5 pr-3">Plazo</th>
-                  <th className="py-1.5 pr-3">Estado</th>
-                  <th className="py-1.5 text-right">Respaldo</th>
-                </tr>
-              </thead>
-              <tbody>
-                {visibles.map((d) => <FilaDocEquipo key={d.tipo} d={d} />)}
-              </tbody>
-            </table>
-          </div>
+            {eq.mantenimiento.length > 5 && (
+              <button
+                onClick={() => setVerTodoHistorial((v) => !v)}
+                className="mt-1 flex w-full items-center justify-center gap-1 py-1.5 text-[11px] font-semibold text-slate-500 hover:text-slate-700"
+              >
+                {verTodoHistorial ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                {verTodoHistorial
+                  ? 'Ver sólo las últimas 5'
+                  : `Ver las ${eq.mantenimiento.length} intervenciones`}
+              </button>
+            )}
+          </>
         )}
       </div>
     </article>
@@ -573,10 +626,14 @@ export default function PortalPrevencionPage() {
     const docsPe = data.personal.flatMap((p) => p.documentos)
     const cuenta = (docs: { estado: string }[], niveles: Nivel[]) =>
       docs.filter((d) => niveles.includes(docUI(d.estado).nivel)).length
+    // Habilitantes y técnicos se cuentan separados a propósito. Sumarlos en un
+    // solo número mezcla "el camión no puede circular" con "falta el
+    // certificado del aire acondicionado", que no son la misma conversación.
     return {
       equipos: data.equipos.length,
       personas: data.personal.length,
-      eqPendientes: cuenta(docsEq, ['rojo', 'naranjo']),
+      eqBasicos: cuenta(docsEq.filter((d) => d.basico), ['rojo', 'naranjo']),
+      eqTecnicos: cuenta(docsEq.filter((d) => !d.basico), ['rojo', 'naranjo']),
       pePendientes: cuenta(docsPe, ['rojo', 'naranjo']),
       porVencer: cuenta(docsEq, ['amarillo']) + cuenta(docsPe, ['amarillo']),
     }
@@ -626,7 +683,8 @@ export default function PortalPrevencionPage() {
     )
   }
 
-  const totalPendientes = (resumen?.eqPendientes ?? 0) + (resumen?.pePendientes ?? 0)
+  // Grave es que un equipo no pueda circular. Lo demás es seguimiento.
+  const grave = (resumen?.eqBasicos ?? 0) > 0
 
   return (
     <div className="min-h-screen bg-slate-100 pb-16">
@@ -675,33 +733,59 @@ export default function PortalPrevencionPage() {
           <div
             className={cn(
               'flex items-start gap-3 rounded-xl border px-4 py-3.5',
-              totalPendientes > 0 ? 'border-red-200 bg-red-50' : 'border-emerald-200 bg-emerald-50',
+              grave ? 'border-red-200 bg-red-50' : 'border-emerald-200 bg-emerald-50',
             )}
           >
-            {totalPendientes > 0
+            {grave
               ? <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-red-500" />
               : <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" />}
             <div>
-              <p className={cn('text-sm font-semibold', totalPendientes > 0 ? 'text-red-800' : 'text-emerald-800')}>
-                {totalPendientes > 0
-                  ? `${totalPendientes} documento${totalPendientes > 1 ? 's' : ''} por regularizar`
-                  : 'Toda la documentación de la faena está al día'}
+              <p className={cn('text-sm font-semibold', grave ? 'text-red-800' : 'text-emerald-800')}>
+                {grave
+                  ? `${resumen!.eqBasicos} documento${resumen!.eqBasicos > 1 ? 's' : ''} habilitante${resumen!.eqBasicos > 1 ? 's' : ''} por regularizar`
+                  : `Los ${resumen?.equipos ?? 0} equipos tienen su documentación habilitante al día`}
               </p>
-              <p className={cn('mt-0.5 text-xs leading-relaxed', totalPendientes > 0 ? 'text-red-700' : 'text-emerald-700')}>
-                {totalPendientes > 0
-                  ? `Vencidos, observados, en proceso de carga o con vencimiento dentro de los próximos 14 días. ${resumen?.eqPendientes ?? 0} corresponden a equipos y ${resumen?.pePendientes ?? 0} a personal.`
-                  : 'Sin vencidos ni observados a la fecha de esta consulta.'}
-                {(resumen?.porVencer ?? 0) > 0 && ` Además, ${resumen!.porVencer} vencen dentro de 30 días.`}
+              <p className={cn('mt-0.5 text-xs leading-relaxed', grave ? 'text-red-700' : 'text-emerald-700')}>
+                {grave
+                  ? 'Permiso de circulación, SOAP, revisión técnica u otro documento que habilita al equipo a circular y operar.'
+                  : 'Permiso de circulación, SOAP, revisión técnica y demás documentación habilitante, vigentes a la fecha de esta consulta.'}
               </p>
             </div>
           </div>
+
+          {/* Lo secundario se dice igual, sin inflar el titular. */}
+          {((resumen?.eqTecnicos ?? 0) > 0 ||
+            (resumen?.pePendientes ?? 0) > 0 ||
+            (resumen?.porVencer ?? 0) > 0) && (
+            <ul className="space-y-1 rounded-lg bg-slate-50 px-4 py-3 text-xs leading-relaxed text-slate-600">
+              {(resumen?.eqTecnicos ?? 0) > 0 && (
+                <li>
+                  <strong className="text-slate-800">{resumen!.eqTecnicos}</strong> certificado(s)
+                  técnico(s) de equipos por regularizar — no impiden operar, se detallan en cada
+                  equipo.
+                </li>
+              )}
+              {(resumen?.pePendientes ?? 0) > 0 && (
+                <li>
+                  <strong className="text-slate-800">{resumen!.pePendientes}</strong> documento(s) de
+                  personal vencidos, observados o en proceso de carga.
+                </li>
+              )}
+              {(resumen?.porVencer ?? 0) > 0 && (
+                <li>
+                  <strong className="text-slate-800">{resumen!.porVencer}</strong> vencen dentro de
+                  los próximos 30 días.
+                </li>
+              )}
+            </ul>
+          )}
         </Seccion>
 
         {/* ── 2. Equipos ── */}
         <Seccion
           n={2}
           titulo="Equipos en faena"
-          bajada="Documentación habilitante e historial de mantenimiento de cada equipo."
+          bajada="Para cada equipo: la documentación que lo habilita a circular y operar, y lo que se le ha hecho."
         >
           {data.equipos.length === 0 ? (
             <p className="py-8 text-center text-sm text-slate-400">Sin equipos asociados a este portal.</p>
