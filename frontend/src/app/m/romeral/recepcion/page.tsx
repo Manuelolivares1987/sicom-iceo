@@ -25,6 +25,9 @@ import { useToast } from '@/contexts/toast-context'
 import { useAuth } from '@/contexts/auth-context'
 import { useExigirSesion } from '@/hooks/use-exigir-sesion'
 import { useNetworkStatus } from '@/hooks/use-calama-offline'
+import {
+  guardarFotoLocal, encolarRecepcion, sincronizarRecepciones, recepcionesPendientes,
+} from '@/lib/offline/combustible-cierre-offline'
 import { SinSesionOffline } from '@/components/enex/sin-sesion-offline'
 import { cn, errorMessage } from '@/lib/utils'
 import { FAENA_ROMERAL, getFaenaPorCodigo } from '@/lib/services/combustible-faena'
@@ -99,25 +102,58 @@ export default function RecepcionRomeralPage() {
     setReparto({}); setFoto(null); setSinFotoMotivo('')
   }
 
+  // Al volver la señal se suben solas las recepciones que estén esperando.
+  useEffect(() => {
+    if (!online) return
+    let vivo = true
+    sincronizarRecepciones().then((r) => {
+      if (!vivo || r.subidas === 0) return
+      toast.success(`Volvió la señal: se envió ${r.subidas} recepción(es) que estaba esperando.`)
+      if (faenaId) getRecepcionesDia(faenaId, fecha).then(setDelDia).catch(() => {})
+    }).catch(() => { /* se reintenta al próximo cambio de señal */ })
+    return () => { vivo = false }
+  }, [online, faenaId, fecha, toast])
+
   const guardar = async (confirmar: boolean) => {
     if (!faenaId) { toast.error('Necesita señal una vez para cargar la faena.'); return }
     if (totalRepartido <= 0) { toast.error('Indique cuántos litros entraron y a qué estanque.'); return }
     setGuardando(true)
     try {
+      const uuid = `rec-${fecha}-${guia || Date.now()}`
+      const destinos = Object.entries(reparto)
+        .filter(([, v]) => Number(v) > 0)
+        .map(([estanque_id, v]) => ({ estanque_id, litros: Number(v) }))
+
+      if (!online) {
+        // El camión llega a las 06:30 y muchas veces a esa hora no hay señal.
+        // Un camión de 30.000 litros que no se registra es la diferencia más
+        // cara que puede aparecer en el cierre, así que se guarda igual.
+        await encolarRecepcion({
+          client_uuid: uuid, faena_id: faenaId, fecha, destinos,
+          guia: guia || null, viaje: viaje || null, camion: camion || null,
+          litros_guia: guiaNum || null, recibido_por: recibidoPor || null,
+          sello: sello || null, observacion: obs || null,
+          foto_ref: foto ? await guardarFotoLocal(foto.file) : null,
+          sin_foto_motivo: sinFotoMotivo || null,
+          confirmar, creado_at: new Date().toISOString(),
+        })
+        toast.success('Recepción guardada en el teléfono. Se envía sola cuando vuelva la señal.')
+        limpiar()
+        return
+      }
+
       let fotoUrl: string | null = null
       if (foto) fotoUrl = await subirFotoMedicion(foto.file)
 
       const r = await registrarRecepcion({
         faenaId, fecha,
-        destinos: Object.entries(reparto)
-          .filter(([, v]) => Number(v) > 0)
-          .map(([estanque_id, v]) => ({ estanque_id, litros: Number(v) })),
+        destinos,
         guia: guia || null, viaje: viaje || null, camion: camion || null,
         litrosGuia: guiaNum || null,
         recibidoPor: recibidoPor || null, sello: sello || null, observacion: obs || null,
         fotoGuia: fotoUrl, sinFotoMotivo: sinFotoMotivo || null,
         confirmar,
-        clientUuid: `rec-${fecha}-${guia || Date.now()}`,
+        clientUuid: uuid,
       })
       toast.success(
         confirmar

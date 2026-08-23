@@ -81,6 +81,10 @@ export type CierreInput = {
   // Qué hizo el turno con cada cosa que quedó pendiente. Sin esto, el cierre
   // no se firma cuando hay pendientes abiertos.
   pendientes?: { pendiente_id: string; respuesta: string; comentario?: string | null }[] | null
+  // El turno se cerró en el teléfono sin conexión. El servidor entonces no
+  // rechaza la verificación desactualizada: la acepta y la marca, porque el
+  // teléfono no podía ver lo que otro sincronizó después.
+  sinSenal?: boolean
 }
 
 /** El resumen del turno que el supervisor mira antes de firmar. */
@@ -192,6 +196,7 @@ export async function guardarCierre(p: CierreInput) {
     p_medido_por: p.medidoPor ?? null,
     p_verificacion: p.verificacion ?? null,
     p_pendientes: p.pendientes ?? null,
+    p_sin_senal: p.sinSenal ?? false,
     p_puntos: p.puntos,
     p_medidores: p.medidores,
     p_observacion: p.observacion ?? null,
@@ -282,6 +287,8 @@ export type RecepcionInput = {
   sinFotoMotivo?: string | null
   confirmar?: boolean
   clientUuid?: string | null
+  // Se tomó en el teléfono sin conexión y subió después.
+  sinSenal?: boolean
 }
 
 export type Recepcion = {
@@ -323,6 +330,7 @@ export async function registrarRecepcion(p: RecepcionInput) {
     p_sin_foto_motivo: p.sinFotoMotivo ?? null,
     p_confirmar: p.confirmar ?? false,
     p_client_uuid: p.clientUuid ?? null,
+    p_sin_senal: p.sinSenal ?? false,
   })
   if (error) throw error
   return data as {
