@@ -40,7 +40,7 @@ import { SinSesionOffline } from '@/components/enex/sin-sesion-offline'
 import { cn, errorMessage } from '@/lib/utils'
 import { FAENA_ROMERAL, TURNOS, getFaenaPorCodigo } from '@/lib/services/combustible-faena'
 import {
-  dentroDeTolerancia,
+  evaluarCuadre, TOL_CUADRA_LT,
   type PuntoMedicion, type LecturaPunto, type LecturaMedidor,
 } from '@/lib/services/combustible-cierre'
 import {
@@ -308,7 +308,8 @@ export default function CierreRomeralPage() {
       }
     }
     const completo = l?.mf != null && l?.mi != null && (p.medidores.length === 0 || leidos === p.medidores.length)
-    return { vFis, vMec, dif: vMec - vFis, completo, leidos, cuadra: dentroDeTolerancia(vFis, vMec) }
+    const r = evaluarCuadre(vFis, vMec)
+    return { vFis, vMec, dif: vMec - vFis, completo, leidos, resultado: r, cuadra: r === 'cuadra' }
   }, [borrador])
 
   const puntosOrdenados = useMemo(() => puntos ?? [], [puntos])
@@ -754,7 +755,9 @@ export default function CierreRomeralPage() {
               >
                 <p className={cn('flex items-center gap-2 text-lg font-bold', c.cuadra ? 'text-emerald-800' : 'text-amber-900')}>
                   {c.cuadra ? <CheckCircle2 className="h-6 w-6" /> : <AlertTriangle className="h-6 w-6" />}
-                  {c.cuadra ? 'Cuadra' : 'Revise este punto'}
+                  {c.resultado === 'cuadra' ? 'Cuadra'
+                    : c.resultado === 'atencion' ? 'Revise el número'
+                    : 'Diferencia grande — avise al supervisor'}
                 </p>
                 <div className="mt-2 space-y-1 text-base">
                   <p className="flex justify-between text-gray-700">
@@ -769,6 +772,11 @@ export default function CierreRomeralPage() {
                     <span>Diferencia</span>
                     <span className="tabular-nums">{c.dif > 0 ? '+' : ''}{miles(c.dif)} L</span>
                   </p>
+                  {!c.cuadra && (
+                    <p className="pt-1 text-sm text-amber-800">
+                      Hasta {miles(TOL_CUADRA_LT)} L se considera normal por la lectura de la varilla.
+                    </p>
+                  )}
                 </div>
               </div>
             )}

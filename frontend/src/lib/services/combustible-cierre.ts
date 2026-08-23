@@ -190,16 +190,32 @@ export async function anotarCeco(faenaId: string, codigo: string, empresa?: stri
 }
 
 // ── Tolerancia ──────────────────────────────────────────────────────────────
-// Punto de partida propuesto: ±0,5 % del movimiento del día, con un piso de 50
-// litros para que un día de poco movimiento no se marque en rojo por el error
-// natural de leer una varilla. Se acuerda con ESMAX y se cambia acá.
-export const TOLERANCIA_PCT = 0.005
-export const TOLERANCIA_PISO_LT = 50
+// NO es un criterio inventado: sale de la aplicación que ya se construyó para
+// Romeral (función varClass), en litros absolutos y con tres niveles.
+//
+//   < 200 L  cuadra        200–500 L  atención        ≥ 500 L  investigar
+//
+// Validada contra los 9 días de junio 2026: de las 22 mediciones de puntos con
+// contador propio, 19 quedaron bajo 200 L y las 22 bajo 500 L. Ninguna se pasó.
+//
+// Un umbral porcentual sería peor acá: castiga los días de poco movimiento y
+// perdona los de mucho, cuando el error de leer una varilla no depende de
+// cuánto se despachó — depende del tanque.
+export const TOL_CUADRA_LT = 200
+export const TOL_ALERTA_LT = 500
 
-export function dentroDeTolerancia(vFis: number, vMec: number): boolean {
+export type ResultadoCuadre = 'cuadra' | 'atencion' | 'investigar'
+
+export function evaluarCuadre(vFis: number, vMec: number): ResultadoCuadre {
   const dif = Math.abs(vMec - vFis)
-  const base = Math.max(Math.abs(vFis), Math.abs(vMec))
-  return dif <= Math.max(base * TOLERANCIA_PCT, TOLERANCIA_PISO_LT)
+  if (dif < TOL_CUADRA_LT) return 'cuadra'
+  if (dif < TOL_ALERTA_LT) return 'atencion'
+  return 'investigar'
+}
+
+/** Compatibilidad: "dentro de tolerancia" es cuadra o atención. */
+export function dentroDeTolerancia(vFis: number, vMec: number): boolean {
+  return evaluarCuadre(vFis, vMec) !== 'investigar'
 }
 
 // ── Recepción de flota primaria (MIG320) ────────────────────────────────────
@@ -295,6 +311,7 @@ export type ControlDia = {
   puntos_medidos: number | null
   puntos_total: number | null
   puntos_fuera_tolerancia: number | null
+  grupos_atencion: number | null
   puntos_sin_contador: number | null
   v_fis: number | null
   v_mec: number | null
