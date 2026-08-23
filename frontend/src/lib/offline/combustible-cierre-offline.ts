@@ -18,6 +18,7 @@ import {
   getPuntosMedicion, getCierreAnterior, guardarCierre, subirFotoMedicion,
   type PuntoMedicion, type LecturaPunto, type LecturaMedidor, type CierreInput,
 } from '@/lib/services/combustible-cierre'
+import { compressImage } from '@/lib/image/compress'
 
 /** El turno completo tal como está en el teléfono. */
 export type BorradorCierre = {
@@ -79,8 +80,18 @@ export const claveCierre = (faenaId: string, fecha: string, turno: string) =>
  * todavía no es una URL: al subir el turno se cambia por la definitiva.
  */
 export async function guardarFotoLocal(file: File | Blob): Promise<string> {
+  // La foto se comprime ANTES de guardarla en el teléfono, no antes de
+  // subirla. La diferencia importa: un turno completo sin señal son unas cien
+  // fotos, y a 4 MB cada una son 400 MB en el IndexedDB del aparato. El
+  // navegador desaloja o tira QuotaExceededError, y el operador pierde el día
+  // entero sin enterarse. A 1600 px y calidad 0,75 la misma foto pesa unos
+  // 250 kB: el día completo cabe en 25 MB y sube por señal de faena.
+  //
+  // compressImage falla seguro: si el aparato no puede procesar la imagen,
+  // devuelve el original. Perder calidad es aceptable; perder la foto no.
+  const blob = await compressImage(file, { maxDim: 1600, quality: 0.75 })
   const blob_id = uuid()
-  await db().blobs.put({ blob_id, blob: file, mime: file.type || 'image/jpeg' })
+  await db().blobs.put({ blob_id, blob, mime: 'image/jpeg' })
   return `local:${blob_id}`
 }
 

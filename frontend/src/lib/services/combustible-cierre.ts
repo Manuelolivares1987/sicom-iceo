@@ -13,6 +13,7 @@
 // ============================================================================
 
 import { supabase } from '@/lib/supabase'
+import { compressImage } from '@/lib/image/compress'
 
 export type PuntoMedicion = {
   id: string
@@ -169,10 +170,15 @@ export async function guardarCierre(p: CierreInput) {
 
 /** Sube la foto de una medición y devuelve su URL pública. */
 export async function subirFotoMedicion(file: File | Blob): Promise<string> {
+  // Segunda red: las fotos que ya pasaron por el teléfono vienen comprimidas y
+  // esto no las toca (compressImage no recomprime bajo 350 kB). Las que suben
+  // directo —la guía de la recepción, por ejemplo— se comprimen aquí. En faena
+  // la diferencia entre 4 MB y 250 kB es que la foto llegue o no llegue.
+  const blob = await compressImage(file, { maxDim: 1600, quality: 0.75 })
   const path = `romeral-cierre/${Date.now()}_${Math.floor(Math.random() * 1e6)}.jpg`
   const { error } = await supabase.storage
     .from('evidencias-verificacion')
-    .upload(path, file, { contentType: 'image/jpeg' })
+    .upload(path, blob, { contentType: 'image/jpeg' })
   if (error) throw error
   return supabase.storage.from('evidencias-verificacion').getPublicUrl(path).data.publicUrl
 }

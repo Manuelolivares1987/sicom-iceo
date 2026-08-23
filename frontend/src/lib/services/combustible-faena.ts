@@ -5,6 +5,7 @@
 // Todo cuelga de la faena: Romeral no comparte catálogo ni reportes con Franke
 // ni con la operación de Coquimbo.
 import { supabase } from '@/lib/supabase'
+import { compressImage } from '@/lib/image/compress'
 
 export const FAENA_ROMERAL = 'FAE-CMP-ROMERAL'
 
@@ -137,9 +138,12 @@ export type DespachoInput = {
 
 /** Sube una foto del medidor al bucket de evidencias. */
 export async function subirFotoMedidor(file: File | Blob): Promise<string> {
+  // Segunda red, como en el cierre: lo que ya pasó por el teléfono viene
+  // comprimido y esto no lo toca; lo que sube directo se comprime aquí.
+  const blob = await compressImage(file, { maxDim: 1600, quality: 0.75 })
   const path = `romeral/${Date.now()}_${Math.floor(Math.random() * 1e6)}.jpg`
   const { error } = await supabase.storage.from('evidencias-verificacion')
-    .upload(path, file, { contentType: 'image/jpeg' })
+    .upload(path, blob, { contentType: 'image/jpeg' })
   if (error) throw error
   return supabase.storage.from('evidencias-verificacion').getPublicUrl(path).data.publicUrl
 }
