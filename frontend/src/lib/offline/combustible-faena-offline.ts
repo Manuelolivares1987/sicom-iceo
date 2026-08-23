@@ -12,6 +12,7 @@ import {
   getCatalogoFaena, registrarDespacho, getDespachosDia, subirFotoMedidor,
   type CatalogoFaena, type CombDespacho, type DespachoInput,
 } from '@/lib/services/combustible-faena'
+import { compressImage } from '@/lib/image/compress'
 
 export type DespachoPendiente = DespachoInput & {
   local_id: string
@@ -56,8 +57,14 @@ class CombFaenaDB extends Dexie {
 
 /** Guarda una foto en el teléfono y devuelve su id local. */
 export async function guardarFotoLocal(file: File | Blob): Promise<string> {
+  // Se comprime antes de guardar, no antes de subir: un turno sin señal son
+  // cerca de cien fotos, y a 4 MB cada una llenan el IndexedDB del teléfono.
+  // Cuando eso pasa el navegador desaloja o tira QuotaExceededError, y el
+  // operador pierde el día sin enterarse. Falla segura: si el aparato no
+  // puede procesarla, se guarda la original.
+  const blob = await compressImage(file, { maxDim: 1600, quality: 0.75 })
   const blob_id = nuevoId()
-  await combDB().blobs.put({ blob_id, blob: file, mime: file.type || 'image/jpeg' })
+  await combDB().blobs.put({ blob_id, blob, mime: 'image/jpeg' })
   return blob_id
 }
 

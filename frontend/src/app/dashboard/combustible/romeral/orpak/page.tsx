@@ -22,9 +22,10 @@ import { useToast } from '@/contexts/toast-context'
 import { cn, errorMessage } from '@/lib/utils'
 import { FAENA_ROMERAL, getFaenaPorCodigo } from '@/lib/services/combustible-faena'
 import {
-  cargarOrpak, getCargas, getCecosDesconocidos,
+  cargarOrpak, getCargas, getCecosDesconocidos, getCecosPorRevisar,
   type FilaOrpak, type ResultadoCarga,
 } from '@/lib/services/combustible-orpak'
+import { confirmarCeco } from '@/lib/services/combustible-cierre'
 
 const miles = (n: number | null | undefined) =>
   n == null ? '—' : Number(n).toLocaleString('es-CL', { maximumFractionDigits: 1 })
@@ -64,6 +65,27 @@ export default function CargarOrpakPage() {
     queryFn: () => getCecosDesconocidos(faenaId!),
     enabled: !!faenaId,
   })
+
+  const { data: porRevisar } = useQuery({
+    queryKey: ['orpak-cecos-por-revisar', faenaId],
+    queryFn: () => getCecosPorRevisar(faenaId!),
+    enabled: !!faenaId,
+  })
+
+  const [confirmando, setConfirmando] = useState<string | null>(null)
+
+  async function confirmar(cecoId: string, codigo: string) {
+    setConfirmando(cecoId)
+    try {
+      await confirmarCeco(cecoId)
+      qc.invalidateQueries({ queryKey: ['orpak-cecos-por-revisar'] })
+      toast.success(`CECO ${codigo} confirmado.`)
+    } catch (err) {
+      toast.error(errorMessage(err))
+    } finally {
+      setConfirmando(null)
+    }
+  }
 
   async function alElegirArchivo(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -242,15 +264,64 @@ export default function CargarOrpakPage() {
         </Card>
       )}
 
-      {!!cecosRaros?.length && (
+      {!!porRevisar?.length && (
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">CECO que Orpak usa y el maestro no tiene</CardTitle>
+            <CardTitle className="text-base">
+              CECO creados desde Orpak, por revisar
+              <span className="ml-2 text-xs font-normal text-gray-400">({porRevisar.length})</span>
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <p className="mb-3 text-xs text-gray-600">
-              Estas transacciones tienen código legible pero no está en el maestro de la faena,
-              así que no se pueden imputar. Casi siempre son transportistas nuevos.
+              Se dieron de alta solos con la razón social que trae el archivo, así que la imputación
+              de esos días ya cerró. Falta que alguien mire el nombre: una razón social mal escrita
+              en Orpak se arrastra hasta la facturación.
+            </p>
+            <div className="max-h-96 overflow-y-auto">
+              <table className="w-full text-sm">
+                <tbody>
+                  {porRevisar.map((c) => (
+                    <tr key={c.ceco_id} className="border-b border-gray-100 last:border-0">
+                      <td className="py-1.5 font-mono text-xs text-gray-800">{c.codigo}</td>
+                      <td className="py-1.5 text-gray-700">
+                        {c.empresa ?? <span className="italic text-amber-700">sin razón social en el archivo</span>}
+                      </td>
+                      <td className="py-1.5 text-right tabular-nums text-gray-600">
+                        {miles(c.litros)} L
+                      </td>
+                      <td className="py-1.5 pl-3 text-right text-xs text-gray-400">
+                        {c.transacciones} mov.
+                      </td>
+                      <td className="py-1.5 pl-3 text-right">
+                        <button
+                          onClick={() => confirmar(c.ceco_id, c.codigo)}
+                          disabled={confirmando === c.ceco_id}
+                          className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-700
+                                     transition hover:border-emerald-400 hover:bg-emerald-50
+                                     hover:text-emerald-800 disabled:opacity-40"
+                        >
+                          {confirmando === c.ceco_id ? '…' : 'Está bien'}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {!!cecosRaros?.length && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">CECO que no se pudieron dar de alta</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="mb-3 text-xs text-gray-600">
+              Traen código legible y no se pudieron crear solos. Si aparece algo acá, hay un
+              choque de códigos que hay que mirar a mano.
             </p>
             <div className="max-h-72 overflow-y-auto">
               <table className="w-full text-sm">

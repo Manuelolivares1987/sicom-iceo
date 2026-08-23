@@ -293,3 +293,38 @@ export async function getCierresMes(faenaId: string, desde: string, hasta: strin
   if (error) throw error
   return (data ?? []) as CierreMes[]
 }
+
+// ── CECO creados desde el archivo, esperando revisión ───────────────────────
+//
+// Nacen solos con la razón social que trae Orpak, así que la imputación cierra
+// el mismo día. Pero nacen SIN confirmar: una razón social mal escrita en
+// Orpak se arrastra hasta la facturación si nadie la mira. Automatizar el
+// tecleo no es lo mismo que automatizar el criterio.
+
+export type CecoPorRevisar = {
+  faena_id: string
+  ceco_id: string
+  codigo: string
+  empresa: string | null
+  anotado_at: string
+  transacciones: number
+  litros: number
+  desde: string | null
+  hasta: string | null
+}
+
+export async function getCecosPorRevisar(faenaId: string) {
+  const { data, error } = await supabase
+    .from('v_comb_faena_ceco_por_revisar').select('*')
+    .eq('faena_id', faenaId).order('litros', { ascending: false }).limit(200)
+  if (error) throw error
+  return (data ?? []) as CecoPorRevisar[]
+}
+
+export async function darDeAltaCecosDeOrpak(faenaId: string) {
+  const { data, error } = await supabase.rpc('rpc_comb_orpak_dar_de_alta_cecos', {
+    p_faena_id: faenaId,
+  })
+  if (error) throw error
+  return data as { creados: number; transacciones_imputadas: number }
+}
