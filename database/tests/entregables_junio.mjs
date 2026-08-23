@@ -45,21 +45,36 @@ const client = new pg.Client({
 // El módulo del frontend habla con Supabase por HTTP. Acá se le pone delante un
 // cliente equivalente contra Postgres, para ejercitar EL MISMO código de armado
 // del libro sin levantar la aplicación.
+//
+// OJO CON ESTO, QUE COSTÓ CARO: el arnés tiene que imitar los LÍMITES de
+// PostgREST, no sólo su forma. PostgREST devuelve como máximo 1.000 filas por
+// respuesta, en silencio y sin error. La primera versión de este arnés
+// consultaba Postgres sin tope, así que los tres entregables pasaban la prueba
+// y el que se bajaba del navegador salía cortado en mil filas — con cara de
+// completo. Un arnés más permisivo que la realidad no prueba: tranquiliza.
 function supabaseFalso(faenaId) {
   return {
     from(vista) {
       const filtros = []
       const orden = []
+      let rango = null
       const api = {
         select() { return api },
         eq(col, val) { filtros.push([col, '=', val]); return api },
         gte(col, val) { filtros.push([col, '>=', val]); return api },
         lte(col, val) { filtros.push([col, '<=', val]); return api },
         order(col) { orden.push(col); return api },
+        range(desde, hasta) { rango = [desde, hasta]; return api },
         then(res, rej) {
           const cond = filtros.map(([c, op], i) => `"${c}" ${op} $${i + 1}`).join(' AND ')
+          // El tope de PostgREST: 1.000 filas por respuesta, aunque el
+          // llamador no pida rango.
+          const TOPE = 1000
+          const desde = rango ? rango[0] : 0
+          const cuantas = rango ? Math.min(rango[1] - rango[0] + 1, TOPE) : TOPE
           const sql = `SELECT * FROM ${vista}` + (cond ? ` WHERE ${cond}` : '')
             + (orden.length ? ` ORDER BY ${orden.map((c) => `"${c}"`).join(', ')}` : '')
+            + ` LIMIT ${cuantas} OFFSET ${desde}`
           return client.query(sql, filtros.map(([, , v]) => v))
             .then((r) => ({ data: r.rows, error: null }))
             .then(res, rej)

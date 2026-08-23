@@ -68,18 +68,37 @@ function diasDelMes(mes) {
     `${y}-${String(m).padStart(2, '0')}-${String(i + 1).padStart(2, '0')}`)
 }
 
+
+// ── Traer TODO, no las primeras mil ─────────────────────────────────────────
+// PostgREST corta en 1.000 filas por respuesta, sin avisar y sin error. Un mes
+// de Romeral son ~4.500 transacciones: la BBDD salía con 1.000 y cara de
+// completa. Es el peor tipo de falla en un entregable — nadie revisa una
+// planilla que se ve bien, y las 3.500 que faltan se descubren cuando el
+// mandante cuadra la facturación.
+//
+// Se pide de a mil hasta que una página vuelva corta.
+const PAGINA = 1000
+
+async function traerTodo(armarConsulta) {
+  const filas = []
+  for (let desde = 0; ; desde += PAGINA) {
+    const { data, error } = await armarConsulta().range(desde, desde + PAGINA - 1)
+    if (error) throw error
+    filas.push(...(data ?? []))
+    if (!data || data.length < PAGINA) return filas
+  }
+}
+
 // ── BBDD con Semana ENAP ────────────────────────────────────────────────────
 
 
 export async function construirBbdd(faenaId, mes) {
   const dias = diasDelMes(mes)
-  const { data, error } = await supabase
+  const filas = await traerTodo(() => supabase
     .from('v_comb_bbdd').select('*')
     .eq('faena_id', faenaId)
     .gte('dia_cierre', dias[0]).lte('dia_cierre', dias[dias.length - 1])
-    .order('dia_cierre').order('hora')
-  if (error) throw error
-  const filas = data ?? []
+    .order('dia_cierre').order('hora'))
 
   const wb = new ExcelJS.Workbook()
   const ws = wb.addWorksheet('BBDD')
@@ -110,16 +129,14 @@ export async function construirBbdd(faenaId, mes) {
 
 export async function construirFormAc066(faenaId, mes) {
   const dias = diasDelMes(mes)
-  const [{ data: d1, error: e1 }, { data: d2, error: e2 }] = await Promise.all([
-    supabase.from('v_comb_form_ac066').select('*')
-      .eq('faena_id', faenaId).gte('fecha', dias[0]).lte('fecha', dias[dias.length - 1]),
-    supabase.from('v_comb_form_ac066_dia').select('*')
-      .eq('faena_id', faenaId).gte('fecha', dias[0]).lte('fecha', dias[dias.length - 1]),
+  const [filas, totales] = await Promise.all([
+    traerTodo(() => supabase.from('v_comb_form_ac066').select('*')
+      .eq('faena_id', faenaId).gte('fecha', dias[0]).lte('fecha', dias[dias.length - 1])
+      .order('fecha')),
+    traerTodo(() => supabase.from('v_comb_form_ac066_dia').select('*')
+      .eq('faena_id', faenaId).gte('fecha', dias[0]).lte('fecha', dias[dias.length - 1])
+      .order('fecha')),
   ])
-  if (e1) throw e1
-  if (e2) throw e2
-  const filas = d1 ?? []
-  const totales = d2 ?? []
 
   // Un estanque por fila, un día por columna: así se lee la planilla original.
   const estanques = Array.from(new Map(filas.map((f) => [f.estanque_id, f])).values())
@@ -179,16 +196,12 @@ export async function construirCierreRomeral(faenaId, mes) {
   const desde = dias[0]
   const hasta = dias[dias.length - 1]
 
-  const [{ data: d1, error: e1 }, { data: d2, error: e2 }] = await Promise.all([
-    supabase.from('v_comb_cierre_romeral_mes').select('*')
-      .eq('faena_id', faenaId).gte('fecha', desde).lte('fecha', hasta).order('fecha'),
-    supabase.from('v_comb_cierre_romeral_numerales').select('*')
-      .eq('faena_id', faenaId).gte('fecha', desde).lte('fecha', hasta).order('fecha'),
+  const [puntos, numerales] = await Promise.all([
+    traerTodo(() => supabase.from('v_comb_cierre_romeral_mes').select('*')
+      .eq('faena_id', faenaId).gte('fecha', desde).lte('fecha', hasta).order('fecha')),
+    traerTodo(() => supabase.from('v_comb_cierre_romeral_numerales').select('*')
+      .eq('faena_id', faenaId).gte('fecha', desde).lte('fecha', hasta).order('fecha')),
   ])
-  if (e1) throw e1
-  if (e2) throw e2
-  const puntos = d1 ?? []
-  const numerales = d2 ?? []
 
   const [y, m] = mes.split('-').map(Number)
   const wb = new ExcelJS.Workbook()

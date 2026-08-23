@@ -48,9 +48,14 @@ const VOLUMEN_UI: Record<string, { label: string; cls: string }> = {
   sin_cierre: { label: 'Sin cerrar',  cls: 'bg-gray-100 text-gray-500' },
 }
 const IMPUTACION_UI: Record<string, { label: string; cls: string }> = {
-  completa:   { label: 'Completa',    cls: 'bg-emerald-100 text-emerald-800' },
-  incompleta: { label: 'Falta CECO',  cls: 'bg-amber-100 text-amber-800' },
-  sin_datos:  { label: 'Sin Orpak',   cls: 'bg-red-100 text-red-700' },
+  completa:   { label: 'Completa',     cls: 'bg-emerald-100 text-emerald-800' },
+  // Se sabe perfectamente de quién es la carga: el código viene en la
+  // transacción y no está en el maestro de la faena. Es una ficha que falta
+  // crear, no información que falte. Mezclarlo con «falta CECO» dejaba un mes
+  // entero en rojo por una tarea de escritorio de diez minutos.
+  por_registrar: { label: 'CECO por dar de alta', cls: 'bg-blue-100 text-blue-800' },
+  incompleta: { label: 'Falta CECO',   cls: 'bg-amber-100 text-amber-800' },
+  sin_datos:  { label: 'Sin registro', cls: 'bg-red-100 text-red-700' },
 }
 const EXCEPCION_UI: Record<string, { label: string; icono: any; cls: string }> = {
   ceco_por_confirmar:       { label: 'CECO por confirmar',   icono: FileWarning, cls: 'text-blue-600' },
@@ -125,6 +130,8 @@ export default function ControlCombustibleRomeralPage() {
       // Lo que de verdad hay que decirle al mandante: cuántos días de
       // imputación están esperando data que no depende de nosotros.
       sinOrpak: d.filter((x) => x.imputacion_estado === 'sin_datos').length,
+      porRegistrar: d.filter((x) => x.imputacion_estado === 'por_registrar').length,
+      cecosPorDarDeAlta: d.reduce((a, x) => a + Number(x.ceco_fuera_del_maestro ?? 0), 0),
       litrosSinImputar: d
         .filter((x) => x.imputacion_estado === 'sin_datos')
         .reduce((a, x) => a + Number(x.v_mec ?? 0), 0),
@@ -178,12 +185,32 @@ export default function ControlCombustibleRomeralPage() {
             <Clock className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
             <div>
               <p className="text-sm font-bold text-amber-900">
-                {resumen.sinOrpak} día{resumen.sinOrpak > 1 ? 's' : ''} con el volumen medido y la imputación pendiente
+                {resumen.sinOrpak} día{resumen.sinOrpak > 1 ? 's' : ''} con el volumen medido y sin ningún movimiento registrado
               </p>
               <p className="mt-0.5 text-xs leading-relaxed text-amber-800">
-                Son {miles(resumen.litrosSinImputar)} L que salieron y están medidos por contador, pero
-                todavía no se sabe a qué CECO imputarlos porque falta la descarga de Orpak. El cierre
-                de volumen de esos días igual se puede firmar.
+                Son {miles(resumen.litrosSinImputar)} L que salieron y están medidos por contador, y
+                no hay ni una transacción que diga a quién. Falta cargar Orpak de esos días, o el
+                combustible salió sin registrarse. El cierre de volumen igual se puede firmar.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* CECO que vienen en la transacción y no están en el maestro. No es
+          información que falte: es una ficha que falta crear. */}
+      {resumen.porRegistrar > 0 && (
+        <Card className="border-blue-300 bg-blue-50">
+          <CardContent className="flex items-start gap-3 p-4">
+            <FileWarning className="mt-0.5 h-5 w-5 shrink-0 text-blue-600" />
+            <div>
+              <p className="text-sm font-bold text-blue-900">
+                {miles(resumen.cecosPorDarDeAlta)} cargas con un CECO que no está en el maestro
+              </p>
+              <p className="mt-0.5 text-xs leading-relaxed text-blue-800">
+                Traen el código y se sabe de quién son —casi siempre transportistas nuevos—, pero no
+                tienen ficha en la faena. Darlos de alta cierra la imputación de {resumen.porRegistrar}
+                {' '}día{resumen.porRegistrar > 1 ? 's' : ''}.
               </p>
             </div>
           </CardContent>
