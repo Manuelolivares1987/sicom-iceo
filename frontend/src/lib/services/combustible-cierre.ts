@@ -91,6 +91,7 @@ export type CierreInput = {
 export type ResumenDelDia = {
   faena_id: string
   fecha: string
+  turno?: string
   despachos: number
   litros: number
   ventas: number
@@ -101,13 +102,19 @@ export type ResumenDelDia = {
   operadores: number
 }
 
-export async function getResumenDelDia(faenaId: string, fecha: string) {
+/**
+ * Lo que se hizo en ESTE turno. No en el día completo: con turno de día y turno
+ * de noche, mostrar el día haría que el supervisor de noche firmara también por
+ * las cargas del turno de día.
+ */
+export async function getResumenDelDia(faenaId: string, fecha: string, turno?: string | null) {
   const { data, error } = await supabase
-    .from('v_comb_faena_dia_para_verificar').select('*')
-    .eq('faena_id', faenaId).eq('fecha', fecha).maybeSingle()
+    .from('v_comb_faena_turno_para_verificar').select('*')
+    .eq('faena_id', faenaId).eq('fecha', fecha)
+    .eq('turno', turno || 'Día').maybeSingle()
   if (error) throw error
   return (data ?? {
-    faena_id: faenaId, fecha, despachos: 0, litros: 0, ventas: 0,
+    faena_id: faenaId, fecha, turno: turno || 'Día', despachos: 0, litros: 0, ventas: 0,
     trasvasijes: 0, litros_trasvasije: 0, sin_ceco: 0, sin_foto: 0, operadores: 0,
   }) as ResumenDelDia
 }
@@ -136,20 +143,50 @@ export async function getPuntosMedicion(faenaId: string): Promise<PuntoMedicion[
 }
 
 /** El cierre del día anterior, para proponer la medición inicial de hoy. */
-export async function getCierreAnterior(faenaId: string, fecha: string) {
-  const { data, error } = await supabase
-    .from('v_comb_faena_cierre_punto')
-    .select('estanque_id, mf, fecha')
-    .eq('faena_id', faenaId).lt('fecha', fecha)
-    .order('fecha', { ascending: false })
-    .limit(40)
+/**
+ * El nivel con el que arranca el turno: el que dejó el TURNO anterior.
+ *
+ * No el del día anterior. En Romeral se trabaja 4x4 con turno de día y turno de
+ * noche, así que entre un cierre y el siguiente hay doce horas, no veinticuatro
+ * — y todo lo que el otro turno movió en medio. Ofrecerle al de noche el nivel
+ * de ayer descuadra los dos turnos: a uno le sobra exactamente lo que al otro
+ * le falta.
+ */
+export async function getCierreAnterior(faenaId: string, fecha: string, turno?: string | null) {
+  const { data, error } = await supabase.rpc('rpc_comb_medicion_del_turno_anterior', {
+    p_faena_id: faenaId,
+    p_fecha: fecha,
+    p_turno: turno ?? 'Día',
+  })
   if (error) throw error
-  // Se queda con la medición final más reciente de cada punto.
   const ultima = new Map<string, number>()
   for (const r of (data ?? []) as { estanque_id: string; mf: number | null }[]) {
-    if (r.mf != null && !ultima.has(r.estanque_id)) ultima.set(r.estanque_id, Number(r.mf))
+    if (r.mf != null) ultima.set(r.estanque_id, Number(r.mf))
   }
   return ultima
+}
+
+/** De quién recibe el turno, para mostrarlo al empezar. */
+export type TurnoAnterior = {
+  fecha_anterior: string | null
+  turno_anterior: string | null
+  entrego: string | null
+  estado_anterior: string | null
+}
+
+export async function getDeQuienRecibe(faenaId: string, fecha: string, turno: string) {
+  const { data, error } = await supabase.rpc('rpc_comb_medicion_del_turno_anterior', {
+    p_faena_id: faenaId, p_fecha: fecha, p_turno: turno,
+  })
+  if (error) throw error
+  const filas = (data ?? []) as { fecha: string; turno: string; medido_por: string | null }[]
+  if (!filas.length) return null
+  return {
+    fecha_anterior: filas[0].fecha,
+    turno_anterior: filas[0].turno,
+    entrego: filas[0].medido_por,
+    estado_anterior: null,
+  } as TurnoAnterior
 }
 
 export type CierrePuntoCalculado = {
