@@ -351,9 +351,10 @@ export default function CierreRomeralPage() {
   const cargar = useCallback(async () => {
     const local = await getPuntosOffline()
     if (local) setPuntos(local)
-    setAnterior(await getMedicionAnteriorOffline())
+    // Por turno: el de día y el de noche arrancan de números distintos.
+    setAnterior(await getMedicionAnteriorOffline(turno))
     setDescargadoAt(await ultimaDescargaCierre())
-  }, [])
+  }, [turno])
 
   useEffect(() => { void cargar() }, [cargar])
 
@@ -367,11 +368,11 @@ export default function CierreRomeralPage() {
     setDescargando(true)
     try {
       const p = await descargarCatalogoCierre(faenaId)
-      const a = await descargarMedicionAnterior(faenaId, fecha)
+      const a = await descargarMedicionAnterior(faenaId, fecha, turno)
       // Los pendientes y el resumen del turno bajan junto con el catálogo: son
       // parte de lo que hay que poder mirar sin señal, no un extra.
       const pend = await descargarPendientes(faenaId).catch(() => [])
-      await descargarResumenDia(faenaId, fecha).catch(() => null)
+      await descargarResumenDia(faenaId, fecha, turno).catch(() => null)
       setPuntos(p); setAnterior(a); setPendientes(pend)
       setDescargadoAt(await ultimaDescargaCierre())
       toast.success(`${p.length} puntos listos para medir sin señal`)
@@ -489,9 +490,9 @@ export default function CierreRomeralPage() {
   useEffect(() => {
     if (paso !== total || !borrador?.faena_id) return
     let vivo = true
-    getResumenDiaOffline(borrador.fecha).then((r) => { if (vivo && r) setDelDia(r) })
+    getResumenDiaOffline(borrador.fecha, borrador.turno).then((r) => { if (vivo && r) setDelDia(r) })
     if (online) {
-      descargarResumenDia(borrador.faena_id, borrador.fecha)
+      descargarResumenDia(borrador.faena_id, borrador.fecha, borrador.turno)
         .then((r) => { if (vivo) setDelDia(r) })
         .catch(() => { /* queda lo del teléfono */ })
     }

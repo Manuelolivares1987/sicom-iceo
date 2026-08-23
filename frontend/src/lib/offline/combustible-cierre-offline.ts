@@ -133,15 +133,15 @@ export async function getPendientesOffline(): Promise<Pendiente[]> {
   return (r?.value as Pendiente[]) ?? []
 }
 
-export async function descargarResumenDia(faenaId: string, fecha: string) {
-  const r = await getResumenDelDia(faenaId, fecha)
-  await db().cache.put({ key: K_RESUMEN + '|' + fecha, value: r,
+export async function descargarResumenDia(faenaId: string, fecha: string, turno?: string) {
+  const r = await getResumenDelDia(faenaId, fecha, turno)
+  await db().cache.put({ key: K_RESUMEN + '|' + fecha + '|' + (turno || 'Día'), value: r,
                          updated_at: new Date().toISOString() })
   return r
 }
 
-export async function getResumenDiaOffline(fecha: string): Promise<ResumenDelDia | null> {
-  const r = await db().cache.get(K_RESUMEN + '|' + fecha)
+export async function getResumenDiaOffline(fecha: string, turno?: string): Promise<ResumenDelDia | null> {
+  const r = await db().cache.get(K_RESUMEN + '|' + fecha + '|' + (turno || 'Día'))
   return (r?.value as ResumenDelDia) ?? null
 }
 
@@ -156,16 +156,22 @@ export async function getPuntosOffline(): Promise<PuntoMedicion[] | null> {
   return (row?.value as PuntoMedicion[]) ?? null
 }
 
-/** La medición final de ayer, para proponer la inicial de hoy sin que nadie la busque. */
-export async function descargarMedicionAnterior(faenaId: string, fecha: string) {
-  const mapa = await getCierreAnterior(faenaId, fecha)
+/**
+ * La medición final del TURNO anterior, para proponer la inicial de este sin
+ * que nadie la busque. Se guarda por turno: el de día y el de noche arrancan de
+ * números distintos, y guardarlos bajo la misma llave haría que el segundo
+ * partiera con el número del primero.
+ */
+export async function descargarMedicionAnterior(faenaId: string, fecha: string, turno?: string) {
+  const mapa = await getCierreAnterior(faenaId, fecha, turno)
   const plano = Object.fromEntries(mapa)
-  await db().cache.put({ key: K_ANTERIOR, value: plano, updated_at: new Date().toISOString() })
+  await db().cache.put({ key: K_ANTERIOR + '|' + (turno || 'Día'), value: plano,
+                         updated_at: new Date().toISOString() })
   return plano as Record<string, number>
 }
 
-export async function getMedicionAnteriorOffline(): Promise<Record<string, number>> {
-  const row = await db().cache.get(K_ANTERIOR)
+export async function getMedicionAnteriorOffline(turno?: string): Promise<Record<string, number>> {
+  const row = await db().cache.get(K_ANTERIOR + '|' + (turno || 'Día'))
   return (row?.value as Record<string, number>) ?? {}
 }
 
