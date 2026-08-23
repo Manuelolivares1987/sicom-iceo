@@ -116,6 +116,7 @@ export default function ControlCombustibleRomeralPage() {
     const d = dias ?? []
     return {
       dias: d.length,
+      atencion: d.reduce((a, x) => a + Number(x.grupos_atencion ?? 0), 0),
       volumenCerrado: d.filter((x) => x.volumen_estado === 'cuadrado').length,
       volumenRevisar: d.filter((x) => x.volumen_estado === 'revisar').length,
       volumenSinCerrar: d.filter((x) => x.volumen_estado === 'sin_cierre').length,
@@ -150,7 +151,9 @@ export default function ControlCombustibleRomeralPage() {
           <p className="mt-1 max-w-2xl text-sm text-gray-500">
             Faena Romeral. El día tiene dos cierres independientes: el de <strong>volumen</strong>
             {' '}se cierra siempre el mismo día con varilla y contador; el de <strong>imputación</strong>
-            {' '}espera a Orpak y no bloquea al primero.
+            {' '}espera a Orpak y no bloquea al primero. Se cuadra por grupo: los dos tanques de la
+            isla Mina están interconectados y separados dan diferencias de miles de litros que se
+            cancelan entre sí. Umbral: cuadra bajo 200 L, atención hasta 500 L.
           </p>
         </div>
         <div className="flex gap-2">
