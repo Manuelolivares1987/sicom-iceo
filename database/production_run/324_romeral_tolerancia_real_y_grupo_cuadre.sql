@@ -61,10 +61,15 @@ COMMENT ON COLUMN public.combustible_faena_config.tolerancia_ok_lt IS
 COMMENT ON COLUMN public.combustible_faena_config.tolerancia_alerta_lt IS
   'Sobre esto, hay que investigar. Ninguna medicion con contador propio de junio supero 500 L. MIG324.';
 
-UPDATE public.combustible_faena_config
+-- Acotado a Romeral: los umbrales salen de SU aplicacion y estan validados con
+-- SUS datos. Sin el WHERE, el dia que otra faena configure los suyos, volver a
+-- correr esta migracion se los pisaria.
+UPDATE public.combustible_faena_config c
    SET tolerancia_ok_lt = 200, tolerancia_alerta_lt = 500,
        observacion = 'Umbrales tomados de la aplicacion de Romeral (varClass) y validados con los 9 dias de junio 2026.',
-       updated_at = NOW();
+       updated_at = NOW()
+  FROM faenas f
+ WHERE f.id = c.faena_id AND f.codigo = 'FAE-CMP-ROMERAL';
 
 -- Las columnas porcentuales que había inventado quedan sin uso. No se borran
 -- todavía: si mañana se acuerda con ESMAX un criterio porcentual, están.
