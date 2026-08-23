@@ -34,6 +34,7 @@ import {
   type ControlDia, type Excepcion,
 } from '@/lib/services/combustible-cierre'
 import { CierreMensual } from '@/components/combustible/cierre-mensual'
+import { PendientesTurno } from '@/components/combustible/pendientes-turno'
 
 const miles = (n: number | null | undefined) =>
   n == null ? '—' : Number(n).toLocaleString('es-CL', { maximumFractionDigits: 0 })
@@ -241,6 +242,10 @@ export default function ControlCombustibleRomeralPage() {
           </Card>
         ))}
       </div>
+
+      {/* Lo que se le pidió a la faena y todavía no se hace. Va arriba porque es
+          lo que el turno tiene que ver antes de salir, no al final del mes. */}
+      {faena?.id && <PendientesTurno faenaId={faena.id} />}
 
       {/* El cierre del mes: acumulado, entregables y el detalle de las tres medidas */}
       {faena?.id && <CierreMensual faenaId={faena.id} desde={desde} hasta={hasta} />}
