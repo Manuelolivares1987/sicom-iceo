@@ -325,7 +325,11 @@ export type ControlDia = {
   litros_trasvasije: number | null
   sin_ceco: number | null
   equipo_sin_mapear: number | null
-  imputacion_estado: 'sin_datos' | 'incompleta' | 'completa'
+  // 'por_registrar' = la carga trae su código de CECO y se sabe de quién es,
+  // pero ese código no tiene ficha en la faena. Falta un alta, no un dato.
+  imputacion_estado: 'sin_datos' | 'incompleta' | 'por_registrar' | 'completa'
+  ceco_fuera_del_maestro: number | null
+  transacciones_orpak: number | null
   recepciones: number | null
   litros_recibidos: number | null
   recepciones_sin_confirmar: number | null
