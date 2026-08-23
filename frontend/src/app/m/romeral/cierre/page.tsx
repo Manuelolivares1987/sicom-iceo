@@ -28,6 +28,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import {
+  ClipboardList,
   ArrowLeft, ArrowRight, Check, CloudOff, Gauge, Download, RefreshCw,
   AlertTriangle, CheckCircle2, Ruler, Truck, Building2, Ban, Save, Camera, X,
 } from 'lucide-react'
@@ -43,6 +44,7 @@ import {
   evaluarCuadre, TOL_CUADRA_LT,
   type PuntoMedicion, type LecturaPunto, type LecturaMedidor,
   getResumenDelDia, type ResumenDelDia,
+  getPendientesAbiertos, type Pendiente, type RespuestaPendiente,
 } from '@/lib/services/combustible-cierre'
 import {
   descargarCatalogoCierre, getPuntosOffline, ultimaDescargaCierre,
@@ -178,6 +180,116 @@ function FotoMedicion({
           />
         </>
       )}
+    </div>
+  )
+}
+
+/**
+ * Lo que el turno anterior dejó pendiente.
+ *
+ * Aparece dos veces a propósito: al empezar el recorrido, para que se alcance a
+ * hacer, y al final, para contestar qué pasó. Un pendiente que sólo se ve a las
+ * 18:00 ya no se puede hacer — sólo se puede explicar.
+ */
+function DelTurnoAnterior({
+  lista, respuestas, onResponder, modo,
+}: {
+  lista: Pendiente[]
+  respuestas: Record<string, RespuestaPendiente>
+  onResponder: (r: RespuestaPendiente) => void
+  modo: 'aviso' | 'contestar'
+}) {
+  if (!lista.length) return null
+
+  const SENAL: Record<string, { texto: string; cls: string }> = {
+    nuevo:       { texto: 'nuevo',                cls: 'bg-blue-100 text-blue-800' },
+    arrastrando: { texto: 'viene de otro turno',  cls: 'bg-amber-100 text-amber-800' },
+    atascado:    { texto: 'lleva varios turnos',  cls: 'bg-red-100 text-red-800' },
+  }
+
+  return (
+    <div className="rounded-xl border-2 border-amber-400 bg-amber-50 p-4">
+      <p className="flex items-center gap-2 text-base font-bold text-amber-900">
+        <ClipboardList className="h-5 w-5 shrink-0" />
+        {modo === 'aviso' ? 'Quedó pendiente del turno anterior' : 'Diga qué pasó con esto'}
+      </p>
+      {modo === 'aviso' && (
+        <p className="mt-1 text-sm text-amber-800">
+          Hágalo durante el turno. Al final le va a preguntar qué pasó con cada uno.
+        </p>
+      )}
+
+      <div className="mt-3 space-y-3">
+        {lista.map((p) => {
+          const r = respuestas[p.id]
+          const senal = SENAL[p.senal] ?? SENAL.nuevo
+          return (
+            <div key={p.id} className="rounded-lg bg-white p-3">
+              <div className="flex flex-wrap items-center gap-2">
+                {p.origen === 'mandante' && (
+                  <span className="rounded bg-gray-900 px-1.5 py-0.5 text-[10px] font-bold uppercase text-white">
+                    Lo pide el mandante
+                  </span>
+                )}
+                <span className={cn('rounded px-1.5 py-0.5 text-[10px] font-bold uppercase', senal.cls)}>
+                  {senal.texto}
+                </span>
+              </div>
+              <p className="mt-1.5 text-base font-medium text-gray-900">{p.texto}</p>
+              {p.pedido_por && (
+                <p className="text-xs text-gray-500">Lo pidió {p.pedido_por}</p>
+              )}
+              {p.ultimo_comentario && (
+                <p className="mt-1 border-l-2 border-gray-200 pl-2 text-sm text-gray-600">
+                  El turno anterior dijo: «{p.ultimo_comentario}»
+                  {p.ultimo_turno_por && <> — {p.ultimo_turno_por}</>}
+                </p>
+              )}
+
+              {modo === 'contestar' && (
+                <div className="mt-2.5 space-y-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => onResponder({ pendiente_id: p.id, respuesta: 'hecho',
+                                                   comentario: r?.comentario ?? null })}
+                      className={cn('h-12 rounded-lg border-2 text-base font-bold',
+                        r?.respuesta === 'hecho'
+                          ? 'border-emerald-500 bg-emerald-600 text-white'
+                          : 'border-gray-300 bg-white text-gray-700')}
+                    >
+                      Se hizo
+                    </button>
+                    <button
+                      onClick={() => onResponder({ pendiente_id: p.id, respuesta: 'no_alcanzo',
+                                                   comentario: r?.comentario ?? null })}
+                      className={cn('h-12 rounded-lg border-2 text-base font-bold',
+                        r?.respuesta === 'no_alcanzo'
+                          ? 'border-amber-500 bg-amber-500 text-white'
+                          : 'border-gray-300 bg-white text-gray-700')}
+                    >
+                      No alcancé
+                    </button>
+                  </div>
+                  {r?.respuesta === 'no_alcanzo' && (
+                    <input
+                      value={r.comentario ?? ''}
+                      onChange={(e) => onResponder({ ...r, comentario: e.target.value })}
+                      placeholder="¿Por qué no se alcanzó?"
+                      className="h-12 w-full rounded-lg border-2 border-amber-400 px-3 text-base"
+                    />
+                  )}
+                  {r?.respuesta === 'no_alcanzo' && !(r.comentario ?? '').trim() && (
+                    <p className="text-xs text-amber-800">
+                      Escriba por qué: el turno que viene lo va a recibir igual, y sin esto
+                      empieza de cero.
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }
@@ -347,6 +459,21 @@ export default function CierreRomeralPage() {
   const [delDia, setDelDia] = useState<ResumenDelDia | null>(null)
   const [revisado, setRevisado] = useState(false)
 
+  // Los pendientes se piden al ENTRAR a la pantalla, no al final: si el
+  // supervisor los descubre a las 18:00, ya no alcanza a hacerlos. Aparecen
+  // arriba antes de empezar el recorrido y otra vez antes de firmar.
+  const [pendientes, setPendientes] = useState<Pendiente[]>([])
+  const [respuestas, setRespuestas] = useState<Record<string, RespuestaPendiente>>({})
+
+  useEffect(() => {
+    if (!borrador?.faena_id || !online) return
+    let vivo = true
+    getPendientesAbiertos(borrador.faena_id)
+      .then((r) => { if (vivo) setPendientes(r) })
+      .catch(() => { if (vivo) setPendientes([]) })
+    return () => { vivo = false }
+  }, [borrador?.faena_id, online])
+
   useEffect(() => {
     if (paso !== total || !borrador?.faena_id || !online) return
     let vivo = true
@@ -356,6 +483,13 @@ export default function CierreRomeralPage() {
     return () => { vivo = false }
   }, [paso, total, borrador?.faena_id, borrador?.fecha, online])
 
+  // Contestados todos, y los que no se alcanzaron con su motivo escrito.
+  const pendientesListos = pendientes.every((p) => {
+    const r = respuestas[p.id]
+    if (!r) return false
+    return r.respuesta === 'hecho' || (r.comentario ?? '').trim().length > 0
+  })
+
   const subir = async (firmar: boolean) => {
     if (!borrador) return
     setSubiendo(true)
@@ -363,7 +497,8 @@ export default function CierreRomeralPage() {
       await subirBorrador(borrador, firmar,
         firmar && revisado && delDia
           ? { despachos: delDia.despachos, litros: delDia.litros }
-          : null)
+          : null,
+        firmar ? Object.values(respuestas) : null)
       toast.success(firmar ? 'Cierre firmado y enviado' : 'Guardado en el sistema')
       setBorrador({ ...borrador, sync_status: 'subido' })
     } catch (e) {
@@ -433,6 +568,12 @@ export default function CierreRomeralPage() {
               </p>
             )}
           </div>
+
+          <DelTurnoAnterior
+            lista={pendientes} respuestas={respuestas}
+            onResponder={(r) => setRespuestas((v) => ({ ...v, [r.pendiente_id]: r }))}
+            modo="aviso"
+          />
 
           <div className="space-y-5 rounded-xl border border-gray-200 bg-white p-4">
             <div>
@@ -555,6 +696,12 @@ export default function CierreRomeralPage() {
             </div>
           )}
 
+          <DelTurnoAnterior
+            lista={pendientes} respuestas={respuestas}
+            onResponder={(r) => setRespuestas((v) => ({ ...v, [r.pendiente_id]: r }))}
+            modo="contestar"
+          />
+
           {/* Lo que se hizo en el turno. No es informativo: el supervisor
               firma por esto, y si llegó una carga mientras revisaba, el
               sistema lo detiene. */}
@@ -613,7 +760,7 @@ export default function CierreRomeralPage() {
           <div className="space-y-2">
             <BotonGrande
               onClick={() => subir(true)}
-              disabled={subiendo || !online || resumen.sinFoto.length > 0}
+              disabled={subiendo || !online || resumen.sinFoto.length > 0 || !pendientesListos}
               icono={Check}
             >
               {subiendo ? <Spinner className="h-5 w-5" /> : 'Firmar y enviar'}

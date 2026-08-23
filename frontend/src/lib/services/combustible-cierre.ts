@@ -78,6 +78,9 @@ export type CierreInput = {
   // coincide con lo que hay en el sistema, el cierre se rechaza: puede haber
   // llegado una carga desde terreno mientras revisaba.
   verificacion?: { despachos: number; litros: number } | null
+  // Qué hizo el turno con cada cosa que quedó pendiente. Sin esto, el cierre
+  // no se firma cuando hay pendientes abiertos.
+  pendientes?: { pendiente_id: string; respuesta: string; comentario?: string | null }[] | null
 }
 
 /** El resumen del turno que el supervisor mira antes de firmar. */
@@ -188,6 +191,7 @@ export async function guardarCierre(p: CierreInput) {
     p_turno: p.turno ?? null,
     p_medido_por: p.medidoPor ?? null,
     p_verificacion: p.verificacion ?? null,
+    p_pendientes: p.pendientes ?? null,
     p_puntos: p.puntos,
     p_medidores: p.medidores,
     p_observacion: p.observacion ?? null,
@@ -407,4 +411,61 @@ export async function confirmarCeco(cecoId: string, codigo?: string, empresa?: s
   })
   if (error) throw error
   return data as { confirmado?: boolean; fusionado_con?: string; despachos_movidos?: number }
+}
+
+// ── Lo que quedó pendiente del turno anterior (MIG344/345) ──────────────────
+//
+// La queja del mandante: se le pide algo al turno de día y el de noche no lo
+// hace. Un pendiente no es una nota — es algo con dueño y con cierre, y vive
+// dentro del cierre del turno porque es el único ritual que el turno ya está
+// obligado a completar. Un módulo aparte no lo abriría nadie.
+
+export type Pendiente = {
+  id: string
+  faena_id: string
+  texto: string
+  origen: 'mandante' | 'supervisor' | 'oficina' | 'sistema'
+  pedido_por: string | null
+  prioridad: 'normal' | 'alta'
+  creado_at: string
+  dias_abierto: number
+  turnos_sin_hacer: number
+  ultimo_comentario: string | null
+  ultimo_turno_por: string | null
+  // 'nuevo' todavía no lo vio ningún turno · 'arrastrando' uno o dos turnos ·
+  // 'atascado' tres o más, que ya es otro problema.
+  senal: 'nuevo' | 'arrastrando' | 'atascado'
+}
+
+export type RespuestaPendiente = {
+  pendiente_id: string
+  respuesta: 'hecho' | 'no_alcanzo' | 'no_corresponde'
+  comentario?: string | null
+}
+
+export async function getPendientesAbiertos(faenaId: string) {
+  const { data, error } = await supabase
+    .from('v_comb_faena_pendientes_abiertos').select('*')
+    .eq('faena_id', faenaId)
+    .order('prioridad').order('creado_at')
+  if (error) throw error
+  return (data ?? []) as Pendiente[]
+}
+
+export async function crearPendiente(p: {
+  faenaId: string
+  texto: string
+  origen?: Pendiente['origen']
+  pedidoPor?: string | null
+  prioridad?: Pendiente['prioridad']
+}) {
+  const { data, error } = await supabase.rpc('rpc_comb_pendiente_crear', {
+    p_faena_id: p.faenaId,
+    p_texto: p.texto,
+    p_origen: p.origen ?? 'supervisor',
+    p_pedido_por: p.pedidoPor ?? null,
+    p_prioridad: p.prioridad ?? 'normal',
+  })
+  if (error) throw error
+  return data as { pendiente_id: string }
 }

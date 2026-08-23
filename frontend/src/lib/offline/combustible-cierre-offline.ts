@@ -189,6 +189,7 @@ export async function subirBorrador(
   b: BorradorCierre,
   firmar: boolean,
   verificacion?: { despachos: number; litros: number } | null,
+  pendientes?: { pendiente_id: string; respuesta: string; comentario?: string | null }[] | null,
 ) {
   await subirFotosPendientes(b)
   const input: CierreInput = {
@@ -202,6 +203,7 @@ export async function subirBorrador(
     firmar,
     clientUuid: b.client_uuid,
     verificacion: firmar ? (verificacion ?? null) : null,
+    pendientes: firmar ? (pendientes ?? null) : null,
   }
   try {
     const r = await guardarCierre(input)
