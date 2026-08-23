@@ -185,7 +185,11 @@ async function subirFotosPendientes(b: BorradorCierre) {
   await db().borradores.put(b)
 }
 
-export async function subirBorrador(b: BorradorCierre, firmar: boolean) {
+export async function subirBorrador(
+  b: BorradorCierre,
+  firmar: boolean,
+  verificacion?: { despachos: number; litros: number } | null,
+) {
   await subirFotosPendientes(b)
   const input: CierreInput = {
     faenaId: b.faena_id,
@@ -197,6 +201,7 @@ export async function subirBorrador(b: BorradorCierre, firmar: boolean) {
     observacion: b.observacion || null,
     firmar,
     clientUuid: b.client_uuid,
+    verificacion: firmar ? (verificacion ?? null) : null,
   }
   try {
     const r = await guardarCierre(input)

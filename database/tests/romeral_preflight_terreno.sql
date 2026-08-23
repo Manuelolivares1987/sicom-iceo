@@ -60,20 +60,50 @@ BEGIN
   BEGIN
     o := rpc_comb_faena_guardar_cierre(f, DATE '2026-08-24','Día','Yusdel Sarduy',
       '[]'::jsonb, '[]'::jsonb, NULL, true, 'pre-c');
-    PERFORM pg_temp.an(7,'El operador FIRMA el cierre del dia', true,'lo permite');
-  EXCEPTION WHEN OTHERS THEN PERFORM pg_temp.an(7,'El operador FIRMA el cierre del dia', false, left(SQLERRM,70)); END;
+    PERFORM pg_temp.an(7,'El operador FIRMA el cierre del dia', true,'LO PERMITE');
+  EXCEPTION WHEN OTHERS THEN PERFORM pg_temp.an(7,'El operador FIRMA el cierre del dia', false, left(SQLERRM,64)); END;
 
   BEGIN
     o := rpc_comb_faena_recepcion(f, DATE '2026-08-24',
       jsonb_build_array(jsonb_build_object('estanque_id', m1, 'litros', 20000)),
       '999','1','JA5655','Copec',20000,'07:00','Operador','SELLO-1',NULL,'https://x/g.jpg',NULL,false,'pre-r');
-    PERFORM pg_temp.an(8,'El operador registra una recepcion', true,'ok');
-  EXCEPTION WHEN OTHERS THEN PERFORM pg_temp.an(8,'El operador registra una recepcion', false, left(SQLERRM,70)); END;
+    PERFORM pg_temp.an(8,'El operador recibe la flota primaria', true,'LO PERMITE');
+  EXCEPTION WHEN OTHERS THEN PERFORM pg_temp.an(8,'El operador recibe la flota primaria', false, left(SQLERRM,64)); END;
 
   BEGIN
     o := rpc_comb_orpak_cargar(f,'x','[]'::jsonb);
     PERFORM pg_temp.an(9,'El operador puede cargar Orpak', true,'lo permite');
   EXCEPTION WHEN OTHERS THEN PERFORM pg_temp.an(9,'El operador puede cargar Orpak', false, left(SQLERRM,60)); END;
+
+  -- ── El supervisor de turno: recibe, mide, verifica y firma ──
+  PERFORM pg_temp.como('supervisor');
+  BEGIN
+    o := rpc_comb_faena_recepcion(f, DATE '2026-08-24',
+      jsonb_build_array(jsonb_build_object('estanque_id', m1, 'litros', 20000)),
+      '999','1','JA5655','Copec',20000,'07:00','Supervisor','SELLO-1',NULL,'https://x/g.jpg',NULL,true,'pre-rs');
+    PERFORM pg_temp.an(13,'El supervisor recibe la flota primaria', true,'ok');
+  EXCEPTION WHEN OTHERS THEN PERFORM pg_temp.an(13,'El supervisor recibe la flota primaria', false, left(SQLERRM,64)); END;
+
+  -- Deja una carga en el dia para que haya algo que verificar.
+  PERFORM rpc_comb_faena_despachar(f, DATE '2026-08-25','Día', c18, NULL, NULL,
+    0, 700, NULL, 'Operador', '10:00', 'CAT25', NULL, 'DJKL-18', NULL, NULL, NULL,
+    'pre-v1', 'https://x/a.jpg','https://x/b.jpg', NULL, '115037','venta','Flota Caex Romeral', NULL);
+
+  BEGIN
+    o := rpc_comb_faena_guardar_cierre(f, DATE '2026-08-25','Día','Supervisor de turno',
+      jsonb_build_array(jsonb_build_object('estanque_id',m1,'mi',47000,'mf',46300,'foto_url','https://x/v.jpg')),
+      '[]'::jsonb, NULL, true, 'pre-v', jsonb_build_object('despachos', 5, 'litros', 9999));
+    PERFORM pg_temp.an(14,'Firma diciendo que reviso 5 cargas y hay 1', true,'LO PERMITE');
+  EXCEPTION WHEN OTHERS THEN PERFORM pg_temp.an(14,'Firma diciendo que reviso 5 cargas y hay 1', false, left(SQLERRM,64)); END;
+
+  BEGIN
+    o := rpc_comb_faena_guardar_cierre(f, DATE '2026-08-25','Día','Supervisor de turno',
+      jsonb_build_array(jsonb_build_object('estanque_id',m1,'mi',47000,'mf',46300,'foto_url','https://x/v.jpg')),
+      '[]'::jsonb, NULL, true, 'pre-v', jsonb_build_object('despachos', 1, 'litros', 700));
+    SELECT count(*) INTO n FROM combustible_faena_cierre
+     WHERE faena_id=f AND fecha=DATE '2026-08-25' AND verificado_at IS NOT NULL;
+    PERFORM pg_temp.an(15,'Firma verificando la carga que realmente hay', n=1, 'verificado='||n);
+  EXCEPTION WHEN OTHERS THEN PERFORM pg_temp.an(15,'Firma verificando la carga que realmente hay', false, left(SQLERRM,64)); END;
 
   -- Quien no opera combustible no registra despachos: ese registro es la
   -- evidencia con la que se le cobra al mandante.
