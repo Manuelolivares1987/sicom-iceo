@@ -50,6 +50,9 @@ import {
   descargarCatalogoCierre, getPuntosOffline, ultimaDescargaCierre,
   descargarMedicionAnterior, getMedicionAnteriorOffline,
   crearBorrador, guardarBorrador, subirBorrador,
+  firmarEnElTelefono, sincronizarPendientes,
+  descargarPendientes, getPendientesOffline,
+  descargarResumenDia, getResumenDiaOffline,
   guardarFotoLocal, getFotoLocal, esFotoLocal,
   type BorradorCierre,
 } from '@/lib/offline/combustible-cierre-offline'
@@ -365,7 +368,11 @@ export default function CierreRomeralPage() {
     try {
       const p = await descargarCatalogoCierre(faenaId)
       const a = await descargarMedicionAnterior(faenaId, fecha)
-      setPuntos(p); setAnterior(a)
+      // Los pendientes y el resumen del turno bajan junto con el catálogo: son
+      // parte de lo que hay que poder mirar sin señal, no un extra.
+      const pend = await descargarPendientes(faenaId).catch(() => [])
+      await descargarResumenDia(faenaId, fecha).catch(() => null)
+      setPuntos(p); setAnterior(a); setPendientes(pend)
       setDescargadoAt(await ultimaDescargaCierre())
       toast.success(`${p.length} puntos listos para medir sin señal`)
     } catch (e) {
@@ -466,20 +473,28 @@ export default function CierreRomeralPage() {
   const [respuestas, setRespuestas] = useState<Record<string, RespuestaPendiente>>({})
 
   useEffect(() => {
-    if (!borrador?.faena_id || !online) return
+    if (!borrador?.faena_id) return
     let vivo = true
-    getPendientesAbiertos(borrador.faena_id)
-      .then((r) => { if (vivo) setPendientes(r) })
-      .catch(() => { if (vivo) setPendientes([]) })
+    // Primero lo que hay en el teléfono, para que se vea sin señal. Si hay
+    // conexión se refresca en segundo plano.
+    getPendientesOffline().then((r) => { if (vivo && r.length) setPendientes(r) })
+    if (online) {
+      descargarPendientes(borrador.faena_id)
+        .then((r) => { if (vivo) setPendientes(r) })
+        .catch(() => { /* queda lo del teléfono */ })
+    }
     return () => { vivo = false }
   }, [borrador?.faena_id, online])
 
   useEffect(() => {
-    if (paso !== total || !borrador?.faena_id || !online) return
+    if (paso !== total || !borrador?.faena_id) return
     let vivo = true
-    getResumenDelDia(borrador.faena_id, borrador.fecha)
-      .then((r) => { if (vivo) setDelDia(r) })
-      .catch(() => { if (vivo) setDelDia(null) })
+    getResumenDiaOffline(borrador.fecha).then((r) => { if (vivo && r) setDelDia(r) })
+    if (online) {
+      descargarResumenDia(borrador.faena_id, borrador.fecha)
+        .then((r) => { if (vivo) setDelDia(r) })
+        .catch(() => { /* queda lo del teléfono */ })
+    }
     return () => { vivo = false }
   }, [paso, total, borrador?.faena_id, borrador?.fecha, online])
 
@@ -490,17 +505,43 @@ export default function CierreRomeralPage() {
     return r.respuesta === 'hecho' || (r.comentario ?? '').trim().length > 0
   })
 
+  // Al recuperar la señal se sube solo lo que esté esperando. Antes esto no
+  // pasaba: el cierre se quedaba en el aparato hasta que alguien volviera a
+  // abrir la pantalla y apretara el botón.
+  useEffect(() => {
+    if (!online) return
+    let vivo = true
+    sincronizarPendientes().then((r) => {
+      if (!vivo || r.subidos === 0) return
+      toast.success(r.firmados > 0
+        ? `Volvió la señal: se envió el cierre que estaba esperando.`
+        : `Volvió la señal: se enviaron ${r.subidos} borrador(es).`)
+    }).catch(() => { /* se reintenta al próximo cambio de señal */ })
+    return () => { vivo = false }
+  }, [online, toast])
+
   const subir = async (firmar: boolean) => {
     if (!borrador) return
     setSubiendo(true)
     try {
-      await subirBorrador(borrador, firmar,
-        firmar && revisado && delDia
-          ? { despachos: delDia.despachos, litros: delDia.litros }
-          : null,
-        firmar ? Object.values(respuestas) : null)
+      const verif = firmar && revisado && delDia
+        ? { despachos: delDia.despachos, litros: delDia.litros } : null
+      const resp = firmar ? Object.values(respuestas) : null
+
+      if (!online) {
+        // Sin señal el turno se cierra igual: queda firmado en el teléfono y
+        // sube solo cuando vuelve la conexión.
+        const b = await firmarEnElTelefono(borrador, verif, resp)
+        setBorrador({ ...b })
+        toast.success(firmar
+          ? 'Turno cerrado en el teléfono. Se envía solo cuando vuelva la señal.'
+          : 'Guardado en el teléfono.')
+        return
+      }
+
+      await subirBorrador(borrador, firmar, verif, resp)
       toast.success(firmar ? 'Cierre firmado y enviado' : 'Guardado en el sistema')
-      setBorrador({ ...borrador, sync_status: 'subido' })
+      setBorrador({ ...borrador, sync_status: 'subido', firma_pendiente: false })
     } catch (e) {
       toast.error(errorMessage(e, 'No se pudo enviar. Queda guardado en el teléfono.'))
     } finally {
@@ -760,12 +801,12 @@ export default function CierreRomeralPage() {
           <div className="space-y-2">
             <BotonGrande
               onClick={() => subir(true)}
-              disabled={subiendo || !online || resumen.sinFoto.length > 0 || !pendientesListos}
+              disabled={subiendo || resumen.sinFoto.length > 0 || !pendientesListos}
               icono={Check}
             >
               {subiendo ? <Spinner className="h-5 w-5" /> : 'Firmar y enviar'}
             </BotonGrande>
-            <BotonGrande onClick={() => subir(false)} variante="secundario" disabled={subiendo || !online} icono={Save}>
+            <BotonGrande onClick={() => subir(false)} variante="secundario" disabled={subiendo} icono={Save}>
               Guardar sin firmar
             </BotonGrande>
             <BotonGrande onClick={() => setPaso(total - 1)} variante="secundario" icono={ArrowLeft}>
@@ -776,7 +817,7 @@ export default function CierreRomeralPage() {
           <p className="text-center text-sm text-gray-500">
             {online
               ? 'Guardado en el teléfono. Al enviar queda en el sistema.'
-              : 'Sin señal: está guardado en el teléfono. Envíelo cuando tenga conexión.'}
+              : 'Sin señal: puede cerrar el turno igual. Se envía solo cuando vuelva la conexión.'}
           </p>
         </main>
       </div>

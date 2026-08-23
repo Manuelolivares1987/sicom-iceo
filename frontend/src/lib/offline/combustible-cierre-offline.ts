@@ -16,7 +16,9 @@
 import Dexie, { type Table } from 'dexie'
 import {
   getPuntosMedicion, getCierreAnterior, guardarCierre, subirFotoMedicion,
+  getPendientesAbiertos, getResumenDelDia, registrarRecepcion,
   type PuntoMedicion, type LecturaPunto, type LecturaMedidor, type CierreInput,
+  type Pendiente, type ResumenDelDia,
 } from '@/lib/services/combustible-cierre'
 import { compressImage } from '@/lib/image/compress'
 
@@ -34,6 +36,13 @@ export type BorradorCierre = {
   actualizado_at: string
   sync_status: 'local' | 'subido' | 'error'
   ultimo_error?: string | null
+  // El turno se cierra en el teléfono aunque no haya señal. Queda marcado
+  // para firmar, y sube cuando vuelve la conexión — no cuando alguien se
+  // acuerde de entrar a la pantalla.
+  firma_pendiente?: boolean
+  verificacion?: { despachos: number; litros: number } | null
+  pendientes?: { pendiente_id: string; respuesta: string; comentario?: string | null }[] | null
+  firmado_local_at?: string | null
 }
 
 type CacheRow = { key: string; value: unknown; updated_at: string }
@@ -106,6 +115,35 @@ export const esFotoLocal = (ref?: string | null) => !!ref?.startsWith('local:')
 // ── Catálogo ────────────────────────────────────────────────────────────────
 const K_PUNTOS = 'puntos-medicion'
 const K_ANTERIOR = 'medicion-anterior'
+
+// Lo que quedó pendiente y el resumen del turno se bajan CON el catálogo. Si
+// se piden sólo cuando hay señal, en Romeral no se ven nunca — y un pendiente
+// que no se ve es exactamente el problema que se quería resolver.
+const K_PENDIENTES = 'pendientes-abiertos'
+const K_RESUMEN = 'resumen-del-dia'
+
+export async function descargarPendientes(faenaId: string) {
+  const p = await getPendientesAbiertos(faenaId)
+  await db().cache.put({ key: K_PENDIENTES, value: p, updated_at: new Date().toISOString() })
+  return p
+}
+
+export async function getPendientesOffline(): Promise<Pendiente[]> {
+  const r = await db().cache.get(K_PENDIENTES)
+  return (r?.value as Pendiente[]) ?? []
+}
+
+export async function descargarResumenDia(faenaId: string, fecha: string) {
+  const r = await getResumenDelDia(faenaId, fecha)
+  await db().cache.put({ key: K_RESUMEN + '|' + fecha, value: r,
+                         updated_at: new Date().toISOString() })
+  return r
+}
+
+export async function getResumenDiaOffline(fecha: string): Promise<ResumenDelDia | null> {
+  const r = await db().cache.get(K_RESUMEN + '|' + fecha)
+  return (r?.value as ResumenDelDia) ?? null
+}
 
 export async function descargarCatalogoCierre(faenaId: string) {
   const puntos = await getPuntosMedicion(faenaId)
@@ -204,10 +242,12 @@ export async function subirBorrador(
     clientUuid: b.client_uuid,
     verificacion: firmar ? (verificacion ?? null) : null,
     pendientes: firmar ? (pendientes ?? null) : null,
+    sinSenal: b.firma_pendiente === true,
   }
   try {
     const r = await guardarCierre(input)
     b.sync_status = 'subido'
+    b.firma_pendiente = false
     b.ultimo_error = null
     await db().borradores.put(b)
     return r
@@ -220,10 +260,150 @@ export async function subirBorrador(
 }
 
 /** Turnos guardados en el teléfono que todavía no subieron. */
+
+/**
+ * Cerrar el turno sin señal.
+ *
+ * En Romeral la señal falta más de lo que sobra. Si firmar exigiera conexión,
+ * a las 18:00 —con el estanque medido y las fotos sacadas— el supervisor no
+ * podría cerrar el día, y lo que pasa cuando eso ocurre es que se vuelve al
+ * papel.
+ *
+ * Acá el turno se cierra en el teléfono y queda marcado para firmar. Sube solo
+ * cuando vuelve la señal, sin que nadie tenga que acordarse de entrar.
+ */
+export async function firmarEnElTelefono(
+  b: BorradorCierre,
+  verificacion?: { despachos: number; litros: number } | null,
+  pendientes?: { pendiente_id: string; respuesta: string; comentario?: string | null }[] | null,
+) {
+  b.firma_pendiente = true
+  b.verificacion = verificacion ?? null
+  b.pendientes = pendientes ?? null
+  b.firmado_local_at = new Date().toISOString()
+  b.sync_status = 'local'
+  await db().borradores.put(b)
+  return b
+}
+
+/**
+ * Sube todo lo que esté esperando en el teléfono.
+ *
+ * Se llama sola al recuperar la señal. Antes esto no existía: `borradoresPendientes`
+ * estaba escrito y no lo llamaba nadie, así que un cierre hecho sin conexión se
+ * quedaba en el aparato hasta que alguien volviera a abrir la pantalla.
+ */
+export async function sincronizarPendientes(): Promise<{
+  subidos: number; firmados: number; errores: string[]
+}> {
+  const cola = await borradoresPendientes()
+  let subidos = 0
+  let firmados = 0
+  const errores: string[] = []
+
+  for (const b of cola) {
+    try {
+      await subirBorrador(b, b.firma_pendiente === true, b.verificacion, b.pendientes)
+      subidos++
+      if (b.firma_pendiente) firmados++
+    } catch (e) {
+      errores.push(`${b.fecha} ${b.turno}: ${e instanceof Error ? e.message : 'error'}`)
+    }
+  }
+  return { subidos, firmados, errores }
+}
+
 export async function borradoresPendientes(): Promise<BorradorCierre[]> {
   return db().borradores.where('sync_status').anyOf('local', 'error').toArray()
 }
 
 export async function borrarBorrador(clave: string) {
   await db().borradores.delete(clave)
+}
+
+// ── La recepción del camión, sin señal ──────────────────────────────────────
+//
+// El camión de flota primaria llega a las 06:30, y en Romeral a esa hora
+// muchas veces no hay señal. Un camión de 30.000 litros que no se registra es
+// la diferencia más cara que puede aparecer en el cierre, así que esto no
+// podía seguir dependiendo de la conexión.
+//
+// La foto de la guía se guarda en el teléfono igual que las del cierre, y sube
+// junto con la recepción cuando vuelve la señal.
+
+export type RecepcionPendiente = {
+  client_uuid: string
+  faena_id: string
+  fecha: string
+  destinos: { estanque_id: string; litros: number }[]
+  guia: string | null
+  viaje: string | null
+  camion: string | null
+  litros_guia: number | null
+  recibido_por: string | null
+  sello: string | null
+  observacion: string | null
+  foto_ref: string | null        // 'local:<id>' mientras espera
+  sin_foto_motivo: string | null
+  confirmar: boolean
+  creado_at: string
+  intento_error?: string | null
+}
+
+const K_RECEPCIONES = 'recepciones-pendientes'
+
+async function colaRecepciones(): Promise<RecepcionPendiente[]> {
+  const r = await db().cache.get(K_RECEPCIONES)
+  return (r?.value as RecepcionPendiente[]) ?? []
+}
+
+async function guardarCola(lista: RecepcionPendiente[]) {
+  await db().cache.put({ key: K_RECEPCIONES, value: lista,
+                         updated_at: new Date().toISOString() })
+}
+
+export async function encolarRecepcion(r: RecepcionPendiente) {
+  const lista = await colaRecepciones()
+  await guardarCola([...lista.filter((x) => x.client_uuid !== r.client_uuid), r])
+  return r
+}
+
+export async function recepcionesPendientes() {
+  return colaRecepciones()
+}
+
+/** Sube las recepciones que estén esperando. El RPC es idempotente por
+ *  client_uuid, así que reintentar no duplica. */
+export async function sincronizarRecepciones(): Promise<{ subidas: number; errores: string[] }> {
+  const lista = await colaRecepciones()
+  if (!lista.length) return { subidas: 0, errores: [] }
+
+  const quedan: RecepcionPendiente[] = []
+  const errores: string[] = []
+  let subidas = 0
+
+  for (const r of lista) {
+    try {
+      let url: string | null = null
+      if (r.foto_ref?.startsWith('local:')) {
+        const b = await getFotoLocal(r.foto_ref)
+        if (b) url = await subirFotoMedicion(b)
+      } else {
+        url = r.foto_ref
+      }
+      await registrarRecepcion({
+        faenaId: r.faena_id, fecha: r.fecha, destinos: r.destinos,
+        guia: r.guia, viaje: r.viaje, camion: r.camion,
+        litrosGuia: r.litros_guia, recibidoPor: r.recibido_por, sello: r.sello,
+        observacion: r.observacion, fotoGuia: url, sinFotoMotivo: r.sin_foto_motivo,
+        confirmar: r.confirmar, clientUuid: r.client_uuid, sinSenal: true,
+      })
+      subidas++
+    } catch (e) {
+      errores.push(`${r.guia ?? r.camion ?? r.fecha}: ${e instanceof Error ? e.message : 'error'}`)
+      quedan.push({ ...r, intento_error: e instanceof Error ? e.message : 'error' })
+    }
+  }
+  await guardarCola(quedan)
+  return { subidas, errores }
 }
