@@ -86,8 +86,12 @@ try {
               ` · periodo ${res.desde} a ${res.hasta} · ${Date.now() - t0} ms`)
   if (res.rechazos?.length) console.log('   rechazos:', JSON.stringify(res.rechazos.slice(0, 5)))
 
-  chequear(res.nuevas === filas.length,
-    'todas las filas del archivo entraron', `${res.nuevas} de ${filas.length}`)
+  // Junio ya esta cargado en produccion, asi que en una corrida normal estas
+  // filas vuelven como repetidas. Lo que importa es que NINGUNA se pierda por
+  // el camino: nuevas + repetidas tiene que dar el total del archivo.
+  chequear(res.nuevas + res.repetidas === filas.length,
+    'ninguna fila del archivo se pierde',
+    `${res.nuevas} nuevas + ${res.repetidas} repetidas de ${filas.length}`)
   chequear(res.rechazadas === 0,
     'ninguna estacion quedo sin reconocer', `${res.rechazadas} rechazadas`)
 
