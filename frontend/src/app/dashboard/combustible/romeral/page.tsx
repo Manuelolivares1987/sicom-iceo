@@ -33,6 +33,7 @@ import {
   getControlDiario, getExcepciones, confirmarCeco,
   type ControlDia, type Excepcion,
 } from '@/lib/services/combustible-cierre'
+import { CierreMensual } from '@/components/combustible/cierre-mensual'
 
 const miles = (n: number | null | undefined) =>
   n == null ? '—' : Number(n).toLocaleString('es-CL', { maximumFractionDigits: 0 })
@@ -208,6 +209,9 @@ export default function ControlCombustibleRomeralPage() {
           </Card>
         ))}
       </div>
+
+      {/* El cierre del mes: acumulado, entregables y el detalle de las tres medidas */}
+      {faena?.id && <CierreMensual faenaId={faena.id} desde={desde} hasta={hasta} />}
 
       {/* Excepciones: lo que hay que resolver */}
       <Card>
