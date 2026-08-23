@@ -21,7 +21,7 @@ import { useMemo, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Fuel, AlertTriangle, CheckCircle2, Clock, Ruler, Gauge, Truck,
-  FileWarning, Check, ChevronRight,
+  FileWarning, Check, ChevronRight, Droplets, Thermometer,
 } from 'lucide-react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Spinner } from '@/components/ui/spinner'
@@ -58,6 +58,11 @@ const IMPUTACION_UI: Record<string, { label: string; cls: string }> = {
   sin_datos:  { label: 'Sin registro', cls: 'bg-red-100 text-red-700' },
 }
 const EXCEPCION_UI: Record<string, { label: string; icono: any; cls: string }> = {
+  // Arriba lo más grave: salió combustible del estanque y no hay a quién
+  // cargárselo. Es el hallazgo que justifica todo el control de inventario.
+  salida_sin_imputar:       { label: 'Salió sin imputar',    icono: AlertTriangle, cls: 'text-red-600' },
+  agua_en_estanque:         { label: 'Agua en el estanque',  icono: Droplets,    cls: 'text-red-600' },
+  diferencia_por_temperatura: { label: 'Diferencia por temperatura', icono: Thermometer, cls: 'text-blue-600' },
   ceco_por_confirmar:       { label: 'CECO por confirmar',   icono: FileWarning, cls: 'text-blue-600' },
   despacho_sin_ceco:        { label: 'Carga sin CECO',       icono: FileWarning, cls: 'text-amber-600' },
   fuera_de_tolerancia:      { label: 'Fuera de tolerancia',  icono: Gauge,       cls: 'text-red-600' },
