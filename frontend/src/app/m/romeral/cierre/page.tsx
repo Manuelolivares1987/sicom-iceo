@@ -42,6 +42,7 @@ import { FAENA_ROMERAL, TURNOS, getFaenaPorCodigo } from '@/lib/services/combust
 import {
   evaluarCuadre, TOL_CUADRA_LT,
   type PuntoMedicion, type LecturaPunto, type LecturaMedidor,
+  getResumenDelDia, type ResumenDelDia,
 } from '@/lib/services/combustible-cierre'
 import {
   descargarCatalogoCierre, getPuntosOffline, ultimaDescargaCierre,
@@ -340,11 +341,29 @@ export default function CierreRomeralPage() {
     return { medidos, saltados, revisar, sinFoto }
   }, [borrador, puntosOrdenados, calcPunto])
 
+  // ── Lo que se hizo en el turno ──────────────────────────────────────────
+  // El supervisor no sólo mide los estanques: revisa las cargas del día antes
+  // de firmar. Se pide con señal, al llegar a la pantalla final.
+  const [delDia, setDelDia] = useState<ResumenDelDia | null>(null)
+  const [revisado, setRevisado] = useState(false)
+
+  useEffect(() => {
+    if (paso !== total || !borrador?.faena_id || !online) return
+    let vivo = true
+    getResumenDelDia(borrador.faena_id, borrador.fecha)
+      .then((r) => { if (vivo) setDelDia(r) })
+      .catch(() => { if (vivo) setDelDia(null) })
+    return () => { vivo = false }
+  }, [paso, total, borrador?.faena_id, borrador?.fecha, online])
+
   const subir = async (firmar: boolean) => {
     if (!borrador) return
     setSubiendo(true)
     try {
-      await subirBorrador(borrador, firmar)
+      await subirBorrador(borrador, firmar,
+        firmar && revisado && delDia
+          ? { despachos: delDia.despachos, litros: delDia.litros }
+          : null)
       toast.success(firmar ? 'Cierre firmado y enviado' : 'Guardado en el sistema')
       setBorrador({ ...borrador, sync_status: 'subido' })
     } catch (e) {
@@ -533,6 +552,61 @@ export default function CierreRomeralPage() {
                 {resumen.sinFoto.slice(0, 6).map((n) => <li key={n}>· {n}</li>)}
                 {resumen.sinFoto.length > 6 && <li>· y {resumen.sinFoto.length - 6} más</li>}
               </ul>
+            </div>
+          )}
+
+          {/* Lo que se hizo en el turno. No es informativo: el supervisor
+              firma por esto, y si llegó una carga mientras revisaba, el
+              sistema lo detiene. */}
+          {delDia && (
+            <div className={cn('rounded-xl border-2 p-4',
+              revisado ? 'border-emerald-400 bg-emerald-50' : 'border-gray-300 bg-white')}>
+              <p className="text-base font-bold text-gray-900">Lo que se hizo en el turno</p>
+              {delDia.despachos === 0 ? (
+                <p className="mt-1 text-sm text-gray-600">
+                  No hay cargas registradas hoy. Si hubo, todavía no llegan desde el teléfono
+                  del operador.
+                </p>
+              ) : (
+                <>
+                  <div className="mt-2 grid grid-cols-2 gap-2 text-center">
+                    <div className="rounded-lg bg-white/70 p-2">
+                      <div className="text-2xl font-bold tabular-nums text-gray-900">{delDia.despachos}</div>
+                      <div className="text-xs text-gray-500">cargas</div>
+                    </div>
+                    <div className="rounded-lg bg-white/70 p-2">
+                      <div className="text-2xl font-bold tabular-nums text-gray-900">
+                        {Math.round(delDia.litros).toLocaleString('es-CL')}
+                      </div>
+                      <div className="text-xs text-gray-500">litros</div>
+                    </div>
+                  </div>
+                  <ul className="mt-2 space-y-0.5 text-sm text-gray-700">
+                    <li>· {delDia.ventas} a equipos y {delDia.trasvasijes} trasvasije
+                      {delDia.trasvasijes === 1 ? '' : 's'} al aljibe</li>
+                    {delDia.sin_ceco > 0 && (
+                      <li className="font-semibold text-amber-800">
+                        · {delDia.sin_ceco} carga{delDia.sin_ceco > 1 ? 's' : ''} sin CECO
+                      </li>
+                    )}
+                    {delDia.sin_foto > 0 && (
+                      <li className="font-semibold text-amber-800">
+                        · {delDia.sin_foto} sin foto del medidor
+                      </li>
+                    )}
+                  </ul>
+                  <label className="mt-3 flex items-start gap-3 rounded-lg bg-white/70 p-3">
+                    <input
+                      type="checkbox" checked={revisado}
+                      onChange={(e) => setRevisado(e.target.checked)}
+                      className="mt-0.5 h-6 w-6 shrink-0 accent-emerald-600"
+                    />
+                    <span className="text-sm font-medium text-gray-800">
+                      Revisé estas {delDia.despachos} cargas y están bien
+                    </span>
+                  </label>
+                </>
+              )}
             </div>
           )}
 

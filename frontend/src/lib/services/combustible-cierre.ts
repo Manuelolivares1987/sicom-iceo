@@ -74,6 +74,35 @@ export type CierreInput = {
   observacion?: string | null
   firmar?: boolean
   clientUuid?: string | null
+  // Lo que el supervisor de turno declara haber revisado del turno. Si no
+  // coincide con lo que hay en el sistema, el cierre se rechaza: puede haber
+  // llegado una carga desde terreno mientras revisaba.
+  verificacion?: { despachos: number; litros: number } | null
+}
+
+/** El resumen del turno que el supervisor mira antes de firmar. */
+export type ResumenDelDia = {
+  faena_id: string
+  fecha: string
+  despachos: number
+  litros: number
+  ventas: number
+  trasvasijes: number
+  litros_trasvasije: number
+  sin_ceco: number
+  sin_foto: number
+  operadores: number
+}
+
+export async function getResumenDelDia(faenaId: string, fecha: string) {
+  const { data, error } = await supabase
+    .from('v_comb_faena_dia_para_verificar').select('*')
+    .eq('faena_id', faenaId).eq('fecha', fecha).maybeSingle()
+  if (error) throw error
+  return (data ?? {
+    faena_id: faenaId, fecha, despachos: 0, litros: 0, ventas: 0,
+    trasvasijes: 0, litros_trasvasije: 0, sin_ceco: 0, sin_foto: 0, operadores: 0,
+  }) as ResumenDelDia
 }
 
 /** Catálogo de puntos y medidores, para bajarlo al teléfono. */
@@ -158,6 +187,7 @@ export async function guardarCierre(p: CierreInput) {
     p_fecha: p.fecha,
     p_turno: p.turno ?? null,
     p_medido_por: p.medidoPor ?? null,
+    p_verificacion: p.verificacion ?? null,
     p_puntos: p.puntos,
     p_medidores: p.medidores,
     p_observacion: p.observacion ?? null,
