@@ -27,6 +27,7 @@ import {
 } from '@/lib/services/bodega-tickets'
 import { buscarProductos } from '@/lib/services/ot-materiales'
 import { getSolicitudesBodega, atenderSolicitudBodega, type BodegaSolicitud } from '@/lib/services/bodega-solicitudes'
+import { PortalesValeCard } from '@/components/bodega/portales-vale-card'
 import { useMaterialesPendientesDespacho, useDespacharMaterialOT } from '@/hooks/use-ot-materiales'
 import { cn } from '@/lib/utils'
 
@@ -656,6 +657,10 @@ function SolicitudesTab() {
     <div className="space-y-6">
       <SolicitudesNCSection />
       <MaterialesOTSection items={pendientesOT as any[]} />
+      {/* [MIG376] El link vive acá porque es de donde salen la mitad de estas
+          solicitudes: quien administra la bandeja es quien decide si el link
+          sigue vivo y a nombre de quién se está retirando. */}
+      <PortalesValeCard />
     </div>
   )
 }
