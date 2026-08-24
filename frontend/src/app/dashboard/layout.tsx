@@ -15,7 +15,7 @@ export default function DashboardLayout({
 }) {
   const { loading } = useRequireAuth()
   const { perfil } = useAuth()
-  const { esOperadorCalamaSolo, esSupervisorCalamaSolo, esOperadorTallerSolo,
+  const { esOperadorCalamaSolo, esSupervisorCalamaSolo, esOperadorTallerSolo, faenaExclusiva,
           esOperadorCombustibleSolo } = usePermissions()
   const router = useRouter()
   const pathname = usePathname()
@@ -25,6 +25,7 @@ export default function DashboardLayout({
   // /m/romeral era correcto; con Franke adentro sería mandar a un conductor de
   // Taltal al catálogo y a los camiones de otra faena.
   const appDeFaena = perfil?.faena?.app_movil ?? null
+  const faenaSolo = faenaExclusiva()
 
   // Guards de ruta:
   //  - OOCC: cualquier /dashboard/* → /m/calama.
@@ -57,9 +58,16 @@ export default function DashboardLayout({
     }
     if (esSupervisorCalamaSolo() && !pathname.startsWith('/dashboard/operacion-calama')) {
       router.replace('/dashboard/operacion-calama')
+      return
+    }
+    // [MIG385] Quien responde por una faena se queda en las pantallas de su
+    // menú. Esconderlas del sidebar sin cerrar la ruta dejaría el sistema
+    // completo a un enlace pegado de distancia.
+    if (faenaSolo && !rutaPermitidaEnFaena(pathname, faenaSolo)) {
+      router.replace(faenaSolo.panel_web ?? faenaSolo.app_movil ?? '/dashboard')
     }
   }, [loading, pathname, esOperadorCalamaSolo, esSupervisorCalamaSolo, esOperadorTallerSolo,
-      esOperadorCombustibleSolo, appDeFaena, perfil?.rol, router])
+      esOperadorCombustibleSolo, appDeFaena, perfil?.rol, faenaSolo, router])
 
   if (loading) {
     return (
@@ -91,6 +99,35 @@ export default function DashboardLayout({
       </div>
     )
   }
+  if (faenaSolo && !rutaPermitidaEnFaena(pathname, faenaSolo)) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <Spinner size="lg" className="text-gray-400" />
+      </div>
+    )
+  }
 
   return <AppShell>{children}</AppShell>
+}
+
+/**
+ * [MIG385] Las pantallas del menú de faena, y sólo ésas.
+ *
+ * Es una lista blanca y no una negra a propósito: con una lista negra, cada
+ * pantalla nueva del sistema queda abierta hasta que alguien se acuerde de
+ * cerrarla. Así, lo que no está escrito acá no se ve.
+ */
+function rutaPermitidaEnFaena(
+  pathname: string,
+  faena: { panel_web?: string | null; app_movil: string | null },
+): boolean {
+  const permitidas = [
+    faena.panel_web ?? null,
+    '/dashboard/activos',
+    '/dashboard/ordenes-trabajo',
+    '/dashboard/mantenimiento/plan-semanal-taller',
+    '/dashboard/prevencion/personal',
+  ].filter((r): r is string => !!r)
+
+  return permitidas.some((r) => pathname === r || pathname.startsWith(`${r}/`))
 }

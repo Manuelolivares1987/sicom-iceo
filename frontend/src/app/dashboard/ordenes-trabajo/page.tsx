@@ -20,6 +20,7 @@ import {
 import { formatCLP, formatDate, getEstadoOTColor, getEstadoOTLabel } from '@/lib/utils'
 import { useOrdenesTrabajo } from '@/hooks/use-ordenes-trabajo'
 import { getFaenas } from '@/lib/services/faenas'
+import { usePermissions } from '@/hooks/use-permissions'
 import { getContratoActivo } from '@/lib/services/contratos'
 // Types used: TipoOT, EstadoOT, Prioridad — from filter values
 
@@ -202,7 +203,10 @@ function Select({
 export default function OrdenesTrabajoPage() {
   const [tipoFilter, setTipoFilter] = useState('')
   const [estadoFilter, setEstadoFilter] = useState('')
-  const [faenaFilter, setFaenaFilter] = useState('')
+  // [MIG385] Acotado a una faena: entra con la suya puesta y no la cambia.
+  const { faenaExclusiva } = usePermissions()
+  const faenaSolo = faenaExclusiva()
+  const [faenaFilter, setFaenaFilter] = useState(faenaSolo?.id ?? '')
   const [prioridadFilter, setPrioridadFilter] = useState('')
   const [fechaDesde, setFechaDesde] = useState('')
   const [fechaHasta, setFechaHasta] = useState('')
@@ -235,7 +239,8 @@ export default function OrdenesTrabajoPage() {
   const filters: Record<string, unknown> = {}
   if (tipoFilter) filters.tipo = tipoFilter
   if (estadoFilter) filters.estado = estadoFilter
-  if (faenaFilter) filters.faena_id = faenaFilter
+  if (faenaSolo) filters.faena_id = faenaSolo.id
+  else if (faenaFilter) filters.faena_id = faenaFilter
   if (prioridadFilter) filters.prioridad = prioridadFilter
   if (fechaDesde) filters.fecha_desde = fechaDesde
   if (fechaHasta) filters.fecha_hasta = fechaHasta
@@ -296,12 +301,21 @@ export default function OrdenesTrabajoPage() {
               onChange={setEstadoFilter}
               options={estadoOptions}
             />
-            <Select
-              label="Faena"
-              value={faenaFilter}
-              onChange={setFaenaFilter}
-              options={faenaOptions}
-            />
+            {faenaSolo ? (
+              <div className="min-w-[150px]">
+                <label className="mb-1 block text-xs font-medium text-gray-500">Faena</label>
+                <p className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm font-semibold text-gray-700">
+                  {faenaSolo.nombre}
+                </p>
+              </div>
+            ) : (
+              <Select
+                label="Faena"
+                value={faenaFilter}
+                onChange={setFaenaFilter}
+                options={faenaOptions}
+              />
+            )}
             <Select
               label="Prioridad"
               value={prioridadFilter}

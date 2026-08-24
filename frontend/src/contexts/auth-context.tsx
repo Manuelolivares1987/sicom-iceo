@@ -77,7 +77,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // única faena con app, y dejó de serlo con Franke.
     const { data, error: perfilError } = await supabase
       .from('usuarios_perfil')
-      .select('*, faena:faenas(id, codigo, nombre, app_movil)')
+      .select('*, faena:faenas(id, codigo, nombre, app_movil, panel_web)')
       .eq('id', userId)
       .maybeSingle()
 

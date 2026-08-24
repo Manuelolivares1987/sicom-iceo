@@ -20,6 +20,8 @@ import {
   ShieldCheck,
   BarChart3,
   Gauge,
+  Users,
+  Smartphone,
   ClipboardCheck,
   FileSpreadsheet,
   Eye,
@@ -360,10 +362,51 @@ interface SidebarProps {
 export default function Sidebar({ collapsed, onToggle, onClose }: SidebarProps) {
   const pathname = usePathname()
   const { perfil, signOut } = useAuth()
-  const { canView, canViewExtended, esOperadorCalamaSolo, esSupervisorCalamaSolo, esComercialSolo } = usePermissions()
+  const {
+    canView, canViewExtended, esOperadorCalamaSolo, esSupervisorCalamaSolo,
+    esComercialSolo, faenaExclusiva,
+  } = usePermissions()
+  const faenaSolo = faenaExclusiva()
   const operadorCalamaSolo = esOperadorCalamaSolo()
   const supervisorCalamaSolo = esSupervisorCalamaSolo()
   const comercialSolo = esComercialSolo()
+
+  /**
+   * [MIG385] El menú de quien responde por una faena.
+   *
+   * Se arma con el perfil, no con una constante: la faena declara su panel y su
+   * app de terreno, así que cuando Franke tenga el suyo aparece solo. Lo que
+   * lleva es lo que esa persona necesita para responder por la faena completa —
+   * el combustible, sus equipos y su gente— y nada más.
+   */
+  const grupoFaena = useMemo(() => {
+    if (!faenaSolo) return null
+    const corto = faenaSolo.nombre.replace(/^.*—\s*/, '').trim() || faenaSolo.nombre
+    const items: NavItem[] = []
+
+    if (faenaSolo.panel_web) {
+      items.push({ label: `Panel ${corto}`, href: faenaSolo.panel_web, icon: Fuel })
+      // El cuadre con Orpak sólo existe donde hay Orpak. No se ofrece un link
+      // que lleve a una pantalla que no está.
+      if (faenaSolo.codigo === 'FAE-CMP-ROMERAL') {
+        items.push({ label: 'Cuadre Orpak', href: `${faenaSolo.panel_web}/orpak`, icon: Gauge })
+      }
+    }
+
+    items.push(
+      { label: 'Equipos de la faena', href: '/dashboard/activos', icon: Truck },
+      { label: 'OTs de la faena', href: '/dashboard/ordenes-trabajo', icon: ClipboardList },
+      { label: 'Plan de mantención', href: '/dashboard/mantenimiento/plan-semanal-taller', icon: CalendarClock },
+      { label: 'Personal acreditado', href: '/dashboard/prevencion/personal', icon: Users },
+    )
+
+    if (faenaSolo.app_movil) {
+      items.push({ label: 'Vista de terreno', href: faenaSolo.app_movil, icon: Smartphone })
+    }
+
+    const g: NavGroup = { label: `Operación ${corto}`, items }
+    return g
+  }, [faenaSolo])
 
   // ── Acordeón: grupos colapsables, persistido en localStorage ──
   const [openGroups, setOpenGroups] = useState<Set<string>>(new Set())
@@ -456,7 +499,7 @@ export default function Sidebar({ collapsed, onToggle, onClose }: SidebarProps) 
 
       {/* Navigation agrupada */}
       <nav className="flex-1 space-y-3 overflow-y-auto px-2 py-3">
-        {navGroups.map((group, idx) => {
+        {(grupoFaena ? [grupoFaena] : navGroups).map((group, idx) => {
           // Restringidos a Calama: solo mostrar grupo Operacion Calama.
           if ((operadorCalamaSolo || supervisorCalamaSolo) && group.label !== 'Operación Calama') return null
           // Perfil comercial: solo el grupo Negocio (Contratos, Comercial, Consolidado).
@@ -470,6 +513,10 @@ export default function Sidebar({ collapsed, onToggle, onClose }: SidebarProps) 
           // Filtro de visibilidad: aplica las mismas reglas de permisos a items
           // planos y a items dentro de subsections.
           const filterItem = (item: NavItem) => {
+            // El menú de faena ya viene acotado: sus items no vuelven a pasar
+            // por los permisos de módulo, o una planificadora sin el módulo de
+            // mantenimiento se quedaría sin ver sus propias OT.
+            if (grupoFaena) return true
             if (operadorCalamaSolo) return item.href === '/m/calama'
             if (supervisorCalamaSolo) {
               return item.extendedModule === 'operacion_calama' && item.href !== '/m/calama'
