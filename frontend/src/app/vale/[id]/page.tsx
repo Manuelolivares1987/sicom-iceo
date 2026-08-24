@@ -111,19 +111,51 @@ export default function ValeImprimiblePage() {
           </div>
         </div>
 
+        {/* [MIG375] Un vale se carga a un equipo o a un centro de costo, nunca
+            a los dos. Imprimir «Equipo: —» en el de oficina dejaba el papel sin
+            decir a quién se le cobra, que es justo lo que este vale existe
+            para dejar por escrito. */}
         <div className="grid grid-cols-2 gap-3 border-b border-gray-300 p-4 text-sm print:p-2">
+          {ticket.origen === 'oficina' ? (
+            <div>
+              <p className="text-[11px] uppercase text-gray-500">Centro de costo</p>
+              <p className="text-lg font-bold print:text-base">{ticket.ceco_nombre ?? '—'}</p>
+              <p className="font-mono text-xs text-gray-600">{ticket.ceco_codigo}</p>
+            </div>
+          ) : (
+            <div>
+              <p className="text-[11px] uppercase text-gray-500">Equipo / Patente</p>
+              <p className="text-lg font-bold print:text-base">{ticket.activo_patente ?? ticket.activo_codigo}</p>
+              <p className="text-xs text-gray-600">{ticket.activo_nombre}</p>
+            </div>
+          )}
           <div>
-            <p className="text-[11px] uppercase text-gray-500">Equipo / Patente</p>
-            <p className="text-lg font-bold print:text-base">{ticket.activo_patente ?? ticket.activo_codigo}</p>
-            <p className="text-xs text-gray-600">{ticket.activo_nombre}</p>
-          </div>
-          <div>
-            <p className="text-[11px] uppercase text-gray-500">Orden de trabajo</p>
-            <p className="font-mono font-bold">{ticket.ot_folio}</p>
-            <p className="mt-1 text-[11px] uppercase text-gray-500 print:mt-0">Autoriza</p>
-            <p className="text-xs font-medium">{ticket.emitido_por_nombre ?? '—'}</p>
+            {ticket.origen === 'oficina' ? (
+              <>
+                <p className="text-[11px] uppercase text-gray-500">Retira</p>
+                <p className="font-bold">{ticket.emitido_por_nombre ?? '—'}</p>
+              </>
+            ) : (
+              <>
+                <p className="text-[11px] uppercase text-gray-500">Orden de trabajo</p>
+                <p className="font-mono font-bold">{ticket.ot_folio ?? '—'}</p>
+                <p className="mt-1 text-[11px] uppercase text-gray-500 print:mt-0">Autoriza</p>
+                <p className="text-xs font-medium">{ticket.emitido_por_nombre ?? '—'}</p>
+              </>
+            )}
           </div>
         </div>
+
+        {/* [MIG371/375] Un vale sin hallazgo detrás no se explica solo: el
+            motivo escrito es lo único que dice por qué salió el material. */}
+        {ticket.origen !== 'ot' && ticket.motivo && (
+          <div className="border-b border-gray-300 px-4 py-2 print:px-2 print:py-1">
+            <p className="text-[11px] uppercase text-gray-500">
+              {ticket.origen === 'oficina' ? 'Pedido de oficina' : 'Pedido manual'} — para qué es
+            </p>
+            <p className="text-sm text-gray-800 print:text-xs">{ticket.motivo}</p>
+          </div>
+        )}
 
         <table className="w-full text-sm print:text-xs">
           <thead>
@@ -160,11 +192,17 @@ export default function ValeImprimiblePage() {
               // eslint-disable-next-line @next/next/no-img-element
               <img src={ticket.firma_jefe_url} alt="firma jefe" className="mx-auto h-14 object-contain print:h-10" />
             ) : <div className="h-14 print:h-10" />}
-            <div className="border-t border-gray-800 pt-1 text-[11px] font-medium">Jefe de Taller (autoriza)</div>
+            {/* [MIG375] En el vale de oficina no hay jefe de taller que
+                autorice: firma quien retira, y ésa es la firma que ya está. */}
+            <div className="border-t border-gray-800 pt-1 text-[11px] font-medium">
+              {ticket.origen === 'oficina' ? 'Solicita' : 'Jefe de Taller (autoriza)'}
+            </div>
           </div>
           <div className="text-center">
             <div className="h-14 print:h-10" />
-            <div className="border-t border-gray-800 pt-1 text-[11px] font-medium">Operador (retira)</div>
+            <div className="border-t border-gray-800 pt-1 text-[11px] font-medium">
+              {ticket.origen === 'oficina' ? 'Recibe conforme' : 'Operador (retira)'}
+            </div>
           </div>
           <div className="text-center">
             <div className="h-14 print:h-10" />

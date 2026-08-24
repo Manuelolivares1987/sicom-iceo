@@ -134,6 +134,11 @@ export type DespachoInput = {
   tipoMovimiento?: 'venta' | 'trasvasije' | 'recirculacion' | 'calibracion'
   flota?: string | null
   destinoEstanqueId?: string | null
+  // [MIG363/364] El folio del ticket printer. En Franke es la fuente de verdad
+  // de la transacción: sin él la carga registrada no se amarra al papel que
+  // quedó arriba del camión. Romeral no lo usa —allá manda Orpak— y por eso va
+  // opcional.
+  folioTicket?: number | null
 }
 
 /** Sube una foto del medidor al bucket de evidencias. */
@@ -167,11 +172,12 @@ export async function registrarDespacho(p: DespachoInput) {
     p_tipo_movimiento: p.tipoMovimiento ?? 'venta',
     p_flota: p.flota ?? null,
     p_destino_estanque_id: p.destinoEstanqueId ?? null,
+    p_folio_ticket: p.folioTicket ?? null,
   })
   if (error) throw error
   return data as {
     success: boolean; despacho_id: string; litros?: number; duplicado?: boolean
-    ceco_id?: string | null; ceco_anotado?: boolean
+    ceco_id?: string | null; ceco_anotado?: boolean; folio_ticket?: number | null
   }
 }
 

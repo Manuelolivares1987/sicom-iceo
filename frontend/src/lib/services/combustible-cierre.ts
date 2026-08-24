@@ -326,6 +326,14 @@ export type RecepcionInput = {
   clientUuid?: string | null
   // Se tomó en el teléfono sin conexión y subió después.
   sinSenal?: boolean
+  // [MIG369] Lo propio de una carga en estación de servicio, que es como entra
+  // el combustible en Franke: el camión va a la EDS en vez de recibir un camión
+  // de flota primaria con guía. Romeral no las usa.
+  eds?: string | null
+  surtidor?: string | null
+  folioTicket?: number | null
+  meterInicial?: number | null
+  meterFinal?: number | null
 }
 
 export type Recepcion = {
@@ -368,6 +376,11 @@ export async function registrarRecepcion(p: RecepcionInput) {
     p_confirmar: p.confirmar ?? false,
     p_client_uuid: p.clientUuid ?? null,
     p_sin_senal: p.sinSenal ?? false,
+    p_eds: p.eds ?? null,
+    p_surtidor: p.surtidor ?? null,
+    p_folio_ticket: p.folioTicket ?? null,
+    p_meter_inicial: p.meterInicial ?? null,
+    p_meter_final: p.meterFinal ?? null,
   })
   if (error) throw error
   return data as {
@@ -375,6 +388,12 @@ export async function registrarRecepcion(p: RecepcionInput) {
     litros_recibidos: number
     diferencia_vs_guia: number | null
     confirmada: boolean
+    eds: string | null
+    surtidor: string | null
+    folio_ticket: number | null
+    litros_medidor: number | null
+    /** Surtidor menos medidor del camión. La pregunta que hay que hacer ahí mismo. */
+    diferencia_surtidor_medidor: number | null
   }
 }
 

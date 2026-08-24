@@ -13,6 +13,11 @@ export type BodegaSolicitud = {
   patente: string | null
   activo_codigo: string | null
   solicitado_por_nombre: string | null
+  /** [MIG374] El cargo de quien pide: bodega prioriza distinto un pedido de oficina. */
+  solicitado_por_cargo?: string | null
+  /** [MIG374] Para quién es: oficina, prevención, taller, terreno. */
+  area?: string | null
+  dias_esperando?: number | null
   nota_bodega: string | null
   created_at: string
 }
@@ -21,6 +26,10 @@ export async function solicitarMaterialBodega(p: {
   descripcion: string; cantidad?: number; ncId?: string | null; observacion?: string | null; unidad?: string | null
   /** Foto del material solicitado; si no viene y hay NC, la RPC hereda la foto de la NC. */
   fotoUrl?: string | null
+  /** [MIG374] El equipo, cuando el pedido es para una patente. */
+  activoId?: string | null
+  /** [MIG374] Para quién es: oficina, prevención, taller, terreno. */
+  area?: string | null
 }) {
   const { data, error } = await supabase.rpc('fn_solicitar_material_bodega', {
     p_descripcion: p.descripcion,
@@ -29,9 +38,25 @@ export async function solicitarMaterialBodega(p: {
     p_observacion: p.observacion ?? null,
     p_foto_url: p.fotoUrl ?? null,
     p_unidad: p.unidad ?? null,
+    p_activo_id: p.activoId ?? null,
+    p_area: p.area ?? null,
   })
   if (error) throw error
-  return data
+  return data as { solicitud_id: string }
+}
+
+/** Lo que uno mismo pidió, para saber en qué va sin llamar a bodega. */
+export async function getMisSolicitudesBodega(): Promise<BodegaSolicitud[]> {
+  const { data: u } = await supabase.auth.getUser()
+  if (!u?.user) return []
+  const { data, error } = await supabase
+    .from('bodega_solicitudes')
+    .select('id, descripcion, cantidad, unidad, estado, area, nota_bodega, created_at')
+    .eq('solicitado_por', u.user.id)
+    .order('created_at', { ascending: false })
+    .limit(20)
+  if (error) throw error
+  return (data ?? []) as unknown as BodegaSolicitud[]
 }
 
 export async function getSolicitudesBodega(estado?: string): Promise<BodegaSolicitud[]> {

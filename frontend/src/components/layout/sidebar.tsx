@@ -15,6 +15,8 @@ import {
   Package,
   Ticket,
   Fuel,
+  PackageSearch,
+  ArrowLeftRight,
   ShieldCheck,
   BarChart3,
   Gauge,
@@ -251,16 +253,37 @@ const navGroups: NavGroup[] = [
   {
     label: 'Bodega',
     items: [
+      // Sin gate de módulo a propósito: quien pide un tóner es de
+      // administración, de prevención o de comercial, y ninguno tiene el
+      // permiso de bodega. Es la única entrada que tiene oficina (MIG374).
+      { label: 'Pedir a bodega', href: '/dashboard/bodega/pedir', icon: PackageSearch, badge: 'Nuevo',
+        tooltip: 'Pedir útiles, tóner, insumos de aseo o cualquier artículo que no venga de un hallazgo ni de una orden de trabajo' },
       { label: 'Panel Bodega', href: '/dashboard/inventario', icon: Package, extendedModule: 'bodega',
         tooltip: 'Stock, compras, salidas, combustible y reportes — todo en un solo panel' },
       { label: 'Pedidos a bodega', href: '/dashboard/bodega/tickets', icon: Ticket, extendedModule: 'bodega', badge: 'Nuevo',
         tooltip: 'Todo el pedido del taller en un lugar: vales por despachar (con fotos), solicitudes de material e historial' },
       { label: 'Seguimiento repuestos', href: '/dashboard/bodega/seguimiento-repuestos', icon: ShoppingCart, extendedModule: 'bodega', badge: 'Nuevo',
         tooltip: 'Repuestos pedidos por el taller sin stock: solicitar la OC (la emite Softland), ver en qué está cada compra y cuándo llega' },
-      { label: 'Combustible Franke', href: '/dashboard/combustible/franke', icon: Fuel, extendedModule: 'bodega', badge: 'Nuevo',
-        tooltip: 'Camiones petroleros, cargas, trasvasije y cuadre diario — operación Franke' },
-      { label: 'Combustible Romeral', href: '/dashboard/combustible/romeral', icon: Fuel, extendedModule: 'bodega', badge: 'Nuevo',
+    ],
+  },
+  // Faena — el combustible de faena no es de la bodega de Coquimbo: se compra
+  // distinto, se mide distinto y se le rinde a otro mandante (MIG366). Tenerlo
+  // colgando de Bodega hacía que el stock de bodega dijera cuarenta y cinco
+  // veces más de lo que hay. Acá vive lo que pasa en faena, y por acá entra el
+  // supervisor de turno — que antes no tenía por dónde llegar a su entrega.
+  {
+    label: 'Faena',
+    items: [
+      { label: 'Combustible Romeral', href: '/dashboard/combustible/romeral', icon: Fuel, extendedModule: 'bodega',
         tooltip: 'Cierre de volumen y de imputación, excepciones y CECO por confirmar — faena Romeral' },
+      { label: 'Combustible Franke', href: '/dashboard/combustible/franke', icon: Fuel, extendedModule: 'bodega',
+        tooltip: 'Camiones petroleros, cargas, trasvasije y cuadre diario — faena Franke' },
+      { label: 'Entrega de turno', href: '/m/franke/entrega', icon: ArrowLeftRight, extendedModule: 'bodega', badge: 'Nuevo',
+        tooltip: 'Cambio de turno 7×7 de Franke: camiones, litros, pendientes y bodega, con firma de quien entrega y de quien recibe' },
+      { label: 'Informe de gestión', href: '/dashboard/combustible/franke/informe', icon: FileText, extendedModule: 'bodega', badge: 'Nuevo',
+        tooltip: 'El informe mensual del contrato FRK 220/2024, calculado: litros por concepto, tickets y folios, deriva del cuentalitros y balance del periodo' },
+      { label: 'Revisión en faena', href: '/dashboard/mantenimiento/pauta-faena', icon: ClipboardList, extendedModule: 'bodega', badge: 'Nuevo',
+        tooltip: 'La pauta diaria del mecánico de faena: qué revisó, qué salió NO OK y cuánto falta para la próxima mantención' },
     ],
   },
   // Compliance

@@ -59,6 +59,8 @@ export interface UsuarioPerfil {
   firma_url: string | null
   created_at: string
   updated_at: string
+  /** La faena de la persona, con la app de terreno que le corresponde (MIG361). */
+  faena?: { id: string; codigo: string; nombre: string; app_movil: string | null } | null
 }
 
 export interface Activo {

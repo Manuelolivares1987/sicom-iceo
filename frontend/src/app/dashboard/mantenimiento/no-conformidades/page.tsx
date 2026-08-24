@@ -42,6 +42,7 @@ import { solicitarMaterialBodega } from '@/lib/services/bodega-solicitudes'
 import { MECANICOS } from '@/lib/taller-grupos'
 import { getTallerTecnicos } from '@/lib/services/taller-plan-semanal'
 import { RepuestosPorAprobar } from '@/components/mantenimiento/repuestos-por-aprobar'
+import { PedidoManualBodega } from '@/components/mantenimiento/pedido-manual-bodega'
 import { NcEquipoCard } from '@/components/mantenimiento/nc-equipo-card'
 import { InformesRecobroEnCurso } from '@/components/mantenimiento/informes-recobro-en-curso'
 import { cn } from '@/lib/utils'
@@ -1373,15 +1374,42 @@ function ValeBodegaModal({ grupos, listos, onClose }: {
   }, [grupos, listos])
 
   const [sel, setSel] = useState<Opcion | null>(opciones.length === 1 ? opciones[0] : null)
+  // [MIG371] Dos caminos al mismo vale. Si no hay ni un equipo con OT, el manual
+  // es el único que sirve: se abre en ése para no dejar la pantalla en un
+  // callejón sin salida.
+  const [modo, setModo] = useState<'hallazgos' | 'manual'>(
+    opciones.length === 0 ? 'manual' : 'hallazgos',
+  )
 
   return (
     <Modal open onClose={onClose} title="Vale para bodega">
-      <div className="space-y-3">
+      <div className="mb-3 flex gap-1 rounded-lg bg-gray-100 p-1">
+        <button type="button" onClick={() => setModo('hallazgos')}
+                className={`flex-1 rounded-md px-3 py-1.5 text-xs font-semibold transition ${
+                  modo === 'hallazgos' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>
+          Desde los hallazgos{opciones.length > 0 ? ` (${opciones.length})` : ''}
+        </button>
+        <button type="button" onClick={() => setModo('manual')}
+                className={`flex-1 rounded-md px-3 py-1.5 text-xs font-semibold transition ${
+                  modo === 'manual' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>
+          Pedido manual
+        </button>
+      </div>
+
+      {modo === 'manual' && <PedidoManualBodega onEmitido={onClose} />}
+
+      <div className={modo === 'manual' ? 'hidden' : 'space-y-3'}>
         {opciones.length === 0 ? (
-          <p className="py-4 text-center text-sm text-gray-500">
-            No hay equipos con OT de taller para emitir vale. Los insumos nacen de los hallazgos
-            de la OT o se agregan con «+ Ítem» una vez que el equipo tiene OT.
-          </p>
+          <div className="space-y-2 py-4 text-center">
+            <p className="text-sm text-gray-500">
+              No hay equipos con OT de taller para emitir vale. Los insumos nacen de los hallazgos
+              de la OT o se agregan con «+ Ítem» una vez que el equipo tiene OT.
+            </p>
+            <button type="button" onClick={() => setModo('manual')}
+                    className="text-xs font-semibold text-orange-700 underline">
+              Pedir material a mano para una patente
+            </button>
+          </div>
         ) : (
           <>
             <div>
