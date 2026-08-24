@@ -34,9 +34,9 @@ import { useToast } from '@/contexts/toast-context'
 import { useRequireAuth } from '@/hooks/use-require-auth'
 import { useAuth } from '@/contexts/auth-context'
 import {
-  getFaenaPorCodigo, getEstanquesFaena, declararMomentoCero, subirFotoMedidor,
-  FAENA_ROMERAL, type EstanqueFaena,
+  getFaenaPorCodigo, getEstanquesFaena, FAENA_ROMERAL, type EstanqueFaena,
 } from '@/lib/services/combustible-faena'
+import { guardarMomentoCero, guardarFotoLocal } from '@/lib/offline/combustible-faena-offline'
 import { cn } from '@/lib/utils'
 
 type Lectura = {
@@ -114,33 +114,32 @@ export default function MomentoCeroPage() {
     if (!listo || !faenaId) return
     setGuardando(true)
     try {
-      // Las fotos suben antes: si una falla, no se declara un momento cero a
-      // medias que después no se puede repetir.
+      // Se varilla recorriendo la faena, donde la señal va y viene. Todo queda
+      // en el teléfono y sube junto: perder los siete puntos por una antena a
+      // medias, en algo que no se puede repetir, sería lo peor que podría pasar.
       const puntos = []
+      const fotos: (string | null)[] = []
       for (const e of pendientes) {
         const l = lecturas[e.id]
-        let fotoUrl: string | null = null
-        if (l.foto) fotoUrl = await subirFotoMedidor(l.foto.file)
+        fotos.push(l.foto ? await guardarFotoLocal(l.foto.file) : null)
         puntos.push({
           estanque_id: e.id,
           litros: Number(l.litros.replace(',', '.')),
           lectura_cm: l.cm.trim() ? Number(l.cm.replace(',', '.')) : null,
-          foto_url: fotoUrl,
-          sin_foto_motivo: fotoUrl ? null : l.sinFoto.trim(),
+          sin_foto_motivo: l.foto ? null : l.sinFoto.trim(),
         })
       }
-      const firmaUrl = await subirFotoMedidor(await (await fetch(firma)).blob())
+      const firmaBlob = await guardarFotoLocal(await (await fetch(firma)).blob())
 
-      const r = await declararMomentoCero({
-        faenaId, fecha, medidoPor: medidoPor.trim(), puntos,
-        firmaUrl, observacion: obs.trim() || null,
-        clientUuid: crypto.randomUUID(),
-      })
-      toast.success(
-        r.faltan.length > 0
-          ? `${r.declarados} estanque(s) declarados. Quedan sin declarar: ${r.faltan.join(', ')}.`
-          : `Momento cero cerrado: los ${r.declarados} estanques quedaron anclados.`,
-      )
+      const { enviado } = await guardarMomentoCero(
+        { faenaId, fecha, medidoPor: medidoPor.trim(), puntos,
+          observacion: obs.trim() || null },
+        fotos, firmaBlob,
+        `Momento cero · ${puntos.length} estanques · ${medidoPor.trim()}`)
+
+      toast.success(enviado
+        ? `Momento cero cerrado: los ${puntos.length} estanques quedaron anclados.`
+        : `Momento cero guardado en el teléfono (${puntos.length} estanques). Sube solo cuando haya señal.`)
       router.push('/m/romeral')
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'No se pudo guardar')

@@ -31,9 +31,10 @@ import { useToast } from '@/contexts/toast-context'
 import { useRequireAuth } from '@/hooks/use-require-auth'
 import { useAuth } from '@/contexts/auth-context'
 import {
-  getFaenaPorCodigo, getEstanquesAhora, trasvasijar, subirFotoMedidor,
-  litrosAhora, FAENA_ROMERAL, type EstanqueAhora,
+  getFaenaPorCodigo, getEstanquesAhora, litrosAhora,
+  FAENA_ROMERAL, type EstanqueAhora,
 } from '@/lib/services/combustible-faena'
+import { guardarTrasvasije, guardarFotoLocal } from '@/lib/offline/combustible-faena-offline'
 import { cn } from '@/lib/utils'
 
 const TURNOS = ['dia', 'noche'] as const
@@ -124,9 +125,12 @@ export default function TrasvasijePage() {
     if (!listo || !faenaId || !origen || !destino) return
     setGuardando(true)
     try {
-      const urlIni = fotoIni ? await subirFotoMedidor(fotoIni.file) : null
-      const urlFin = fotoFin ? await subirFotoMedidor(fotoFin.file) : null
-      const r = await trasvasijar({
+      // Las fotos quedan en el teléfono y suben con el movimiento cuando haya
+      // señal: en faena esto se hace en la estación, no en la oficina.
+      const blobIni = fotoIni ? await guardarFotoLocal(fotoIni.file) : null
+      const blobFin = fotoFin ? await guardarFotoLocal(fotoFin.file) : null
+      const litrosTxt = Number(litrosFinales).toLocaleString('es-CL')
+      const { enviado } = await guardarTrasvasije({
         faenaId,
         fecha: new Date().toISOString().slice(0, 10),
         turno,
@@ -136,18 +140,15 @@ export default function TrasvasijePage() {
         operador: operador.trim(),
         meterInicial: meterIni ? Number(meterIni.replace(',', '.')) : null,
         meterFinal: meterFin ? Number(meterFin.replace(',', '.')) : null,
-        fotoInicial: urlIni,
-        fotoFinal: urlFin,
-        sinFotoMotivo: urlIni ? null : sinFoto.trim(),
+        sinFotoMotivo: blobIni ? null : sinFoto.trim(),
         observacion: obs.trim() || null,
         hora: new Date().toTimeString().slice(0, 8),
-        clientUuid: crypto.randomUUID(),
-      })
-      toast.success(
-        `${Number(r.litros).toLocaleString('es-CL')} L del ${r.origen} al ${r.destino}. `
-        + `Quedan ${Number(r.destino_queda).toLocaleString('es-CL')} L en el destino.`
-        + (r.aviso ? ` ${r.aviso}` : ''),
-      )
+      }, { inicial: blobIni, final: blobFin },
+        `${litrosTxt} L · ${origen.codigo} → ${destino.patente ?? destino.codigo}`)
+
+      toast.success(enviado
+        ? `${litrosTxt} L del ${origen.codigo} al ${destino.patente ?? destino.codigo}.`
+        : `${litrosTxt} L guardados en el teléfono. Suben solos cuando haya señal.`)
       router.push('/m/romeral')
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'No se pudo guardar')

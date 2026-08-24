@@ -10,6 +10,7 @@
 import Dexie, { type Table } from 'dexie'
 import {
   getCatalogoFaena, registrarDespacho, getDespachosDia, subirFotoMedidor,
+  trasvasijar, declararMomentoCero,
   type CatalogoFaena, type CombDespacho, type DespachoInput,
 } from '@/lib/services/combustible-faena'
 import { compressImage } from '@/lib/image/compress'
@@ -32,6 +33,32 @@ export type DespachoPendiente = DespachoInput & {
   foto_fin_blob?: string | null
 }
 
+/**
+ * [MIG378] Los otros dos movimientos de terreno. El despacho tiene su propia
+ * cola desde MIG279 porque es lo de todos los días; estos dos llegaron después
+ * y necesitan lo mismo: en Romeral la señal es mala de verdad, y una pantalla
+ * que carga sin red pero no guarda es peor que una que no carga — el operador
+ * llena todo y lo pierde al apretar el botón.
+ *
+ * Las fotos viajan por `blob_id`: se guardan en el teléfono y se resuelven a
+ * URL recién cuando hay red, igual que las del medidor.
+ */
+export type MovimientoPendiente = {
+  local_id: string
+  tipo: 'trasvasije' | 'momento_cero'
+  client_uuid: string
+  created_at: string
+  sync_status: 'pending' | 'error'
+  intentos: number
+  ultimo_error?: string | null
+  /** Lo que se le manda al RPC, con los blob_id donde van las URLs. */
+  payload: Record<string, unknown>
+  /** Qué campos del payload son blob_id que hay que subir antes. */
+  fotos: { campo: string; blob_id: string; indice?: number }[]
+  /** Para poder mostrarlo en la lista sin catálogo a mano. */
+  resumen: string
+}
+
 type CacheRow = { key: string; value: unknown; updated_at: string }
 type BlobRow = { blob_id: string; blob: Blob; mime: string }
 
@@ -39,6 +66,7 @@ class CombFaenaDB extends Dexie {
   cache!: Table<CacheRow, string>
   pending!: Table<DespachoPendiente, string>
   blobs!: Table<BlobRow, string>
+  movimientos!: Table<MovimientoPendiente, string>
 
   constructor() {
     super('sicom-combustible-faena')
@@ -51,6 +79,13 @@ class CombFaenaDB extends Dexie {
       cache: 'key, updated_at',
       pending: 'local_id, sync_status, created_at',
       blobs: 'blob_id',
+    })
+    // v3: el trasvasije y el momento cero también esperan en el teléfono
+    this.version(3).stores({
+      cache: 'key, updated_at',
+      pending: 'local_id, sync_status, created_at',
+      blobs: 'blob_id',
+      movimientos: 'local_id, tipo, sync_status, created_at',
     })
   }
 }
@@ -229,4 +264,143 @@ export async function getDiaOffline(
 /** Descarta un despacho que todavía no subió (se anotó mal y aún no viaja). */
 export async function descartarPendiente(localId: string) {
   await combDB().pending.delete(localId)
+}
+
+// ── Trasvasije y momento cero, también sin señal (MIG378) ───────────────────
+
+/** Encola un trasvasije. Si hay red, se intenta subir de inmediato. */
+export async function guardarTrasvasije(payload: {
+  faenaId: string; fecha: string; turno?: string | null
+  origenId: string; destinoId: string; litros: number; operador: string
+  meterInicial?: number | null; meterFinal?: number | null
+  sinFotoMotivo?: string | null; observacion?: string | null; hora?: string | null
+}, fotos: { inicial?: string | null; final?: string | null }, resumen: string) {
+  const mov: MovimientoPendiente = {
+    local_id: nuevoId(),
+    tipo: 'trasvasije',
+    client_uuid: nuevoId(),
+    created_at: new Date().toISOString(),
+    sync_status: 'pending',
+    intentos: 0,
+    payload: { ...payload },
+    fotos: [
+      ...(fotos.inicial ? [{ campo: 'fotoInicial', blob_id: fotos.inicial }] : []),
+      ...(fotos.final ? [{ campo: 'fotoFinal', blob_id: fotos.final }] : []),
+    ],
+    resumen,
+  }
+  await combDB().movimientos.put(mov)
+  if (isOnline()) {
+    const r = await sincronizarMovimientos()
+    return { enviado: r.ok > 0 }
+  }
+  return { enviado: false }
+}
+
+/** Encola el momento cero. Las fotos de varilla van una por estanque. */
+export async function guardarMomentoCero(payload: {
+  faenaId: string; fecha: string; medidoPor: string
+  puntos: { estanque_id: string; litros: number; lectura_cm?: number | null;
+            sin_foto_motivo?: string | null }[]
+  observacion?: string | null
+}, fotosPunto: (string | null)[], firmaBlobId: string, resumen: string) {
+  const mov: MovimientoPendiente = {
+    local_id: nuevoId(),
+    tipo: 'momento_cero',
+    client_uuid: nuevoId(),
+    created_at: new Date().toISOString(),
+    sync_status: 'pending',
+    intentos: 0,
+    payload: { ...payload },
+    fotos: [
+      { campo: 'firmaUrl', blob_id: firmaBlobId },
+      ...fotosPunto
+        .map((b, i) => (b ? { campo: 'punto_foto', blob_id: b, indice: i } : null))
+        .filter((x): x is { campo: string; blob_id: string; indice: number } => x !== null),
+    ],
+    resumen,
+  }
+  await combDB().movimientos.put(mov)
+  if (isOnline()) {
+    const r = await sincronizarMovimientos()
+    return { enviado: r.ok > 0 }
+  }
+  return { enviado: false }
+}
+
+export async function movimientosPendientesCount(): Promise<number> {
+  return combDB().movimientos.count()
+}
+
+export async function movimientosPendientes(): Promise<MovimientoPendiente[]> {
+  return combDB().movimientos.orderBy('created_at').toArray()
+}
+
+export async function descartarMovimiento(localId: string) {
+  const m = await combDB().movimientos.get(localId)
+  if (m) for (const f of m.fotos) await combDB().blobs.delete(f.blob_id)
+  await combDB().movimientos.delete(localId)
+}
+
+/**
+ * Sube la cola de trasvasijes y momentos cero. Mismo trato que el despacho:
+ * las fotos primero, el movimiento después, y nada se borra del teléfono hasta
+ * que el servidor confirma.
+ */
+export async function sincronizarMovimientos(): Promise<{ ok: number; failed: number }> {
+  if (!isOnline()) return { ok: 0, failed: 0 }
+  const cola = await combDB().movimientos.toArray()
+  let ok = 0, failed = 0
+
+  for (const m of cola) {
+    try {
+      // Las fotos que aún no tienen URL se suben ahora y se anotan en el
+      // payload, para que un reintento no las vuelva a subir.
+      const payload = { ...m.payload } as Record<string, unknown>
+      const puntos = Array.isArray(payload.puntos)
+        ? [...(payload.puntos as Record<string, unknown>[])]
+        : []
+
+      for (const f of m.fotos) {
+        const yaEsta = f.indice != null
+          ? !!puntos[f.indice]?.foto_url
+          : !!payload[f.campo]
+        if (yaEsta) continue
+        const b = await getFotoLocal(f.blob_id)
+        if (!b) continue
+        const url = await conTimeout(subirFotoMedidor(b), 30_000)
+        if (f.indice != null) {
+          puntos[f.indice] = { ...puntos[f.indice], foto_url: url }
+        } else {
+          payload[f.campo] = url
+        }
+      }
+      if (puntos.length) payload.puntos = puntos
+      await combDB().movimientos.update(m.local_id, { payload })
+
+      if (m.tipo === 'trasvasije') {
+        await conTimeout(trasvasijar({
+          ...(payload as Parameters<typeof trasvasijar>[0]),
+          clientUuid: m.client_uuid,
+        }), 20_000)
+      } else {
+        await conTimeout(declararMomentoCero({
+          ...(payload as Parameters<typeof declararMomentoCero>[0]),
+          clientUuid: m.client_uuid,
+        }), 30_000)
+      }
+
+      // Confirmado: recién ahí se sueltan las fotos del teléfono.
+      for (const f of m.fotos) await combDB().blobs.delete(f.blob_id)
+      await combDB().movimientos.delete(m.local_id)
+      ok++
+    } catch (e) {
+      failed++
+      await combDB().movimientos.update(m.local_id, {
+        sync_status: 'error', intentos: (m.intentos ?? 0) + 1,
+        ultimo_error: (e as Error).message,
+      })
+    }
+  }
+  return { ok, failed }
 }

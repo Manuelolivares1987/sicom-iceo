@@ -30,6 +30,7 @@ import {
 import {
   getCatalogoOffline, descargarCatalogo, ultimaDescarga, guardarDespacho, guardarFotoLocal,
   sincronizar, getDiaOffline, descartarPendiente, pendientesCount,
+  sincronizarMovimientos, movimientosPendientesCount,
   type DespachoPendiente,
 } from '@/lib/offline/combustible-faena-offline'
 
@@ -117,7 +118,11 @@ export default function RomeralTerrenoPage() {
   const refrescar = useCallback(async (faenaId: string, f: string) => {
     const { servidor: s, locales: l } = await getDiaOffline(faenaId, f)
     setServidor(s); setLocales(l)
-    setPorSubir(await pendientesCount())
+    // [MIG378] El contador es de TODO lo que espera en el teléfono, no sólo de
+    // los despachos: si el trasvasije o el momento cero quedan atrás, el
+    // operador tiene que verlo en el mismo lugar donde ya mira.
+    const [d, m] = await Promise.all([pendientesCount(), movimientosPendientesCount()])
+    setPorSubir(d + m)
   }, [])
 
   useEffect(() => {
@@ -140,10 +145,11 @@ export default function RomeralTerrenoPage() {
   useEffect(() => {
     const trySync = async () => {
       if (typeof navigator === 'undefined' || !navigator.onLine) return
-      const r = await sincronizar()
-      if ((r.ok > 0 || r.failed > 0) && cat && fecha) {
+      const [r, rm] = await Promise.all([sincronizar(), sincronizarMovimientos()])
+      const ok = r.ok + rm.ok
+      if ((ok > 0 || r.failed + rm.failed > 0) && cat && fecha) {
         await refrescar(cat.faena.id, fecha)
-        if (r.ok > 0) toast.success(`${r.ok} carga(s) subida(s)`)
+        if (ok > 0) toast.success(`${ok} registro(s) subido(s)`)
       }
     }
     window.addEventListener('online', trySync)
@@ -346,12 +352,13 @@ export default function RomeralTerrenoPage() {
       {porSubir > 0 && (
         <div className="flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 p-2 text-xs text-amber-800">
           <CloudOff className="h-4 w-4 flex-shrink-0" />
-          <span className="flex-1">{porSubir} carga(s) guardada(s) en el teléfono, aún sin subir.</span>
+          <span className="flex-1">{porSubir} registro(s) guardado(s) en el teléfono, aún sin subir.</span>
           {online && (
             <button onClick={async () => {
-                      const r = await sincronizar()
+                      const [r, rm] = await Promise.all([sincronizar(), sincronizarMovimientos()])
                       await refrescar(cat.faena.id, fecha)
-                      toast.success(r.ok > 0 ? `${r.ok} subida(s)` : 'No se pudo subir todavía')
+                      const ok = r.ok + rm.ok
+                      toast.success(ok > 0 ? `${ok} subida(s)` : 'No se pudo subir todavía')
                     }}
                     className="rounded border border-amber-400 bg-white px-2 py-1 font-semibold">
               Subir
