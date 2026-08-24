@@ -215,8 +215,20 @@ function MenuPortal({ equipos, personas, porRegularizar }: {
     return () => obs.disconnect()
   }, [])
 
+  // Se calcula el destino y se usa window.scrollTo en vez de scrollIntoView:
+  // con reduced-motion —o en un navegador que ignore el smooth— scrollIntoView
+  // se queda sin hacer nada y el menú no lleva a ninguna parte. Además así el
+  // alto del propio menú se descuenta acá, sin depender de un scroll-margin.
   const ir = (id: string) => {
-    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    const el = document.getElementById(id)
+    if (!el) return
+    const alto = document.querySelector('nav')?.getBoundingClientRect().height ?? 0
+    const destino = Math.max(0, el.getBoundingClientRect().top + window.scrollY - alto - 8)
+    window.scrollTo({ top: destino, behavior: 'smooth' })
+    // Si el navegador ignoró la animación y no se movió, se salta de una.
+    window.setTimeout(() => {
+      if (Math.abs(window.scrollY - destino) > 4) window.scrollTo(0, destino)
+    }, 400)
     setActiva(id)
   }
 
