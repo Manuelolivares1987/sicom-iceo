@@ -9,7 +9,7 @@
 // ============================================================================
 
 import Link from 'next/link'
-import { ClipboardList, ChevronRight, Fuel, ArrowLeftRight } from 'lucide-react'
+import { ClipboardList, ChevronRight, Fuel, ArrowLeftRight, Gauge } from 'lucide-react'
 import { useAuth } from '@/contexts/auth-context'
 import { useExigirSesion } from '@/hooks/use-exigir-sesion'
 import { SinSesionOffline } from '@/components/enex/sin-sesion-offline'
@@ -34,6 +34,13 @@ const ACCESOS = [
     bajada: 'Cada carga con su folio de ticket, sin señal',
     roles: ['operador_combustible', 'supervisor', 'planificador',
             'jefe_operaciones', 'administrador'],
+  },
+  {
+    href: '/m/franke/carga',
+    icono: Gauge,
+    titulo: 'Carga del camión',
+    bajada: 'Lo que entra por el surtidor, contra lo que recibió el camión',
+    roles: ['supervisor', 'planificador', 'jefe_operaciones', 'administrador'],
   },
   {
     href: '/m/franke/entrega',

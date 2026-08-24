@@ -192,11 +192,75 @@ export async function getBalance(faenaId: string, desde: string, hasta: string) 
     desde: string; hasta: string
     stock_inicial: number | null; stock_inicial_verificado: boolean
     cargas: number; ventas: number; trasvasijes: number; recirculacion_calibracion: number
-    stock_teorico: number; stock_fisico: number | null; stock_fisico_verificado: boolean
+    movimiento_neto: number
+    // [MIG365] Nulos cuando no hay un inicial verificado contra el que comparar.
+    stock_teorico: number | null
+    stock_fisico: number | null; stock_fisico_verificado: boolean
+    comparable: boolean
+    por_que_no_comparable: string | null
     diferencia: number | null; diferencia_pct: number | null
     transacciones: number
     folios: { desde: number | null; hasta: number | null; emitidos: number; faltantes: number }
     ventas_por_ceco: { ceco: string | null; empresa: string | null; litros: number }[]
+  }
+}
+
+// ── El informe mensual de gestión (MIG367/368) ─────────────────────────────
+
+export type InformeMensual = {
+  faena: { codigo: string; nombre: string }
+  periodo: { desde: string; hasta: string; hora_corte: string; texto: string; mes?: string; anio?: string }
+  dotacion: { nombre: string; cargo: string | null; rol: string }[]
+  equipos: {
+    patente: string | null; equipo: string; estado: string; origen_estado: string
+    horometro: number | null; kilometraje: number | null; desviaciones: number
+  }[]
+  litros_por_concepto: {
+    transacciones: number; ventas: number; trasvasijes: number
+    calibraciones: number; recirculaciones: number
+  }
+  tickets: {
+    emitidos: number; ventas: number; ventas_validas: number; nulos_cero_litros: number
+    trasvasije_y_stock: number; calibracion_recirculacion: number; sin_folio: number
+    folio_desde: number | null; folio_hasta: number | null
+  }
+  folios_faltantes: { folio: number; entre: number | null; y: number | null }[]
+  deriva: {
+    parcial: number; acumulativo: number; diferencia: number
+    pct: number | null; transacciones_medidas: number
+  }
+  ventas_por_cargo: { ceco: string | null; empresa: string | null; litros: number }[]
+  no_venta_por_concepto: { concepto: string; litros: number; tickets: number }[]
+  cargas_por_camion: { camion: string; litros: number; cargas: number }[]
+  cargas_por_surtidor: { eds: string; surtidor: string; litros: number; cargas: number }[]
+  balance: Awaited<ReturnType<typeof getBalance>>
+  anio: { anio: number; ventas: number; transacciones: number }
+  mayores_consumidores_anio: { ceco: string | null; empresa: string | null; litros: number }[]
+  entregas_turno: {
+    desde: string; hasta: string; turno_saliente: string; turno_entrante: string
+    estado: string; conteo_fisico: boolean; conteo_omitido_motivo: string | null
+    stock_fisico: number | null; entrega_nombre: string | null; recibe_nombre: string | null
+    reparos: string | null
+  }[]
+  redaccion_pendiente: string[]
+  advertencias: string[]
+}
+
+export async function getInformeMensual(faenaId: string, desde: string, hasta: string) {
+  const { data, error } = await supabase.rpc('fn_faena_informe_mensual', {
+    p_faena_id: faenaId, p_desde: desde, p_hasta: hasta,
+  })
+  if (error) throw error
+  return data as InformeMensual
+}
+
+/** Primer y último día del mes de una fecha cualquiera. */
+export function mesDe(fecha: Date): { desde: string; hasta: string } {
+  const iso = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  return {
+    desde: iso(new Date(fecha.getFullYear(), fecha.getMonth(), 1)),
+    hasta: iso(new Date(fecha.getFullYear(), fecha.getMonth() + 1, 0)),
   }
 }
 

@@ -35,9 +35,13 @@ import { useNetworkStatus } from '@/hooks/use-calama-offline'
 import { SinSesionOffline } from '@/components/enex/sin-sesion-offline'
 import { cn, errorMessage } from '@/lib/utils'
 import {
-  FAENA_FRANKE, getFaenaId, getAgenda, getItems, getRespuestas, guardarPauta,
-  subirFotoPauta, type PautaAgenda, type PautaItem, type Respuesta,
+  FAENA_FRANKE, getFaenaId, getRespuestas,
+  type PautaAgenda, type PautaItem, type Respuesta,
 } from '@/lib/services/faena-pauta'
+import {
+  getAgendaOffline, getItemsOffline, guardarPautaOffline, guardarFotoLocal,
+  urlFotoLocal, pendientesCount,
+} from '@/lib/offline/faena-pauta-offline'
 
 const hoyISO = () => {
   const d = new Date()
@@ -51,6 +55,9 @@ type Estado = Record<string, {
   observacion?: string
   fotoUrl?: string
   fotoPreview?: string
+  // La foto que todavía está en el teléfono. Vale igual que una subida para
+  // pasar el gate de evidencia: se sacó, y eso es lo que el gate pide.
+  fotoBlob?: string
 }>
 
 export default function EjecutarPautaPage() {
@@ -79,6 +86,7 @@ export default function EjecutarPautaPage() {
   const [pidiendoMotivo, setPidiendoMotivo] = useState(false)
   const [motivoNoAplica, setMotivoNoAplica] = useState('')
   const [abierto, setAbierto] = useState<string | null>(null)
+  const [porSubir, setPorSubir] = useState(0)
 
   // El borrador vive en el teléfono. Si se cae la señal o se apaga el aparato,
   // la pauta sigue donde iba.
@@ -88,30 +96,50 @@ export default function EjecutarPautaPage() {
   const cargar = useCallback(async () => {
     setCargando(true)
     try {
-      const f = await getFaenaId(FAENA_FRANKE)
-      if (!f) { toast.error('No se encontró la faena Franke.'); return }
+      // El id de la faena queda recordado: pedirlo es lo primero que falla
+      // cuando no hay antena, y sin él no se puede leer lo bajado.
+      let f: string | null = null
+      try { f = localStorage.getItem('franke-faena-id') } catch { /* modo privado */ }
+      if (online || !f) {
+        const nuevo = await getFaenaId(FAENA_FRANKE).catch(() => null)
+        if (nuevo) {
+          f = nuevo
+          try { localStorage.setItem('franke-faena-id', nuevo) } catch { /* modo privado */ }
+        }
+      }
+      if (!f) {
+        toast.error('Baje la jornada al teléfono con señal antes de subir al patio.')
+        return
+      }
       setFaenaId(f)
 
-      const [ag, its] = await Promise.all([getAgenda(f), getItems(pautaId)])
-      const fila = ag.find((a) => a.pauta_id === pautaId && a.activo_id === activoId) ?? null
+      const [ag, its] = await Promise.all([getAgendaOffline(f), getItemsOffline(pautaId)])
+      if (!its || its.length === 0) {
+        toast.error('Esta pauta no está bajada a este teléfono. Vuelva atrás y baje la jornada con señal.')
+        return
+      }
+      const fila = (ag ?? []).find((a) => a.pauta_id === pautaId && a.activo_id === activoId) ?? null
       setCab(fila)
       setItems(its)
-      if (its.length > 0) setAbierto(its[0].bloque)
+      setAbierto(its[0].bloque)
       setCerrada(fila?.ejecucion_hoy_estado === 'cerrada' || fila?.ejecucion_hoy_estado === 'no_aplica')
 
       // Lo que ya está en el servidor manda sobre el borrador local: si otro
-      // cerró la pauta, no se pisa con lo que quedó en este teléfono.
+      // cerró la pauta, no se pisa con lo que quedó en este teléfono. Sin señal
+      // no hay servidor que consultar, y ahí manda el borrador.
       let base: Estado = {}
-      if (fila?.ejecucion_hoy_id) {
-        for (const r of await getRespuestas(fila.ejecucion_hoy_id)) {
-          base[r.item_id] = {
-            resultado: (r.resultado === 'ok' || r.resultado === 'nok') ? r.resultado : undefined,
-            valor: r.valor != null ? String(r.valor) : undefined,
-            texto: r.texto ?? undefined,
-            observacion: r.observacion ?? undefined,
-            fotoUrl: r.foto_url ?? undefined,
+      if (fila?.ejecucion_hoy_id && online) {
+        try {
+          for (const r of await getRespuestas(fila.ejecucion_hoy_id)) {
+            base[r.item_id] = {
+              resultado: (r.resultado === 'ok' || r.resultado === 'nok') ? r.resultado : undefined,
+              valor: r.valor != null ? String(r.valor) : undefined,
+              texto: r.texto ?? undefined,
+              observacion: r.observacion ?? undefined,
+              fotoUrl: r.foto_url ?? undefined,
+            }
           }
-        }
+        } catch { /* sin respuesta del servidor: se sigue con el borrador */ }
       }
       if (Object.keys(base).length === 0) {
         try {
@@ -119,12 +147,21 @@ export default function EjecutarPautaPage() {
           if (raw) base = JSON.parse(raw) as Estado
         } catch { /* modo privado */ }
       }
+      // Las fotos que quedaron en el teléfono se vuelven a mostrar: sin esto,
+      // al reabrir la pauta el hallazgo parece no tener foto y el mecánico la
+      // saca de nuevo.
+      for (const [id, v] of Object.entries(base)) {
+        if (v.fotoBlob && !v.fotoUrl) {
+          const u = await urlFotoLocal(v.fotoBlob)
+          if (u) base[id] = { ...v, fotoPreview: u }
+        }
+      }
       setEstado(base)
       cargado.current = true
     } catch (e) {
       toast.error(errorMessage(e, 'No se pudo abrir la pauta'))
     } finally { setCargando(false) }
-  }, [pautaId, activoId, toast, K_DRAFT])
+  }, [pautaId, activoId, toast, K_DRAFT, online])
 
   useEffect(() => { void cargar() }, [cargar])
 
@@ -156,7 +193,10 @@ export default function EjecutarPautaPage() {
 
   const faltan = items.filter((i) => i.obligatorio && !contestado(i))
   const hallazgos = items.filter((i) => estado[i.id]?.resultado === 'nok')
-  const sinFoto = hallazgos.filter((i) => i.foto_si_nok && !estado[i.id]?.fotoUrl)
+  // Una foto guardada en el teléfono vale igual que una subida: el gate pide
+  // que se haya sacado, no que haya llegado al servidor.
+  const sinFoto = hallazgos.filter(
+    (i) => i.foto_si_nok && !estado[i.id]?.fotoUrl && !estado[i.id]?.fotoBlob)
   const repuestos = hallazgos.map((i) => i.repuesto).filter(Boolean) as string[]
 
   // Lo que la pauta pide y de ahí sale para todos lados: hoy este número se
@@ -196,20 +236,23 @@ export default function EjecutarPautaPage() {
     .map((i) => ({ item: i, aviso: revisarLectura(i, estado[i.id]?.valor ?? '') }))
     .filter((x) => x.aviso)
 
+  // La foto queda en el teléfono y sube con la pauta. Subirla de inmediato
+  // parecía mejor, pero deja al mecánico esperando una barra frente al camión y
+  // falla justo cuando no hay antena — que es cuando la foto importa.
   const tomarFoto = async (itemId: string, file: File) => {
     setSubiendo(itemId)
     try {
       set(itemId, { fotoPreview: URL.createObjectURL(file) })
-      const url = await subirFotoPauta(file)
-      set(itemId, { fotoUrl: url })
+      const blobId = await guardarFotoLocal(file)
+      set(itemId, { fotoBlob: blobId })
     } catch (e) {
       set(itemId, { fotoPreview: undefined })
-      toast.error(errorMessage(e, 'No se pudo subir la foto. Reintente con señal.'))
+      toast.error(errorMessage(e, 'No se pudo guardar la foto en el teléfono.'))
     } finally { setSubiendo(null) }
   }
 
   const enviar = async (cerrar: boolean) => {
-    if (!faenaId) { toast.error('Necesita señal para guardar.'); return }
+    if (!faenaId) { toast.error('Baje la jornada al teléfono con señal antes de subir al patio.'); return }
     if (cerrar && faltan.length > 0) {
       toast.error(`Falta contestar ${faltan.length} ítem(s). El primero: ${faltan[0].texto}`)
       setAbierto(faltan[0].bloque)
@@ -229,16 +272,18 @@ export default function EjecutarPautaPage() {
     }
     setGuardando(true)
     try {
-      const payload: Respuesta[] = items.map((i) => ({
+      // Las fotos van como id local: la cola las sube y las cambia por su URL.
+      const payload = items.map((i) => ({
         item_id: i.id,
         resultado: estado[i.id]?.resultado ?? null,
         valor: estado[i.id]?.valor ? Number(estado[i.id]!.valor) : null,
         texto: estado[i.id]?.texto ?? null,
         observacion: estado[i.id]?.observacion ?? null,
         foto_url: estado[i.id]?.fotoUrl ?? null,
+        foto_blob: estado[i.id]?.fotoBlob ?? null,
       }))
 
-      const r = await guardarPauta({
+      const { enviado, resultado } = await guardarPautaOffline({
         faenaId, pautaId, activoId, fecha, turno,
         items: payload,
         horometro: lectura('h'),
@@ -247,20 +292,32 @@ export default function EjecutarPautaPage() {
         cerrar,
         ejecutadoPorNombre: perfil?.nombre_completo ?? null,
         clientUuid: K_DRAFT,
+        equipoNombre: cab?.patente ?? cab?.activo_codigo ?? null,
+        pautaNombre: cab?.pauta_nombre ?? null,
       })
 
-      if (cerrar) {
-        try { localStorage.removeItem(K_DRAFT) } catch { /* modo privado */ }
-        setCerrada(true)
-        toast.success(
-          r.no_conformidades
-            ? `Pauta cerrada. ${r.no_conformidades} no conformidad(es) levantada(s).`
-            : 'Pauta cerrada. Sin hallazgos.',
-        )
-        router.push('/m/franke/pauta')
-      } else {
-        toast.success('Guardado. Puede seguir después.')
+      if (!cerrar) {
+        toast.success(enviado
+          ? 'Guardado. Puede seguir después.'
+          : 'Guardado en el teléfono. Sube solo cuando vuelva la señal.')
+        return
       }
+
+      try { localStorage.removeItem(K_DRAFT) } catch { /* modo privado */ }
+      setCerrada(true)
+      if (enviado && resultado) {
+        toast.success(resultado.no_conformidades
+          ? `Pauta cerrada. ${resultado.no_conformidades} no conformidad(es) levantada(s).`
+          : 'Pauta cerrada. Sin hallazgos.')
+      } else {
+        // No se le dice «cerrada» a algo que todavía no llegó al servidor: la
+        // no conformidad se levanta al subir, y prometerla ahora sería mentir.
+        toast.success(
+          `Pauta guardada en el teléfono${hallazgos.length ? ` con ${hallazgos.length} hallazgo(s)` : ''}. `
+          + 'Sube sola cuando vuelva la señal.')
+      }
+      setPorSubir(await pendientesCount())
+      router.push('/m/franke/pauta')
     } catch (e) {
       toast.error(errorMessage(e, 'No se pudo guardar'))
     } finally { setGuardando(false) }
@@ -274,15 +331,19 @@ export default function EjecutarPautaPage() {
     }
     setGuardando(true)
     try {
-      await guardarPauta({
+      const { enviado } = await guardarPautaOffline({
         faenaId, pautaId, activoId, fecha, turno,
         items: [], cerrar: true,
         ejecutadoPorNombre: perfil?.nombre_completo ?? null,
         noAplicaMotivo: motivoNoAplica.trim(),
         clientUuid: K_DRAFT,
+        equipoNombre: cab?.patente ?? cab?.activo_codigo ?? null,
+        pautaNombre: cab?.pauta_nombre ?? null,
       })
       try { localStorage.removeItem(K_DRAFT) } catch { /* modo privado */ }
-      toast.success('Registrado: el equipo no estaba en faena.')
+      toast.success(enviado
+        ? 'Registrado: el equipo no estaba en faena.'
+        : 'Guardado en el teléfono. Sube solo cuando vuelva la señal.')
       router.push('/m/franke/pauta')
     } catch (e) {
       toast.error(errorMessage(e, 'No se pudo registrar'))
@@ -438,6 +499,13 @@ export default function EjecutarPautaPage() {
               {sinFoto.length > 0
                 ? `${sinFoto.length} hallazgo(s) sin foto. Un NO OK sin foto no se puede cerrar.`
                 : `Faltan ${faltan.length} de ${items.length}.`}
+            </p>
+          )}
+          {!online && (
+            <p className="mb-2 flex items-start gap-1.5 text-[11px] leading-snug text-gray-600">
+              <CloudOff className="mt-px h-3.5 w-3.5 shrink-0" />
+              Sin señal: la pauta y sus fotos quedan en el teléfono y suben solas.
+              {porSubir > 0 && ` Hay ${porSubir} esperando.`}
             </p>
           )}
           <div className="flex gap-2">

@@ -274,6 +274,8 @@ const navGroups: NavGroup[] = [
         tooltip: 'Camiones petroleros, cargas, trasvasije y cuadre diario — faena Franke' },
       { label: 'Entrega de turno', href: '/m/franke/entrega', icon: ArrowLeftRight, extendedModule: 'bodega', badge: 'Nuevo',
         tooltip: 'Cambio de turno 7×7 de Franke: camiones, litros, pendientes y bodega, con firma de quien entrega y de quien recibe' },
+      { label: 'Informe de gestión', href: '/dashboard/combustible/franke/informe', icon: FileText, extendedModule: 'bodega', badge: 'Nuevo',
+        tooltip: 'El informe mensual del contrato FRK 220/2024, calculado: litros por concepto, tickets y folios, deriva del cuentalitros y balance del periodo' },
       { label: 'Revisión en faena', href: '/dashboard/mantenimiento/pauta-faena', icon: ClipboardList, extendedModule: 'bodega', badge: 'Nuevo',
         tooltip: 'La pauta diaria del mecánico de faena: qué revisó, qué salió NO OK y cuánto falta para la próxima mantención' },
     ],
