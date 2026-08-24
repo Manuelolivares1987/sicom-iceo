@@ -15,6 +15,7 @@ import Link from 'next/link'
 import {
   Fuel, Plus, Check, WifiOff, CloudOff, RefreshCw, Search, X, Truck,
   MapPin, Trash2, CheckCircle2, Download, ChevronDown, Camera, Ruler, ChevronRight,
+  ArrowLeftRight,
 } from 'lucide-react'
 import { Spinner } from '@/components/ui/spinner'
 import { useToast } from '@/contexts/toast-context'
@@ -309,6 +310,37 @@ export default function RomeralTerrenoPage() {
           <p className="text-[11px] text-gray-500">Guía de flota primaria, con foto</p>
         </div>
         <ChevronRight className="h-5 w-5 shrink-0 text-gray-400" />
+      </Link>
+
+      {/* [MIG378] Cargar un aljibe estaba escondido dentro del despacho: había
+          que elegir la estación como si fuera el camión del que se despacha.
+          Nadie lo iba a encontrar ahí. */}
+      <Link
+        href="/m/romeral/trasvasije"
+        className="flex items-center gap-3 rounded-xl border-2 border-gray-300 bg-white p-3 active:bg-gray-50"
+      >
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-gray-600 text-white">
+          <ArrowLeftRight className="h-5 w-5" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-bold text-gray-900">Pasar combustible</p>
+          <p className="text-[11px] text-gray-500">Cargar un camión desde una estación</p>
+        </div>
+        <ChevronRight className="h-5 w-5 shrink-0 text-gray-400" />
+      </Link>
+
+      {/* [MIG378] Se hace una vez en la vida de la faena, así que no compite con
+          lo de todos los días: aparece discreto y al final. */}
+      <Link
+        href="/m/romeral/inicial"
+        className="flex items-center gap-3 rounded-xl border border-dashed border-gray-300 p-2.5 active:bg-gray-50"
+      >
+        <Ruler className="h-4 w-4 shrink-0 text-gray-400" />
+        <div className="min-w-0 flex-1">
+          <p className="text-xs font-semibold text-gray-600">Momento cero</p>
+          <p className="text-[10px] text-gray-400">Con qué parte la faena. Se declara una sola vez.</p>
+        </div>
+        <ChevronRight className="h-4 w-4 shrink-0 text-gray-300" />
       </Link>
 
       {porSubir > 0 && (

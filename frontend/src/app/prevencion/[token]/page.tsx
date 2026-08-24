@@ -168,11 +168,12 @@ function Chip({ nivel, children }: { nivel: Nivel; children: React.ReactNode }) 
   )
 }
 
-function Seccion({ n, titulo, bajada, children }: {
-  n: number; titulo: string; bajada?: string; children: React.ReactNode
+function Seccion({ n, id, titulo, bajada, children }: {
+  n: number; id?: string; titulo: string; bajada?: string; children: React.ReactNode
 }) {
   return (
-    <section className="space-y-3">
+    // scroll-mt deja la sección bajo el menú pegado, no tapada por él.
+    <section id={id} className="scroll-mt-20 space-y-3">
       <div className="border-b border-slate-200 pb-2">
         <h2 className="text-sm font-bold uppercase tracking-wide text-slate-800">
           <span className="text-slate-400">{n}.</span> {titulo}
@@ -181,6 +182,79 @@ function Seccion({ n, titulo, bajada, children }: {
       </div>
       {children}
     </section>
+  )
+}
+
+
+// ── El menú (MIG379) ───────────────────────────────────────────────────────
+// El portal es una sola página larga: tres secciones, y con 15 personas la de
+// personal se va lejos. Esto la deja a un toque, y de paso dice de cuánto se
+// está hablando antes de bajar.
+function MenuPortal({ equipos, personas, porRegularizar }: {
+  equipos: number; personas: number; porRegularizar: number
+}) {
+  const [activa, setActiva] = useState('estado')
+
+  // La sección activa se sigue con el scroll, no con el click: si alguien baja
+  // a mano, el menú tiene que acompañarlo igual.
+  useEffect(() => {
+    const ids = ['estado', 'equipos', 'personal']
+    const obs = new IntersectionObserver(
+      (entries) => {
+        const visible = entries
+          .filter((e) => e.isIntersecting)
+          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0]
+        if (visible) setActiva(visible.target.id)
+      },
+      { rootMargin: '-72px 0px -60% 0px', threshold: 0 },
+    )
+    ids.forEach((id) => {
+      const el = document.getElementById(id)
+      if (el) obs.observe(el)
+    })
+    return () => obs.disconnect()
+  }, [])
+
+  const ir = (id: string) => {
+    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    setActiva(id)
+  }
+
+  const items: { id: string; texto: string; dato?: string }[] = [
+    { id: 'estado', texto: 'Estado', dato: porRegularizar > 0 ? String(porRegularizar) : undefined },
+    { id: 'equipos', texto: 'Equipos', dato: String(equipos) },
+    { id: 'personal', texto: 'Personal', dato: String(personas) },
+  ]
+
+  return (
+    <nav className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur print:hidden">
+      <div className="mx-auto flex max-w-4xl gap-1 px-6 py-2">
+        {items.map((it) => (
+          <button
+            key={it.id}
+            onClick={() => ir(it.id)}
+            className={cn(
+              'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition',
+              activa === it.id
+                ? 'bg-slate-800 text-white'
+                : 'text-slate-500 hover:bg-slate-100',
+            )}
+          >
+            {it.texto}
+            {it.dato && (
+              <span className={cn(
+                'rounded px-1.5 text-[10px] tabular-nums',
+                activa === it.id ? 'bg-white/20' : 'bg-slate-200 text-slate-600',
+                it.id === 'estado' && porRegularizar > 0 && activa !== it.id
+                  ? 'bg-red-100 text-red-700' : '',
+              )}>
+                {it.dato}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+    </nav>
   )
 }
 
@@ -737,9 +811,15 @@ export default function PortalPrevencionPage() {
         </div>
       </header>
 
+      <MenuPortal
+        equipos={resumen?.equipos ?? 0}
+        personas={resumen?.personas ?? 0}
+        porRegularizar={resumen?.eqBasicos ?? 0}
+      />
+
       <main className="mx-auto max-w-4xl space-y-8 px-6 py-6">
         {/* ── 1. La conclusión primero ── */}
-        <Seccion n={1} titulo="Estado de cumplimiento">
+        <Seccion n={1} id="estado" titulo="Estado de cumplimiento">
           <div
             className={cn(
               'flex items-start gap-3 rounded-xl border px-4 py-3.5',
@@ -798,6 +878,7 @@ export default function PortalPrevencionPage() {
         {/* ── 2. Equipos ── */}
         <Seccion
           n={2}
+          id="equipos"
           titulo="Equipos en faena"
           bajada="Para cada equipo: la documentación que lo habilita a circular y operar, y lo que se le ha hecho."
         >
@@ -815,6 +896,7 @@ export default function PortalPrevencionPage() {
         {/* ── 3. Personal ── */}
         <Seccion
           n={3}
+          id="personal"
           titulo="Personal acreditado"
           bajada="Exámenes ocupacionales y licencias internas. Se informa vigencia y estado; no se entregan resultados clínicos."
         >
