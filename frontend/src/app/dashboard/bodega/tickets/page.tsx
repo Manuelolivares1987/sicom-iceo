@@ -61,6 +61,19 @@ function estadoBadge(e: string) {
   }
 }
 
+// [MIG375] A quién se le carga el vale. Los del taller van contra un equipo y
+// una OT; los de oficina, contra un centro de costo y sin OT. Imprimir «OT
+// null» al bodeguero le escondía justamente el dato que necesita para saber
+// qué está entregando.
+function aQuienSeCarga(t: BodegaTicket) {
+  return t.origen === 'oficina'
+    ? { titulo: t.ceco_nombre ?? 'Centro de costo', detalle: t.ceco_codigo ?? '' }
+    : {
+        titulo: t.activo_patente ?? t.activo_codigo ?? '—',
+        detalle: t.ot_folio ? `OT ${t.ot_folio}` : 'Pedido manual',
+      }
+}
+
 // Bodega gestiona TODO el pedido del taller en esta única página: vales por
 // despachar (con fotos), solicitudes de material y el historial.
 export default function BodegaTicketsPage() {
@@ -432,9 +445,9 @@ function DespacharTab() {
                         <span className="font-mono text-xs font-bold">{t.folio}</span>
                         <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${estadoBadge(t.estado)}`}>{t.estado}</span>
                       </div>
-                      <div className="text-sm font-semibold text-gray-800">{t.activo_patente ?? t.activo_codigo} <span className="font-normal text-gray-500">{t.activo_nombre}</span></div>
+                      <div className="text-sm font-semibold text-gray-800">{aQuienSeCarga(t).titulo} <span className="font-normal text-gray-500">{t.activo_nombre}</span></div>
                       <div className="text-[11px] text-gray-500">
-                        OT {t.ot_folio} · {t.n_items} ítem{t.n_items !== 1 ? 's' : ''} · emitió {t.emitido_por_nombre ?? '—'} · {new Date(t.created_at).toLocaleDateString('es-CL')}
+                        {aQuienSeCarga(t).detalle} · {t.n_items} ítem{t.n_items !== 1 ? 's' : ''} · emitió {t.emitido_por_nombre ?? '—'} · {new Date(t.created_at).toLocaleDateString('es-CL')}
                       </div>
                     </div>
                     <Truck className="h-5 w-5 text-orange-500 shrink-0" />
@@ -460,9 +473,9 @@ function DespacharTab() {
                         title="Ver / imprimir el vale" className="text-gray-400 hover:text-gray-600">
                   <Printer className="h-4 w-4" />
                 </button>
-                <span className="ml-auto text-xs text-gray-500">{ticket.activo_codigo} {ticket.activo_patente && `· ${ticket.activo_patente}`}</span>
+                <span className="ml-auto text-xs text-gray-500">{aQuienSeCarga(ticket).titulo}</span>
               </div>
-              <div className="text-xs text-gray-500">OT {ticket.ot_folio} · emitió {ticket.emitido_por_nombre ?? '—'}</div>
+              <div className="text-xs text-gray-500">{aQuienSeCarga(ticket).detalle} · emitió {ticket.emitido_por_nombre ?? '—'}</div>
 
               {!usable && (
                 <div className="flex items-center gap-2 rounded-lg bg-amber-50 border border-amber-200 p-2 text-sm text-amber-800">
@@ -811,9 +824,9 @@ function HistorialTab() {
                   <span className="font-mono text-xs font-bold">{t.folio}</span>
                   <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${estadoBadge(t.estado)}`}>{t.estado}</span>
                 </div>
-                <div className="text-sm text-gray-800">{t.activo_codigo} {t.activo_patente && `· ${t.activo_patente}`}</div>
+                <div className="text-sm text-gray-800">{aQuienSeCarga(t).titulo}</div>
                 <div className="text-[11px] text-gray-500">
-                  OT {t.ot_folio} · {t.n_entregados}/{t.n_items} ítems · emitió {t.emitido_por_nombre ?? '—'}
+                  {aQuienSeCarga(t).detalle} · {t.n_entregados}/{t.n_items} ítems · emitió {t.emitido_por_nombre ?? '—'}
                 </div>
               </div>
               <Button variant="outline" size="sm" title="Vale imprimible para el retiro"

@@ -27,9 +27,13 @@ export type BodegaTicket = {
   entregado_por: string | null
   entregado_at: string | null
   created_at: string
-  /** [MIG371] De dónde nació: de los hallazgos de una OT, o pedido a mano. */
-  origen: 'ot' | 'manual'
+  /** De dónde nació: de los hallazgos de una OT, pedido a mano, o de oficina. */
+  origen: 'ot' | 'manual' | 'oficina'
   motivo: string | null
+  /** [MIG375] El centro de costo, cuando el vale no va contra un equipo. */
+  ceco_id: string | null
+  ceco_codigo: string | null
+  ceco_nombre: string | null
   ot_folio: string | null
   faena_id: string | null
   activo_codigo: string | null
@@ -220,6 +224,68 @@ export async function getEquiposParaVale(): Promise<EquipoParaVale[]> {
     .order('patente', { nullsFirst: false })
   if (error) throw error
   return (data ?? []) as EquipoParaVale[]
+}
+
+export type CecoLite = { id: string; codigo: string; nombre: string; area: string | null }
+
+/**
+ * Los centros de costo a los que puede cargar un pedido de oficina: los de
+ * área, no los de equipo. Cada patente tiene su propio CECO y ésos se imputan
+ * solos por el vale del taller — ofrecerlos acá sólo daría por dónde
+ * equivocarse.
+ */
+export async function getCecosArea(): Promise<CecoLite[]> {
+  const { data, error } = await supabase
+    .from('centros_costo')
+    .select('id, codigo, nombre, area')
+    .like('codigo', 'CECO-%')
+    .eq('activo', true)
+    .order('nombre')
+  if (error) throw error
+  return (data ?? []) as CecoLite[]
+}
+
+/**
+ * [MIG375] Vale de oficina: sale el mismo papel con folio y QR que el del
+ * taller, pero cargado a un centro de costo en vez de a un equipo.
+ *
+ * Lo firma quien retira —no el jefe de taller— porque el control acá es otro:
+ * el gasto queda con nombre y con centro de costo.
+ */
+export async function crearValeOficina(params: {
+  cecoId: string
+  items: ItemValeManual[]
+  motivo: string
+  firmaUrl: string
+  bodegaId?: string | null
+  observacion?: string | null
+}) {
+  const { data, error } = await supabase.rpc('rpc_crear_vale_oficina', {
+    p_ceco_id: params.cecoId,
+    p_items: params.items,
+    p_motivo: params.motivo,
+    p_firma_url: params.firmaUrl,
+    p_bodega_id: params.bodegaId ?? null,
+    p_observacion: params.observacion ?? null,
+  })
+  if (error) throw error
+  return data as {
+    success: boolean; ticket_id: string; folio: string; qr: string
+    items: number; items_sin_catalogo: number
+    bodega_id: string | null; ceco: string; ceco_nombre: string
+  }
+}
+
+/** Los vales que uno mismo emitió, para seguirlos sin llamar a bodega. */
+export async function getMisVales(): Promise<BodegaTicket[]> {
+  const { data: u } = await supabase.auth.getUser()
+  if (!u?.user) return []
+  const { data, error } = await supabase.from('v_bodega_ticket').select('*')
+    .eq('emitido_por', u.user.id)
+    .order('created_at', { ascending: false })
+    .limit(20)
+  if (error) throw error
+  return (data ?? []) as BodegaTicket[]
 }
 
 /** Bodega amarra un ítem escrito a mano con su producto del catálogo. */
