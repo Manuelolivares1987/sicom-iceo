@@ -60,7 +60,14 @@ export interface UsuarioPerfil {
   created_at: string
   updated_at: string
   /** La faena de la persona, con la app de terreno que le corresponde (MIG361). */
-  faena?: { id: string; codigo: string; nombre: string; app_movil: string | null } | null
+  /** [MIG385] TRUE = el menú y la navegación quedan acotados a su faena. */
+  solo_su_faena?: boolean
+  faena?: {
+    id: string; codigo: string; nombre: string
+    app_movil: string | null
+    /** [MIG385] Pantalla de control de la faena en el panel web. */
+    panel_web?: string | null
+  } | null
 }
 
 export interface Activo {

@@ -503,6 +503,20 @@ export function usePermissions() {
     return rol === 'comercial'
   }
 
+  /**
+   * [MIG385] La faena a la que está acotada esta persona, o null si ve todo.
+   *
+   * Va por persona y no por rol a propósito: hay planificadores de faena que sí
+   * necesitan ver el sistema completo. Un admin global nunca queda acotado —si
+   * no, quien administra no podría entrar a arreglar nada.
+   */
+  function faenaExclusiva(): { id: string; codigo: string; nombre: string;
+                               app_movil: string | null; panel_web?: string | null } | null {
+    if (!perfil?.solo_su_faena) return null
+    if (isAdminGlobal()) return null
+    return perfil.faena ?? null
+  }
+
   function tieneRolCalama(): boolean { return rolCalama !== null }
   function tieneAccesoDashboardCalama(): boolean {
     return !!rolCalama && ROLES_CALAMA_DASHBOARD.includes(rolCalama)
@@ -558,6 +572,7 @@ export function usePermissions() {
     esOperadorTallerSolo,
     esOperadorCombustibleSolo,
     esComercialSolo,
+    faenaExclusiva,
     tieneRolCalama, tieneAccesoDashboardCalama,
   }
 }

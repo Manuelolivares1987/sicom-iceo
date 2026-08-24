@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   ShieldAlert, Search, AlertTriangle, CheckCircle2, Clock, Ban,
   FileWarning, ChevronDown, ChevronRight, Save, Pencil,
@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Spinner } from '@/components/ui/spinner'
 import { useRequireAuth } from '@/hooks/use-require-auth'
+import { usePermissions } from '@/hooks/use-permissions'
 import {
   useControlDocumental, useActualizarExamen,
   useRenovarExamen, useHistorialExamen, abrirRespaldo, useEnviarReporte,
@@ -659,12 +660,29 @@ function EnviarReporteModal({ faena, faenas, onCerrar }: {
 
 export default function ControlDocumentalPersonalPage() {
   useRequireAuth()
+  // [MIG385] Acá la faena se identifica por código de prevención («ROMERAL»),
+  // que no es el código del maestro de faenas («FAE-CMP-ROMERAL»). Se calza por
+  // contenido, y si no calza ninguno NO se cae a «todas»: mostrar de más sería
+  // peor que mostrar de menos.
+  const { faenaExclusiva } = usePermissions()
+  const faenaSolo = faenaExclusiva()
   const [faena, setFaena] = useState<string | null>(null)
   const [q, setQ] = useState('')
   const [soloProblemas, setSoloProblemas] = useState(false)
   const [enviando, setEnviando] = useState(false)
 
   const { data, isLoading, error } = useControlDocumental(faena)
+
+  const codigoDeSuFaena = useMemo(() => {
+    if (!faenaSolo || !data?.faenas) return null
+    const suyo = `${faenaSolo.codigo} ${faenaSolo.nombre}`.toUpperCase()
+    return data.faenas.find((f) => suyo.includes(f.faena.toUpperCase()))?.faena ?? null
+  }, [faenaSolo, data?.faenas])
+
+  // En cuanto se sabe cuál es su faena, la vista queda fijada ahí.
+  useEffect(() => {
+    if (faenaSolo && codigoDeSuFaena && faena !== codigoDeSuFaena) setFaena(codigoDeSuFaena)
+  }, [faenaSolo, codigoDeSuFaena, faena])
 
   const personas = (data?.personas ?? []).filter((p) => {
     if (soloProblemas && p.estado_general === 'conforme') return false
@@ -754,15 +772,28 @@ export default function ControlDocumentalPersonalPage() {
               <Input value={q} onChange={(e) => setQ(e.target.value)}
                 placeholder="Buscar por nombre, RUT o empresa…" className="pl-9" />
             </div>
-            <Button size="sm" variant={faena === null ? 'primary' : 'outline'}
-              onClick={() => setFaena(null)}>Todas</Button>
-            {data.faenas.map((f) => (
-              <Button key={f.faena} size="sm"
-                variant={faena === f.faena ? 'primary' : 'outline'}
-                onClick={() => setFaena(f.faena)}>
-                {f.faena} ({f.personas})
-              </Button>
-            ))}
+            {faenaSolo ? (
+              <span className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-1.5 text-sm font-semibold text-gray-700">
+                {codigoDeSuFaena ?? faenaSolo.nombre}
+                {codigoDeSuFaena && (
+                  <span className="ml-1 font-normal text-gray-500">
+                    ({data.faenas.find((f) => f.faena === codigoDeSuFaena)?.personas ?? 0})
+                  </span>
+                )}
+              </span>
+            ) : (
+              <>
+                <Button size="sm" variant={faena === null ? 'primary' : 'outline'}
+                  onClick={() => setFaena(null)}>Todas</Button>
+                {data.faenas.map((f) => (
+                  <Button key={f.faena} size="sm"
+                    variant={faena === f.faena ? 'primary' : 'outline'}
+                    onClick={() => setFaena(f.faena)}>
+                    {f.faena} ({f.personas})
+                  </Button>
+                ))}
+              </>
+            )}
             <Button size="sm" variant={soloProblemas ? 'primary' : 'outline'}
               onClick={() => setSoloProblemas((v) => !v)}>
               Solo con brechas

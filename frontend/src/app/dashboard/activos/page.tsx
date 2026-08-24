@@ -32,6 +32,7 @@ import { useActivos, useEstadosPlanificador } from '@/hooks/use-activos'
 import { EstadoFlotaPill } from '@/components/flota/estado-flota-pill'
 import { ESTADO_FLOTA_LABEL, ESTADO_FLOTA_OPCIONES, esFlotaDelPlanificador } from '@/lib/estado-flota'
 import { getFaenas } from '@/lib/services/faenas'
+import { usePermissions } from '@/hooks/use-permissions'
 import type { Activo, TipoActivo, EstadoActivo, Criticidad } from '@/types/database'
 
 // ---------------------------------------------------------------------------
@@ -199,7 +200,12 @@ export default function ActivosPage() {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
   const [search, setSearch] = useState('')
   const [tipoFilter, setTipoFilter] = useState('')
-  const [faenaFilter, setFaenaFilter] = useState('')
+  // [MIG385] Quien está acotado a una faena entra con su faena puesta y no la
+  // puede cambiar: el filtro deja de ser una preferencia y pasa a ser el
+  // alcance de la persona.
+  const { faenaExclusiva } = usePermissions()
+  const faenaSolo = faenaExclusiva()
+  const [faenaFilter, setFaenaFilter] = useState(faenaSolo?.id ?? '')
   const [estadoFilter, setEstadoFilter] = useState('')
   const [criticidadFilter, setCriticidadFilter] = useState('')
 
@@ -217,7 +223,8 @@ export default function ActivosPage() {
   // código del planificador, que vive en otra tabla (estado_diario_flota).
   const filters: Record<string, unknown> = {}
   if (tipoFilter) filters.tipo = tipoFilter
-  if (faenaFilter) filters.faena_id = faenaFilter
+  if (faenaSolo) filters.faena_id = faenaSolo.id
+  else if (faenaFilter) filters.faena_id = faenaFilter
   if (criticidadFilter) filters.criticidad = criticidadFilter
 
   const { data: activos, isLoading, error } = useActivos(filters)
@@ -351,12 +358,21 @@ export default function ActivosPage() {
             onChange={setTipoFilter}
             options={tipoOptions}
           />
-          <FilterSelect
-            label="Faena"
-            value={faenaFilter}
-            onChange={setFaenaFilter}
-            options={faenaOptions}
-          />
+          {faenaSolo ? (
+            <div className="min-w-[150px]">
+              <label className="mb-1 block text-xs font-medium text-gray-500">Faena</label>
+              <p className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm font-semibold text-gray-700">
+                {faenaSolo.nombre}
+              </p>
+            </div>
+          ) : (
+            <FilterSelect
+              label="Faena"
+              value={faenaFilter}
+              onChange={setFaenaFilter}
+              options={faenaOptions}
+            />
+          )}
           <FilterSelect
             label="Estado"
             value={estadoFilter}
