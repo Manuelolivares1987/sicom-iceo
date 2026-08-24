@@ -27,6 +27,9 @@ export type BodegaTicket = {
   entregado_por: string | null
   entregado_at: string | null
   created_at: string
+  /** [MIG371] De dónde nació: de los hallazgos de una OT, o pedido a mano. */
+  origen: 'ot' | 'manual'
+  motivo: string | null
   ot_folio: string | null
   faena_id: string | null
   activo_codigo: string | null
@@ -36,6 +39,8 @@ export type BodegaTicket = {
   entregado_por_nombre: string | null
   n_items: number
   n_entregados: number
+  /** Ítems escritos a mano que bodega todavía no amarró a un producto. */
+  n_sin_producto: number
 }
 
 export type BodegaTicketItem = {
@@ -153,6 +158,77 @@ export async function crearTicket(params: {
   })
   if (error) throw error
   return data as { success: boolean; ticket_id: string; folio: string; qr: string; items: number }
+}
+
+/**
+ * [MIG371] Pedido manual: se elige la patente y se escribe lo que hace falta,
+ * sin esperar a que haya un hallazgo ni una OT abierta.
+ *
+ * Por dentro el vale igual cuelga de una OT de abastecimiento del equipo —el
+ * kardex exige OT en toda salida— pero eso no se le pregunta a nadie: se
+ * reutiliza la del equipo si ya existe.
+ */
+export type ItemValeManual = {
+  /** Del catálogo. Sin él, bodega tendrá que amarrarlo antes de despachar. */
+  producto_id?: string | null
+  descripcion?: string | null
+  cantidad: number
+  unidad?: string | null
+  comentario?: string | null
+}
+
+export async function crearValeManual(params: {
+  activoId: string
+  items: ItemValeManual[]
+  motivo: string
+  firmaJefeUrl: string
+  bodegaId?: string | null
+  observacion?: string | null
+}) {
+  const { data, error } = await supabase.rpc('rpc_crear_vale_manual', {
+    p_activo_id: params.activoId,
+    p_items: params.items,
+    p_motivo: params.motivo,
+    p_firma_jefe_url: params.firmaJefeUrl,
+    p_bodega_id: params.bodegaId ?? null,
+    p_observacion: params.observacion ?? null,
+  })
+  if (error) throw error
+  return data as {
+    success: boolean; ticket_id: string; folio: string; qr: string
+    items: number
+    /** Cuántos quedaron sin producto de catálogo: bodega los tendrá que amarrar. */
+    items_sin_catalogo: number
+    bodega_id: string | null
+    ot_id: string; ot_folio: string; ot_reutilizada: boolean
+  }
+}
+
+export type EquipoParaVale = {
+  id: string; codigo: string; nombre: string | null; patente: string | null; estado: string | null
+}
+
+/**
+ * Los equipos a los que se les puede pedir material. Consulta liviana a
+ * propósito: es para un buscador, no para una ficha.
+ */
+export async function getEquiposParaVale(): Promise<EquipoParaVale[]> {
+  const { data, error } = await supabase
+    .from('activos')
+    .select('id, codigo, nombre, patente, estado')
+    .is('fecha_baja', null)
+    .order('patente', { nullsFirst: false })
+  if (error) throw error
+  return (data ?? []) as EquipoParaVale[]
+}
+
+/** Bodega amarra un ítem escrito a mano con su producto del catálogo. */
+export async function asignarProductoItem(itemId: string, productoId: string) {
+  const { data, error } = await supabase.rpc('rpc_ticket_item_producto', {
+    p_item_id: itemId, p_producto_id: productoId,
+  })
+  if (error) throw error
+  return data as { success: boolean; producto: string }
 }
 
 export async function entregarTicket(params: {

@@ -119,11 +119,20 @@ export default function ValeImprimiblePage() {
           </div>
           <div>
             <p className="text-[11px] uppercase text-gray-500">Orden de trabajo</p>
-            <p className="font-mono font-bold">{ticket.ot_folio}</p>
+            <p className="font-mono font-bold">{ticket.ot_folio ?? '—'}</p>
             <p className="mt-1 text-[11px] uppercase text-gray-500 print:mt-0">Autoriza</p>
             <p className="text-xs font-medium">{ticket.emitido_por_nombre ?? '—'}</p>
           </div>
         </div>
+
+        {/* [MIG371] Un pedido manual no nace de un hallazgo: el motivo es lo
+            único que explica por qué salió el material, así que va impreso. */}
+        {ticket.origen === 'manual' && ticket.motivo && (
+          <div className="border-b border-gray-300 px-4 py-2 print:px-2 print:py-1">
+            <p className="text-[11px] uppercase text-gray-500">Pedido manual — para qué es</p>
+            <p className="text-sm text-gray-800 print:text-xs">{ticket.motivo}</p>
+          </div>
+        )}
 
         <table className="w-full text-sm print:text-xs">
           <thead>

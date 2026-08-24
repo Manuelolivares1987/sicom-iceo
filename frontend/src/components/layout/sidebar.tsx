@@ -15,6 +15,7 @@ import {
   Package,
   Ticket,
   Fuel,
+  PackageSearch,
   ArrowLeftRight,
   ShieldCheck,
   BarChart3,
@@ -252,6 +253,11 @@ const navGroups: NavGroup[] = [
   {
     label: 'Bodega',
     items: [
+      // Sin gate de módulo a propósito: quien pide un tóner es de
+      // administración, de prevención o de comercial, y ninguno tiene el
+      // permiso de bodega. Es la única entrada que tiene oficina (MIG374).
+      { label: 'Pedir a bodega', href: '/dashboard/bodega/pedir', icon: PackageSearch, badge: 'Nuevo',
+        tooltip: 'Pedir útiles, tóner, insumos de aseo o cualquier artículo que no venga de un hallazgo ni de una orden de trabajo' },
       { label: 'Panel Bodega', href: '/dashboard/inventario', icon: Package, extendedModule: 'bodega',
         tooltip: 'Stock, compras, salidas, combustible y reportes — todo en un solo panel' },
       { label: 'Pedidos a bodega', href: '/dashboard/bodega/tickets', icon: Ticket, extendedModule: 'bodega', badge: 'Nuevo',

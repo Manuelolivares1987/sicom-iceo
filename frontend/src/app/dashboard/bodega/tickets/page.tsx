@@ -22,9 +22,10 @@ import {
   useCrearTicket, useEntregarTicket, useAnularTicket,
 } from '@/hooks/use-bodega-tickets'
 import {
-  getTicketByFolio, subirFirmaTicket, enviarItemACompra,
+  getTicketByFolio, subirFirmaTicket, enviarItemACompra, asignarProductoItem,
   type TicketEmitible, type BodegaTicket,
 } from '@/lib/services/bodega-tickets'
+import { buscarProductos } from '@/lib/services/ot-materiales'
 import { getSolicitudesBodega, atenderSolicitudBodega, type BodegaSolicitud } from '@/lib/services/bodega-solicitudes'
 import { useMaterialesPendientesDespacho, useDespacharMaterialOT } from '@/hooks/use-ot-materiales'
 import { cn } from '@/lib/utils'
@@ -112,6 +113,75 @@ export default function BodegaTicketsPage() {
       {tab === 'solicitudes' && <SolicitudesTab />}
       {tab === 'historial' && <HistorialTab />}
       {tab === 'emitir' && <EmitirTab />}
+    </div>
+  )
+}
+
+// ── Amarrar un ítem escrito a mano a su producto (MIG371) ───────────────────
+// El pedido manual deja escribir el ítem con las palabras de quien pide. Bodega
+// es quien sabe cuál es el artículo, y hasta que lo dice el ítem no se puede
+// despachar: el descuento de stock necesita el producto. Antes esto no tenía
+// pantalla y el ítem se quedaba pegado para siempre.
+function AmarrarProducto({ itemId, pedido, onListo }: {
+  itemId: string; pedido: string; onListo: () => void
+}) {
+  const toast = useToast()
+  const [abierto, setAbierto] = useState(false)
+  const [q, setQ] = useState('')
+  const [res, setRes] = useState<Array<{ id: string; codigo: string | null; nombre: string }>>([])
+  const [busy, setBusy] = useState(false)
+
+  const buscar = async (t: string) => {
+    setQ(t)
+    if (t.trim().length < 2) { setRes([]); return }
+    try {
+      const { data } = await buscarProductos(t, 8)
+      setRes((data ?? []) as Array<{ id: string; codigo: string | null; nombre: string }>)
+    } catch { setRes([]) }
+  }
+
+  const asignar = async (productoId: string) => {
+    setBusy(true)
+    try {
+      const r = await asignarProductoItem(itemId, productoId)
+      toast.success(`«${pedido}» quedó como ${r.producto}. Ahora se puede despachar.`)
+      setAbierto(false); setQ(''); setRes([])
+      onListo()
+    } catch (e) { toast.error((e as Error).message) } finally { setBusy(false) }
+  }
+
+  if (!abierto) {
+    return (
+      <button type="button" onClick={() => setAbierto(true)}
+              title="Decir qué producto del catálogo es, para poder despacharlo"
+              className="flex shrink-0 items-center gap-1 rounded-lg border border-amber-400 bg-amber-50 px-2 py-1.5 text-[11px] font-semibold text-amber-800">
+        <PackageSearch className="h-3.5 w-3.5" /> ¿Cuál es?
+      </button>
+    )
+  }
+
+  return (
+    <div className="w-full shrink-0 rounded-lg border border-amber-300 bg-amber-50 p-2">
+      <div className="mb-1 flex items-center gap-2">
+        <p className="flex-1 text-[11px] text-amber-900">
+          Pedido como <b>{pedido}</b> — ¿qué producto es?
+        </p>
+        <button type="button" onClick={() => { setAbierto(false); setQ(''); setRes([]) }}
+                aria-label="Cerrar" className="text-amber-700"><X className="h-3.5 w-3.5" /></button>
+      </div>
+      <Input value={q} onChange={(e) => buscar(e.target.value)} placeholder="Buscar en el catálogo…" />
+      {res.length > 0 && (
+        <div className="mt-1 max-h-36 space-y-0.5 overflow-y-auto">
+          {res.map((r) => (
+            <button key={r.id} type="button" disabled={busy} onClick={() => asignar(r.id)}
+                    className="flex w-full items-center gap-2 rounded bg-white px-2 py-1 text-left text-xs hover:bg-gray-50 disabled:opacity-50">
+              <span className="font-mono text-[10px] text-gray-500">{r.codigo}</span>
+              <span className="min-w-0 flex-1 truncate">{r.nombre}</span>
+            </button>
+          ))}
+        </div>
+      )}
+      {busy && <Loader2 className="mt-1 h-3.5 w-3.5 animate-spin text-amber-700" />}
     </div>
   )
 }
@@ -218,7 +288,7 @@ function DespacharTab() {
     () => (todos ?? []).filter((t) => t.estado === 'emitido' || t.estado === 'parcial'),
     [todos])
 
-  const { data: items } = useTicketItems(ticket?.id ?? null)
+  const { data: items, refetch: refetchItems } = useTicketItems(ticket?.id ?? null)
   const { data: bodegasAll } = useBodegasTaller()
   // Solo bodegas de la faena de la OT (o sin faena); la salida valida esto.
   const bodegas = useMemo(() => {
@@ -451,6 +521,15 @@ function DespacharTab() {
                               </button>
                             </div>
                           )
+                        )}
+                        {/* [MIG371] El pedido manual permite escribir el ítem a
+                            mano. Quien pide no siempre sabe el código; bodega sí.
+                            Sin esto el ítem no se puede despachar y el stock no
+                            baja nunca. */}
+                        {usable && i.pendiente > 0 && !i.producto_id && (
+                          <AmarrarProducto itemId={i.id}
+                                           pedido={i.descripcion ?? 'el ítem'}
+                                           onListo={() => refetchItems()} />
                         )}
                         {usable && i.pendiente > 0 && (
                           <button type="button" onClick={() => mandarACompra(i)} disabled={aCompraBusy === i.id}
