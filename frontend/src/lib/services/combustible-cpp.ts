@@ -152,6 +152,10 @@ export async function listarEstanquesActivos() {
     .from('combustible_estanques')
     .select('id, codigo, nombre, capacidad_lt, stock_teorico_lt, costo_promedio_lt, faena_id, activo')
     .eq('activo', true)
+    // [MIG366] El costo promedio ponderado sale del kardex de compras de
+    // Coquimbo. El combustible de faena nunca pasó por ese kardex: no tiene CPP
+    // y ofrecerlo acá invita a valorizarlo con un costo que no es el suyo.
+    .is('faena_id', null)
     .order('codigo')
   return { data: data as EstanqueMini[] | null, error }
 }

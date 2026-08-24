@@ -15,6 +15,35 @@ import { useExigirSesion } from '@/hooks/use-exigir-sesion'
 import { SinSesionOffline } from '@/components/enex/sin-sesion-offline'
 import { Spinner } from '@/components/ui/spinner'
 
+// Cada rol ve lo suyo y nada más. Un mecánico que toca «Entrega de turno» choca
+// contra un error de permisos que él no puede resolver, y a la tercera vez deja
+// de abrir la app. Es más barato no mostrar el botón.
+const ACCESOS = [
+  {
+    href: '/m/franke/pauta',
+    icono: ClipboardList,
+    titulo: 'Revisión de equipos',
+    bajada: 'La pauta del mecánico, por equipo y por día',
+    roles: ['tecnico_mantenimiento', 'operador_taller', 'jefe_mantenimiento',
+            'supervisor', 'planificador', 'jefe_operaciones', 'administrador'],
+  },
+  {
+    href: '/m/franke/despacho',
+    icono: Fuel,
+    titulo: 'Despacho de combustible',
+    bajada: 'Cada carga con su folio de ticket, sin señal',
+    roles: ['operador_combustible', 'supervisor', 'planificador',
+            'jefe_operaciones', 'administrador'],
+  },
+  {
+    href: '/m/franke/entrega',
+    icono: ArrowLeftRight,
+    titulo: 'Entrega de turno',
+    bajada: 'Camiones, litros, pendientes y bodega · dos firmas',
+    roles: ['supervisor', 'planificador', 'jefe_operaciones', 'administrador'],
+  },
+]
+
 export default function FrankeMobileHome() {
   const { verificando, sinSesionOffline } = useExigirSesion()
   const { perfil } = useAuth()
@@ -24,9 +53,11 @@ export default function FrankeMobileHome() {
   }
   if (sinSesionOffline) return <SinSesionOffline />
 
+  const mios = ACCESOS.filter((a) => !perfil?.rol || a.roles.includes(perfil.rol))
+
   return (
     <div className="min-h-screen bg-gray-50">
-      <header className="border-b border-gray-200 bg-white px-4 py-5">
+      <header className="border-b border-gray-200 bg-white px-4 pb-5 pt-[max(1.25rem,env(safe-area-inset-top))]">
         <p className="text-lg font-bold leading-tight text-gray-900">Faena Franke</p>
         <p className="text-xs text-gray-500">
           Contrato FRK 220/2024 · CM Cenizas
@@ -35,41 +66,25 @@ export default function FrankeMobileHome() {
       </header>
 
       <main className="space-y-3 px-4 py-5">
-        <Link href="/m/franke/pauta"
-              className="flex items-center gap-3 rounded-xl border-2 border-gray-200 bg-white p-4 active:scale-[0.99]">
-          <div className="grid h-12 w-12 shrink-0 place-items-center rounded-lg bg-gray-900 text-white">
-            <ClipboardList className="h-6 w-6" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="text-base font-bold text-gray-900">Revisión de equipos</p>
-            <p className="text-xs text-gray-500">La pauta del mecánico, por equipo y por día</p>
-          </div>
-          <ChevronRight className="h-5 w-5 shrink-0 text-gray-400" />
-        </Link>
-
-        <div className="rounded-xl border-2 border-dashed border-gray-300 bg-white p-4 opacity-60">
-          <div className="flex items-center gap-3">
-            <div className="grid h-12 w-12 shrink-0 place-items-center rounded-lg bg-gray-200 text-gray-500">
-              <Fuel className="h-6 w-6" />
+        {mios.map((a) => (
+          <Link key={a.href} href={a.href}
+                className="flex items-center gap-3 rounded-xl border-2 border-gray-200 bg-white p-4 active:scale-[0.99]">
+            <div className="grid h-12 w-12 shrink-0 place-items-center rounded-lg bg-gray-900 text-white">
+              <a.icono className="h-6 w-6" />
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-base font-bold text-gray-700">Despacho de combustible</p>
-              <p className="text-xs text-gray-500">Fase 3 · aún se registra en el ticket printer</p>
+              <p className="text-base font-bold text-gray-900">{a.titulo}</p>
+              <p className="text-xs text-gray-500">{a.bajada}</p>
             </div>
-          </div>
-        </div>
+            <ChevronRight className="h-5 w-5 shrink-0 text-gray-400" />
+          </Link>
+        ))}
 
-        <div className="rounded-xl border-2 border-dashed border-gray-300 bg-white p-4 opacity-60">
-          <div className="flex items-center gap-3">
-            <div className="grid h-12 w-12 shrink-0 place-items-center rounded-lg bg-gray-200 text-gray-500">
-              <ArrowLeftRight className="h-6 w-6" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-base font-bold text-gray-700">Entrega de turno</p>
-              <p className="text-xs text-gray-500">Fase 2 · se está construyendo</p>
-            </div>
-          </div>
-        </div>
+        {mios.length === 0 && (
+          <p className="rounded-xl border border-dashed border-gray-300 bg-white p-6 text-center text-sm text-gray-500">
+            Su cuenta no tiene nada asignado en esta faena. Avise a quien administra el sistema.
+          </p>
+        )}
       </main>
     </div>
   )

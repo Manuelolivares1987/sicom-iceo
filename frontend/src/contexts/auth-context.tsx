@@ -71,9 +71,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const cacheado = leerPerfilCache(userId)
     if (cacheado) setPerfil(cacheado)
 
+    // Se trae la faena junto al perfil porque de ella sale la app de terreno a
+    // la que aterriza la gente de faena (MIG361). Sin esto, todo operador de
+    // combustible caía en /m/romeral — que era cierto mientras Romeral fuera la
+    // única faena con app, y dejó de serlo con Franke.
     const { data, error: perfilError } = await supabase
       .from('usuarios_perfil')
-      .select('*')
+      .select('*, faena:faenas(id, codigo, nombre, app_movil)')
       .eq('id', userId)
       .maybeSingle()
 

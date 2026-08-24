@@ -15,6 +15,7 @@ import {
   Package,
   Ticket,
   Fuel,
+  ArrowLeftRight,
   ShieldCheck,
   BarChart3,
   Gauge,
@@ -158,8 +159,6 @@ const navGroups: NavGroup[] = [
           { label: 'No Conformidades', href: '/dashboard/mantenimiento/no-conformidades', icon: AlertTriangle, module: 'mantenimiento', contador: 'nc-por-decidir',
             tooltip: 'Hallazgos por planificar y repuestos que el operador pide aprobar' },
           { label: 'Equipos auxiliares', href: '/dashboard/mantenimiento/auxiliares', icon: Layers, module: 'mantenimiento' },
-          { label: 'Revisión en faena', href: '/dashboard/mantenimiento/pauta-faena', icon: ClipboardList, module: 'mantenimiento', badge: 'Nuevo',
-            tooltip: 'La pauta diaria del mecánico de faena: qué revisó, qué salió NO OK y cuánto falta para la próxima mantención' },
         ],
       },
       {
@@ -259,10 +258,24 @@ const navGroups: NavGroup[] = [
         tooltip: 'Todo el pedido del taller en un lugar: vales por despachar (con fotos), solicitudes de material e historial' },
       { label: 'Seguimiento repuestos', href: '/dashboard/bodega/seguimiento-repuestos', icon: ShoppingCart, extendedModule: 'bodega', badge: 'Nuevo',
         tooltip: 'Repuestos pedidos por el taller sin stock: solicitar la OC (la emite Softland), ver en qué está cada compra y cuándo llega' },
-      { label: 'Combustible Franke', href: '/dashboard/combustible/franke', icon: Fuel, extendedModule: 'bodega', badge: 'Nuevo',
-        tooltip: 'Camiones petroleros, cargas, trasvasije y cuadre diario — operación Franke' },
-      { label: 'Combustible Romeral', href: '/dashboard/combustible/romeral', icon: Fuel, extendedModule: 'bodega', badge: 'Nuevo',
+    ],
+  },
+  // Faena — el combustible de faena no es de la bodega de Coquimbo: se compra
+  // distinto, se mide distinto y se le rinde a otro mandante (MIG366). Tenerlo
+  // colgando de Bodega hacía que el stock de bodega dijera cuarenta y cinco
+  // veces más de lo que hay. Acá vive lo que pasa en faena, y por acá entra el
+  // supervisor de turno — que antes no tenía por dónde llegar a su entrega.
+  {
+    label: 'Faena',
+    items: [
+      { label: 'Combustible Romeral', href: '/dashboard/combustible/romeral', icon: Fuel, extendedModule: 'bodega',
         tooltip: 'Cierre de volumen y de imputación, excepciones y CECO por confirmar — faena Romeral' },
+      { label: 'Combustible Franke', href: '/dashboard/combustible/franke', icon: Fuel, extendedModule: 'bodega',
+        tooltip: 'Camiones petroleros, cargas, trasvasije y cuadre diario — faena Franke' },
+      { label: 'Entrega de turno', href: '/m/franke/entrega', icon: ArrowLeftRight, extendedModule: 'bodega', badge: 'Nuevo',
+        tooltip: 'Cambio de turno 7×7 de Franke: camiones, litros, pendientes y bodega, con firma de quien entrega y de quien recibe' },
+      { label: 'Revisión en faena', href: '/dashboard/mantenimiento/pauta-faena', icon: ClipboardList, extendedModule: 'bodega', badge: 'Nuevo',
+        tooltip: 'La pauta diaria del mecánico de faena: qué revisó, qué salió NO OK y cuánto falta para la próxima mantención' },
     ],
   },
   // Compliance

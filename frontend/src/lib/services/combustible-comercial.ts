@@ -22,7 +22,13 @@ export async function cargarStockEstanques(): Promise<EstanqueStock[]> {
       id, codigo, nombre, capacidad_lt, stock_teorico_lt, stock_minimo_alerta_lt,
       faena:faenas!faena_id ( nombre )
     `)
-    .eq('tipo', 'fijo')  // excluir camiones Franke (estanques moviles) — solo en sección Franke
+    // [MIG366] Sólo los estanques de la bodega de Coquimbo. El filtro por tipo
+    // dejaba fuera los camiones pero seguía sumando las cuatro estaciones fijas
+    // de Romeral —128.400 L de CMP en un consolidado de Coquimbo—. El combustible
+    // de faena se rinde en el cierre de su faena, con otro documento y a otro
+    // mandante.
+    .is('faena_id', null)
+    .eq('tipo', 'fijo')
     .order('codigo')
   if (error) throw error
   type Raw = Omit<EstanqueStock, 'faena_nombre' | 'porcentaje' | 'estado'> & {

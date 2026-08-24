@@ -90,7 +90,20 @@ export default function FrankePautaAgendaPage() {
     () => agenda.filter((a) => a.pauta_tipo === 'programada' && (a.senal === 'vencida' || a.senal === 'por_vencer')),
     [agenda],
   )
-  const diarias = useMemo(() => agenda.filter((a) => a.pauta_tipo === 'diaria'), [agenda])
+  // El equipo que la ficha declara fuera de servicio no se le exige al mecánico
+  // todos los días. El HHWB-42 lleva meses en el taller de Coquimbo: pedirle que
+  // entre a marcarlo «no está en faena» cada mañana es la clase de trabajo
+  // inútil que hace que se marque todo OK sin mirar. Sigue visible y se puede
+  // abrir —vuelve algún día—, pero aparte y sin contar en la cuenta del día.
+  const enFaena = useMemo(
+    () => agenda.filter((a) => a.pauta_tipo === 'diaria' && a.activo_estado !== 'en_mantenimiento'),
+    [agenda],
+  )
+  const fueraDeFaena = useMemo(
+    () => agenda.filter((a) => a.pauta_tipo === 'diaria' && a.activo_estado === 'en_mantenimiento'),
+    [agenda],
+  )
+  const diarias = enFaena
   const otrasProgramadas = useMemo(
     () => agenda.filter((a) => a.pauta_tipo === 'programada' && a.senal !== 'vencida' && a.senal !== 'por_vencer'),
     [agenda],
@@ -105,7 +118,7 @@ export default function FrankePautaAgendaPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 pb-12">
-      <header className="sticky top-0 z-10 border-b border-gray-200 bg-white px-4 py-3">
+      <header className="sticky top-0 z-10 border-b border-gray-200 bg-white px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))]">
         <div className="flex items-center gap-3">
           <div className="min-w-0 flex-1">
             <p className="text-base font-bold leading-tight text-gray-900">Revisión de equipos</p>
@@ -169,6 +182,20 @@ export default function FrankePautaAgendaPage() {
             {diarias.map((a) => <Tarjeta key={a.pauta_id + a.activo_id} a={a} turno={turno} />)}
           </div>
         </section>
+
+        {fueraDeFaena.length > 0 && (
+          <section>
+            <h2 className="mb-2 flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-gray-500">
+              <Ban className="h-4 w-4" /> Fuera de faena
+            </h2>
+            <p className="mb-3 text-xs text-gray-500">
+              No cuentan en la revisión de hoy. Se pueden abrir igual si volvieron.
+            </p>
+            <div className="space-y-3 opacity-70">
+              {fueraDeFaena.map((a) => <Tarjeta key={a.pauta_id + a.activo_id} a={a} turno={turno} />)}
+            </div>
+          </section>
+        )}
 
         {otrasProgramadas.length > 0 && (
           <section>

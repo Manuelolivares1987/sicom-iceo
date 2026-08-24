@@ -167,6 +167,35 @@ export default function EjecutarPautaPage() {
     return Number.isFinite(v) && v > 0 ? v : null
   }
 
+  // Un horómetro no retrocede y no salta mil horas en un día. Un dígito de menos
+  // —2566 en vez de 25664— se aceptaba sin decir nada y envenenaba el programa
+  // de mantención, que es justamente lo que esta pauta viene a arreglar.
+  const revisarLectura = (i: PautaItem, texto: string): string | null => {
+    const v = Number(String(texto).replace(',', '.'))
+    if (!Number.isFinite(v) || texto.trim() === '') return null
+    const previo = i.unidad === 'h' ? cab?.horas_uso_actual
+                 : i.unidad === 'km' ? cab?.kilometraje_actual
+                 : null
+    if (previo == null || previo <= 0) return null
+    if (v < previo) {
+      return `La última lectura fue ${Math.round(previo).toLocaleString('es-CL')} ${i.unidad}. `
+           + 'Un contador no retrocede: revise si le falta un dígito.'
+    }
+    // 24 h de operación continua es el techo físico; 2.000 km en un día
+    // tampoco pasa en faena. Más que eso es un tecleo, no una lectura.
+    const salto = v - previo
+    if ((i.unidad === 'h' && salto > 200) || (i.unidad === 'km' && salto > 5000)) {
+      return `Son ${Math.round(salto).toLocaleString('es-CL')} ${i.unidad} más que la última lectura `
+           + `(${Math.round(previo).toLocaleString('es-CL')}). Revise el número.`
+    }
+    return null
+  }
+
+  const avisosLectura = items
+    .filter((i) => i.tipo_respuesta === 'numero')
+    .map((i) => ({ item: i, aviso: revisarLectura(i, estado[i.id]?.valor ?? '') }))
+    .filter((x) => x.aviso)
+
   const tomarFoto = async (itemId: string, file: File) => {
     setSubiendo(itemId)
     try {
@@ -189,6 +218,13 @@ export default function EjecutarPautaPage() {
     if (cerrar && sinFoto.length > 0) {
       toast.error(`Estos hallazgos necesitan foto: ${sinFoto.map((i) => i.texto).join(' · ')}`)
       setAbierto(sinFoto[0].bloque)
+      return
+    }
+    // Una lectura imposible no se puede cerrar sin volver a mirarla: de acá
+    // sale el programa de mantención de los tres camiones.
+    if (cerrar && avisosLectura.length > 0) {
+      toast.error(avisosLectura[0].aviso as string)
+      setAbierto(avisosLectura[0].item.bloque)
       return
     }
     setGuardando(true)
@@ -260,7 +296,7 @@ export default function EjecutarPautaPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 pb-40">
-      <header className="sticky top-0 z-20 border-b border-gray-200 bg-white px-4 py-3">
+      <header className="sticky top-0 z-20 border-b border-gray-200 bg-white px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))]">
         <div className="flex items-center gap-3">
           <Link href="/m/franke/pauta" className="shrink-0 rounded-lg p-1.5 text-gray-500 hover:bg-gray-100">
             <ArrowLeft className="h-5 w-5" />
@@ -330,6 +366,10 @@ export default function EjecutarPautaPage() {
                   {its.map((i) => (
                     <ItemFila key={i.id} item={i} valor={estado[i.id]} bloqueado={cerrada}
                               subiendo={subiendo === i.id}
+                              ultima={i.unidad === 'h' ? cab?.horas_uso_actual ?? null
+                                    : i.unidad === 'km' ? cab?.kilometraje_actual ?? null
+                                    : null}
+                              aviso={revisarLectura(i, estado[i.id]?.valor ?? '')}
                               onSet={(p) => set(i.id, p)}
                               onFoto={(f) => void tomarFoto(i.id, f)} />
                   ))}
@@ -418,12 +458,16 @@ export default function EjecutarPautaPage() {
 }
 
 function ItemFila({
-  item, valor, bloqueado, subiendo, onSet, onFoto,
+  item, valor, bloqueado, subiendo, ultima, aviso, onSet, onFoto,
 }: {
   item: PautaItem
   valor: Estado[string] | undefined
   bloqueado: boolean
   subiendo: boolean
+  /** La última lectura conocida del equipo, para no teclear de memoria. */
+  ultima?: number | null
+  /** Lo que está mal con lo tecleado, si algo lo está. */
+  aviso?: string | null
   onSet: (p: Partial<Estado[string]>) => void
   onFoto: (f: File) => void
 }) {
@@ -447,11 +491,28 @@ function ItemFila({
       {item.ayuda && <p className="text-xs leading-snug text-gray-500">{item.ayuda}</p>}
 
       {item.tipo_respuesta === 'numero' && (
-        <input inputMode="decimal" disabled={bloqueado}
-               value={valor?.valor ?? ''}
-               onChange={(e) => onSet({ valor: e.target.value.replace(/[^\d.,]/g, '') })}
-               placeholder="0"
-               className="h-16 w-full rounded-xl border-2 border-gray-300 px-4 text-right text-3xl font-bold tabular-nums disabled:bg-gray-100" />
+        <>
+          <input inputMode="decimal" disabled={bloqueado}
+                 value={valor?.valor ?? ''}
+                 onChange={(e) => onSet({ valor: e.target.value.replace(/[^\d.,]/g, '') })}
+                 placeholder={ultima != null && ultima > 0
+                   ? Math.round(ultima).toLocaleString('es-CL') : '0'}
+                 className={cn(
+                   'h-16 w-full rounded-xl border-2 px-4 text-right text-3xl font-bold tabular-nums disabled:bg-gray-100',
+                   aviso ? 'border-amber-500 bg-amber-50' : 'border-gray-300')} />
+          {/* El número que el sistema ya tiene, a la vista pero sin rellenar:
+              prellenarlo invita a confirmar sin mirar el tablero. */}
+          {ultima != null && ultima > 0 && (
+            <p className="text-right font-mono text-[11px] tabular-nums text-gray-500">
+              última lectura: {Math.round(ultima).toLocaleString('es-CL')} {item.unidad}
+            </p>
+          )}
+          {aviso && (
+            <p className="flex items-start gap-1.5 rounded-lg bg-amber-50 p-2 text-xs leading-snug text-amber-900">
+              <AlertTriangle className="mt-px h-3.5 w-3.5 shrink-0" /> {aviso}
+            </p>
+          )}
+        </>
       )}
 
       {item.tipo_respuesta === 'texto' && (
