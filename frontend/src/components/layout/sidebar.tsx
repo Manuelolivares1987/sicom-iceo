@@ -158,6 +158,8 @@ const navGroups: NavGroup[] = [
           { label: 'No Conformidades', href: '/dashboard/mantenimiento/no-conformidades', icon: AlertTriangle, module: 'mantenimiento', contador: 'nc-por-decidir',
             tooltip: 'Hallazgos por planificar y repuestos que el operador pide aprobar' },
           { label: 'Equipos auxiliares', href: '/dashboard/mantenimiento/auxiliares', icon: Layers, module: 'mantenimiento' },
+          { label: 'Revisión en faena', href: '/dashboard/mantenimiento/pauta-faena', icon: ClipboardList, module: 'mantenimiento', badge: 'Nuevo',
+            tooltip: 'La pauta diaria del mecánico de faena: qué revisó, qué salió NO OK y cuánto falta para la próxima mantención' },
         ],
       },
       {
