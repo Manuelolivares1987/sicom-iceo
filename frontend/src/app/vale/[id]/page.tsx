@@ -81,7 +81,9 @@ export default function ValeImprimiblePage() {
       {/* Barra de acciones (no se imprime) */}
       <div className="mb-4 flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 print:hidden">
         <p className="text-sm text-gray-600">
-          Imprime este vale y entrégaselo al operador para retirar en bodega.
+          {ticket.origen === 'oficina'
+            ? 'Imprime este vale y llévalo a bodega para retirar.'
+            : 'Imprime este vale y entrégaselo al operador para retirar en bodega.'}
         </p>
         <button onClick={() => window.print()}
                 className="flex items-center gap-1.5 rounded-lg bg-[#0b2a4a] px-4 py-2 text-sm font-semibold text-white">
@@ -210,9 +212,12 @@ export default function ValeImprimiblePage() {
           </div>
         </div>
 
+        {/* [MIG375] El vale de oficina lo retira quien lo pidió, no un operador
+            de taller: mandarlo a buscar a alguien que no existe sobra. */}
         <p className="border-t border-gray-300 p-3 text-center text-[10px] text-gray-500 print:p-1.5">
-          Presentar este vale en bodega. El bodeguero escanea el QR en Bodega → Tickets y registra la
-          entrega (total o parcial). Ticket de un solo uso — al completarse queda ENTREGADO.
+          {ticket.origen === 'oficina'
+            ? 'Presentar este vale en bodega para retirar. El bodeguero escanea el QR en Bodega → Tickets y registra la entrega (total o parcial). El costo queda cargado al centro de costo de arriba.'
+            : 'Presentar este vale en bodega. El bodeguero escanea el QR en Bodega → Tickets y registra la entrega (total o parcial). Ticket de un solo uso — al completarse queda ENTREGADO.'}
         </p>
       </div>
     </div>

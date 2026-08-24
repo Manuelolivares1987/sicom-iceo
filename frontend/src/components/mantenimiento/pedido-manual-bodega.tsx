@@ -53,6 +53,9 @@ export function PedidoManualBodega({ onEmitido }: { onEmitido?: () => void }) {
   const [observacion, setObservacion] = useState('')
   const [firma, setFirma] = useState('')
   const [busy, setBusy] = useState(false)
+  // Emitido el vale, el buscador de ítems y el pad de firma conservan lo
+  // último y el siguiente pedido parte sucio. Subir esto los remonta limpios.
+  const [nro, setNro] = useState(0)
 
   const equiposFiltrados = useMemo(() => {
     const q = buscarEquipo.trim().toLowerCase()
@@ -86,6 +89,7 @@ export function PedidoManualBodega({ onEmitido }: { onEmitido?: () => void }) {
       )
       window.open(`/vale/${r.ticket_id}`, '_blank')
       setLineas([]); setMotivo(''); setObservacion(''); setFirma(''); setEquipo(null); setBuscarEquipo('')
+      setNro((n) => n + 1)
       onEmitido?.()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'No se pudo emitir el pedido')
@@ -142,7 +146,7 @@ export function PedidoManualBodega({ onEmitido }: { onEmitido?: () => void }) {
       {equipo && (
         <div>
           <label className="text-xs font-medium">2. ¿Qué se necesita?</label>
-          <AgregarLineaVale onAdd={(l) => setLineas((ls) => [...ls, l])} />
+          <AgregarLineaVale key={nro} onAdd={(l) => setLineas((ls) => [...ls, l])} />
           <ListaLineasVale lineas={lineas}
                            onQuitar={(k) => setLineas((ls) => ls.filter((x) => x.key !== k))} />
         </div>
@@ -169,7 +173,7 @@ export function PedidoManualBodega({ onEmitido }: { onEmitido?: () => void }) {
                    className="mt-0.5 w-full rounded border px-2 py-1.5 text-sm" />
           </label>
 
-          <SignaturePad label="Firma del jefe de taller (obligatoria)" onCapture={setFirma} />
+          <SignaturePad key={nro} label="Firma del jefe de taller (obligatoria)" onCapture={setFirma} />
 
           <Button onClick={emitir} disabled={!listo || busy} className="w-full">
             {busy ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : null}

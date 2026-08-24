@@ -276,14 +276,19 @@ export async function crearValeOficina(params: {
   }
 }
 
-/** Los vales que uno mismo emitió, para seguirlos sin llamar a bodega. */
-export async function getMisVales(): Promise<BodegaTicket[]> {
+/**
+ * Los vales que uno mismo emitió, para seguirlos sin llamar a bodega.
+ *
+ * `origen` acota a un solo camino: en la pantalla de oficina, mezclar los vales
+ * que la misma persona emitió desde el taller es ruido —son de otro flujo, de
+ * otro papel y de otro costo—.
+ */
+export async function getMisVales(origen?: 'ot' | 'manual' | 'oficina'): Promise<BodegaTicket[]> {
   const { data: u } = await supabase.auth.getUser()
   if (!u?.user) return []
-  const { data, error } = await supabase.from('v_bodega_ticket').select('*')
-    .eq('emitido_por', u.user.id)
-    .order('created_at', { ascending: false })
-    .limit(20)
+  let q = supabase.from('v_bodega_ticket').select('*').eq('emitido_por', u.user.id)
+  if (origen) q = q.eq('origen', origen)
+  const { data, error } = await q.order('created_at', { ascending: false }).limit(20)
   if (error) throw error
   return (data ?? []) as BodegaTicket[]
 }

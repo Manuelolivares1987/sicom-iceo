@@ -140,6 +140,10 @@ function ValeDeOficina() {
   const [observacion, setObservacion] = useState('')
   const [firma, setFirma] = useState('')
   const [busy, setBusy] = useState(false)
+  // Emitido un vale, el buscador de ítems conserva lo último escrito y la
+  // pantalla queda sucia para el siguiente pedido. Subir esto lo remonta
+  // limpio, sin tener que exponer un reset desde afuera.
+  const [nro, setNro] = useState(0)
 
   const { data: cecos = [] } = useQuery({
     queryKey: ['cecos-area'], queryFn: getCecosArea, staleTime: 600_000,
@@ -148,7 +152,9 @@ function ValeDeOficina() {
     queryKey: ['bodegas'], queryFn: getBodegas, staleTime: 600_000,
   })
   const { data: vales = [], refetch } = useQuery({
-    queryKey: ['mis-vales'], queryFn: getMisVales, staleTime: 15_000,
+    queryKey: ['mis-vales', 'oficina'],
+    queryFn: () => getMisVales('oficina'),
+    staleTime: 15_000,
   })
 
   // Con una sola bodega no hay nada que preguntar: se elige sola.
@@ -179,6 +185,7 @@ function ValeDeOficina() {
       // El vale se abre solo: el papel es el punto de todo esto.
       window.open(`/vale/${r.ticket_id}`, '_blank')
       setLineas([]); setMotivo(''); setObservacion(''); setFirma('')
+      setNro((n) => n + 1)
       refetch()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'No se pudo emitir el vale')
@@ -215,7 +222,7 @@ function ValeDeOficina() {
           {/* ── 2. Qué se retira ──────────────────────────────────────── */}
           <div>
             <label className="text-sm font-semibold text-gray-800">2. ¿Qué se retira?</label>
-            <AgregarLineaVale onAdd={(l) => setLineas((ls) => [...ls, l])} />
+            <AgregarLineaVale key={nro} onAdd={(l) => setLineas((ls) => [...ls, l])} />
             <ListaLineasVale lineas={lineas}
                              onQuitar={(k) => setLineas((ls) => ls.filter((x) => x.key !== k))} />
           </div>
@@ -251,7 +258,7 @@ function ValeDeOficina() {
                        placeholder="Quién retira, cuándo, dónde dejarlo" className="mt-0.5 font-normal" />
               </label>
 
-              <SignaturePad label="Su firma (obligatoria)" onCapture={setFirma} />
+              <SignaturePad key={nro} label="Su firma (obligatoria)" onCapture={setFirma} />
 
               <Button onClick={emitir} disabled={!listo || busy} className="w-full">
                 {busy ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Printer className="mr-1.5 h-4 w-4" />}
