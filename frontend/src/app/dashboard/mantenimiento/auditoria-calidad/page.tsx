@@ -63,7 +63,7 @@ function AuditoriaCalidadPageInner() {
   // [MIG260] Tiene que calzar con lo que acepta la base (fn_resolver_auditoria_calidad
   // y rpc_guardar_avance_auditoria): solo auditor_calidad y administrador. Antes la
   // pantalla también habilitaba a quien aprueba mantenimiento, y ese perfil marcaba
-  // los 188 ítems para recibir el rechazo recién al apretar Aprobar.
+  // todos los ítems para recibir el rechazo recién al apretar Aprobar.
   const puedeAuditar = rol === 'auditor_calidad' || rol === 'administrador'
   // Planificar la semana de calidad lo permite un grupo más amplio
   // (fn_calidad_plan_autorizado); generar el chequeo masivo, la jefatura.
@@ -726,7 +726,9 @@ function AuditoriaDetalle({ sel, puedeAuditar, onDone }: {
   const tecnica = items.filter((i) => i.categoria === 'tecnica')
   const docs = items.filter((i) => i.categoria === 'documentacion')
 
-  // [MIG260] Los 188 ítems agrupados por sus 12 bloques, en el orden del Excel.
+  // [MIG390] Agrupados por bloque, en el orden del recorrido alrededor del
+  // camión: primero el estándar (24 o 22 puntos según sea de combustible o de
+  // agua), después sus no conformidades abiertas, y al final los papeles.
   const bloquesDe = (list: AuditoriaItem[]): Array<[string, AuditoriaItem[]]> => {
     const map: Record<string, AuditoriaItem[]> = {}
     for (const it of list) {
@@ -975,7 +977,8 @@ function AuditoriaDetalle({ sel, puedeAuditar, onDone }: {
           </div>
         )}
 
-        {/* [MIG260] Avance + autoguardado. El checklist va completo (V03, 188). */}
+        {/* [MIG390] Avance + autoguardado. Ya no son los 188 del V03: son el
+            estándar del camión más lo que ese camión tiene abierto. */}
         {items.length > 0 && (
           <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-gray-50 px-3 py-2 text-xs">
             <span className="font-semibold text-gray-700">
