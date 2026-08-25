@@ -589,8 +589,14 @@ export default function Sidebar({ collapsed, onToggle, onClose }: SidebarProps) 
 
           // Acordeón: abierto si la barra está colapsada (modo iconos), si el
           // grupo no tiene label, si el usuario lo abrió, o si contiene la ruta activa.
+          //
+          // [MIG385] El menú de faena va SIEMPRE abierto. Es el único grupo que
+          // esa persona tiene, y `activeGroupLabel` lo busca en navGroups —donde
+          // no está—, así que ni siquiera se abría al estar parada en él:
+          // Catalina entraba y veía un menú con un título y nada debajo.
+          // Un acordeón de un solo grupo no es un acordeón, es una puerta cerrada.
           const isOpen =
-            collapsed || !group.label ||
+            collapsed || !group.label || !!grupoFaena ||
             openGroups.has(group.label) || group.label === activeGroupLabel
 
           return (
