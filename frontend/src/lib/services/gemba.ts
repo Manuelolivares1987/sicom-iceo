@@ -134,6 +134,14 @@ export interface GembaRespuesta {
   item: string
   evaluacion?: GembaEvaluacion | null
   observacion?: string
+  /** [MIG389] La evidencia. Obligatoria en «no cumple» para poder cerrar. */
+  foto_url?: string | null
+  /** Cuándo se sacó, según el teléfono. Distinto de cuándo llegó al servidor. */
+  foto_tomada_at?: string | null
+  foto_lat?: number | null
+  foto_lng?: number | null
+  /** La salida honesta para lo que no se puede fotografiar. */
+  sin_foto_motivo?: string | null
 }
 
 export interface GembaHallazgo {
@@ -308,7 +316,15 @@ export async function createGembaRecorrido(input: {
 
 export async function updateGembaRespuesta(
   id: string,
-  cambios: { evaluacion?: GembaEvaluacion | null; observacion?: string }
+  cambios: {
+    evaluacion?: GembaEvaluacion | null
+    observacion?: string
+    foto_url?: string | null
+    foto_tomada_at?: string | null
+    foto_lat?: number | null
+    foto_lng?: number | null
+    sin_foto_motivo?: string | null
+  }
 ) {
   const { data, error } = await supabase
     .from('gemba_respuestas')
@@ -427,4 +443,37 @@ export async function getFaenasActivas() {
     .eq('estado', 'activa')
     .order('nombre')
   return { data: data as Array<{ id: string; nombre: string; codigo: string }> | null, error }
+}
+
+
+// ── La evidencia del recorrido (MIG389) ─────────────────────────────────────
+
+/**
+ * Sube la foto de un ítem con la fecha y la hora ya estampadas encima.
+ *
+ * La marca va sobre el pixel para que viaje con la imagen: pegada en un correo
+ * o impresa, una foto sin fecha no prueba nada. El dato que vale para el
+ * sistema es el que se guarda en la fila; la marca es para el papel.
+ */
+export async function subirFotoGemba(
+  recorridoId: string,
+  file: File | Blob,
+  etiqueta?: string,
+): Promise<{ url: string; tomadaAt: string; lat: number | null; lng: number | null }> {
+  const { estamparFechaHora } = await import('@/lib/image/estampar-fecha')
+  const est = await estamparFechaHora(file, { etiqueta })
+
+  const BUCKET = 'evidencias-verificacion'
+  const path = `gemba/${recorridoId}/${Date.now()}_${Math.floor(Math.random() * 1e6)}.jpg`
+  const { error } = await supabase.storage
+    .from(BUCKET)
+    .upload(path, est.blob, { upsert: false, contentType: 'image/jpeg' })
+  if (error) throw error
+
+  return {
+    url: supabase.storage.from(BUCKET).getPublicUrl(path).data.publicUrl,
+    tomadaAt: est.tomadaAt,
+    lat: est.lat,
+    lng: est.lng,
+  }
 }

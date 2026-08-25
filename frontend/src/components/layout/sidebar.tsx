@@ -22,6 +22,7 @@ import {
   Gauge,
   Users,
   Smartphone,
+  Link2,
   ClipboardCheck,
   FileSpreadsheet,
   Eye,
@@ -86,6 +87,8 @@ type NavGroup = {
   label?: string
   items?: NavItem[]               // grupo flat (compatibilidad)
   subsections?: NavSubsection[]   // grupo con sub-secciones
+  /** Sólo para administradores globales: no pasa por permisos de módulo. */
+  soloAdmin?: boolean
 }
 
 // Los Recorridos Gemba son una práctica de tres cargos, pero cada uno entra
@@ -339,6 +342,47 @@ const navGroups: NavGroup[] = [
       { label: 'Sugerencias', href: '/dashboard/admin/sugerencias', icon: Lightbulb, module: 'admin', badge: 'Nuevo' },
     ],
   },
+  // Las pantallas de terreno. Cada perfil entra a la suya por redirección y no
+  // necesita este menú; quien administra sí, para poder ver lo mismo que ve la
+  // gente sin pedirle el teléfono prestado. De las seis apps, el menú sólo
+  // enlazaba tres: había que saberse las URL de memoria.
+  {
+    label: 'Vistas de terreno',
+    soloAdmin: true,
+    items: [
+      { label: 'Taller', href: '/m/taller', icon: Wrench,
+        tooltip: 'Lo que ve el operador del taller: sus OT, la pauta y el pedido de insumos' },
+      { label: 'Romeral', href: '/m/romeral', icon: Fuel,
+        tooltip: 'Despacho, cierre de turno, recepción, trasvasije y momento cero' },
+      { label: 'Franke', href: '/m/franke', icon: Fuel,
+        tooltip: 'Pauta del mecánico, despacho, carga en EDS y entrega de turno' },
+      { label: 'Franke — venta', href: '/m/franke-venta', icon: Fuel,
+        tooltip: 'La venta de combustible de Franke' },
+      { label: 'Calama', href: '/m/calama', icon: Activity,
+        tooltip: 'Lo que ve el operador de obras civiles en Calama' },
+      { label: 'ENEX', href: '/m/enex', icon: Building2,
+        tooltip: 'Ejecución en terreno de las pautas del contrato ENEX' },
+    ],
+  },
+  // Lo que ve gente de afuera. Los portales con token no se enlazan acá porque
+  // el link ES la credencial: se copian desde su tarjeta, que además dice quién
+  // lo ha usado y permite revocarlo.
+  {
+    label: 'Lo que ve el cliente',
+    soloAdmin: true,
+    items: [
+      { label: 'Portal del cliente', href: '/portal/login', icon: Briefcase,
+        tooltip: 'Donde entra el arrendatario con su cuenta' },
+      { label: 'Reporte de flota', href: '/reporte-flota', icon: Share2,
+        tooltip: 'Reporte público, sin cuenta' },
+      { label: 'Reporte de fiabilidad', href: '/reporte-fiabilidad', icon: BarChart3,
+        tooltip: 'El informe que se manda por correo' },
+      { label: 'Link de bodega (oficina)', href: '/dashboard/bodega/tickets', icon: Link2,
+        tooltip: 'Copiar o revocar el link con el que oficina pide sin cuenta — pestaña Solicitudes' },
+      { label: 'Portales de prevención', href: '/dashboard/prevencion', icon: ShieldCheck,
+        tooltip: 'Copiar o revocar los links de documentación que se dan al mandante' },
+    ],
+  },
 ]
 
 // Flat list para filtrado por permisos y retrocompatibilidad interna
@@ -364,9 +408,10 @@ export default function Sidebar({ collapsed, onToggle, onClose }: SidebarProps) 
   const { perfil, signOut } = useAuth()
   const {
     canView, canViewExtended, esOperadorCalamaSolo, esSupervisorCalamaSolo,
-    esComercialSolo, faenaExclusiva,
+    esComercialSolo, faenaExclusiva, isAdminGlobal,
   } = usePermissions()
   const faenaSolo = faenaExclusiva()
+  const esAdminGlobal = isAdminGlobal()
   const operadorCalamaSolo = esOperadorCalamaSolo()
   const supervisorCalamaSolo = esSupervisorCalamaSolo()
   const comercialSolo = esComercialSolo()
@@ -500,6 +545,9 @@ export default function Sidebar({ collapsed, onToggle, onClose }: SidebarProps) 
       {/* Navigation agrupada */}
       <nav className="flex-1 space-y-3 overflow-y-auto px-2 py-3">
         {(grupoFaena ? [grupoFaena] : navGroups).map((group, idx) => {
+          // Los grupos de administrador no pasan por permisos de módulo: son
+          // atajos a pantallas que ya existen, no un permiso nuevo.
+          if (group.soloAdmin && !esAdminGlobal) return null
           // Restringidos a Calama: solo mostrar grupo Operacion Calama.
           if ((operadorCalamaSolo || supervisorCalamaSolo) && group.label !== 'Operación Calama') return null
           // Perfil comercial: solo el grupo Negocio (Contratos, Comercial, Consolidado).
@@ -517,6 +565,7 @@ export default function Sidebar({ collapsed, onToggle, onClose }: SidebarProps) 
             // por los permisos de módulo, o una planificadora sin el módulo de
             // mantenimiento se quedaría sin ver sus propias OT.
             if (grupoFaena) return true
+            if (group.soloAdmin) return true
             if (operadorCalamaSolo) return item.href === '/m/calama'
             if (supervisorCalamaSolo) {
               return item.extendedModule === 'operacion_calama' && item.href !== '/m/calama'
