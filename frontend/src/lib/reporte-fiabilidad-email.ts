@@ -28,8 +28,8 @@ const esc = (s: unknown) => String(s ?? '').replace(/[&<>]/g, (c) => ({ '&': '&a
 export function buildFiabilidadEmailHtml(data: Reporte, desde: string, hasta: string, origin: string, token?: string | null): string {
   const cats = data.categorias ?? []
   const equipos = data.equipos ?? []
-  // Excluir camiones Franke (codigo CAM-*): solo se ven en la sección Franke.
-  const combustible = (data.combustible ?? []).filter((e) => !e.estanque_codigo?.startsWith('CAM-'))
+  // [MIG393] El RPC ya devuelve sólo la bodega de Coquimbo (es_bodega).
+  const combustible = data.combustible ?? []
   const n = (v: number | null | undefined) => Number(v || 0)
   const s = cats.reduce((a, c) => ({
     eq: a.eq + n(c.total_equipos), dias: a.dias + n(c.dias_equipo),

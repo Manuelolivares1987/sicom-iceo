@@ -26,7 +26,7 @@ export type CombustibleProyeccion = {
 export async function getCombustibleProyeccion(): Promise<CombustibleProyeccion[]> {
   const { data, error } = await supabase
     .from('v_combustible_proyeccion_stock').select('*')
-    .not('estanque_codigo', 'like', 'CAM-%')  // excluir camiones Franke (solo en sección Franke)
+    .eq('es_bodega', true)  // [MIG393] sólo la bodega de Coquimbo
     .order('severidad', { ascending: true })
     .order('estanque_codigo')
   if (error) throw error
@@ -44,7 +44,7 @@ export type DemandaDiariaPorEmpresa = {
 export async function getCombustibleDemandaDiariaEmpresa(): Promise<DemandaDiariaPorEmpresa[]> {
   const { data, error } = await supabase
     .from('v_combustible_demanda_externa_diaria').select('*')
-    .not('estanque_codigo', 'like', 'CAM-%')  // excluir camiones Franke
+    .eq('es_bodega', true)  // [MIG393] sólo la bodega de Coquimbo
     .order('fecha', { ascending: false })
     .limit(500)
   if (error) throw error

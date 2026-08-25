@@ -79,7 +79,7 @@ export async function getResumenCombustible(): Promise<{ data: ResumenCombustibl
   const { data, error } = await supabase
     .from('v_combustible_control_kardex_varillaje')
     .select('*')
-    .not('estanque_codigo', 'like', 'CAM-%')  // excluir camiones Franke (solo en sección Franke)
+    .eq('es_bodega', true)  // [MIG393] sólo la bodega de Coquimbo
   if (error) return { data: null, error }
   const rows = (data ?? []) as EstanqueControlRow[]
 
@@ -111,7 +111,7 @@ export async function getControlEstanques() {
   const { data, error } = await supabase
     .from('v_combustible_control_kardex_varillaje')
     .select('*')
-    .not('estanque_codigo', 'like', 'CAM-%')  // excluir camiones Franke
+    .eq('es_bodega', true)  // [MIG393] sólo la bodega de Coquimbo
     .order('estanque_codigo')
   return { data: data as EstanqueControlRow[] | null, error }
 }
@@ -125,7 +125,7 @@ export interface FiltrosMovimientos {
 
 export async function getMovimientosValorizados(filtros?: FiltrosMovimientos, limit = 100) {
   let q = supabase.from('v_combustible_movimientos_valorizados').select('*')
-    .not('estanque_codigo', 'like', 'CAM-%')  // excluir camiones Franke (solo en sección Franke)
+    .eq('estanque_es_bodega', true)  // [MIG393] sólo la bodega de Coquimbo
   if (filtros?.estanque_id) q = q.eq('estanque_id', filtros.estanque_id)
   if (filtros?.tipo) q = q.eq('tipo_movimiento', filtros.tipo)
   if (filtros?.desde) q = q.gte('fecha_movimiento', filtros.desde)

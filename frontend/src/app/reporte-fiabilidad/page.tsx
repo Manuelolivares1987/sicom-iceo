@@ -126,8 +126,9 @@ export default function ReporteFiabilidadPublicoPage() {
 
   const equipos = data?.equipos ?? []
   const matriz = data?.matriz ?? []
-  // Excluir camiones Franke (codigo CAM-*): solo se ven en la sección Franke.
-  const combustible = (data?.combustible ?? []).filter((e) => !e.estanque_codigo?.startsWith('CAM-'))
+  // [MIG393] El RPC ya devuelve sólo la bodega de Coquimbo (es_bodega): el
+  // filtro por prefijo escondía el JGBY-10, que vende desde Coquimbo.
+  const combustible = data?.combustible ?? []
   const combTot = combustible.reduce((a, e) => ({
     cap: a.cap + Number(e.capacidad_lt || 0), st: a.st + Number(e.stock_actual || 0),
     min: a.min + Number(e.stock_minimo || 0),
