@@ -71,12 +71,22 @@ export async function getSeguimientoRecursos(): Promise<OTRecursoSeguimiento[]> 
   return (data ?? []) as OTRecursoSeguimiento[]
 }
 
+/**
+ * Amarra el recurso a un producto del catálogo — o corrige el código si ya
+ * tenía uno. [MIG394] Sólo mientras el recurso esté 'solicitado' o 'aprobado';
+ * una vez en un vale, el código se corrige en el vale (que valida la entrega
+ * parcial) y desde allá se sincroniza de vuelta.
+ */
 export async function asignarProductoRecurso(recursoId: string, productoId: string) {
   const { data, error } = await supabase.rpc('rpc_ot_recurso_asignar_producto', {
     p_recurso_id: recursoId, p_producto_id: productoId,
   })
   if (error) throw error
-  return data as { success: boolean }
+  return data as {
+    success: boolean; producto: string; codigo: string | null
+    /** true si se cambió un código existente; false si era el primer amarre. */
+    reasignado?: boolean
+  }
 }
 
 export async function crearProductoRapido(params: {

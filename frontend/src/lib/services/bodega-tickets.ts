@@ -294,12 +294,25 @@ export async function getMisVales(origen?: 'ot' | 'manual' | 'oficina'): Promise
 }
 
 /** Bodega amarra un ítem escrito a mano con su producto del catálogo. */
+/**
+ * Amarra el ítem a un producto del catálogo — o corrige el código si ya tenía
+ * uno. [MIG394] El catálogo tiene familias con varios códigos (tallas, colores,
+ * variantes), así que bodega necesita poder cambiarlo, no sólo ponerlo la
+ * primera vez. El RPC rechaza el cambio si el vale ya se entregó/anuló o si el
+ * ítem tiene entrega parcial, y sincroniza el recurso de taller de origen.
+ */
 export async function asignarProductoItem(itemId: string, productoId: string) {
   const { data, error } = await supabase.rpc('rpc_ticket_item_producto', {
     p_item_id: itemId, p_producto_id: productoId,
   })
   if (error) throw error
-  return data as { success: boolean; producto: string }
+  return data as {
+    success: boolean; producto: string
+    codigo: string | null
+    /** true si se cambió un código existente; false si era el primer amarre. */
+    reasignado?: boolean
+    sin_cambio?: boolean
+  }
 }
 
 export async function entregarTicket(params: {
