@@ -38,6 +38,8 @@ export type ValePapel = {
   ot_folio?: string | null
   firma_jefe_url?: string | null
   emitido_por_nombre?: string | null
+  /** [MIG395] El vale automático se autoriza en plataforma al aprobar el repuesto. */
+  observacion?: string | null
   /** [MIG376] Quién responde por el vale, tenga cuenta o haya entrado por link. */
   pedido_por_nombre?: string | null
   solicitante_nombre?: string | null
@@ -60,6 +62,7 @@ export function ValeImprimible({ ticket, items }: { ticket: ValePapel; items: Va
     day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit',
   })
   const esOficina = ticket.origen === 'oficina'
+  const esAuto    = ticket.origen === 'auto'
   const quien = ticket.pedido_por_nombre ?? ticket.solicitante_nombre ?? ticket.emitido_por_nombre ?? '—'
 
   return (
@@ -163,12 +166,25 @@ export function ValeImprimible({ ticket, items }: { ticket: ValePapel; items: Va
           {ticket.firma_jefe_url ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={ticket.firma_jefe_url} alt="firma" className="mx-auto h-14 object-contain print:h-10" />
+          ) : esAuto ? (
+            /* [MIG395] El vale automático no tiene firma manuscrita porque nadie
+               lo emitió a mano: lo emitió la aprobación del repuesto. Dejar la
+               línea en blanco haría parecer que el jefe no autorizó, cuando sí
+               lo hizo — con su cuenta y con fecha. Se dice cuál fue el acto. */
+            <div className="flex h-14 flex-col items-center justify-end print:h-10">
+              <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+                Autorizado en plataforma
+              </span>
+            </div>
           ) : <div className="h-14 print:h-10" />}
           {/* [MIG375] En el vale de oficina no hay jefe de taller que autorice:
               firma quien retira, y ésa es la firma que ya está. */}
           <div className="border-t border-gray-800 pt-1 text-[11px] font-medium">
             {esOficina ? 'Solicita' : 'Jefe de Taller (autoriza)'}
           </div>
+          {esAuto && ticket.observacion && (
+            <div className="pt-0.5 text-[9px] leading-tight text-gray-500">{ticket.observacion}</div>
+          )}
         </div>
         <div className="text-center">
           <div className="h-14 print:h-10" />
