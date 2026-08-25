@@ -1,6 +1,7 @@
 // Recursos (repuestos/materiales) que el operador de taller pide para reparar
 // una OT y que el jefe valida antes de emitir el vale de bodega (MIG197).
 import { supabase } from '@/lib/supabase'
+import { subirFirmaTicket } from './bodega-tickets'
 
 export type OTRecursoEstado = 'solicitado' | 'aprobado' | 'rechazado' | 'en_compra' | 'recibido' | 'en_vale'
 
@@ -200,7 +201,11 @@ export async function validarRecurso(params: {
     p_cantidad_aprobada: params.cantidadAprobada ?? null, p_nota: params.nota ?? null,
   })
   if (error) throw error
-  return data as { success: boolean; recurso_id: string; estado: OTRecursoEstado }
+  return data as {
+    success: boolean; recurso_id: string; estado: OTRecursoEstado
+    /** [MIG395] Aprobar emite el vale: viene el que se creó o engordó. */
+    ticket_id?: string | null; ticket_folio?: string | null
+  }
 }
 
 export async function agregarRecursoJefe(params: {
@@ -223,7 +228,11 @@ export async function agregarRecursoJefe(params: {
     p_fotos: params.fotos && params.fotos.length > 0 ? params.fotos : null,
   })
   if (error) throw error
-  return data as { success: boolean; recurso_id: string }
+  return data as {
+    success: boolean; recurso_id: string
+    /** [MIG395] Agregar también emite el vale — antes era el camino mudo. */
+    ticket_id?: string | null; ticket_folio?: string | null
+  }
 }
 
 export const RECURSO_ESTADO_LABEL: Record<OTRecursoEstado, { label: string; cls: string }> = {
@@ -308,4 +317,17 @@ export async function insumosAVale(params: {
     success: boolean; ticket_id: string; folio: string; qr: string
     items: number; ceco: string; ceco_nombre: string
   }
+}
+
+/**
+ * [MIG396] Guarda la firma de quien AUTORIZA, para que el vale automático salga
+ * firmado. Sólo sobre la propia cuenta. No sirve —ni debe usarse— para las
+ * firmas de recibo (operador retira / bodega entrega): ésas son la prueba de la
+ * entrega y se firman en el mesón.
+ */
+export async function guardarMiFirma(firmaDataUrl: string) {
+  const url = await subirFirmaTicket(firmaDataUrl, 'firma-jefe')
+  const { data, error } = await supabase.rpc('rpc_guardar_mi_firma', { p_firma_url: url })
+  if (error) throw error
+  return data as { success: boolean; guardada: boolean }
 }

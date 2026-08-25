@@ -38,7 +38,7 @@ import {
   useRecursosOTTaller, useValidarRecursoTaller, useAgregarRecursoTaller, useEmitirValeTaller,
 } from '@/hooks/use-taller-plan-semanal'
 import { SignaturePad } from '@/components/ui/signature-pad'
-import { RECURSO_ESTADO_LABEL, type OTRecurso } from '@/lib/services/ot-recursos'
+import { RECURSO_ESTADO_LABEL, guardarMiFirma, type OTRecurso } from '@/lib/services/ot-recursos'
 import { buscarProductos } from '@/lib/services/ot-materiales'
 import { useNetworkStatus } from '@/hooks/use-calama-offline'
 import {
@@ -2520,6 +2520,7 @@ function RecursosJefeSection({ otId, otFolio }: { otId: string | null; otFolio: 
   // Vale con firma
   const [valeOpen, setValeOpen] = useState(false)
   const [firma, setFirma] = useState('')
+  const [guardarFirma, setGuardarFirma] = useState(false)
 
   useEffect(() => {
     if (prod || q.trim().length < 2) { setResultados([]); return }
@@ -2535,13 +2536,23 @@ function RecursosJefeSection({ otId, otFolio }: { otId: string | null; otFolio: 
   const lista = recursos ?? []
   const pendientes = lista.filter((r) => r.estado === 'solicitado').length
   const aprobados = lista.filter((r) => r.estado === 'aprobado').length
+  // [MIG395] Aprobar ya emite el vale, así que 'aprobado' casi nunca queda: lo
+  // normal es que el ítem pase derecho a 'en_vale'. El folio se muestra para que
+  // el jefe vea que salió, en vez de un botón muerto en (0).
+  const enVale = lista.filter((r) => r.estado === 'en_vale')
+  const valeFolio = enVale.find((r) => r.ticket_folio)?.ticket_folio ?? null
 
   function aprobar(r: OTRecurso) {
     const cantTxt = cantidades[r.id]
     const cantAprob = cantTxt !== undefined && cantTxt !== '' ? Number(cantTxt) : r.cantidad
     if (!cantAprob || cantAprob <= 0) { toast.error('Cantidad aprobada inválida'); return }
-    validar.mutate({ recursoId: r.id, accion: 'aprobar', cantidadAprobada: cantAprob },
-      { onError: (e) => toast.error((e as Error).message) })
+    validar.mutate({ recursoId: r.id, accion: 'aprobar', cantidadAprobada: cantAprob }, {
+      // [MIG395] El vale sale al aprobar: decirlo, o el jefe sigue buscando el botón.
+      onSuccess: (res) => {
+        if (res?.ticket_folio) toast.success(`Aprobado y al vale ${res.ticket_folio} — bodega ya lo tiene`)
+      },
+      onError: (e) => toast.error((e as Error).message),
+    })
   }
   function rechazar(r: OTRecurso) {
     const nota = window.prompt('Motivo del rechazo (lo verá el mecánico):') ?? undefined
@@ -2562,6 +2573,12 @@ function RecursosJefeSection({ otId, otFolio }: { otId: string | null; otFolio: 
   }
   function emitirVale() {
     if (!firma) return
+    if (guardarFirma) {
+      // No bloquea la emisión: si falla guardar la firma, el vale igual sale.
+      guardarMiFirma(firma)
+        .then(() => toast.success('Firma guardada — los vales automáticos saldrán firmados'))
+        .catch(() => toast.error('El vale se emitió, pero no se pudo guardar la firma'))
+    }
     emitir.mutate({ firmaDataUrl: firma }, {
       onSuccess: (r) => { toast.success(`Vale ${r.folio} emitido (${r.items} ítems) — bodega lo despacha con el QR`); setValeOpen(false); setFirma('') },
       onError: (e) => toast.error((e as Error).message),
@@ -2583,10 +2600,23 @@ function RecursosJefeSection({ otId, otFolio }: { otId: string | null; otFolio: 
           <Button variant="outline" onClick={() => setAgregarOpen((v) => !v)}>
             <Plus className="h-3.5 w-3.5 mr-1" /> Ítem
           </Button>
-          <Button disabled={aprobados === 0 || emitir.isPending} onClick={() => setValeOpen(true)}>
-            {emitir.isPending ? <Spinner className="h-4 w-4 mr-1" /> : <Package className="h-4 w-4 mr-1" />}
-            Generar vale ({aprobados})
-          </Button>
+          {/* [MIG395] El vale ya no depende de que alguien se acuerde: sale al
+              aprobar. El botón queda para el caso manual con firma (o para
+              re-emitir tras anular), y cuando no hay nada suelto se muestra el
+              folio del vale que sí salió. */}
+          {aprobados > 0 ? (
+            <Button disabled={emitir.isPending} onClick={() => setValeOpen(true)}>
+              {emitir.isPending ? <Spinner className="h-4 w-4 mr-1" /> : <Package className="h-4 w-4 mr-1" />}
+              Generar vale ({aprobados})
+            </Button>
+          ) : valeFolio ? (
+            <a href={`/vale/${enVale.find((r) => r.ticket_folio)?.ticket_id ?? ''}`}
+               target="_blank" rel="noreferrer"
+               title="Bodega ya lo tiene en su bandeja. Abre para imprimirlo."
+               className="flex items-center gap-1 rounded-lg border border-green-300 bg-green-50 px-2.5 py-1.5 text-[11px] font-semibold text-green-800 hover:bg-green-100">
+              <Package className="h-3.5 w-3.5" /> En bodega · {valeFolio}
+            </a>
+          ) : null}
         </div>
       </div>
 
@@ -2712,6 +2742,23 @@ function RecursosJefeSection({ otId, otFolio }: { otId: string | null; otFolio: 
               pendientes de esta OT, si los hay). Bodega lo despacha escaneando el QR.
             </p>
             <SignaturePad label="Firma del jefe de taller (obligatoria)" onCapture={setFirma} />
+            {/* [MIG396] Guardarla una vez y que los vales automáticos salgan
+                firmados: aprobar un repuesto YA es autorizar su salida, así que
+                la firma sólo le pone cara a un acto que igual ocurrió.
+                Ojo: esto es la firma de quien AUTORIZA. Las de recibo —operador
+                retira, bodega entrega— se firman en el mesón, porque son la
+                prueba de la entrega y guardarlas las vaciaría de sentido. */}
+            <label className="flex items-start gap-2 rounded-lg border border-gray-200 bg-gray-50 p-2 text-[12px] text-gray-700">
+              <input type="checkbox" className="mt-0.5" checked={guardarFirma}
+                     onChange={(e) => setGuardarFirma(e.target.checked)} />
+              <span>
+                <b>Guardar mi firma</b> para que los vales automáticos salgan firmados.
+                <span className="block text-[11px] text-gray-500">
+                  Se usa sólo en la línea «Jefe de Taller (autoriza)». El operador y bodega
+                  siguen firmando al retirar y entregar.
+                </span>
+              </span>
+            </label>
           </div>
           <ModalFooter>
             <Button variant="outline" onClick={() => setValeOpen(false)}>Cancelar</Button>
