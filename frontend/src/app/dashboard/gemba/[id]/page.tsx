@@ -1,9 +1,10 @@
 'use client'
 
 import { useMemo, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Footprints, AlertTriangle, CheckCircle2, Lock } from 'lucide-react'
+import { ArrowLeft, Footprints, AlertTriangle, CheckCircle2, Lock, Camera, Loader2, X } from 'lucide-react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -23,6 +24,7 @@ import {
   useCerrarGembaRecorrido,
 } from '@/hooks/use-gemba'
 import type { GembaEvaluacion, GembaRespuesta } from '@/lib/services/gemba'
+import { subirFotoGemba, updateGembaRespuesta } from '@/lib/services/gemba'
 
 const EVALS: Array<{ value: GembaEvaluacion; label: string; activeCls: string }> = [
   { value: 'cumple', label: 'Cumple', activeCls: 'bg-green-600 text-white border-green-600' },
@@ -35,6 +37,7 @@ export default function GembaRecorridoPage() {
   const params = useParams<{ id: string }>()
   const id = params?.id
   const toast = useToast()
+  const qc = useQueryClient()
   const { canCreate } = usePermissions()
 
   const { data: recorrido, isLoading } = useGembaRecorrido(id)
@@ -262,6 +265,18 @@ export default function GembaRecorridoPage() {
                     className="mt-2 min-h-[40px] w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 placeholder:text-gray-300 focus:border-gray-400 focus:outline-none disabled:bg-gray-50"
                   />
                 )}
+
+                {/* [MIG389] La evidencia. Aparece cuando el ítem se marca «no
+                    cumple» —ahí la foto ES el hallazgo— y también si ya la
+                    tiene, para poder verla en un recorrido cerrado. */}
+                {(r.evaluacion === 'no_cumple' || r.foto_url) && (
+                  <EvidenciaItem
+                    r={r}
+                    recorridoId={id}
+                    soloLectura={soloLectura}
+                    onGuardado={() => qc.invalidateQueries({ queryKey: ['gemba-respuestas', id] })}
+                  />
+                )}
               </div>
             ))}
           </CardContent>
@@ -454,6 +469,127 @@ export default function GembaRecorridoPage() {
           </div>
         </div>
       </Modal>
+    </div>
+  )
+}
+
+
+// ── La evidencia de un hallazgo (MIG389) ────────────────────────────────────
+// La foto lleva la fecha y la hora estampadas encima: pegada en un correo o
+// impresa en el informe, una foto sin fecha no prueba nada.
+//
+// Y hay una salida escrita para lo que no se puede fotografiar —un ruido, un
+// olor, algo que ya se retiró—. Sin ella la gente termina sacando una foto del
+// piso para poder avanzar, y eso es peor que no tener foto: es evidencia falsa.
+function EvidenciaItem({ r, recorridoId, soloLectura, onGuardado }: {
+  r: GembaRespuesta
+  recorridoId?: string
+  soloLectura: boolean
+  onGuardado: () => void
+}) {
+  const toast = useToast()
+  const [subiendo, setSubiendo] = useState(false)
+
+  const tomar = async (file: File) => {
+    if (!recorridoId) return
+    setSubiendo(true)
+    try {
+      const f = await subirFotoGemba(recorridoId, file, r.item.slice(0, 40))
+      const { error } = await updateGembaRespuesta(r.id, {
+        foto_url: f.url,
+        foto_tomada_at: f.tomadaAt,
+        foto_lat: f.lat,
+        foto_lng: f.lng,
+        sin_foto_motivo: null,
+      })
+      if (error) throw error
+      onGuardado()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'No se pudo subir la foto')
+    } finally {
+      setSubiendo(false)
+    }
+  }
+
+  const guardarMotivo = async (texto: string) => {
+    if (texto.trim() === (r.sin_foto_motivo ?? '')) return
+    const { error } = await updateGembaRespuesta(r.id, { sin_foto_motivo: texto.trim() || null })
+    if (error) toast.error('No se pudo guardar el motivo')
+    else onGuardado()
+  }
+
+  const quitar = async () => {
+    const { error } = await updateGembaRespuesta(r.id, {
+      foto_url: null, foto_tomada_at: null, foto_lat: null, foto_lng: null,
+    })
+    if (error) toast.error('No se pudo quitar la foto')
+    else onGuardado()
+  }
+
+  if (r.foto_url) {
+    return (
+      <div className="mt-2 flex items-center gap-2 rounded-lg border border-gray-200 bg-white p-2">
+        <a href={r.foto_url} target="_blank" rel="noreferrer" className="shrink-0">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={r.foto_url} alt="Evidencia" className="h-16 w-16 rounded object-cover hover:opacity-80" />
+        </a>
+        <div className="min-w-0 flex-1">
+          <p className="text-[11px] font-semibold text-gray-700">Evidencia</p>
+          {r.foto_tomada_at && (
+            <p className="text-[11px] text-gray-500">
+              {new Date(r.foto_tomada_at).toLocaleString('es-CL', {
+                day: '2-digit', month: '2-digit', year: 'numeric',
+                hour: '2-digit', minute: '2-digit',
+              })}
+            </p>
+          )}
+          {r.foto_lat != null && r.foto_lng != null && (
+            <p className="font-mono text-[10px] text-gray-400">
+              {Number(r.foto_lat).toFixed(5)}, {Number(r.foto_lng).toFixed(5)}
+            </p>
+          )}
+        </div>
+        {!soloLectura && (
+          <button type="button" onClick={quitar} aria-label="Quitar la foto"
+                  className="shrink-0 text-gray-400 hover:text-red-600">
+            <X className="h-4 w-4" />
+          </button>
+        )}
+      </div>
+    )
+  }
+
+  if (soloLectura) {
+    return r.sin_foto_motivo ? (
+      <p className="mt-2 rounded-lg bg-gray-50 p-2 text-[11px] italic text-gray-600">
+        Sin foto: {r.sin_foto_motivo}
+      </p>
+    ) : null
+  }
+
+  return (
+    <div className="mt-2 space-y-1.5">
+      <label className="flex min-h-[44px] cursor-pointer items-center justify-center gap-2 rounded-lg border-2 border-dashed border-red-300 bg-white text-sm font-semibold text-red-700">
+        {subiendo ? (
+          <><Loader2 className="h-4 w-4 animate-spin" /> Subiendo…</>
+        ) : (
+          <><Camera className="h-4 w-4" /> Foto del hallazgo</>
+        )}
+        <input type="file" accept="image/*" capture="environment" className="hidden"
+               disabled={subiendo}
+               onChange={(e) => { const f = e.target.files?.[0]; if (f) tomar(f) }} />
+      </label>
+      <input
+        type="text"
+        defaultValue={r.sin_foto_motivo ?? ''}
+        placeholder="…o escriba por qué no se puede fotografiar"
+        onBlur={(e) => guardarMotivo(e.target.value)}
+        className="min-h-[38px] w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs text-gray-700 placeholder:text-gray-300 focus:border-gray-400 focus:outline-none"
+      />
+      <p className="text-[10px] leading-snug text-gray-500">
+        La foto queda con la fecha y la hora encima. Sin foto ni motivo, el recorrido no se puede
+        cerrar.
+      </p>
     </div>
   )
 }
