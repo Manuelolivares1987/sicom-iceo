@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
   Wrench, ChevronRight, ChevronDown, RefreshCw, WifiOff, CloudOff, CheckCircle2, Play, Pause, User, LogOut,
+  PackageSearch,
 } from 'lucide-react'
 import { Spinner } from '@/components/ui/spinner'
 import { useAuth } from '@/contexts/auth-context'
@@ -167,6 +168,20 @@ export default function MecanicoHomePage() {
           <Link href="/dashboard" className="text-gray-400 hover:text-gray-600"><LogOut className="h-5 w-5" /></Link>
         )}
       </div>
+
+      {/* [MIG386] Lo del taller que no es de ningún equipo. Vive fuera de las OT
+          a propósito: quien busca guantes no está buscando una orden. */}
+      <Link href="/m/taller/insumos"
+            className="flex items-center gap-3 rounded-xl border-2 border-gray-300 bg-white p-3 active:bg-gray-50">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-gray-600 text-white">
+          <PackageSearch className="h-5 w-5" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-bold text-gray-900">Pedir insumos</p>
+          <p className="text-[11px] text-gray-500">Guantes, trapos, discos — lo aprueba el jefe</p>
+        </div>
+        <ChevronRight className="h-5 w-5 shrink-0 text-gray-400" />
+      </Link>
 
       {/* Estado de conexión / pendientes */}
       <div className={`flex items-center gap-2 rounded-lg border p-2.5 text-sm ${
