@@ -282,3 +282,109 @@ export function periodoSugerido(hoy = new Date()): { desde: string; hasta: strin
   desde.setDate(desde.getDate() - 6)
   return { desde: iso(desde), hasta: iso(hasta) }
 }
+
+// ── El ciclo 7x7 y el status del día 7 (MIG392) ─────────────────────────────
+// El turno de Franke dura siete días. El sistema cuenta solo desde la fecha en
+// que entró, así que nadie tiene que marcar nada cada mañana — y por eso
+// funciona incluso el día que a nadie se le ocurre marcar nada.
+
+export type DiaCiclo = {
+  dia: number
+  fecha: string
+  es_hoy: boolean
+  pasado: boolean
+  /** El último día del turno lleva su propio objetivo. */
+  entrega_status: boolean
+  pautas_hechas: number
+  pautas_abiertas: number
+  equipos_revisados: string[]
+}
+
+export type CalendarioCiclo = {
+  hay_ciclo: boolean
+  ciclo_id?: string
+  numero?: number
+  turno?: string | null
+  fecha_inicio?: string
+  fecha_fin?: string
+  dias_total?: number
+  /** null cuando el turno se pasó de largo: se dice, no se disimula. */
+  dia_actual?: number | null
+  dias_corridos?: number
+  es_dia_de_entrega?: boolean
+  vencido?: boolean
+  dias?: DiaCiclo[]
+}
+
+export async function getCalendarioCiclo(faenaId: string): Promise<CalendarioCiclo> {
+  const { data, error } = await supabase.rpc('fn_faena_ciclo_calendario', {
+    p_faena_id: faenaId,
+  })
+  if (error) throw error
+  return (data ?? { hay_ciclo: false }) as CalendarioCiclo
+}
+
+export async function abrirCicloTurno(params: {
+  faenaId: string
+  fechaInicio?: string | null
+  turno?: string | null
+  dias?: number
+}) {
+  const { data, error } = await supabase.rpc('rpc_faena_ciclo_abrir', {
+    p_faena_id: params.faenaId,
+    p_fecha_inicio: params.fechaInicio ?? null,
+    p_turno: params.turno ?? null,
+    p_dias: params.dias ?? 7,
+  })
+  if (error) throw error
+  return data as {
+    success: boolean; ciclo_id: string; numero: number
+    fecha_inicio: string; fecha_fin: string
+  }
+}
+
+export type EquipoStatus = {
+  activo_id: string
+  patente: string
+  nombre: string | null
+  estado: string | null
+  horometro: number | null
+  kilometraje: number | null
+  dias_con_pauta: number
+  dias_del_turno: number
+  nc_abiertas: number
+  nc_detalle: { fecha: string | null; severidad: string | null; descripcion: string }[]
+}
+
+export type StatusCamiones = {
+  hay_ciclo: boolean
+  ciclo_id?: string
+  numero?: number
+  turno?: string | null
+  desde?: string
+  hasta?: string
+  equipos?: EquipoStatus[]
+  combustible?: {
+    despachado_lt: number
+    recibido_lt: number
+    estanques: { codigo: string; patente: string | null; stock_lt: number; capacidad_lt: number }[]
+  }
+  pautas_del_turno?: number
+  pautas_cerradas?: number
+  generado_at?: string
+}
+
+/**
+ * El status que se entrega el día 7. No se redacta: se calcula de lo que pasó
+ * en los siete días. Un status que hay que escribir termina siendo una frase
+ * amable; uno que se calcula, es lo que de verdad ocurrió.
+ */
+export async function getStatusCamiones(
+  faenaId: string, cicloId?: string | null,
+): Promise<StatusCamiones> {
+  const { data, error } = await supabase.rpc('fn_faena_status_camiones', {
+    p_faena_id: faenaId, p_ciclo_id: cicloId ?? null,
+  })
+  if (error) throw error
+  return (data ?? { hay_ciclo: false }) as StatusCamiones
+}

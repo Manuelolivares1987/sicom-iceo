@@ -9,7 +9,7 @@
 // ============================================================================
 
 import Link from 'next/link'
-import { ClipboardList, ChevronRight, Fuel, ArrowLeftRight, Gauge } from 'lucide-react'
+import { ClipboardList, ChevronRight, Fuel, ArrowLeftRight, Gauge, CalendarDays } from 'lucide-react'
 import { useAuth } from '@/contexts/auth-context'
 import { useExigirSesion } from '@/hooks/use-exigir-sesion'
 import { SinSesionOffline } from '@/components/enex/sin-sesion-offline'
@@ -48,6 +48,17 @@ const ACCESOS = [
     titulo: 'Entrega de turno',
     bajada: 'Camiones, litros, pendientes y bodega · dos firmas',
     roles: ['supervisor', 'planificador', 'jefe_operaciones', 'administrador'],
+  },
+  // [MIG392] Va primero en la cabeza de quien entra a trabajar —«¿en qué día
+  // vamos?»— pero último en la lista: se mira una vez al día, no cada vez que
+  // se abre la app.
+  {
+    href: '/m/franke/turno',
+    icono: CalendarDays,
+    titulo: 'El turno',
+    bajada: 'Los siete días · el último se entrega el status de los camiones',
+    roles: ['tecnico_mantenimiento', 'operador_taller', 'operador_combustible',
+            'supervisor', 'planificador', 'jefe_operaciones', 'administrador'],
   },
 ]
 
