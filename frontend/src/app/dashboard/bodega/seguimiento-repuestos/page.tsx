@@ -60,9 +60,20 @@ function VincularProducto({ recurso, onDone }: { recurso: OTRecursoSeguimiento; 
     return () => clearTimeout(t)
   }, [q])
 
+  // [MIG394] El mismo cuadro sirve para amarrar por primera vez y para corregir
+  // el código: el catálogo tiene familias con varios códigos y quien pidió no
+  // siempre eligió el correcto.
+  const yaTiene = !!recurso.producto_id
+
   async function vincular(productoId: string) {
     setBusy(true)
-    try { await asignarProductoRecurso(recurso.id, productoId); toast.success('Producto vinculado'); onDone() }
+    try {
+      const r = await asignarProductoRecurso(recurso.id, productoId)
+      toast.success(r.reasignado
+        ? `Código corregido: ahora es ${r.producto}${r.codigo ? ` (${r.codigo})` : ''}`
+        : 'Producto vinculado')
+      onDone()
+    }
     catch (e) { toast.error((e as Error).message) }
     finally { setBusy(false) }
   }
@@ -78,11 +89,18 @@ function VincularProducto({ recurso, onDone }: { recurso: OTRecursoSeguimiento; 
   }
 
   return (
-    <Modal open onClose={onDone} title="Vincular a producto de bodega">
+    <Modal open onClose={onDone}
+           title={yaTiene ? 'Corregir el código del repuesto' : 'Vincular a producto de bodega'}>
       <div className="space-y-3">
         <p className="text-sm text-gray-600">
-          «{recurso.descripcion}» no está amarrado al catálogo. Para comprarlo y que la recepción
-          alimente el stock, vincúlalo a un producto (o créalo).
+          {yaTiene ? (
+            <>Hoy figura como <b>{recurso.producto_nombre}</b>
+              {recurso.producto_codigo && <span className="font-mono text-xs text-gray-500"> · {recurso.producto_codigo}</span>}
+              . Si no es ese el código que hay que descontar, elige el correcto.</>
+          ) : (
+            <>«{recurso.descripcion}» no está amarrado al catálogo. Para comprarlo y que la recepción
+              alimente el stock, vincúlalo a un producto (o créalo).</>
+          )}
         </p>
         <div className="relative">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-400" />
@@ -272,10 +290,20 @@ export default function SeguimientoRepuestosPage() {
                             ))}
                           </div>
                         )}
-                        {f.por_comprar && !f.producto_id && (
+                        {/* [MIG394] Mientras el recurso no esté en un vale, el
+                            código se puede poner Y corregir: el catálogo tiene
+                            familias con varios códigos y el primer amarre puede
+                            estar equivocado. Ya en vale, se corrige allá (que es
+                            donde se valida que no haya entrega parcial) y desde
+                            allá se sincroniza de vuelta hacia acá. */}
+                        {(f.estado === 'solicitado' || f.estado === 'aprobado') && (
                           <button onClick={() => setVincular(f)}
-                                  className="mt-1 flex items-center gap-1 rounded border border-orange-300 bg-orange-50 px-2 py-0.5 text-[11px] font-semibold text-orange-700">
-                            <Package className="h-3 w-3" /> Vincular a producto para comprar
+                                  className={`mt-1 flex items-center gap-1 rounded border px-2 py-0.5 text-[11px] font-semibold ${
+                                    f.producto_id
+                                      ? 'border-gray-300 bg-white text-gray-600 hover:bg-gray-50'
+                                      : 'border-orange-300 bg-orange-50 text-orange-700'}`}>
+                            <Package className="h-3 w-3" />
+                            {f.producto_id ? 'Otro código' : 'Vincular a producto para comprar'}
                           </button>
                         )}
                       </td>

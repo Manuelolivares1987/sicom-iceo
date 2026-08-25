@@ -137,14 +137,27 @@ export default function BodegaTicketsPage() {
 // es quien sabe cuál es el artículo, y hasta que lo dice el ítem no se puede
 // despachar: el descuento de stock necesita el producto. Antes esto no tenía
 // pantalla y el ítem se quedaba pegado para siempre.
-function AmarrarProducto({ itemId, pedido, onListo }: {
-  itemId: string; pedido: string; onListo: () => void
+/**
+ * [MIG394] Bodega dice cuál es el código — y puede corregirlo después.
+ *
+ * Una familia del catálogo tiene muchos códigos (el chaleco geólogo son cinco
+ * tallas; «adblue» son el bidón, el filtro, la tapa y la cubierta). Quien pide
+ * elige el que se le ocurre; quien sabe cuál hay que descontar es bodega, y lo
+ * sabe con el vale en la mano. Antes sólo podía decirlo si el ítem venía vacío:
+ * una vez amarrado, el código quedaba congelado aunque estuviera mal.
+ */
+function AmarrarProducto({ itemId, pedido, actualCodigo, actualNombre, onListo }: {
+  itemId: string; pedido: string
+  actualCodigo?: string | null; actualNombre?: string | null
+  onListo: () => void
 }) {
   const toast = useToast()
   const [abierto, setAbierto] = useState(false)
   const [q, setQ] = useState('')
   const [res, setRes] = useState<Array<{ id: string; codigo: string | null; nombre: string }>>([])
   const [busy, setBusy] = useState(false)
+
+  const yaTiene = !!actualNombre
 
   const buscar = async (t: string) => {
     setQ(t)
@@ -159,7 +172,10 @@ function AmarrarProducto({ itemId, pedido, onListo }: {
     setBusy(true)
     try {
       const r = await asignarProductoItem(itemId, productoId)
-      toast.success(`«${pedido}» quedó como ${r.producto}. Ahora se puede despachar.`)
+      const cod = r.codigo ? ` (${r.codigo})` : ''
+      toast.success(r.reasignado
+        ? `Código corregido: ahora es ${r.producto}${cod}.`
+        : `«${pedido}» quedó como ${r.producto}${cod}. Ahora se puede despachar.`)
       setAbierto(false); setQ(''); setRes([])
       onListo()
     } catch (e) { toast.error((e as Error).message) } finally { setBusy(false) }
@@ -168,21 +184,35 @@ function AmarrarProducto({ itemId, pedido, onListo }: {
   if (!abierto) {
     return (
       <button type="button" onClick={() => setAbierto(true)}
-              title="Decir qué producto del catálogo es, para poder despacharlo"
-              className="flex shrink-0 items-center gap-1 rounded-lg border border-amber-400 bg-amber-50 px-2 py-1.5 text-[11px] font-semibold text-amber-800">
-        <PackageSearch className="h-3.5 w-3.5" /> ¿Cuál es?
+              title={yaTiene
+                ? 'Cambiar el código: el catálogo tiene varios códigos por producto'
+                : 'Decir qué producto del catálogo es, para poder despacharlo'}
+              className={cn(
+                'flex shrink-0 items-center gap-1 rounded-lg border px-2 py-1.5 text-[11px] font-semibold',
+                yaTiene
+                  ? 'border-gray-300 bg-white text-gray-600 hover:bg-gray-50'
+                  : 'border-amber-400 bg-amber-50 text-amber-800')}>
+        <PackageSearch className="h-3.5 w-3.5" /> {yaTiene ? 'Otro código' : '¿Cuál es?'}
       </button>
     )
   }
 
   return (
-    <div className="w-full shrink-0 rounded-lg border border-amber-300 bg-amber-50 p-2">
+    <div className={cn('w-full shrink-0 rounded-lg border p-2',
+                       yaTiene ? 'border-gray-300 bg-gray-50' : 'border-amber-300 bg-amber-50')}>
       <div className="mb-1 flex items-center gap-2">
-        <p className="flex-1 text-[11px] text-amber-900">
-          Pedido como <b>{pedido}</b> — ¿qué producto es?
+        <p className={cn('flex-1 text-[11px]', yaTiene ? 'text-gray-700' : 'text-amber-900')}>
+          {yaTiene ? (
+            <>Hoy es <b>{actualNombre}</b>
+              {actualCodigo && <span className="font-mono text-[10px] text-gray-500"> · {actualCodigo}</span>}
+              {' '}— ¿cuál es el correcto?</>
+          ) : (
+            <>Pedido como <b>{pedido}</b> — ¿qué producto es?</>
+          )}
         </p>
         <button type="button" onClick={() => { setAbierto(false); setQ(''); setRes([]) }}
-                aria-label="Cerrar" className="text-amber-700"><X className="h-3.5 w-3.5" /></button>
+                aria-label="Cerrar"
+                className={yaTiene ? 'text-gray-500' : 'text-amber-700'}><X className="h-3.5 w-3.5" /></button>
       </div>
       <Input value={q} onChange={(e) => buscar(e.target.value)} placeholder="Buscar en el catálogo…" />
       {res.length > 0 && (
@@ -505,8 +535,14 @@ function DespacharTab() {
                       <div className="flex items-center gap-2">
                         <div className="flex-1">
                           <div className="text-sm font-medium">{i.producto_nombre ?? i.descripcion}</div>
+                          {/* [MIG394] El código a la vista: es lo que bodega
+                              busca en la repisa y lo que tiene que poder
+                              comparar para saber si le pidieron el correcto. */}
+                          {i.producto_codigo && (
+                            <div className="font-mono text-[10px] text-gray-500">{i.producto_codigo}</div>
+                          )}
                           <div className="text-[11px] text-gray-500">
-                            Pide {i.cantidad_solicitada} · entregado {i.cantidad_entregada} · pendiente {i.pendiente}
+                            Pide {i.cantidad_solicitada} {i.unidad ?? ''} · entregado {i.cantidad_entregada} · pendiente {i.pendiente}
                             {i.producto_id
                               ? <span className={disp === 0 ? 'font-semibold text-red-600' : undefined}> · stock {disp ?? '…'}</span>
                               : <span className="text-amber-600"> · sin producto en catálogo</span>}
@@ -540,10 +576,17 @@ function DespacharTab() {
                         {/* [MIG371] El pedido manual permite escribir el ítem a
                             mano. Quien pide no siempre sabe el código; bodega sí.
                             Sin esto el ítem no se puede despachar y el stock no
-                            baja nunca. */}
-                        {usable && i.pendiente > 0 && !i.producto_id && (
+                            baja nunca.
+                            [MIG394] Y también cuando YA tiene código: una familia
+                            del catálogo tiene varios (tallas, colores, variantes),
+                            así que el primer amarre puede estar equivocado. Se
+                            corta al haber entrega parcial, porque ahí el descuento
+                            ya salió de un artículo concreto. */}
+                        {usable && i.pendiente > 0 && i.cantidad_entregada === 0 && (
                           <AmarrarProducto itemId={i.id}
                                            pedido={i.descripcion ?? 'el ítem'}
+                                           actualCodigo={i.producto_codigo}
+                                           actualNombre={i.producto_id ? i.producto_nombre : null}
                                            onListo={() => refetchItems()} />
                         )}
                         {usable && i.pendiente > 0 && (
