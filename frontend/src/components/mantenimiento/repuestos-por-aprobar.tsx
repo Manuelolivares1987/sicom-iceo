@@ -59,7 +59,7 @@ export function RepuestosPorAprobar({ onCambio }: { onCambio?: () => void }) {
         <div className="mb-3 flex items-center gap-2">
           <PackageCheck className="h-5 w-5 shrink-0 text-orange-600" />
           <h2 className="text-base font-bold text-orange-900">
-            {pendientes.length} pedido{pendientes.length > 1 ? 's' : ''} de repuestos esperando tu aprobación
+            {pendientes.length} pedido{pendientes.length > 1 ? 's' : ''} esperando tu aprobación
           </h2>
         </div>
 
@@ -82,10 +82,22 @@ export function RepuestosPorAprobar({ onCambio }: { onCambio?: () => void }) {
                   )}
 
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-bold text-gray-900">
-                      {r.activo_patente ?? r.activo_codigo ?? '—'}
-                      <span className="ml-1.5 text-[11px] font-normal text-muted-foreground">OT {r.ot_folio}</span>
-                    </p>
+                    {/* [MIG386] Un pedido va contra un equipo o contra el
+                        taller. Mostrar «OT null» en los del taller dejaba al
+                        jefe sin saber a qué le está dando el visto bueno. */}
+                    {r.es_insumo_taller ? (
+                      <p className="text-sm font-bold text-gray-900">
+                        {r.ceco_nombre ?? 'Taller'}
+                        <span className="ml-1.5 rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-semibold text-gray-600">
+                          insumo del taller
+                        </span>
+                      </p>
+                    ) : (
+                      <p className="text-sm font-bold text-gray-900">
+                        {r.activo_patente ?? r.activo_codigo ?? '—'}
+                        <span className="ml-1.5 text-[11px] font-normal text-muted-foreground">OT {r.ot_folio}</span>
+                      </p>
+                    )}
                     <p className="text-sm text-gray-800">
                       {r.cantidad} {r.unidad ?? 'un'} · {r.producto_nombre ?? r.descripcion ?? 'Sin descripción'}
                     </p>

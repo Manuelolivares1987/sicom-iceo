@@ -46,6 +46,13 @@ export type OTRecurso = {
 
 /** Fila del tablero de seguimiento (v_ot_recursos_seguimiento). */
 export type OTRecursoSeguimiento = OTRecurso & {
+  /** [MIG386] Pedido del taller sin orden de trabajo: se carga a un CECO. */
+  es_insumo_taller?: boolean
+  ceco_id?: string | null
+  ceco_codigo?: string | null
+  ceco_nombre?: string | null
+  /** La patente si es de un equipo, el centro de costo si es del taller. */
+  destino?: string | null
   ot_folio: string
   activo_codigo: string | null
   activo_patente: string | null
@@ -216,4 +223,79 @@ export const RECURSO_ESTADO_LABEL: Record<OTRecursoEstado, { label: string; cls:
   en_compra:  { label: 'OC solicitada', cls: 'bg-purple-100 text-purple-700' },
   recibido:   { label: 'Recibido — por entregar', cls: 'bg-teal-100 text-teal-700' },
   en_vale:    { label: 'En vale',     cls: 'bg-blue-100 text-blue-700' },
+}
+
+// ── Insumos del taller (MIG386-388) ─────────────────────────────────────────
+// El mismo circuito que los repuestos —pide el operador, valida el jefe, sale
+// el vale— pero sin orden de trabajo: guantes, trapos, discos de corte. No son
+// de ningún equipo, son del taller, y por eso se cargan a un centro de costo.
+
+export type CecoTaller = { id: string; codigo: string; nombre: string; area: string | null }
+
+/**
+ * Los centros de costo a los que un insumo del taller se puede cargar.
+ *
+ * Cada patente es un CECO (`area = 'Flota'`, 55 de ellos) y ésos quedan fuera a
+ * propósito: si el material es para un equipo, va por su orden de trabajo, que
+ * es donde el gasto queda con su trabajo y su historia.
+ */
+export async function getCecosTaller(): Promise<CecoTaller[]> {
+  const { data, error } = await supabase
+    .from('centros_costo')
+    .select('id, codigo, nombre, area')
+    .eq('activo', true)
+    .neq('area', 'Flota')
+    .order('nombre')
+  if (error) throw error
+  return (data ?? []) as CecoTaller[]
+}
+
+export async function solicitarInsumoTaller(params: {
+  cecoId: string
+  cantidad: number
+  productoId?: string | null
+  descripcion?: string | null
+  unidad?: string | null
+  comentario?: string | null
+  solicitadoNombre?: string | null
+  clientUuid?: string | null
+  fotos?: string[] | null
+}) {
+  const { data, error } = await supabase.rpc('rpc_taller_insumo_solicitar', {
+    p_ceco_id: params.cecoId,
+    p_cantidad: params.cantidad,
+    p_producto_id: params.productoId ?? null,
+    p_descripcion: params.descripcion ?? null,
+    p_unidad: params.unidad ?? null,
+    p_comentario: params.comentario ?? null,
+    p_solicitado_nombre: params.solicitadoNombre ?? null,
+    p_client_uuid: params.clientUuid ?? null,
+    p_fotos: params.fotos && params.fotos.length > 0 ? params.fotos : null,
+  })
+  if (error) throw error
+  return data as {
+    success: boolean; recurso_id: string
+    ceco: string; ceco_nombre: string; duplicado?: boolean
+  }
+}
+
+/**
+ * Los insumos aprobados de un mismo centro de costo se juntan en UN vale: el
+ * operador va una vez a bodega, no una por artículo.
+ */
+export async function insumosAVale(params: {
+  recursoIds: string[]
+  bodegaId?: string | null
+  observacion?: string | null
+}) {
+  const { data, error } = await supabase.rpc('rpc_taller_insumos_a_vale', {
+    p_recurso_ids: params.recursoIds,
+    p_bodega_id: params.bodegaId ?? null,
+    p_observacion: params.observacion ?? null,
+  })
+  if (error) throw error
+  return data as {
+    success: boolean; ticket_id: string; folio: string; qr: string
+    items: number; ceco: string; ceco_nombre: string
+  }
 }

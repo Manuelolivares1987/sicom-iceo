@@ -28,6 +28,7 @@ import {
 import { buscarProductos } from '@/lib/services/ot-materiales'
 import { getSolicitudesBodega, atenderSolicitudBodega, type BodegaSolicitud } from '@/lib/services/bodega-solicitudes'
 import { PortalesValeCard } from '@/components/bodega/portales-vale-card'
+import { InsumosAprobadosCard } from '@/components/bodega/insumos-aprobados-card'
 import { useMaterialesPendientesDespacho, useDespacharMaterialOT } from '@/hooks/use-ot-materiales'
 import { cn } from '@/lib/utils'
 
@@ -655,6 +656,10 @@ function SolicitudesTab() {
   const { data: pendientesOT = [] } = useMaterialesPendientesDespacho()
   return (
     <div className="space-y-6">
+      {/* [MIG386] Los insumos que el jefe aprobó y todavía no tienen papel.
+          Van primero: es lo único de esta pestaña que ya está resuelto y sólo
+          espera que alguien apriete un botón. */}
+      <InsumosAprobadosCard />
       <SolicitudesNCSection />
       <MaterialesOTSection items={pendientesOT as any[]} />
       {/* [MIG376] El link vive acá porque es de donde salen la mitad de estas
