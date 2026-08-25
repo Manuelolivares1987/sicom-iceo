@@ -22,13 +22,12 @@ export async function cargarStockEstanques(): Promise<EstanqueStock[]> {
       id, codigo, nombre, capacidad_lt, stock_teorico_lt, stock_minimo_alerta_lt,
       faena:faenas!faena_id ( nombre )
     `)
-    // [MIG366] Sólo los estanques de la bodega de Coquimbo. El filtro por tipo
-    // dejaba fuera los camiones pero seguía sumando las cuatro estaciones fijas
-    // de Romeral —128.400 L de CMP en un consolidado de Coquimbo—. El combustible
+    // [MIG366/393] Sólo los estanques de la bodega de Coquimbo: el combustible
     // de faena se rinde en el cierre de su faena, con otro documento y a otro
-    // mandante.
-    .is('faena_id', null)
-    .eq('tipo', 'fijo')
+    // mandante. `es_bodega` es la regla en la BD (sin faena y sin operación);
+    // el `tipo = 'fijo'` que estaba aquí era un atajo para excluir camiones, y
+    // escondía el JGBY-10, que es un camión de venta de Coquimbo.
+    .eq('es_bodega', true)
     .order('codigo')
   if (error) throw error
   type Raw = Omit<EstanqueStock, 'faena_nombre' | 'porcentaje' | 'estado'> & {
@@ -67,7 +66,7 @@ export async function cargarConsolidadoComercial(
   let q = supabase
     .from('v_combustible_movimientos_cliente')
     .select('*')
-    .not('estanque_codigo', 'like', 'CAM-%')  // excluir movimientos de camiones Franke
+    .eq('estanque_es_bodega', true)  // [MIG393] sólo la bodega de Coquimbo
     .order('fecha', { ascending: false })
     .limit(5000)
   if (filtros.fechaDesde) q = q.gte('fecha', filtros.fechaDesde + 'T00:00:00')
@@ -104,7 +103,7 @@ export async function cargarVentasExternasComercial(
   let q = supabase
     .from('v_combustible_movimientos_cliente')
     .select('*')
-    .not('estanque_codigo', 'like', 'CAM-%')  // excluir ventas de camiones Franke
+    .eq('estanque_es_bodega', true)  // [MIG393] sólo la bodega de Coquimbo
     .or('destino_tipo.eq.venta_externa,activo_contrato_id.not.is.null')
     .order('fecha', { ascending: false })
     .limit(5000)
