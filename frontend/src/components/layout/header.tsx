@@ -27,10 +27,21 @@ const accionDe: Record<string, string> = {
   vale_emitido:        'Preparar',
   no_conformidad:      'Planificar',
   bloqueante:          'Resolver',
+  doc_sin_fecha:       'Poner la fecha',
 }
 
-// Adónde lleva una alerta según su entidad.
-function rutaAlerta(entidadTipo: string | null): string {
+// Adónde lleva una alerta.
+// El tipo manda sobre la entidad: dos alertas pueden colgar del mismo equipo y
+// resolverse en pantallas distintas. Un papel sin vigencia (MIG413) cuelga de un
+// activo, pero mandarlo al mapa GPS no le sirve a nadie: se arregla en Control
+// documental.
+function rutaAlerta(entidadTipo: string | null, tipo?: string | null): string {
+  switch (tipo) {
+    case 'doc_sin_fecha':
+    case 'doc_vencido':
+    case 'doc_por_vencer':
+    case 'doc_vencidos_equipo': return '/dashboard/flota/control-documental'
+  }
   switch (entidadTipo) {
     case 'no_conformidad': return '/dashboard/mantenimiento/no-conformidades'
     case 'activo':         return '/dashboard/flota/gps'
@@ -87,10 +98,10 @@ export default function Header({ onMenuToggle }: HeaderProps) {
     critical: 'bg-red-500', warning: 'bg-amber-500', info: 'bg-blue-500',
   }
 
-  function abrirAlerta(id: string, entidadTipo: string | null) {
+  function abrirAlerta(id: string, entidadTipo: string | null, tipo?: string | null) {
     marcarLeida.mutate(id)
     setShowNotif(false)
-    router.push(rutaAlerta(entidadTipo))
+    router.push(rutaAlerta(entidadTipo, tipo))
   }
 
   const displayName = perfil?.nombre_completo ?? 'Usuario'
@@ -202,7 +213,7 @@ export default function Header({ onMenuToggle }: HeaderProps) {
                   visibles.slice(0, 30).map((a) => (
                     <button
                       key={a.id}
-                      onClick={() => abrirAlerta(a.id, a.entidad_tipo)}
+                      onClick={() => abrirAlerta(a.id, a.entidad_tipo, a.tipo)}
                       className="flex w-full items-start gap-2 border-b border-gray-50 px-4 py-2.5 text-left hover:bg-gray-50"
                     >
                       <span className={cn('mt-1.5 h-2 w-2 shrink-0 rounded-full', sevDot[a.severidad] ?? 'bg-gray-400')} />

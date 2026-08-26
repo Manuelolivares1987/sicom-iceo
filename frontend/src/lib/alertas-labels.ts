@@ -16,6 +16,8 @@ export const ALERTA_TIPO_LABEL: Record<string, string> = {
   doc_por_vencer:        'Documento por vencer',
   doc_vencido:           'Documento vencido',
   doc_vencidos_equipo:   'Documentos vencidos',
+  // [MIG413] Hay papel cargado, pero nadie anotó hasta cuándo vale.
+  doc_sin_fecha:         'Papeles sin vigencia',
   vencimiento:           'Vencimiento',
   semep_vencido:         'SEMEP vencido',
   rt_por_vencer:         'Revisión técnica por vencer',
