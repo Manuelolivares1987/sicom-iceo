@@ -119,7 +119,7 @@ function palabraANumero(w) {
 }
 
 /** Lee el documento y propone el vencimiento. */
-function analizar(textoCrudo) {
+function analizar(textoCrudo, tipoVence = true) {
   const t = normalizar(textoCrudo)
   const bajo = t.toLowerCase()
   const fechas = fechasEn(t)
@@ -218,15 +218,49 @@ function analizar(textoCrudo) {
   //    justo cómo el FJTJ-60 llegó a tener un certificado de 2015 vigente.
   //
   //    Queda marcado como REGLA, no como lectura: la fecha no está en el papel.
+  //
+  //    DOS CONDICIONES, aprendidas de equivocarse:
+  //
+  //    a) Sólo a tipos que vencen. Aplicarla a una factura de compra daba
+  //       «la factura del RSCY-85 venció en 2016»: una factura no caduca.
+  //
+  //    b) La fecha base tiene que estar ANCLADA a una etiqueta («Fecha de
+  //       emisión», «Fecha de instalación»). Usar «la fecha más antigua del
+  //       documento» tomaba datos de plantilla: tres camiones distintos —GCSY-66,
+  //       RZPC-83 y SBPG-12— salían con la misma póliza vencida el 29-12-2014,
+  //       que es una fecha del formulario de la aseguradora, no de su seguro.
+  //       Sin ancla no se inventa: se dice que hay que abrirlo.
+  if (!tipoVence) {
+    return { confianza: 'no_vence', motivo: 'Este tipo de papel no caduca (identidad o propiedad del equipo)' }
+  }
+  const mEmiAncla = bajo.match(RE_EMISION)
+  if (mEmiAncla) {
+    const p = mEmiAncla.index
+    const anclada = fechas.map((f) => ({ ...f, dist: f.pos - p }))
+                          .filter((f) => f.dist > 0 && f.dist < 160)
+                          .sort((a, b) => a.dist - b.dist)[0]
+    if (anclada) {
+      return {
+        emision: anclada.iso,
+        vencimiento: sumar(anclada.iso, { anios: 2 }),
+        confianza: 'regla_2_anios',
+        regla: 'el documento no declara vigencia: 2 años desde su fecha',
+        evidencia: t.slice(Math.max(0, p - 30), p + 120).trim(),
+      }
+    }
+  }
   const masAntigua = [...fechas].sort((a, b) => a.iso.localeCompare(b.iso))[0]
   return {
-    emision: masAntigua.iso,
-    vencimiento: sumar(masAntigua.iso, { anios: 2 }),
-    confianza: 'regla_2_anios',
-    regla: 'el documento no declara vigencia: se aplica la regla de 2 años desde la fecha del documento',
+    emision: masAntigua.iso, confianza: 'sin_ancla',
+    motivo: 'Tiene fechas pero ninguna dice ser la del documento: hay que abrirlo',
     evidencia: t.slice(0, 220).trim(),
   }
 }
+
+/** Los papeles de identidad y propiedad del equipo no caducan (MIG408). */
+const PERMANENTES = new Set([
+  'factura_compra', 'ficha_tecnica', 'padron', 'inscripcion_rnvm', 'homologacion',
+])
 
 // ── Main ────────────────────────────────────────────────────────────────────
 const args = process.argv.slice(2)
@@ -266,7 +300,7 @@ for (const r of rows) {
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
     const buf = Buffer.from(await resp.arrayBuffer())
     const texto = await textoDePdf(buf)
-    const an = analizar(texto)
+    const an = analizar(texto, !PERMANENTES.has(r.tipo))
     resultados.push({ ...r, ...an, caracteres: texto.trim().length })
     const v = an.vencimiento ?? '—'
     const alerta = an.vencimiento && an.vencimiento < new Date().toISOString().slice(0, 10) ? ' ⚠ VENCIDO' : ''
