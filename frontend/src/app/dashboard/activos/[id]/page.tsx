@@ -34,6 +34,7 @@ import {
   Printer,
   RefreshCw,
   CheckCircle2,
+  Loader2,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { HistorialMantenimiento } from '@/components/activos/historial-mantenimiento'
@@ -91,6 +92,7 @@ import { CarpetaCertificados } from '@/components/activos/carpeta-certificados'
 import { HistoricoContratosCard } from '@/components/activos/historico-contratos-card'
 import { useHistorialArriendos, useUltimoArriendo } from '@/hooks/use-arriendos'
 import { Building2 } from 'lucide-react'
+import { leerDocumento, type LecturaDocumento } from '@/lib/documentos/leer-documento'
 
 // ---------------------------------------------------------------------------
 // Tabs
@@ -374,7 +376,7 @@ export default function ActivoDetailPage() {
           <div className="space-y-6">
             {/* Carpeta del equipo: certificados emitidos por el sistema (MIG219) */}
             <CarpetaCertificados activoId={id} />
-            <TabCertificaciones activoId={id} />
+            <TabCertificaciones activoId={id} patente={a.patente} />
           </div>
         )}
         {tab === 'ots' && <TabOTs activoId={id} />}
@@ -520,13 +522,39 @@ const EMPTY_DOC_FORM = {
   bloqueante: true,
 }
 
-function TabCertificaciones({ activoId }: { activoId: string }) {
+function TabCertificaciones({ activoId, patente }: { activoId: string; patente?: string | null }) {
   const { data: certs, isLoading } = useCertificacionesByActivo(activoId)
   const queryClient = useQueryClient()
   const toast = useToast()
   const [showAdd, setShowAdd] = useState(false)
   const [newCert, setNewCert] = useState({ ...EMPTY_DOC_FORM })
   const [newFile, setNewFile] = useState<File | null>(null)
+  // [26-08] El sistema lee el papel al momento de subirlo: comprueba que sea un
+  // archivo de verdad, que hable de ESTE equipo y de este tipo de certificado, y
+  // saca la fecha de vencimiento. Los 468 papeles sin fecha de la flota entraron
+  // porque nadie abría el PDF; revisarlo acá evita que vuelva a pasar.
+  const [lectura, setLectura] = useState<LecturaDocumento | null>(null)
+  const [leyendo, setLeyendo] = useState(false)
+
+  const revisarArchivo = async (f: File | null) => {
+    setNewFile(f); setLectura(null)
+    if (!f) return
+    setLeyendo(true)
+    try {
+      const r = await leerDocumento(f, { patente, tipo: newCert.tipo })
+      setLectura(r)
+      // Si el documento dice su vigencia, se rellena sola: menos tipeo y menos
+      // margen para inventar una fecha.
+      if (r.vencimiento) {
+        setNewCert((p) => ({
+          ...p,
+          fecha_vencimiento: r.vencimiento!,
+          fecha_emision: p.fecha_emision || (r.emision ?? p.fecha_emision),
+        }))
+      }
+    } catch { /* leer es una ayuda, no un requisito: nunca bloquea la carga */ }
+    finally { setLeyendo(false) }
+  }
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -699,15 +727,34 @@ function TabCertificaciones({ activoId }: { activoId: string }) {
                 type="file"
                 accept=".pdf,.jpg,.jpeg,.png"
                 className="mt-1 block w-full text-sm file:mr-3 file:rounded file:border-0 file:bg-blue-100 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-blue-700 hover:file:bg-blue-200"
-                onChange={(e) => setNewFile(e.target.files?.[0] ?? null)}
+                onChange={(e) => void revisarArchivo(e.target.files?.[0] ?? null)}
               />
               {newFile && <p className="mt-1 text-[11px] text-gray-500">Se subirá: {newFile.name}</p>}
+              {leyendo && (
+                <p className="mt-2 flex items-center gap-1.5 text-[11px] text-gray-500">
+                  <Loader2 className="h-3 w-3 animate-spin" /> Revisando el documento…
+                </p>
+              )}
+              {lectura && lectura.avisos.length > 0 && (
+                <div className="mt-2 space-y-1">
+                  {lectura.avisos.map((a, i) => (
+                    <div key={i} className={cn('rounded-lg border px-2.5 py-1.5 text-[11px]',
+                      a.severidad === 'bloqueante' ? 'border-red-300 bg-red-50 text-red-800'
+                      : a.severidad === 'grave' ? 'border-orange-300 bg-orange-50 text-orange-900'
+                      : a.severidad === 'aviso' ? 'border-amber-200 bg-amber-50 text-amber-900'
+                      : 'border-green-200 bg-green-50 text-green-800')}>
+                      <b>{a.titulo}</b>
+                      {a.detalle && <span className="block opacity-90">{a.detalle}</span>}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
             {formError && (
               <p className="rounded border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{formError}</p>
             )}
             <div className="flex gap-2">
-              <Button size="sm" onClick={handleAdd} disabled={saving}>
+              <Button size="sm" onClick={handleAdd} disabled={saving || lectura?.puedeGuardar === false}>
                 <Save className="h-4 w-4 mr-1" /> {saving ? 'Guardando…' : 'Guardar'}
               </Button>
               <Button size="sm" variant="outline" onClick={() => setShowAdd(false)} disabled={saving}>Cancelar</Button>
