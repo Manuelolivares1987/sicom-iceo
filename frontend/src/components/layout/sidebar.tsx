@@ -49,6 +49,7 @@ import {
   ShieldAlert,
   Clock,
   Archive,
+  FileWarning,
 } from 'lucide-react'
 import { useNcPorDecidir } from '@/hooks/use-nc-por-decidir'
 import { cn } from '@/lib/utils'
@@ -238,6 +239,10 @@ const navGroups: NavGroup[] = [
     label: 'Flota',
     items: [
       { label: 'Flota', href: '/dashboard/flota', icon: Truck, module: 'flota' },
+      // [MIG409/410] Los papeles de cada camión, con lo que el lector sacó del
+      // archivo. Lo que se arregla acá se ve al tiro en el QR del equipo.
+      { label: 'Control documental', href: '/dashboard/flota/control-documental', icon: FileWarning, module: 'flota', badge: 'NUEVO',
+        tooltip: 'Papeles vencidos y sin fecha de toda la flota, camión por camión' },
       { label: 'Fiabilidad', href: '/dashboard/fiabilidad', icon: Activity, module: 'flota' },
       { label: 'Informes Recepción', href: '/dashboard/flota/recepcion', icon: FileText, module: 'flota' },
       { label: 'Jornada', href: '/dashboard/flota/jornada', icon: Timer, module: 'flota' },
