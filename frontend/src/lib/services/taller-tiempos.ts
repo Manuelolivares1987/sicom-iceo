@@ -31,6 +31,18 @@ export type TiempoChecklist = {
   items_hechos: number | null
   min_por_item: number | null
   avance_final: number | null
+  // [MIG400] Un checklist puede repartirse en varias jornadas.
+  jornadas: number | null
+  dias_calendario: number | null
+  /** Lo que de verdad frenó el trabajo: espera de repuesto, equipo no disponible, otro. */
+  horas_demora_real: number | null
+  horas_espera_repuesto: number | null
+  horas_equipo_no_disponible: number | null
+  horas_pausa_otro: number | null
+  /** La noche y la colación: NO son demora de nadie. */
+  horas_fin_jornada: number | null
+  horas_colacion_tramos: number | null
+  pausas_sin_declarar: number | null
 }
 
 export type TiempoRepuesto = {

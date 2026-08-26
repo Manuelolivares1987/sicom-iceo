@@ -189,14 +189,27 @@ export default function TiemposTallerPage() {
                    valor={`${mediana(C.map((c) => c.min_por_item)) ?? '—'} min`}
                    casos={C.filter((c) => c.min_por_item != null).length}
                    ayuda="La medida comparable entre checklists de distinto largo" />
-            <Cifra titulo="Horas en pausa"
-                   valor={`${promedio(C.map((c) => c.horas_pausado)) ?? '—'} h`}
-                   casos={C.filter((c) => c.horas_pausado != null).length}
-                   ayuda="Promedio por ejecución" />
-            <Cifra titulo="Ejecuciones registradas"
-                   valor={String(C.length)} casos={C.length}
-                   ayuda="Cada vez que un mecánico apretó «iniciar»" />
+            {/* [MIG400] La demora que duele es la de adentro del día. La noche
+                y la colación van aparte: un checklist repartido en tres
+                jornadas no es un checklist demorado. */}
+            <Cifra titulo="Demora real"
+                   valor={`${mediana(C.map((c) => c.horas_demora_real)) ?? '—'} h`}
+                   casos={C.filter((c) => (c.horas_demora_real ?? 0) > 0).length}
+                   ayuda="Espera de repuesto, equipo no disponible u otro. NO cuenta la noche ni la colación" />
+            <Cifra titulo="Jornadas por checklist"
+                   valor={`${mediana(C.map((c) => c.jornadas)) ?? '—'}`}
+                   casos={C.filter((c) => c.jornadas != null).length}
+                   ayuda="En cuántos días distintos se trabajó" />
           </div>
+
+          {C.some((c) => (c.pausas_sin_declarar ?? 0) > 0) && (
+            <Aviso>
+              <b>Hay pausas que nadie clasificó.</b> Cuando el mecánico no dice por qué para, el
+              motivo se deduce de cuánto duró: si cruza la medianoche o pasa de 10 horas, se toma
+              como fin de jornada y no cuenta como demora. Es una suposición razonable, pero es
+              una suposición — están marcadas como «sin declarar».
+            </Aviso>
+          )}
 
           {C.length < 20 && (
             <Aviso>
@@ -216,8 +229,10 @@ export default function TiemposTallerPage() {
                   <th className="p-2">Equipo</th>
                   <th className="p-2">Quién</th>
                   <th className="p-2 text-right">Ítems</th>
+                  <th className="p-2 text-right">Jornadas</th>
+                  <th className="p-2 text-right">Calendario</th>
                   <th className="p-2 text-right">Efectivas</th>
-                  <th className="p-2 text-right">Pausa</th>
+                  <th className="p-2 text-right">Demora real</th>
                   <th className="p-2 text-right">Min/ítem</th>
                 </tr>
               </thead>
@@ -228,8 +243,22 @@ export default function TiemposTallerPage() {
                     <td className="p-2 whitespace-nowrap text-gray-600">{c.activo_patente ?? c.activo_codigo ?? '—'}</td>
                     <td className="p-2 text-gray-600">{c.ejecutor}</td>
                     <td className="p-2 text-right tabular-nums text-gray-600">{c.items_hechos ?? 0}/{c.items_totales ?? 0}</td>
+                    <td className="p-2 text-right tabular-nums text-gray-600">{c.jornadas ?? '—'}</td>
+                    <td className="p-2 text-right tabular-nums text-gray-500">
+                      {c.dias_calendario != null ? `${c.dias_calendario} d` : '—'}
+                    </td>
                     <td className="p-2 text-right tabular-nums font-semibold">{c.horas_efectivas ?? '—'}</td>
-                    <td className="p-2 text-right tabular-nums text-gray-500">{c.horas_pausado ?? '—'}</td>
+                    <td className="p-2 text-right tabular-nums">
+                      {(c.horas_demora_real ?? 0) > 0
+                        ? <span className="font-semibold text-amber-700">{c.horas_demora_real} h</span>
+                        : <span className="text-gray-400">—</span>}
+                      {(c.pausas_sin_declarar ?? 0) > 0 && (
+                        <div className="text-[10px] font-normal text-gray-400"
+                             title="Nadie declaró por qué se pausó: el motivo se dedujo de cuánto duró">
+                          {c.pausas_sin_declarar} sin declarar
+                        </div>
+                      )}
+                    </td>
                     <td className="p-2 text-right tabular-nums">{c.min_por_item ?? '—'}</td>
                   </tr>
                 ))}
