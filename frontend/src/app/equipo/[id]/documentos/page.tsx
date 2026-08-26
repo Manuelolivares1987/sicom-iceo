@@ -18,7 +18,7 @@ interface DocPublico {
   fecha_emision: string | null
   fecha_vencimiento: string | null
   dias_restantes: number | null
-  estado: 'vigente' | 'por_vencer' | 'vencido' | 'permanente'
+  estado: 'vigente' | 'por_vencer' | 'vencido' | 'permanente' | 'sin_fecha'
   archivo_url: string | null
 }
 
@@ -27,8 +27,12 @@ const ESTADO_UI: Record<string, { label: string; cls: string }> = {
   por_vencer: { label: 'Por vencer', cls: 'bg-yellow-100 text-yellow-700' },
   vencido:    { label: 'RENOVAR',    cls: 'bg-red-100 text-red-700' },
   permanente: { label: 'Permanente', cls: 'bg-gray-100 text-gray-600' },
+  // [MIG410] Hay documento cargado, de un tipo que caduca, sin vigencia
+  // registrada. Antes decía «Permanente» — o sea, al arrendatario se le
+  // afirmaba que no vencía nunca un papel que podía estar vencido.
+  sin_fecha:  { label: 'VIGENCIA POR CONFIRMAR', cls: 'bg-orange-100 text-orange-800' },
 }
-const ORDEN_ESTADO: Record<string, number> = { vencido: 0, por_vencer: 1, vigente: 2, permanente: 3 }
+const ORDEN_ESTADO: Record<string, number> = { vencido: 0, sin_fecha: 1, por_vencer: 2, vigente: 3, permanente: 4 }
 
 export default function DocumentosEquipoPage() {
   const params = useParams()
@@ -50,6 +54,7 @@ export default function DocumentosEquipoPage() {
     (ORDEN_ESTADO[a.estado] ?? 9) - (ORDEN_ESTADO[b.estado] ?? 9) ||
     (TIPO_DOC_LABEL[a.tipo] ?? a.tipo).localeCompare(TIPO_DOC_LABEL[b.tipo] ?? b.tipo))
   const vencidos = docs.filter((d) => d.estado === 'vencido').length
+  const porConfirmar = docs.filter((d) => d.estado === 'sin_fecha').length
 
   return (
     <div className="flex min-h-screen items-start justify-center bg-gray-100 px-4 py-8">
@@ -76,6 +81,20 @@ export default function DocumentosEquipoPage() {
             <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
               <AlertTriangle className="h-4 w-4 shrink-0" />
               {vencidos} documento{vencidos > 1 ? 's' : ''} requiere{vencidos > 1 ? 'n' : ''} renovación.
+            </div>
+          )}
+
+          {/* [MIG410] Decirlo, aunque incomode. Antes estos salían como
+              «Permanente»: al arrendatario se le afirmaba que no vencían nunca
+              papeles que podían estar vencidos hace más de un año. */}
+          {porConfirmar > 0 && (
+            <div className="flex items-start gap-2 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-xs text-orange-800">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+              <span>
+                <b>{porConfirmar} documento{porConfirmar > 1 ? 's' : ''} con la vigencia por confirmar.</b>{' '}
+                El archivo está cargado, pero su fecha de vencimiento no está registrada.
+                Se puede abrir y revisar; estamos actualizándolos.
+              </span>
             </div>
           )}
 
