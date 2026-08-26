@@ -253,7 +253,9 @@ export default function NoConformidadesPage() {
   // kilométrica— pero el de arriba, que es el que está más trabado, sí.
   useEffect(() => {
     if (autoAbierto || equipos.length === 0) return
-    setExpandido(Object.fromEntries(equipos.slice(0, 3).map((e) => [e.activoId, true])))
+    // Sólo el primero. Con tres, el peor caso son 81 hallazgos y 76 fotos en la
+    // primera pintada — en un tablet de taller eso es una pantalla congelada.
+    setExpandido(Object.fromEntries(equipos.slice(0, 1).map((e) => [e.activoId, true])))
     setAutoAbierto(true)
   }, [equipos, autoAbierto])
 
@@ -394,7 +396,7 @@ export default function NoConformidadesPage() {
                           className="flex w-full gap-2 rounded border bg-white p-2 text-left">
                     {nc.foto_url ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={nc.foto_url} alt="Evidencia" className="h-12 w-12 shrink-0 rounded border object-cover" />
+                      <img src={nc.foto_url} alt="Evidencia" loading="lazy" decoding="async" className="h-12 w-12 shrink-0 rounded border object-cover" />
                     ) : (
                       <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded border border-dashed border-gray-300 text-gray-300">
                         <ImageOff className="h-4 w-4" />
@@ -520,7 +522,7 @@ export default function NoConformidadesPage() {
                               <a href={nc.foto_url} target="_blank" rel="noreferrer" title="Ver la foto del hallazgo"
                                  onClick={(e) => e.stopPropagation()} className="shrink-0">
                                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img src={nc.foto_url} alt="Evidencia de la NC" className="h-14 w-14 rounded border object-cover hover:opacity-80" />
+                                <img src={nc.foto_url} alt="Evidencia de la NC" loading="lazy" decoding="async" className="h-14 w-14 rounded border object-cover hover:opacity-80" />
                               </a>
                             ) : (
                               <span title="Esta NC se levantó sin foto"
