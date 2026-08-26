@@ -106,10 +106,13 @@ export default function TiemposTallerPage() {
         rep.isLoading ? <div className="flex justify-center py-10"><Spinner /></div> : (
         <div className="space-y-3">
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {/* [MIG404] Sólo lo que pidió un operador. Lo que la jefatura agrega
+                nace aprobado en el mismo instante: mide cero por construcción y
+                arrastraba la mediana de todos a cero. */}
             <Cifra titulo="Pedir → aprobar"
                    valor={horasLegibles(mediana(R.map((r) => r.h_pedir_a_aprobar)))}
                    casos={R.filter((r) => r.h_pedir_a_aprobar != null).length}
-                   ayuda="Desde que el mecánico lo pide hasta que la jefatura lo aprueba" />
+                   ayuda="Sólo lo que pidió un operador y esperó respuesta. Lo que agrega la jefatura nace aprobado y no cuenta acá" />
             <Cifra titulo="Aprobar → vale"
                    valor={horasLegibles(mediana(R.map((r) => r.h_aprobar_a_vale)))}
                    casos={R.filter((r) => r.h_aprobar_a_vale != null).length}
@@ -158,7 +161,15 @@ export default function TiemposTallerPage() {
                       {r.activo_patente ?? r.activo_codigo ?? '—'}
                       <div className="font-mono text-[10px] text-gray-400">{r.ot_folio}</div>
                     </td>
-                    <td className="p-2 text-gray-600">{r.lo_pidio ?? '—'}</td>
+                    <td className="p-2 text-gray-600">
+                      {r.lo_pidio ?? '—'}
+                      {!r.lo_pidio_el_operador && (
+                        <div className="text-[10px] text-gray-400"
+                             title="La jefatura lo agregó ya aprobado: no hubo espera que medir">
+                          lo agregó la jefatura
+                        </div>
+                      )}
+                    </td>
                     <td className="p-2 text-right tabular-nums">{horasLegibles(r.h_pedir_a_aprobar)}</td>
                     <td className="p-2 text-right tabular-nums">{horasLegibles(r.h_aprobar_a_vale)}</td>
                     <td className="p-2 text-right tabular-nums">{horasLegibles(r.h_vale_a_entrega)}</td>

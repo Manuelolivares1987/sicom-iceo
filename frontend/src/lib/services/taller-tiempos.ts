@@ -65,6 +65,8 @@ export type TiempoRepuesto = {
   h_vale_a_entrega: number | null
   h_total: number | null
   h_esperando: number | null
+  /** [MIG404] false = lo agregó la jefatura, que aprueba en el mismo instante. */
+  lo_pidio_el_operador: boolean
 }
 
 export type TiempoNC = {
