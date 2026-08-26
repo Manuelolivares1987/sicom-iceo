@@ -318,6 +318,24 @@ function EmitirTab() {
   )
 }
 
+/**
+ * Días que lleva esperando un vale. La antigüedad es la única forma que tiene
+ * bodega de priorizar: hasta ahora los diez vales se veían idénticos.
+ */
+function EsperaChip({ desde }: { desde: string }) {
+  const dias = Math.floor((Date.now() - new Date(desde).getTime()) / 86_400_000)
+  if (dias <= 0) return <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-600">emitido hoy</span>
+  const cls = dias >= 15 ? 'bg-red-100 text-red-700'
+            : dias >= 5  ? 'bg-amber-100 text-amber-800'
+            : 'bg-gray-100 text-gray-600'
+  return (
+    <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${cls}`}
+          title={`Emitido el ${new Date(desde).toLocaleDateString('es-CL')}`}>
+      esperando {dias} día{dias !== 1 ? 's' : ''}
+    </span>
+  )
+}
+
 // ── Por despachar (bodeguero): lista de vales pendientes + despacho ───────────
 function DespacharTab() {
   const toast = useToast()
@@ -480,6 +498,24 @@ function DespacharTab() {
                       <div className="text-sm font-semibold text-gray-800">{aQuienSeCarga(t).titulo} <span className="font-normal text-gray-500">{t.activo_nombre}</span></div>
                       <div className="text-[11px] text-gray-500">
                         {aQuienSeCarga(t).detalle} · {t.n_items} ítem{t.n_items !== 1 ? 's' : ''} · emitió {t.emitido_por_nombre ?? '—'} · {new Date(t.created_at).toLocaleDateString('es-CL')}
+                      </div>
+                      <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                        {/* Cuánto lleva esperando. Sin esto, un vale de hace 50
+                            días se ve igual que el de hoy y nadie sabe cuál
+                            atender primero. */}
+                        <EsperaChip desde={t.created_at} />
+                        {/* Un vale cuyos ítems no están en el catálogo no se
+                            puede despachar: el stock no baja de un producto que
+                            el sistema no sabe cuál es. Mejor saberlo antes de
+                            abrirlo que después. */}
+                        {t.n_sin_producto > 0 && (
+                          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800"
+                                title="Hay que decir qué producto del catálogo es cada uno antes de poder despacharlos">
+                            {t.n_sin_producto === t.n_items
+                              ? 'Ninguno se puede despachar todavía: falta el código'
+                              : `${t.n_sin_producto} de ${t.n_items} sin código`}
+                          </span>
+                        )}
                       </div>
                     </div>
                     <Truck className="h-5 w-5 text-orange-500 shrink-0" />

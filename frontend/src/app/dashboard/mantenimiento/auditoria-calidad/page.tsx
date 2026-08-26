@@ -34,6 +34,7 @@ import { subirFirma } from '@/lib/services/verificacion'
 import { subirFotoItemAuditoria, getInformesSalida } from '@/lib/services/informe-salida'
 import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
+import { etiquetaEstadoActivo } from '@/lib/alertas-labels'
 
 type Res = 'ok' | 'no_ok' | 'na' | 'pendiente'
 
@@ -45,7 +46,9 @@ function cuandoFue(iso: string): string {
   const dias = Math.round((dia(new Date()) - dia(d)) / 86_400_000)
   if (dias <= 0) return `hoy ${hora}`
   if (dias === 1) return `ayer ${hora}`
-  return `el ${d.toLocaleDateString('es-CL', { day: '2-digit', month: '2-digit' })} ${hora}`
+  // Con día/mes en números, «7/8» puede leerse 7 de agosto u 8 de julio. Con el
+  // mes en letras no hay dos lecturas posibles.
+  return `el ${d.toLocaleDateString('es-CL', { day: '2-digit', month: 'short' })} a las ${hora}`
 }
 
 // useSearchParams exige Suspense en el prerender (Next 14).
@@ -151,12 +154,18 @@ function AuditoriaCalidadPageInner() {
       {/* KPIs */}
       {kpi && (
         <div className="grid gap-3 grid-cols-2 md:grid-cols-4 lg:grid-cols-6">
-          <Kpi label="Audit pass rate (30d)" value={`${kpi.aud_pass_rate_pct ?? '—'}%`} icon={Gauge} />
-          <Kpi label="Chequeo OK 1ª vez" value={`${kpi.cc_first_time_ok_pct ?? '—'}%`} icon={CheckCircle2} />
+          {/* Sin auditorías cerradas todavía, un «—%» parece un indicador roto.
+              Se dice que aún no hay con qué calcularlo. */}
+          <Kpi label="Auditorías aprobadas (30 días)"
+               value={kpi.aud_pass_rate_pct == null ? 'Sin cerrar aún' : `${kpi.aud_pass_rate_pct}%`}
+               icon={Gauge} />
+          <Kpi label="Aprobadas a la primera"
+               value={kpi.cc_first_time_ok_pct == null ? 'Sin cerrar aún' : `${kpi.cc_first_time_ok_pct}%`}
+               icon={CheckCircle2} />
           <Kpi label="Diferidos pendientes" value={kpi.diferidos_pendientes ?? 0} icon={Clock} />
           <Kpi label="Diferidos vencidos" value={kpi.diferidos_vencidos ?? 0} icon={AlertTriangle} warn={(kpi.diferidos_vencidos ?? 0) > 0} />
           <Kpi label="Pendientes críticos" value={kpi.diferidos_criticos ?? 0} icon={FileWarning} warn={(kpi.diferidos_criticos ?? 0) > 0} />
-          <Kpi label="NCR abiertas" value={kpi.nc_abiertas ?? 0} icon={ShieldCheck} />
+          <Kpi label="No conformidades abiertas" value={kpi.nc_abiertas ?? 0} icon={ShieldCheck} />
         </div>
       )}
 
@@ -188,7 +197,9 @@ function AuditoriaCalidadPageInner() {
                   <div>
                     <div className="font-medium">{e.patente ?? e.codigo}</div>
                     <div className="text-xs text-muted-foreground flex items-center gap-1">
-                      {e.estado}
+                      {/* El estado en palabras. Antes salía 'en_mantenimiento'
+                          con guión bajo: el valor de la base, tal cual. */}
+                      {etiquetaEstadoActivo(e.estado)}
                       {e.estado_comercial === 'disponible' && <Badge variant="operativo" className="text-[9px]">disponible</Badge>}
                       {abierta && (
                         <span className="rounded bg-amber-100 px-1 py-0.5 text-[9px] text-amber-800">
@@ -230,7 +241,7 @@ function AuditoriaCalidadPageInner() {
                   {/* [MIG271] Cuándo se dejó el trabajo, para el que vuelve al otro día. */}
                   {a.ultima_actividad && (
                     <div className="text-[11px] text-emerald-700">
-                      seguiste {cuandoFue(a.ultima_actividad)}
+                      Se trabajó por última vez {cuandoFue(a.ultima_actividad)}
                     </div>
                   )}
                   {(a.items_marcados ?? 0) > 0 && (a.items_marcados ?? 0) < a.items_total && (

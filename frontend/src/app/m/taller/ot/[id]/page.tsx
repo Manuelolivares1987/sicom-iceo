@@ -20,6 +20,7 @@ import {
   useMecanicoOTs, useMecanicoChecklist, useMarcarItem, useTimingMecanico,
   useAutoSyncTaller, useNetworkStatus, useRecursosOT, useSolicitarRecurso,
   useNotasOT, useAgregarNota,
+  useMedidoresOT, useGuardarMedidores,
 } from '@/hooks/use-taller-mecanico'
 
 function dataUrlToBlob(dataUrl: string): Blob {
@@ -150,6 +151,118 @@ function NeumaticosProfundidad({ item, onSave, saving }: {
           Cancelar
         </button>
       </div>
+    </div>
+  )
+}
+
+// ── Medidores del equipo (MIG397) ───────────────────────────────────────────
+// Con cuánto uso volvió el equipo. Las columnas existían desde siempre, pero el
+// mecánico no tenía dónde escribirlas: se llenaban solas arrastrando el último
+// valor o quedaban nulas, y 46 de 120 recepciones quedaron sin ningún medidor.
+// De este número salen la próxima preventiva y lo que se le cobra al cliente.
+function MedidoresSection({ otId, online }: { otId: string; online: boolean }) {
+  const { data: med, isLoading } = useMedidoresOT(otId)
+  const guardar = useGuardarMedidores(otId)
+  const [hm, setHm] = useState('')
+  const [km, setKm] = useState('')
+  const [aviso, setAviso] = useState<string | null>(null)
+  const [editando, setEditando] = useState(false)
+
+  useEffect(() => {
+    if (!med) return
+    setHm(med.horometro != null ? String(med.horometro) : '')
+    setKm(med.kilometraje != null ? String(med.kilometraje) : '')
+  }, [med])
+
+  if (isLoading || !med) return null
+
+  const exigeKm = med.exige_kilometraje
+  const falta = med.horometro == null || (exigeKm && med.kilometraje == null)
+  const cerrado = !falta && !editando
+
+  const enviar = (confirmado: boolean) => {
+    const hmN = hm.trim() === '' ? null : Number(hm)
+    const kmN = km.trim() === '' ? null : Number(km)
+    if (hmN == null || Number.isNaN(hmN)) { setAviso('Escribe el horómetro.'); return }
+    if (exigeKm && (kmN == null || Number.isNaN(kmN))) { setAviso('Escribe el kilometraje.'); return }
+    setAviso(null)
+    guardar.mutate({ horometro: hmN, kilometraje: kmN, confirmado }, {
+      onSuccess: (r) => {
+        if (r?.requiere_confirmacion) { setAviso(r.motivo ?? 'Revisa el número.'); return }
+        setAviso(null); setEditando(false)
+      },
+      onError: (e) => setAviso((e as Error).message),
+    })
+  }
+
+  return (
+    <div className={cerrado
+      ? 'rounded-xl border border-gray-200 bg-white p-3'
+      : 'rounded-xl border-2 border-amber-400 bg-amber-50 p-3'}>
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="flex items-center gap-1 text-sm font-semibold">
+          <Gauge className="h-4 w-4 text-amber-600" /> Medidores del equipo
+        </h2>
+        {cerrado && (
+          <button type="button" onClick={() => setEditando(true)}
+                  className="text-[11px] font-semibold text-blue-600 underline">Corregir</button>
+        )}
+      </div>
+
+      {cerrado ? (
+        <p className="mt-1 text-xs text-gray-600">
+          <b className="tabular-nums">{med.horometro}</b> h
+          {exigeKm && med.kilometraje != null && <> · <b className="tabular-nums">{med.kilometraje}</b> km</>}
+          {!med.anotado_por_persona && (
+            <span className="ml-1 text-amber-700">· lo trajo el sistema, confírmalo</span>
+          )}
+        </p>
+      ) : (
+        <>
+          <p className="mt-1 text-[11px] text-amber-900">
+            Anótalos antes de finalizar. De acá sale cuándo toca la próxima mantención.
+          </p>
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            <label className="text-[11px] font-medium text-gray-700">
+              Horómetro (h)
+              <input type="number" inputMode="decimal" step="0.1" min="0" value={hm}
+                     onChange={(e) => setHm(e.target.value)}
+                     className="mt-0.5 w-full rounded-lg border border-gray-300 px-2 py-2 text-base tabular-nums"
+                     placeholder="0.0" />
+            </label>
+            {exigeKm && (
+              <label className="text-[11px] font-medium text-gray-700">
+                Kilometraje (km)
+                <input type="number" inputMode="decimal" step="0.1" min="0" value={km}
+                       onChange={(e) => setKm(e.target.value)}
+                       className="mt-0.5 w-full rounded-lg border border-gray-300 px-2 py-2 text-base tabular-nums"
+                       placeholder="0.0" />
+              </label>
+            )}
+          </div>
+          {aviso && (
+            <p className="mt-2 rounded-lg bg-white px-2 py-1.5 text-[11px] font-medium text-red-700">
+              {aviso}
+              {guardar.data?.requiere_confirmacion && (
+                <button type="button" onClick={() => enviar(true)}
+                        className="ml-2 rounded bg-red-600 px-2 py-0.5 text-white">
+                  Es correcto, guardar igual
+                </button>
+              )}
+            </p>
+          )}
+          <button type="button" disabled={guardar.isPending || !online}
+                  onClick={() => enviar(false)}
+                  className="mt-2 w-full rounded-lg bg-amber-600 py-2.5 text-sm font-semibold text-white disabled:opacity-50">
+            {guardar.isPending ? 'Guardando…' : 'Guardar medidores'}
+          </button>
+          {!online && (
+            <p className="mt-1 text-[11px] text-amber-800">
+              Sin señal no se pueden guardar todavía: anótalos cuando vuelva la conexión.
+            </p>
+          )}
+        </>
+      )}
     </div>
   )
 }
@@ -661,6 +774,10 @@ export default function MecanicoOTPage() {
         <AlertTriangle className="h-3 w-3 text-amber-500" />
         Al pausar o finalizar, las tareas NO OK se reportan como No Conformidad al jefe.
       </p>
+
+      {/* [MIG397] Con cuánto uso volvió el equipo. Va antes que todo lo demás
+          porque finalizar lo exige y se descubre tarde si queda al final. */}
+      <MedidoresSection otId={otId} online={online} />
 
       {/* Repuestos y materiales para reparar (los valida el jefe) */}
       <RecursosSection otId={otId} online={online}

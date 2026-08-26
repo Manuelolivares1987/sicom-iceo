@@ -122,7 +122,7 @@ export default function LoginPage() {
                 id="email"
                 type="email"
                 autoComplete="email"
-                placeholder="usuario@pilladoempresas.cl"
+                placeholder="nombre@pillado.cl"
                 className="block w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm text-gray-900 placeholder-gray-400 transition-colors focus:border-pillado-green-500 focus:outline-none focus:ring-2 focus:ring-pillado-green-500/20"
                 {...register('email', {
                   required: 'El correo es obligatorio',
