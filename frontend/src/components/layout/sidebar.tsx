@@ -47,6 +47,7 @@ import {
   Building2,
   Footprints,
   ShieldAlert,
+  Clock,
 } from 'lucide-react'
 import { useNcPorDecidir } from '@/hooks/use-nc-por-decidir'
 import { cn } from '@/lib/utils'
@@ -165,6 +166,10 @@ const navGroups: NavGroup[] = [
           { label: 'No Conformidades', href: '/dashboard/mantenimiento/no-conformidades', icon: AlertTriangle, module: 'mantenimiento', contador: 'nc-por-decidir',
             tooltip: 'Hallazgos por planificar y repuestos que el operador pide aprobar' },
           { label: 'Equipos auxiliares', href: '/dashboard/mantenimiento/auxiliares', icon: Layers, module: 'mantenimiento' },
+          // [MIG399] Los tres tramos del trabajo medidos con los relojes que el
+          // sistema ya guardaba: checklist, repuesto y no conformidad.
+          { label: 'Cuánto nos demoramos', href: '/dashboard/mantenimiento/tiempos', icon: Clock, module: 'mantenimiento', badge: 'NUEVO',
+            tooltip: 'Cuánto toma el checklist, conseguir un repuesto y resolver una NC' },
         ],
       },
       {
