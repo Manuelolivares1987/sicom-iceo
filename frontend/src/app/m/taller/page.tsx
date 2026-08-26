@@ -124,13 +124,35 @@ export default function MecanicoHomePage() {
       arr.push(o)
       m.set(k, arr)
     }
+    // [26-08] Antes se ordenaba puro cronológico, así que arriba de todo
+    // quedaban las OT de julio que siguen «Por iniciar» —seis semanas
+    // atrasadas— y el trabajo de hoy había que ir a buscarlo abajo, después de
+    // ocho grupos. El mecánico abre su lista para ver qué le toca HOY.
+    //
+    // Orden: hoy · atrasadas (de la más vieja) · lo que viene · sin fecha.
+    const hoyISO = (() => {
+      const d = new Date()
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    })()
+    const rango = (f: string) => (f === hoyISO ? 0 : f < hoyISO ? 1 : 2)
     return Array.from(m.entries())
       .sort(([a], [b]) => {
         if (!a) return 1        // sin fecha al final
         if (!b) return -1
+        const ra = rango(a), rb = rango(b)
+        if (ra !== rb) return ra - rb
+        // Dentro de las atrasadas, primero la que lleva más tiempo esperando.
         return a.localeCompare(b)
       })
-      .map(([fecha, items]) => ({ fecha: fecha || null, label: diaLabel(fecha || null), items }))
+      .map(([fecha, items]) => ({
+        fecha: fecha || null,
+        label: diaLabel(fecha || null),
+        atrasado: !!fecha && fecha < hoyISO,
+        diasAtraso: fecha && fecha < hoyISO
+          ? Math.round((new Date(hoyISO).getTime() - new Date(fecha).getTime()) / 86400000)
+          : 0,
+        items,
+      }))
   }, [misOts])
 
   // Días plegados (colapsables). Por defecto todos desplegados; el operador
@@ -285,9 +307,20 @@ export default function MecanicoHomePage() {
                 type="button"
                 onClick={() => toggleDia(clave)}
                 aria-expanded={!plegado}
-                className="sticky top-0 z-10 flex w-full items-center gap-2 rounded-lg bg-gray-100 px-2.5 py-2 active:bg-gray-200">
-                <ChevronDown className={`h-4 w-4 text-gray-500 transition-transform ${plegado ? '-rotate-90' : ''}`} />
-                <span className="text-xs font-semibold text-gray-700">{grupo.label}</span>
+                className={`sticky top-0 z-10 flex w-full items-center gap-2 rounded-lg px-2.5 py-2 ${
+                  grupo.atrasado ? 'bg-red-100 active:bg-red-200' : 'bg-gray-100 active:bg-gray-200'}`}>
+                <ChevronDown className={`h-4 w-4 transition-transform ${plegado ? '-rotate-90' : ''} ${
+                  grupo.atrasado ? 'text-red-600' : 'text-gray-500'}`} />
+                <span className={`text-xs font-semibold ${grupo.atrasado ? 'text-red-800' : 'text-gray-700'}`}>
+                  {grupo.label}
+                </span>
+                {/* Que el atraso se vea, y cuánto. Antes una OT de hace seis
+                    semanas se veía igual que la de hoy. */}
+                {grupo.atrasado && (
+                  <span className="rounded-full bg-red-600 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                    {grupo.diasAtraso} día{grupo.diasAtraso !== 1 ? 's' : ''} de atraso
+                  </span>
+                )}
                 <span className="ml-auto rounded-full bg-white px-2 py-0.5 text-[10px] font-medium text-gray-500">
                   {grupo.items.length} OT{grupo.items.length !== 1 ? 's' : ''}
                 </span>

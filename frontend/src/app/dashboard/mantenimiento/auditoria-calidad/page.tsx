@@ -93,6 +93,13 @@ function AuditoriaCalidadPageInner() {
   const { data: kpi } = useKpiCalidadTaller()
   const { data: pendientes = [], isLoading: loadingPend } = useAuditoriasPendientes()
   const { data: equipos = [] } = useEquiposParaAuditar()
+  const [buscaEquipo, setBuscaEquipo] = useState('')
+  const equiposFiltrados = useMemo(() => {
+    const q = buscaEquipo.trim().toLowerCase()
+    if (!q) return equipos
+    return (equipos as Array<{ patente?: string | null; codigo?: string | null }>).filter((e) =>
+      (e.patente ?? '').toLowerCase().includes(q) || (e.codigo ?? '').toLowerCase().includes(q))
+  }, [equipos, buscaEquipo])
   const iniciar = useIniciarAuditoria()
 
   const [sel, setSel] = useState<{ auditoria_id: string; activo_id: string; label: string } | null>(null)
@@ -185,9 +192,20 @@ function AuditoriaCalidadPageInner() {
           {/* Iniciar auditoría */}
           <Card>
             <CardHeader><CardTitle className="text-base">Equipos para auditar</CardTitle></CardHeader>
-            <CardContent className="space-y-2 max-h-72 overflow-auto">
-              {equipos.length === 0 && <p className="text-sm text-muted-foreground py-4 text-center">Sin equipos en mantención.</p>}
-              {equipos.map((e: any) => {
+            <CardContent className="space-y-2">
+              {/* [26-08] 32 equipos en una lista sin buscador: el auditor tenía
+                  que encontrar el suyo bajando con la rueda del mouse. */}
+              <Input value={buscaEquipo} onChange={(ev) => setBuscaEquipo(ev.target.value)}
+                     placeholder="Buscar patente o código…" className="h-8 text-sm" />
+              {equiposFiltrados.length === 0 && (
+                <p className="py-4 text-center text-sm text-muted-foreground">
+                  {equipos.length === 0
+                    ? 'Sin equipos en mantención.'
+                    : `Ningún equipo coincide con «${buscaEquipo}».`}
+                </p>
+              )}
+              <div className="space-y-2 max-h-72 overflow-auto">
+              {equiposFiltrados.map((e: any) => {
                 // [MIG271] Si el equipo ya tiene auditoría abierta, el botón la
                 // retoma (la base ya no deja crear una segunda). Se dice
                 // «Continuar» para que nadie crea que parte de cero.
@@ -220,6 +238,7 @@ function AuditoriaCalidadPageInner() {
                 </div>
                 )
               })}
+              </div>
             </CardContent>
           </Card>
 
