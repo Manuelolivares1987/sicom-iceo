@@ -128,7 +128,19 @@ function analizar(textoCrudo) {
   }
 
   // 1) Vencimiento explícito: la fecha más cercana después de la palabra clave.
-  const mVence = bajo.match(RE_VENCE)
+  //    OJO: en las pólizas «Vencimiento» encabeza la TABLA DE CUOTAS del pago
+  //    («Nro Cuota | Vencimiento | Total»), no la vigencia del seguro. Tomar esa
+  //    fecha daba pólizas «vencidas en 2024» que en realidad estaban al día: el
+  //    número era el de la primera cuota. Si el contexto huele a plan de pago,
+  //    esta regla no aplica y se sigue con las siguientes.
+  const mVence = (() => {
+    for (const m of bajo.matchAll(new RegExp(RE_VENCE.source, 'gi'))) {
+      const ctx = bajo.slice(Math.max(0, m.index - 90), m.index + 90)
+      if (/cuota|dividendo|prima\s|forma de pago|plan de pago/.test(ctx)) continue
+      return m
+    }
+    return null
+  })()
   if (mVence) {
     const p = mVence.index
     const cerca = fechas
