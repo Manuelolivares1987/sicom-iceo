@@ -47,6 +47,23 @@ import { NcEquipoCard } from '@/components/mantenimiento/nc-equipo-card'
 import { InformesRecobroEnCurso } from '@/components/mantenimiento/informes-recobro-en-curso'
 import { cn } from '@/lib/utils'
 
+// [MIG402] Los nombres del grupo de trabajo, sin repetidos. El modal del
+// conjunto lee `equipo.grupos` —que es la suma de TODAS las NC del equipo— y al
+// guardar lo escribe de vuelta en cada una: sin esto la lista se concatena
+// consigo misma en cada guardado, y dos mecánicos terminan siendo cuatro.
+function nombresUnicos(texto: string | null | undefined): string[] {
+  const vistos = new Set<string>()
+  const out: string[] = []
+  for (const raw of (texto ?? '').split(',')) {
+    const n = raw.trim()
+    if (!n) continue
+    const k = n.toLowerCase()
+    if (vistos.has(k)) continue
+    vistos.add(k); out.push(n)
+  }
+  return out
+}
+
 const ESTADO_BADGE: Record<string, { v: any; t: string }> = {
   registrada: { v: 'default', t: 'Registrada' },
   con_recursos: { v: 'asignada', t: 'Con recursos' },
@@ -76,7 +93,6 @@ const ORIGEN_TXT: Record<string, string> = {
 
 const ORDEN_ESTADO = ['registrada', 'con_recursos', 'planificada', 'en_ejecucion', 'resuelta', 'descartada']
 const ORDEN_SEV = ['critica', 'alta', 'media', 'baja']
-const FILTROS = [['', 'Todas'], ['registrada', 'Sin recursos'], ['con_recursos', 'Con recursos'], ['planificada', 'Planificadas']] as const
 
 // ── El ciclo, dicho como pasos ──────────────────────────────────────────────
 // El jefe de taller preguntaba por qué no "le llegaban" las cosas: la bandeja
@@ -86,17 +102,20 @@ const FILTROS = [['', 'Todas'], ['registrada', 'Sin recursos'], ['con_recursos',
 type PasoClave = 'aprobar' | 'recursos' | 'planificar' | 'vale' | 'taller' | 'listo'
 
 const PASOS: { k: PasoClave; label: string; hacer: string; color: string }[] = [
-  { k: 'aprobar',    label: 'Insumos por aprobar', hacer: 'El operador pidió repuestos: aprobar o ajustar', color: 'bg-orange-600' },
-  { k: 'recursos',   label: 'Falta definir recursos', hacer: 'Asignar grupo, horas y materiales', color: 'bg-amber-500' },
-  { k: 'planificar', label: 'Listos para planificar', hacer: 'Crear la OT correctiva del equipo', color: 'bg-sky-600' },
-  { k: 'vale',       label: 'Esperando vale', hacer: 'Emitir el vale para que bodega prepare', color: 'bg-violet-600' },
+  { k: 'aprobar',    label: 'Aprobar insumos', hacer: 'El operador pidió repuestos: aprobar o ajustar', color: 'bg-orange-600' },
+  { k: 'recursos',   label: 'Definir recursos', hacer: 'Asignar grupo, horas y materiales', color: 'bg-amber-500' },
+  { k: 'planificar', label: 'Planificar la OT', hacer: 'Crear la OT correctiva del equipo', color: 'bg-sky-600' },
+  { k: 'vale',       label: 'Emitir el vale', hacer: 'Emitir el vale para que bodega prepare', color: 'bg-violet-600' },
   { k: 'taller',     label: 'En taller', hacer: 'El trabajo está en ejecución', color: 'bg-emerald-600' },
   { k: 'listo',      label: 'Resueltos', hacer: 'Sin nada pendiente', color: 'bg-gray-400' },
 ]
-const PASO_TXT: Record<PasoClave, string> = {
-  aprobar: 'Aprobar insumos', recursos: 'Definir recursos', planificar: 'Planificar OT',
-  vale: 'Emitir vale', taller: 'En taller', listo: 'Resuelto',
-}
+// [26-08] UN solo nombre por estado. Antes el contador de arriba decía «Listos
+// para planificar», el chip de la fila «Planificar OT» y el filtro de abajo
+// «Planificadas»: tres palabras para lo mismo en la misma pantalla, y nadie
+// podía conectar un número con las filas que lo componen.
+const PASO_TXT: Record<PasoClave, string> = Object.fromEntries(
+  PASOS.map((p) => [p.k, p.label]),
+) as Record<PasoClave, string>
 
 // Conjunto de NC de una patente: en el taller TODO se gestiona por equipo (MIG209)
 type EquipoNC = {
@@ -138,8 +157,9 @@ export default function NoConformidadesPage() {
   useRequireAuth()
   const qc = useQueryClient()
   const toast = useToast()
-  const [filtro, setFiltro] = useState('')
-  const { data: ncs = [], isLoading } = useQuery({ queryKey: ['nc-recepcion', filtro], queryFn: () => getNcRecepcion(filtro || undefined), staleTime: 20_000 })
+  // [26-08] Se traen todas y se filtran con los contadores de arriba, que son
+  // el único filtro de la pantalla desde que salió la fila duplicada.
+  const { data: ncs = [], isLoading } = useQuery({ queryKey: ['nc-recepcion'], queryFn: () => getNcRecepcion(), staleTime: 20_000 })
   const [recursosEquipo, setRecursosEquipo] = useState<EquipoNC | null>(null)
   const [fichaNc, setFichaNc] = useState<{ nc: NcRecepcion; patente: string } | null>(null)
   const [recobroEquipo, setRecobroEquipo] = useState<EquipoNC | null>(null)
@@ -147,7 +167,11 @@ export default function NoConformidadesPage() {
   const [adhocOpen, setAdhocOpen] = useState(false)
   const [valeOpen, setValeOpen] = useState(false)
   const [busyId, setBusyId] = useState<string | null>(null)
+  // [26-08] Lo mejor de esta pantalla —la foto del daño y la frase textual del
+  // mecánico— venía plegado, y la instrucción para abrirlo estaba en gris de
+  // once píxeles dentro de un párrafo de sesenta palabras que nadie lee.
   const [expandido, setExpandido] = useState<Record<string, boolean>>({})
+  const [autoAbierto, setAutoAbierto] = useState(false)
 
   // Equipos con insumos aprobados/recibidos listos para vale (botón grande)
   const { data: seguimiento = [] } = useQuery({
@@ -224,6 +248,15 @@ export default function NoConformidadesPage() {
   const invalidar = () => qc.invalidateQueries({ queryKey: ['nc-recepcion'] })
   const todoAbierto = equipos.length > 0 && equipos.every((e) => expandido[e.activoId])
 
+  // Los primeros equipos vienen abiertos: la foto y la observación son lo que se
+  // viene a ver. Con muchos equipos no se abren todos —la página quedaría
+  // kilométrica— pero el de arriba, que es el que está más trabado, sí.
+  useEffect(() => {
+    if (autoAbierto || equipos.length === 0) return
+    setExpandido(Object.fromEntries(equipos.slice(0, 3).map((e) => [e.activoId, true])))
+    setAutoAbierto(true)
+  }, [equipos, autoAbierto])
+
   const kpi = useMemo(() => ({
     total: equipos.length,
     recobrables: ncs.filter((n) => n.recobro === 'cliente' || n.recobro === 'compartido').length,
@@ -294,6 +327,8 @@ export default function NoConformidadesPage() {
                 <span className="text-2xl font-bold leading-none">{n}</span>
               </div>
               <p className="mt-1 text-[11px] font-medium leading-tight text-gray-700">{p.label}</p>
+              {/* Estos recuadros siempre filtraron, pero no lo parecían. */}
+              <p className="mt-0.5 text-[10px] text-gray-400">{activo ? 'filtrando ↓' : 'ver estos'}</p>
             </button>
           )
         })}
@@ -315,9 +350,12 @@ export default function NoConformidadesPage() {
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        {FILTROS.map(([k, l]) => (
-          <button key={k} onClick={() => setFiltro(k)} className={cn('rounded-full border px-3 py-1 text-xs', filtro === k ? 'bg-orange-600 text-white border-orange-600' : 'hover:bg-muted')}>{l}</button>
-        ))}
+        {/* [26-08] Acá había una segunda fila de filtros —Todas / Sin recursos /
+            Con recursos / Planificadas— que hacía casi lo mismo que los
+            contadores de arriba pero con otras palabras. Dos filtros con dos
+            vocabularios en la misma pantalla es una forma segura de que nadie
+            confíe en ninguno. Manda el de arriba, que tiene los seis estados y
+            además dice cuántos hay en cada uno. */}
         {/* El detalle (foto, observación, notas) vive dentro de cada equipo: un
             solo click para abrirlos todos y revisar sin ir uno por uno. */}
         <button onClick={() => setExpandido(todoAbierto ? {} : Object.fromEntries(equipos.map((e) => [e.activoId, true])))}
@@ -727,8 +765,7 @@ function NcFichaModal({ nc, patente, onClose, onDone }: {
   })
 
   type MatRow = NcMaterial & { solicitar?: boolean; foto?: File | null }
-  const [mecanicos, setMecanicos] = useState<string[]>(() =>
-    (nc.grupo_trabajo ?? '').split(',').map((s) => s.trim()).filter(Boolean))
+  const [mecanicos, setMecanicos] = useState<string[]>(() => nombresUnicos(nc.grupo_trabajo))
   const [horas, setHoras] = useState(nc.horas_estimadas ? String(nc.horas_estimadas) : '')
   const [dias, setDias] = useState(nc.tiempo_estimado_dias ? String(nc.tiempo_estimado_dias) : '')
   const [recobro, setRecobro] = useState<RecobroValor | null>(nc.recobro)
@@ -1840,8 +1877,7 @@ function RecursosEquipoModal({ equipo, onClose, onDone }: { equipo: EquipoNC; on
   }, [ncsAbiertas])
 
   type MatRow = NcMaterial & { solicitar?: boolean; foto?: File | null }
-  const [mecanicos, setMecanicos] = useState<string[]>(() =>
-    (equipo.grupos ?? '').split(',').map((s) => s.trim()).filter(Boolean))
+  const [mecanicos, setMecanicos] = useState<string[]>(() => nombresUnicos(equipo.grupos))
 
   // Mismos técnicos que en Planificación (catálogo taller_tecnicos, MIG195);
   // MECANICOS queda solo de respaldo si el catálogo está vacío.
