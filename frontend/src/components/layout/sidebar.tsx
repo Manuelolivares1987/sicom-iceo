@@ -48,6 +48,7 @@ import {
   Footprints,
   ShieldAlert,
   Clock,
+  Archive,
 } from 'lucide-react'
 import { useNcPorDecidir } from '@/hooks/use-nc-por-decidir'
 import { cn } from '@/lib/utils'
@@ -170,6 +171,10 @@ const navGroups: NavGroup[] = [
           // sistema ya guardaba: checklist, repuesto y no conformidad.
           { label: 'Cuánto nos demoramos', href: '/dashboard/mantenimiento/tiempos', icon: Clock, module: 'mantenimiento', badge: 'NUEVO',
             tooltip: 'Cuánto toma el checklist, conseguir un repuesto y resolver una NC' },
+          // [MIG406] Elegir la patente y pasar todo lo suyo a historia, para
+          // empezar limpio después del mes de prueba.
+          { label: 'Guardar en el historial', href: '/dashboard/mantenimiento/historial-equipos', icon: Archive, module: 'mantenimiento', badge: 'NUEVO',
+            tooltip: 'Elegir patentes y pasar sus NC, OT, vales y checklists a historia. No borra: se puede deshacer' },
         ],
       },
       {
