@@ -46,3 +46,6 @@ backups-fase0/
 database/preprod/pg17*/
 database/preprod/pgdata*/
 frontend/staging-e2e.mjs
+
+# Credenciales de prueba — nunca al repo
+PRUEBA_GENERAL_CUENTAS.txt
