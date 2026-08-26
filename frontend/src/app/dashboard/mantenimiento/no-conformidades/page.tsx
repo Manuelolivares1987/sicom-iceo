@@ -46,6 +46,7 @@ import { PedidoManualBodega } from '@/components/mantenimiento/pedido-manual-bod
 import { NcEquipoCard } from '@/components/mantenimiento/nc-equipo-card'
 import { InformesRecobroEnCurso } from '@/components/mantenimiento/informes-recobro-en-curso'
 import { cn } from '@/lib/utils'
+import { BarraArchivar } from '@/components/ui/barra-archivar'
 
 // [MIG402] Los nombres del grupo de trabajo, sin repetidos. El modal del
 // conjunto lee `equipo.grupos` —que es la suma de TODAS las NC del equipo— y al
@@ -160,6 +161,20 @@ export default function NoConformidadesPage() {
   // [26-08] Se traen todas y se filtran con los contadores de arriba, que son
   // el único filtro de la pantalla desde que salió la fila duplicada.
   const { data: ncs = [], isLoading } = useQuery({ queryKey: ['nc-recepcion'], queryFn: () => getNcRecepcion(), staleTime: 20_000 })
+
+  // [MIG405] Seleccionar equipos para guardarlos en el historial. Se elige por
+  // EQUIPO y se archivan todas sus NC: en esta pantalla el conjunto de la
+  // patente es la unidad de trabajo, así que también es la unidad de limpieza.
+  const [seleccion, setSeleccion] = useState<Set<string>>(new Set())
+  const toggleSel = (activoId: string) => setSeleccion((p) => {
+    const n = new Set(p); n.has(activoId) ? n.delete(activoId) : n.add(activoId); return n
+  })
+
+  // Se elige el equipo, se archivan sus no conformidades: la bandeja trabaja
+  // por conjunto de patente, así que la limpieza también.
+  const ncsSeleccionadas = useMemo(
+    () => ncs.filter((n) => seleccion.has(n.activo_id)).map((n) => n.id),
+    [ncs, seleccion])
   const [recursosEquipo, setRecursosEquipo] = useState<EquipoNC | null>(null)
   const [fichaNc, setFichaNc] = useState<{ nc: NcRecepcion; patente: string } | null>(null)
   const [recobroEquipo, setRecobroEquipo] = useState<EquipoNC | null>(null)
@@ -367,6 +382,18 @@ export default function NoConformidadesPage() {
         </button>
       </div>
 
+      {/* [MIG405] Seleccionar equipos y guardarlos en el historial. Agosto fue
+          mes de prueba: mientras lo ensayado siga mezclado con lo real, ningún
+          indicador dice la verdad. No borra nada y el lote se puede deshacer. */}
+      <BarraArchivar
+        entidad="no_conformidades"
+        nombreCosa="no conformidad"
+        seleccion={ncsSeleccionadas}
+        onLimpiar={() => setSeleccion(new Set())}
+        onListo={() => setSeleccion(new Set())}
+        queKeys={[['nc-recepcion'], ['alertas-no-leidas'], ['alertas-conteo-por-decidir']]}
+      />
+
       {/* ── En el teléfono: una tarjeta por equipo ─────────────────────────── */}
       <div className="space-y-2 md:hidden">
         {isLoading && <Spinner className="h-5 w-5" />}
@@ -446,6 +473,13 @@ export default function NoConformidadesPage() {
                         onClick={() => setExpandido((p) => ({ ...p, [eq.activoId]: !abierto }))}>
                       <td className="p-2 whitespace-nowrap">
                         <span className="inline-flex items-center gap-1 font-bold">
+                          {/* [MIG405] Elegir para guardar en el historial. El clic
+                              no debe desplegar la fila: son dos gestos distintos. */}
+                          <input type="checkbox" checked={seleccion.has(eq.activoId)}
+                                 onClick={(ev) => ev.stopPropagation()}
+                                 onChange={() => toggleSel(eq.activoId)}
+                                 title="Elegir este equipo para guardarlo en el historial"
+                                 className="mr-1 h-3.5 w-3.5 cursor-pointer" />
                           {abierto ? <ChevronDown className="h-3.5 w-3.5 text-gray-400" /> : <ChevronRight className="h-3.5 w-3.5 text-gray-400" />}
                           {eq.patente}
                         </span>
