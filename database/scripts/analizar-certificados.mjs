@@ -210,11 +210,20 @@ function analizar(textoCrudo) {
     }
   }
 
-  // 4) Sin regla: se deja la fecha más antigua como pista, sin proponer nada.
+  // 4) El documento no dice hasta cuándo vale.
+  //    Decisión de Manuel (26-08-2026): «dejemos la regla de 2 años». Hay tres
+  //    proveedores de láminas con tres formatos y sólo uno declara vigencia
+  //    —Gamont dice «2 Años»; LEOLOA y BlackGlass certifican la instalación y
+  //    nada más—. Sin una regla, esos papeles no se pueden vencer nunca, que es
+  //    justo cómo el FJTJ-60 llegó a tener un certificado de 2015 vigente.
+  //
+  //    Queda marcado como REGLA, no como lectura: la fecha no está en el papel.
   const masAntigua = [...fechas].sort((a, b) => a.iso.localeCompare(b.iso))[0]
   return {
-    emision: masAntigua.iso, confianza: 'baja',
-    motivo: 'No dice vencimiento ni vigencia: hay que abrirlo',
+    emision: masAntigua.iso,
+    vencimiento: sumar(masAntigua.iso, { anios: 2 }),
+    confianza: 'regla_2_anios',
+    regla: 'el documento no declara vigencia: se aplica la regla de 2 años desde la fecha del documento',
     evidencia: t.slice(0, 220).trim(),
   }
 }
