@@ -3,6 +3,7 @@
 import { useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNetworkStatus } from '@/hooks/use-calama-offline'
+import { supabase } from '@/lib/supabase'
 import {
   getOTs, getChecklistMecanico, queueItem, queueTiming, syncTallerPending, getPendingCount,
   prepareTallerOffline, getRecursosMecanico, queueRecurso,
@@ -171,6 +172,64 @@ export function useAutoSyncTaller() {
     void trySync()
     return () => window.removeEventListener('online', trySync)
   }, [qc])
+}
+
+
+// ── Medidores del equipo (MIG397) ───────────────────────────────────────────
+// Con cuánto uso volvió el equipo. De este número salen la próxima preventiva y
+// lo que se le cobra al cliente por el uso; si no queda escrito acá, no queda
+// escrito en ninguna parte. Antes las columnas existían pero el mecánico no
+// tenía dónde llenarlas: 46 de 120 recepciones quedaron sin ningún medidor.
+
+export type MedidoresOT = {
+  instance_id: string
+  horometro: number | null
+  kilometraje: number | null
+  exige_kilometraje: boolean
+  anotado_por_persona: boolean
+}
+
+export function useMedidoresOT(otId: string | null) {
+  return useQuery({
+    queryKey: ['mec-medidores', otId],
+    enabled: !!otId,
+    queryFn: async (): Promise<MedidoresOT | null> => {
+      const { data, error } = await supabase
+        .from('checklist_v2_instance')
+        .select('id, horometro, kilometraje, medidores_por, activo_id, activos!activo_id(tipo)')
+        .eq('ot_id', otId!)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      if (error) throw error
+      if (!data) return null
+      const tipo = (data as unknown as { activos?: { tipo?: string } }).activos?.tipo ?? ''
+      return {
+        instance_id: (data as { id: string }).id,
+        horometro: (data as { horometro: number | null }).horometro,
+        kilometraje: (data as { kilometraje: number | null }).kilometraje,
+        exige_kilometraje: ['camion', 'camion_cisterna', 'camioneta', 'lubrimovil'].includes(tipo),
+        anotado_por_persona: (data as { medidores_por: string | null }).medidores_por != null,
+      }
+    },
+  })
+}
+
+export function useGuardarMedidores(otId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (v: { horometro: number | null; kilometraje: number | null; confirmado?: boolean }) => {
+      const { data, error } = await supabase.rpc('rpc_taller_registrar_medidores', {
+        p_ot_id: otId,
+        p_horometro: v.horometro,
+        p_kilometraje: v.kilometraje,
+        p_confirmado: v.confirmado ?? false,
+      })
+      if (error) throw error
+      return data as { success: boolean; requiere_confirmacion?: boolean; motivo?: string }
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['mec-medidores', otId] }) },
+  })
 }
 
 export type { MecanicoOT }
