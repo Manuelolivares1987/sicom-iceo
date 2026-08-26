@@ -155,3 +155,38 @@ export const TIPO_DOC: Record<string, string> = {
 }
 
 export const nombreTipo = (t: string) => TIPO_DOC[t] ?? t.replace(/_/g, ' ')
+
+// ── Cuánto dura cada papel, según sus propios documentos ────────────────────
+// [MIG415] La regla de 2 años era un acuerdo para papeles que no declaran
+// vigencia. La hermeticidad SÍ la declara —6 meses— y aplicarle un año es
+// exactamente cómo doce camiones terminaron circulando con el certificado
+// vencido y el sistema en verde. Donde hay estándar, el estándar manda.
+
+export type VigenciaEstandar = { tipo: string; meses: number; fuente: string }
+
+export async function getVigenciasEstandar(): Promise<Record<string, VigenciaEstandar>> {
+  const { data, error } = await supabase.from('certificado_vigencia_estandar').select('*')
+  if (error) throw error
+  const out: Record<string, VigenciaEstandar> = {}
+  for (const v of (data ?? []) as VigenciaEstandar[]) out[v.tipo] = v
+  return out
+}
+
+/** emisión + N meses, en ISO. Devuelve '' si falta la emisión. */
+export function sumarMeses(emisionISO: string, meses: number): string {
+  if (!emisionISO) return ''
+  const [a, m, d] = emisionISO.split('-').map(Number)
+  // Día 0 del mes siguiente = último día del mes: así un 31 de enero + 1 mes
+  // cae el 28/29 de febrero en vez de saltar a marzo.
+  const ultimo = new Date(Date.UTC(a, m - 1 + meses + 1, 0)).getUTCDate()
+  const dt = new Date(Date.UTC(a, m - 1 + meses, Math.min(d, ultimo)))
+  return dt.toISOString().slice(0, 10)
+}
+
+/** Cuántos meses hay entre dos fechas, redondeado. Para comparar con el estándar. */
+export function mesesEntre(desdeISO: string, hastaISO: string): number | null {
+  if (!desdeISO || !hastaISO) return null
+  const d = new Date(desdeISO), h = new Date(hastaISO)
+  if (isNaN(+d) || isNaN(+h)) return null
+  return Math.round((+h - +d) / (1000 * 60 * 60 * 24 * 30.44))
+}

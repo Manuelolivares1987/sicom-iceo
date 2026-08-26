@@ -118,17 +118,46 @@ async function textoDePdf(file: File): Promise<string> {
   }
   const buf = await file.arrayBuffer()
   const doc = await (pdfjs as unknown as {
-    getDocument: (o: unknown) => { promise: Promise<{ numPages: number; getPage: (n: number) => Promise<{ getTextContent: () => Promise<{ items: Array<{ str?: string }> }> }>; destroy: () => Promise<void> }> }
+    getDocument: (o: unknown) => { promise: Promise<{ numPages: number; getPage: (n: number) => Promise<{ getTextContent: () => Promise<{ items: Array<{ str?: string; transform?: number[] }> }> }>; destroy: () => Promise<void> }> }
   }).getDocument({ data: new Uint8Array(buf), isEvalSupported: false }).promise
 
   let texto = ''
   const paginas = Math.min(doc.numPages, 5) // con 5 basta: la fecha va al principio
   for (let p = 1; p <= paginas; p++) {
     const tc = await (await doc.getPage(p)).getTextContent()
-    texto += tc.items.map((i) => i.str ?? '').join(' ') + '\n'
+    texto += lineasDeItems(tc.items).join('\n') + '\n'
   }
   await doc.destroy()
   return texto
+}
+
+/**
+ * Reconstruye las líneas por su posición en la página, no por el orden en que
+ * los trozos vienen guardados dentro del PDF.
+ *
+ * Esa distinción costó cara. Uniendo los trozos en orden de archivo, en los
+ * certificados de hermeticidad la etiqueta «Fecha de vencimiento» quedaba a
+ * decenas de trozos de su propia fecha, y el lector no las asociaba nunca. Doce
+ * camiones pasaron con la vigencia mal cargada porque nadie —ni el sistema— las
+ * juntó. Agrupando por coordenada Y se lee como lo lee una persona.
+ */
+function lineasDeItems(items: Array<{ str?: string; transform?: number[] }>): string[] {
+  // Sin coordenadas no hay nada que reconstruir: se devuelve el orden de archivo.
+  if (!items.some((i) => i.transform)) return [items.map((i) => i.str ?? '').join(' ')]
+
+  const pos = items
+    .filter((i) => (i.str ?? '').trim())
+    .map((i) => ({ s: i.str as string, x: i.transform?.[4] ?? 0, y: Math.round(i.transform?.[5] ?? 0) }))
+  pos.sort((a, b) => b.y - a.y || a.x - b.x)
+
+  const out: string[] = []
+  let ultimaY: number | null = null
+  for (const o of pos) {
+    // 4 puntos de tolerancia: menos parte líneas con subíndices, más las junta.
+    if (ultimaY === null || Math.abs(ultimaY - o.y) > 4) { out.push(o.s); ultimaY = o.y }
+    else out[out.length - 1] += ' ' + o.s
+  }
+  return out
 }
 
 /** Los primeros bytes dicen qué es de verdad, no la extensión. */

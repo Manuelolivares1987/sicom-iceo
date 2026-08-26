@@ -55,9 +55,36 @@ async function textoDePdf(buf) {
   let out = ''
   for (let p = 1; p <= doc.numPages; p++) {
     const tc = await (await doc.getPage(p)).getTextContent()
-    out += tc.items.map((i) => i.str).join(' ') + '\n'
+    out += lineasDeItems(tc.items).join('\n') + '\n'
   }
   await doc.destroy()
+  return out
+}
+
+/**
+ * Las líneas por su posición en la página, no por el orden en que los trozos
+ * vienen guardados dentro del PDF.
+ *
+ * La diferencia no es cosmética. Uniendo los trozos en orden de archivo, en los
+ * certificados de hermeticidad la etiqueta «Fecha de vencimiento» quedaba a
+ * decenas de trozos de su propia fecha y nunca se asociaban: por eso este mismo
+ * lector marcó 25 hermeticidades como «sin fecha en el documento» cuando 5 de
+ * ellas la declaraban en letras grandes, y doce camiones siguieron mostrando
+ * una vigencia mal cargada. Agrupando por coordenada Y se lee como en papel.
+ */
+function lineasDeItems(items) {
+  if (!items.some((i) => i.transform)) return [items.map((i) => i.str).join(' ')]
+  const pos = items
+    .filter((i) => (i.str ?? '').trim())
+    .map((i) => ({ s: i.str, x: i.transform?.[4] ?? 0, y: Math.round(i.transform?.[5] ?? 0) }))
+  pos.sort((a, b) => b.y - a.y || a.x - b.x)
+  const out = []
+  let ultimaY = null
+  for (const o of pos) {
+    // 4 puntos de tolerancia: menos parte líneas con subíndices, más las junta.
+    if (ultimaY === null || Math.abs(ultimaY - o.y) > 4) { out.push(o.s); ultimaY = o.y }
+    else out[out.length - 1] += ' ' + o.s
+  }
   return out
 }
 

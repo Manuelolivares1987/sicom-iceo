@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, useRef } from 'react'
+import { useState, useMemo, useRef, useEffect } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import {
@@ -93,6 +93,7 @@ import { HistoricoContratosCard } from '@/components/activos/historico-contratos
 import { useHistorialArriendos, useUltimoArriendo } from '@/hooks/use-arriendos'
 import { Building2 } from 'lucide-react'
 import { leerDocumento, type LecturaDocumento } from '@/lib/documentos/leer-documento'
+import { getVigenciasEstandar, sumarMeses, mesesEntre } from '@/lib/services/control-documental'
 
 // ---------------------------------------------------------------------------
 // Tabs
@@ -534,6 +535,12 @@ function TabCertificaciones({ activoId, patente }: { activoId: string; patente?:
   // saca la fecha de vencimiento. Los 468 papeles sin fecha de la flota entraron
   // porque nadie abría el PDF; revisarlo acá evita que vuelva a pasar.
   const [lectura, setLectura] = useState<LecturaDocumento | null>(null)
+  // [MIG415] Cuánto dura cada tipo según sus propios certificados. La
+  // hermeticidad son 6 meses, no un año: cargarla con un año fue lo que dejó a
+  // doce camiones circulando con el papel vencido y el sistema en verde.
+  const [vigencias, setVigencias] = useState<Record<string, { meses: number; fuente: string }>>({})
+  useEffect(() => { getVigenciasEstandar().then(setVigencias).catch(() => {}) }, [])
+  const estandar = vigencias[newCert.tipo] ?? null
   const [leyendo, setLeyendo] = useState(false)
 
   const revisarArchivo = async (f: File | null) => {
@@ -688,19 +695,52 @@ function TabCertificaciones({ activoId, patente }: { activoId: string; patente?:
               <div>
                 <label className="text-xs font-medium text-gray-600">Tipo</label>
                 <select className="w-full rounded border px-2 py-1.5 text-sm mt-1"
-                  value={newCert.tipo} onChange={(e) => setNewCert({ ...newCert, tipo: e.target.value })}>
+                  value={newCert.tipo} onChange={(e) => {
+                    const t = e.target.value
+                    const m = vigencias[t]?.meses
+                    // Al elegir el tipo se propone su vencimiento real. Si la
+                    // persona ya escribió uno a mano, no se le pisa.
+                    setNewCert((p) => ({ ...p, tipo: t,
+                      fecha_vencimiento: m && p.fecha_emision && !p.fecha_vencimiento
+                        ? sumarMeses(p.fecha_emision, m) : p.fecha_vencimiento }))
+                  }}>
                   {TIPOS_DOC_OPCIONES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
                 </select>
               </div>
               <div>
                 <label className="text-xs font-medium text-gray-600">Fecha Emision</label>
                 <input type="date" className="w-full rounded border px-2 py-1.5 text-sm mt-1"
-                  value={newCert.fecha_emision} onChange={(e) => setNewCert({ ...newCert, fecha_emision: e.target.value })} />
+                  value={newCert.fecha_emision} onChange={(e) => {
+                    const em = e.target.value
+                    const m = vigencias[newCert.tipo]?.meses
+                    setNewCert((p) => ({ ...p, fecha_emision: em,
+                      fecha_vencimiento: m && em ? sumarMeses(em, m) : p.fecha_vencimiento }))
+                  }} />
               </div>
               <div>
                 <label className="text-xs font-medium text-gray-600">Fecha Vencimiento</label>
                 <input type="date" className="w-full rounded border px-2 py-1.5 text-sm mt-1"
                   value={newCert.fecha_vencimiento} onChange={(e) => setNewCert({ ...newCert, fecha_vencimiento: e.target.value })} />
+                {estandar && (() => {
+                  const m = mesesEntre(newCert.fecha_emision, newCert.fecha_vencimiento)
+                  if (m === null) return (
+                    <p className="text-[11px] text-gray-500 mt-1">
+                      Este documento dura {estandar.meses} meses.
+                    </p>
+                  )
+                  if (m === estandar.meses) return (
+                    <p className="text-[11px] text-green-700 mt-1">
+                      Calza con los {estandar.meses} meses que dura este documento.
+                    </p>
+                  )
+                  return (
+                    <p className="text-[11px] text-amber-700 mt-1">
+                      Estás poniendo {m} {m === 1 ? 'mes' : 'meses'}, y este documento dura{' '}
+                      <strong>{estandar.meses}</strong>. Si el papel dice otra cosa, mándate;
+                      si no, el vencimiento correcto es {sumarMeses(newCert.fecha_emision, estandar.meses)}.
+                    </p>
+                  )
+                })()}
               </div>
               <div>
                 <label className="text-xs font-medium text-gray-600">Entidad</label>
