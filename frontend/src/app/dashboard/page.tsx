@@ -30,6 +30,7 @@ import {
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Spinner } from '@/components/ui/spinner'
 import { cn } from '@/lib/utils'
+import { etiquetaTipoAlerta } from '@/lib/alertas-labels'
 import { getICEOColor, getICEOLabel } from '@/lib/utils'
 import { useRequireAuth } from '@/hooks/use-require-auth'
 import { useAuth } from '@/contexts/auth-context'
@@ -583,7 +584,7 @@ function LegacyDashboard() {
                               : 'bg-blue-100 text-blue-700'
                         )}
                       >
-                        {alerta.tipo}
+                        {etiquetaTipoAlerta(alerta.tipo)}
                       </span>
                     </div>
                   </div>

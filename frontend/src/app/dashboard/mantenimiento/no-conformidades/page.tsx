@@ -683,10 +683,23 @@ function RecobroResumenEquipo({ eq, onDone }: { eq: EquipoNC; onDone: () => void
   return (
     <RecobroMenu ncIds={ids} actual={unico} titulo={titulo} bulk={eq.ncs.length} onDone={onDone}>
       {unico ? <RecobroChip valor={unico} /> : (
-        <span className="inline-flex items-center gap-1 text-[10px] font-semibold">
-          {eq.nRecobrables > 0 && <span className="rounded-full bg-green-100 px-1.5 py-0.5 text-green-800" title="Recobrables al cliente">{eq.nRecobrables}</span>}
-          {eq.nNoRecobrables > 0 && <span className="rounded-full bg-rose-100 px-1.5 py-0.5 text-rose-800" title="Las asume la empresa">{eq.nNoRecobrables}</span>}
-          {eq.nRecobroPorDefinir > 0 && <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-gray-500" title="Sin definir">{eq.nRecobroPorDefinir}?</span>}
+        /* Esta columna decide A QUIÉN SE LE COBRA el daño. Antes eran tres
+           números de colores y un signo de interrogación —«19 7 6?»— y la
+           explicación vivía sólo en el tooltip: en un tablet en taller, nadie
+           la ve nunca. Ahora cada número dice qué es. */
+        <span className="inline-flex flex-wrap items-center gap-1 text-[10px] font-semibold">
+          {eq.nRecobrables > 0 && (
+            <span className="rounded-full bg-green-100 px-1.5 py-0.5 text-green-800"
+                  title="Se le cobran al cliente">{eq.nRecobrables} al cliente</span>
+          )}
+          {eq.nNoRecobrables > 0 && (
+            <span className="rounded-full bg-rose-100 px-1.5 py-0.5 text-rose-800"
+                  title="Las asume la empresa">{eq.nNoRecobrables} las asumimos</span>
+          )}
+          {eq.nRecobroPorDefinir > 0 && (
+            <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-gray-600"
+                  title="Todavía nadie decidió si se cobran">{eq.nRecobroPorDefinir} por decidir</span>
+          )}
         </span>
       )}
     </RecobroMenu>
