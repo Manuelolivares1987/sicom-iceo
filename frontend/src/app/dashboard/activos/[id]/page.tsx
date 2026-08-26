@@ -537,6 +537,16 @@ function TabCertificaciones({ activoId }: { activoId: string }) {
   // [MIG273] Renovar no pisa la fila: crea una versión nueva. Solo la última de
   // cada tipo rige; las anteriores se muestran aparte y no marcan vencido.
   const vigentes = useMemo(() => documentosVigentes(certs as any[] | undefined), [certs])
+  // [MIG407] Qué tipos vencen: si algún certificado de ese tipo en TODA la
+  // ficha tiene fecha real, el tipo vence. Mismo criterio que la vista.
+  const tiposQueVencen = useMemo(() => {
+    const s = new Set<string>()
+    for (const c of (certs as any[] | undefined) ?? []) {
+      const f = c.fecha_vencimiento as string | null
+      if (f && f < '2099-01-01') s.add(c.tipo)
+    }
+    return s
+  }, [certs])
   const reemplazados = useMemo(() => documentosReemplazados(certs as any[] | undefined), [certs])
 
   const refrescar = () => {
@@ -714,9 +724,16 @@ function TabCertificaciones({ activoId }: { activoId: string }) {
         <div className="space-y-2">
           {vigentes
             .sort((a: any, b: any) => {
-              const order = { vencido: 0, por_vencer: 1, vigente: 2, permanente: 3 }
-              return (order[estadoDocumento(a.fecha_vencimiento)] ?? 4) -
-                     (order[estadoDocumento(b.fecha_vencimiento)] ?? 4)
+              // [MIG407] «sin_fecha» va casi arriba: es un papel cargado cuya
+              // vigencia nadie anotó, y hasta que alguien lo abra no se sabe si
+              // el equipo puede operar. Pesa más que uno por vencer.
+              const order: Record<string, number> = {
+                vencido: 0, sin_fecha: 1, por_vencer: 2, vigente: 3, permanente: 4,
+              }
+              const est = (d: any) => estadoDocumento(d.fecha_vencimiento, {
+                tieneArchivo: !!d.archivo_url, tipoVence: tiposQueVencen.has(d.tipo),
+              })
+              return (order[est(a)] ?? 5) - (order[est(b)] ?? 5)
             })
             .map((c: any) => (
               <DocumentoCard

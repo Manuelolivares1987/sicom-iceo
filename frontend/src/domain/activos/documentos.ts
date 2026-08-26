@@ -10,7 +10,7 @@
  * (MIG273). Si cambia una, cambia la otra.
  */
 
-export type EstadoDocumento = 'vigente' | 'por_vencer' | 'vencido' | 'permanente'
+export type EstadoDocumento = 'vigente' | 'por_vencer' | 'vencido' | 'permanente' | 'sin_fecha'
 
 /** Los documentos sin vencimiento real se cargaron con fecha 2099-12-31. */
 const FECHA_PERMANENTE = '2099-01-01'
@@ -27,9 +27,20 @@ export interface DocumentoEquipo {
 }
 
 /** Estado real del documento, calculado desde la fecha (no desde la columna
- *  `estado`, que la refresca un job diario y puede ir un día atrasada). */
-export function estadoDocumento(fechaVencimiento: string | null | undefined): EstadoDocumento {
-  if (!fechaVencimiento || fechaVencimiento >= FECHA_PERMANENTE) return 'permanente'
+ *  `estado`, que la refresca un job diario y puede ir un día atrasada).
+ *
+ *  [MIG407] La fecha 2099 se usó para dos cosas distintas: «este papel no vence
+ *  nunca» y «cargué el PDF y no leí la fecha». La segunda es un hueco disfrazado
+ *  de estado — es lo que dejó los certificados vencidos del TGGF-57 invisibles.
+ *  Si hay archivo cargado y el tipo vence, se dice `sin_fecha`, no `permanente`.
+ */
+export function estadoDocumento(
+  fechaVencimiento: string | null | undefined,
+  opciones?: { tieneArchivo?: boolean; tipoVence?: boolean },
+): EstadoDocumento {
+  if (!fechaVencimiento || fechaVencimiento >= FECHA_PERMANENTE) {
+    return opciones?.tieneArchivo && opciones?.tipoVence ? 'sin_fecha' : 'permanente'
+  }
 
   const hoy = new Date()
   hoy.setHours(0, 0, 0, 0)
