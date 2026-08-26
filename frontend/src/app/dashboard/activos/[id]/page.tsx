@@ -739,6 +739,7 @@ function TabCertificaciones({ activoId }: { activoId: string }) {
               <DocumentoCard
                 key={c.id}
                 c={c}
+                tipoVence={tiposQueVencen.has(c.tipo)}
                 subiendo={subiendo}
                 onSubirArchivo={() => handleFileUpload(c.id)}
                 onRenovar={() => handleRenovar(c)}
@@ -770,14 +771,18 @@ function TabCertificaciones({ activoId }: { activoId: string }) {
   )
 }
 
-function DocumentoCard({ c, subiendo, reemplazado, onSubirArchivo, onRenovar }: {
+function DocumentoCard({ c, subiendo, reemplazado, tipoVence, onSubirArchivo, onRenovar }: {
   c: any
+  /** [MIG407] Si el tipo de este papel vence, un 2099 es un hueco, no «permanente». */
+  tipoVence?: boolean
   subiendo?: boolean
   reemplazado?: boolean
   onSubirArchivo?: () => void
   onRenovar?: () => void
 }) {
-  const estado = reemplazado ? 'reemplazado' : estadoDocumento(c.fecha_vencimiento)
+  const estado = reemplazado ? 'reemplazado' : estadoDocumento(c.fecha_vencimiento, {
+    tieneArchivo: !!c.archivo_url, tipoVence,
+  })
   const dias = diasParaVencer(c.fecha_vencimiento)
 
   return (
@@ -787,6 +792,7 @@ function DocumentoCard({ c, subiendo, reemplazado, onSubirArchivo, onRenovar }: 
       estado === 'vencido' ? 'border-l-red-500' :
       estado === 'por_vencer' ? 'border-l-amber-500' :
       estado === 'permanente' ? 'border-l-gray-400' :
+      estado === 'sin_fecha' ? 'border-l-orange-500' :
       'border-l-green-500'
     )}>
       <CardContent className="p-4">
@@ -800,6 +806,14 @@ function DocumentoCard({ c, subiendo, reemplazado, onSubirArchivo, onRenovar }: 
                 <Badge className="bg-gray-100 text-gray-600">Reemplazado</Badge>
               ) : estado === 'permanente' ? (
                 <Badge className="bg-gray-100 text-gray-600">Sin vencimiento</Badge>
+              ) : estado === 'sin_fecha' ? (
+                /* [MIG407] Hay papel cargado y su tipo vence, pero nadie anotó
+                   hasta cuándo. Decirle «sin vencimiento» es justo lo que dejó
+                   invisibles las láminas vencidas del TGGF-57 y el SVBJ-57. */
+                <Badge className="bg-orange-100 text-orange-800"
+                       title="El archivo está cargado pero nadie anotó hasta cuándo vale. Ábrelo y registra la fecha.">
+                  Falta la fecha — revisar el archivo
+                </Badge>
               ) : (
                 <Badge className={getCertEstadoColor(estado)}>{getCertEstadoLabel(estado)}</Badge>
               )}
