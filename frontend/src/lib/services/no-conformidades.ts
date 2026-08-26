@@ -45,6 +45,9 @@ export type NcRecepcion = {
   recobro_informe_estado: string | null
   /** Plata ya comprometida en materiales de la NC (costo de bodega). */
   costo_materiales_estimado: number
+  /** [MIG405] Guardada en el historial: sale de la bandeja pero no se borra. */
+  archivado_at: string | null
+  archivado_motivo: string | null
 }
 
 // Quién paga el hallazgo (default_cobrable_enum, MIG54).
@@ -79,8 +82,11 @@ export async function setRecobroNc(ncIds: string[], valor: RecobroValor | null, 
 
 export type NcMaterial = { descripcion?: string | null; producto_id?: string | null; cantidad: number; comentario?: string | null; nc_id?: string | null }
 
-export async function getNcRecepcion(estado?: string): Promise<NcRecepcion[]> {
+export async function getNcRecepcion(estado?: string, incluirArchivadas = false): Promise<NcRecepcion[]> {
   let q = supabase.from('v_nc_recepcion').select('*').order('created_at', { ascending: false })
+  // [MIG405] Lo guardado en el historial no ensucia la bandeja. No se borró:
+  // se puede pedir con incluirArchivadas y se puede deshacer el lote entero.
+  if (!incluirArchivadas) q = q.is('archivado_at', null)
   if (estado) q = q.eq('estado_planificacion', estado)
   const { data, error } = await q
   if (error) throw error
