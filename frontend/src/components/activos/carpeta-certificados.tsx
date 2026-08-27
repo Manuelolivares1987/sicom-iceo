@@ -3,7 +3,7 @@
 // Carpeta del equipo (MIG219): certificados que Pillado emite al cliente.
 // Se habilitan cuando el equipo no tiene NC abiertas; cada certificado lo
 // firma el operador que hizo el trabajo y el jefe de taller.
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Award, Printer, Plus, AlertTriangle, CheckCircle2 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
@@ -36,7 +36,17 @@ async function getActivoLite(activoId: string): Promise<ActivoLite | null> {
   return (data as unknown as ActivoLite | null) ?? null
 }
 
-export function CarpetaCertificados({ activoId }: { activoId: string }) {
+export function CarpetaCertificados({ activoId, acciones }: {
+  activoId: string
+  /**
+   * Botones extra al lado de «Emitir certificado». Existe para que la
+   * hermeticidad —que tiene su propio formato de tres páginas y no entra en la
+   * plantilla genérica— se emita desde acá y no desde otro rincón: tener dos
+   * lugares donde se emiten certificados es cómo se termina con dos
+   * numeraciones distintas.
+   */
+  acciones?: ReactNode
+}) {
   const toast = useToast()
   const qc = useQueryClient()
   const { data: certs, isLoading } = useQuery({
@@ -63,6 +73,9 @@ export function CarpetaCertificados({ activoId }: { activoId: string }) {
 
   const [datos, setDatos] = useState<Record<string, string>>({})
   const [fecha, setFecha] = useState('')
+  // [MIG436] Hasta cuándo vale. Sin esto el papel del equipo quedaba como
+  // «no vence», que sobre un certificado de mantención es falso.
+  const [venceEl, setVenceEl] = useState('')
   const [operadorId, setOperadorId] = useState('')
   const [operadorNombre, setOperadorNombre] = useState('')
   const [firmaOperador, setFirmaOperador] = useState('')
@@ -72,7 +85,7 @@ export function CarpetaCertificados({ activoId }: { activoId: string }) {
 
   function abrirModal() {
     const hoy = new Date().toISOString().slice(0, 10)
-    setTipoCodigo(''); setFecha(hoy)
+    setTipoCodigo(''); setFecha(hoy); setVenceEl('')
     setDatos({
       equipo: activo?.nombre ?? '',
       marca: activo?.modelo?.marca?.nombre ?? '',
@@ -105,7 +118,7 @@ export function CarpetaCertificados({ activoId }: { activoId: string }) {
       activoId, tipoCodigo: tipo.codigo, datos,
       operadorNombre: nombreOp.trim(), operadorTecnicoId: operadorId || null,
       firmaOperadorDataUrl: firmaOperador, firmaJefeDataUrl: firmaJefe,
-      fechaEmision: fecha || null,
+      fechaEmision: fecha || null, venceEl: venceEl || null,
     })
   }
 
@@ -127,10 +140,13 @@ export function CarpetaCertificados({ activoId }: { activoId: string }) {
             Certificados Pillado firmados por el operador y el jefe de taller. Se habilitan al resolver todas las NC.
           </p>
         </div>
-        <Button size="sm" onClick={abrirModal} disabled={bloqueado}
-                title={bloqueado ? 'El equipo tiene NC abiertas' : 'Emitir un certificado del equipo'}>
-          <Plus className="h-4 w-4 mr-1" /> Emitir certificado
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          {acciones}
+          <Button size="sm" onClick={abrirModal} disabled={bloqueado}
+                  title={bloqueado ? 'El equipo tiene NC abiertas' : 'Emitir un certificado del equipo'}>
+            <Plus className="h-4 w-4 mr-1" /> Emitir certificado
+          </Button>
+        </div>
       </div>
 
       {bloqueado ? (
@@ -250,6 +266,17 @@ export function CarpetaCertificados({ activoId }: { activoId: string }) {
                     <label className="text-xs font-medium text-gray-600">Fecha de emisión</label>
                     <input type="date" className="w-full rounded border px-2 py-1.5 text-sm"
                            value={fecha} onChange={(e) => setFecha(e.target.value)} />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-gray-600">Vale hasta</label>
+                    <input type="date" className="w-full rounded border px-2 py-1.5 text-sm"
+                           value={venceEl} min={fecha}
+                           onChange={(e) => setVenceEl(e.target.value)} />
+                    <p className="mt-0.5 text-[10px] leading-tight text-gray-500">
+                      {venceEl
+                        ? 'El papel del equipo va a quedar vigente hasta esa fecha.'
+                        : 'Si lo dejas en blanco, el papel queda como «falta la fecha» y aparece pendiente en Control documental.'}
+                    </p>
                   </div>
                   <div>
                     <label className="text-xs font-medium text-gray-600">Operador que realizó el trabajo</label>
