@@ -80,11 +80,23 @@ export function documentosVigentes<T extends DocumentoEquipo>(docs: T[] | null |
   return Array.from(porClave.values())
 }
 
+/**
+ * Cuál de dos versiones del mismo papel es la que rige.
+ *
+ * [MIG429] Manda el ÚLTIMO CARGADO, no el de fecha más lejana. Antes era al
+ * revés, y eso hacía que subir un papel corregido con vigencia MENOR no
+ * cambiara nada: el JDKH-31 figuraba vigente hasta 31-12-2026 con un
+ * certificado que dice abril, y cargar el bueno habría parecido funcionar
+ * dejando el camión en verde, sin ningún aviso.
+ *
+ * El desempate por fecha se conserva para las versiones cargadas en el mismo
+ * instante, que es lo que pasa con la carga masiva de abril.
+ */
 function ganaComoActual(a: DocumentoEquipo, b: DocumentoEquipo): boolean {
-  const va = a.fecha_vencimiento ?? ''
-  const vb = b.fecha_vencimiento ?? ''
-  if (va !== vb) return va > vb
-  return (a.created_at ?? '') > (b.created_at ?? '')
+  const ca = a.created_at ?? ''
+  const cb = b.created_at ?? ''
+  if (ca !== cb) return ca > cb
+  return (a.fecha_vencimiento ?? '') > (b.fecha_vencimiento ?? '')
 }
 
 /** Las versiones anteriores, ya reemplazadas por una renovación. */
