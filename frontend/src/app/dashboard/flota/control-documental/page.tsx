@@ -32,6 +32,9 @@ import { leerDocumento, type LecturaDocumento } from '@/lib/documentos/leer-docu
 // la forma más rápida de que dos pantallas terminen diciendo cosas distintas.
 import { ESTADO_CODIGO_LABELS, ESTADO_CODIGO_COLORS, ESTADO_CODIGO_ORDEN,
          type EstadoCodigo } from '@/lib/services/cierre-diario'
+import { EquipoQrCard } from '@/components/qr/equipo-qr-card'
+import { ModalEmitirHermeticidad } from '@/components/certificados/modal-emitir-hermeticidad'
+import { QrCode, FileCheck2 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Spinner } from '@/components/ui/spinner'
 import { Modal, ModalFooter } from '@/components/ui/modal'
@@ -59,6 +62,9 @@ export default function ControlDocumentalPage() {
   const [subiendo, setSubiendo] = useState<PapelEquipo | null>(null)
   // [MIG428] El status va primero porque es la pregunta que se hace primero:
   // «de los que están arrendados, ¿cuáles tienen los papeles al día?».
+  // El QR y la emisión son del EQUIPO, no de un papel: van en la cabecera.
+  const [verQr, setVerQr] = useState(false)
+  const [emitiendo, setEmitiendo] = useState(false)
   const [status, setStatus] = useState<string>('')
   const [zona, setZona] = useState<string>('')
 
@@ -232,13 +238,27 @@ export default function ControlDocumentalPage() {
         {/* ── Los papeles del camión elegido ──────────────────────────────── */}
         <div className="space-y-2">
           {eqSel && (
-            <div className="flex flex-wrap items-baseline gap-2">
-              <h2 className="text-lg font-bold">{eqSel.patente}</h2>
-              <span className="text-sm text-gray-500">{eqSel.activo_nombre}</span>
-              <span className="ml-auto text-[11px] text-gray-500">
-                {eqSel.total} documentos · {eqSel.vigentes} al día
-              </span>
-            </div>
+            <>
+              <div className="flex flex-wrap items-baseline gap-2">
+                <h2 className="text-lg font-bold">{eqSel.patente}</h2>
+                <span className="text-sm text-gray-500">{eqSel.activo_nombre}</span>
+                <span className="ml-auto text-[11px] text-gray-500">
+                  {eqSel.total} documentos · {eqSel.vigentes} al día
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button variant="outline" className="h-8 text-xs" onClick={() => setVerQr((x) => !x)}>
+                  <QrCode className="mr-1 h-3.5 w-3.5" /> {verQr ? 'Ocultar el QR' : 'Ver el QR del equipo'}
+                </Button>
+                <Button variant="outline" className="h-8 text-xs" onClick={() => setEmitiendo(true)}>
+                  <FileCheck2 className="mr-1 h-3.5 w-3.5" /> Emitir certificado de hermeticidad
+                </Button>
+              </div>
+              {verQr && (
+                <EquipoQrCard activoId={eqSel.activo_id} codigo={eqSel.patente}
+                              nombre={eqSel.activo_nombre} />
+              )}
+            </>
           )}
           {cargandoPapeles ? <div className="py-10 text-center"><Spinner /></div> : (
             <div className="space-y-1.5">
@@ -300,6 +320,11 @@ export default function ControlDocumentalPage() {
       {subiendo && (
         <ModalSubirPapel p={subiendo} onClose={() => setSubiendo(null)}
                          onListo={() => { setSubiendo(null); refrescar() }} />
+      )}
+      {emitiendo && eqSel && (
+        <ModalEmitirHermeticidad activoId={eqSel.activo_id} patente={eqSel.patente}
+                                 onClose={() => setEmitiendo(false)}
+                                 onListo={() => { setEmitiendo(false); refrescar() }} />
       )}
     </div>
   )
