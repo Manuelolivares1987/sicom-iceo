@@ -24,7 +24,14 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 // `Infinity` es un valor global de JavaScript: se importa con alias para no
 // sombrearlo dentro de este archivo.
-import { Infinity as IconoSinVencimiento } from 'lucide-react'
+import { Infinity as IconoSinVencimiento, Upload } from 'lucide-react'
+import { subirDocumentoCert, renovarCertificacion } from '@/lib/services/taller-planificacion'
+import { leerDocumento, type LecturaDocumento } from '@/lib/documentos/leer-documento'
+// El status y sus colores se toman de donde ya viven: es el mismo vocabulario
+// que usa el planificador y que propone Sugerencias GPS. Duplicarlo acá sería
+// la forma más rápida de que dos pantallas terminen diciendo cosas distintas.
+import { ESTADO_CODIGO_LABELS, ESTADO_CODIGO_COLORS, ESTADO_CODIGO_ORDEN,
+         type EstadoCodigo } from '@/lib/services/cierre-diario'
 import { Input } from '@/components/ui/input'
 import { Spinner } from '@/components/ui/spinner'
 import { Modal, ModalFooter } from '@/components/ui/modal'
@@ -48,6 +55,12 @@ export default function ControlDocumentalPage() {
   const [editando, setEditando] = useState<PapelEquipo | null>(null)
   // [MIG427] El papel que se está por marcar como que no caduca.
   const [noCaduca, setNoCaduca] = useState<PapelEquipo | null>(null)
+  // El papel cuyo archivo se está por reemplazar por uno nuevo.
+  const [subiendo, setSubiendo] = useState<PapelEquipo | null>(null)
+  // [MIG428] El status va primero porque es la pregunta que se hace primero:
+  // «de los que están arrendados, ¿cuáles tienen los papeles al día?».
+  const [status, setStatus] = useState<string>('')
+  const [zona, setZona] = useState<string>('')
 
   const { data: equipos = [], isLoading } = useQuery({
     queryKey: ['control-doc-equipos'], queryFn: getEquiposDocumental,
@@ -62,18 +75,44 @@ export default function ControlDocumentalPage() {
   const visibles = useMemo(() => {
     const q = busca.trim().toLowerCase()
     return equipos.filter((e) => {
+      if (status && (e.status_codigo ?? '') !== status) return false
+      // 'taller' agrupa a los que no tienen operación asignada: están adentro.
+      if (zona === 'taller' ? !!e.zona : zona && e.zona !== zona) return false
       if (soloProblemas && e.vencidos === 0 && e.sin_fecha === 0 && e.por_vencer === 0) return false
       if (!q) return true
       return (e.patente ?? '').toLowerCase().includes(q) ||
              (e.activo_codigo ?? '').toLowerCase().includes(q) ||
              (e.activo_nombre ?? '').toLowerCase().includes(q)
     })
-  }, [equipos, busca, soloProblemas])
+  }, [equipos, busca, soloProblemas, status, zona])
 
-  const tot = useMemo(() => equipos.reduce((a, e) => ({
+  /** Los status que existen hoy en la flota, en el orden del planificador. */
+  const statusDisponibles = useMemo(() => {
+    const cuenta = new Map<string, number>()
+    for (const e of equipos) {
+      const c = e.status_codigo
+      if (c) cuenta.set(c, (cuenta.get(c) ?? 0) + 1)
+    }
+    return ESTADO_CODIGO_ORDEN.filter((c) => cuenta.has(c))
+      .map((c) => ({ codigo: c, n: cuenta.get(c)! }))
+  }, [equipos])
+
+  const zonasDisponibles = useMemo(() => {
+    const z: string[] = []
+    let enTaller = 0
+    for (const e of equipos) {
+      if (!e.zona) { enTaller++; continue }
+      if (!z.includes(e.zona)) z.push(e.zona)
+    }
+    return { zonas: z.sort(), enTaller }
+  }, [equipos])
+
+  /** Lo que muestran los recuadros de arriba: sigue al filtro, no a la flota
+   *  entera. Un total que no cambia al filtrar confunde más de lo que informa. */
+  const totFiltrado = useMemo(() => visibles.reduce((a, e) => ({
     venc: a.venc + e.vencidos, sf: a.sf + e.sin_fecha, pv: a.pv + e.por_vencer,
-    prop: a.prop + e.con_propuesta,
-  }), { venc: 0, sf: 0, pv: 0, prop: 0 }), [equipos])
+    prop: a.prop + e.con_propuesta, bloq: a.bloq + e.vencidos_bloqueantes,
+  }), { venc: 0, sf: 0, pv: 0, prop: 0, bloq: 0 }), [visibles])
 
   const eqSel = equipos.find((e) => e.activo_id === activo)
 
@@ -96,12 +135,51 @@ export default function ControlDocumentalPage() {
         </p>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Tile n={tot.venc} label="vencidos" sub="ya caducaron" cls="text-red-600 border-red-500" />
-        <Tile n={tot.sf} label="sin fecha" sub="hay papel, falta la vigencia" cls="text-orange-600 border-orange-500" />
-        <Tile n={tot.pv} label="por vencer" sub="dentro de 30 días" cls="text-amber-600 border-amber-500" />
-        <Tile n={tot.prop} label="con propuesta" sub="el sistema leyó el archivo" cls="text-teal-700 border-teal-600" />
+      {/* ── El status primero, que es la pregunta que se hace primero ──────── */}
+      <div className="rounded-lg border bg-white p-3">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="mr-1 text-[11px] font-semibold uppercase tracking-wide text-gray-500">Status</span>
+          <FiltroChip activo={!status} onClick={() => setStatus('')}
+                      label="Todos" n={equipos.length} />
+          {statusDisponibles.map(({ codigo, n }) => (
+            <FiltroChip key={codigo} activo={status === codigo} onClick={() => setStatus(codigo)}
+                        label={ESTADO_CODIGO_LABELS[codigo as EstadoCodigo] ?? codigo} n={n}
+                        cls={ESTADO_CODIGO_COLORS[codigo as EstadoCodigo]} />
+          ))}
+        </div>
+        <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t pt-2">
+          <span className="mr-1 text-[11px] font-semibold uppercase tracking-wide text-gray-500">Zona</span>
+          <FiltroChip activo={!zona} onClick={() => setZona('')} label="Todas" n={equipos.length} />
+          {zonasDisponibles.zonas.map((z) => (
+            <FiltroChip key={z} activo={zona === z} onClick={() => setZona(z)}
+                        label={z} n={equipos.filter((e) => e.zona === z).length} />
+          ))}
+          {zonasDisponibles.enTaller > 0 && (
+            <FiltroChip activo={zona === 'taller'} onClick={() => setZona('taller')}
+                        label="En taller, sin operación" n={zonasDisponibles.enTaller} />
+          )}
+          {(status || zona) && (
+            <button type="button" onClick={() => { setStatus(''); setZona('') }}
+                    className="ml-auto text-[11px] font-medium text-blue-600 hover:underline">
+              Limpiar filtros
+            </button>
+          )}
+        </div>
       </div>
+
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <Tile n={totFiltrado.bloq} label="bloqueantes vencidos" sub="el equipo no debería operar" cls="text-red-700 border-red-700" />
+        <Tile n={totFiltrado.venc} label="vencidos" sub="ya caducaron" cls="text-red-600 border-red-500" />
+        <Tile n={totFiltrado.sf} label="sin fecha" sub="hay papel, falta la vigencia" cls="text-orange-600 border-orange-500" />
+        <Tile n={totFiltrado.pv} label="por vencer" sub="dentro de 30 días" cls="text-amber-600 border-amber-500" />
+        <Tile n={totFiltrado.prop} label="con propuesta" sub="el sistema leyó el archivo" cls="text-teal-700 border-teal-600" />
+      </div>
+      {(status || zona) && (
+        <p className="-mt-2 text-[11px] text-gray-500">
+          Los números de arriba son de los {visibles.length} equipos que quedaron con el filtro puesto,
+          no de la flota completa.
+        </p>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-[300px_1fr]">
         {/* ── Los camiones ────────────────────────────────────────────────── */}
@@ -125,6 +203,13 @@ export default function ControlDocumentalPage() {
                       e.activo_id === activo ? 'border-gray-900 bg-gray-50 ring-1 ring-gray-900' : 'hover:bg-gray-50'}`}>
                     <div className="flex items-center gap-1.5">
                       <span className="text-sm font-bold">{e.patente}</span>
+                      {e.status_codigo && (
+                        <span title={ESTADO_CODIGO_LABELS[e.status_codigo as EstadoCodigo] ?? e.status_codigo}
+                              className={`rounded border px-1 text-[9px] font-bold ${
+                                ESTADO_CODIGO_COLORS[e.status_codigo as EstadoCodigo] ?? 'bg-gray-100 text-gray-600'}`}>
+                          {e.status_codigo}
+                        </span>
+                      )}
                       {e.vencidos > 0 && <Chip n={e.vencidos} cls="bg-red-600 text-white" t="vencidos" />}
                       {e.sin_fecha > 0 && <Chip n={e.sin_fecha} cls="bg-orange-500 text-white" t="sin fecha" />}
                       {e.vencidos === 0 && e.sin_fecha === 0 && e.por_vencer === 0 && (
@@ -161,6 +246,7 @@ export default function ControlDocumentalPage() {
                 <PapelCard key={p.certificacion_id} p={p}
                            onEditar={() => setEditando(p)}
                            onNoCaduca={() => setNoCaduca(p)}
+                           onSubir={() => setSubiendo(p)}
                            onVuelveACaducar={async () => {
                              try {
                                // Si el TIPO estaba marcado, revertir sólo este papel
@@ -211,7 +297,27 @@ export default function ControlDocumentalPage() {
         <ModalNoCaduca p={noCaduca} onClose={() => setNoCaduca(null)}
                        onListo={() => { setNoCaduca(null); refrescar() }} />
       )}
+      {subiendo && (
+        <ModalSubirPapel p={subiendo} onClose={() => setSubiendo(null)}
+                         onListo={() => { setSubiendo(null); refrescar() }} />
+      )}
     </div>
+  )
+}
+
+/** Un filtro que además dice cuántos equipos hay detrás: elegir a ciegas y
+ *  encontrarse con una lista vacía es la forma más rápida de no usar un filtro. */
+function FiltroChip({ activo, onClick, label, n, cls }: {
+  activo: boolean; onClick: () => void; label: string; n: number; cls?: string
+}) {
+  return (
+    <button type="button" onClick={onClick} disabled={n === 0}
+      className={`rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors disabled:opacity-40 ${
+        activo ? 'border-gray-900 bg-gray-900 text-white'
+               : cls ? `${cls} hover:brightness-95`
+               : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'}`}>
+      {label} <span className={activo ? 'opacity-70' : 'opacity-50'}>{n}</span>
+    </button>
   )
 }
 
@@ -229,9 +335,9 @@ function Chip({ n, cls, t }: { n: number; cls: string; t: string }) {
   return <span title={t} className={`rounded-full px-1.5 text-[10px] font-bold ${cls}`}>{n}</span>
 }
 
-function PapelCard({ p, onAceptar, onDescartar, onEditar, onNoCaduca, onVuelveACaducar }: {
+function PapelCard({ p, onAceptar, onDescartar, onEditar, onNoCaduca, onVuelveACaducar, onSubir }: {
   p: PapelEquipo; onAceptar: () => void; onDescartar: () => void; onEditar: () => void
-  onNoCaduca: () => void; onVuelveACaducar: () => void
+  onNoCaduca: () => void; onVuelveACaducar: () => void; onSubir: () => void
 }) {
   const [busy, setBusy] = useState(false)
   const est = ESTADO_DOC[p.estado] ?? ESTADO_DOC.no_aplica
@@ -337,6 +443,13 @@ function PapelCard({ p, onAceptar, onDescartar, onEditar, onNoCaduca, onVuelveAC
           </>
         )}
 
+        {/* Subir el papel nuevo se puede siempre: renovar no depende de en qué
+            estado esté el que hay. Es la salida real de un documento vencido —
+            las demás sólo corrigen la fecha del que ya no sirve. */}
+        <Button variant="outline" className="h-7 text-xs" onClick={onSubir}>
+          <Upload className="mr-1 h-3 w-3" /> Subir el papel nuevo
+        </Button>
+
         {p.propuesta_id && !yaNoCaduca && (
           <Button variant="ghost" className="h-7 text-xs text-gray-500" disabled={busy}
                   onClick={() => correr(onDescartar)}>
@@ -356,6 +469,145 @@ function PapelCard({ p, onAceptar, onDescartar, onEditar, onNoCaduca, onVuelveAC
  * segunda vale también para los documentos que lleguen mañana, y es la que
  * corresponde al certificado de cabina.
  */
+/**
+ * Subir el papel nuevo desde Control documental.
+ *
+ * Antes esto sólo se podía hacer entrando a la ficha del equipo, que es donde
+ * NO se está cuando uno descubre que un papel está vencido: se descubre acá.
+ *
+ * El archivo se revisa en el navegador antes de subirlo (`leerDocumento`):
+ * comprueba que sea un archivo de verdad, que hable de ESTE equipo y de este
+ * tipo de papel, y saca la fecha si el documento la declara. Los avisos se
+ * muestran; sólo los bloqueantes impiden guardar. Un escaneo sin texto no es un
+ * error —es la mitad del archivo de la flota— y se guarda igual, con la fecha
+ * escrita a mano.
+ */
+function ModalSubirPapel({ p, onClose, onListo }: {
+  p: PapelEquipo; onClose: () => void; onListo: () => void
+}) {
+  const toast = useToast()
+  const [file, setFile] = useState<File | null>(null)
+  const [lectura, setLectura] = useState<LecturaDocumento | null>(null)
+  const [leyendo, setLeyendo] = useState(false)
+  const [venc, setVenc] = useState('')
+  const [emi, setEmi] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  const revisar = async (f: File | null) => {
+    setFile(f); setLectura(null); setVenc(''); setEmi('')
+    if (!f) return
+    setLeyendo(true)
+    try {
+      const r = await leerDocumento(f, { patente: p.patente, tipo: p.tipo })
+      setLectura(r)
+      if (r.vencimiento) setVenc(r.vencimiento)
+      if (r.emision) setEmi(r.emision)
+    } catch {
+      // Leer es una ayuda, no un requisito: si falla, se carga a mano.
+    } finally { setLeyendo(false) }
+  }
+
+  const bloqueado = !!lectura?.avisos.some((a) => a.severidad === 'bloqueante')
+  const puedeGuardar = !!file && !!venc && !bloqueado && !busy
+
+  const guardar = async () => {
+    if (!file) return
+    setBusy(true)
+    try {
+      const url = await subirDocumentoCert(p.activo_id, p.tipo, file)
+      await renovarCertificacion({
+        activoId: p.activo_id,
+        tipo: p.tipo,
+        fechaEmision: emi || venc,
+        fechaVencimiento: venc,
+        archivoUrl: url,
+        bloqueante: p.bloqueante,
+        notas: lectura?.origen === 'documento'
+          ? `Fecha leída del documento al subirlo. ${lectura.evidencia ?? ''}`.slice(0, 400)
+          : 'Fecha escrita a mano al subir el papel.',
+      })
+      toast.success(`${nombreTipo(p.tipo)} del ${p.patente} actualizado — vence ${venc}`)
+      onListo()
+    } catch (e) {
+      toast.error((e as Error).message)
+    } finally { setBusy(false) }
+  }
+
+  const color = (sev: string) =>
+    sev === 'bloqueante' ? 'border-red-300 bg-red-50 text-red-800'
+    : sev === 'alto' ? 'border-amber-300 bg-amber-50 text-amber-800'
+    : 'border-gray-200 bg-gray-50 text-gray-700'
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white p-5 shadow-xl"
+           onClick={(e) => e.stopPropagation()}>
+        <h3 className="text-base font-bold">Subir el papel nuevo</h3>
+        <p className="mt-0.5 text-xs text-gray-500">{nombreTipo(p.tipo)} · {p.patente}</p>
+        <p className="mt-2 rounded bg-gray-50 p-2 text-[11px] text-gray-600">
+          El anterior no se borra: queda en el historial del equipo. Desde ahora rige
+          el que subas, y el QR del camión lo muestra al toque.
+        </p>
+
+        <input type="file" accept=".pdf,image/*"
+               onChange={(e) => revisar(e.target.files?.[0] ?? null)}
+               className="mt-3 w-full rounded border px-2 py-1.5 text-sm" />
+
+        {leyendo && (
+          <p className="mt-2 flex items-center gap-2 text-xs text-gray-500">
+            <Loader2 className="h-3 w-3 animate-spin" /> Revisando el archivo…
+          </p>
+        )}
+
+        {lectura && (
+          <div className="mt-3 space-y-1.5">
+            {lectura.avisos.map((a, i) => (
+              <div key={i} className={`rounded border p-2 text-[11px] ${color(a.severidad)}`}>
+                <b>{a.titulo}</b>
+                <p className="mt-0.5">{a.detalle}</p>
+              </div>
+            ))}
+            {lectura.vencimiento ? (
+              <p className="rounded border border-green-300 bg-green-50 p-2 text-[11px] text-green-800">
+                <b>El documento dice que vence el {lectura.vencimiento}.</b>
+                {lectura.evidencia && <span className="mt-0.5 block font-mono text-[10px] opacity-80">…{lectura.evidencia.slice(0, 160)}…</span>}
+              </p>
+            ) : lectura.caracteres === 0 ? (
+              <p className="rounded border border-gray-200 bg-gray-50 p-2 text-[11px] text-gray-600">
+                Es un escaneo sin texto: hay que escribir la fecha mirando la foto.
+              </p>
+            ) : null}
+          </div>
+        )}
+
+        <div className="mt-4 grid grid-cols-2 gap-3">
+          <div>
+            <label className="text-xs font-medium text-gray-600">Vence el</label>
+            <input type="date" value={venc} onChange={(e) => setVenc(e.target.value)}
+                   className="mt-1 w-full rounded border px-2 py-1.5 text-sm" />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-gray-600">Fecha del documento</label>
+            <input type="date" value={emi} onChange={(e) => setEmi(e.target.value)}
+                   className="mt-1 w-full rounded border px-2 py-1.5 text-sm" />
+          </div>
+        </div>
+
+        <div className="mt-5 flex justify-end gap-2">
+          <Button variant="outline" onClick={onClose}>Cancelar</Button>
+          <Button disabled={!puedeGuardar} onClick={guardar}>
+            {busy && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}
+            Guardar el papel nuevo
+          </Button>
+        </div>
+        {!venc && file && !bloqueado && (
+          <p className="mt-2 text-right text-[11px] text-gray-500">Falta la fecha de vencimiento.</p>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function ModalNoCaduca({ p, onClose, onListo }: {
   p: PapelEquipo; onClose: () => void; onListo: () => void
 }) {
