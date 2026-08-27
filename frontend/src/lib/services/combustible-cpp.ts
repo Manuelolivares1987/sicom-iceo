@@ -319,6 +319,9 @@ export interface SalidaCombustiblePayload {
   lectura_medidor_final_lt?:   number | null
   // MIG78: kilometraje obligatorio para externos
   kilometraje_vehiculo?:       number | null
+  // MIG437: segunda carga del dia a la misma patente externa (solo jefatura)
+  autorizar_recarga_dia?:      boolean | null
+  motivo_recarga_dia?:         string | null
 }
 
 export interface SalidaCombustibleResult {
@@ -554,6 +557,9 @@ export async function registrarSalidaCombustible(payload: SalidaCombustiblePaylo
     p_lectura_medidor_inicial_lt: payload.lectura_medidor_inicial_lt ?? null,
     p_lectura_medidor_final_lt:   payload.lectura_medidor_final_lt ?? null,
     p_kilometraje_vehiculo:       payload.kilometraje_vehiculo ?? null,
+    // MIG437
+    p_autorizar_recarga_dia:      payload.autorizar_recarga_dia ?? false,
+    p_motivo_recarga_dia:         payload.motivo_recarga_dia ?? null,
   })
   if (error) return { data: null, error }
   return { data: data as SalidaCombustibleResult, error: null }
@@ -573,6 +579,31 @@ export async function getPropuestaLitrosEquipo(equipoId: string) {
   const { data, error } = await supabase.rpc('rpc_propuesta_litros_equipo', { p_equipo_id: equipoId })
   if (error) return { data: null, error }
   return { data: data as PropuestaLitrosEquipo, error: null }
+}
+
+// ── MIG437: una patente externa no se carga dos veces el mismo dia ─────────
+// Se consulta al elegir la patente para avisar antes de que el operador
+// llene el formulario completo, no despues de guardar.
+export interface CargaExternoDelDia {
+  kardex_id:      string
+  folio:          string
+  hora:           string
+  litros:         number
+  registrado_por: string
+}
+export interface CargasExternoDelDia {
+  cargas:          CargaExternoDelDia[]
+  n:               number
+  litros_total:    number
+  puede_autorizar: boolean
+}
+export async function getCargasExternoDelDia(vehiculoExternoId: string, fecha?: string | null) {
+  const { data, error } = await supabase.rpc('rpc_cargas_externo_del_dia', {
+    p_vehiculo_externo_id: vehiculoExternoId,
+    p_fecha: fecha ?? null,
+  })
+  if (error) return { data: null, error }
+  return { data: data as CargasExternoDelDia, error: null }
 }
 
 // ── MIG49: anular ingreso de combustible (corregir precio mal cargado) ─────
