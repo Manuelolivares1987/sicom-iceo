@@ -108,6 +108,12 @@ export async function emitirCertificado(params: {
   fechaEmision?: string | null
   ciudad?: string | null
   otId?: string | null
+  /**
+   * [MIG436] Hasta cuándo vale el certificado. Si va vacío, el papel del equipo
+   * queda como «falta la fecha» —un pendiente visible— y NO como «no vence»:
+   * afirmarle al cliente que una mantención no caduca es falso.
+   */
+  venceEl?: string | null
 }) {
   const firmaOperador = await subirFirmaCertificado(params.firmaOperadorDataUrl, 'operador')
   const firmaJefe = await subirFirmaCertificado(params.firmaJefeDataUrl, 'jefe')
@@ -118,6 +124,7 @@ export async function emitirCertificado(params: {
     p_operador_nombre: params.operadorNombre,
     p_firma_operador_url: firmaOperador,
     p_firma_jefe_url: firmaJefe,
+    p_vence_el: params.venceEl ?? null,
     p_operador_tecnico_id: params.operadorTecnicoId ?? null,
     p_fecha_emision: params.fechaEmision ?? null,
     p_ciudad: params.ciudad ?? 'Coquimbo',

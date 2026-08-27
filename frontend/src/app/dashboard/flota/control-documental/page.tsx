@@ -34,6 +34,7 @@ import { ESTADO_CODIGO_LABELS, ESTADO_CODIGO_COLORS, ESTADO_CODIGO_ORDEN,
          type EstadoCodigo } from '@/lib/services/cierre-diario'
 import { EquipoQrCard } from '@/components/qr/equipo-qr-card'
 import { ModalEmitirHermeticidad } from '@/components/certificados/modal-emitir-hermeticidad'
+import { CarpetaCertificados } from '@/components/activos/carpeta-certificados'
 import { QrCode, FileCheck2 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Spinner } from '@/components/ui/spinner'
@@ -65,6 +66,7 @@ export default function ControlDocumentalPage() {
   // El QR y la emisión son del EQUIPO, no de un papel: van en la cabecera.
   const [verQr, setVerQr] = useState(false)
   const [emitiendo, setEmitiendo] = useState(false)
+  const [verCertificados, setVerCertificados] = useState(false)
   const [status, setStatus] = useState<string>('')
   const [zona, setZona] = useState<string>('')
 
@@ -250,13 +252,28 @@ export default function ControlDocumentalPage() {
                 <Button variant="outline" className="h-8 text-xs" onClick={() => setVerQr((x) => !x)}>
                   <QrCode className="mr-1 h-3.5 w-3.5" /> {verQr ? 'Ocultar el QR' : 'Ver el QR del equipo'}
                 </Button>
-                <Button variant="outline" className="h-8 text-xs" onClick={() => setEmitiendo(true)}>
-                  <FileCheck2 className="mr-1 h-3.5 w-3.5" /> Emitir certificado de hermeticidad
+                <Button variant="outline" className="h-8 text-xs" onClick={() => setVerCertificados((x) => !x)}>
+                  <FileCheck2 className="mr-1 h-3.5 w-3.5" />
+                  {verCertificados ? 'Ocultar los certificados' : 'Certificados del equipo'}
                 </Button>
               </div>
               {verQr && (
                 <EquipoQrCard activoId={eqSel.activo_id} codigo={eqSel.patente}
                               nombre={eqSel.activo_nombre} />
+              )}
+              {/* La carpeta completa del equipo: los seis certificados Pillado que
+                  ya se emitían desde la ficha, más la hermeticidad. Estaban en dos
+                  lugares distintos; acá es donde se está mirando los papeles. */}
+              {verCertificados && (
+                <div className="rounded-lg border bg-white p-4">
+                  <CarpetaCertificados
+                    activoId={eqSel.activo_id}
+                    acciones={
+                      <Button size="sm" variant="outline" onClick={() => setEmitiendo(true)}>
+                        <FileCheck2 className="mr-1 h-4 w-4" /> Hermeticidad
+                      </Button>
+                    } />
+                </div>
               )}
             </>
           )}
