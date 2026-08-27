@@ -63,6 +63,14 @@ export type PapelEquipo = {
   propuesta_vencida: boolean | null
   /** [MIG427] El TIPO completo está marcado como que no vence. */
   tipo_no_caduca: boolean | null
+  /**
+   * [MIG430] El sistema no está de acuerdo con esta fecha, pero la escribió
+   * una persona y vale. Es una advertencia al lado del dato, no un estado:
+   * marcar «falta la fecha» sobre una fecha recién escrita es ruido.
+   */
+  vigencia_observacion: string | null
+  /** La fecha la cargó el sistema y no se puede sostener: ahí sí no vale. */
+  vigencia_dudosa_nota: string | null
 }
 
 export async function getEquiposDocumental(): Promise<EquipoDocumental[]> {
