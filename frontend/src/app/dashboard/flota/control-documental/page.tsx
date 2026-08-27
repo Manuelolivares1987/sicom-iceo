@@ -385,6 +385,19 @@ function PapelCard({ p, onAceptar, onDescartar, onEditar, onNoCaduca, onVuelveAC
         )}
       </div>
 
+      {/* [MIG430] El sistema no está de acuerdo con la fecha, pero la escribió
+          una persona: se le avisa al lado, sin borrarle el dato. */}
+      {p.vigencia_observacion && (
+        <p className="mt-1.5 rounded border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] text-amber-800">
+          <b>Revisar:</b> {p.vigencia_observacion}
+        </p>
+      )}
+      {p.vigencia_dudosa_nota && (
+        <p className="mt-1.5 rounded border border-orange-200 bg-orange-50 px-2 py-1 text-[11px] text-orange-800">
+          <b>La fecha que hay no se puede sostener:</b> {p.vigencia_dudosa_nota}
+        </p>
+      )}
+
       {/* Lo que el lector sacó del archivo */}
       {conf && p.estado !== 'vigente' && (
         <div className="mt-2 rounded-lg bg-gray-50 p-2">
