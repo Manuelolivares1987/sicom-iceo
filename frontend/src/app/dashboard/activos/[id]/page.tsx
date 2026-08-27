@@ -617,6 +617,8 @@ function TabCertificaciones({ activoId, patente }: { activoId: string; patente?:
         numero: newCert.numero_certificado || null,
         entidad: newCert.entidad_certificadora || null,
         bloqueante: newCert.bloqueante,
+        // [MIG433] Quién afirma la fecha: el archivo o la persona.
+        origen: lectura?.origen === 'documento' ? 'documento' : 'manual',
       })
 
       refrescar()

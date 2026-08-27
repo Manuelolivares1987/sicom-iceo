@@ -334,6 +334,13 @@ export async function renovarCertificacion(p: {
   activoId: string; tipo: string; fechaEmision: string; fechaVencimiento: string
   archivoUrl?: string | null; numero?: string | null; entidad?: string | null
   bloqueante?: boolean | null; notas?: string | null
+  /**
+   * [MIG433] De dónde salió la fecha: 'documento' si el lector la sacó del
+   * archivo, 'manual' si la escribió quien sube el papel. Importa: sin esto la
+   * base la toma por una fecha del sistema y el control del estándar la
+   * descalifica, devolviendo «falta la fecha» sobre un papel recién cargado.
+   */
+  origen?: 'manual' | 'documento'
 }) {
   const { data, error } = await supabase.rpc('rpc_renovar_certificacion', {
     p_activo_id: p.activoId,
@@ -345,6 +352,7 @@ export async function renovarCertificacion(p: {
     p_entidad: p.entidad ?? null,
     p_bloqueante: p.bloqueante ?? null,
     p_notas: p.notas ?? null,
+    p_origen: p.origen ?? 'manual',
   })
   if (error) throw error
   return data
