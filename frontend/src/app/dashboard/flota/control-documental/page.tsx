@@ -560,6 +560,9 @@ function ModalSubirPapel({ p, onClose, onListo }: {
         fechaVencimiento: venc,
         archivoUrl: url,
         bloqueante: p.bloqueante,
+        // Si el lector la sacó del archivo vale más que si la tecleó alguien:
+        // queda anotado cuál de las dos fue.
+        origen: lectura?.origen === 'documento' ? 'documento' : 'manual',
         notas: lectura?.origen === 'documento'
           ? `Fecha leída del documento al subirlo. ${lectura.evidencia ?? ''}`.slice(0, 400)
           : 'Fecha escrita a mano al subir el papel.',
