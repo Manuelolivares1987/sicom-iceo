@@ -23,6 +23,12 @@ export type EquipoDocumental = {
   activo_nombre: string | null
   activo_tipo: string | null
   activo_estado: string
+  /** [MIG428] Coquimbo / Calama. NULL = está en el taller, sin operación asignada. */
+  zona: string | null
+  /** [MIG428] El status del planificador: el mismo que propone Sugerencias GPS. */
+  status_codigo: string | null
+  status_fecha: string | null
+  status_confirmado_hoy: boolean | null
   total: number
   vencidos: number
   sin_fecha: number
@@ -62,6 +68,7 @@ export type PapelEquipo = {
 export async function getEquiposDocumental(): Promise<EquipoDocumental[]> {
   const { data, error } = await supabase
     .from('v_control_documental_equipo').select('*')
+    .order('vencidos_bloqueantes', { ascending: false })
     .order('vencidos', { ascending: false })
     .order('sin_fecha', { ascending: false })
   if (error) throw error
