@@ -1,0 +1,195 @@
+[
+ {
+  "patente": "DJKL-18",
+  "tipo": "hermeticidad",
+  "cert": "12/2025",
+  "inspeccion": "2025-12-29",
+  "vencimiento": "2026-06-29",
+  "sistema": "2026-06-29",
+  "nota": "ya corregido en MIG415"
+ },
+ {
+  "patente": "FJTJ-60",
+  "tipo": "hermeticidad",
+  "cert": "10/2025",
+  "inspeccion": "2025-10-01",
+  "vencimiento": "2026-04-01",
+  "sistema": "2027-04-01",
+  "nota": "el sistema tenia un anio de mas"
+ },
+ {
+  "patente": "FSLZ-67",
+  "tipo": "hermeticidad",
+  "cert": "02/2026",
+  "inspeccion": "2026-03-26",
+  "vencimiento": "2026-09-25",
+  "sistema": "2027-11-11",
+  "nota": "vigente, vence en 30 dias"
+ },
+ {
+  "patente": "HKSR-81",
+  "tipo": "hermeticidad",
+  "cert": "09/2021",
+  "inspeccion": "2021-09-08",
+  "vencimiento": "2022-03-08",
+  "sistema": "2024-11-28",
+  "nota": "el papel en carpeta es de 2021; vencido hace mas de 4 anios"
+ },
+ {
+  "patente": "JGBY-10",
+  "tipo": "hermeticidad",
+  "cert": "12/2025",
+  "inspeccion": "2025-12-05",
+  "vencimiento": "2026-06-05",
+  "sistema": "2027-06-05",
+  "nota": "el sistema tenia un anio de mas"
+ },
+ {
+  "patente": "LCSX-78",
+  "tipo": "hermeticidad",
+  "cert": "10/2025",
+  "inspeccion": "2025-10-01",
+  "vencimiento": "2026-04-01",
+  "sistema": "2027-04-01",
+  "nota": "el CERTIFICADO dice 01-04-2025, anterior a su propia prueba: error de tipeo del emisor. Mismo Nro 10/2025 que FJTJ-60 y SVBJ-56"
+ },
+ {
+  "patente": "RSCY-85",
+  "tipo": "hermeticidad",
+  "cert": null,
+  "inspeccion": null,
+  "vencimiento": null,
+  "sistema": "2099-12-31",
+  "nota": "NO SE PUDO LEER: el PDF viene partido en tiras de 140 px. Hay que reescanear"
+ },
+ {
+  "patente": "SVBJ-56",
+  "tipo": "hermeticidad",
+  "cert": "10/2025",
+  "inspeccion": "2025-10-15",
+  "vencimiento": "2026-04-15",
+  "sistema": "2099-12-31",
+  "nota": "el sistema no tenia fecha; vencido hace 133 dias"
+ },
+ {
+  "patente": "TRST-57",
+  "tipo": "hermeticidad",
+  "cert": "01/2026",
+  "inspeccion": "2026-05-05",
+  "vencimiento": "2026-11-05",
+  "sistema": "2027-11-05",
+  "nota": "vigente hasta noviembre; el sistema tenia un anio de mas"
+ },
+ {
+  "patente": "GCSY-66",
+  "tipo": "revision_tecnica",
+  "inspeccion": "2025-05-29",
+  "vencimiento": "2029-05-29",
+  "sistema": "2099-12-31",
+  "nota": "grua Toyota, vigencia larga. El sistema no tenia fecha"
+ },
+ {
+  "patente": "KVDK-20",
+  "tipo": "revision_tecnica",
+  "inspeccion": "2026-03-03",
+  "vencimiento": "2027-02-28",
+  "sistema": "2099-12-31",
+  "nota": "VALIDO HASTA FEBRERO 2027. Propietario Banco Santander (leasing)"
+ },
+ {
+  "patente": "RZPC-83",
+  "tipo": "revision_tecnica",
+  "inspeccion": "2025-06-30",
+  "vencimiento": "2027-06-30",
+  "sistema": "2099-12-31",
+  "nota": "VALIDO HASTA JUNIO 2027"
+ },
+ {
+  "patente": "SBPG-12",
+  "tipo": "revision_tecnica",
+  "inspeccion": "2025-06-02",
+  "vencimiento": "2027-05-31",
+  "sistema": "2099-12-31",
+  "nota": "VALIDO HASTA MAYO 2027"
+ },
+ {
+  "patente": "LKPY-18",
+  "tipo": "revision_tecnica",
+  "inspeccion": "2026-02-18",
+  "vencimiento": "2026-08-18",
+  "sistema": "2026-08-18",
+  "nota": "el sistema estaba CORRECTO"
+ },
+ {
+  "patente": "JDKH-31",
+  "tipo": "revision_tecnica",
+  "inspeccion": "2025-04-30",
+  "vencimiento": "2026-04-30",
+  "sistema": "2026-12-31",
+  "nota": "VALIDO HASTA ABRIL 2026. El sistema la daba vigente hasta diciembre: VENCIDA hace 118 dias"
+ },
+ {
+  "patente": "KCBY-31",
+  "tipo": "revision_tecnica",
+  "inspeccion": "2026-06-17",
+  "vencimiento": "2026-12-16",
+  "sistema": "2026-12-16",
+  "nota": "correcto. Propietario B K SpA"
+ },
+ {
+  "patente": "LLBP-96",
+  "tipo": "revision_tecnica",
+  "inspeccion": "2025-09-26",
+  "vencimiento": "2026-09-30",
+  "sistema": "2026-09-30",
+  "nota": "correcto"
+ },
+ {
+  "patente": "FJTJ-61",
+  "tipo": "revision_tecnica",
+  "inspeccion": "2026-07-09",
+  "vencimiento": "2027-01-09",
+  "sistema": "2027-01-09",
+  "nota": "correcto. Archivo guardado como PNG, no PDF"
+ },
+ {
+  "patente": "FSLZ-67",
+  "tipo": "revision_tecnica",
+  "inspeccion": "2026-06-26",
+  "vencimiento": "2026-12-26",
+  "sistema": "2026-12-26",
+  "nota": "correcto. Archivo guardado como PNG"
+ },
+ {
+  "patente": "HHWB-44",
+  "tipo": "revision_tecnica",
+  "inspeccion": "2026-06-08",
+  "vencimiento": "2026-12-05",
+  "sistema": "2026-12-05",
+  "nota": "correcto. Archivo PNG. Propietario Banco BBVA"
+ },
+ {
+  "patente": "JTYK-88",
+  "tipo": "revision_tecnica",
+  "inspeccion": "2026-07-09",
+  "vencimiento": "2027-01-08",
+  "sistema": "2027-01-08",
+  "nota": "correcto. Archivo PNG"
+ },
+ {
+  "patente": "RSCY-85",
+  "tipo": "revision_tecnica",
+  "inspeccion": "2026-07-30",
+  "vencimiento": "2027-01-30",
+  "sistema": "2027-01-30",
+  "nota": "correcto. Archivo PNG"
+ },
+ {
+  "patente": "FJTJ-60",
+  "tipo": "revision_tecnica",
+  "inspeccion": "2026-08-03",
+  "vencimiento": "2027-02-03",
+  "sistema": "2027-02-03",
+  "nota": "correcto. Archivo JPEG"
+ }
+]

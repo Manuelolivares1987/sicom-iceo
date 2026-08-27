@@ -49,3 +49,10 @@ frontend/staging-e2e.mjs
 
 # Credenciales de prueba — nunca al repo
 PRUEBA_GENERAL_CUENTAS.txt
+.cache-papeles/
+reportes/forense/escaneos/
+reportes/forense/miniaturas/
+reportes/forense/paginas/
+reportes/forense/tc8/
+reportes/forense/render/
+reportes/*.xlsx
