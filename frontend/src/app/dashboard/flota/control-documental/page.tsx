@@ -22,6 +22,9 @@ import {
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+// `Infinity` es un valor global de JavaScript: se importa con alias para no
+// sombrearlo dentro de este archivo.
+import { Infinity as IconoSinVencimiento } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Spinner } from '@/components/ui/spinner'
 import { Modal, ModalFooter } from '@/components/ui/modal'
@@ -29,6 +32,7 @@ import { useToast } from '@/contexts/toast-context'
 import { useRequireAuth } from '@/hooks/use-require-auth'
 import {
   getEquiposDocumental, getPapelesEquipo, fijarFecha, descartarPropuesta,
+  marcarNoCaduca, vuelveACaducar,
   ESTADO_DOC, CONFIANZA, nombreTipo,
   type EquipoDocumental, type PapelEquipo,
 } from '@/lib/services/control-documental'
@@ -42,6 +46,8 @@ export default function ControlDocumentalPage() {
   const [busca, setBusca] = useState('')
   const [soloProblemas, setSoloProblemas] = useState(true)
   const [editando, setEditando] = useState<PapelEquipo | null>(null)
+  // [MIG427] El papel que se está por marcar como que no caduca.
+  const [noCaduca, setNoCaduca] = useState<PapelEquipo | null>(null)
 
   const { data: equipos = [], isLoading } = useQuery({
     queryKey: ['control-doc-equipos'], queryFn: getEquiposDocumental,
@@ -154,6 +160,19 @@ export default function ControlDocumentalPage() {
               {papeles.map((p) => (
                 <PapelCard key={p.certificacion_id} p={p}
                            onEditar={() => setEditando(p)}
+                           onNoCaduca={() => setNoCaduca(p)}
+                           onVuelveACaducar={async () => {
+                             try {
+                               // Si el TIPO estaba marcado, revertir sólo este papel
+                               // no sirve: la vista lo volvería a dar por permanente.
+                               const alcance = p.tipo_no_caduca ? 'tipo' : 'este'
+                               const r = await vuelveACaducar(p.certificacion_id, alcance)
+                               toast.success(alcance === 'tipo'
+                                 ? `${nombreTipo(p.tipo)} vuelve a caducar — ${r.papeles_afectados} papeles piden fecha otra vez`
+                                 : 'Este papel vuelve a pedir fecha')
+                               refrescar()
+                             } catch (e) { toast.error((e as Error).message) }
+                           }}
                            onAceptar={async () => {
                              try {
                                const r = await fijarFecha({
@@ -188,6 +207,10 @@ export default function ControlDocumentalPage() {
         <ModalFecha p={editando} onClose={() => setEditando(null)}
                     onListo={() => { setEditando(null); refrescar() }} />
       )}
+      {noCaduca && (
+        <ModalNoCaduca p={noCaduca} onClose={() => setNoCaduca(null)}
+                       onListo={() => { setNoCaduca(null); refrescar() }} />
+      )}
     </div>
   )
 }
@@ -206,13 +229,16 @@ function Chip({ n, cls, t }: { n: number; cls: string; t: string }) {
   return <span title={t} className={`rounded-full px-1.5 text-[10px] font-bold ${cls}`}>{n}</span>
 }
 
-function PapelCard({ p, onAceptar, onDescartar, onEditar }: {
+function PapelCard({ p, onAceptar, onDescartar, onEditar, onNoCaduca, onVuelveACaducar }: {
   p: PapelEquipo; onAceptar: () => void; onDescartar: () => void; onEditar: () => void
+  onNoCaduca: () => void; onVuelveACaducar: () => void
 }) {
   const [busy, setBusy] = useState(false)
   const est = ESTADO_DOC[p.estado] ?? ESTADO_DOC.no_aplica
   const conf = p.propuesta_confianza ? CONFIANZA[p.propuesta_confianza] : null
   const puedeAceptar = !!p.vencimiento_propuesto && p.estado !== 'vigente'
+  // Marcado a mano en este papel, o el tipo entero declarado permanente.
+  const yaNoCaduca = p.fecha_origen === 'documento_sin_vencimiento' || !!p.tipo_no_caduca
 
   const correr = async (fn: () => Promise<void> | void) => {
     setBusy(true); try { await fn() } finally { setBusy(false) }
@@ -240,10 +266,17 @@ function PapelCard({ p, onAceptar, onDescartar, onEditar }: {
       </div>
 
       <div className="mt-0.5 text-[11px] text-gray-500">
-        {p.fecha_vencimiento
+        {yaNoCaduca ? 'Este documento no vence'
+          : p.fecha_vencimiento
           ? <>Vence {p.fecha_vencimiento}{p.dias_restantes != null && ` · ${p.dias_restantes} días`}</>
           : 'Sin fecha de vencimiento registrada'}
-        {p.fecha_origen && <span className="ml-1 text-gray-400">· fecha {p.fecha_origen === 'documento' ? 'leída del documento' : p.fecha_origen === 'regla_2_anios' ? 'por regla de 2 años' : 'escrita a mano'}</span>}
+        {p.fecha_origen && p.fecha_origen !== 'documento_sin_vencimiento' && (
+          <span className="ml-1 text-gray-400">· fecha {
+            p.fecha_origen === 'documento' ? 'leída del documento'
+            : p.fecha_origen === 'regla_2_anios' ? 'por regla de 2 años'
+            : p.fecha_origen === 'carga_inicial' ? 'de la carga de abril'
+            : 'escrita a mano'}</span>
+        )}
       </div>
 
       {/* Lo que el lector sacó del archivo */}
@@ -267,22 +300,146 @@ function PapelCard({ p, onAceptar, onDescartar, onEditar }: {
               </p>
             </details>
           )}
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            {puedeAceptar && (
-              <Button className="h-7 text-xs" disabled={busy} onClick={() => correr(onAceptar)}>
-                {busy ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Check className="mr-1 h-3 w-3" />}
-                Aceptar {p.vencimiento_propuesto}
-              </Button>
-            )}
-            <Button variant="outline" className="h-7 text-xs" onClick={onEditar}>Escribir otra fecha</Button>
-            {p.propuesta_id && (
-              <Button variant="outline" className="h-7 text-xs" disabled={busy} onClick={() => correr(onDescartar)}>
-                <X className="mr-1 h-3 w-3" /> Descartar
-              </Button>
-            )}
-          </div>
         </div>
       )}
+
+      {/* ── Qué se puede hacer con este papel ────────────────────────────────
+          La botonera vivía DENTRO del bloque de la propuesta, así que un papel
+          del que el lector no sacó nada —que son la mayoría— no tenía ninguna
+          acción: se veía el problema y no se podía resolver. Ahora está afuera. */}
+      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+        {puedeAceptar && (
+          <Button className="h-7 text-xs" disabled={busy} onClick={() => correr(onAceptar)}>
+            {busy ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Check className="mr-1 h-3 w-3" />}
+            Aceptar {p.vencimiento_propuesto}
+          </Button>
+        )}
+
+        {yaNoCaduca ? (
+          <>
+            <span className="flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-600">
+              <IconoSinVencimiento className="h-3 w-3" />
+              {p.tipo_no_caduca ? 'Este tipo de documento no caduca' : 'Este papel no caduca'}
+            </span>
+            <Button variant="ghost" className="h-7 text-xs text-gray-500" disabled={busy}
+                    onClick={() => correr(onVuelveACaducar)}>
+              {p.tipo_no_caduca ? 'Sí caduca, revertir para todo el tipo' : 'Sí caduca'}
+            </Button>
+          </>
+        ) : (
+          <>
+            <Button variant="outline" className="h-7 text-xs" onClick={onEditar}>
+              {p.fecha_vencimiento ? 'Escribir otra fecha' : 'Escribir la fecha'}
+            </Button>
+            <Button variant="outline" className="h-7 text-xs" onClick={onNoCaduca}>
+              <IconoSinVencimiento className="mr-1 h-3 w-3" /> No caduca
+            </Button>
+          </>
+        )}
+
+        {p.propuesta_id && !yaNoCaduca && (
+          <Button variant="ghost" className="h-7 text-xs text-gray-500" disabled={busy}
+                  onClick={() => correr(onDescartar)}>
+            <X className="mr-1 h-3 w-3" /> Descartar la propuesta
+          </Button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Marcar que un papel no caduca. [MIG427]
+ *
+ * Lo único que este modal decide es el ALCANCE, y por eso es lo primero que se
+ * ve. «Este papel» y «todos los de este tipo» no son la misma afirmación: la
+ * segunda vale también para los documentos que lleguen mañana, y es la que
+ * corresponde al certificado de cabina.
+ */
+function ModalNoCaduca({ p, onClose, onListo }: {
+  p: PapelEquipo; onClose: () => void; onListo: () => void
+}) {
+  const toast = useToast()
+  const [alcance, setAlcance] = useState<'este' | 'tipo'>('tipo')
+  const [motivo, setMotivo] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  // La base lo exige para un bloqueante; el aviso va acá para no chocar contra
+  // un error del servidor después de haber apretado el botón.
+  const faltaMotivo = !!p.bloqueante && !motivo.trim()
+
+  const guardar = async () => {
+    setBusy(true)
+    try {
+      const r = await marcarNoCaduca({ certificacionId: p.certificacion_id, alcance, motivo })
+      toast.success(alcance === 'tipo'
+        ? `${nombreTipo(p.tipo)}: no caduca. Se resolvieron ${r.papeles_resueltos} papeles de la flota.`
+        : `${nombreTipo(p.tipo)} del ${p.patente}: no caduca.`)
+      onListo()
+    } catch (e) {
+      toast.error((e as Error).message)
+    } finally { setBusy(false) }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+      <div className="w-full max-w-lg rounded-xl bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <h3 className="text-base font-bold">Este documento no caduca</h3>
+        <p className="mt-0.5 text-xs text-gray-500">
+          {nombreTipo(p.tipo)} · {p.patente}
+        </p>
+
+        <div className="mt-4 space-y-2">
+          <label className={`flex cursor-pointer gap-3 rounded-lg border p-3 ${
+            alcance === 'tipo' ? 'border-blue-500 bg-blue-50' : 'hover:bg-gray-50'}`}>
+            <input type="radio" className="mt-1" checked={alcance === 'tipo'}
+                   onChange={() => setAlcance('tipo')} />
+            <span>
+              <span className="block text-sm font-semibold">Ningún «{nombreTipo(p.tipo)}» caduca</span>
+              <span className="block text-xs text-gray-500">
+                Vale para toda la flota y para los que se carguen más adelante. Es el caso
+                del certificado de cabina: no vence en ningún equipo.
+              </span>
+            </span>
+          </label>
+
+          <label className={`flex cursor-pointer gap-3 rounded-lg border p-3 ${
+            alcance === 'este' ? 'border-blue-500 bg-blue-50' : 'hover:bg-gray-50'}`}>
+            <input type="radio" className="mt-1" checked={alcance === 'este'}
+                   onChange={() => setAlcance('este')} />
+            <span>
+              <span className="block text-sm font-semibold">Sólo este papel del {p.patente}</span>
+              <span className="block text-xs text-gray-500">
+                Este documento en particular no declara vencimiento. Los demás del
+                mismo tipo siguen pidiendo fecha.
+              </span>
+            </span>
+          </label>
+        </div>
+
+        <div className="mt-4">
+          <label className="text-xs font-medium text-gray-600">
+            Por qué no caduca {p.bloqueante && <span className="text-red-600">· obligatorio</span>}
+          </label>
+          <textarea rows={2} value={motivo} onChange={(e) => setMotivo(e.target.value)}
+                    placeholder="Ej: certifica una condición del equipo, no una autorización con plazo."
+                    className="mt-1 w-full rounded border px-2 py-1.5 text-sm" />
+          {p.bloqueante && (
+            <p className="mt-1 text-[11px] text-red-600">
+              Es un certificado bloqueante: autoriza a operar. Decir que no vence tiene
+              que quedar explicado y firmado.
+            </p>
+          )}
+        </div>
+
+        <div className="mt-5 flex justify-end gap-2">
+          <Button variant="outline" onClick={onClose}>Cancelar</Button>
+          <Button disabled={busy || faltaMotivo} onClick={guardar}>
+            {busy && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}
+            {alcance === 'tipo' ? 'Marcar todo el tipo' : 'Marcar este papel'}
+          </Button>
+        </div>
+      </div>
     </div>
   )
 }

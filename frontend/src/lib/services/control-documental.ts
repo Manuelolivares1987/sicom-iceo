@@ -55,6 +55,8 @@ export type PapelEquipo = {
   propuesta_regla: string | null
   propuesta_evidencia: string | null
   propuesta_vencida: boolean | null
+  /** [MIG427] El TIPO completo está marcado como que no vence. */
+  tipo_no_caduca: boolean | null
 }
 
 export async function getEquiposDocumental(): Promise<EquipoDocumental[]> {
@@ -93,6 +95,39 @@ export async function fijarFecha(params: {
   })
   if (error) throw error
   return data as { success: boolean; vencimiento: string; vencido: boolean; origen: string }
+}
+
+/**
+ * [MIG427] Decir que un papel no caduca.
+ *
+ * El alcance importa y no se adivina: «este» habla de un documento —éste no
+ * declara vencimiento— y «tipo» de la categoría entera, incluidos los que
+ * lleguen mañana. El certificado de cabina es del segundo caso.
+ *
+ * En un certificado bloqueante la base exige el motivo: afirmar que un papel
+ * que autoriza a operar no vence tiene que quedar firmado por alguien.
+ */
+export async function marcarNoCaduca(params: {
+  certificacionId: string
+  alcance: 'este' | 'tipo'
+  motivo?: string | null
+}) {
+  const { data, error } = await supabase.rpc('rpc_certificacion_no_caduca', {
+    p_certificacion_id: params.certificacionId,
+    p_alcance: params.alcance,
+    p_motivo: params.motivo ?? null,
+  })
+  if (error) throw error
+  return data as { success: boolean; tipo: string; patente: string; alcance: string; papeles_resueltos: number }
+}
+
+/** Deshacer lo anterior: el papel vuelve a pedir fecha. */
+export async function vuelveACaducar(certificacionId: string, alcance: 'este' | 'tipo') {
+  const { data, error } = await supabase.rpc('rpc_certificacion_vuelve_a_caducar', {
+    p_certificacion_id: certificacionId, p_alcance: alcance,
+  })
+  if (error) throw error
+  return data as { success: boolean; tipo: string; papeles_afectados: number }
 }
 
 export async function descartarPropuesta(certificacionId: string, motivo: string) {
