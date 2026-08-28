@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
   Wrench, ChevronRight, ChevronDown, RefreshCw, WifiOff, CloudOff, CheckCircle2, Play, Pause, User, LogOut,
-  ArrowLeft, PackageSearch, Download,
+  ArrowLeft, PackageSearch, Download, ChevronLeft, Calendar,
 } from 'lucide-react'
 import { Spinner } from '@/components/ui/spinner'
 import { useAuth } from '@/contexts/auth-context'
@@ -16,6 +16,10 @@ import {
 } from '@/hooks/use-taller-mecanico'
 import { useTallerTecnicos } from '@/hooks/use-taller-plan-semanal'
 import type { MecanicoOT } from '@/lib/offline/taller-mecanico-sync'
+import {
+  DIAS_INICIAL, isoToday, startOfWeekISOOffset, endOfWeekISOOffset, diasDeSemana,
+  rangoSemanaLabel, formatDiaCorto,
+} from '@/lib/semana'
 
 const LS_KEY = 'taller-mecanico'
 
@@ -180,12 +184,64 @@ export default function MecanicoHomePage() {
     return [...list].sort((a, b) => Number(esMia(b)) - Number(esMia(a)))
   }, [porMecanico, estadoFiltro, soloMias, esMia])
 
+  /**
+   * La semana, igual que en Calama — y por la misma razón.
+   *
+   * Una OT vieja se sigue trabajando: no está cerrada, está atrasada. La lista
+   * completa sirve para eso, pero cuando hay catorce órdenes repartidas en
+   * ocho días, «lo del martes pasado» hay que ir a buscarlo entre todo lo
+   * demás. La tira deja pararse en un día.
+   *
+   * Lo que se ve, según dónde estés parado:
+   *   · semana actual y sin día elegido → TODO, como antes: hoy, lo atrasado,
+   *     lo que viene y lo sin fecha. Es la vista que ya estaba y no se pierde.
+   *   · un día elegido                  → sólo ese día.
+   *   · otra semana                     → sólo los días de esa semana.
+   */
+  const [weekOffset, setWeekOffset] = useState(0)
+  const [diaSeleccionado, setDiaSeleccionado] = useState<string | null>(null)
+  const weekStart = useMemo(() => startOfWeekISOOffset(weekOffset), [weekOffset])
+  const weekEnd = useMemo(() => endOfWeekISOOffset(weekOffset), [weekOffset])
+  const diasSemanaVisible = useMemo(() => diasDeSemana(weekStart), [weekStart])
+
+  // Si cambias de semana, el día que tenías elegido deja de existir en pantalla.
+  useEffect(() => {
+    if (diaSeleccionado && (diaSeleccionado < weekStart || diaSeleccionado > weekEnd)) {
+      setDiaSeleccionado(null)
+    }
+  }, [diaSeleccionado, weekStart, weekEnd])
+
+  // Cuántas OTs tiene cada día de la semana visible. Se cuenta sobre lo que ya
+  // dejaron pasar los filtros de mecánico y estado: si estás mirando las de
+  // Marcos, la tira te dice los días de Marcos.
+  const conteosPorDia = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const o of misOts) {
+      if (!o.fecha_programada) continue
+      m.set(o.fecha_programada, (m.get(o.fecha_programada) ?? 0) + 1)
+    }
+    return m
+  }, [misOts])
+
+  const totalSemana = useMemo(
+    () => diasSemanaVisible.reduce((acc, d) => acc + (conteosPorDia.get(d) ?? 0), 0),
+    [diasSemanaVisible, conteosPorDia]
+  )
+
+  const enSemanaActual = weekOffset === 0
+
+  const otsEnVista = useMemo(() => {
+    if (diaSeleccionado) return misOts.filter((o) => o.fecha_programada === diaSeleccionado)
+    if (enSemanaActual) return misOts
+    return misOts.filter((o) => !!o.fecha_programada && o.fecha_programada >= weekStart && o.fecha_programada <= weekEnd)
+  }, [misOts, diaSeleccionado, enSemanaActual, weekStart, weekEnd])
+
   // Agrupar por día (fecha_programada), igual que el plan del jefe de taller.
   // Los días ordenados cronológicamente; "sin fecha" al final. Dentro de cada
   // día se conserva el orden de misOts (las del mecánico primero).
   const gruposPorDia = useMemo(() => {
     const m = new Map<string, MecanicoOT[]>()
-    for (const o of misOts) {
+    for (const o of otsEnVista) {
       const k = o.fecha_programada ?? ''
       const arr = m.get(k) ?? []
       arr.push(o)
@@ -197,10 +253,7 @@ export default function MecanicoHomePage() {
     // ocho grupos. El mecánico abre su lista para ver qué le toca HOY.
     //
     // Orden: hoy · atrasadas (de la más vieja) · lo que viene · sin fecha.
-    const hoyISO = (() => {
-      const d = new Date()
-      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-    })()
+    const hoyISO = isoToday()
     const rango = (f: string) => (f === hoyISO ? 0 : f < hoyISO ? 1 : 2)
     return Array.from(m.entries())
       .sort(([a], [b]) => {
@@ -220,7 +273,7 @@ export default function MecanicoHomePage() {
           : 0,
         items,
       }))
-  }, [misOts])
+  }, [otsEnVista])
 
   // Días plegados (colapsables). Por defecto todos desplegados; el operador
   // pliega los que no le interesan para ver mejor los del día.
@@ -371,13 +424,90 @@ export default function MecanicoHomePage() {
         )}
       </div>
 
+      {/* Tira semanal — el mismo control que usa Calama */}
+      <div className="rounded-xl border border-gray-200 bg-white">
+        <div className="flex items-center justify-between px-2 pt-2 pb-1">
+          <button type="button" onClick={() => setWeekOffset((o) => o - 1)}
+                  aria-label="Semana anterior"
+                  className="-m-1 rounded p-1.5 text-gray-700 active:bg-gray-100">
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+          <div className="flex items-center gap-2 text-xs font-bold text-gray-800">
+            <Calendar className="h-3.5 w-3.5 text-gray-500" />
+            <span>{rangoSemanaLabel(weekStart, weekEnd)}</span>
+            <span className="font-mono text-[10px] text-gray-500">({totalSemana})</span>
+            {!enSemanaActual && (
+              <button type="button" onClick={() => { setWeekOffset(0); setDiaSeleccionado(null) }}
+                      className="rounded bg-orange-100 px-1.5 py-0.5 text-[10px] font-semibold text-orange-800 active:bg-orange-200">
+                Hoy
+              </button>
+            )}
+          </div>
+          <button type="button" onClick={() => setWeekOffset((o) => o + 1)}
+                  aria-label="Semana siguiente"
+                  className="-m-1 rounded p-1.5 text-gray-700 active:bg-gray-100">
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="grid grid-cols-7 gap-1 px-2 pb-2">
+          {diasSemanaVisible.map((fechaISO, idx) => {
+            const conteo = conteosPorDia.get(fechaISO) ?? 0
+            const esHoy = fechaISO === isoToday()
+            const esSeleccionado = diaSeleccionado === fechaISO
+            const tieneOTs = conteo > 0
+            return (
+              <button key={fechaISO} type="button"
+                      onClick={() => setDiaSeleccionado(esSeleccionado ? null : fechaISO)}
+                      className={`flex flex-col items-center rounded-lg border py-1.5 transition-colors ${
+                        esSeleccionado ? 'border-orange-600 bg-orange-600 text-white'
+                        : esHoy ? 'border-orange-300 bg-orange-50 text-orange-900'
+                        : tieneOTs ? 'border-gray-300 bg-white text-gray-800'
+                        : 'border-gray-200 bg-gray-50 text-gray-400'}`}>
+                <span className="text-[9px] font-semibold uppercase leading-none tracking-wide">
+                  {DIAS_INICIAL[idx]}
+                </span>
+                <span className="mt-0.5 text-base font-bold leading-tight">
+                  {Number(fechaISO.slice(8, 10))}
+                </span>
+                <span className={`mt-0.5 font-mono text-[9px] leading-none ${
+                  esSeleccionado ? 'text-white/90' : tieneOTs ? 'text-gray-700' : 'text-gray-400'}`}>
+                  {tieneOTs ? conteo : '—'}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+        {diaSeleccionado && (
+          <button type="button" onClick={() => setDiaSeleccionado(null)}
+                  className="w-full rounded-b-xl border-t border-gray-200 bg-gray-100 py-2 text-xs font-medium text-gray-700 active:bg-gray-200">
+            Ver todo otra vez
+          </button>
+        )}
+      </div>
+
+      {/* Que la tira vacía no se lea como «no hay trabajo»: hoy TODAS las OTs
+          liberadas están atrasadas, así que la semana en curso sale en cero y
+          el trabajo real está más abajo. */}
+      {enSemanaActual && !diaSeleccionado && totalSemana === 0 && misOts.length > 0 && (
+        <p className="rounded-lg bg-amber-50 px-2.5 py-2 text-[11px] text-amber-800">
+          Esta semana no tiene OTs programadas.{' '}
+          {misOts.length === 1
+            ? 'La que hay sigue abierta de una semana anterior — está abajo y se puede seguir trabajando.'
+            : `Las ${misOts.length} que hay siguen abiertas de semanas anteriores — están abajo y se pueden seguir trabajando.`}
+        </p>
+      )}
+
       {/* Lista */}
       <div className="flex items-center justify-between pt-1">
         <h2 className="text-sm font-semibold text-gray-700">
-          {soloMias && mecanico
-            ? (esOperador ? 'OTs con mi nombre' : `OTs de ${mecanico}`)
-            : 'OTs liberadas a ejecución'}
-          <span className="ml-1.5 font-normal text-gray-400">{misOts.length}</span>
+          {diaSeleccionado
+            ? formatDiaCorto(diaSeleccionado)
+            : !enSemanaActual
+              ? `Semana del ${rangoSemanaLabel(weekStart, weekEnd)}`
+              : soloMias && mecanico
+                ? (esOperador ? 'OTs con mi nombre' : `OTs de ${mecanico}`)
+                : 'OTs liberadas a ejecución'}
+          <span className="ml-1.5 font-normal text-gray-400">{otsEnVista.length}</span>
         </h2>
         <button onClick={() => refetch()} aria-label="Actualizar"
                 className="text-gray-400 hover:text-gray-600" disabled={isFetching}>
@@ -387,11 +517,25 @@ export default function MecanicoHomePage() {
 
       {isLoading ? (
         <div className="flex justify-center py-8"><Spinner /></div>
-      ) : misOts.length === 0 ? (
+      ) : otsEnVista.length === 0 ? (
         <div className="py-8 text-center text-sm text-gray-400">
           {/* El vacío tiene que decir cuál de los filtros lo dejó vacío, y
               ofrecer soltarlo. Antes decía «no hay OTs» y punto. */}
-          {estadoFiltro !== 'todas' ? (
+          {diaSeleccionado ? (
+            <>
+              <p>Nada programado para el {formatDiaCorto(diaSeleccionado)}.</p>
+              <button onClick={() => setDiaSeleccionado(null)} className="mt-2 text-xs font-medium text-orange-600 underline">
+                Ver todo otra vez
+              </button>
+            </>
+          ) : !enSemanaActual ? (
+            <>
+              <p>La semana del {rangoSemanaLabel(weekStart, weekEnd)} no tiene OTs.</p>
+              <button onClick={() => setWeekOffset(0)} className="mt-2 text-xs font-medium text-orange-600 underline">
+                Volver a hoy
+              </button>
+            </>
+          ) : estadoFiltro !== 'todas' ? (
             <>
               <p>
                 No hay OTs «{ESTADOS.find((e) => e.key === estadoFiltro)?.label.toLowerCase()}»
