@@ -501,7 +501,9 @@ export async function rpcMoverJornada(planOtId: string, fechaDestino: string, re
 export async function rpcQuitarJornada(planOtId: string, detener = false) {
   const { data, error } = await supabase.rpc('rpc_taller_quitar_jornada', { p_plan_ot_id: planOtId, p_detener: detener })
   if (error) throw error
-  return data as { success: boolean }
+  // [MIG443] ot_descartada trae el folio cuando esa era la última jornada de
+  // una OT que nació al programar y nunca se trabajó: se descarta sola.
+  return data as { success: boolean; detenida?: boolean; ot_descartada?: string | null }
 }
 
 export async function rpcAsignarResponsable(planOtId: string, responsableId: string | null, cuadrilla?: string | null, motivo?: string | null) {

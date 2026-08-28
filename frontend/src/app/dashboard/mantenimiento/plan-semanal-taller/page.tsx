@@ -642,7 +642,9 @@ export default function PlanSemanalTallerPage() {
                         // pregunta: nadie corta un trabajo andando sin querer.
                         if (j.jornada_estado === 'en_ejecucion') { setDetenerTarget(j); return }
                         quitarJornada.mutate({ planOtId: j.plan_ot_id }, {
-                          onSuccess: () => toast.success('Jornada quitada del plan'),
+                          onSuccess: (r) => toast.success(r?.ot_descartada
+                            ? `Jornada quitada. La OT ${r.ot_descartada} se descartó: se creó al programar y no alcanzó a tener trabajo`
+                            : 'Jornada quitada del plan'),
                           onError: (err) => toast.error((err as Error).message),
                         })
                       }}
@@ -848,7 +850,9 @@ export default function PlanSemanalTallerPage() {
               onClick={() => {
                 const j = detenerTarget
                 quitarJornada.mutate({ planOtId: j.plan_ot_id, detener: true }, {
-                  onSuccess: () => { setDetenerTarget(null); toast.success('Trabajo detenido y jornada quitada del plan') },
+                  onSuccess: (r) => { setDetenerTarget(null); toast.success(r?.ot_descartada
+                    ? `Trabajo detenido y jornada quitada. La OT ${r.ot_descartada} se descartó`
+                    : 'Trabajo detenido y jornada quitada del plan') },
                   onError: (err) => toast.error((err as Error).message),
                 })
               }}
