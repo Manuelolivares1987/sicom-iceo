@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
   Wrench, ChevronRight, ChevronDown, RefreshCw, WifiOff, CloudOff, CheckCircle2, Play, Pause, User, LogOut,
-  PackageSearch,
+  ArrowLeft, PackageSearch, Download, ChevronLeft, Calendar,
 } from 'lucide-react'
 import { Spinner } from '@/components/ui/spinner'
 import { useAuth } from '@/contexts/auth-context'
@@ -16,7 +16,10 @@ import {
 } from '@/hooks/use-taller-mecanico'
 import { useTallerTecnicos } from '@/hooks/use-taller-plan-semanal'
 import type { MecanicoOT } from '@/lib/offline/taller-mecanico-sync'
-import { Download } from 'lucide-react'
+import {
+  DIAS_INICIAL, isoToday, startOfWeekISOOffset, endOfWeekISOOffset, diasDeSemana,
+  rangoSemanaLabel, formatDiaCorto,
+} from '@/lib/semana'
 
 const LS_KEY = 'taller-mecanico'
 
@@ -37,12 +40,45 @@ function diaLabel(fecha: string | null): string {
   return `${cap} ${fmt}`
 }
 
+// Los tres estados que le importan a quien está parado en el taller. El resto
+// de la máquina de estados no llega hasta acá: una OT liberada o está andando,
+// o está detenida, o no ha partido.
+type EstadoFiltro = 'todas' | 'en_ejecucion' | 'pausada' | 'por_iniciar'
+
+function grupoEstado(estado: string): Exclude<EstadoFiltro, 'todas'> {
+  if (estado === 'en_ejecucion') return 'en_ejecucion'
+  if (estado === 'pausada') return 'pausada'
+  return 'por_iniciar'
+}
+
 function estadoBadge(estado: string) {
   switch (estado) {
     case 'en_ejecucion': return { cls: 'bg-amber-100 text-amber-800', label: 'En ejecución', icon: Play }
     case 'pausada':      return { cls: 'bg-orange-100 text-orange-800', label: 'Pausada', icon: Pause }
     default:             return { cls: 'bg-blue-100 text-blue-800', label: 'Por iniciar', icon: Wrench }
   }
+}
+
+const ESTADOS: { key: EstadoFiltro; label: string }[] = [
+  { key: 'todas', label: 'Todas' },
+  { key: 'en_ejecucion', label: 'En ejecución' },
+  { key: 'pausada', label: 'Pausadas' },
+  { key: 'por_iniciar', label: 'Por iniciar' },
+]
+
+/**
+ * ¿Esta OT lleva el nombre de este mecánico en la cuadrilla?
+ *
+ * Va aparte de `esMia` a propósito: para contar cuántas OTs trae CADA nombre
+ * no sirve mirar `asignada_a_mi` —esa es de la cuenta que abrió sesión, y le
+ * sumaría las mismas OTs a los diez mecánicos de la lista—.
+ */
+function nombreCoincide(nombre: string, o: MecanicoOT): boolean {
+  const n = nombre.trim().toLowerCase()
+  if (!n) return false
+  const primer = n.split(/\s+/)[0] ?? ''
+  const c = (o.cuadrilla ?? '').toLowerCase()
+  return c.includes(n) || (primer.length >= 3 && c.includes(primer))
 }
 
 export default function MecanicoHomePage() {
@@ -61,6 +97,7 @@ export default function MecanicoHomePage() {
   // para filtrar/destacar las suyas (nombre en la cuadrilla del plan).
   const esOperador = perfil?.rol === 'operador_taller'
   const [soloMias, setSoloMias] = useState(false)
+  const [estadoFiltro, setEstadoFiltro] = useState<EstadoFiltro>('todas')
   const { data: tecnicosCat } = useTallerTecnicos(null)
 
   const [mecanico, setMecanico] = useState<string>('')
@@ -68,9 +105,23 @@ export default function MecanicoHomePage() {
     const saved = typeof window !== 'undefined' ? localStorage.getItem(LS_KEY) : null
     if (saved) setMecanico(saved)
   }, [])
+
+  // Los diez nombres ocupaban tres filas encima de la lista: en un teléfono el
+  // trabajo del día empezaba recién a media pantalla. Ahora el picker se abre
+  // cuando se necesita — y para el operador que todavía no dice quién es, se
+  // abre solo, porque ese es su primer paso.
+  const [pickerAbierto, setPickerAbierto] = useState(false)
+  useEffect(() => {
+    if (esOperador && !mecanico) setPickerAbierto(true)
+  }, [esOperador, mecanico])
+
   function elegir(m: string) {
-    setMecanico(m)
-    if (typeof window !== 'undefined') localStorage.setItem(LS_KEY, m)
+    // Volver a tocar el nombre elegido lo suelta. Antes no había forma de
+    // deshacer la elección: quedaba pegada en localStorage para siempre.
+    const nuevo = m === mecanico ? '' : m
+    setMecanico(nuevo)
+    if (nuevo === '') setSoloMias(false)
+    if (typeof window !== 'undefined') localStorage.setItem(LS_KEY, nuevo)
   }
 
   async function salir() {
@@ -87,17 +138,35 @@ export default function MecanicoHomePage() {
   // ¿La OT es del mecánico elegido? Nombre completo o primer nombre en la
   // cuadrilla (planes antiguos usan nombres cortos), o asignación por cuenta.
   const esMia = useMemo(() => {
-    const n = mecanico.trim().toLowerCase()
-    const primer = n.split(/\s+/)[0] ?? ''
     return (o: MecanicoOT): boolean => {
       if (o.asignada_a_mi) return true
-      if (!n) return false
-      const c = (o.cuadrilla ?? '').toLowerCase()
-      return c.includes(n) || (primer.length >= 3 && c.includes(primer))
+      return nombreCoincide(mecanico, o)
     }
   }, [mecanico])
 
-  const conMiNombre = useMemo(() => (ots ?? []).filter(esMia).length, [ots, esMia])
+  const todas = useMemo(() => ots ?? [], [ots])
+  const conMiNombre = useMemo(() => todas.filter(esMia).length, [todas, esMia])
+
+  // Cuánto trabajo trae cada mecánico. Sin esto el picker eran diez botones
+  // mudos: había que apretarlos uno por uno para descubrir quién tenía OTs.
+  const conteoPorMecanico = useMemo(() => {
+    const m: Record<string, number> = {}
+    for (const n of nombresPicker) m[n] = todas.filter((o) => nombreCoincide(n, o)).length
+    return m
+  }, [nombresPicker, todas])
+
+  // El mecánico es el filtro grueso; el estado, el fino. Por eso los contadores
+  // de estado se calculan sobre lo que ya dejó pasar el mecánico.
+  const porMecanico = useMemo(
+    () => (soloMias && mecanico ? todas.filter(esMia) : todas),
+    [todas, soloMias, mecanico, esMia]
+  )
+
+  const conteoPorEstado = useMemo(() => {
+    const c: Record<EstadoFiltro, number> = { todas: porMecanico.length, en_ejecucion: 0, pausada: 0, por_iniciar: 0 }
+    for (const o of porMecanico) c[grupoEstado(o.ot_estado)] += 1
+    return c
+  }, [porMecanico])
 
   // Todos ven TODAS las OTs liberadas; el nombre sólo ordena y filtra.
   //
@@ -107,18 +176,72 @@ export default function MecanicoHomePage() {
   // Además el filtro era por `cuadrilla`, así que las OTs sin cuadrilla
   // asignada eran invisibles para cualquier nombre que se eligiera.
   const misOts = useMemo(() => {
-    const list = ots ?? []
-    if (soloMias) return list.filter(esMia)
+    const list = estadoFiltro === 'todas'
+      ? porMecanico
+      : porMecanico.filter((o) => grupoEstado(o.ot_estado) === estadoFiltro)
+    if (soloMias) return list
     // Todas, pero las del mecánico elegido primero.
     return [...list].sort((a, b) => Number(esMia(b)) - Number(esMia(a)))
-  }, [ots, soloMias, esMia])
+  }, [porMecanico, estadoFiltro, soloMias, esMia])
+
+  /**
+   * La semana, igual que en Calama — y por la misma razón.
+   *
+   * Una OT vieja se sigue trabajando: no está cerrada, está atrasada. La lista
+   * completa sirve para eso, pero cuando hay catorce órdenes repartidas en
+   * ocho días, «lo del martes pasado» hay que ir a buscarlo entre todo lo
+   * demás. La tira deja pararse en un día.
+   *
+   * Lo que se ve, según dónde estés parado:
+   *   · semana actual y sin día elegido → TODO, como antes: hoy, lo atrasado,
+   *     lo que viene y lo sin fecha. Es la vista que ya estaba y no se pierde.
+   *   · un día elegido                  → sólo ese día.
+   *   · otra semana                     → sólo los días de esa semana.
+   */
+  const [weekOffset, setWeekOffset] = useState(0)
+  const [diaSeleccionado, setDiaSeleccionado] = useState<string | null>(null)
+  const weekStart = useMemo(() => startOfWeekISOOffset(weekOffset), [weekOffset])
+  const weekEnd = useMemo(() => endOfWeekISOOffset(weekOffset), [weekOffset])
+  const diasSemanaVisible = useMemo(() => diasDeSemana(weekStart), [weekStart])
+
+  // Si cambias de semana, el día que tenías elegido deja de existir en pantalla.
+  useEffect(() => {
+    if (diaSeleccionado && (diaSeleccionado < weekStart || diaSeleccionado > weekEnd)) {
+      setDiaSeleccionado(null)
+    }
+  }, [diaSeleccionado, weekStart, weekEnd])
+
+  // Cuántas OTs tiene cada día de la semana visible. Se cuenta sobre lo que ya
+  // dejaron pasar los filtros de mecánico y estado: si estás mirando las de
+  // Marcos, la tira te dice los días de Marcos.
+  const conteosPorDia = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const o of misOts) {
+      if (!o.fecha_programada) continue
+      m.set(o.fecha_programada, (m.get(o.fecha_programada) ?? 0) + 1)
+    }
+    return m
+  }, [misOts])
+
+  const totalSemana = useMemo(
+    () => diasSemanaVisible.reduce((acc, d) => acc + (conteosPorDia.get(d) ?? 0), 0),
+    [diasSemanaVisible, conteosPorDia]
+  )
+
+  const enSemanaActual = weekOffset === 0
+
+  const otsEnVista = useMemo(() => {
+    if (diaSeleccionado) return misOts.filter((o) => o.fecha_programada === diaSeleccionado)
+    if (enSemanaActual) return misOts
+    return misOts.filter((o) => !!o.fecha_programada && o.fecha_programada >= weekStart && o.fecha_programada <= weekEnd)
+  }, [misOts, diaSeleccionado, enSemanaActual, weekStart, weekEnd])
 
   // Agrupar por día (fecha_programada), igual que el plan del jefe de taller.
   // Los días ordenados cronológicamente; "sin fecha" al final. Dentro de cada
   // día se conserva el orden de misOts (las del mecánico primero).
   const gruposPorDia = useMemo(() => {
     const m = new Map<string, MecanicoOT[]>()
-    for (const o of misOts) {
+    for (const o of otsEnVista) {
       const k = o.fecha_programada ?? ''
       const arr = m.get(k) ?? []
       arr.push(o)
@@ -130,10 +253,7 @@ export default function MecanicoHomePage() {
     // ocho grupos. El mecánico abre su lista para ver qué le toca HOY.
     //
     // Orden: hoy · atrasadas (de la más vieja) · lo que viene · sin fecha.
-    const hoyISO = (() => {
-      const d = new Date()
-      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-    })()
+    const hoyISO = isoToday()
     const rango = (f: string) => (f === hoyISO ? 0 : f < hoyISO ? 1 : 2)
     return Array.from(m.entries())
       .sort(([a], [b]) => {
@@ -153,7 +273,7 @@ export default function MecanicoHomePage() {
           : 0,
         items,
       }))
-  }, [misOts])
+  }, [otsEnVista])
 
   // Días plegados (colapsables). Por defecto todos desplegados; el operador
   // pliega los que no le interesan para ver mejor los del día.
@@ -166,6 +286,13 @@ export default function MecanicoHomePage() {
       return next
     })
   }
+
+  const chip = (activo: boolean) =>
+    `rounded-full border px-2.5 py-1 text-xs transition ${
+      activo ? 'border-orange-600 bg-orange-600 font-medium text-white'
+             : 'border-gray-300 bg-white text-gray-700 active:bg-gray-100'}`
+
+  const puedeDescargar = (esOperador || mecanico) && misOts.length > 0 && online
 
   return (
     <div className="p-3 space-y-3">
@@ -187,114 +314,248 @@ export default function MecanicoHomePage() {
             <LogOut className="h-5 w-5" />
           </button>
         ) : (
-          <Link href="/dashboard" className="text-gray-400 hover:text-gray-600"><LogOut className="h-5 w-5" /></Link>
+          <Link href="/dashboard" aria-label="Volver al panel" title="Volver al panel"
+                className="text-gray-400 hover:text-gray-600"><ArrowLeft className="h-5 w-5" /></Link>
         )}
       </div>
+
+      {/* Una sola barra para todo lo que es estado de la app —conexión, lo que
+          falta subir, la descarga offline—. Antes eran tres bloques apilados
+          entre el encabezado y el trabajo. */}
+      <div className={`flex flex-wrap items-center gap-x-2 gap-y-1.5 rounded-lg border p-2 text-xs ${
+        online ? 'border-green-200 bg-green-50 text-green-700' : 'border-amber-300 bg-amber-50 text-amber-800'}`}>
+        {online ? <CheckCircle2 className="h-4 w-4 shrink-0" /> : <WifiOff className="h-4 w-4 shrink-0" />}
+        <span className="font-medium">{online ? 'En línea' : 'Sin conexión — se guardará local'}</span>
+        {pendientes > 0 && (
+          <span className="flex items-center gap-1">
+            <CloudOff className="h-3.5 w-3.5" /> {pendientes} por sincronizar
+          </span>
+        )}
+        <div className="ml-auto flex items-center gap-1.5">
+          {online && pendientes > 0 && (
+            <button onClick={() => sync.mutate()} disabled={sync.isPending}
+                    className="rounded-md border border-green-300 bg-white px-2 py-1 text-green-700 disabled:opacity-50">
+              {sync.isPending ? 'Sincronizando…' : 'Sincronizar'}
+            </button>
+          )}
+          {puedeDescargar && (
+            <button
+              onClick={() => descargar.mutate(misOts.map((o) => o.ot_id), {
+                onSuccess: (n) => setDescargaMsg(`${n} OTs guardadas en el teléfono`),
+              })}
+              disabled={descargar.isPending}
+              className="flex items-center gap-1 rounded-md border border-orange-300 bg-white px-2 py-1 font-medium text-orange-700 disabled:opacity-50">
+              {descargar.isPending ? <Spinner className="h-3.5 w-3.5" /> : <Download className="h-3.5 w-3.5" />}
+              Guardar sin internet
+            </button>
+          )}
+        </div>
+      </div>
+      {descargaMsg && <p className="text-center text-xs text-green-600">{descargaMsg}</p>}
 
       {/* [MIG386] Lo del taller que no es de ningún equipo. Vive fuera de las OT
           a propósito: quien busca guantes no está buscando una orden. */}
       <Link href="/m/taller/insumos"
-            className="flex items-center gap-3 rounded-xl border-2 border-gray-300 bg-white p-3 active:bg-gray-50">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-gray-600 text-white">
-          <PackageSearch className="h-5 w-5" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-bold text-gray-900">Pedir insumos</p>
-          <p className="text-[11px] text-gray-500">Guantes, trapos, discos — lo aprueba el jefe</p>
-        </div>
-        <ChevronRight className="h-5 w-5 shrink-0 text-gray-400" />
+            className="flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 active:bg-gray-50">
+        <PackageSearch className="h-4 w-4 shrink-0 text-gray-600" />
+        <span className="text-sm font-semibold text-gray-900">Pedir insumos</span>
+        <span className="truncate text-[11px] text-gray-500">guantes, trapos, discos</span>
+        <ChevronRight className="ml-auto h-4 w-4 shrink-0 text-gray-400" />
       </Link>
 
-      {/* Estado de conexión / pendientes */}
-      <div className={`flex items-center gap-2 rounded-lg border p-2.5 text-sm ${
-        online ? 'border-green-200 bg-green-50 text-green-700' : 'border-amber-300 bg-amber-50 text-amber-800'}`}>
-        {online ? <CheckCircle2 className="h-4 w-4" /> : <WifiOff className="h-4 w-4" />}
-        <span className="font-medium">{online ? 'En línea' : 'Sin conexión — se guardará local'}</span>
-        {pendientes > 0 && (
-          <span className="ml-auto flex items-center gap-1 text-xs">
-            <CloudOff className="h-3.5 w-3.5" /> {pendientes} por sincronizar
-          </span>
-        )}
-        {online && pendientes > 0 && (
-          <button onClick={() => sync.mutate()} disabled={sync.isPending}
-                  className="ml-2 rounded-md bg-white border border-green-300 px-2 py-1 text-xs text-green-700 disabled:opacity-50">
-            {sync.isPending ? 'Sincronizando…' : 'Sincronizar'}
-          </button>
-        )}
-      </div>
-
-      {/* Todas las liberadas vs. las que traen el nombre elegido. El jefe y el
-          administrador lo usan para supervisar sin hacerse pasar por nadie. */}
-      <div className="flex gap-2">
-          <button onClick={() => setSoloMias(false)}
-                  className={`rounded-full px-3 py-1.5 text-sm border ${
-                    !soloMias ? 'bg-orange-600 text-white border-orange-600'
-                              : 'bg-white text-gray-700 border-gray-300'}`}>
-            Todas ({(ots ?? []).length})
-          </button>
-          <button onClick={() => setSoloMias(true)}
-                  className={`rounded-full px-3 py-1.5 text-sm border ${
-                    soloMias ? 'bg-orange-600 text-white border-orange-600'
-                             : 'bg-white text-gray-700 border-gray-300'}`}>
-            {esOperador ? 'Con mi nombre' : 'Del mecánico elegido'} ({conMiNombre})
-          </button>
-      </div>
-
-      {/* Selector de mecánico: en la cuenta compartida del operador cada uno
-          elige su nombre (catálogo de técnicos); perfiles del dashboard usan
-          la lista corta legacy. */}
-      <div>
-        <div className="flex items-center gap-1 mb-1 text-xs font-medium text-gray-500">
-          <User className="h-3.5 w-3.5" /> {esOperador ? 'Soy:' : 'Destacar mecánico:'}
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {nombresPicker.map((m) => (
-            <button key={m} onClick={() => elegir(m)}
-                    className={`rounded-full px-3 py-1.5 text-sm border ${
-                      mecanico === m ? 'bg-orange-600 text-white border-orange-600'
-                                     : 'bg-white text-gray-700 border-gray-300'}`}>
-              {m}
+      {/* ── Filtros ──────────────────────────────────────────────────────────
+          Antes el único filtro era «Todas / Del mecánico elegido», y con nadie
+          elegido decía «(0)»: se leía como que no había trabajo. Lo que se mira
+          de verdad al llegar al taller es qué está andando y qué no ha partido.
+      */}
+      <div className="space-y-2">
+        <div className="flex flex-wrap gap-1.5">
+          {ESTADOS.map((e) => (
+            <button key={e.key} onClick={() => setEstadoFiltro(e.key)} className={chip(estadoFiltro === e.key)}>
+              {e.label}{' '}
+              <span className={estadoFiltro === e.key ? 'text-white/80' : 'text-gray-400'}>
+                {conteoPorEstado[e.key]}
+              </span>
             </button>
           ))}
         </div>
+
+        <div className="flex flex-wrap items-center gap-1.5">
+          <button onClick={() => setPickerAbierto((v) => !v)}
+                  aria-expanded={pickerAbierto}
+                  className="flex items-center gap-1 rounded-full border border-gray-300 bg-white px-2.5 py-1 text-xs text-gray-700 active:bg-gray-100">
+            <User className="h-3.5 w-3.5 text-gray-400" />
+            {esOperador ? 'Soy:' : 'Mecánico:'}
+            <span className="font-medium text-gray-900">{mecanico || 'todos'}</span>
+            <ChevronDown className={`h-3.5 w-3.5 text-gray-400 transition-transform ${pickerAbierto ? '' : '-rotate-90'}`} />
+          </button>
+
+          {/* Sólo tiene sentido preguntar «todas o las suyas» cuando ya hay un
+              «suyas». Con nadie elegido, este par de botones era ruido. */}
+          {mecanico && (
+            <div className="flex gap-1.5">
+              <button onClick={() => setSoloMias(false)} className={chip(!soloMias)}>Todas</button>
+              <button onClick={() => setSoloMias(true)} className={chip(soloMias)}>
+                {esOperador ? 'Sólo las mías' : `Sólo ${mecanico.split(' ')[0]}`}{' '}
+                <span className={soloMias ? 'text-white/80' : 'text-gray-400'}>{conMiNombre}</span>
+              </button>
+            </div>
+          )}
+        </div>
+
+        {pickerAbierto && (
+          <div className="flex flex-wrap gap-1.5 rounded-lg border border-gray-200 bg-white p-2">
+            {nombresPicker.map((m) => {
+              const n = conteoPorMecanico[m] ?? 0
+              return (
+                <button key={m} onClick={() => elegir(m)}
+                        className={`rounded-full border px-2.5 py-1 text-xs transition ${
+                          mecanico === m ? 'border-orange-600 bg-orange-600 font-medium text-white'
+                          : n === 0 ? 'border-gray-200 bg-gray-50 text-gray-400'
+                                    : 'border-gray-300 bg-white text-gray-700 active:bg-gray-100'}`}>
+                  {m} <span className={mecanico === m ? 'text-white/80' : 'text-gray-400'}>{n}</span>
+                </button>
+              )
+            })}
+            <p className="w-full pt-1 text-[10px] text-gray-400">
+              El número es cuántas OTs liberadas trae ese nombre en la cuadrilla. Tócalo de nuevo para soltarlo.
+            </p>
+          </div>
+        )}
       </div>
 
-      {/* Descargar para offline */}
-      {(esOperador || mecanico) && misOts.length > 0 && online && (
-        <button
-          onClick={() => descargar.mutate(misOts.map((o) => o.ot_id), {
-            onSuccess: (n) => setDescargaMsg(`${n} OTs descargadas para usar sin internet`),
+      {/* Tira semanal — el mismo control que usa Calama */}
+      <div className="rounded-xl border border-gray-200 bg-white">
+        <div className="flex items-center justify-between px-2 pt-2 pb-1">
+          <button type="button" onClick={() => setWeekOffset((o) => o - 1)}
+                  aria-label="Semana anterior"
+                  className="-m-1 rounded p-1.5 text-gray-700 active:bg-gray-100">
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+          <div className="flex items-center gap-2 text-xs font-bold text-gray-800">
+            <Calendar className="h-3.5 w-3.5 text-gray-500" />
+            <span>{rangoSemanaLabel(weekStart, weekEnd)}</span>
+            <span className="font-mono text-[10px] text-gray-500">({totalSemana})</span>
+            {!enSemanaActual && (
+              <button type="button" onClick={() => { setWeekOffset(0); setDiaSeleccionado(null) }}
+                      className="rounded bg-orange-100 px-1.5 py-0.5 text-[10px] font-semibold text-orange-800 active:bg-orange-200">
+                Hoy
+              </button>
+            )}
+          </div>
+          <button type="button" onClick={() => setWeekOffset((o) => o + 1)}
+                  aria-label="Semana siguiente"
+                  className="-m-1 rounded p-1.5 text-gray-700 active:bg-gray-100">
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="grid grid-cols-7 gap-1 px-2 pb-2">
+          {diasSemanaVisible.map((fechaISO, idx) => {
+            const conteo = conteosPorDia.get(fechaISO) ?? 0
+            const esHoy = fechaISO === isoToday()
+            const esSeleccionado = diaSeleccionado === fechaISO
+            const tieneOTs = conteo > 0
+            return (
+              <button key={fechaISO} type="button"
+                      onClick={() => setDiaSeleccionado(esSeleccionado ? null : fechaISO)}
+                      className={`flex flex-col items-center rounded-lg border py-1.5 transition-colors ${
+                        esSeleccionado ? 'border-orange-600 bg-orange-600 text-white'
+                        : esHoy ? 'border-orange-300 bg-orange-50 text-orange-900'
+                        : tieneOTs ? 'border-gray-300 bg-white text-gray-800'
+                        : 'border-gray-200 bg-gray-50 text-gray-400'}`}>
+                <span className="text-[9px] font-semibold uppercase leading-none tracking-wide">
+                  {DIAS_INICIAL[idx]}
+                </span>
+                <span className="mt-0.5 text-base font-bold leading-tight">
+                  {Number(fechaISO.slice(8, 10))}
+                </span>
+                <span className={`mt-0.5 font-mono text-[9px] leading-none ${
+                  esSeleccionado ? 'text-white/90' : tieneOTs ? 'text-gray-700' : 'text-gray-400'}`}>
+                  {tieneOTs ? conteo : '—'}
+                </span>
+              </button>
+            )
           })}
-          disabled={descargar.isPending}
-          className="flex w-full items-center justify-center gap-2 rounded-lg border border-orange-300 bg-orange-50 py-2 text-sm font-medium text-orange-700 disabled:opacity-50">
-          {descargar.isPending ? <Spinner className="h-4 w-4" /> : <Download className="h-4 w-4" />}
-          Descargar mis OTs para usar sin internet
-        </button>
+        </div>
+        {diaSeleccionado && (
+          <button type="button" onClick={() => setDiaSeleccionado(null)}
+                  className="w-full rounded-b-xl border-t border-gray-200 bg-gray-100 py-2 text-xs font-medium text-gray-700 active:bg-gray-200">
+            Ver todo otra vez
+          </button>
+        )}
+      </div>
+
+      {/* Que la tira vacía no se lea como «no hay trabajo»: hoy TODAS las OTs
+          liberadas están atrasadas, así que la semana en curso sale en cero y
+          el trabajo real está más abajo. */}
+      {enSemanaActual && !diaSeleccionado && totalSemana === 0 && misOts.length > 0 && (
+        <p className="rounded-lg bg-amber-50 px-2.5 py-2 text-[11px] text-amber-800">
+          Esta semana no tiene OTs programadas.{' '}
+          {misOts.length === 1
+            ? 'La que hay sigue abierta de una semana anterior — está abajo y se puede seguir trabajando.'
+            : `Las ${misOts.length} que hay siguen abiertas de semanas anteriores — están abajo y se pueden seguir trabajando.`}
+        </p>
       )}
-      {descargaMsg && <p className="text-center text-xs text-green-600">{descargaMsg}</p>}
 
       {/* Lista */}
       <div className="flex items-center justify-between pt-1">
         <h2 className="text-sm font-semibold text-gray-700">
-          {soloMias
-            ? (esOperador ? 'OTs con mi nombre' : `OTs de ${mecanico || 'el mecánico elegido'}`)
-            : 'OTs liberadas a ejecución'}
+          {diaSeleccionado
+            ? formatDiaCorto(diaSeleccionado)
+            : !enSemanaActual
+              ? `Semana del ${rangoSemanaLabel(weekStart, weekEnd)}`
+              : soloMias && mecanico
+                ? (esOperador ? 'OTs con mi nombre' : `OTs de ${mecanico}`)
+                : 'OTs liberadas a ejecución'}
+          <span className="ml-1.5 font-normal text-gray-400">{otsEnVista.length}</span>
         </h2>
-        <button onClick={() => refetch()} className="text-gray-400 hover:text-gray-600" disabled={isFetching}>
+        <button onClick={() => refetch()} aria-label="Actualizar"
+                className="text-gray-400 hover:text-gray-600" disabled={isFetching}>
           <RefreshCw className={`h-4 w-4 ${isFetching ? 'animate-spin' : ''}`} />
         </button>
       </div>
 
       {isLoading ? (
         <div className="flex justify-center py-8"><Spinner /></div>
-      ) : misOts.length === 0 ? (
-        <p className="py-8 text-center text-sm text-gray-400">
-          {soloMias
-            ? (mecanico
-                ? `No hay OTs liberadas con el nombre de ${mecanico} — revisa "Todas".`
-                : 'Elige un nombre arriba, o revisa "Todas".')
-            : 'No hay OTs liberadas a ejecución. Libéralas desde el Plan Taller.'}
-        </p>
+      ) : otsEnVista.length === 0 ? (
+        <div className="py-8 text-center text-sm text-gray-400">
+          {/* El vacío tiene que decir cuál de los filtros lo dejó vacío, y
+              ofrecer soltarlo. Antes decía «no hay OTs» y punto. */}
+          {diaSeleccionado ? (
+            <>
+              <p>Nada programado para el {formatDiaCorto(diaSeleccionado)}.</p>
+              <button onClick={() => setDiaSeleccionado(null)} className="mt-2 text-xs font-medium text-orange-600 underline">
+                Ver todo otra vez
+              </button>
+            </>
+          ) : !enSemanaActual ? (
+            <>
+              <p>La semana del {rangoSemanaLabel(weekStart, weekEnd)} no tiene OTs.</p>
+              <button onClick={() => setWeekOffset(0)} className="mt-2 text-xs font-medium text-orange-600 underline">
+                Volver a hoy
+              </button>
+            </>
+          ) : estadoFiltro !== 'todas' ? (
+            <>
+              <p>
+                No hay OTs «{ESTADOS.find((e) => e.key === estadoFiltro)?.label.toLowerCase()}»
+                {soloMias && mecanico ? ` de ${mecanico}` : ''}.
+              </p>
+              <button onClick={() => setEstadoFiltro('todas')} className="mt-2 text-xs font-medium text-orange-600 underline">
+                Ver todos los estados
+              </button>
+            </>
+          ) : soloMias && mecanico ? (
+            <>
+              <p>Ninguna OT liberada trae el nombre de {mecanico}.</p>
+              <button onClick={() => setSoloMias(false)} className="mt-2 text-xs font-medium text-orange-600 underline">
+                Ver todas
+              </button>
+            </>
+          ) : (
+            <p>No hay OTs liberadas a ejecución. Libéralas desde el Plan Taller.</p>
+          )}
+        </div>
       ) : (
         <div className="space-y-4">
           {gruposPorDia.map((grupo) => {
@@ -330,14 +591,21 @@ export default function MecanicoHomePage() {
                 const Icon = b.icon
                 const total = o.checklist_total ?? 0
                 const hechos = o.checklist_completados ?? 0
+                // El destacado NO depende del rol. Estaba detrás de
+                // `esOperador`, así que el jefe y el administrador elegían un
+                // nombre y no se marcaba nada: el filtro parecía roto porque su
+                // único efecto era invisible. Con «sólo las suyas» activo sobra,
+                // que ahí todas lo son.
+                const destacada = !!mecanico && !soloMias && esMia(o)
                 return (
                   <Link key={o.ot_id} href={`/m/taller/ot/${o.ot_id}`}
-                        className="block rounded-xl border border-gray-200 bg-white p-3 active:bg-gray-50">
+                        className={`block rounded-xl border bg-white p-3 active:bg-gray-50 ${
+                          destacada ? 'border-orange-400 ring-1 ring-orange-200' : 'border-gray-200'}`}>
                     <div className="flex items-center gap-2">
                       <span className="font-mono text-xs font-bold text-gray-900">{o.ot_folio}</span>
-                      {esOperador && esMia(o) && (
+                      {destacada && (
                         <span className="rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-medium text-orange-700">
-                          ★ Mi nombre
+                          ★ {esOperador ? 'Mi nombre' : mecanico.split(' ')[0]}
                         </span>
                       )}
                       <span className={`ml-auto flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${b.cls}`}>
@@ -348,6 +616,13 @@ export default function MecanicoHomePage() {
                       {o.activo_codigo} {o.activo_patente && <span className="text-gray-500">· {o.activo_patente}</span>}
                     </div>
                     <div className="text-xs text-gray-500">{o.activo_nombre}</div>
+                    {/* Quién la tiene. Estaba en los datos y no se mostraba: para
+                        supervisar había que abrir la OT una por una. */}
+                    {o.cuadrilla && (
+                      <div className="mt-1 truncate text-[11px] text-gray-500">
+                        <User className="mr-1 inline h-3 w-3 text-gray-400" />{o.cuadrilla}
+                      </div>
+                    )}
                     <div className="mt-2 flex items-center justify-between">
                       <div className="text-[11px] text-gray-500">
                         {hechos}/{total} tareas · {Math.round(((o.tiempo_estimado_total_min ?? 0) / 60) * 10) / 10} h

@@ -2,6 +2,7 @@
 
 import { useRequireAuth } from '@/hooks/use-require-auth'
 import { Spinner } from '@/components/ui/spinner'
+import { VolverAlPanel } from '@/components/layout/volver-al-panel'
 
 export default function MobileCalamaLayout({
   children,
@@ -23,6 +24,7 @@ export default function MobileCalamaLayout({
       <div className="mx-auto max-w-md sm:max-w-lg pb-24">
         {children}
       </div>
+      <VolverAlPanel />
     </div>
   )
 }
