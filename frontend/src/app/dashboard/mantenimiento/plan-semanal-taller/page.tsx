@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState, useEffect } from 'react'
+import { useMemo, useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import {
   DndContext, DragEndEvent, PointerSensor, useDraggable, useDroppable, useSensor, useSensors,
@@ -57,6 +57,7 @@ import {
   type RecepcionPorPlanificar, type NcOtPorAgendar, type PapelProblema,
 } from '@/lib/services/taller-planificacion'
 import { MAX_MECANICOS } from '@/lib/taller-grupos'
+import { isoToday } from '@/lib/semana'
 
 type Tab = 'kanban' | 'cobertura' | 'cumplimiento'
 
@@ -161,6 +162,19 @@ export default function PlanSemanalTallerPage() {
   const quitarJornada = useQuitarJornadaTaller(planSemanalId)
   // Los días de una OT que YA está en el tablero.
   const [diasOtTarget, setDiasOtTarget] = useState<TallerPlanOTFull | null>(null)
+
+  // El tablero no cabe entero en un notebook: son siete días de 210px. Si se
+  // abre en el lunes, un miércoles hay que scrollear para ver el trabajo de
+  // hoy. Se centra solo, una vez, cuando llegan las jornadas.
+  const tableroRef = useRef<HTMLDivElement | null>(null)
+  const yaCentrado = useRef(false)
+  useEffect(() => {
+    if (yaCentrado.current || !tableroRef.current) return
+    const col = tableroRef.current.querySelector('[data-hoy="si"]')
+    if (!col) return
+    yaCentrado.current = true
+    col.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' })
+  }, [jornadas])
   const confirmarPlan = useConfirmarPlanSemanalTaller(planSemanalId)
   const liberarOts = useLiberarOtsTaller(planSemanalId)
   const iniciarEjec = useIniciarEjecucionTaller(planSemanalId)
@@ -598,7 +612,7 @@ export default function PlanSemanalTallerPage() {
 
       {tab === 'kanban' && (
         <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
-          <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-3">
+          <div className="grid grid-cols-1 lg:grid-cols-[260px_minmax(0,1fr)] gap-3">
             {/* Patentes izq */}
             <PatentesPanel
               items={patentesOrdenadas}
@@ -608,10 +622,10 @@ export default function PlanSemanalTallerPage() {
             />
 
             {/* Días + preventivas sugeridas */}
-            <div className="space-y-3">
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-7 gap-2">
+            <div className="min-w-0 space-y-3">
+              <div ref={tableroRef} className="flex snap-x gap-2 overflow-x-auto pb-2">
                 {loadJornadas ? (
-                  <div className="col-span-7 flex justify-center py-10"><Spinner /></div>
+                  <div className="flex w-full justify-center py-10"><Spinner /></div>
                 ) : (
                   (dias ?? []).map((dia) => (
                     <DiaColumna
@@ -1867,19 +1881,79 @@ function DiaColumna({ fecha, nombre, jornadas, onAsignar, onDetalle, onQuitar, o
   onLiberar: (j: TallerPlanOTFull) => void
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: `dia:${fecha}` })
-  const esHoy = fecha === new Date().toISOString().slice(0, 10)
+
+  // isoToday() y no toISOString(): este último pasa a UTC, así que desde las
+  // nueve de la noche en Chile «hoy» se corría al día siguiente y la columna
+  // marcada era la equivocada.
+  const hoy = isoToday()
+  const esHoy = fecha === hoy
+  const esPasado = fecha < hoy
+  const d = new Date(fecha + 'T12:00:00')
+  const dow = d.getDay()
+  const finDeSemana = dow === 0 || dow === 6
+
+  // El nombre sale de la fecha y no de nombre_dia: en la base están sin tilde
+  // («Miercoles», «Sabado») y en una cabecera grande se nota.
+  const diaTexto = d.toLocaleDateString('es-CL', { weekday: 'long' }) || nombre
+
+  const nOts = jornadas.length
+  const horas = jornadas.reduce((a, j) => a + (j.horas_planificadas ?? 0), 0)
+
+  const marco =
+    isOver ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-300'
+    : esHoy ? 'border-blue-400 bg-white'
+    : finDeSemana ? 'border-gray-200 bg-gray-50/70'
+    : 'border-gray-200 bg-white'
+
+  const cabecera =
+    isOver ? 'border-blue-200 bg-blue-100'
+    : esHoy ? 'border-blue-200 bg-blue-50'
+    : finDeSemana ? 'border-gray-200 bg-gray-100'
+    : 'border-gray-200 bg-gray-50'
 
   return (
-    <Card ref={setNodeRef} className={`${isOver ? 'ring-2 ring-blue-400' : ''} ${esHoy ? 'border-blue-400' : ''}`}>
-      <CardHeader className={`pb-2 ${esHoy ? 'bg-blue-50' : ''}`}>
-        <CardTitle className="text-xs flex items-center justify-between">
-          <span className="capitalize">{nombre}</span>
-          <span className="text-[10px] text-gray-500 font-normal">{fmtFecha(fecha)}</span>
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="p-2 min-h-[60vh] space-y-1.5">
-        {jornadas.length === 0 ? (
-          <div className="text-[10px] text-gray-400 p-2 text-center">Sin OTs</div>
+    <div
+      ref={setNodeRef}
+      data-hoy={esHoy ? 'si' : undefined}
+      className={`flex min-w-[190px] flex-1 snap-start flex-col overflow-hidden rounded-xl border transition-colors ${marco} ${
+        esPasado && !esHoy ? 'opacity-80' : ''}`}
+    >
+      {/* La cabecera se queda pegada: con la columna llena de OTs, al bajar ya
+          no se sabía en qué día se estaba mirando. */}
+      <div className={`sticky top-0 z-10 border-b px-2.5 py-1.5 ${cabecera}`}>
+        <div className="flex items-center gap-1.5">
+          <span className={`truncate text-sm font-bold capitalize ${esHoy ? 'text-blue-900' : 'text-gray-800'}`}>
+            {diaTexto}
+          </span>
+          <span className="shrink-0 text-[11px] text-gray-500">{fmtFecha(fecha)}</span>
+          {esHoy && (
+            <span className="ml-auto shrink-0 rounded-full bg-blue-600 px-1.5 py-0.5 text-[9px] font-bold tracking-wide text-white">
+              HOY
+            </span>
+          )}
+        </div>
+        {/* Cuánto tiene el día encima: es lo que decide dónde cae la próxima. */}
+        <div className="mt-0.5 flex items-center gap-1.5 text-[10px] text-gray-500">
+          {nOts === 0 ? (
+            <span>libre</span>
+          ) : (
+            <>
+              <span className="font-medium tabular-nums text-gray-700">{nOts}</span>
+              <span>OT{nOts === 1 ? '' : 's'}</span>
+              {horas > 0 && <span className="tabular-nums">· {Math.round(horas * 10) / 10} h</span>}
+            </>
+          )}
+        </div>
+      </div>
+
+      <div className="flex min-h-[240px] flex-1 flex-col gap-1.5 p-2">
+        {nOts === 0 ? (
+          /* El vacío tiene que invitar a soltar. Antes decía «Sin OTs» en gris
+             chico y no se leía como una zona donde se puede dejar algo. */
+          <div className={`flex flex-1 items-center justify-center rounded-lg border-2 border-dashed px-2 text-center text-[10px] leading-tight transition-colors ${
+            isOver ? 'border-blue-400 bg-blue-50 font-medium text-blue-700' : 'border-gray-200 text-gray-400'}`}>
+            {isOver ? 'Suelta aquí' : 'Arrastra una patente'}
+          </div>
         ) : (
           jornadas.map((j) => (
             <JornadaCard key={j.plan_ot_id} jornada={j}
@@ -1888,10 +1962,11 @@ function DiaColumna({ fecha, nombre, jornadas, onAsignar, onDetalle, onQuitar, o
                          onLiberar={onLiberar} />
           ))
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   )
 }
+
 
 function JornadaCard({ jornada, onAsignar, onDetalle, onQuitar, onDias, onIniciar, onPausar, onFinalizar, onLiberar }: {
   jornada: TallerPlanOTFull
