@@ -172,7 +172,8 @@ export function useMoverJornadaTaller(planId: string | null) {
 export function useQuitarJornadaTaller(planId: string | null) {
   const invalidate = useInvalidatePlan(planId)
   return useMutation({
-    mutationFn: (planOtId: string) => rpcQuitarJornada(planOtId),
+    networkMode: 'always',
+    mutationFn: (p: { planOtId: string; detener?: boolean }) => rpcQuitarJornada(p.planOtId, p.detener ?? false),
     onSuccess: () => invalidate(),
   })
 }

@@ -498,8 +498,8 @@ export async function rpcMoverJornada(planOtId: string, fechaDestino: string, re
   return data as { success: boolean; reprogramada?: boolean }
 }
 
-export async function rpcQuitarJornada(planOtId: string) {
-  const { data, error } = await supabase.rpc('rpc_taller_quitar_jornada', { p_plan_ot_id: planOtId })
+export async function rpcQuitarJornada(planOtId: string, detener = false) {
+  const { data, error } = await supabase.rpc('rpc_taller_quitar_jornada', { p_plan_ot_id: planOtId, p_detener: detener })
   if (error) throw error
   return data as { success: boolean }
 }
