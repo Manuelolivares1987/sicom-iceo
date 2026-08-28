@@ -162,6 +162,8 @@ export default function PlanSemanalTallerPage() {
   const quitarJornada = useQuitarJornadaTaller(planSemanalId)
   // Los días de una OT que YA está en el tablero.
   const [diasOtTarget, setDiasOtTarget] = useState<TallerPlanOTFull | null>(null)
+  // Quitar una jornada que está corriendo: se pregunta antes de detenerla.
+  const [detenerTarget, setDetenerTarget] = useState<TallerPlanOTFull | null>(null)
 
   // El tablero no cabe entero en un notebook: son siete días de 210px. Si se
   // abre en el lunes, un miércoles hay que scrollear para ver el trabajo de
@@ -635,10 +637,15 @@ export default function PlanSemanalTallerPage() {
                       jornadas={jornadasVisibles.filter((j) => j.plan_dia_id === dia.id)}
                       onAsignar={(j) => setAsignarOpen(j)}
                       onDetalle={(j) => setDetalleOpen(j)}
-                      onQuitar={(j) => quitarJornada.mutate(j.plan_ot_id, {
-                        onSuccess: () => toast.success('Jornada quitada'),
-                        onError: (err) => toast.error((err as Error).message),
-                      })}
+                      onQuitar={(j) => {
+                        // En ejecución hay que detenerla primero, y eso se
+                        // pregunta: nadie corta un trabajo andando sin querer.
+                        if (j.jornada_estado === 'en_ejecucion') { setDetenerTarget(j); return }
+                        quitarJornada.mutate({ planOtId: j.plan_ot_id }, {
+                          onSuccess: () => toast.success('Jornada quitada del plan'),
+                          onError: (err) => toast.error((err as Error).message),
+                        })
+                      }}
                       onDias={(j) => setDiasOtTarget(j)}
                       onIniciar={(j) => j.ot_id && iniciarEjec.mutate({ otId: j.ot_id, planOtId: j.plan_ot_id }, {
                         onSuccess: () => toast.success('OT iniciada'),
@@ -819,6 +826,38 @@ export default function PlanSemanalTallerPage() {
 
       {/* Renovar un papel se hace en Control documental, que es donde se
           guarda el archivo y se deja la trazabilidad. Acá se planifica. */}
+
+      {/* Quitar una jornada que está corriendo */}
+      {detenerTarget && (
+        <Modal open onClose={() => setDetenerTarget(null)}
+               title={`Quitar del plan · ${detenerTarget.ot_folio ?? ''}`}>
+          <div className="space-y-2 text-sm">
+            <p className="font-semibold text-amber-900">Esta jornada está en ejecución.</p>
+            <p className="text-gray-700">
+              Al quitarla se detiene el trabajo. El avance registrado se conserva; se pierde
+              el detalle de play/pausa de esta jornada.
+            </p>
+            <p className="text-gray-700">
+              La OT <span className="font-mono">{detenerTarget.ot_folio}</span> sigue abierta y
+              vuelve a «Viene de semanas anteriores».
+            </p>
+          </div>
+          <ModalFooter>
+            <Button variant="secondary" onClick={() => setDetenerTarget(null)}>Cancelar</Button>
+            <Button
+              onClick={() => {
+                const j = detenerTarget
+                quitarJornada.mutate({ planOtId: j.plan_ot_id, detener: true }, {
+                  onSuccess: () => { setDetenerTarget(null); toast.success('Trabajo detenido y jornada quitada del plan') },
+                  onError: (err) => toast.error((err as Error).message),
+                })
+              }}
+              disabled={quitarJornada.isPending}>
+              {quitarJornada.isPending ? 'Deteniendo…' : 'Detener y quitar'}
+            </Button>
+          </ModalFooter>
+        </Modal>
+      )}
 
       {/* Estirar o recortar los días de una OT que ya está en el tablero */}
       {diasOtTarget && (
@@ -1341,7 +1380,7 @@ function DiasDeLaOtDialog({
           toast.error('Es el único día de la OT. Para sacarla del plan usa el botón de quitar.')
           return
         }
-        await quitarJornada.mutateAsync(ya.plan_ot_id)
+        await quitarJornada.mutateAsync({ planOtId: ya.plan_ot_id })
         toast.success('Día quitado de la OT')
       } else {
         await agregarJornada.mutateAsync({
@@ -2157,10 +2196,6 @@ function JornadaCard({ jornada, onAsignar, onDetalle, onQuitar, onDias, onInicia
                 <Calendar className="h-3 w-3" />
               </button>
             )}
-            <button onClick={() => onQuitar(jornada)} title="Quitar del plan"
-                    className="text-[9px] px-1.5 py-0.5 rounded bg-red-50 hover:bg-red-100 text-red-600 ml-auto">
-              <Trash2 className="h-3 w-3" />
-            </button>
           </>
         )}
         {finalizada && (
@@ -2168,6 +2203,22 @@ function JornadaCard({ jornada, onAsignar, onDetalle, onQuitar, onDias, onInicia
             <CheckCircle2 className="h-3 w-3" /> {jornada.ultima_ejecucion_avance ?? 100}% completada
           </div>
         )}
+        {/* Quitar del plan vive FUERA del bloque de arriba a propósito: estaba
+            dentro de {!finalizada}, así que en una jornada finalizada la
+            tarjeta se quedaba sin botón y no había forma de saber por qué.
+            Ahora siempre está; si no se puede, lo explica. */}
+        <button onClick={() => onQuitar(jornada)}
+                disabled={finalizada}
+                title={finalizada
+                  ? 'Esta jornada ya se finalizó: es parte del historial del plan y no se saca'
+                  : enEjec
+                    ? 'Quitar del plan — hay que detener el trabajo primero'
+                    : 'Quitar del plan'}
+                className={`text-[9px] px-1.5 py-0.5 rounded ml-auto ${
+                  finalizada ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                             : 'bg-red-50 hover:bg-red-100 text-red-600'}`}>
+          <Trash2 className="h-3 w-3" />
+        </button>
         </>
         )}
       </div>
