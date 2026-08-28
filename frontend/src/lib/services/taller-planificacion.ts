@@ -516,3 +516,34 @@ export async function getOtAbiertaDelTrabajo(
   if (error) throw error
   return (data?.[0] as any) ?? null
 }
+
+// ── [MIG441] Los papeles del equipo, al momento de planificarlo ─────────────
+
+export type PapelProblema = {
+  tipo: string
+  /** 'vencido' | 'por_vencer' | 'sin_fecha' */
+  estado: string
+  fecha_vencimiento: string | null
+  dias_restantes: number | null
+}
+
+/**
+ * Papeles vencidos, por vencer o sin fecha de un equipo.
+ *
+ * Se pregunta a la base y no se filtra la lista de "documentos por vencer" en
+ * el cliente: esa lista trae sólo lo que vence dentro de N días y se quedaría
+ * sin los que no tienen fecha, que son justamente de los que no sabemos nada.
+ * Es la misma función que usa el trigger que avisa a la jefatura, así que lo
+ * que ve el planificador y lo que se notifica no se pueden separar.
+ */
+export async function getPapelesProblema(activoId: string): Promise<PapelProblema[]> {
+  const { data, error } = await supabase.rpc('rpc_activo_papeles_problema', { p_activo_id: activoId })
+  if (error) throw error
+  return (data ?? []) as PapelProblema[]
+}
+
+export function papelProblemaTexto(p: PapelProblema): string {
+  if (p.estado === 'vencido') return `vencido hace ${Math.abs(p.dias_restantes ?? 0)} días`
+  if (p.estado === 'por_vencer') return `vence en ${p.dias_restantes ?? 0} días`
+  return 'sin fecha de vencimiento'
+}
