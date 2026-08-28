@@ -20,8 +20,9 @@ import {
 import { useOTsValidasSalida, useCECO } from '@/hooks/use-bodega-salida-fifo'
 import type {
   SalidaCombustiblePayload, DestinoSalidaCombustible, PropuestaLitrosEquipo,
+  CargasExternoDelDia,
 } from '@/lib/services/combustible-cpp'
-import { getPropuestaLitrosEquipo } from '@/lib/services/combustible-cpp'
+import { getPropuestaLitrosEquipo, getCargasExternoDelDia } from '@/lib/services/combustible-cpp'
 import { uploadEvidenciaCombustible } from '@/lib/services/combustible'
 import {
   getVehiculosExternosAutorizados,
@@ -82,6 +83,12 @@ export function SalidaCombustibleForm() {
   // MIG78: kilometraje obligatorio para externos
   const [kilometraje, setKilometraje]       = useState<number | ''>('')
 
+  // MIG437: una patente externa no se carga dos veces el mismo dia
+  const [cargasDia, setCargasDia]       = useState<CargasExternoDelDia | null>(null)
+  const [buscandoCargas, setBuscando]   = useState(false)
+  const [autorizarRecarga, setAutorizarRecarga] = useState(false)
+  const [motivoRecarga, setMotivoRecarga]       = useState('')
+
   // MIG66: fotos selladas
   const [fotoInicial, setFotoInicial] = useState<FotoSellada | null>(null)
   const [fotoFinal, setFotoFinal]     = useState<FotoSellada | null>(null)
@@ -117,6 +124,21 @@ export function SalidaCombustibleForm() {
     if (!equipoId || esExterno) { setPropuesta(null); return }
     getPropuestaLitrosEquipo(equipoId).then(({ data }) => setPropuesta(data ?? null))
   }, [equipoId, esExterno])
+
+  // MIG437: apenas se elige la patente externa se revisa si ya recibió
+  // combustible ese día. El aviso llega antes de llenar el resto del
+  // formulario, no después de guardar.
+  useEffect(() => {
+    setAutorizarRecarga(false)
+    setMotivoRecarga('')
+    if (!esExterno || !vehiculoExternoId) { setCargasDia(null); return }
+    let vigente = true
+    setBuscando(true)
+    getCargasExternoDelDia(vehiculoExternoId, fecha || null)
+      .then(({ data }) => { if (vigente) setCargasDia(data ?? null) })
+      .finally(() => { if (vigente) setBuscando(false) })
+    return () => { vigente = false }
+  }, [esExterno, vehiculoExternoId, fecha])
 
   const estanque = estanques?.find((e) => e.id === estanqueId)
   const litrosNum = typeof litros === 'number' ? litros : 0
@@ -171,7 +193,17 @@ export function SalidaCombustibleForm() {
   if (esDespachoFisico && rutReceptor.trim().length < 7) errores.push('RUT del receptor obligatorio.')
   if (esExterno && (typeof kilometraje !== 'number' || kilometraje < 0)) errores.push('Vehículo externo: kilometraje obligatorio.')
 
-  const canSubmit = errores.length === 0 && !submitting
+  // MIG437: esta patente ya recibió combustible hoy
+  const yaCargadaHoy   = esExterno && !!cargasDia && cargasDia.n > 0
+  const puedeAutorizar = !!cargasDia?.puede_autorizar
+  if (yaCargadaHoy && !autorizarRecarga) {
+    errores.push('Esta patente ya recibió combustible hoy. No se puede cargar dos veces el mismo día.')
+  }
+  if (yaCargadaHoy && autorizarRecarga && motivoRecarga.trim().length < 10) {
+    errores.push('Para autorizar la segunda carga del día declara el motivo (mínimo 10 caracteres).')
+  }
+
+  const canSubmit = errores.length === 0 && !submitting && !buscandoCargas
 
   if (loadEst) {
     return <div className="flex justify-center py-10"><Spinner /></div>
@@ -259,6 +291,9 @@ export function SalidaCombustibleForm() {
         lectura_medidor_final_lt:   typeof lecturaFin === 'number' ? lecturaFin : null,
         // MIG78
         kilometraje_vehiculo:       esExterno && typeof kilometraje === 'number' ? kilometraje : null,
+        // MIG437
+        autorizar_recarga_dia:      yaCargadaHoy && autorizarRecarga,
+        motivo_recarga_dia:         yaCargadaHoy && autorizarRecarga ? motivoRecarga.trim() : null,
       }
 
       registrar.mutate(payload, {
@@ -393,6 +428,74 @@ export function SalidaCombustibleForm() {
                   Obligatorio para calcular rendimiento (lt/km) del vehículo externo.
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* MIG437: esta patente ya recibió combustible hoy */}
+          {requiereEquipo && esExterno && vehiculoExternoId && buscandoCargas && (
+            <div className="flex items-center gap-2 text-xs text-gray-600">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              Revisando si esta patente ya cargó hoy…
+            </div>
+          )}
+
+          {requiereEquipo && esExterno && yaCargadaHoy && cargasDia && (
+            <div className="rounded-lg border-2 border-red-300 bg-red-50 p-3 space-y-3">
+              <div className="flex items-start gap-2">
+                <AlertCircle className="h-5 w-5 text-red-600 mt-0.5 shrink-0" />
+                <div className="text-sm text-red-900">
+                  <div className="font-bold">
+                    Esta patente YA recibió combustible {fecha === todayISO() ? 'hoy' : `el ${fecha}`}.
+                  </div>
+                  <div className="mt-1 text-xs">
+                    Cargar de nuevo le factura dos veces al cliente. Si la carga anterior fue un
+                    error, corrígela en vez de repetirla.
+                  </div>
+                </div>
+              </div>
+
+              <ul className="space-y-1 text-xs text-red-900">
+                {cargasDia.cargas.map((c) => (
+                  <li key={c.kardex_id} className="flex flex-wrap items-center gap-2 rounded bg-white/70 px-2 py-1">
+                    <span className="rounded border border-red-300 bg-white px-1.5 py-0.5 font-mono text-[10px] text-red-800">{c.folio}</span>
+                    <span className="font-medium">{c.hora} h</span>
+                    <span>{Number(c.litros).toLocaleString('es-CL')} lt</span>
+                    <span className="text-red-700">· registró {c.registrado_por}</span>
+                  </li>
+                ))}
+                <li className="pt-1 font-semibold">
+                  Total del día: {Number(cargasDia.litros_total).toLocaleString('es-CL')} lt
+                </li>
+              </ul>
+
+              {puedeAutorizar ? (
+                <div className="rounded border border-red-200 bg-white p-2 space-y-2">
+                  <label className="flex items-start gap-2 cursor-pointer">
+                    <input type="checkbox" className="mt-0.5"
+                           checked={autorizarRecarga}
+                           onChange={(e) => setAutorizarRecarga(e.target.checked)} />
+                    <span className="text-xs font-medium text-red-900">
+                      Autorizo esta segunda carga del día (queda registrada a mi nombre)
+                    </span>
+                  </label>
+                  {autorizarRecarga && (
+                    <div>
+                      <label className="block text-[11px] font-medium text-gray-700 mb-1">
+                        Motivo de la segunda carga * (mínimo 10 caracteres)
+                      </label>
+                      <textarea rows={2} value={motivoRecarga}
+                                onChange={(e) => setMotivoRecarga(e.target.value)}
+                                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                                placeholder="ej: segundo viaje a faena en el mismo turno, autorizado por operaciones" />
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="rounded border border-red-200 bg-white px-2 py-1.5 text-xs text-red-800">
+                  Si esta segunda carga es real, pide a un <strong>administrador o supervisor</strong> que
+                  la autorice. Tu perfil no puede levantar el bloqueo.
+                </div>
+              )}
             </div>
           )}
 
