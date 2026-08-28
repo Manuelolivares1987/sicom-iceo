@@ -9,7 +9,7 @@ import {
   Calendar, ArrowLeft, ChevronLeft, ChevronRight, Lock, Unlock, AlertTriangle, Trash2, User,
   Play, Pause, CheckCircle2, BarChart3, ShieldAlert, RefreshCw, Wrench, Layers, FileSpreadsheet,
   Truck, Mail, Pencil, Plus, Clock, Camera, ExternalLink, ListChecks, Upload, Package, X, Search,
-  Smartphone,
+  Smartphone, FileWarning,
 } from 'lucide-react'
 import { exportarPlanSemanalExcel, descargarBlob } from '@/lib/export/plan-semanal-excel'
 import { buildPlanSemanalTallerEmailHtml } from '@/lib/email/plan-semanal-taller-email'
@@ -50,12 +50,11 @@ import {
 import { getFlotaDashboard, type FlotaDashboardActivo } from '@/lib/services/flota-dashboard'
 import {
   getPlanesActivo, getPreventivasDue, programarOtTaller, getOtAbiertaDelTrabajo,
-  getEquiposPadre, getRtPorVencer,
-  subirDocumentoRt, renovarRevisionTecnica, getRecepcionesPorPlanificar, programarRecepcion,
+  getEquiposPadre, getRecepcionesPorPlanificar, programarRecepcion,
   getNcOtsPorAgendar,
-  getDocumentosPorVencer, subirDocumentoCert, renovarCertificacion, TIPO_DOC_LABEL,
-  type PlanActivo, type PreventivaDue, type TipoOtTaller, type PrioridadTaller, type RtPorVencer,
-  type RecepcionPorPlanificar, type NcOtPorAgendar, type DocumentoPorVencer,
+  getPapelesProblema, papelProblemaTexto, TIPO_DOC_LABEL,
+  type PlanActivo, type PreventivaDue, type TipoOtTaller, type PrioridadTaller,
+  type RecepcionPorPlanificar, type NcOtPorAgendar, type PapelProblema,
 } from '@/lib/services/taller-planificacion'
 import { MAX_MECANICOS } from '@/lib/taller-grupos'
 
@@ -144,8 +143,6 @@ export default function PlanSemanalTallerPage() {
   // Solo la flota real (55): tipo móvil, sin activo_padre_id, no dada de baja. Excluye auxiliares.
   const { data: fleet } = useQuery({ queryKey: ['equipos-padre'], queryFn: getEquiposPadre, staleTime: 60_000 })
   const { data: preventivas } = useQuery({ queryKey: ['preventivas-due', 15], queryFn: () => getPreventivasDue(15), staleTime: 60_000 })
-  const { data: rtDue } = useQuery({ queryKey: ['rt-por-vencer', 30], queryFn: () => getRtPorVencer(30), staleTime: 60_000 })
-  const { data: docsDue } = useQuery({ queryKey: ['documentos-por-vencer', 30], queryFn: () => getDocumentosPorVencer(30), staleTime: 60_000 })
   const { data: recepciones } = useQuery({ queryKey: ['recepciones-por-planificar'], queryFn: getRecepcionesPorPlanificar, staleTime: 60_000 })
   const { data: ncOts } = useQuery({ queryKey: ['nc-ot-por-agendar'], queryFn: getNcOtsPorAgendar, staleTime: 60_000 })
   // [MIG259] El trabajo abierto que NO está en esta semana. Antes no se veía en
@@ -162,6 +159,8 @@ export default function PlanSemanalTallerPage() {
   const moverJornada = useMoverJornadaTaller(planSemanalId)
   const agregarJornada = useAgregarJornadaTaller(planSemanalId)
   const quitarJornada = useQuitarJornadaTaller(planSemanalId)
+  // Los días de una OT que YA está en el tablero.
+  const [diasOtTarget, setDiasOtTarget] = useState<TallerPlanOTFull | null>(null)
   const confirmarPlan = useConfirmarPlanSemanalTaller(planSemanalId)
   const liberarOts = useLiberarOtsTaller(planSemanalId)
   const iniciarEjec = useIniciarEjecucionTaller(planSemanalId)
@@ -174,8 +173,6 @@ export default function PlanSemanalTallerPage() {
   const [finAvance, setFinAvance] = useState<number>(100)
   const [finObs, setFinObs] = useState<string>('')
   const [dropTarget, setDropTarget] = useState<DropTarget | null>(null)
-  const [renovarRt, setRenovarRt] = useState<RtPorVencer | null>(null)
-  const [renovarDoc, setRenovarDoc] = useState<DocumentoPorVencer | null>(null)
   const [recepTarget, setRecepTarget] = useState<{ activoId: string; label: string; fecha: string } | null>(null)
   // [MIG259] Descartar una OT que ya no corresponde: exige motivo.
   const [descartarTarget, setDescartarTarget] = useState<TallerOtArrastre | null>(null)
@@ -628,6 +625,7 @@ export default function PlanSemanalTallerPage() {
                         onSuccess: () => toast.success('Jornada quitada'),
                         onError: (err) => toast.error((err as Error).message),
                       })}
+                      onDias={(j) => setDiasOtTarget(j)}
                       onIniciar={(j) => j.ot_id && iniciarEjec.mutate({ otId: j.ot_id, planOtId: j.plan_ot_id }, {
                         onSuccess: () => toast.success('OT iniciada'),
                         onError: (err) => toast.error((err as Error).message),
@@ -661,17 +659,14 @@ export default function PlanSemanalTallerPage() {
               {/* Preventivas sugeridas (arrástralas a un día) */}
               <PreventivasSugeridas items={preventivasPatentes} />
 
-              {/* Revisión Técnica por vencer (arrástralas a un día → inspección) */}
-              <RtPorVencerCard items={rtDue ?? []} onRenovar={setRenovarRt} />
+              {/* Los papeles NO viven acá. Estaban en dos tarjetas más —Revisión
+                  Técnica por vencer y Documentos con problemas— que repetían lo
+                  que ya muestra Control documental, y que empujaban el trabajo
+                  de la semana fuera de la pantalla.
 
-              {/* Patentes con problemas de documentos (solo flota rodante) */}
-              <DocumentosPorVencerCard
-                items={(docsDue ?? []).filter((d) =>
-                  fleetIds.has(d.activo_id) &&
-                  (!filtroOperacion || (d.operacion ?? '') === filtroOperacion),
-                )}
-                onRenovar={setRenovarDoc}
-              />
+                  Lo que sí hace falta al planificar es saber si LA patente que
+                  estás soltando trae un papel malo, y eso ahora sale en el
+                  diálogo de programar, con el aviso a la jefatura (MIG441). */}
             </div>
           </div>
         </DndContext>
@@ -808,24 +803,19 @@ export default function PlanSemanalTallerPage() {
         />
       )}
 
-      {/* Diálogo: renovar Revisión Técnica (subir doc + nuevo vencimiento) */}
-      {renovarDoc && (
-        <RenovarDocumentoDialog
-          doc={renovarDoc}
-          onClose={() => setRenovarDoc(null)}
-          onDone={() => {
-            setRenovarDoc(null)
-            qc.invalidateQueries({ queryKey: ['documentos-por-vencer'] })
-            qc.invalidateQueries({ queryKey: ['rt-por-vencer'] })
-          }}
-        />
-      )}
+      {/* Renovar un papel se hace en Control documental, que es donde se
+          guarda el archivo y se deja la trazabilidad. Acá se planifica. */}
 
-      {renovarRt && (
-        <RenovarRtDialog
-          rt={renovarRt}
-          onClose={() => setRenovarRt(null)}
-          onDone={() => { setRenovarRt(null); qc.invalidateQueries({ queryKey: ['rt-por-vencer'] }) }}
+      {/* Estirar o recortar los días de una OT que ya está en el tablero */}
+      {diasOtTarget && (
+        <DiasDeLaOtDialog
+          jornada={diasOtTarget}
+          dias={dias ?? []}
+          jornadasDeLaOt={(jornadas ?? []).filter((j) => j.ot_id && j.ot_id === diasOtTarget.ot_id)}
+          planSemanalId={planSemanalId}
+          agregarJornada={agregarJornada}
+          quitarJornada={quitarJornada}
+          onClose={() => setDiasOtTarget(null)}
         />
       )}
 
@@ -1300,273 +1290,145 @@ function RecepcionDialog({ target, planSemanalId, dias, agregarJornada, onClose,
   )
 }
 
-function RtPorVencerCard({ items, onRenovar }: { items: RtPorVencer[]; onRenovar: (r: RtPorVencer) => void }) {
-  return (
-    <Card className="border-purple-200">
-      <CardHeader className="pb-2">
-        <CardTitle className="text-sm flex items-center gap-2 text-purple-800">
-          <ShieldAlert className="h-4 w-4" /> Revisión Técnica por vencer ({items.length})
-          <span className="text-[10px] font-normal text-gray-400">— pulsa «Renovar RT» para subir el documento nuevo y el nuevo vencimiento.</span>
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="p-2">
-        {items.length === 0 ? (
-          <div className="text-xs text-gray-400 p-3 text-center">Sin RT vencidas ni próximas.</div>
-        ) : (
-          <div className="flex gap-2 overflow-x-auto pb-1">
-            {items.map((r) => <RtCard key={r.activo_id} r={r} onRenovar={onRenovar} />)}
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  )
-}
-
-function RtCard({ r, onRenovar }: { r: RtPorVencer; onRenovar: (r: RtPorVencer) => void }) {
-  const vencida = r.dias_restantes < 0
-  return (
-    <div className="shrink-0 flex flex-col gap-1 items-stretch w-[120px]">
-      <div title={vencida ? `RT vencida hace ${Math.abs(r.dias_restantes)}d (venció ${r.fecha_vencimiento})` : `RT vence en ${r.dias_restantes}d (${r.fecha_vencimiento})`}
-           className={`rounded border px-2.5 py-1.5 shadow-sm text-[12px] font-bold text-center ${
-             vencida ? 'border-red-300 bg-red-50 text-red-800' : 'border-purple-200 bg-purple-50 text-purple-800'
-           }`}>
-        <div className="font-mono">{r.patente ?? r.codigo}</div>
-        <div className="text-[10px] font-normal">{vencida ? `vencida ${Math.abs(r.dias_restantes)}d` : `en ${r.dias_restantes}d`}</div>
-      </div>
-      <button type="button" onClick={() => onRenovar(r)}
-        className="text-[11px] text-white bg-purple-600 hover:bg-purple-700 rounded px-2 py-1 font-medium">📄 Renovar RT</button>
-    </div>
-  )
-}
-
-function RenovarRtDialog({ rt, onClose, onDone }: { rt: RtPorVencer; onClose: () => void; onDone: () => void }) {
-  const toast = useToast()
-  const [file, setFile] = useState<File | null>(null)
-  const [emision, setEmision] = useState<string>(() => new Date().toISOString().slice(0, 10))
-  const [venc, setVenc] = useState<string>('')
-  const [numero, setNumero] = useState('')
-  const [saving, setSaving] = useState(false)
-
-  const submit = async () => {
-    if (!venc) { toast.error('Indica el nuevo vencimiento de la RT'); return }
-    if (venc < emision) { toast.error('El vencimiento no puede ser anterior a la emisión'); return }
-    setSaving(true)
-    try {
-      let url: string | null = null
-      if (file) url = await subirDocumentoRt(rt.activo_id, file)
-      await renovarRevisionTecnica({
-        activoId: rt.activo_id, fechaEmision: emision, fechaVencimiento: venc,
-        archivoUrl: url, numero: numero || null,
-      })
-      toast.success(`RT renovada: ${rt.patente ?? rt.codigo} vence ${venc}`)
-      onDone()
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Error al renovar la RT')
-    } finally { setSaving(false) }
-  }
-
-  return (
-    <Modal open onClose={onClose} title={`Renovar Revisión Técnica · ${rt.patente ?? rt.codigo}`}>
-      <div className="space-y-3">
-        <p className="text-xs text-gray-500">
-          RT actual {rt.dias_restantes < 0 ? `vencida hace ${Math.abs(rt.dias_restantes)} días` : `vence en ${rt.dias_restantes} días`} ({rt.fecha_vencimiento}).
-        </p>
-        <div>
-          <label className="text-xs font-medium">Documento de la nueva RT (PDF/imagen)</label>
-          <input type="file" accept="application/pdf,image/*"
-            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-            className="w-full rounded border px-2 py-1.5 text-sm" />
-          {file && <p className="text-[10px] text-green-600 mt-0.5">✓ {file.name}</p>}
-        </div>
-        <div className="grid grid-cols-2 gap-2">
-          <label className="text-xs font-medium">Fecha de emisión
-            <input type="date" value={emision} onChange={(e) => setEmision(e.target.value)}
-              className="mt-0.5 w-full rounded border px-2 py-1.5 text-sm" />
-          </label>
-          <label className="text-xs font-medium">Nuevo vencimiento*
-            <input type="date" value={venc} onChange={(e) => setVenc(e.target.value)}
-              className="mt-0.5 w-full rounded border px-2 py-1.5 text-sm" />
-          </label>
-        </div>
-        <label className="text-xs font-medium block">N° certificado (opcional)
-          <input value={numero} onChange={(e) => setNumero(e.target.value)}
-            className="mt-0.5 w-full rounded border px-2 py-1.5 text-sm" />
-        </label>
-      </div>
-      <ModalFooter>
-        <Button variant="outline" onClick={onClose} disabled={saving}>Cancelar</Button>
-        <Button onClick={submit} disabled={saving}>{saving ? 'Guardando…' : 'Registrar RT renovada'}</Button>
-      </ModalFooter>
-    </Modal>
-  )
-}
-
-// ── Patentes con problemas de documentos (RT, SOAP, permiso, hermeticidad, …) ──
-// Agrupado por equipo: cada patente muestra juntos sus documentos con problema.
-function DocumentosPorVencerCard({ items, onRenovar }: {
-  items: DocumentoPorVencer[]
-  onRenovar: (d: DocumentoPorVencer) => void
+/**
+ * Los días de una OT que ya está en el tablero.
+ *
+ * El multidía existe desde que se armó el Kanban —una OT, varios días, con su
+ * badge J2/J3—, pero sólo se podía decidir al soltar la patente por primera
+ * vez. Después, arrastrar la tarjeta la MUEVE de día: no había forma de decir
+ * «esto además sigue el miércoles» sin volver a arrastrar la patente desde el
+ * panel y pasar de nuevo por el diálogo de programar.
+ *
+ * Un día que ya arrancó no se puede sacar: el trabajo hecho no se borra desde
+ * un calendario. Es la misma regla que ya impide arrastrar esa tarjeta.
+ */
+function DiasDeLaOtDialog({
+  jornada, dias, jornadasDeLaOt, planSemanalId, agregarJornada, quitarJornada, onClose,
+}: {
+  jornada: TallerPlanOTFull
+  dias: { id: string; fecha: string; nombre_dia: string }[]
+  jornadasDeLaOt: TallerPlanOTFull[]
+  planSemanalId: string
+  agregarJornada: ReturnType<typeof useAgregarJornadaTaller>
+  quitarJornada: ReturnType<typeof useQuitarJornadaTaller>
+  onClose: () => void
 }) {
-  const [busca, setBusca] = useState('')
-  const vencidos = items.filter((d) => d.dias_restantes < 0).length
-  const grupos = useMemo(() => {
-    const s = busca.trim().toLowerCase()
-    const filtrados = !s ? items : items.filter((d) =>
-      (d.patente ?? '').toLowerCase().includes(s) || (d.codigo ?? '').toLowerCase().includes(s),
-    )
-    const m = new Map<string, DocumentoPorVencer[]>()
-    for (const d of filtrados) {
-      const arr = m.get(d.activo_id) ?? []
-      arr.push(d)
-      m.set(d.activo_id, arr)
+  const toast = useToast()
+  const [ocupado, setOcupado] = useState(false)
+  const porFecha = new Map(jornadasDeLaOt.map((j) => [j.dia_fecha, j]))
+  const equipo = jornada.activo_patente ?? jornada.activo_codigo ?? 'equipo'
+
+  const toggle = async (fecha: string) => {
+    const ya = porFecha.get(fecha)
+    setOcupado(true)
+    try {
+      if (ya) {
+        if (jornadasDeLaOt.length === 1) {
+          toast.error('Es el único día de la OT. Para sacarla del plan usa el botón de quitar.')
+          return
+        }
+        await quitarJornada.mutateAsync(ya.plan_ot_id)
+        toast.success('Día quitado de la OT')
+      } else {
+        await agregarJornada.mutateAsync({
+          planSemanalId, otId: jornada.ot_id!, fecha, cuadrilla: jornada.cuadrilla ?? null,
+        })
+        toast.success('Día agregado — sigue siendo la misma OT')
+      }
+    } catch (e) {
+      toast.error((e as Error).message)
+    } finally {
+      setOcupado(false)
     }
-    return Array.from(m.values())
-      .map((docs) => docs.slice().sort((a, b) => a.dias_restantes - b.dias_restantes))
-      .sort((a, b) => a[0].dias_restantes - b[0].dias_restantes) // peor equipo primero
-  }, [items, busca])
-
-  return (
-    <Card className="border-amber-300">
-      <CardHeader className="pb-2">
-        <CardTitle className="text-sm flex flex-wrap items-center gap-2 text-amber-800">
-          <ShieldAlert className="h-4 w-4" /> Documentos con problemas · {grupos.length} equipos ({items.length} docs)
-          {vencidos > 0 && (
-            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-red-100 text-red-700">{vencidos} vencidos</span>
-          )}
-          <span className="text-[10px] font-normal text-gray-400">— RT, SOAP, permiso de circulación, hermeticidad, etc. Pulsa «Renovar» para subir el archivo y el nuevo vencimiento.</span>
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="p-2">
-        <div className="relative mb-2 max-w-xs">
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
-          <Input
-            className="h-8 pl-8 text-xs"
-            placeholder="Buscar por patente / código…"
-            value={busca}
-            onChange={(e) => setBusca(e.target.value)}
-          />
-        </div>
-        {grupos.length === 0 ? (
-          <div className="text-xs text-gray-400 p-3 text-center">Sin documentos que coincidan.</div>
-        ) : (
-          <div className="flex flex-wrap gap-2">
-            {grupos.map((docs) => {
-              const g = docs[0]
-              const gVencidos = docs.filter((d) => d.dias_restantes < 0).length
-              return (
-                <div key={g.activo_id} className="w-full sm:w-[340px] shrink-0 rounded-lg border border-gray-200 overflow-hidden">
-                  <div className="flex items-center gap-2 bg-gray-50 px-2.5 py-1.5 border-b">
-                    <span className="font-mono font-bold text-sm text-gray-800">{g.patente ?? g.codigo ?? '—'}</span>
-                    {g.patente && g.codigo && <span className="text-[10px] text-gray-400">{g.codigo}</span>}
-                    {g.operacion && <span className="text-[10px] text-gray-400">· {g.operacion}</span>}
-                    {gVencidos > 0 && (
-                      <span className="ml-auto text-[9px] font-bold px-1 rounded bg-red-100 text-red-700">{gVencidos} venc.</span>
-                    )}
-                  </div>
-                  <div className="divide-y">
-                    {docs.map((d) => {
-                      const vencido = d.dias_restantes < 0
-                      return (
-                        <div key={d.tipo} className="px-2.5 py-2 text-xs hover:bg-amber-50/40">
-                          <div className="flex items-center gap-1.5">
-                            <span className="font-medium text-gray-700">{TIPO_DOC_LABEL[d.tipo] ?? d.tipo}</span>
-                            {d.bloqueante && <span className="text-[9px] px-1 rounded bg-red-100 text-red-700">bloqueante</span>}
-                            <span className={`ml-auto text-[10px] font-semibold px-1.5 py-0.5 rounded ${
-                              vencido ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-800'
-                            }`}>
-                              {vencido ? `vencido ${Math.abs(d.dias_restantes)}d` : `en ${d.dias_restantes}d`}
-                            </span>
-                          </div>
-                          <div className="mt-1.5 flex items-center justify-between gap-2">
-                            <span className="text-[10px] text-gray-400">vence {d.fecha_vencimiento}</span>
-                            <button type="button" onClick={() => onRenovar(d)}
-                              title="Subir el documento y registrar el nuevo vencimiento"
-                              className="inline-flex items-center gap-1 text-[11px] text-white bg-amber-600 hover:bg-amber-700 rounded px-2.5 py-1 font-semibold shadow-sm">
-                              <Upload className="h-3.5 w-3.5" /> Subir documento
-                            </button>
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  )
-}
-
-function RenovarDocumentoDialog({ doc, onClose, onDone }: {
-  doc: DocumentoPorVencer; onClose: () => void; onDone: () => void
-}) {
-  const toast = useToast()
-  const [file, setFile] = useState<File | null>(null)
-  const [emision, setEmision] = useState<string>(() => new Date().toISOString().slice(0, 10))
-  const [venc, setVenc] = useState<string>('')
-  const [numero, setNumero] = useState('')
-  const [saving, setSaving] = useState(false)
-  const label = TIPO_DOC_LABEL[doc.tipo] ?? doc.tipo
-
-  const submit = async () => {
-    if (!venc) { toast.error('Indica el nuevo vencimiento'); return }
-    if (venc < emision) { toast.error('El vencimiento no puede ser anterior a la emisión'); return }
-    setSaving(true)
-    try {
-      let url: string | null = null
-      if (file) url = await subirDocumentoCert(doc.activo_id, doc.tipo, file)
-      await renovarCertificacion({
-        activoId: doc.activo_id, tipo: doc.tipo, fechaEmision: emision, fechaVencimiento: venc,
-        archivoUrl: url, numero: numero || null,
-      })
-      toast.success(`${label} renovado: ${doc.patente ?? doc.codigo} vence ${venc}`)
-      onDone()
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Error al renovar el documento')
-    } finally { setSaving(false) }
   }
 
   return (
-    <Modal open onClose={onClose} title={`Renovar ${label} · ${doc.patente ?? doc.codigo}`}>
+    <Modal open onClose={onClose} title={`Días de la OT ${jornada.ot_folio ?? ''} · ${equipo}`}>
       <div className="space-y-3">
-        <p className="text-xs text-gray-500">
-          {label} {doc.dias_restantes < 0 ? `vencido hace ${Math.abs(doc.dias_restantes)} días` : `vence en ${doc.dias_restantes} días`} ({doc.fecha_vencimiento}).
+        <p className="text-xs text-gray-600">
+          Marca los días en que el equipo va a estar en el taller. Es <strong>una sola OT</strong>:
+          mantiene su folio, su checklist y su avance; sólo se le suman o restan días.
         </p>
-        <div>
-          <label className="text-xs font-medium block mb-1">Archivo del documento (PDF o foto)</label>
-          <label className="flex cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed border-amber-300 bg-amber-50 px-3 py-5 text-center hover:bg-amber-100">
-            <Upload className="h-6 w-6 text-amber-600" />
-            <span className="text-sm font-semibold text-amber-800">
-              {file ? file.name : 'Haz clic para subir el archivo'}
-            </span>
-            <span className="text-[11px] text-amber-600">PDF o foto de la {label.toLowerCase()}</span>
-            <input type="file" accept="application/pdf,image/*" className="hidden"
-              onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
-          </label>
-          {file && <p className="text-[11px] text-green-600 mt-1">✓ {file.name} seleccionado</p>}
+        <div className="grid grid-cols-4 gap-1.5">
+          {dias.map((d) => {
+            const j = porFecha.get(d.fecha)
+            const arrancado = !!j && (j.jornada_estado === 'en_ejecucion' || j.jornada_estado === 'finalizada')
+            return (
+              <button key={d.id} type="button"
+                      disabled={ocupado || arrancado}
+                      onClick={() => toggle(d.fecha)}
+                      title={arrancado ? 'Este día ya arrancó: no se puede sacar' : undefined}
+                      className={`rounded border px-2 py-1.5 text-left text-[11px] transition disabled:opacity-60 ${
+                        j ? 'border-blue-500 bg-blue-50 font-medium text-blue-900'
+                          : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'}`}>
+                <div className="truncate">{d.nombre_dia}</div>
+                <div className="text-[10px] text-gray-500">{d.fecha.slice(8, 10)}/{d.fecha.slice(5, 7)}</div>
+                {arrancado && <div className="text-[9px] font-semibold text-amber-700">ya arrancó</div>}
+              </button>
+            )
+          })}
         </div>
-        <div className="grid grid-cols-2 gap-2">
-          <label className="text-xs font-medium">Fecha de emisión
-            <input type="date" value={emision} onChange={(e) => setEmision(e.target.value)}
-              className="mt-0.5 w-full rounded border px-2 py-1.5 text-sm" />
-          </label>
-          <label className="text-xs font-medium">Nuevo vencimiento*
-            <input type="date" value={venc} onChange={(e) => setVenc(e.target.value)}
-              className="mt-0.5 w-full rounded border px-2 py-1.5 text-sm" />
-          </label>
-        </div>
-        <label className="text-xs font-medium block">N° / folio (opcional)
-          <input value={numero} onChange={(e) => setNumero(e.target.value)}
-            className="mt-0.5 w-full rounded border px-2 py-1.5 text-sm" />
-        </label>
+        <p className="text-[11px] text-gray-500">
+          {jornadasDeLaOt.length} día{jornadasDeLaOt.length === 1 ? '' : 's'} en el plan de esta semana.
+        </p>
       </div>
       <ModalFooter>
-        <Button variant="outline" onClick={onClose} disabled={saving}>Cancelar</Button>
-        <Button onClick={submit} disabled={saving}>{saving ? 'Guardando…' : 'Registrar documento renovado'}</Button>
+        <Button variant="secondary" onClick={onClose}>Listo</Button>
       </ModalFooter>
     </Modal>
+  )
+}
+
+/**
+ * [MIG441] Los papeles del equipo, a la vista antes de meterlo al plan.
+ *
+ * No bloquea: un equipo con la revisión técnica vencida puede entrar a taller
+ * —muchas veces es justo donde tiene que estar— y el trabajo que se programa
+ * puede ser el que arregla el papel. Lo que faltaba era que se supiera, y que
+ * la jefatura se enterara sin depender de que alguien se acuerde de avisar.
+ *
+ * El aviso a jefe de taller y jefe de operaciones NO sale de acá: lo dispara un
+ * trigger en la tabla del plan. Al plan se entra por cinco caminos distintos y
+ * sólo uno pasa por este diálogo.
+ */
+function PapelesDelEquipoAviso({ activoId }: { activoId: string }) {
+  const { data: papeles } = useQuery({
+    queryKey: ['papeles-problema', activoId],
+    queryFn: () => getPapelesProblema(activoId),
+    staleTime: 60_000,
+  })
+  const items: PapelProblema[] = papeles ?? []
+  if (items.length === 0) return null
+
+  const vencidos = items.filter((p) => p.estado === 'vencido').length
+  const grave = vencidos > 0
+
+  return (
+    <div className={`rounded-lg border p-2.5 text-xs ${
+      grave ? 'border-red-300 bg-red-50' : 'border-amber-300 bg-amber-50'}`}>
+      <p className={`flex items-center gap-1.5 font-semibold ${grave ? 'text-red-900' : 'text-amber-900'}`}>
+        <FileWarning className="h-4 w-4 shrink-0" />
+        Este equipo tiene {items.length} papel{items.length === 1 ? '' : 'es'} con problema
+        {vencidos > 0 && ` · ${vencidos} vencido${vencidos === 1 ? '' : 's'}`}
+      </p>
+      <ul className={`mt-1.5 space-y-0.5 ${grave ? 'text-red-800' : 'text-amber-800'}`}>
+        {items.slice(0, 5).map((p) => (
+          <li key={p.tipo} className="flex items-center justify-between gap-3">
+            <span className="truncate">{TIPO_DOC_LABEL[p.tipo] ?? p.tipo}</span>
+            <span className="shrink-0 font-medium">{papelProblemaTexto(p)}</span>
+          </li>
+        ))}
+        {items.length > 5 && (
+          <li className="opacity-70">y {items.length - 5} más</li>
+        )}
+      </ul>
+      <p className={`mt-1.5 ${grave ? 'text-red-800' : 'text-amber-800'}`}>
+        Se puede planificar igual. Al hacerlo se avisa al Jefe de Taller y al Jefe de Operaciones.
+        Los papeles se renuevan en{' '}
+        <Link href="/dashboard/flota/control-documental" target="_blank"
+              className="font-medium underline">Control documental</Link>.
+      </p>
+    </div>
   )
 }
 
@@ -1645,6 +1507,9 @@ function ProgramarOtDialog({ target, planSemanalId, dias, onClose, onDone, agreg
   return (
     <Modal open onClose={onClose} title={`Programar · ${target.label}`}>
       <div className="space-y-3">
+        {/* Lo primero, porque es lo que puede hacerte cambiar de opinión. */}
+        <PapelesDelEquipoAviso activoId={target.activoId} />
+
         {/* [MIG256] El trabajo que se arrastra de una semana a otra sigue en la
             misma OT: un solo folio, con su checklist y su avance, hasta cerrarla. */}
         {otAbierta && (
@@ -1988,13 +1853,14 @@ function TareaLibreDialog({ dias, tecnicos, operacionInicial, enviando, onClose,
   )
 }
 
-function DiaColumna({ fecha, nombre, jornadas, onAsignar, onDetalle, onQuitar, onIniciar, onPausar, onFinalizar, onLiberar }: {
+function DiaColumna({ fecha, nombre, jornadas, onAsignar, onDetalle, onQuitar, onDias, onIniciar, onPausar, onFinalizar, onLiberar }: {
   fecha: string
   nombre: string
   jornadas: TallerPlanOTFull[]
   onAsignar: (j: TallerPlanOTFull) => void
   onDetalle: (j: TallerPlanOTFull) => void
   onQuitar: (j: TallerPlanOTFull) => void
+  onDias: (j: TallerPlanOTFull) => void
   onIniciar: (j: TallerPlanOTFull) => void
   onPausar: (j: TallerPlanOTFull) => void
   onFinalizar: (j: TallerPlanOTFull) => void
@@ -2017,7 +1883,7 @@ function DiaColumna({ fecha, nombre, jornadas, onAsignar, onDetalle, onQuitar, o
         ) : (
           jornadas.map((j) => (
             <JornadaCard key={j.plan_ot_id} jornada={j}
-                         onAsignar={onAsignar} onDetalle={onDetalle} onQuitar={onQuitar}
+                         onAsignar={onAsignar} onDetalle={onDetalle} onQuitar={onQuitar} onDias={onDias}
                          onIniciar={onIniciar} onPausar={onPausar} onFinalizar={onFinalizar}
                          onLiberar={onLiberar} />
           ))
@@ -2027,11 +1893,12 @@ function DiaColumna({ fecha, nombre, jornadas, onAsignar, onDetalle, onQuitar, o
   )
 }
 
-function JornadaCard({ jornada, onAsignar, onDetalle, onQuitar, onIniciar, onPausar, onFinalizar, onLiberar }: {
+function JornadaCard({ jornada, onAsignar, onDetalle, onQuitar, onDias, onIniciar, onPausar, onFinalizar, onLiberar }: {
   jornada: TallerPlanOTFull
   onAsignar: (j: TallerPlanOTFull) => void
   onDetalle: (j: TallerPlanOTFull) => void
   onQuitar: (j: TallerPlanOTFull) => void
+  onDias: (j: TallerPlanOTFull) => void
   onIniciar: (j: TallerPlanOTFull) => void
   onPausar: (j: TallerPlanOTFull) => void
   onFinalizar: (j: TallerPlanOTFull) => void
@@ -2205,6 +2072,14 @@ function JornadaCard({ jornada, onAsignar, onDetalle, onQuitar, onIniciar, onPau
               <button onClick={() => onFinalizar(jornada)} title="Finalizar"
                       className="text-[9px] px-1.5 py-0.5 rounded bg-green-100 hover:bg-green-200 text-green-700">
                 <CheckCircle2 className="h-3 w-3" />
+              </button>
+            )}
+            {/* El mismo equipo, más de un día. Arrastrar la tarjeta la MUEVE;
+                esto la estira. */}
+            {jornada.ot_id && (
+              <button onClick={() => onDias(jornada)} title="Días de esta OT (el mismo equipo, varios días)"
+                      className="text-[9px] px-1.5 py-0.5 rounded bg-blue-50 hover:bg-blue-100 text-blue-700">
+                <Calendar className="h-3 w-3" />
               </button>
             )}
             <button onClick={() => onQuitar(jornada)} title="Quitar del plan"
