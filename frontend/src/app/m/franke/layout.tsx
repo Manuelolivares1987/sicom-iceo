@@ -1,4 +1,5 @@
 import SugerenciaWidget from '@/components/sugerencias/sugerencia-widget'
+import { VolverAlPanel } from '@/components/layout/volver-al-panel'
 import { SincronizadorFranke } from '@/components/franke/sincronizador'
 
 export default function FrankeMobileLayout({ children }: { children: React.ReactNode }) {
@@ -12,6 +13,7 @@ export default function FrankeMobileLayout({ children }: { children: React.React
       {/* El mecánico y el conductor son quienes mejor saben si la pantalla les
           sirve o les estorba. Que lo puedan decir desde donde trabajan. */}
       <SugerenciaWidget />
+      <VolverAlPanel />
     </div>
   )
 }

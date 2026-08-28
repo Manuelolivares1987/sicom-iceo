@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
   Wrench, ChevronRight, ChevronDown, RefreshCw, WifiOff, CloudOff, CheckCircle2, Play, Pause, User, LogOut,
+  ArrowLeft,
   PackageSearch,
 } from 'lucide-react'
 import { Spinner } from '@/components/ui/spinner'
@@ -187,7 +188,8 @@ export default function MecanicoHomePage() {
             <LogOut className="h-5 w-5" />
           </button>
         ) : (
-          <Link href="/dashboard" className="text-gray-400 hover:text-gray-600"><LogOut className="h-5 w-5" /></Link>
+          <Link href="/dashboard" aria-label="Volver al panel" title="Volver al panel"
+                className="text-gray-400 hover:text-gray-600"><ArrowLeft className="h-5 w-5" /></Link>
         )}
       </div>
 

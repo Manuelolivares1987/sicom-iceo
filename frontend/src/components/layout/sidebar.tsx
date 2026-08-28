@@ -92,6 +92,12 @@ type NavGroup = {
   subsections?: NavSubsection[]   // grupo con sub-secciones
   /** Sólo para administradores globales: no pasa por permisos de módulo. */
   soloAdmin?: boolean
+  /**
+   * El grupo nace abierto. Se usa donde el acordeón cerrado equivale a no
+   * existir: los accesos de administrador viven al final de trece grupos, y
+   * un título cerrado abajo de todo no lo encuentra nadie.
+   */
+  defaultOpen?: boolean
 }
 
 // Los Recorridos Gemba son una práctica de tres cargos, pero cada uno entra
@@ -164,6 +170,11 @@ const navGroups: NavGroup[] = [
         label: 'Taller',
         items: [
           { label: 'Panel Taller', href: '/dashboard/mantenimiento', icon: Wrench, module: 'mantenimiento' },
+          // El acceso a la app del mecánico estaba sólo en el grupo de
+          // administrador, al final del menú: quien planifica el taller no
+          // tenía cómo mirar lo mismo que ve el operador en su teléfono.
+          { label: 'Terreno (móvil)', href: '/m/taller', icon: Smartphone, module: 'mantenimiento',
+            tooltip: 'Lo que ve el operador en su teléfono: sus OT, la pauta, el horómetro y el pedido de insumos' },
           { label: 'Plan semanal', href: '/dashboard/mantenimiento/plan-semanal-taller', icon: CalendarClock, module: 'mantenimiento' },
           { label: 'No Conformidades', href: '/dashboard/mantenimiento/no-conformidades', icon: AlertTriangle, module: 'mantenimiento', contador: 'nc-por-decidir',
             tooltip: 'Hallazgos por planificar y repuestos que el operador pide aprobar' },
@@ -195,7 +206,7 @@ const navGroups: NavGroup[] = [
       { label: 'Panel Calama',     href: '/dashboard/operacion-calama',                 icon: Activity,        extendedModule: 'operacion_calama' },
       { label: 'Plan semanal',     href: '/dashboard/operacion-calama/plan-semanal',    icon: CalendarClock,   extendedModule: 'operacion_calama' },
       { label: 'Mis OTs Calama',   href: '/dashboard/operacion-calama/mis-ots',         icon: ClipboardCheck,  extendedModule: 'operacion_calama' },
-      { label: 'Vista movil',      href: '/m/calama',                                   icon: ClipboardCheck,  extendedModule: 'operacion_calama' },
+      { label: 'Terreno (móvil)',  href: '/m/calama',                                   icon: ClipboardCheck,  extendedModule: 'operacion_calama' },
       { label: 'Órdenes Calama',   href: '/dashboard/operacion-calama/ots',             icon: ClipboardList,   extendedModule: 'operacion_calama' },
       { label: 'Planificaciones',  href: '/dashboard/operacion-calama/planificaciones', icon: Layers,          extendedModule: 'operacion_calama' },
       { label: 'Importar Excel',   href: '/dashboard/operacion-calama/importar',        icon: FileSpreadsheet, extendedModule: 'operacion_calama' },
@@ -364,6 +375,7 @@ const navGroups: NavGroup[] = [
   {
     label: 'Vistas de terreno',
     soloAdmin: true,
+    defaultOpen: true,
     items: [
       { label: 'Taller', href: '/m/taller', icon: Wrench,
         tooltip: 'Lo que ve el operador del taller: sus OT, la pauta y el pedido de insumos' },
@@ -385,6 +397,7 @@ const navGroups: NavGroup[] = [
   {
     label: 'Lo que ve el cliente',
     soloAdmin: true,
+    defaultOpen: true,
     items: [
       { label: 'Portal del cliente', href: '/portal/login', icon: Briefcase,
         tooltip: 'Donde entra el arrendatario con su cuenta' },
@@ -469,25 +482,32 @@ export default function Sidebar({ collapsed, onToggle, onClose }: SidebarProps) 
   }, [faenaSolo])
 
   // ── Acordeón: grupos colapsables, persistido en localStorage ──
-  const [openGroups, setOpenGroups] = useState<Set<string>>(new Set())
+  // Se guarda abierto/cerrado POR GRUPO y no la lista de abiertos: con una
+  // lista, un grupo que nace abierto no se puede cerrar —la ausencia significa
+  // las dos cosas a la vez—.
+  const [groupState, setGroupState] = useState<Record<string, boolean>>({})
   const [hydrated, setHydrated] = useState(false)
   useEffect(() => {
     try {
       const saved = localStorage.getItem('sidebar-open-groups')
-      if (saved) setOpenGroups(new Set(JSON.parse(saved) as string[]))
+      if (saved) {
+        const parsed = JSON.parse(saved) as unknown
+        // Compatibilidad con el formato viejo (arreglo de grupos abiertos).
+        if (Array.isArray(parsed)) {
+          setGroupState(Object.fromEntries((parsed as string[]).map((l) => [l, true])))
+        } else if (parsed && typeof parsed === 'object') {
+          setGroupState(parsed as Record<string, boolean>)
+        }
+      }
     } catch { /* ignore */ }
     setHydrated(true)
   }, [])
   useEffect(() => {
-    if (hydrated) localStorage.setItem('sidebar-open-groups', JSON.stringify(Array.from(openGroups)))
-  }, [openGroups, hydrated])
+    if (hydrated) localStorage.setItem('sidebar-open-groups', JSON.stringify(groupState))
+  }, [groupState, hydrated])
 
-  const toggleGroup = (label: string) =>
-    setOpenGroups((prev) => {
-      const next = new Set(prev)
-      if (next.has(label)) next.delete(label); else next.add(label)
-      return next
-    })
+  const toggleGroup = (label: string, abierto: boolean) =>
+    setGroupState((prev) => ({ ...prev, [label]: !abierto }))
 
   // Grupo que contiene la ruta activa: se fuerza abierto.
   const activeGroupLabel = useMemo(() => {
@@ -612,13 +632,14 @@ export default function Sidebar({ collapsed, onToggle, onClose }: SidebarProps) 
           // Un acordeón de un solo grupo no es un acordeón, es una puerta cerrada.
           const isOpen =
             collapsed || !group.label || !!grupoFaena ||
-            openGroups.has(group.label) || group.label === activeGroupLabel
+            group.label === activeGroupLabel ||
+            (groupState[group.label] ?? !!group.defaultOpen)
 
           return (
             <div key={idx}>
               {!collapsed && group.label && (
                 <button
-                  onClick={() => toggleGroup(group.label!)}
+                  onClick={() => toggleGroup(group.label!, isOpen)}
                   className="mb-1 flex w-full items-center justify-between rounded px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-gray-500 transition-colors hover:bg-white/5 hover:text-gray-300"
                   aria-expanded={isOpen}
                 >
