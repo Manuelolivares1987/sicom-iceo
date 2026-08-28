@@ -1,4 +1,5 @@
 import SugerenciaWidget from '@/components/sugerencias/sugerencia-widget'
+import { VolverAlPanel } from '@/components/layout/volver-al-panel'
 
 export default function EnexMobileLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -7,6 +8,7 @@ export default function EnexMobileLayout({ children }: { children: React.ReactNo
       {/* Ampolleta de sugerencias: el supervisor de terreno (combustible/lubricantes)
           reporta mejoras/errores al instante desde la app. */}
       <SugerenciaWidget />
+      <VolverAlPanel />
     </div>
   )
 }

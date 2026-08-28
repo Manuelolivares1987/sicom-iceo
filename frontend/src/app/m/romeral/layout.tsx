@@ -1,4 +1,5 @@
 import SugerenciaWidget from '@/components/sugerencias/sugerencia-widget'
+import { VolverAlPanel } from '@/components/layout/volver-al-panel'
 
 export default function RomeralMobileLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -7,6 +8,7 @@ export default function RomeralMobileLayout({ children }: { children: React.Reac
       {/* El operador del camión reporta desde la misma app lo que le falta o le
           estorba: es quien mejor sabe si el registro le sirve o le complica. */}
       <SugerenciaWidget />
+      <VolverAlPanel />
     </div>
   )
 }
