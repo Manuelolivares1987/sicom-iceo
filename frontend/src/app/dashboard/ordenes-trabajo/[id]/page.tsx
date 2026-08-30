@@ -8,6 +8,7 @@ import { useAuth } from '@/contexts/auth-context'
 import { usePermissions } from '@/hooks/use-permissions'
 import {
   getJornadasDeOT, getChecklistV3OT, type ChecklistV3Item,
+  respuestaCaptura, type MedicionItem,
   rpcV3SetTiempo, rpcV3SetExcluido, rpcV3SetExcluidoBloque, rpcV3AgregarItem, rpcV3EliminarCustom,
   rpcV3ArrastrarNc, rpcV3RestaurarCompleto,
   rpcLiberarEjecucion, rpcReabrirPreparacion,
@@ -186,6 +187,94 @@ function ResultRadio({
   )
 }
 
+/**
+ * [MIG444] El control que corresponde a un ítem que no es una verificación.
+ *
+ * El bloque B11 —cierre de recepción— son siete campos de captura que traían el
+ * tipo escrito en su descripción, entre paréntesis, y se respondían con OK/NO OK
+ * porque el modelo no tenía cómo declararlo.
+ */
+function CapturaItemDashboard({ item, disabled, onGuardar }: {
+  item: ChecklistV3Item
+  disabled: boolean
+  onGuardar: (p: { observacion?: string | null; valor_numerico?: number | null; mediciones?: MedicionItem }) => void
+}) {
+  const cap = respuestaCaptura(item.mediciones)
+  const [texto, setTexto] = useState(item.observacion ?? '')
+  const [numero, setNumero] = useState(item.valor_numerico != null ? String(item.valor_numerico) : '')
+  const [fecha, setFecha] = useState(cap.fecha ?? '')
+  const [opcion, setOpcion] = useState(cap.opcion ?? '')
+
+  const input = 'rounded-lg border border-gray-300 px-2 py-1 text-sm'
+  const boton = 'rounded-lg bg-blue-600 px-2.5 py-1 text-xs font-semibold text-white disabled:opacity-40'
+
+  if (item.tipo_respuesta === 'firma') {
+    // Ya se firman al cerrar el checklist (rpc_cerrar_checklist_v2 recibe firma
+    // y RUT de operador y de cliente). Pedirlas dos veces guarda dos verdades.
+    return (
+      <p className="max-w-[260px] text-right text-[11px] text-gray-500">
+        Se firma al cerrar el checklist
+      </p>
+    )
+  }
+
+  if (item.tipo_respuesta === 'numero') {
+    const sucio = numero !== (item.valor_numerico != null ? String(item.valor_numerico) : '')
+    return (
+      <div className="flex shrink-0 items-center gap-1.5">
+        <input type="number" step="0.1" min="0" value={numero} disabled={disabled}
+               onChange={(e) => setNumero(e.target.value)} placeholder="0"
+               className={`${input} w-24 tabular-nums`} />
+        <span className="text-xs text-gray-500">h</span>
+        <button type="button" disabled={disabled || !sucio} className={boton}
+                onClick={() => onGuardar({ valor_numerico: numero.trim() === '' ? null : Number(numero) })}>
+          Guardar
+        </button>
+      </div>
+    )
+  }
+
+  if (item.tipo_respuesta === 'fecha') {
+    const sucio = fecha !== (cap.fecha ?? '')
+    return (
+      <div className="flex shrink-0 items-center gap-1.5">
+        <input type="date" value={fecha} disabled={disabled}
+               onChange={(e) => setFecha(e.target.value)} className={input} />
+        <button type="button" disabled={disabled || !sucio} className={boton}
+                onClick={() => onGuardar({ mediciones: { ...cap, fecha: fecha || null } })}>
+          Guardar
+        </button>
+      </div>
+    )
+  }
+
+  if (item.tipo_respuesta === 'seleccion') {
+    const sucio = opcion !== (cap.opcion ?? '')
+    return (
+      <div className="flex shrink-0 items-center gap-1.5">
+        <input value={opcion} disabled={disabled} onChange={(e) => setOpcion(e.target.value)}
+               placeholder="OT-XX-XX" className={`${input} w-28 font-mono`} />
+        <button type="button" disabled={disabled || !sucio} className={boton}
+                onClick={() => onGuardar({ mediciones: { ...cap, opcion: opcion.trim() || null } })}>
+          Guardar
+        </button>
+      </div>
+    )
+  }
+
+  const sucio = texto !== (item.observacion ?? '')
+  return (
+    <div className="w-[260px] shrink-0">
+      <textarea rows={2} value={texto} disabled={disabled} onChange={(e) => setTexto(e.target.value)}
+                placeholder="Escribe acá…" className={`${input} w-full`} />
+      <button type="button" disabled={disabled || !sucio} className={`${boton} mt-1`}
+              onClick={() => onGuardar({ observacion: texto.trim() || null })}>
+        Guardar
+      </button>
+    </div>
+  )
+}
+
 function bloqueLabel(b: string): string {
   const known = (BLOQUE_LABELS as Record<string, string>)[b]
   if (known) return known
@@ -279,6 +368,21 @@ function ChecklistTab({
       invalidate()
     } catch { /* retry */ } finally { setSavingId(null) }
   }
+  /**
+   * [MIG444] Los ítems que no son una verificación se guardan en la columna que
+   * les corresponde, no en un OK/NO OK que no significaba nada.
+   */
+  async function guardarCaptura(
+    it: ChecklistV3Item,
+    p: { observacion?: string | null; valor_numerico?: number | null; mediciones?: MedicionItem },
+  ) {
+    setSavingId(it.instance_item_id)
+    try {
+      await actualizarItemV3(it.instance_item_id, p)
+      invalidate()
+    } catch { /* retry */ } finally { setSavingId(null) }
+  }
+
   async function saveObs(it: ChecklistV3Item) {
     const o = observations[it.instance_item_id]
     if (o === undefined || o === (it.observacion ?? '')) return
@@ -568,11 +672,19 @@ function ChecklistTab({
                           </p>
                         )}
                       </div>
-                      <ResultRadio
-                        value={item.resultado}
-                        disabled={readOnly || savingId === item.instance_item_id}
-                        onChange={(v) => setResultado(item, v as 'ok' | 'no_ok' | 'na')}
-                      />
+                      {item.tipo_respuesta === 'ok_no_ok' ? (
+                        <ResultRadio
+                          value={item.resultado}
+                          disabled={readOnly || savingId === item.instance_item_id}
+                          onChange={(v) => setResultado(item, v as 'ok' | 'no_ok' | 'na')}
+                        />
+                      ) : (
+                        <CapturaItemDashboard
+                          item={item}
+                          disabled={readOnly || savingId === item.instance_item_id}
+                          onGuardar={(p) => guardarCaptura(item, p)}
+                        />
+                      )}
                     </div>
 
                     {item.foto_url && (

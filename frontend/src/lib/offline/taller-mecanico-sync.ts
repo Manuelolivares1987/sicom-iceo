@@ -11,6 +11,7 @@ import { iniciarOT, pausarOT } from '@/lib/services/ordenes-trabajo'
 import { getRecursosOT, solicitarRecurso, subirFotoRecurso, type OTRecurso } from '@/lib/services/ot-recursos'
 import { getNotasOT, subirFotoNota, agregarNotaOT, type OTNota } from '@/lib/services/ot-notas'
 import { tallerDB, newId, type TallerPending } from './taller-db'
+import type { MedicionItem } from '@/lib/services/taller-plan-semanal'
 
 const FIRMA_BUCKET = 'calama-firmas'
 async function subirFirmaMecanico(blob: Blob): Promise<string> {
@@ -90,7 +91,10 @@ export async function getChecklistMecanico(otId: string): Promise<ChecklistV3Ite
   if (pend.length === 0) return base
 
   // Acumular pendientes por ítem (en orden cronológico).
-  const acc = new Map<string, { resultado?: string; observacion?: string | null; fotos_blob_ids?: string[]; mediciones?: { pos: string; mm: number | null }[] }>()
+  const acc = new Map<string, {
+    resultado?: string; observacion?: string | null; fotos_blob_ids?: string[]
+    mediciones?: MedicionItem; valor_numerico?: number | null
+  }>()
   for (const p of pend) {
     if (!p.instance_item_id) continue
     const cur = acc.get(p.instance_item_id) ?? {}
@@ -100,6 +104,7 @@ export async function getChecklistMecanico(otId: string): Promise<ChecklistV3Ite
     const nuevas = p.fotos_blob_ids?.length ? p.fotos_blob_ids : (p.foto_blob_id ? [p.foto_blob_id] : [])
     if (nuevas.length) cur.fotos_blob_ids = [...(cur.fotos_blob_ids ?? []), ...nuevas]
     if (p.mediciones !== undefined) cur.mediciones = p.mediciones
+    if (p.valor_numerico !== undefined) cur.valor_numerico = p.valor_numerico
     acc.set(p.instance_item_id, cur)
   }
 
@@ -119,6 +124,7 @@ export async function getChecklistMecanico(otId: string): Promise<ChecklistV3Ite
       foto_url: fotos[0] ?? it.foto_url,
       foto_urls: fotos.length ? fotos : it.foto_urls,
       mediciones: a.mediciones !== undefined ? a.mediciones : it.mediciones,
+      valor_numerico: a.valor_numerico !== undefined ? a.valor_numerico : it.valor_numerico,
     }
   }))
 }
@@ -296,7 +302,9 @@ export async function queueItem(params: {
   observacion?: string | null
   files?: (File | Blob)[]
   file?: File | null   // compat: una sola foto
-  mediciones?: { pos: string; mm: number | null }[]
+  mediciones?: MedicionItem
+  /** [MIG444] Ítems de captura numérica, como el próximo horómetro de pauta. */
+  valor_numerico?: number | null
 }): Promise<void> {
   const db = tallerDB()
   const files = params.files ?? (params.file ? [params.file] : [])
@@ -313,6 +321,7 @@ export async function queueItem(params: {
     observacion: params.observacion,
     fotos_blob_ids: fotosIds.length ? fotosIds : undefined,
     mediciones: params.mediciones,
+    valor_numerico: params.valor_numerico,
     sync_status: 'pending', retries: 0, last_error: null, created_at: new Date().toISOString(),
   }
   await db.pending.put(row)
@@ -390,10 +399,12 @@ export async function syncTallerPending(): Promise<{ ok: number; failed: number 
           await actualizarItem(p.instance_item_id, {
             resultado: p.resultado, observacion: p.observacion ?? undefined,
             foto_urls: merged, foto_url: merged[0], mediciones: p.mediciones,
+            valor_numerico: p.valor_numerico,
           })
         } else {
           await actualizarItem(p.instance_item_id!, {
             resultado: p.resultado, observacion: p.observacion ?? undefined, mediciones: p.mediciones,
+            valor_numerico: p.valor_numerico,
           })
         }
         for (const bid of blobIds) await db.blobs.delete(bid)

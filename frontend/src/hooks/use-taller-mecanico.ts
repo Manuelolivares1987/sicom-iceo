@@ -4,6 +4,7 @@ import { useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNetworkStatus } from '@/hooks/use-calama-offline'
 import { supabase } from '@/lib/supabase'
+import type { MedicionItem } from '@/lib/services/taller-plan-semanal'
 import {
   getOTs, getChecklistMecanico, queueItem, queueTiming, syncTallerPending, getPendingCount,
   prepareTallerOffline, getRecursosMecanico, queueRecurso,
@@ -53,7 +54,8 @@ export function useMarcarItem(otId: string) {
       instanceItemId: string; instanceId: string
       resultado?: 'ok' | 'no_ok' | 'na'; observacion?: string | null
       file?: File | null; files?: (File | Blob)[]
-      mediciones?: { pos: string; mm: number | null }[]
+      mediciones?: MedicionItem
+      valor_numerico?: number | null
     }) => queueItem({ otId, ...p }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: keyChecklist(otId) })
