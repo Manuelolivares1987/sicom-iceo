@@ -1,6 +1,11 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
+import { useToast } from '@/contexts/toast-context'
+import { getTecnicosActivos } from '@/lib/services/taller-plan-semanal'
+import {
+  getOSDeOT, getPersonasDeOS, crearOS, ESTADO_OS_LABEL,
+} from '@/lib/services/taller-os'
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
@@ -1907,6 +1912,12 @@ export default function OrdenTrabajoDetailPage() {
         />
       </div>
 
+      {/* [MIG473] Las Órdenes de Servicio de esta visita. Va acá porque es lo
+          que el jefe arma después de leer las no conformidades. */}
+      <div className="mb-4">
+        <OrdenesDeServicioPanel otId={id as string} />
+      </div>
+
       {/* Feedback */}
       {actionError && (
         <div className="mb-4 flex items-center gap-2 rounded-lg bg-red-50 p-3 text-sm text-red-700">
@@ -2331,6 +2342,220 @@ function NotaANoConformidad({ notaId, ncId, otId }: { notaId: string; ncId: stri
         <AlertTriangle className="h-3 w-3" /> {busy ? 'Creando...' : 'Convertir en NC'}
       </button>
       {msg && <span className="text-[11px] text-gray-600">{msg}</span>}
+    </div>
+  )
+}
+
+
+/**
+ * [MIG473] Las Órdenes de Servicio de una OT.
+ *
+ * Una OT es la visita del equipo; una OS es un paquete de ejecución dentro de
+ * ella: quién lo hace, en cuántas horas, sobre qué no conformidades. Una visita
+ * con 32 hallazgos se convierte en tres o cuatro paquetes, no en 32 órdenes.
+ *
+ * El panel muestra horas ESTIMADAS contra REALES y quiénes trabajaron — que no
+ * es lo mismo que el responsable: el reloj sigue a la persona, así que una OS
+ * puede tener las horas de dos o tres mecánicos distintos.
+ */
+function OrdenesDeServicioPanel({ otId }: { otId: string }) {
+  const toast = useToast()
+  const qc = useQueryClient()
+  const { data: oss = [] } = useQuery({
+    queryKey: ['os-de-ot', otId],
+    queryFn: () => getOSDeOT(otId),
+    staleTime: 20_000,
+    retry: false,
+  })
+  const { data: ncs = [] } = useQuery({
+    queryKey: ['nc-de-ot', otId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('no_conformidades')
+        .select('id, descripcion, severidad, resuelto')
+        .eq('ot_id', otId).eq('resuelto', false)
+        .order('created_at')
+      if (error) throw new Error(error.message)
+      return (data ?? []) as { id: string; descripcion: string; severidad: string | null }[]
+    },
+    staleTime: 20_000,
+    retry: false,
+  })
+  const { data: tecnicos = [] } = useQuery({
+    queryKey: ['tecnicos-os'],
+    queryFn: getTecnicosActivos,
+    staleTime: 5 * 60_000,
+  })
+
+  const [abierto, setAbierto] = useState(false)
+  const [titulo, setTitulo] = useState('')
+  const [horas, setHoras] = useState('')
+  const [resp, setResp] = useState('')
+  const [sel, setSel] = useState<Set<string>>(new Set())
+  const [verPersonas, setVerPersonas] = useState<string | null>(null)
+
+  // Las NC que ya están en alguna OS no se pueden volver a agrupar.
+  const yaAsignadas = useMemo(() => new Set<string>(), [])
+
+  const crear = useMutation({
+    mutationFn: () => crearOS({
+      otId, titulo, ncIds: Array.from(sel),
+      responsableId: resp || null,
+      horasEstimadas: horas.trim() ? Number(horas) : null,
+    }),
+    onSuccess: (r) => {
+      toast.success(`${r.folio} creada con ${r.nc_asignadas} no conformidad(es)`)
+      setAbierto(false); setTitulo(''); setHoras(''); setResp(''); setSel(new Set())
+      qc.invalidateQueries({ queryKey: ['os-de-ot', otId] })
+    },
+    onError: (e) => toast.error((e as Error).message),
+  })
+
+  const toggle = (id: string) => setSel((p) => {
+    const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n
+  })
+
+  return (
+    <div className="rounded-lg border border-gray-200 bg-white p-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <ClipboardList className="h-4 w-4 shrink-0 text-blue-700" />
+        <span className="font-semibold text-gray-800">Órdenes de Servicio</span>
+        <span className="text-xs text-gray-500">
+          {oss.length === 0
+            ? 'el trabajo de esta visita todavía no está repartido'
+            : `${oss.length} paquete${oss.length > 1 ? 's' : ''} de trabajo`}
+        </span>
+        {!abierto && (
+          <button onClick={() => setAbierto(true)}
+                  className="ml-auto text-xs font-medium text-blue-600 underline">
+            Armar una OS
+          </button>
+        )}
+      </div>
+
+      {oss.length > 0 && (
+        <div className="mt-2 space-y-2">
+          {oss.map((os) => (
+            <div key={os.id} className="rounded-lg border border-gray-200 p-2.5">
+              <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                <span className="font-mono text-[11px] text-gray-500">{os.folio}</span>
+                <span className="text-sm font-medium text-gray-800">{os.titulo}</span>
+                <span className={`rounded px-1.5 py-0.5 text-[11px] font-medium ${
+                  os.estado === 'en_ejecucion' ? 'bg-green-100 text-green-800'
+                  : os.estado === 'finalizada' ? 'bg-gray-100 text-gray-600'
+                  : os.estado === 'pausada' ? 'bg-amber-100 text-amber-900'
+                  : 'bg-blue-100 text-blue-800'}`}>
+                  {ESTADO_OS_LABEL[os.estado] ?? os.estado}
+                </span>
+                <span className="text-[11px] text-gray-500">
+                  {os.ncs} NC · {os.horas_reales} h de {os.horas_estimadas ?? '—'} h estimadas
+                </span>
+              </div>
+              <p className="mt-0.5 text-[11px] text-gray-600">
+                {os.quienes
+                  ? <>Trabajaron: <b>{os.quienes}</b></>
+                  : os.responsable
+                    ? <>Encargada a {os.responsable} · nadie ha empezado</>
+                    : 'Sin responsable ni trabajo registrado'}
+              </p>
+              {os.quienes && (
+                <button onClick={() => setVerPersonas(verPersonas === os.id ? null : os.id)}
+                        className="mt-1 text-[11px] font-medium text-blue-600 underline">
+                  {verPersonas === os.id ? 'Ocultar el detalle' : 'Ver quién hizo qué'}
+                </button>
+              )}
+              {verPersonas === os.id && <PersonasDeOS osId={os.id} />}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {abierto && (
+        <div className="mt-3 space-y-2 rounded-lg border border-blue-200 bg-blue-50 p-3">
+          <div>
+            <label className="text-xs font-medium">Qué trabajo es</label>
+            <input value={titulo} onChange={(e) => setTitulo(e.target.value)}
+                   placeholder="Ej: Sistema de frenos · Eléctrico · Neumáticos"
+                   className="mt-0.5 w-full rounded border border-gray-300 px-2 py-1.5 text-sm" />
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <div>
+              <label className="text-xs font-medium">Quién la hace</label>
+              <select value={resp} onChange={(e) => setResp(e.target.value)}
+                      className="mt-0.5 w-full rounded border border-gray-300 bg-white px-2 py-1.5 text-sm">
+                <option value="">— Sin asignar todavía —</option>
+                {tecnicos.map((t) => <option key={t.id} value={t.id}>{t.nombre}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs font-medium">Horas estimadas</label>
+              <input type="number" step="0.5" min="0" value={horas}
+                     onChange={(e) => setHoras(e.target.value)} placeholder="6"
+                     className="mt-0.5 w-full rounded border border-gray-300 px-2 py-1.5 text-sm" />
+            </div>
+          </div>
+
+          <div>
+            <label className="text-xs font-medium">
+              Qué no conformidades resuelve ({sel.size} de {ncs.length})
+            </label>
+            <div className="mt-1 max-h-52 space-y-1 overflow-y-auto rounded border border-gray-200 bg-white p-1.5">
+              {ncs.length === 0 && (
+                <p className="px-1 py-2 text-[11px] text-gray-500">
+                  Esta OT no tiene no conformidades abiertas. Se puede crear igual una OS suelta.
+                </p>
+              )}
+              {ncs.map((nc) => (
+                <label key={nc.id} className="flex cursor-pointer items-start gap-2 rounded px-1 py-1 hover:bg-gray-50">
+                  <input type="checkbox" className="mt-0.5" checked={sel.has(nc.id)}
+                         onChange={() => toggle(nc.id)} disabled={yaAsignadas.has(nc.id)} />
+                  <span className="text-xs text-gray-700">{nc.descripcion}</span>
+                </label>
+              ))}
+            </div>
+            <p className="mt-1 text-[10px] text-gray-500">
+              Agrupa por sistema o por especialidad. Una NC sólo puede estar en una OS: nadie cobra
+              dos veces el mismo arreglo.
+            </p>
+          </div>
+
+          <div className="flex gap-2">
+            <Button size="sm" disabled={crear.isPending || titulo.trim().length < 4}
+                    onClick={() => crear.mutate()}>
+              Crear la OS
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => setAbierto(false)}>Cancelar</Button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** Qué actividad hizo quién. El responsable es uno; los que trabajaron, varios. */
+function PersonasDeOS({ osId }: { osId: string }) {
+  const { data: personas = [], isLoading } = useQuery({
+    queryKey: ['os-personas', osId],
+    queryFn: () => getPersonasDeOS(osId),
+    staleTime: 15_000,
+  })
+  if (isLoading) return <p className="mt-1 text-[11px] text-gray-400">Cargando…</p>
+  if (personas.length === 0) return null
+  return (
+    <div className="mt-1.5 space-y-1">
+      {personas.map((p) => (
+        <div key={p.tecnico_id}
+             className="flex flex-wrap items-baseline gap-x-2 rounded bg-gray-50 px-2 py-1 text-[11px]">
+          <span className="font-medium text-gray-800">{p.tecnico}</span>
+          <span className="tabular-nums text-gray-700">{p.horas} h</span>
+          <span className="text-gray-500">
+            en {p.tramos} {p.tramos === 1 ? 'vez' : 'veces'}
+          </span>
+          {p.trabajando_ahora && (
+            <span className="rounded bg-green-100 px-1.5 text-green-800">trabajando ahora</span>
+          )}
+        </div>
+      ))}
     </div>
   )
 }
