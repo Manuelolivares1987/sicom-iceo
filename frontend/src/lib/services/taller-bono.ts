@@ -176,6 +176,38 @@ export async function acusarRecibo(lineaId: string, comentario?: string | null) 
   if (error) throw new Error(error.message)
 }
 
+// ── [MIG466] El tipo de trabajo lo declara el planificador ──────────────────
+
+export type ConceptoBono = {
+  concepto: string
+  descripcion: string
+  dias_optimizado: number
+  dias_normal: number
+  dias_demora: number
+}
+
+/** La leyenda, leída de los parámetros: si el acta cambia un plazo, cambia sola. */
+export async function getConceptosBono() {
+  const { data, error } = await supabase.rpc('rpc_taller_conceptos_bono')
+  if (error) throw new Error(error.message)
+  return (data ?? []) as ConceptoBono[]
+}
+
+/**
+ * Declara qué tipo de trabajo es una OT.
+ *
+ * Antes esto se deducía del kárdex DÍAS DESPUÉS de planificar, así que el
+ * planificador no podía saber contra qué plazo se iba a medir el trabajo que
+ * estaba programando. Ahora lo decide él, y queda con su nombre.
+ */
+export async function setConceptoOT(otId: string, concepto: string, motivo?: string | null) {
+  const { data, error } = await supabase.rpc('rpc_taller_ot_set_concepto', {
+    p_ot_id: otId, p_concepto: concepto, p_motivo: motivo ?? null,
+  })
+  if (error) throw new Error(error.message)
+  return data as { success: boolean; concepto: string; sugerido: string | null; difiere: boolean }
+}
+
 // ── Utilidades de presentación ──────────────────────────────────────────────
 
 export function clp(n: number | null | undefined): string {
