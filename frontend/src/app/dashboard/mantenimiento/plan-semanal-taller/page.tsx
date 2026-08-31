@@ -59,6 +59,7 @@ import {
 } from '@/lib/services/taller-planificacion'
 import { MAX_MECANICOS } from '@/lib/taller-grupos'
 import { isoToday } from '@/lib/semana'
+import { getConceptosBono, setConceptoOT } from '@/lib/services/taller-bono'
 
 type Tab = 'kanban' | 'cobertura' | 'cumplimiento'
 
@@ -1508,6 +1509,17 @@ function ProgramarOtDialog({ target, planSemanalId, dias, onClose, onDone, agreg
   const [planId, setPlanId] = useState<string>(target.planIdPre ?? '')
   const [prioridad, setPrioridad] = useState<PrioridadTaller>('normal')
   const [mecanicos, setMecanicos] = useState<string[]>([])
+  // [MIG466] El tipo de trabajo del bono se declara acá, al planificar. Antes se
+  // deducía del kárdex días después, así que el planificador no podía saber
+  // contra qué plazo se iba a medir lo que estaba programando.
+  const [concepto, setConcepto] = useState<string>('')
+  const [motivoConcepto, setMotivoConcepto] = useState('')
+  const { data: conceptos = [] } = useQuery({
+    queryKey: ['conceptos-bono'], queryFn: getConceptosBono, staleTime: 10 * 60_000,
+  })
+  const conceptoSugerido = tipo === 'correctivo' ? 'RSR' : 'MPN'
+  useEffect(() => { setConcepto(conceptoSugerido); setMotivoConcepto('') }, [conceptoSugerido])
+  const conceptoCambiado = !!concepto && concepto !== conceptoSugerido
   // Un equipo se puede programar para VARIOS días (multidía): el día soltado viene marcado.
   const [fechasSel, setFechasSel] = useState<Set<string>>(new Set([target.fecha]))
   const [enviando, setEnviando] = useState(false)
@@ -1549,6 +1561,16 @@ function ProgramarOtDialog({ target, planSemanalId, dias, onClose, onDone, agreg
       })
       for (const f of fechas) {
         await agregarJornada.mutateAsync({ planSemanalId, otId: r.id, fecha: f, cuadrilla })
+      }
+      // [MIG466] Se declara después de crear la OT porque antes no existe. Si
+      // esto falla, la OT queda igual: cae a la deducción automática, que es
+      // exactamente lo que hacía el sistema antes.
+      if (concepto) {
+        try {
+          await setConceptoOT(r.id, concepto, motivoConcepto.trim() || null)
+        } catch (e) {
+          toast.error(`OT ${r.folio} programada, pero el tipo de trabajo quedó sin declarar: ${(e as Error).message}`)
+        }
       }
       const nDias = `${fechas.length} día${fechas.length > 1 ? 's' : ''}`
       toast.success(r.reutilizada
@@ -1594,6 +1616,64 @@ function ProgramarOtDialog({ target, planSemanalId, dias, onClose, onDone, agreg
             <option value="correctivo">Correctivo</option>
             <option value="inspeccion">Inspección</option>
           </select>
+        </div>
+
+        {/* [MIG466] Qué tipo de tarea es, en términos del plan de incentivo.
+            Decide el estándar de días contra el que se mide el trabajo, así que
+            tiene que estar decidido ANTES de ejecutar, no deducido después. */}
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-2.5">
+          <label className="text-xs font-semibold text-emerald-900">
+            Tipo de tarea para el plan de incentivo
+          </label>
+          <select value={concepto} onChange={(e) => setConcepto(e.target.value)}
+                  className="mt-1 w-full rounded border border-emerald-300 bg-white px-2 py-1.5 text-sm">
+            {conceptos.map((c) => (
+              <option key={c.concepto} value={c.concepto}>
+                {c.concepto} — {c.descripcion}
+              </option>
+            ))}
+          </select>
+
+          {conceptos.length > 0 && (
+            <div className="mt-2 overflow-x-auto">
+              <table className="w-full min-w-[380px] text-[11px]">
+                <thead className="text-emerald-800">
+                  <tr>
+                    <th className="py-1 text-left font-semibold">Tipo</th>
+                    <th className="py-1 text-right font-semibold">Optimizado</th>
+                    <th className="py-1 text-right font-semibold">Normal</th>
+                    <th className="py-1 text-right font-semibold">Con demora</th>
+                  </tr>
+                </thead>
+                <tbody className="text-emerald-900">
+                  {conceptos.map((c) => (
+                    <tr key={c.concepto}
+                        className={c.concepto === concepto ? 'font-semibold' : 'opacity-70'}>
+                      <td className="py-0.5">{c.concepto}</td>
+                      <td className="py-0.5 text-right tabular-nums">hasta {c.dias_optimizado} d</td>
+                      <td className="py-0.5 text-right tabular-nums">hasta {c.dias_normal} d</td>
+                      <td className="py-0.5 text-right tabular-nums">desde {c.dias_demora} d</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <p className="mt-1 text-[10px] text-emerald-800">
+                Cerrar dentro del plazo optimizado paga el máximo del tramo. Pasado el plazo de
+                demora, esa OT no paga.
+              </p>
+            </div>
+          )}
+
+          {conceptoCambiado && (
+            <div className="mt-2">
+              <label className="text-[11px] font-medium text-emerald-900">
+                Cambiaste la sugerencia ({conceptoSugerido}). ¿Por qué?
+              </label>
+              <input value={motivoConcepto} onChange={(e) => setMotivoConcepto(e.target.value)}
+                     placeholder="Queda guardado junto al bono (mínimo 10 caracteres)"
+                     className="mt-0.5 w-full rounded border border-emerald-300 px-2 py-1.5 text-sm" />
+            </div>
+          )}
         </div>
 
         {tipo === 'preventivo' && (
