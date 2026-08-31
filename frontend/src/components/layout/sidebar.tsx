@@ -49,6 +49,7 @@ import {
   ShieldAlert,
   Clock,
   Archive,
+  Wallet,
   FileWarning,
 } from 'lucide-react'
 import { useNcPorDecidir } from '@/hooks/use-nc-por-decidir'
@@ -179,6 +180,10 @@ const navGroups: NavGroup[] = [
           { label: 'No Conformidades', href: '/dashboard/mantenimiento/no-conformidades', icon: AlertTriangle, module: 'mantenimiento', contador: 'nc-por-decidir',
             tooltip: 'Hallazgos por planificar y repuestos que el operador pide aprobar' },
           { label: 'Equipos auxiliares', href: '/dashboard/mantenimiento/auxiliares', icon: Layers, module: 'mantenimiento' },
+          // [MIG452-456] El bono deja de ser discrecional: se calcula, se cierra
+          // y el trabajador lo revisa en su teléfono.
+          { label: 'Bono del taller', href: '/dashboard/mantenimiento/bono-taller', icon: Wallet, module: 'mantenimiento', badge: 'NUEVO',
+            tooltip: 'Plan de incentivo por trabajo + KPI de disponibilidad, y el cierre del corte' },
           // [MIG399] Los tres tramos del trabajo medidos con los relojes que el
           // sistema ya guardaba: checklist, repuesto y no conformidad.
           { label: 'Cuánto nos demoramos', href: '/dashboard/mantenimiento/tiempos', icon: Clock, module: 'mantenimiento', badge: 'NUEVO',
