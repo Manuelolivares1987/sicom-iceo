@@ -21,6 +21,7 @@ import { Button } from '@/components/ui/button'
 import { useToast } from '@/contexts/toast-context'
 import {
   getDatosPrevios, emitirCertificado, subirFotoCertificado, getCertificadoEmitido,
+  getMiFirma, guardarMiFirmaDesdeArchivo, type MiFirma,
   GRUPOS_HERMETICIDAD, OBLIGATORIOS_HERMETICIDAD, type DatosPrevios,
 } from '@/lib/services/certificados'
 import { descargarCertificadoHermeticidad } from './pdf-hermeticidad'
@@ -62,6 +63,33 @@ export function ModalEmitirHermeticidad({ activoId, patente, onClose, onListo }:
       .catch((e) => toast.error((e as Error).message))
   }, [activoId, toast])
 
+  // [MIG467] La firma de quien está emitiendo. Vive en su perfil, así que se
+  // sube una vez y sirve para todos los certificados que emita.
+  const [firma, setFirma] = useState<MiFirma | null>(null)
+  const [subiendoFirma, setSubiendoFirma] = useState(false)
+  useEffect(() => { getMiFirma().then(setFirma).catch(() => {}) }, [])
+
+  // El nombre y el cargo se proponen desde el perfil: quien emite es quien firma.
+  useEffect(() => {
+    if (!firma) return
+    setV((p) => ({
+      ...p,
+      firmante_nombre: (p.firmante_nombre ?? '').trim() || (firma.nombre ?? ''),
+      firmante_cargo:  (p.firmante_cargo  ?? '').trim() || (firma.cargo  ?? ''),
+    }))
+  }, [firma])
+
+  async function cargarFirma(file: File) {
+    setSubiendoFirma(true)
+    try {
+      await guardarMiFirmaDesdeArchivo(file)
+      setFirma(await getMiFirma())
+      toast.success('Firma guardada. Va a salir en los certificados que emitas.')
+    } catch (e) {
+      toast.error((e as Error).message)
+    } finally { setSubiendoFirma(false) }
+  }
+
   const meses = previos?.meses_vigencia ?? 6
   const vence = sumarMeses(fechaPrueba, meses)
   const faltan = OBLIGATORIOS_HERMETICIDAD.filter((k) => !(v[k] ?? '').trim())
@@ -77,6 +105,9 @@ export function ModalEmitirHermeticidad({ activoId, patente, onClose, onListo }:
         ...v, activo_id: activoId, tipo: 'hermeticidad',
         fecha_prueba: fechaPrueba, informe,
         foto_inicio_url: fi, foto_termino_url: ft,
+        // Se manda la firma para que quede CONGELADA con el certificado: si
+        // mañana cambia la del perfil, este papel sigue mostrando la de hoy.
+        firmante_firma_url: firma?.firma_url ?? null,
       })
       toast.success(`Certificado Nº ${r.folio} emitido — vence el ${r.fecha_vencimiento}`)
       // Se baja al toque: quien lo emitió lo necesita ahora, no después.
@@ -173,6 +204,43 @@ export function ModalEmitirHermeticidad({ activoId, patente, onClose, onListo }:
                     {abierta && (
                       <div className="border-t p-3">
                         {g.nota && <p className="mb-2 text-[11px] text-gray-500">{g.nota}</p>}
+                        {g.titulo === 'Quién firma' && (
+                          <div className="mb-3 rounded-lg border border-gray-200 bg-gray-50 p-2.5">
+                            <p className="text-[11px] font-semibold text-gray-700">Tu firma</p>
+                            {firma?.firma_url ? (
+                              <>
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img src={firma.firma_url} alt="Firma"
+                                     className="mt-1 h-14 bg-white object-contain px-2" />
+                                <p className="mt-0.5 text-[10px] text-gray-500">
+                                  Va a salir sobre la línea del certificado.
+                                  {firma.actualizada_at &&
+                                    ` Cargada el ${new Date(firma.actualizada_at).toLocaleDateString('es-CL')}.`}
+                                </p>
+                              </>
+                            ) : (
+                              <p className="mt-0.5 text-[11px] text-gray-600">
+                                Todavía no tienes firma cargada: el certificado va a salir con la
+                                línea en blanco para firmar a mano.
+                              </p>
+                            )}
+                            <label className="mt-1.5 inline-flex cursor-pointer items-center gap-1.5 text-[11px] font-medium text-blue-700">
+                              <input type="file" accept="image/*" className="hidden"
+                                     disabled={subiendoFirma}
+                                     onChange={(e) => {
+                                       const f = e.target.files?.[0]
+                                       if (f) cargarFirma(f)
+                                       e.target.value = ''
+                                     }} />
+                              {subiendoFirma ? 'Guardando…'
+                                : firma?.firma_url ? 'Cambiar mi firma' : 'Subir mi firma'}
+                            </label>
+                            <p className="mt-1 text-[10px] text-gray-500">
+                              PNG con fondo transparente o una foto de la firma sobre hoja blanca.
+                              Queda guardada en tu perfil, no en este certificado.
+                            </p>
+                          </div>
+                        )}
                         <div className="grid gap-2.5 sm:grid-cols-2">
                           {g.campos.map((c) => (
                             <div key={c.k} className={c.ancho === 'full' ? 'sm:col-span-2' : ''}>

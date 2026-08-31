@@ -78,6 +78,8 @@ export type CertificadoHermeticidad = {
   vencido: boolean
   anulado: boolean
   created_at: string
+  /** [MIG467] La firma con la que se emitió. Congelada: no cambia si el firmante cambia la suya. */
+  firmante_firma_url: string | null
 }
 
 export type DatosPrevios = {
@@ -159,6 +161,43 @@ export async function subirFotoCertificado(activoId: string, momento: 'inicio' |
     throw new Error(`No se pudo subir la foto de ${momento}: ${error.message}`)
   }
   return supabase.storage.from('documentos').getPublicUrl(path).data.publicUrl
+}
+
+// ── [MIG467] La firma de quien emite ────────────────────────────────────────
+//
+// Vive en el perfil, no en el certificado: se sube una vez y sirve para todos
+// los documentos que emita esa persona. Se guarda con el mismo RPC que ya usaba
+// el vale de bodega desde MIG396 — una sola puerta.
+
+export type MiFirma = {
+  nombre: string | null
+  cargo: string | null
+  firma_url: string | null
+  actualizada_at: string | null
+}
+
+export async function getMiFirma(): Promise<MiFirma> {
+  const { data, error } = await supabase.rpc('rpc_mi_firma')
+  if (error) throw new Error(error.message)
+  return (data ?? {}) as MiFirma
+}
+
+/**
+ * Guarda una firma a partir de una imagen.
+ *
+ * Manuel la manda como foto o PNG; el resto del sistema la captura dibujándola
+ * en pantalla. Las dos terminan en lo mismo: un data URL que se sube y se
+ * apunta desde el perfil.
+ */
+export async function guardarMiFirmaDesdeArchivo(file: File) {
+  const dataUrl = await new Promise<string>((ok, fail) => {
+    const r = new FileReader()
+    r.onload = () => ok(String(r.result))
+    r.onerror = () => fail(new Error('No se pudo leer la imagen'))
+    r.readAsDataURL(file)
+  })
+  const { guardarMiFirma } = await import('@/lib/services/ot-recursos')
+  return guardarMiFirma(dataUrl)
 }
 
 // ── Qué se le pide a quien emite ────────────────────────────────────────────
