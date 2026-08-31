@@ -32,6 +32,8 @@ export type TallerPending = {
   user_id?: string
   observaciones?: string | null
   con_observaciones?: boolean
+  /** [MIG472] Por qué se cierra con tareas obligatorias sin hacer. */
+  motivo_pendientes?: string | null
   firma_blob_id?: string | null   // firma del técnico para finalizar
   // kind = 'recurso' (repuesto/material solicitado para reparar, MIG197)
   producto_id?: string | null

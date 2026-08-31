@@ -335,6 +335,8 @@ export async function queueTiming(
   opts?: {
     observaciones?: string | null; conObservaciones?: boolean; firma?: File | Blob | null
     tecnicoId?: string | null
+    /** [MIG472] Por qué se cierra con tareas obligatorias sin hacer. */
+    motivoPendientes?: string | null
   },
 ): Promise<void> {
   const db = tallerDB()
@@ -348,6 +350,7 @@ export async function queueTiming(
     accion, user_id: userId, observaciones: opts?.observaciones ?? null,
     tecnico_id: opts?.tecnicoId ?? null,
     con_observaciones: opts?.conObservaciones ?? false, firma_blob_id: firmaBlobId,
+    motivo_pendientes: opts?.motivoPendientes ?? null,
     sync_status: 'pending', retries: 0, last_error: null, created_at: new Date().toISOString(),
   }
   await db.pending.put(row)
@@ -450,11 +453,22 @@ export async function syncTallerPending(): Promise<{ ok: number; failed: number 
           const b = await db.blobs.get(p.firma_blob_id)
           if (b) firmaUrl = await subirFirmaMecanico(b.blob)
         }
-        const { error } = await supabase.rpc('rpc_taller_finalizar_mecanico', {
+        const { data: fin, error } = await supabase.rpc('rpc_taller_finalizar_mecanico', {
           p_ot_id: p.ot_id, p_firma_tecnico_url: firmaUrl,
           p_con_observaciones: p.con_observaciones ?? false, p_observaciones: p.observaciones ?? null,
+          p_motivo_pendientes: p.motivo_pendientes ?? null,
         })
         if (error) throw error
+        // [MIG472] Quedan tareas obligatorias sin hacer. NO es un error del
+        // sistema: es una decisión que le falta al mecánico. Si esto se tratara
+        // como éxito, la OT no se cerraría y nadie se enteraría — el peor final
+        // posible para una cola offline.
+        const r = fin as { requiere_motivo_pendientes?: boolean; motivo?: string } | null
+        if (r?.requiere_motivo_pendientes) {
+          const e = new Error(r.motivo ?? 'Quedan tareas obligatorias sin hacer.')
+          e.name = 'PENDIENTES'
+          throw e
+        }
         if (p.firma_blob_id) await db.blobs.delete(p.firma_blob_id)
       } else if (p.accion === 'iniciar') {
         // Hasta MIG449 esto llamaba a la transición de estado y NO medía nada:
