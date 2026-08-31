@@ -87,6 +87,11 @@ export type BonoDisponibilidad = {
   dias_equipo: number
   dias_equipo_buenos: number
   dias_con_registro: number
+  /** [MIG459] Cuán completa está la medición. No bloquea; se muestra. */
+  dias_transcurridos: number
+  dias_sin_registro: number
+  dias_incompletos: number
+  equipos_dia_normal: number
 }
 
 /** La cartola de una persona. Sin `tecnicoId` devuelve la del que pregunta. */
