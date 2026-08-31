@@ -1520,6 +1520,7 @@ function ProgramarOtDialog({ target, planSemanalId, dias, onClose, onDone, agreg
   const conceptoSugerido = tipo === 'correctivo' ? 'RSR' : 'MPN'
   useEffect(() => { setConcepto(conceptoSugerido); setMotivoConcepto('') }, [conceptoSugerido])
   const conceptoCambiado = !!concepto && concepto !== conceptoSugerido
+
   // Un equipo se puede programar para VARIOS días (multidía): el día soltado viene marcado.
   const [fechasSel, setFechasSel] = useState<Set<string>>(new Set([target.fecha]))
   const [enviando, setEnviando] = useState(false)
@@ -1539,6 +1540,32 @@ function ProgramarOtDialog({ target, planSemanalId, dias, onClose, onDone, agreg
     }
   /* eslint-disable-next-line react-hooks/exhaustive-deps */
   }, [planes])
+
+  // [MIG466] Contra qué tramo cae lo que se está planificando.
+  //
+  // El bono NO cuenta jornadas: cuenta los días de calendario entre el inicio y
+  // el cierre de la OT. Planificar lunes y viernes son dos jornadas pero cinco
+  // días, y eso cambia el tramo. Y si se reutiliza una OT abierta, el reloj ya
+  // viene corriendo desde antes.
+  const conceptoSel = conceptos.find((c) => c.concepto === concepto) ?? null
+  const tramoPlan = useMemo(() => {
+    if (!conceptoSel || fechasSel.size === 0) return null
+    const orden = Array.from(fechasSel).sort()
+    const inicioReal = (!forzarNueva && otAbierta)
+      ? (otAbierta.fecha_inicio ?? otAbierta.created_at).slice(0, 10)
+      : orden[0]
+    const desde = inicioReal < orden[0] ? inicioReal : orden[0]
+    const hasta = orden[orden.length - 1]
+    const dias = Math.max(1, Math.round(
+      (new Date(hasta + 'T00:00:00').getTime() - new Date(desde + 'T00:00:00').getTime())
+      / 86_400_000) + 1)
+    const tramo =
+      dias <= conceptoSel.dias_optimizado ? 'optimizado'
+      : dias <= conceptoSel.dias_normal   ? 'normal'
+      : dias <= conceptoSel.dias_demora   ? 'con demora'
+      : 'fuera de plazo'
+    return { desde, hasta, dias, tramo, arrastra: desde < orden[0] }
+  }, [conceptoSel, fechasSel, otAbierta, forzarNueva])
 
   const toggleDia = (f: string) => setFechasSel((prev) => {
     const next = new Set(prev)
@@ -1660,6 +1687,36 @@ function ProgramarOtDialog({ target, planSemanalId, dias, onClose, onDone, agreg
               <p className="mt-1 text-[10px] text-emerald-800">
                 Cerrar dentro del plazo optimizado paga el máximo del tramo. Pasado el plazo de
                 demora, esa OT no paga.
+              </p>
+            </div>
+          )}
+
+          {tramoPlan && (
+            <div className={`mt-2 rounded-lg border px-2.5 py-2 text-[11px] ${
+              tramoPlan.tramo === 'optimizado' ? 'border-green-300 bg-green-50 text-green-900'
+              : tramoPlan.tramo === 'normal'   ? 'border-blue-300 bg-blue-50 text-blue-900'
+              : tramoPlan.tramo === 'con demora' ? 'border-amber-300 bg-amber-50 text-amber-900'
+              : 'border-red-300 bg-red-50 text-red-900'}`}>
+              <p className="font-semibold">
+                Del {fmtFecha(tramoPlan.desde)} al {fmtFecha(tramoPlan.hasta)} ·{' '}
+                {tramoPlan.dias} {tramoPlan.dias === 1 ? 'día' : 'días'} ·{' '}
+                {concepto} cae en «{tramoPlan.tramo}»
+              </p>
+              {tramoPlan.arrastra && (
+                <p className="mt-0.5">
+                  El reloj de esta OT ya venía corriendo desde el {fmtFecha(tramoPlan.desde)}:
+                  los días se cuentan desde ahí, no desde el primer día que marques.
+                </p>
+              )}
+              {tramoPlan.tramo === 'fuera de plazo' && (
+                <p className="mt-0.5 font-medium">
+                  Así como está, esta OT no pagaría bono. Si el trabajo de verdad toma esos
+                  días, revisa si el tipo de tarea es el correcto.
+                </p>
+              )}
+              <p className="mt-0.5 opacity-80">
+                Es una estimación sobre lo planificado. El bono cuenta los días reales entre
+                el inicio y el cierre de la OT.
               </p>
             </div>
           )}
