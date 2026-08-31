@@ -264,6 +264,7 @@ function MedidoresSection({ otId, online }: { otId: string; online: boolean }) {
   const guardar = useGuardarMedidores(otId)
   const [hm, setHm] = useState('')
   const [km, setKm] = useState('')
+  const [cl, setCl] = useState('')
   const [aviso, setAviso] = useState<string | null>(null)
   const [editando, setEditando] = useState(false)
 
@@ -271,12 +272,17 @@ function MedidoresSection({ otId, online }: { otId: string; online: boolean }) {
     if (!med) return
     setHm(med.horometro != null ? String(med.horometro) : '')
     setKm(med.kilometraje != null ? String(med.kilometraje) : '')
+    setCl(med.cuenta_litros != null ? String(med.cuenta_litros) : '')
   }, [med])
 
   if (isLoading || !med) return null
 
   const exigeKm = med.exige_kilometraje
-  const falta = med.horometro == null || (exigeKm && med.kilometraje == null)
+  // [MIG471] El cuenta litros del aljibe: totalizador que no se reinicia.
+  const exigeCl = med.exige_cuenta_litros
+  const falta = med.horometro == null
+    || (exigeKm && med.kilometraje == null)
+    || (exigeCl && med.cuenta_litros == null)
   // [MIG444] Antes bastaba con que el número EXISTIERA para dar la sección por
   // hecha, y el número lo arrastra el sistema del último valor conocido. Por eso
   // en producción hay 83 checklists con medidores y CERO escritos por alguien:
@@ -290,8 +296,10 @@ function MedidoresSection({ otId, online }: { otId: string; online: boolean }) {
     const kmN = km.trim() === '' ? null : Number(km)
     if (hmN == null || Number.isNaN(hmN)) { setAviso('Escribe el horómetro.'); return }
     if (exigeKm && (kmN == null || Number.isNaN(kmN))) { setAviso('Escribe el kilometraje.'); return }
+    const clN = cl.trim() === '' ? null : Number(cl)
+    if (exigeCl && (clN == null || Number.isNaN(clN))) { setAviso('Escribe el cuenta litros.'); return }
     setAviso(null)
-    guardar.mutate({ horometro: hmN, kilometraje: kmN, confirmado }, {
+    guardar.mutate({ horometro: hmN, kilometraje: kmN, cuentaLitros: clN, confirmado }, {
       onSuccess: (r) => {
         if (r?.requiere_confirmacion) { setAviso(r.motivo ?? 'Revisa el número.'); return }
         setAviso(null); setEditando(false)
@@ -318,6 +326,7 @@ function MedidoresSection({ otId, online }: { otId: string; online: boolean }) {
         <p className="mt-1 text-xs text-gray-600">
           <b className="tabular-nums">{med.horometro}</b> h
           {exigeKm && med.kilometraje != null && <> · <b className="tabular-nums">{med.kilometraje}</b> km</>}
+          {exigeCl && med.cuenta_litros != null && <> · <b className="tabular-nums">{med.cuenta_litros}</b> L</>}
           {!med.anotado_por_persona && (
             <span className="ml-1 text-amber-700">· lo trajo el sistema, confírmalo</span>
           )}
@@ -344,6 +353,19 @@ function MedidoresSection({ otId, online }: { otId: string; online: boolean }) {
                        onChange={(e) => setKm(e.target.value)}
                        className="mt-0.5 w-full rounded-lg border border-gray-300 px-2 py-2 text-base tabular-nums"
                        placeholder="0.0" />
+              </label>
+            )}
+            {exigeCl && (
+              <label className="col-span-2 text-[11px] font-medium text-gray-700">
+                Cuenta litros (L)
+                <input type="number" inputMode="decimal" step="1" min="0" value={cl}
+                       onChange={(e) => setCl(e.target.value)}
+                       className="mt-0.5 w-full rounded-lg border border-gray-300 px-2 py-2 text-base tabular-nums"
+                       placeholder="0" />
+                <span className="mt-0.5 block font-normal text-[10px] text-gray-500">
+                  El totalizador del surtidor, el que no se reinicia. Anota el número tal
+                  como aparece.
+                </span>
               </label>
             )}
           </div>

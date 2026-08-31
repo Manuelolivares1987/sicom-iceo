@@ -189,7 +189,10 @@ export type MedidoresOT = {
   instance_id: string
   horometro: number | null
   kilometraje: number | null
+  /** [MIG471] Totalizador del surtidor. Sólo en aljibes de combustible. */
+  cuenta_litros: number | null
   exige_kilometraje: boolean
+  exige_cuenta_litros: boolean
   anotado_por_persona: boolean
 }
 
@@ -200,19 +203,24 @@ export function useMedidoresOT(otId: string | null) {
     queryFn: async (): Promise<MedidoresOT | null> => {
       const { data, error } = await supabase
         .from('checklist_v2_instance')
-        .select('id, horometro, kilometraje, medidores_por, activo_id, activos!activo_id(tipo)')
+        .select('id, horometro, kilometraje, cuenta_litros, medidores_por, activo_id, activos!activo_id(tipo, tipo_equipamiento)')
         .eq('ot_id', otId!)
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle()
       if (error) throw error
       if (!data) return null
-      const tipo = (data as unknown as { activos?: { tipo?: string } }).activos?.tipo ?? ''
+      const act = (data as unknown as { activos?: { tipo?: string; tipo_equipamiento?: string } }).activos
+      const tipo = act?.tipo ?? ''
       return {
         instance_id: (data as { id: string }).id,
         horometro: (data as { horometro: number | null }).horometro,
         kilometraje: (data as { kilometraje: number | null }).kilometraje,
+        cuenta_litros: (data as { cuenta_litros: number | null }).cuenta_litros,
         exige_kilometraje: ['camion', 'camion_cisterna', 'camioneta', 'lubrimovil'].includes(tipo),
+        // [MIG471] El totalizador del surtidor sólo existe en los aljibes de
+        // combustible. Pedirlo donde no existe enseña a inventar números.
+        exige_cuenta_litros: act?.tipo_equipamiento === 'aljibe_combustible',
         anotado_por_persona: (data as { medidores_por: string | null }).medidores_por != null,
       }
     },
@@ -222,12 +230,16 @@ export function useMedidoresOT(otId: string | null) {
 export function useGuardarMedidores(otId: string) {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: async (v: { horometro: number | null; kilometraje: number | null; confirmado?: boolean }) => {
+    mutationFn: async (v: {
+      horometro: number | null; kilometraje: number | null
+      cuentaLitros?: number | null; confirmado?: boolean
+    }) => {
       const { data, error } = await supabase.rpc('rpc_taller_registrar_medidores', {
         p_ot_id: otId,
         p_horometro: v.horometro,
         p_kilometraje: v.kilometraje,
         p_confirmado: v.confirmado ?? false,
+        p_cuenta_litros: v.cuentaLitros ?? null,
       })
       if (error) throw error
       return data as { success: boolean; requiere_confirmacion?: boolean; motivo?: string }
