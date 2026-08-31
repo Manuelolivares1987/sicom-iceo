@@ -102,7 +102,8 @@ export type ChecklistV2Item = {
   cobrable_override: DefaultCobrable | null
   costo_estimado: number | null
   /** Mediciones estructuradas, p.ej. profundidad por neumático (MIG203). */
-  mediciones?: MedicionNeumatico[] | null
+  // Neumáticos (MIG203) o la respuesta de un ítem de captura (MIG444).
+  mediciones?: MedicionNeumatico[] | Record<string, unknown> | null
 }
 
 export type MedicionNeumatico = { pos: string; mm: number | null }
