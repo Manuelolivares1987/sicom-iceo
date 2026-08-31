@@ -130,6 +130,34 @@ export type ChecklistOtItem = {
 }
 
 // Checklist V03 efectivo de una OT (parte del maestro, con overrides a medida)
+export type TipoRespuestaItem = 'ok_no_ok' | 'texto' | 'numero' | 'fecha' | 'seleccion' | 'firma'
+
+/** Profundidad por posición del neumático (MIG203). */
+export type MedicionNeumatico = { pos: string; mm: number | null }
+
+/**
+ * [MIG444] La respuesta de un ítem de captura, en el mismo jsonb que ya usaban
+ * los neumáticos. No se inventó una columna: la que hay alcanza.
+ */
+export type RespuestaCaptura = {
+  fecha?: string | null
+  opcion?: string | null
+  firma_operador_url?: string | null
+  rut_operador?: string | null
+  firma_taller_url?: string | null
+  rut_taller?: string | null
+}
+
+export type MedicionItem = MedicionNeumatico[] | RespuestaCaptura
+
+export function medicionesNeumaticos(m: MedicionItem | null | undefined): MedicionNeumatico[] {
+  return Array.isArray(m) ? m : []
+}
+
+export function respuestaCaptura(m: MedicionItem | null | undefined): RespuestaCaptura {
+  return m && !Array.isArray(m) ? m : {}
+}
+
 export type ChecklistV3Item = {
   instance_item_id: string
   instance_id: string
@@ -153,7 +181,14 @@ export type ChecklistV3Item = {
   excluido: boolean
   es_custom: boolean
   /** Profundidad por neumático u otras mediciones del ítem (MIG203). */
-  mediciones: { pos: string; mm: number | null }[] | null
+  mediciones: MedicionItem | null
+  /**
+   * [MIG444] Qué se le pide al mecánico acá. 'ok_no_ok' es una verificación; el
+   * resto son campos de captura. El bloque B11 son siete de estos, y se estaban
+   * respondiendo con OK/NO OK porque no había cómo declararlo.
+   */
+  tipo_respuesta: TipoRespuestaItem
+  valor_numerico: number | null
   /** El checklist completo ya se hizo antes: esta OT trae solo las NC (MIG270). */
   instance_arrastre: boolean
   arrastre_ot_folio: string | null

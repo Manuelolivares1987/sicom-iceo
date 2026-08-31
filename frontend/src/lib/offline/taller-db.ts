@@ -11,6 +11,8 @@ export type TallerCacheRow = { key: string; value: unknown; updated_at: string }
 export type TallerBlob = { blob_id: string; blob: Blob; mime: string }
 
 /** Cambio pendiente de sincronizar. */
+import type { MedicionItem } from '@/lib/services/taller-plan-semanal'
+
 export type TallerPending = {
   local_id: string
   client_uuid: string
@@ -22,7 +24,8 @@ export type TallerPending = {
   resultado?: 'ok' | 'no_ok' | 'na'
   observacion?: string | null
   foto_blob_id?: string | null
-  mediciones?: { pos: string; mm: number | null }[]  // profundidad neumáticos (MIG203)
+  mediciones?: MedicionItem                          // neumáticos (MIG203) o captura (MIG444)
+  valor_numerico?: number | null                     // ítems de captura numérica (MIG444)
   // kind = 'timing' (cronómetro de jornada)
   accion?: 'iniciar' | 'pausar' | 'finalizar'
   tecnico_id?: string | null        // quién apretó el reloj (MIG448)

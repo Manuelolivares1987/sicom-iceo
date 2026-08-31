@@ -14,7 +14,10 @@ import { SignaturePad } from '@/components/ui/signature-pad'
 import { useAuth } from '@/contexts/auth-context'
 import { BLOQUE_LABELS } from '@/lib/services/checklist-v2'
 import { useQuery } from '@tanstack/react-query'
-import { getTecnicosActivos, type ChecklistV3Item } from '@/lib/services/taller-plan-semanal'
+import {
+  medicionesNeumaticos, respuestaCaptura, getTecnicosActivos,
+  type ChecklistV3Item, type RespuestaCaptura, type MedicionItem,
+} from '@/lib/services/taller-plan-semanal'
 import { RECURSO_ESTADO_LABEL } from '@/lib/services/ot-recursos'
 import { buscarProductos } from '@/lib/services/ot-materiales'
 import {
@@ -78,7 +81,7 @@ function NeumaticosProfundidad({ item, onSave, saving }: {
   onSave: (m: MedicionNeum[]) => void
   saving: boolean
 }) {
-  const guardadas = item.mediciones ?? []
+  const guardadas = medicionesNeumaticos(item.mediciones)
   const [abierto, setAbierto] = useState(false)
   const [rows, setRows] = useState<MedicionNeum[]>([])
 
@@ -161,6 +164,101 @@ function NeumaticosProfundidad({ item, onSave, saving }: {
 // mecánico no tenía dónde escribirlas: se llenaban solas arrastrando el último
 // valor o quedaban nulas, y 46 de 120 recepciones quedaron sin ningún medidor.
 // De este número salen la próxima preventiva y lo que se le cobra al cliente.
+/**
+ * [MIG444] Los ítems que no son una verificación.
+ *
+ * El bloque B11 —cierre de recepción— son siete campos de captura: daños,
+ * observaciones del operador, trabajos pedidos, próximo horómetro, tipo de OT,
+ * tiempo estimado y firmas. Traían el tipo escrito en su propia descripción,
+ * entre paréntesis, porque el modelo no tenía cómo declararlo, así que los siete
+ * se respondían con OK / NO OK. Marcar «OK» en «Observaciones del operador que
+ * entrega» no significa nada.
+ */
+function CapturaItem({ it, onGuardar, saving }: {
+  it: ChecklistV3Item
+  onGuardar: (p: { observacion?: string | null; valor_numerico?: number | null; mediciones?: MedicionItem }) => void
+  saving: boolean
+}) {
+  const cap: RespuestaCaptura = respuestaCaptura(it.mediciones)
+  const [texto, setTexto] = useState(it.observacion ?? '')
+  const [numero, setNumero] = useState(it.valor_numerico != null ? String(it.valor_numerico) : '')
+  const [fecha, setFecha] = useState(cap.fecha ?? '')
+  const [opcion, setOpcion] = useState(cap.opcion ?? '')
+
+  const cls = 'w-full rounded-lg border border-gray-300 px-2 py-1.5 text-sm'
+
+  if (it.tipo_respuesta === 'firma') {
+    // Las firmas y los RUT ya se capturan al CERRAR el checklist
+    // (rpc_cerrar_checklist_v2 recibe firma y RUT de operador y de cliente).
+    // Repetirlas acá sería pedir dos veces lo mismo y guardar dos verdades.
+    return (
+      <p className="mt-2 rounded-lg border border-gray-200 bg-gray-50 px-2 py-1.5 text-[11px] text-gray-600">
+        Las firmas y los RUT se piden al cerrar el checklist, en un solo paso.
+      </p>
+    )
+  }
+
+  if (it.tipo_respuesta === 'numero') {
+    const sucio = numero !== (it.valor_numerico != null ? String(it.valor_numerico) : '')
+    return (
+      <div className="mt-2 flex items-center gap-2">
+        <input type="number" inputMode="decimal" step="0.1" min="0" value={numero}
+               onChange={(e) => setNumero(e.target.value)}
+               placeholder="0" className={cls + ' max-w-[140px] tabular-nums'} />
+        <span className="text-xs text-gray-500">h</span>
+        <button type="button" disabled={saving || !sucio}
+                onClick={() => onGuardar({ valor_numerico: numero.trim() === '' ? null : Number(numero) })}
+                className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40">
+          Guardar
+        </button>
+      </div>
+    )
+  }
+
+  if (it.tipo_respuesta === 'fecha') {
+    const sucio = fecha !== (cap.fecha ?? '')
+    return (
+      <div className="mt-2 flex items-center gap-2">
+        <input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} className={cls + ' max-w-[190px]'} />
+        <button type="button" disabled={saving || !sucio}
+                onClick={() => onGuardar({ mediciones: { ...cap, fecha: fecha || null } })}
+                className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40">
+          Guardar
+        </button>
+      </div>
+    )
+  }
+
+  if (it.tipo_respuesta === 'seleccion') {
+    const sucio = opcion !== (cap.opcion ?? '')
+    return (
+      <div className="mt-2 flex items-center gap-2">
+        <input value={opcion} onChange={(e) => setOpcion(e.target.value)}
+               placeholder="OT-XX-XX" className={cls + ' max-w-[190px] font-mono'} />
+        <button type="button" disabled={saving || !sucio}
+                onClick={() => onGuardar({ mediciones: { ...cap, opcion: opcion.trim() || null } })}
+                className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40">
+          Guardar
+        </button>
+      </div>
+    )
+  }
+
+  // texto
+  const sucio = texto !== (it.observacion ?? '')
+  return (
+    <div className="mt-2">
+      <textarea rows={2} value={texto} onChange={(e) => setTexto(e.target.value)}
+                placeholder="Escribe acá…" className={cls} />
+      <button type="button" disabled={saving || !sucio}
+              onClick={() => onGuardar({ observacion: texto.trim() || null })}
+              className="mt-1 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40">
+        Guardar
+      </button>
+    </div>
+  )
+}
+
 function MedidoresSection({ otId, online }: { otId: string; online: boolean }) {
   const { data: med, isLoading } = useMedidoresOT(otId)
   const guardar = useGuardarMedidores(otId)
@@ -179,7 +277,13 @@ function MedidoresSection({ otId, online }: { otId: string; online: boolean }) {
 
   const exigeKm = med.exige_kilometraje
   const falta = med.horometro == null || (exigeKm && med.kilometraje == null)
-  const cerrado = !falta && !editando
+  // [MIG444] Antes bastaba con que el número EXISTIERA para dar la sección por
+  // hecha, y el número lo arrastra el sistema del último valor conocido. Por eso
+  // en producción hay 83 checklists con medidores y CERO escritos por alguien:
+  // la sección se veía cerrada y nadie escribía nunca la lectura real. Ahora se
+  // queda abierta hasta que la confirme una persona. No bloquea: se puede seguir
+  // con el checklist igual.
+  const cerrado = !falta && med.anotado_por_persona && !editando
 
   const enviar = (confirmado: boolean) => {
     const hmN = hm.trim() === '' ? null : Number(hm)
@@ -221,7 +325,9 @@ function MedidoresSection({ otId, online }: { otId: string; online: boolean }) {
       ) : (
         <>
           <p className="mt-1 text-[11px] text-amber-900">
-            Anótalos antes de finalizar. De acá sale cuándo toca la próxima mantención.
+            {falta
+              ? 'Anótalos antes de empezar. De acá sale cuándo toca la próxima mantención.'
+              : 'Estos números los trajo el sistema del último dato conocido. Confirma la lectura real del equipo.'}
           </p>
           <div className="mt-2 grid grid-cols-2 gap-2">
             <label className="text-[11px] font-medium text-gray-700">
@@ -868,7 +974,14 @@ export default function MecanicoOTPage() {
                     </p>
                   )}
 
-                  <div className="mt-2"><ResultRadio value={it.resultado} onChange={(v) => setResultado(it, v)} /></div>
+                  {it.tipo_respuesta === 'ok_no_ok' ? (
+                    <div className="mt-2"><ResultRadio value={it.resultado} onChange={(v) => setResultado(it, v)} /></div>
+                  ) : (
+                    <CapturaItem it={it} saving={marcar.isPending}
+                      onGuardar={(p) => marcar.mutate({
+                        instanceItemId: it.instance_item_id, instanceId: it.instance_id, ...p,
+                      })} />
+                  )}
 
                   {/* Neumáticos: profundidad por posición (MIG203) */}
                   {esItemNeumaticos(it.descripcion) && (

@@ -43,7 +43,7 @@ import { buscarProductos } from '@/lib/services/ot-materiales'
 import { useNetworkStatus } from '@/hooks/use-calama-offline'
 import {
   lunesDeIso, getJornadaEventos, getOtArrastre, descartarOt,
-  CATEGORIA_TAREA_LABEL, CATEGORIAS_TAREA_LIBRE,
+  CATEGORIA_TAREA_LABEL, CATEGORIAS_TAREA_LIBRE, medicionesNeumaticos,
   type TallerPlanOTFull, type ChecklistV3Item, type TallerJornadaEvento,
   type TallerTecnico, type CategoriaTareaTaller, type TallerOtArrastre,
 } from '@/lib/services/taller-plan-semanal'
@@ -2911,9 +2911,9 @@ function ChecklistV3Row({ item, otId, planId }: {
         </div>
       </div>
       {/* Profundidad por neumático registrada por el mecánico (MIG203) */}
-      {(item.mediciones?.length ?? 0) > 0 && (
+      {medicionesNeumaticos(item.mediciones).length > 0 && (
         <div className="mt-1 flex flex-wrap gap-1">
-          {(item.mediciones ?? []).map((m, i) => (
+          {medicionesNeumaticos(item.mediciones).map((m, i) => (
             <span key={i} className={`rounded px-1.5 py-0.5 text-[9px] font-semibold ${
               m.mm != null && m.mm < 3 ? 'bg-red-100 text-red-700' : 'bg-blue-50 text-blue-800 border border-blue-100'}`}>
               {m.pos}: {m.mm ?? '—'} mm
