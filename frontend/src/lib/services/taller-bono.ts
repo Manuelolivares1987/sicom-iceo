@@ -120,6 +120,29 @@ export async function getDisponibilidadPeriodo(desde: string, hasta: string) {
   return (Array.isArray(data) ? data[0] : data) as BonoDisponibilidad | null
 }
 
+export type OTSinDueno = {
+  ot_id: string
+  ot_folio: string
+  estado: string
+  fecha_termino: string | null
+  /** Por qué no le paga a nadie: sin plan, sin cuadrilla, o sólo gente que no participa. */
+  motivo: string
+}
+
+/**
+ * [MIG464] Trabajo cerrado dentro del corte que no le paga a nadie.
+ *
+ * Una OT así no falla: simplemente no aparece en el bono. Por eso hay que
+ * mirarla aparte — y por eso frena el cierre.
+ */
+export async function getOTSinDueno(desde: string, hasta: string) {
+  const { data, error } = await supabase.rpc('rpc_taller_bono_ot_sin_dueno', {
+    p_desde: desde, p_hasta: hasta,
+  })
+  if (error) throw new Error(error.message)
+  return (data ?? []) as OTSinDueno[]
+}
+
 export async function getPeriodos() {
   const { data, error } = await supabase.rpc('rpc_taller_bono_periodos')
   if (error) throw new Error(error.message)
