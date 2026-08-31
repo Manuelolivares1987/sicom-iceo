@@ -502,10 +502,14 @@ export const ESTADOS_OT_ABIERTA = ['creada', 'asignada', 'en_ejecucion', 'pausad
 /** OT abierta del mismo trabajo, para avisar ANTES de programar. */
 export async function getOtAbiertaDelTrabajo(
   activoId: string, tipo: TipoOtTaller, planId: string | null,
-): Promise<{ id: string; folio: string; estado: string; fecha_programada: string | null } | null> {
+): Promise<{
+  id: string; folio: string; estado: string; fecha_programada: string | null
+  /** [MIG466] Desde cuándo corre el reloj: el bono cuenta días reales, no jornadas. */
+  fecha_inicio: string | null; created_at: string
+} | null> {
   let q = supabase
     .from('ordenes_trabajo')
-    .select('id, folio, estado, fecha_programada, plan_mantenimiento_id')
+    .select('id, folio, estado, fecha_programada, fecha_inicio, created_at, plan_mantenimiento_id')
     .eq('activo_id', activoId)
     .eq('tipo', tipo)
     .in('estado', ESTADOS_OT_ABIERTA)
