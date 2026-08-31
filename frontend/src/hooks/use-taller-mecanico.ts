@@ -70,8 +70,10 @@ export function useTimingMecanico(otId: string) {
     mutationFn: (p: {
       accion: 'iniciar' | 'pausar' | 'finalizar'; userId: string
       observaciones?: string | null; conObservaciones?: boolean; firma?: File | Blob | null
+      tecnicoId?: string | null
     }) => queueTiming(otId, p.accion, p.userId, {
       observaciones: p.observaciones, conObservaciones: p.conObservaciones, firma: p.firma,
+      tecnicoId: p.tecnicoId,
     }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: keyChecklist(otId) })

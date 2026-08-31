@@ -7,7 +7,9 @@
 import { supabase } from '@/lib/supabase'
 import { getChecklistV3OT, type ChecklistV3Item } from '@/lib/services/taller-plan-semanal'
 import { actualizarItem, subirFotoItem } from '@/lib/services/checklist-v2'
-import { iniciarOT, pausarOT } from '@/lib/services/ordenes-trabajo'
+import {
+  rpcIniciarEjecucion, rpcPausarEjecucionOT, rpcReanudarEjecucionOT,
+} from '@/lib/services/taller-plan-semanal'
 import { getRecursosOT, solicitarRecurso, subirFotoRecurso, type OTRecurso } from '@/lib/services/ot-recursos'
 import { getNotasOT, subirFotoNota, agregarNotaOT, type OTNota } from '@/lib/services/ot-notas'
 import { tallerDB, newId, type TallerPending } from './taller-db'
@@ -321,7 +323,10 @@ export async function queueItem(params: {
 
 export async function queueTiming(
   otId: string, accion: 'iniciar' | 'pausar' | 'finalizar', userId: string,
-  opts?: { observaciones?: string | null; conObservaciones?: boolean; firma?: File | Blob | null },
+  opts?: {
+    observaciones?: string | null; conObservaciones?: boolean; firma?: File | Blob | null
+    tecnicoId?: string | null
+  },
 ): Promise<void> {
   const db = tallerDB()
   let firmaBlobId: string | null = null
@@ -332,6 +337,7 @@ export async function queueTiming(
   const row: TallerPending = {
     local_id: newId(), client_uuid: newId(), ot_id: otId, kind: 'timing',
     accion, user_id: userId, observaciones: opts?.observaciones ?? null,
+    tecnico_id: opts?.tecnicoId ?? null,
     con_observaciones: opts?.conObservaciones ?? false, firma_blob_id: firmaBlobId,
     sync_status: 'pending', retries: 0, last_error: null, created_at: new Date().toISOString(),
   }
@@ -439,10 +445,19 @@ export async function syncTallerPending(): Promise<{ ok: number; failed: number 
         })
         if (error) throw error
         if (p.firma_blob_id) await db.blobs.delete(p.firma_blob_id)
+      } else if (p.accion === 'iniciar') {
+        // Hasta MIG449 esto llamaba a la transición de estado y NO medía nada:
+        // había 5 ejecuciones en todo el sistema, la última de julio. Sin reloj
+        // no hay días que medir ni tiempo que repartir, que es la mitad del bono.
+        //
+        // Primero se intenta reanudar —si el mecánico pausó y vuelve, es la
+        // misma ejecución— y sólo si no había ninguna abierta se arranca una.
+        const r = await rpcReanudarEjecucionOT(p.ot_id)
+        if (r?.sin_ejecucion) {
+          await rpcIniciarEjecucion(p.ot_id, null, p.tecnico_id ?? null)
+        }
       } else {
-        const r = p.accion === 'iniciar' ? await iniciarOT(p.ot_id, p.user_id!)
-          : await pausarOT(p.ot_id, p.user_id!, p.observaciones ?? undefined)
-        if (r.error) throw r.error
+        await rpcPausarEjecucionOT(p.ot_id, p.observaciones ?? null)
       }
       await db.pending.delete(p.local_id)
       ok++

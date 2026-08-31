@@ -25,6 +25,7 @@ export type TallerPending = {
   mediciones?: { pos: string; mm: number | null }[]  // profundidad neumáticos (MIG203)
   // kind = 'timing' (cronómetro de jornada)
   accion?: 'iniciar' | 'pausar' | 'finalizar'
+  tecnico_id?: string | null        // quién apretó el reloj (MIG448)
   user_id?: string
   observaciones?: string | null
   con_observaciones?: boolean

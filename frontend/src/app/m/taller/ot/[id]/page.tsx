@@ -13,7 +13,8 @@ import { Modal, ModalFooter } from '@/components/ui/modal'
 import { SignaturePad } from '@/components/ui/signature-pad'
 import { useAuth } from '@/contexts/auth-context'
 import { BLOQUE_LABELS } from '@/lib/services/checklist-v2'
-import type { ChecklistV3Item } from '@/lib/services/taller-plan-semanal'
+import { useQuery } from '@tanstack/react-query'
+import { getTecnicosActivos, type ChecklistV3Item } from '@/lib/services/taller-plan-semanal'
 import { RECURSO_ESTADO_LABEL } from '@/lib/services/ot-recursos'
 import { buscarProductos } from '@/lib/services/ot-materiales'
 import {
@@ -664,11 +665,35 @@ export default function MecanicoOTPage() {
   const [warnFoto, setWarnFoto] = useState(false)
   const [prefillRecurso, setPrefillRecurso] = useState<RecursoPrefill | null>(null)
 
+  /**
+   * [MIG448] Quién está poniendo el tiempo.
+   *
+   * Los nueve técnicos comparten la cuenta del taller, así que el usuario
+   * autenticado es el mismo para todos. El nombre que cada uno elige en la
+   * portada («Soy: Joel Coo») vive en el localStorage de su teléfono y hasta
+   * ahora no llegaba a ninguna parte. Acá se resuelve contra el catálogo y
+   * viaja con el reloj: es lo que después permite repartir el bono.
+   */
+  const { data: tecnicos } = useQuery({
+    queryKey: ['taller-tecnicos-activos'],
+    queryFn: getTecnicosActivos,
+    staleTime: 30 * 60_000,
+  })
+  const tecnicoId = useMemo(() => {
+    if (typeof window === 'undefined') return null
+    const elegido = (localStorage.getItem('taller-mecanico') ?? '').trim().toLowerCase()
+    if (!elegido || !tecnicos?.length) return null
+    const primer = elegido.split(/\s+/)[0] ?? ''
+    const t = tecnicos.find((x) => x.nombre.toLowerCase() === elegido)
+      ?? tecnicos.find((x) => x.nombre.toLowerCase().split(/\s+/)[0] === primer)
+    return t?.id ?? null
+  }, [tecnicos])
+
   function doTiming(accion: 'iniciar' | 'pausar') {
     if (accion === 'pausar' && noOkSinFoto > 0) { setWarnFoto(true); return }
     setWarnFoto(false)
     timing.reset()
-    timing.mutate({ accion, userId })
+    timing.mutate({ accion, userId, tecnicoId })
   }
   function abrirFinalizar() {
     if (noOkSinFoto > 0) { setWarnFoto(true); return }
