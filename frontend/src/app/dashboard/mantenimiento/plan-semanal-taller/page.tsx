@@ -20,7 +20,7 @@ import { Modal, ModalFooter } from '@/components/ui/modal'
 import { Input } from '@/components/ui/input'
 import { useToast } from '@/contexts/toast-context'
 import { useRequireAuth } from '@/hooks/use-require-auth'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient, useMutation} from '@tanstack/react-query'
 import {
   useGetOrCreatePlanSemanalTaller, useDiasPlanSemanalTaller, useJornadasPlanSemanalTaller,
   useKpiSemanalTaller, useCumplimientoPmMesTaller,
@@ -61,6 +61,8 @@ import {
 import { MAX_MECANICOS } from '@/lib/taller-grupos'
 import { isoToday } from '@/lib/semana'
 import { getConceptosBono, setConceptoOT } from '@/lib/services/taller-bono'
+import { getCierresPorValidar, validarCierre } from '@/lib/services/taller-planificacion'
+import { usePermissions } from '@/hooks/use-permissions'
 
 type Tab = 'kanban' | 'cobertura' | 'cumplimiento'
 
@@ -602,6 +604,11 @@ export default function PlanSemanalTallerPage() {
         </TabBtn>
         <TabBtn active={tab === 'cumplimiento'} onClick={() => setTab('cumplimiento')} icon={<BarChart3 className="h-4 w-4" />}>Cumplimiento PM</TabBtn>
       </div>
+
+      {/* [MIG472] Cierres con tareas pendientes esperando a la jefatura. Va
+          arriba porque es lo único del tablero que retiene plata: mientras no se
+          decida, ese trabajo no le paga a nadie. */}
+      <CierresPorValidarCard />
 
       {/* KPIs semana actual */}
       {kpi && tab === 'kanban' && (
@@ -3248,5 +3255,112 @@ function CumplimientoTab() {
         </table>
       </CardContent>
     </Card>
+  )
+}
+
+
+/**
+ * [MIG472] Los cierres con tareas obligatorias sin hacer.
+ *
+ * El mecánico pudo cerrar porque escribió por qué; ahora le toca a la jefatura
+ * decidir. No es una notificación: es una cola de trabajo con dos salidas, y
+ * ninguna de las dos es dejarla ahí — mientras esté sin decidir, esa OT no paga
+ * bono y bloquea el cierre del período.
+ */
+function CierresPorValidarCard() {
+  const toast = useToast()
+  const qc = useQueryClient()
+  const { rol } = usePermissions()
+  const puede = ['jefe_mantenimiento', 'administrador', 'subgerente_operaciones', 'jefe_operaciones']
+    .includes(rol ?? '')
+
+  const { data: cierres = [] } = useQuery({
+    queryKey: ['cierres-por-validar'],
+    queryFn: getCierresPorValidar,
+    staleTime: 30_000,
+    retry: false,
+  })
+  const [devolviendo, setDevolviendo] = useState<string | null>(null)
+  const [comentario, setComentario] = useState('')
+
+  const decidir = useMutation({
+    mutationFn: (v: { otId: string; aprueba: boolean; comentario?: string | null }) =>
+      validarCierre(v.otId, v.aprueba, v.comentario),
+    onSuccess: (r) => {
+      toast.success(r.estado === 'validado'
+        ? `${r.folio} validada: el trabajo ya cuenta`
+        : `${r.folio} devuelta al taller`)
+      setDevolviendo(null); setComentario('')
+      qc.invalidateQueries({ queryKey: ['cierres-por-validar'] })
+      qc.invalidateQueries({ queryKey: ['taller'] })
+    },
+    onError: (e) => toast.error((e as Error).message),
+  })
+
+  if (cierres.length === 0) return null
+
+  return (
+    <div className="mb-4 rounded-xl border border-amber-300 bg-amber-50 p-3">
+      <div className="flex items-center gap-2">
+        <AlertTriangle className="h-4 w-4 shrink-0 text-amber-700" />
+        <h2 className="text-sm font-semibold text-amber-900">
+          Cierres con tareas pendientes por validar ({cierres.length})
+        </h2>
+      </div>
+      <p className="mt-0.5 text-[11px] text-amber-800">
+        Se cerraron con tareas obligatorias sin hacer. Hasta que decidas, ese trabajo no paga
+        bono y el período no se puede cerrar.
+      </p>
+
+      <div className="mt-2 space-y-2">
+        {cierres.map((c) => (
+          <div key={c.ot_id} className="rounded-lg border border-amber-200 bg-white p-2.5">
+            <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+              <span className="font-mono text-[11px] text-gray-500">{c.folio}</span>
+              <span className="text-sm font-medium text-gray-800">{c.patente ?? c.equipo}</span>
+              <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium text-amber-900">
+                {c.pendientes} de {c.total} tareas sin hacer
+              </span>
+              {c.cuadrilla && <span className="text-[11px] text-gray-500">· {c.cuadrilla}</span>}
+            </div>
+            {c.motivo && (
+              <p className="mt-1 rounded bg-gray-50 px-2 py-1 text-xs text-gray-700">“{c.motivo}”</p>
+            )}
+
+            {devolviendo === c.ot_id ? (
+              <div className="mt-2">
+                <textarea rows={2} value={comentario} onChange={(e) => setComentario(e.target.value)}
+                          placeholder="Qué falta para poder cerrarla (mínimo 10 caracteres)"
+                          className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm" />
+                <div className="mt-1.5 flex gap-2">
+                  <Button size="sm" disabled={decidir.isPending || comentario.trim().length < 10}
+                          onClick={() => decidir.mutate({ otId: c.ot_id, aprueba: false, comentario })}>
+                    Devolver al taller
+                  </Button>
+                  <Button size="sm" variant="outline"
+                          onClick={() => { setDevolviendo(null); setComentario('') }}>
+                    Cancelar
+                  </Button>
+                </div>
+              </div>
+            ) : puede ? (
+              <div className="mt-2 flex flex-wrap gap-2">
+                <Button size="sm" disabled={decidir.isPending}
+                        onClick={() => decidir.mutate({ otId: c.ot_id, aprueba: true })}>
+                  Validar el cierre
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => setDevolviendo(c.ot_id)}>
+                  Devolver — falta trabajo
+                </Button>
+              </div>
+            ) : (
+              <p className="mt-1.5 text-[11px] text-gray-500">
+                Lo valida la jefatura de taller.
+              </p>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
   )
 }

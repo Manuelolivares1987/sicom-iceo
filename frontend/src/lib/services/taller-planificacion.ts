@@ -551,3 +551,35 @@ export function papelProblemaTexto(p: PapelProblema): string {
   if (p.estado === 'por_vencer') return `vence en ${p.dias_restantes ?? 0} días`
   return 'sin fecha de vencimiento'
 }
+
+// ── [MIG472] Cierres con tareas pendientes, esperando a la jefatura ─────────
+//
+// Cerrar con obligatorias sin hacer se puede, pero no en silencio: la OT queda
+// marcada y no paga bono hasta que el jefe de taller la apruebe o la devuelva.
+
+export type CierrePorValidar = {
+  ot_id: string
+  folio: string
+  patente: string | null
+  equipo: string | null
+  fecha_termino: string | null
+  pendientes: number
+  total: number
+  motivo: string | null
+  cerro: string | null
+  cuadrilla: string | null
+}
+
+export async function getCierresPorValidar(): Promise<CierrePorValidar[]> {
+  const { data, error } = await supabase.rpc('rpc_taller_cierres_por_validar')
+  if (error) throw new Error(error.message)
+  return (data ?? []) as CierrePorValidar[]
+}
+
+export async function validarCierre(otId: string, aprueba: boolean, comentario?: string | null) {
+  const { data, error } = await supabase.rpc('rpc_taller_validar_cierre', {
+    p_ot_id: otId, p_aprueba: aprueba, p_comentario: comentario ?? null,
+  })
+  if (error) throw new Error(error.message)
+  return data as { success: boolean; folio: string; estado: string }
+}

@@ -73,9 +73,11 @@ export function useTimingMecanico(otId: string) {
       accion: 'iniciar' | 'pausar' | 'finalizar'; userId: string
       observaciones?: string | null; conObservaciones?: boolean; firma?: File | Blob | null
       tecnicoId?: string | null
+      /** [MIG472] Por qué se cierra con tareas obligatorias sin hacer. */
+      motivoPendientes?: string | null
     }) => queueTiming(otId, p.accion, p.userId, {
       observaciones: p.observaciones, conObservaciones: p.conObservaciones, firma: p.firma,
-      tecnicoId: p.tecnicoId,
+      tecnicoId: p.tecnicoId, motivoPendientes: p.motivoPendientes,
     }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: keyChecklist(otId) })

@@ -744,6 +744,8 @@ export default function MecanicoOTPage() {
   const [observations, setObservations] = useState<Record<string, string>>({})
   const fileRefs = useRef<Record<string, HTMLInputElement | null>>({})
   const [finalizar, setFinalizar] = useState(false)
+  // [MIG472] Cerrar con tareas pendientes se puede, explicando por qué.
+  const [motivoPend, setMotivoPend] = useState('')
   const [firma, setFirma] = useState('')
   const [conObs, setConObs] = useState(false)
   const [obsFin, setObsFin] = useState('')
@@ -829,6 +831,9 @@ export default function MecanicoOTPage() {
     timing.reset()
     timing.mutate({ accion, userId, tecnicoId })
   }
+  // [MIG472] El backend contesta «faltan N tareas» en vez de negarse en seco.
+  const pidePendientes = timing.isError && (timing.error as Error).name === 'PENDIENTES'
+
   function abrirFinalizar() {
     if (noOkSinFoto > 0) { setWarnFoto(true); return }
     setWarnFoto(false)
@@ -841,8 +846,14 @@ export default function MecanicoOTPage() {
   function confirmFinalizar() {
     if (!firma) return
     timing.mutate(
-      { accion: 'finalizar', userId, firma: dataUrlToBlob(firma), conObservaciones: conObs, observaciones: obsFin.trim() || null },
-      { onSuccess: () => setFinalizar(false) },
+      {
+        accion: 'finalizar', userId, firma: dataUrlToBlob(firma),
+        conObservaciones: conObs, observaciones: obsFin.trim() || null,
+        // [MIG472] Sólo viaja si el mecánico ya explicó por qué quedan tareas
+        // sin hacer. Sin motivo, el sistema vuelve a preguntar.
+        motivoPendientes: motivoPend.trim() || null,
+      },
+      { onSuccess: () => { setFinalizar(false); setMotivoPend('') } },
     )
   }
 
@@ -1105,7 +1116,29 @@ export default function MecanicoOTPage() {
                         placeholder="Observaciones…" className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
             )}
             <SignaturePad label="Firma del técnico (obligatoria)" onCapture={setFirma} />
-            {timing.isError && (
+
+            {/* [MIG472] Quedan obligatorias sin hacer. No es un error: es una
+                salida que existe y que el jefe de taller revisa después. */}
+            {pidePendientes && (
+              <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2.5">
+                <p className="text-xs font-medium text-amber-900">
+                  {(timing.error as Error).message}
+                </p>
+                <label className="mt-2 block text-[11px] font-medium text-amber-900">
+                  ¿Por qué quedaron sin hacer?
+                  <textarea rows={2} value={motivoPend}
+                            onChange={(e) => setMotivoPend(e.target.value)}
+                            placeholder="Ej: falta el repuesto del filtro, el cliente se llevó el equipo"
+                            className="mt-0.5 w-full rounded-lg border border-amber-300 px-2 py-1.5 text-sm" />
+                </label>
+                <p className="mt-1 text-[10px] text-amber-800">
+                  La OT queda cerrada y marcada para que el jefe de taller la revise. Hasta que
+                  la valide, este trabajo no cuenta para el bono.
+                </p>
+              </div>
+            )}
+
+            {timing.isError && !pidePendientes && (
               <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
                 No se pudo finalizar: {(timing.error as Error).message}
               </p>
@@ -1113,9 +1146,12 @@ export default function MecanicoOTPage() {
           </div>
           <ModalFooter>
             <Button variant="outline" onClick={() => setFinalizar(false)}>Cancelar</Button>
-            <Button disabled={!firma || (conObs && !obsFin.trim()) || timing.isPending} onClick={confirmFinalizar}>
+            <Button
+              disabled={!firma || (conObs && !obsFin.trim()) || timing.isPending
+                        || (pidePendientes && motivoPend.trim().length < 10)}
+              onClick={confirmFinalizar}>
               {timing.isPending ? <Spinner className="h-4 w-4 mr-1" /> : <CheckCircle2 className="h-4 w-4 mr-1" />}
-              Finalizar
+              {pidePendientes ? 'Cerrar igual — lo revisa el jefe' : 'Finalizar'}
             </Button>
           </ModalFooter>
         </Modal>
