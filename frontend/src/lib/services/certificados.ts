@@ -176,6 +176,29 @@ export type MiFirma = {
   actualizada_at: string | null
 }
 
+export type FirmanteAutorizado = {
+  id: string
+  nombre: string
+  cargo: string | null
+  titulo: string | null
+  firma_url: string | null
+  tiene_firma: boolean
+}
+
+/**
+ * [MIG469] Quién puede figurar como firmante, que no es lo mismo que quién
+ * puede emitir.
+ *
+ * Emitir lo puede hacer la jefatura; firmar, sólo quien esté designado. El
+ * servidor resuelve el nombre, el cargo y la firma desde el perfil del
+ * designado: lo que mande esta pantalla en esos campos se ignora.
+ */
+export async function getFirmantesAutorizados(tipo = 'hermeticidad'): Promise<FirmanteAutorizado[]> {
+  const { data, error } = await supabase.rpc('rpc_certificado_firmantes', { p_tipo: tipo })
+  if (error) throw new Error(error.message)
+  return (data ?? []) as FirmanteAutorizado[]
+}
+
 export async function getMiFirma(): Promise<MiFirma> {
   const { data, error } = await supabase.rpc('rpc_mi_firma')
   if (error) throw new Error(error.message)

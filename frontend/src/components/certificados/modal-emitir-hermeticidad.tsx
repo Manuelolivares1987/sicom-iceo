@@ -22,6 +22,7 @@ import { useToast } from '@/contexts/toast-context'
 import {
   getDatosPrevios, emitirCertificado, subirFotoCertificado, getCertificadoEmitido,
   getMiFirma, guardarMiFirmaDesdeArchivo, type MiFirma,
+  getFirmantesAutorizados, type FirmanteAutorizado,
   GRUPOS_HERMETICIDAD, OBLIGATORIOS_HERMETICIDAD, type DatosPrevios,
 } from '@/lib/services/certificados'
 import { descargarCertificadoHermeticidad } from './pdf-hermeticidad'
@@ -69,15 +70,31 @@ export function ModalEmitirHermeticidad({ activoId, patente, onClose, onListo }:
   const [subiendoFirma, setSubiendoFirma] = useState(false)
   useEffect(() => { getMiFirma().then(setFirma).catch(() => {}) }, [])
 
-  // El nombre y el cargo se proponen desde el perfil: quien emite es quien firma.
+  // [MIG469] Quien emite no es necesariamente quien firma: el jefe de
+  // operaciones hace el certificado y lo firma Manuel. La lista es de personas
+  // DESIGNADAS, no de cuentas con permiso para emitir.
+  const [firmantes, setFirmantes] = useState<FirmanteAutorizado[]>([])
+  const [firmanteId, setFirmanteId] = useState<string>('')
   useEffect(() => {
-    if (!firma) return
+    getFirmantesAutorizados('hermeticidad')
+      .then((fs) => { setFirmantes(fs); if (fs.length === 1) setFirmanteId(fs[0].id) })
+      .catch(() => {})
+  }, [])
+  const firmante = firmantes.find((f) => f.id === firmanteId) ?? null
+  const soyElFirmante = !!firmante && !!firma && firmante.nombre === firma.nombre
+
+  // Lo que va impreso viene del perfil del designado. Se muestra, no se edita:
+  // el servidor lo resuelve igual, y un campo editable que se ignora es una
+  // mentira en pantalla.
+  useEffect(() => {
+    if (!firmante) return
     setV((p) => ({
       ...p,
-      firmante_nombre: (p.firmante_nombre ?? '').trim() || (firma.nombre ?? ''),
-      firmante_cargo:  (p.firmante_cargo  ?? '').trim() || (firma.cargo  ?? ''),
+      firmante_nombre: firmante.nombre ?? '',
+      firmante_cargo:  firmante.cargo ?? '',
+      firmante_titulo: firmante.titulo ?? p.firmante_titulo ?? '',
     }))
-  }, [firma])
+  }, [firmante])
 
   async function cargarFirma(file: File) {
     setSubiendoFirma(true)
@@ -105,9 +122,10 @@ export function ModalEmitirHermeticidad({ activoId, patente, onClose, onListo }:
         ...v, activo_id: activoId, tipo: 'hermeticidad',
         fecha_prueba: fechaPrueba, informe,
         foto_inicio_url: fi, foto_termino_url: ft,
-        // Se manda la firma para que quede CONGELADA con el certificado: si
-        // mañana cambia la del perfil, este papel sigue mostrando la de hoy.
-        firmante_firma_url: firma?.firma_url ?? null,
+        // [MIG469] Sólo se dice A QUIÉN se le pide firmar. El nombre, el cargo
+        // y la firma los resuelve el servidor desde su perfil, y los congela con
+        // el certificado. Lo que mandemos acá en esos campos se ignora.
+        firmante_id: firmanteId || null,
       })
       toast.success(`Certificado Nº ${r.folio} emitido — vence el ${r.fecha_vencimiento}`)
       // Se baja al toque: quien lo emitió lo necesita ahora, no después.
@@ -206,39 +224,70 @@ export function ModalEmitirHermeticidad({ activoId, patente, onClose, onListo }:
                         {g.nota && <p className="mb-2 text-[11px] text-gray-500">{g.nota}</p>}
                         {g.titulo === 'Quién firma' && (
                           <div className="mb-3 rounded-lg border border-gray-200 bg-gray-50 p-2.5">
-                            <p className="text-[11px] font-semibold text-gray-700">Tu firma</p>
-                            {firma?.firma_url ? (
+                            <p className="text-[11px] font-semibold text-gray-700">
+                              Quién firma este certificado
+                            </p>
+                            {firmantes.length === 0 ? (
+                              <p className="mt-0.5 text-[11px] text-amber-800">
+                                No hay nadie designado para firmar certificados de hermeticidad:
+                                va a salir con la línea en blanco para firmar a mano.
+                              </p>
+                            ) : (
                               <>
-                                {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img src={firma.firma_url} alt="Firma"
-                                     className="mt-1 h-14 bg-white object-contain px-2" />
-                                <p className="mt-0.5 text-[10px] text-gray-500">
-                                  Va a salir sobre la línea del certificado.
-                                  {firma.actualizada_at &&
-                                    ` Cargada el ${new Date(firma.actualizada_at).toLocaleDateString('es-CL')}.`}
+                                <select value={firmanteId} onChange={(e) => setFirmanteId(e.target.value)}
+                                        className="mt-1 w-full rounded border border-gray-300 bg-white px-2 py-1.5 text-sm">
+                                  <option value="">— Se firma a mano —</option>
+                                  {firmantes.map((f) => (
+                                    <option key={f.id} value={f.id}>
+                                      {f.nombre}{f.cargo ? ' · ' + f.cargo : ''}
+                                      {f.tiene_firma ? '' : ' (sin firma cargada)'}
+                                    </option>
+                                  ))}
+                                </select>
+                                <p className="mt-1 text-[10px] text-gray-500">
+                                  Puedes emitirlo tú y que lo firme otra persona. El nombre, el cargo
+                                  y la firma salen de su perfil — no se escriben acá.
                                 </p>
                               </>
-                            ) : (
-                              <p className="mt-0.5 text-[11px] text-gray-600">
-                                Todavía no tienes firma cargada: el certificado va a salir con la
-                                línea en blanco para firmar a mano.
+                            )}
+
+                            {firmante && !firmante.tiene_firma && (
+                              <p className="mt-1.5 text-[11px] text-amber-800">
+                                {firmante.nombre} todavía no tiene firma cargada: el certificado va a
+                                salir con la línea en blanco.
                               </p>
                             )}
-                            <label className="mt-1.5 inline-flex cursor-pointer items-center gap-1.5 text-[11px] font-medium text-blue-700">
-                              <input type="file" accept="image/*" className="hidden"
-                                     disabled={subiendoFirma}
-                                     onChange={(e) => {
-                                       const f = e.target.files?.[0]
-                                       if (f) cargarFirma(f)
-                                       e.target.value = ''
-                                     }} />
-                              {subiendoFirma ? 'Guardando…'
-                                : firma?.firma_url ? 'Cambiar mi firma' : 'Subir mi firma'}
-                            </label>
-                            <p className="mt-1 text-[10px] text-gray-500">
-                              PNG con fondo transparente o una foto de la firma sobre hoja blanca.
-                              Queda guardada en tu perfil, no en este certificado.
-                            </p>
+
+                            {firmante?.firma_url ? (
+                              <>
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img src={firmante.firma_url} alt="Firma"
+                                     className="mt-1.5 h-14 bg-white object-contain px-2" />
+                                <p className="mt-0.5 text-[10px] text-gray-500">
+                                  Va a salir sobre la línea del certificado.
+                                </p>
+                              </>
+                            ) : null}
+
+                            {(soyElFirmante || !firmanteId) && (
+                              <>
+                                <label className="mt-1.5 inline-flex cursor-pointer items-center gap-1.5 text-[11px] font-medium text-blue-700">
+                                  <input type="file" accept="image/*" className="hidden"
+                                         disabled={subiendoFirma}
+                                         onChange={(e) => {
+                                           const f = e.target.files?.[0]
+                                           if (f) cargarFirma(f)
+                                           e.target.value = ''
+                                         }} />
+                                  {subiendoFirma ? 'Guardando…'
+                                    : firma?.firma_url ? 'Cambiar mi firma' : 'Subir mi firma'}
+                                </label>
+                                <p className="mt-1 text-[10px] text-gray-500">
+                                  PNG con fondo transparente o una foto de la firma sobre hoja blanca.
+                                  Queda guardada en tu perfil, no en este certificado.
+                                </p>
+                              </>
+                            )}
                           </div>
                         )}
                         <div className="grid gap-2.5 sm:grid-cols-2">
@@ -249,8 +298,9 @@ export function ModalEmitirHermeticidad({ activoId, patente, onClose, onListo }:
                                 {OBLIGATORIOS_HERMETICIDAD.includes(c.k) && <span className="text-red-600"> *</span>}
                               </label>
                               <input value={v[c.k] ?? ''} placeholder={c.ph}
+                                     readOnly={!!firmante && c.k.startsWith('firmante_')}
                                      onChange={(e) => setV((p) => ({ ...p, [c.k]: e.target.value }))}
-                                     className="mt-0.5 w-full rounded border px-2 py-1 text-sm" />
+                                     className={`mt-0.5 w-full rounded border px-2 py-1 text-sm ${firmante && c.k.startsWith("firmante_") ? "bg-gray-100 text-gray-600" : ""}`} />
                             </div>
                           ))}
                         </div>
