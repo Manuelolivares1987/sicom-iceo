@@ -47,6 +47,9 @@ const s = StyleSheet.create({
   colTitulo: { fontFamily: 'Helvetica-Bold', textDecoration: 'underline', textAlign: 'center', marginBottom: 4 },
 
   firma: { marginTop: 'auto', alignItems: 'flex-end', paddingTop: 24 },
+  // [MIG467] La firma va PEGADA a la raya, no encima del texto: si sobresale,
+  // el nombre queda ilegible y el papel se ve arreglado.
+  firmaImg: { width: 160, height: 46, objectFit: 'contain', marginBottom: 1 },
   firmaLinea: { width: 200, borderTopWidth: 1, borderTopColor: '#111', marginBottom: 3 },
   firmaTexto: { fontSize: 9, textAlign: 'center', width: 200 },
   firmaNombre: { fontSize: 9.5, fontFamily: 'Helvetica-Bold', textAlign: 'center', width: 200 },
@@ -99,6 +102,7 @@ function Dato({ k, v }: { k: string; v?: string | null }) {
 function Firma({ c }: { c: CertificadoHermeticidad }) {
   return (
     <View style={s.firma}>
+      {c.firmante_firma_url ? <Image style={s.firmaImg} src={c.firmante_firma_url} /> : null}
       <View style={s.firmaLinea} />
       <Text style={s.firmaNombre}>{c.firmante_nombre || '—'}</Text>
       <Text style={s.firmaTexto}>{c.firmante_titulo || ''}</Text>
