@@ -366,6 +366,15 @@ function TrabajoExternoPanel({ ot, onCambio }: {
         </p>
       )}
 
+      {/* El error de autorizar vivía sólo dentro del formulario, así que el
+          bloqueo actuaba y la pantalla se quedaba muda: el usuario apretaba
+          «Autorizar» y no pasaba nada visible. */}
+      {error && !abierto && (
+        <p className="mt-2 rounded border border-red-200 bg-red-50 px-2 py-1.5 text-xs font-medium text-red-700">
+          {error}
+        </p>
+      )}
+
       {externo && !autorizado && puedeAutorizar && !abierto && (
         <button onClick={autorizar} disabled={guardando}
                 className="mt-2 rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50">
