@@ -45,6 +45,7 @@ import { useNetworkStatus } from '@/hooks/use-calama-offline'
 import {
   lunesDeIso, getJornadaEventos, getOtArrastre, descartarOt,
   CATEGORIA_TAREA_LABEL, CATEGORIAS_TAREA_LIBRE, medicionesNeumaticos, getCuadrillaJornada,
+  rpcSetCuadrilla,
   type TallerPlanOTFull, type ChecklistV3Item, type TallerJornadaEvento,
   type TallerTecnico, type CategoriaTareaTaller, type TallerOtArrastre,
 } from '@/lib/services/taller-plan-semanal'
@@ -1308,9 +1309,15 @@ function RecepcionDialog({ target, planSemanalId, dias, agregarJornada, onClose,
     setEnviando(true)
     try {
       const fechas = Array.from(fechasSel).sort()
-      const cuadrilla = mecanicos.length ? mecanicos.join(', ') : null
+      // [MIG471] `mecanicos` son IDS desde MIG451, no nombres. Pegarlos con
+      // comas en el campo de texto dejaba UUIDs en pantalla y —peor— ninguna
+      // fila en taller_ot_cuadrilla, que es de donde sale el bono. Se guarda con
+      // el RPC que escribe las personas y re-deriva el texto.
       const { ot_id } = await programarRecepcion(target.activoId)
-      for (const f of fechas) await agregarJornada.mutateAsync({ planSemanalId, otId: ot_id, fecha: f, cuadrilla })
+      for (const f of fechas) {
+        const j = await agregarJornada.mutateAsync({ planSemanalId, otId: ot_id, fecha: f })
+        if (mecanicos.length) await rpcSetCuadrilla(j.plan_ot_id, mecanicos)
+      }
       toast.success(`Recepción de ${target.label} planificada (${fechas.length} día${fechas.length > 1 ? 's' : ''})`)
       onDone()
     } catch (e) {
@@ -1578,7 +1585,7 @@ function ProgramarOtDialog({ target, planSemanalId, dias, onClose, onDone, agreg
     setEnviando(true)
     try {
       const fechas = Array.from(fechasSel).sort()
-      const cuadrilla = mecanicos.length ? mecanicos.join(', ') : null
+
       // Una sola OT (con su checklist desde la pauta); se agrega como jornada en cada día.
       const r = await programarOtTaller({
         activoId: target.activoId, tipo, prioridad, fecha: fechas[0],
@@ -1586,8 +1593,11 @@ function ProgramarOtDialog({ target, planSemanalId, dias, onClose, onDone, agreg
         planId: tipo === 'preventivo' ? (planId || null) : null,
         reutilizar: !forzarNueva,
       })
+      // [MIG471] Igual que en recepción: se guardan PERSONAS, no un texto con
+      // ids adentro. De esto depende que la OT le pague a alguien.
       for (const f of fechas) {
-        await agregarJornada.mutateAsync({ planSemanalId, otId: r.id, fecha: f, cuadrilla })
+        const j = await agregarJornada.mutateAsync({ planSemanalId, otId: r.id, fecha: f })
+        if (mecanicos.length) await rpcSetCuadrilla(j.plan_ot_id, mecanicos)
       }
       // [MIG466] Se declara después de crear la OT porque antes no existe. Si
       // esto falla, la OT queda igual: cae a la deducción automática, que es
@@ -2472,9 +2482,19 @@ function JornadaDetalleModal({ jornada, planId, onClose }: {
   const { data: checklist, isLoading: loadCl } = useChecklistV3Taller(jornada.ot_id)
   const agregar = useV3AgregarItemTaller(planId, jornada.ot_id)
 
-  const mecIniciales = (jornada.cuadrilla ?? '').split(',').map((s) => s.trim())
-    .filter(Boolean).slice(0, MAX_MECANICOS)
-  const [mecanicos, setMecanicos] = useState<string[]>(mecIniciales)
+  // [MIG471] La cuadrilla guardada se lee POR PERSONA. Antes se partía el texto
+  // por comas y se le pasaba al selector, que desde MIG451 trabaja con ids: no
+  // calzaba nada, así que abría vacío y al guardar escribía ids en el texto.
+  const { data: cuadrillaGuardada } = useQuery({
+    queryKey: ['cuadrilla-jornada', jornada.plan_ot_id],
+    queryFn: () => getCuadrillaJornada(jornada.plan_ot_id),
+  })
+  const [mecanicos, setMecanicos] = useState<string[]>([])
+  const [mecTocado, setMecTocado] = useState(false)
+  useEffect(() => {
+    if (mecTocado || !cuadrillaGuardada) return
+    setMecanicos(cuadrillaGuardada.map((g) => g.tecnico_id).slice(0, MAX_MECANICOS))
+  }, [cuadrillaGuardada, mecTocado])
   // Responsable = técnico del catálogo de taller (mismo selector que el
   // planificador, MIG194). Si la jornada aún no guarda tecnico_id, se muestra
   // el primero de la cuadrilla que calce con el catálogo (planes antiguos).
@@ -2496,9 +2516,10 @@ function JornadaDetalleModal({ jornada, planId, onClose }: {
 
   // Control de cambios: si el plan está confirmado y cambia el personal, exigir motivo.
   const confirmado = jornada.plan_estado !== 'borrador'
+  const idsGuardadosJornada = (cuadrillaGuardada ?? []).map((g) => g.tecnico_id).join('|')
   const personalCambia =
     tecnicoCambia ||
-    (mecanicos.join(', ') !== (jornada.cuadrilla ?? ''))
+    (mecanicos.join('|') !== idsGuardadosJornada)
   const requiereMotivo = confirmado && personalCambia
 
   function guardarCabecera() {
@@ -2510,13 +2531,24 @@ function JornadaDetalleModal({ jornada, planId, onClose }: {
       planOtId: jornada.plan_ot_id,
       // Solo se envía si el usuario lo cambió (la RPC exige motivo con plan confirmado)
       tecnicoId: tecnicoCambia ? (tecnicoId || null) : null,
-      cuadrilla: mecanicos.join(', '),
+      // [MIG471] La cuadrilla ya NO viaja como texto acá: la escribe el RPC de
+      // personas, que además re-deriva el texto para que los dos digan lo mismo.
       horasPlanificadas: horas ? Number(horas) : null,
       avanceObjetivo: meta ? Number(meta) : null,
       observaciones: obs.trim() || null,
       motivo: motivo.trim() || null,
     }, {
-      onSuccess: () => { toast.success('Jornada actualizada'); onClose() },
+      onSuccess: async () => {
+        try {
+          if (mecanicos.join('|') !== idsGuardadosJornada) {
+            await rpcSetCuadrilla(jornada.plan_ot_id, mecanicos, motivo.trim() || null)
+          }
+          toast.success('Jornada actualizada')
+          onClose()
+        } catch (e) {
+          toast.error(`La jornada se guardó, pero la cuadrilla no: ${(e as Error).message}`)
+        }
+      },
       onError: (err) => toast.error((err as Error).message),
     })
   }
@@ -2578,7 +2610,9 @@ function JornadaDetalleModal({ jornada, planId, onClose }: {
           </div>
           <div className="sm:col-span-2">
             <label className="text-xs font-medium">Mecánicos a cargo (hasta {MAX_MECANICOS})</label>
-            <MecanicosPicker value={mecanicos} onChange={setMecanicos} opciones={tecnicos ?? []} />
+            <MecanicosPicker value={mecanicos}
+                             onChange={(v) => { setMecTocado(true); setMecanicos(v) }}
+                             opciones={tecnicos ?? []} />
           </div>
           <div>
             <label className="text-xs font-medium">Meta de avance (%)</label>
