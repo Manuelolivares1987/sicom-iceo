@@ -49,7 +49,13 @@ const s = StyleSheet.create({
   firma: { marginTop: 'auto', alignItems: 'flex-end', paddingTop: 24 },
   // [MIG467] La firma va PEGADA a la raya, no encima del texto: si sobresale,
   // el nombre queda ilegible y el papel se ve arreglado.
-  firmaImg: { width: 160, height: 46, objectFit: 'contain', marginBottom: 1 },
+  //
+  // [MIG470] La caja era 160x46 —proporción de firma alargada— y la firma real
+  // resultó casi cuadrada (ratio 1.21, porque los trazos bajan mucho y lleva el
+  // timbre). En esa caja se habría dibujado a 56x46 pt: un borrón. Ahora la caja
+  // respeta esa proporción, y `contain` deja que una firma más alargada se siga
+  // viendo bien.
+  firmaImg: { width: 130, height: 106, objectFit: 'contain', marginBottom: 1 },
   firmaLinea: { width: 200, borderTopWidth: 1, borderTopColor: '#111', marginBottom: 3 },
   firmaTexto: { fontSize: 9, textAlign: 'center', width: 200 },
   firmaNombre: { fontSize: 9.5, fontFamily: 'Helvetica-Bold', textAlign: 'center', width: 200 },
