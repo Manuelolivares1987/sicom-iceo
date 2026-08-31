@@ -179,6 +179,16 @@ export default function BonoTallerPage() {
               <> · promedio diario {disp.promedio_diario_pct}%</>
             )}
           </p>
+          {/* [MIG459] Un indicador incompleto no es mentira, pero quien firma un
+              pago tiene que saberlo ANTES de firmarlo. */}
+          {disp && (disp.dias_sin_registro > 0 || disp.dias_incompletos > 0) && (
+            <p className="mt-1 text-[11px] font-medium text-amber-800">
+              Medido sobre {disp.dias_con_registro} de {disp.dias_transcurridos} días
+              transcurridos
+              {disp.dias_sin_registro > 0 && <> · {disp.dias_sin_registro} sin registro</>}
+              {disp.dias_incompletos > 0 && <> · {disp.dias_incompletos} a medias</>}
+            </p>
+          )}
         </div>
         <div className="rounded-xl border border-gray-200 bg-white p-3">
           <div className="flex items-center gap-1.5"><Users className="h-3.5 w-3.5 text-gray-500" />
