@@ -132,11 +132,32 @@ export async function getCertificadoEmitido(id: string): Promise<CertificadoHerm
 }
 
 /** Sube una foto del control fotográfico y devuelve su URL pública. */
+/**
+ * Sube una foto de la prueba de hermeticidad.
+ *
+ * OJO CON LA CARPETA. El bucket `documentos` tiene RLS por prefijo de ruta, y
+ * la politica de certificados solo admite `certificaciones/...` y `cert/...`.
+ * Esto escribia en `certificados/...` —una tercera grafia que no existe— y el
+ * upload moria con «new row violates row-level security policy», sin decir por
+ * que. No era un problema de rol: le pasaba a cualquiera que adjuntara una
+ * foto, administrador incluido.
+ *
+ * `cert/` es la carpeta que ya usa el resto del modulo (taller-planificacion).
+ * Si hace falta una carpeta nueva, hay que agregarla a la politica ANTES.
+ */
 export async function subirFotoCertificado(activoId: string, momento: 'inicio' | 'termino', file: File) {
   const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
-  const path = `certificados/hermeticidad/${activoId}/${Date.now()}-${momento}-${safe}`
+  const path = `cert/hermeticidad/${activoId}/${Date.now()}-${momento}-${safe}`
   const { error } = await supabase.storage.from('documentos').upload(path, file, { upsert: false })
-  if (error) throw error
+  if (error) {
+    // El mensaje crudo de storage no le dice nada a quien esta emitiendo.
+    if (/row-level security/i.test(error.message)) {
+      throw new Error(
+        `No se pudo guardar la foto de ${momento}: el sistema no tiene permiso para ` +
+        `escribir en esa carpeta. Avisa a soporte — no es tu perfil, es la ruta.`)
+    }
+    throw new Error(`No se pudo subir la foto de ${momento}: ${error.message}`)
+  }
   return supabase.storage.from('documentos').getPublicUrl(path).data.publicUrl
 }
 
