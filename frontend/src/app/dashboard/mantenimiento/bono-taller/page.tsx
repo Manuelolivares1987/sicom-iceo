@@ -30,7 +30,7 @@ import { useToast } from '@/contexts/toast-context'
 import { usePermissions } from '@/hooks/use-permissions'
 import {
   useResumenBono, useDisponibilidadPeriodo, usePeriodosBono,
-  useCerrarPeriodo, useReabrirPeriodo, useCartolaBono,
+  useCerrarPeriodo, useReabrirPeriodo, useCartolaBono, useOTSinDueno,
 } from '@/hooks/use-taller-bono'
 import { clp, corteDelMes, CONCEPTO_LABEL } from '@/lib/services/taller-bono'
 
@@ -65,6 +65,9 @@ export default function BonoTallerPage() {
   const { data: lineas = [], isLoading, error } = useResumenBono(corte.desde, corte.hasta)
   const { data: disp } = useDisponibilidadPeriodo(corte.desde, corte.hasta)
   const { data: periodos = [] } = usePeriodosBono()
+  // [MIG464] Trabajo cerrado en el corte que no le paga a nadie. No falla solo:
+  // desaparece del bono en silencio, que es peor.
+  const { data: sinDueno = [] } = useOTSinDueno(corte.desde, corte.hasta)
   const cerrar = useCerrarPeriodo()
   const reabrir = useReabrirPeriodo()
 
@@ -337,12 +340,34 @@ export default function BonoTallerPage() {
             </div>
           )}
 
+          {sinDueno.length > 0 && (
+            <div className="mt-2 flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-2.5 text-xs text-amber-900">
+              <AlertTriangle className="mt-px h-4 w-4 shrink-0" />
+              <div>
+                <p className="font-medium">
+                  {sinDueno.length === 1
+                    ? 'Hay una OT cerrada en el corte que no le paga a nadie:'
+                    : `Hay ${sinDueno.length} OT cerradas en el corte que no le pagan a nadie:`}
+                </p>
+                <ul className="mt-1 list-disc pl-4">
+                  {sinDueno.map((o) => (
+                    <li key={o.ot_id}><span className="font-mono">{o.ot_folio}</span> — {o.motivo}</li>
+                  ))}
+                </ul>
+                <p className="mt-1">
+                  Asígnales cuadrilla en el Plan Semanal, o confirma con la jefatura que no
+                  corresponde pagarlas. Sin eso, ese trabajo se cerraría sin llegarle a nadie.
+                </p>
+              </div>
+            </div>
+          )}
+
           <input value={notas} onChange={(e) => setNotas(e.target.value)}
                  placeholder="Nota del cierre (opcional): número de acta, acuerdos, etc."
                  className="mt-3 w-full rounded-lg border border-gray-300 px-2 py-1.5 text-sm" />
 
           {!confirmando ? (
-            <Button className="mt-3" disabled={conFalta.length > 0}
+            <Button className="mt-3" disabled={conFalta.length > 0 || sinDueno.length > 0}
                     onClick={() => setConfirmando(true)}>
               <Lock className="mr-1 h-4 w-4" /> Cerrar el corte
             </Button>

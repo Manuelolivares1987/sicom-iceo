@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   getCartola, getResumenBono, getDisponibilidadPeriodo, getPeriodos,
-  cerrarPeriodo, reabrirPeriodo, acusarRecibo,
+  cerrarPeriodo, reabrirPeriodo, acusarRecibo, getOTSinDueno,
 } from '@/lib/services/taller-bono'
 
 const KEY_PERIODOS = ['bono-periodos'] as const
@@ -32,6 +32,15 @@ export function useDisponibilidadPeriodo(desde: string, hasta: string) {
     queryKey: ['bono-disponibilidad', desde, hasta],
     queryFn: () => getDisponibilidadPeriodo(desde, hasta),
     staleTime: 60_000,
+  })
+}
+
+export function useOTSinDueno(desde: string, hasta: string) {
+  return useQuery({
+    queryKey: ['bono-ot-sin-dueno', desde, hasta],
+    queryFn: () => getOTSinDueno(desde, hasta),
+    staleTime: 30_000,
+    retry: false,
   })
 }
 
