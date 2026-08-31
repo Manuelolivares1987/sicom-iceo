@@ -4,7 +4,7 @@ import { useState, useRef, useEffect, useMemo } from 'react'
 import { useToast } from '@/contexts/toast-context'
 import { getTecnicosActivos } from '@/lib/services/taller-plan-semanal'
 import {
-  getOSDeOT, getPersonasDeOS, crearOS, ESTADO_OS_LABEL,
+  getOSDeOT, getPersonasDeOS, crearOS, asignarOS, ESTADO_OS_LABEL,
 } from '@/lib/services/taller-os'
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import { useParams } from 'next/navigation'
@@ -2393,6 +2393,19 @@ function OrdenesDeServicioPanel({ otId }: { otId: string }) {
   const [resp, setResp] = useState('')
   const [sel, setSel] = useState<Set<string>>(new Set())
   const [verPersonas, setVerPersonas] = useState<string | null>(null)
+  const [asignando, setAsignando] = useState<string | null>(null)
+  const [asigTec, setAsigTec] = useState('')
+  const [asigMotivo, setAsigMotivo] = useState('')
+
+  const asignar = useMutation({
+    mutationFn: asignarOS,
+    onSuccess: (r) => {
+      toast.success(r.aviso ? `Asignada. ${r.aviso}` : 'Asignada')
+      setAsignando(null); setAsigTec(''); setAsigMotivo('')
+      qc.invalidateQueries({ queryKey: ['os-de-ot', otId] })
+    },
+    onError: (e) => toast.error((e as Error).message),
+  })
 
   // Las NC que ya están en alguna OS no se pueden volver a agrupar.
   const yaAsignadas = useMemo(() => new Set<string>(), [])
@@ -2458,11 +2471,51 @@ function OrdenesDeServicioPanel({ otId }: { otId: string }) {
                     ? <>Encargada a {os.responsable} · nadie ha empezado</>
                     : 'Sin responsable ni trabajo registrado'}
               </p>
-              {os.quienes && (
-                <button onClick={() => setVerPersonas(verPersonas === os.id ? null : os.id)}
-                        className="mt-1 text-[11px] font-medium text-blue-600 underline">
-                  {verPersonas === os.id ? 'Ocultar el detalle' : 'Ver quién hizo qué'}
-                </button>
+              <div className="mt-1 flex flex-wrap items-center gap-3">
+                {os.quienes && (
+                  <button onClick={() => setVerPersonas(verPersonas === os.id ? null : os.id)}
+                          className="text-[11px] font-medium text-blue-600 underline">
+                    {verPersonas === os.id ? 'Ocultar el detalle' : 'Ver quién hizo qué'}
+                  </button>
+                )}
+                {/* [MIG474] Mover a alguien es del jefe. El operador sólo
+                    ejecuta lo que le asignaron, así que el botón vive acá y no
+                    en el teléfono. */}
+                {os.estado !== 'finalizada' && os.estado !== 'anulada' && (
+                  <button onClick={() => { setAsignando(os.id); setAsigTec(''); setAsigMotivo('') }}
+                          className="text-[11px] font-medium text-blue-600 underline">
+                    {os.responsable ? 'Cambiar quién la hace' : 'Asignar a alguien'}
+                  </button>
+                )}
+              </div>
+
+              {asignando === os.id && (
+                <div className="mt-2 rounded-lg border border-blue-200 bg-blue-50 p-2.5">
+                  <label className="text-[11px] font-medium text-gray-700">A quién se la asignas</label>
+                  <select value={asigTec} onChange={(e) => setAsigTec(e.target.value)}
+                          className="mt-0.5 w-full rounded border border-gray-300 bg-white px-2 py-1.5 text-sm">
+                    <option value="">— Elige un mecánico —</option>
+                    {tecnicos.map((t) => <option key={t.id} value={t.id}>{t.nombre}</option>)}
+                  </select>
+                  <input value={asigMotivo} onChange={(e) => setAsigMotivo(e.target.value)}
+                         placeholder="Por qué (opcional): urgente, se liberó, cambio de turno…"
+                         className="mt-1.5 w-full rounded border border-gray-300 px-2 py-1.5 text-sm" />
+                  <p className="mt-1 text-[10px] text-gray-600">
+                    Si ya estaba en otro trabajo, se le cierra el tiempo ahí con su motivo. El
+                    mecánico no puede cambiarse solo.
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <Button size="sm" disabled={!asigTec || asignar.isPending}
+                            onClick={() => asignar.mutate({ osId: os.id, tecnicoId: asigTec, motivo: asigMotivo, arrancar: false })}>
+                      Asignar
+                    </Button>
+                    <Button size="sm" variant="outline" disabled={!asigTec || asignar.isPending}
+                            onClick={() => asignar.mutate({ osId: os.id, tecnicoId: asigTec, motivo: asigMotivo, arrancar: true })}>
+                      Asignar y que parta ahora
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => setAsignando(null)}>Cancelar</Button>
+                  </div>
+                </div>
               )}
               {verPersonas === os.id && <PersonasDeOS osId={os.id} />}
             </div>

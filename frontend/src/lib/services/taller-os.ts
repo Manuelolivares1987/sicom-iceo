@@ -81,6 +81,47 @@ export async function crearOS(p: {
   return data as { success: boolean; os_id: string; folio: string; nc_asignadas: number }
 }
 
+// ── [MIG474] Al operador lo mueve el jefe ───────────────────────────────────
+//
+// Asignar es la decisión del jefe: a quién le toca esta OS. Mover a alguien es
+// reasignarlo, y eso además le para el reloj donde estaba. El operador sólo
+// puede empezar y pausar lo que ya le asignaron.
+
+export type AsignacionVigente = {
+  tecnico_id: string; tecnico: string
+  os_id: string; os_folio: string; titulo: string
+  ot_folio: string; patente: string | null
+  asignado_desde: string; asignado_por: string | null; motivo: string | null
+  trabajando: boolean
+}
+
+/** A qué está asignado cada mecánico ahora, y si está trabajando o no. */
+export async function getAsignacionesVigentes(): Promise<AsignacionVigente[]> {
+  const { data, error } = await supabase
+    .from('v_taller_os_asignacion_vigente').select('*').order('tecnico')
+  if (error) throw new Error(error.message)
+  return (data ?? []) as AsignacionVigente[]
+}
+
+/** La acción del jefe. `arrancar` deja al mecánico andando de inmediato. */
+export async function asignarOS(p: {
+  osId: string; tecnicoId: string; motivo?: string | null; arrancar?: boolean
+}) {
+  const { data, error } = await supabase.rpc('rpc_taller_os_asignar', {
+    p_os_id: p.osId, p_tecnico_id: p.tecnicoId,
+    p_motivo: p.motivo ?? null, p_arrancar: p.arrancar ?? false,
+  })
+  if (error) throw new Error(error.message)
+  return data as { success: boolean; ya_estaba?: boolean; aviso?: string | null; arrancada?: boolean }
+}
+
+export async function desasignarTecnico(tecnicoId: string, motivo?: string | null) {
+  const { error } = await supabase.rpc('rpc_taller_os_desasignar', {
+    p_tecnico_id: tecnicoId, p_motivo: motivo ?? null,
+  })
+  if (error) throw new Error(error.message)
+}
+
 export async function iniciarOS(osId: string, tecnicoId: string) {
   const { data, error } = await supabase.rpc('rpc_taller_os_iniciar', {
     p_os_id: osId, p_tecnico_id: tecnicoId,
