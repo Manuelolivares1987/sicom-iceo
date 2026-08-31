@@ -8,7 +8,7 @@ import {
   rpcAgregarJornadaOT,
   rpcQuitarJornada, rpcConfirmarPlanSemanal, rpcLiberarOts,
   rpcV3SetTiempo, rpcV3SetExcluido, rpcV3AgregarItem, rpcV3EliminarCustom,
-  rpcAdminSembrarPlanesFaltantes,
+  rpcAdminSembrarPlanesFaltantes, rpcSetCuadrilla,
 } from '@/lib/services/taller-plan-semanal'
 // Capa offline del Kanban del jefe: lecturas cacheadas + cola de mutaciones
 // que se sincroniza al recuperar internet.
@@ -80,6 +80,16 @@ export function useUsuariosAsignablesTaller() {
     staleTime: 5 * 60_000,
   })
 }
+export function useSetCuadrillaTaller(planId: string | null) {
+  const invalidate = useInvalidatePlan(planId)
+  return useMutation({
+    networkMode: 'always',
+    mutationFn: (p: { planOtId: string; tecnicoIds: string[]; motivo?: string | null }) =>
+      rpcSetCuadrilla(p.planOtId, p.tecnicoIds, p.motivo),
+    onSuccess: () => invalidate(),
+  })
+}
+
 export function useTallerTecnicos(operacion?: string | null) {
   return useQuery({
     queryKey: KEY('tecnicos', operacion),

@@ -6,6 +6,7 @@ import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { useAuth } from '@/contexts/auth-context'
 import { usePermissions } from '@/hooks/use-permissions'
+import { declararTrabajoExterno, autorizarTrabajoExterno } from '@/lib/services/ordenes-trabajo'
 import {
   getJornadasDeOT, getChecklistV3OT, type ChecklistV3Item,
   respuestaCaptura, type MedicionItem,
@@ -271,6 +272,140 @@ function CapturaItemDashboard({ item, disabled, onGuardar }: {
               onClick={() => onGuardar({ observacion: texto.trim() || null })}>
         Guardar
       </button>
+    </div>
+  )
+}
+
+/**
+ * [MIG446/447] Trabajo que se fue afuera.
+ *
+ * Mandar una OT a un tercero era algo que se hacía y no se anotaba: el campo
+ * `equipo_externo` existía pero se usaba como nota de ubicación —22 de 241
+ * jornadas, con patentes, faenas y hasta nombres de mecánicos propios adentro—,
+ * así que no había forma de saber qué trabajo hizo el taller y cuál no. Y eso es
+ * justo lo que el bono paga.
+ *
+ * Declarar exige proveedor y motivo. Autorizar es de la jefatura de operaciones
+ * y no lo puede hacer quien declaró. Sin autorización la OT no se cierra, y una
+ * OT externa no genera bono para nadie.
+ */
+function TrabajoExternoPanel({ ot, onCambio }: {
+  ot: {
+    id: string
+    ejecutada_por_externo?: boolean | null
+    proveedor_externo?: string | null
+    externo_motivo?: string | null
+    externo_autorizado_at?: string | null
+  }
+  onCambio: () => void
+}) {
+  const { rol } = usePermissions()
+  const puedeDeclarar = ['administrador', 'subgerente_operaciones', 'jefe_mantenimiento',
+                         'jefe_operaciones', 'planificador', 'supervisor'].includes(rol ?? '')
+  const puedeAutorizar = ['administrador', 'subgerente_operaciones', 'jefe_operaciones'].includes(rol ?? '')
+
+  const externo = !!ot.ejecutada_por_externo
+  const autorizado = !!ot.externo_autorizado_at
+
+  const [abierto, setAbierto] = useState(false)
+  const [proveedor, setProveedor] = useState(ot.proveedor_externo ?? '')
+  const [motivo, setMotivo] = useState(ot.externo_motivo ?? '')
+  const [error, setError] = useState<string | null>(null)
+  const [guardando, setGuardando] = useState(false)
+
+  async function guardar(esExterno: boolean) {
+    setGuardando(true); setError(null)
+    try {
+      await declararTrabajoExterno(ot.id, esExterno, proveedor, motivo)
+      setAbierto(false); onCambio()
+    } catch (e) { setError((e as Error).message) } finally { setGuardando(false) }
+  }
+
+  async function autorizar() {
+    setGuardando(true); setError(null)
+    try { await autorizarTrabajoExterno(ot.id); onCambio() }
+    catch (e) { setError((e as Error).message) } finally { setGuardando(false) }
+  }
+
+  if (!externo && !puedeDeclarar) return null
+
+  return (
+    <div className={`rounded-lg border p-3 text-sm ${
+      externo && !autorizado ? 'border-amber-300 bg-amber-50'
+      : externo ? 'border-gray-200 bg-white'
+      : 'border-gray-200 bg-white'}`}>
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="font-semibold text-gray-800">Trabajo de externo</span>
+        {externo ? (
+          <span className={`rounded px-2 py-0.5 text-xs font-semibold ${
+            autorizado ? 'bg-green-100 text-green-800' : 'bg-amber-200 text-amber-900'}`}>
+            {autorizado ? 'Autorizado' : 'Falta autorización'}
+          </span>
+        ) : (
+          <span className="text-xs text-gray-500">Lo hizo el taller</span>
+        )}
+        {puedeDeclarar && !abierto && (
+          <button onClick={() => setAbierto(true)}
+                  className="ml-auto text-xs font-medium text-blue-600 underline">
+            {externo ? 'Corregir' : 'Declarar que lo hizo un externo'}
+          </button>
+        )}
+      </div>
+
+      {externo && !abierto && (
+        <p className="mt-1.5 text-xs text-gray-600">
+          <span className="font-medium">{ot.proveedor_externo}</span>
+          {ot.externo_motivo ? ` · ${ot.externo_motivo}` : ''}
+        </p>
+      )}
+
+      {externo && !autorizado && !abierto && (
+        <p className="mt-1.5 text-xs text-amber-900">
+          Mientras no la autorice la jefatura de operaciones, esta OT no se puede cerrar.
+          Tampoco genera bono para el taller.
+        </p>
+      )}
+
+      {externo && !autorizado && puedeAutorizar && !abierto && (
+        <button onClick={autorizar} disabled={guardando}
+                className="mt-2 rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50">
+          {guardando ? 'Autorizando…' : 'Autorizar el trabajo externo'}
+        </button>
+      )}
+
+      {abierto && (
+        <div className="mt-2 space-y-2">
+          <div>
+            <label className="text-xs font-medium">Empresa que hizo el trabajo</label>
+            <input value={proveedor} onChange={(e) => setProveedor(e.target.value)}
+                   placeholder="Nombre del proveedor"
+                   className="mt-0.5 w-full rounded border border-gray-300 px-2 py-1.5 text-sm" />
+          </div>
+          <div>
+            <label className="text-xs font-medium">Por qué salió del taller</label>
+            <textarea rows={2} value={motivo} onChange={(e) => setMotivo(e.target.value)}
+                      placeholder="Mínimo 10 caracteres"
+                      className="mt-0.5 w-full rounded border border-gray-300 px-2 py-1.5 text-sm" />
+          </div>
+          {error && <p className="text-xs font-medium text-red-600">{error}</p>}
+          <div className="flex flex-wrap gap-2">
+            <button onClick={() => guardar(true)} disabled={guardando}
+                    className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50">
+              {guardando ? 'Guardando…' : 'Guardar'}
+            </button>
+            {externo && (
+              <button onClick={() => guardar(false)} disabled={guardando}
+                      className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700">
+                Lo hizo el taller después de todo
+              </button>
+            )}
+            <button onClick={() => { setAbierto(false); setError(null) }}
+                    className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs text-gray-600">
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -1748,6 +1883,15 @@ export default function OrdenTrabajoDetailPage() {
       {(otData.estado === 'creada' || otData.estado === 'asignada') && id && (
         <EditarOTCard otData={otData} otId={id} />
       )}
+
+      {/* [MIG446/447] Quién hizo el trabajo: el taller o un tercero. Va arriba
+          porque decide si la OT se puede cerrar y si genera bono. */}
+      <div className="mb-4">
+        <TrabajoExternoPanel
+          ot={otData as never}
+          onCambio={() => qc.invalidateQueries({ queryKey: ['orden-trabajo', id] })}
+        />
+      </div>
 
       {/* Feedback */}
       {actionError && (

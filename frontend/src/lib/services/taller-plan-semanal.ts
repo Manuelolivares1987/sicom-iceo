@@ -107,6 +107,25 @@ export const CATEGORIAS_TAREA_LIBRE: CategoriaTareaTaller[] = [
   'asistencia_terreno', 'equipo_externo', 'soldadura',
 ]
 
+/**
+ * [MIG451] La cuadrilla se guarda por persona, no como un string con comas.
+ * El RPC escribe las dos cosas —la tabla, que es la que paga, y el texto que
+ * el resto de las pantallas todavía muestra— para que no puedan discrepar.
+ */
+export async function rpcSetCuadrilla(planOtId: string, tecnicoIds: string[], motivo?: string | null) {
+  const { data, error } = await supabase.rpc('rpc_taller_set_cuadrilla', {
+    p_plan_ot_id: planOtId, p_tecnico_ids: tecnicoIds, p_motivo: motivo ?? null,
+  })
+  if (error) throw error
+  return data as { success: boolean; cuadrilla: string | null; personas: number }
+}
+
+export async function getCuadrillaJornada(planOtId: string) {
+  const { data, error } = await supabase.rpc('rpc_taller_cuadrilla_jornada', { p_plan_ot_id: planOtId })
+  if (error) throw error
+  return (data ?? []) as { tecnico_id: string; nombre: string; rol: string }[]
+}
+
 export type TallerTecnico = {
   id: string
   nombre: string

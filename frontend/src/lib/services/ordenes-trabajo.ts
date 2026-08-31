@@ -376,3 +376,26 @@ export async function getOTsStats(faenaId?: string) {
 // ── Aliases (used by hooks) ─────────────────────────────────────────
 
 export const addEvidencia = addEvidenciaOT
+
+// ── [MIG446/447] Trabajo hecho por un tercero ───────────────────────────────
+//
+// El campo `equipo_externo` del plan nunca fue esto: era una nota de ubicación
+// donde la gente escribía patentes, faenas y hasta nombres de mecánicos propios.
+// Esto sí es una declaración, con proveedor y motivo, y la autoriza otra persona.
+
+export async function declararTrabajoExterno(
+  otId: string, externo: boolean, proveedor?: string | null, motivo?: string | null,
+) {
+  const { data, error } = await supabase.rpc('rpc_taller_declarar_externo', {
+    p_ot_id: otId, p_externo: externo,
+    p_proveedor: proveedor ?? null, p_motivo: motivo ?? null,
+  })
+  if (error) throw error
+  return data as { success: boolean; folio: string; externo: boolean }
+}
+
+export async function autorizarTrabajoExterno(otId: string) {
+  const { data, error } = await supabase.rpc('rpc_taller_autorizar_externo', { p_ot_id: otId })
+  if (error) throw error
+  return data as { success: boolean; folio: string }
+}
