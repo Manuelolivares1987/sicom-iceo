@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
   Wrench, ChevronRight, ChevronDown, RefreshCw, WifiOff, CloudOff, CheckCircle2, Play, Pause, User, LogOut,
-  ArrowLeft, PackageSearch, Download, ChevronLeft, Calendar, Wallet,
+  ArrowLeft, PackageSearch, Download, ChevronLeft, Calendar,
 } from 'lucide-react'
 import { Spinner } from '@/components/ui/spinner'
 import { useAuth } from '@/contexts/auth-context'
@@ -363,15 +363,12 @@ export default function MecanicoHomePage() {
         <ChevronRight className="ml-auto h-4 w-4 shrink-0 text-gray-400" />
       </Link>
 
-      {/* [MIG456] La cartola. Va acá, junto a lo demás que el mecánico hace por
-          sí mismo, y no escondida en un menú: el bono es suyo. */}
-      <Link href="/m/taller/mi-bono"
-            className="flex items-center gap-2 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 active:bg-emerald-100">
-        <Wallet className="h-4 w-4 shrink-0 text-emerald-700" />
-        <span className="text-sm font-semibold text-emerald-900">Mi bono</span>
-        <span className="truncate text-[11px] text-emerald-700">qué llevo en este corte</span>
-        <ChevronRight className="ml-auto h-4 w-4 shrink-0 text-emerald-500" />
-      </Link>
+      {/* [MIG460] Acá iba «Mi bono». Se saca hasta que la marcha blanca demuestre
+          que el cálculo es correcto: un monto equivocado que el mecánico ya vio
+          no se desmiente con una migración, se arrastra meses en el taller.
+          Mientras tanto el cálculo lo revisan administración, operaciones y la
+          jefatura de taller en /dashboard/mantenimiento/bono-taller. Para
+          reabrirlo: este bloque más una fila en `taller_bono_acceso`. */}
 
       {/* ── Filtros ──────────────────────────────────────────────────────────
           Antes el único filtro era «Todas / Del mecánico elegido», y con nadie

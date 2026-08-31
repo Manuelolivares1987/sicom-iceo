@@ -18,7 +18,7 @@
 // siempre lo mismo, aunque una OT se reabra en octubre.
 // ============================================================================
 
-import { useMemo, useState } from 'react'
+import { Fragment, useMemo, useState } from 'react'
 import Link from 'next/link'
 import {
   Wallet, Lock, Unlock, AlertTriangle, ChevronLeft, ChevronRight, Users,
@@ -30,11 +30,16 @@ import { useToast } from '@/contexts/toast-context'
 import { usePermissions } from '@/hooks/use-permissions'
 import {
   useResumenBono, useDisponibilidadPeriodo, usePeriodosBono,
-  useCerrarPeriodo, useReabrirPeriodo,
+  useCerrarPeriodo, useReabrirPeriodo, useCartolaBono,
 } from '@/hooks/use-taller-bono'
-import { clp, corteDelMes } from '@/lib/services/taller-bono'
+import { clp, corteDelMes, CONCEPTO_LABEL } from '@/lib/services/taller-bono'
 
-const PUEDE_CERRAR = ['administrador', 'subgerente_operaciones', 'jefe_operaciones', 'jefe_mantenimiento']
+// [MIG460] Mientras dure la marcha blanca el cálculo del bono no se le muestra
+// al taller. El candado de verdad vive en el RPC (tabla `taller_bono_acceso`);
+// esta lista existe para no dejar que alguien llegue a una pantalla que le va a
+// responder un error.
+const PUEDE_VER = ['administrador', 'subgerente_operaciones', 'jefe_operaciones', 'jefe_mantenimiento']
+const PUEDE_CERRAR = PUEDE_VER
 const PUEDE_REABRIR = ['administrador', 'subgerente_operaciones']
 
 function fmt(iso: string): string {
@@ -46,8 +51,13 @@ function fmt(iso: string): string {
 export default function BonoTallerPage() {
   const toast = useToast()
   const { rol } = usePermissions()
+  const puedeVer = PUEDE_VER.includes(rol ?? '')
   const puedeCerrar = PUEDE_CERRAR.includes(rol ?? '')
   const puedeReabrir = PUEDE_REABRIR.includes(rol ?? '')
+
+  // Quién está abierto en el detalle. Revisar persona por persona es lo que
+  // permite decir «esto ya está bien» antes de abrirle la cartola al taller.
+  const [abierto, setAbierto] = useState<string | null>(null)
 
   const [ancla, setAncla] = useState(() => new Date())
   const corte = useMemo(() => corteDelMes(ancla), [ancla])
@@ -73,6 +83,24 @@ export default function BonoTallerPage() {
 
   const moverCorte = (meses: number) => {
     const d = new Date(ancla); d.setMonth(d.getMonth() + meses); setAncla(d)
+  }
+
+  if (!puedeVer) {
+    return (
+      <div className="p-6">
+        <Link href="/dashboard/mantenimiento"
+              className="mb-3 inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700">
+          <ArrowLeft className="h-4 w-4" /> Mantenimiento
+        </Link>
+        <div className="max-w-lg rounded-xl border border-gray-200 bg-white p-5">
+          <h1 className="text-lg font-semibold text-gray-900">El bono todavía no está abierto</h1>
+          <p className="mt-2 text-sm text-gray-600">
+            Mientras dure la marcha blanca, el cálculo del bono lo revisan administración,
+            operaciones y la jefatura de taller. Se abre cuando el cálculo esté validado.
+          </p>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -240,9 +268,15 @@ export default function BonoTallerPage() {
             </thead>
             <tbody>
               {lineas.map((l) => (
-                <tr key={l.tecnico_id} className={`border-b border-gray-100 last:border-0 ${
-                  l.falta ? 'bg-amber-50/50' : ''}`}>
-                  <td className="px-3 py-2 font-medium text-gray-800">{l.tecnico}</td>
+                <Fragment key={l.tecnico_id}>
+                <tr onClick={() => setAbierto(abierto === l.tecnico_id ? null : l.tecnico_id)}
+                    className={`cursor-pointer border-b border-gray-100 last:border-0 hover:bg-gray-50 ${
+                  l.falta ? 'bg-amber-50/50' : ''} ${abierto === l.tecnico_id ? 'bg-gray-50' : ''}`}>
+                  <td className="px-3 py-2 font-medium text-gray-800">
+                    <ChevronRight className={`mr-1 inline h-3.5 w-3.5 text-gray-400 transition-transform ${
+                      abierto === l.tecnico_id ? 'rotate-90' : ''}`} />
+                    {l.tecnico}
+                  </td>
                   <td className="px-3 py-2 text-gray-600">{l.cargo ?? '—'}</td>
                   <td className="px-3 py-2 text-right tabular-nums text-gray-600">{l.ots}</td>
                   <td className="px-3 py-2 text-right tabular-nums text-gray-500">{clp(l.plan_formula)}</td>
@@ -257,6 +291,15 @@ export default function BonoTallerPage() {
                     {l.aviso && <span className="text-gray-500">{l.aviso}</span>}
                   </td>
                 </tr>
+                {abierto === l.tecnico_id && (
+                  <tr className="border-b border-gray-100 bg-gray-50">
+                    <td colSpan={10} className="px-3 py-3">
+                      <DetalleTecnico desde={corte.desde} hasta={corte.hasta}
+                                      tecnicoId={l.tecnico_id} nombre={l.tecnico} />
+                    </td>
+                  </tr>
+                )}
+                </Fragment>
               ))}
               {lineas.length === 0 && (
                 <tr><td colSpan={10} className="px-3 py-6 text-center text-gray-400">
@@ -351,6 +394,64 @@ export default function BonoTallerPage() {
           </div>
         </>
       )}
+    </div>
+  )
+}
+
+
+/**
+ * [MIG460] El detalle de una persona, dentro de la tabla.
+ *
+ * Es lo mismo que vería el mecánico en su cartola, pero mirado por quien tiene
+ * que validarlo primero. Sin esto la revisión se queda en el total y el total
+ * no se puede discutir: lo que se discute es «esta OT no la hice yo» o «esa
+ * demora no fue mía».
+ */
+function DetalleTecnico({ desde, hasta, tecnicoId, nombre }: {
+  desde: string; hasta: string; tecnicoId: string; nombre: string
+}) {
+  const { data, isLoading, error } = useCartolaBono(desde, hasta, tecnicoId)
+
+  if (isLoading) return <div className="py-3 text-center"><Spinner className="h-4 w-4" /></div>
+  if (error) return <p className="text-xs text-red-700">{(error as Error).message}</p>
+
+  const det = data?.detalle ?? []
+  if (det.length === 0) {
+    return (
+      <p className="text-xs text-gray-500">
+        Ninguna OT de {nombre} se cerró dentro de este corte. El bono por trabajo se paga
+        cuando la OT queda ejecutada, no cuando se empieza.
+      </p>
+    )
+  }
+
+  return (
+    <div className="space-y-1.5">
+      <p className="text-[11px] font-medium uppercase tracking-wide text-gray-500">
+        Trabajos contados a {nombre}
+      </p>
+      {det.map((d, i) => (
+        <div key={(d.ot_id ?? '') + i}
+             className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm">
+          <span className="font-mono text-[11px] text-gray-500">{d.ot_folio}</span>
+          <span className="text-gray-800">
+            {d.concepto ? (CONCEPTO_LABEL[d.concepto] ?? d.concepto) : 'Sin concepto'}
+          </span>
+          <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[11px] text-gray-600">
+            {d.dias} {Number(d.dias) === 1 ? 'día' : 'días'} · {d.tramo ?? '—'}
+          </span>
+          {d.participacion != null && Number(d.participacion) < 1 && (
+            <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[11px] text-gray-600">
+              le tocó el {Math.round(Number(d.participacion) * 100)}% ({d.base_reparto})
+            </span>
+          )}
+          {d.aviso && <span className="text-[11px] text-gray-500">{d.aviso}</span>}
+          <span className="ml-auto text-right tabular-nums">
+            <span className="text-gray-400">planilla {clp(d.monto_formula)}</span>
+            <span className="ml-3 font-semibold text-gray-900">{clp(d.monto_propuesto)}</span>
+          </span>
+        </div>
+      ))}
     </div>
   )
 }

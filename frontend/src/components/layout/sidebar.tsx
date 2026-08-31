@@ -182,7 +182,12 @@ const navGroups: NavGroup[] = [
           { label: 'Equipos auxiliares', href: '/dashboard/mantenimiento/auxiliares', icon: Layers, module: 'mantenimiento' },
           // [MIG452-456] El bono deja de ser discrecional: se calcula, se cierra
           // y el trabajador lo revisa en su teléfono.
+          // [MIG460] El cálculo del bono no se muestra al taller hasta que la
+          // marcha blanca lo valide. El candado de verdad está en el RPC
+          // (`taller_bono_acceso`); esta lista sólo evita mostrar una puerta
+          // que se va a cerrar en la cara.
           { label: 'Bono del taller', href: '/dashboard/mantenimiento/bono-taller', icon: Wallet, module: 'mantenimiento', badge: 'NUEVO',
+            roles: ['administrador', 'subgerente_operaciones', 'jefe_operaciones', 'jefe_mantenimiento'],
             tooltip: 'Plan de incentivo por trabajo + KPI de disponibilidad, y el cierre del corte' },
           // [MIG399] Los tres tramos del trabajo medidos con los relojes que el
           // sistema ya guardaba: checklist, repuesto y no conformidad.
