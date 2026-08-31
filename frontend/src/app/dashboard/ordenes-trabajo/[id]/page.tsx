@@ -1750,7 +1750,12 @@ function EditarOTCard({ otData, otId }: { otData: any; otId: string }) {
 function PlanSemanalBanner({ otId }: { otId: string }) {
   const { data: jornadas = [] } = useQuery({ queryKey: ['ot-jornadas', otId], queryFn: () => getJornadasDeOT(otId), enabled: !!otId, staleTime: 30_000 })
   if (jornadas.length === 0) return null
-  const cuadrillas = Array.from(new Set(jornadas.map((j) => j.cuadrilla).filter(Boolean))) as string[]
+  // [MIG455] Deduplicar por NOMBRE, no por el texto completo de cada jornada.
+  // «Marco Díaz, Joel Coo», «Marco Díaz» y «Joel Coo, Marco Díaz» son tres textos
+  // distintos: un Set sobre ellos los deja pasar a los tres y la lista repite gente.
+  const cuadrillas = Array.from(new Set(
+    jornadas.flatMap((j) => (j.cuadrilla ?? '').split(',')).map((n) => n.trim()).filter(Boolean),
+  )).sort((a, b) => a.localeCompare(b, 'es'))
   const responsable = cuadrillas.length ? cuadrillas.join(' · ') : (jornadas.find((j) => j.responsable)?.responsable ?? 'Sin asignar')
   return (
     <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 p-3">
