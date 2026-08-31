@@ -28,6 +28,7 @@ export type TallerPending = {
   valor_numerico?: number | null                     // ítems de captura numérica (MIG444)
   // kind = 'timing' (cronómetro de jornada)
   accion?: 'iniciar' | 'pausar' | 'finalizar'
+  tecnico_id?: string | null        // quién apretó el reloj (MIG448)
   user_id?: string
   observaciones?: string | null
   con_observaciones?: boolean

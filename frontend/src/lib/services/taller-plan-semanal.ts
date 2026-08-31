@@ -750,9 +750,11 @@ export async function rpcConfirmarPlanSemanal(planSemanalId: string) {
   return data as { success: boolean; ots_confirmadas: number }
 }
 
-export async function rpcIniciarEjecucion(otId: string, observacion?: string | null) {
+export async function rpcIniciarEjecucion(
+  otId: string, observacion?: string | null, tecnicoId?: string | null,
+) {
   const { data, error } = await supabase.rpc('rpc_taller_iniciar_ejecucion_ot', {
-    p_ot_id: otId, p_observacion: observacion ?? null,
+    p_ot_id: otId, p_observacion: observacion ?? null, p_tecnico_id: tecnicoId ?? null,
   })
   if (error) throw error
   return data as { success: boolean; ejecucion_id: string; plan_ot_id: string | null }
@@ -827,4 +829,33 @@ export async function getActivosSinPlan(): Promise<ActivoSinPlan[]> {
     .from('v_activos_sin_plan_preventivo').select('*').limit(500)
   if (error) throw error
   return (data ?? []) as ActivoSinPlan[]
+}
+
+// ── [MIG448/449] El reloj del taller, desde el teléfono ─────────────────────
+
+export type TecnicoTallerLite = { id: string; nombre: string; operacion: string | null }
+
+/** Catálogo de técnicos activos, para resolver el nombre que el mecánico eligió. */
+export async function getTecnicosActivos(): Promise<TecnicoTallerLite[]> {
+  const { data, error } = await supabase.rpc('rpc_taller_tecnicos_activos')
+  if (error) throw error
+  return (data ?? []) as TecnicoTallerLite[]
+}
+
+/**
+ * Pausar y reanudar desde la OT y no desde el id de la ejecución: el teléfono
+ * trabaja sin señal y no siempre conoce ese id.
+ */
+export async function rpcPausarEjecucionOT(otId: string, motivo?: string | null) {
+  const { data, error } = await supabase.rpc('rpc_taller_pausar_ejecucion_ot', {
+    p_ot_id: otId, p_motivo: motivo ?? null, p_motivo_tipo: null,
+  })
+  if (error) throw error
+  return data as { success: boolean; sin_ejecucion?: boolean }
+}
+
+export async function rpcReanudarEjecucionOT(otId: string) {
+  const { data, error } = await supabase.rpc('rpc_taller_reanudar_ejecucion_ot', { p_ot_id: otId })
+  if (error) throw error
+  return data as { success: boolean; sin_ejecucion?: boolean }
 }
