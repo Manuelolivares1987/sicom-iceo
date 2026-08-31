@@ -769,6 +769,7 @@ export default function MecanicoOTPage() {
   // Hallazgos NO OK sin foto: bloquean pausar/finalizar (la NC nace con foto).
   const noOkSinFoto = visibles.filter((i) => i.resultado === 'no_ok' && !i.foto_url).length
   const [warnFoto, setWarnFoto] = useState(false)
+  const [sinNombre, setSinNombre] = useState(false)
   const [prefillRecurso, setPrefillRecurso] = useState<RecursoPrefill | null>(null)
 
   /**
@@ -797,6 +798,11 @@ export default function MecanicoOTPage() {
 
   function doTiming(accion: 'iniciar' | 'pausar') {
     if (accion === 'pausar' && noOkSinFoto > 0) { setWarnFoto(true); return }
+    // [MIG461] El taller entra con una cuenta compartida, así que la sesión no
+    // dice quién trabaja. Sin nombre elegido el RPC rechaza el inicio; conviene
+    // decirlo acá y no dejar que el mecánico se lleve un error crudo.
+    if (accion === 'iniciar' && !tecnicoId) { setSinNombre(true); return }
+    setSinNombre(false)
     setWarnFoto(false)
     timing.reset()
     timing.mutate({ accion, userId, tecnicoId })
@@ -889,6 +895,13 @@ export default function MecanicoOTPage() {
           </button>
         )}
       </div>
+      )}
+      {sinNombre && (
+        <p className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-900">
+          Antes de empezar, elige tu nombre en la lista de mecánicos (arriba, en «Mis OTs»).
+          El taller entra con una cuenta compartida, así que la pantalla no sabe quién eres —
+          y el tiempo que se mide es el que después se reparte.
+        </p>
       )}
       {warnFoto && noOkSinFoto > 0 && (
         <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
