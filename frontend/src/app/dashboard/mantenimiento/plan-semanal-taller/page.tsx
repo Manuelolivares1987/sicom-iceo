@@ -36,6 +36,7 @@ import {
   useCrearTecnico, useDesactivarTecnico,
   usePlanPendingCount, useSyncTallerPlan, useAutoSyncTallerPlan, useDescargarSemanaOffline,
   useRecursosOTTaller, useValidarRecursoTaller, useAgregarRecursoTaller, useEmitirValeTaller,
+  useSetCuadrillaTaller,
 } from '@/hooks/use-taller-plan-semanal'
 import { SignaturePad } from '@/components/ui/signature-pad'
 import { RECURSO_ESTADO_LABEL, guardarMiFirma, type OTRecurso } from '@/lib/services/ot-recursos'
@@ -43,7 +44,7 @@ import { buscarProductos } from '@/lib/services/ot-materiales'
 import { useNetworkStatus } from '@/hooks/use-calama-offline'
 import {
   lunesDeIso, getJornadaEventos, getOtArrastre, descartarOt,
-  CATEGORIA_TAREA_LABEL, CATEGORIAS_TAREA_LIBRE, medicionesNeumaticos,
+  CATEGORIA_TAREA_LABEL, CATEGORIAS_TAREA_LIBRE, medicionesNeumaticos, getCuadrillaJornada,
   type TallerPlanOTFull, type ChecklistV3Item, type TallerJornadaEvento,
   type TallerTecnico, type CategoriaTareaTaller, type TallerOtArrastre,
 } from '@/lib/services/taller-plan-semanal'
@@ -1660,14 +1661,22 @@ function ProgramarOtDialog({ target, planSemanalId, dias, onClose, onDone, agreg
 }
 
 // Selector de técnicos (hasta 2). Devuelve nombres; se guardan en `cuadrilla`.
+/**
+ * [MIG451] Elige personas, no nombres.
+ *
+ * Antes devolvía los nombres y la pantalla los juntaba con comas en un campo de
+ * texto. Para repartir el bono hay que saber QUIÉN es cada uno, y un string con
+ * «Yusdel Sarduy Joel Coo» adentro no lo dice. El orden importa: el primero que
+ * se marca queda como titular de la jornada.
+ */
 function MecanicosPicker({ value, onChange, opciones }: {
   value: string[]
   onChange: (v: string[]) => void
   opciones: TallerTecnico[]
 }) {
-  const toggle = (m: string) => {
-    if (value.includes(m)) onChange(value.filter((x) => x !== m))
-    else if (value.length < MAX_MECANICOS) onChange([...value, m])
+  const toggle = (id: string) => {
+    if (value.includes(id)) onChange(value.filter((x) => x !== id))
+    else if (value.length < MAX_MECANICOS) onChange([...value, id])
   }
   if (opciones.length === 0) {
     return <p className="mt-1 text-xs text-gray-400">No hay técnicos registrados para esta operación.</p>
@@ -1675,10 +1684,11 @@ function MecanicosPicker({ value, onChange, opciones }: {
   return (
     <div className="mt-1 flex flex-wrap gap-1">
       {opciones.map((t) => {
-        const on = value.includes(t.nombre)
+        const on = value.includes(t.id)
         const bloqueado = !on && value.length >= MAX_MECANICOS
+        const titular = on && value[0] === t.id
         return (
-          <button key={t.id} type="button" onClick={() => toggle(t.nombre)} disabled={bloqueado}
+          <button key={t.id} type="button" onClick={() => toggle(t.id)} disabled={bloqueado}
                   title={t.especialidad}
                   className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${
                     on ? 'border-blue-500 bg-blue-500 text-white'
@@ -1686,6 +1696,7 @@ function MecanicosPicker({ value, onChange, opciones }: {
                        : 'border-gray-200 bg-white text-gray-700 hover:bg-blue-50'
                   }`}>
             {t.nombre}
+            {titular && <span className="ml-1 text-[9px] font-semibold text-blue-100">titular</span>}
             <span className={`ml-1 text-[9px] ${on ? 'text-blue-100' : 'text-gray-400'}`}>{t.especialidad}</span>
           </button>
         )
@@ -2236,18 +2247,27 @@ function AsignarResponsableModal({ jornada, planId, onClose }: {
   onClose: () => void
 }) {
   const toast = useToast()
-  const asignar = useAsignarResponsableTaller(planId)
+  const setCuadrilla = useSetCuadrillaTaller(planId)
   const { data: tecnicos } = useTallerTecnicos(jornada.operacion)
-  // Mecánicos iniciales a partir de la cuadrilla guardada.
-  const inicial = (jornada.cuadrilla ?? '')
-    .split(',').map((s) => s.trim())
-    .filter(Boolean)
-    .slice(0, MAX_MECANICOS)
-  const [mecanicos, setMecanicos] = useState<string[]>(inicial)
+
+  // [MIG451] La cuadrilla que ya está guardada, por persona. Antes se
+  // reconstruía partiendo el texto por comas, que fallaba con «Yusdel Sarduy
+  // Joel Coo» —dos personas, una sola coma ausente—.
+  const { data: guardada } = useQuery({
+    queryKey: ['cuadrilla-jornada', jornada.plan_ot_id],
+    queryFn: () => getCuadrillaJornada(jornada.plan_ot_id),
+  })
+  const [mecanicos, setMecanicos] = useState<string[]>([])
+  const [tocado, setTocado] = useState(false)
+  useEffect(() => {
+    if (tocado || !guardada) return
+    setMecanicos(guardada.map((g) => g.tecnico_id).slice(0, MAX_MECANICOS))
+  }, [guardada, tocado])
   const [motivo, setMotivo] = useState('')
 
   const confirmado = jornada.plan_estado !== 'borrador'
-  const cuadrillaCambia = mecanicos.join(', ') !== (jornada.cuadrilla ?? '')
+  const idsGuardados = (guardada ?? []).map((g) => g.tecnico_id).join('|')
+  const cuadrillaCambia = mecanicos.join('|') !== idsGuardados
   const requiereMotivo = confirmado && cuadrillaCambia
 
   return (
@@ -2255,7 +2275,13 @@ function AsignarResponsableModal({ jornada, planId, onClose }: {
       <div className="space-y-3">
         <div>
           <label className="text-xs font-medium">Técnicos a cargo (hasta {MAX_MECANICOS})</label>
-          <MecanicosPicker value={mecanicos} onChange={setMecanicos} opciones={tecnicos ?? []} />
+          <MecanicosPicker value={mecanicos}
+                           onChange={(v) => { setTocado(true); setMecanicos(v) }}
+                           opciones={tecnicos ?? []} />
+          <p className="mt-1 text-[11px] text-gray-500">
+            El primero que marques queda como titular. Esta lista es la que reparte el bono,
+            y se congela cuando la OT queda ejecutada.
+          </p>
         </div>
         {requiereMotivo && (
           <div>
@@ -2269,15 +2295,21 @@ function AsignarResponsableModal({ jornada, planId, onClose }: {
       </div>
       <ModalFooter>
         <Button variant="outline" onClick={onClose}>Cancelar</Button>
-        <Button disabled={asignar.isPending || (requiereMotivo && !motivo.trim())}
-                onClick={() => asignar.mutate({
-                  planOtId: jornada.plan_ot_id, responsableId: jornada.responsable_id ?? null,
-                  cuadrilla: mecanicos.join(', '), motivo: motivo.trim() || null,
+        <Button disabled={setCuadrilla.isPending || (requiereMotivo && !motivo.trim())}
+                onClick={() => setCuadrilla.mutate({
+                  planOtId: jornada.plan_ot_id,
+                  tecnicoIds: mecanicos,
+                  motivo: motivo.trim() || null,
                 }, {
-                  onSuccess: () => { toast.success('Mecánicos asignados'); onClose() },
+                  onSuccess: (r) => {
+                    toast.success(r?.personas
+                      ? `Cuadrilla guardada: ${r.cuadrilla}`
+                      : 'Jornada sin mecánicos asignados')
+                    onClose()
+                  },
                   onError: (err) => toast.error((err as Error).message),
                 })}>
-          {asignar.isPending ? <Spinner className="h-4 w-4 mr-1" /> : null}
+          {setCuadrilla.isPending ? <Spinner className="h-4 w-4 mr-1" /> : null}
           Guardar
         </Button>
       </ModalFooter>
