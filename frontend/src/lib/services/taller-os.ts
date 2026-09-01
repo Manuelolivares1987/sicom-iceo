@@ -243,3 +243,49 @@ export async function autorizarOSExterna(osId: string) {
   if (error) throw new Error(error.message)
   return data as { success: boolean; folio: string }
 }
+
+// ── [MIG479] Fase 3 · El teléfono del mecánico ──────────────────────────────
+
+/** Una OS asignada a quien abrió sesión, con lo justo para decidir en 2 segundos. */
+export type MiOS = {
+  os_id: string
+  folio: string
+  titulo: string
+  descripcion: string | null
+  estado: string
+  prioridad: string | null
+  ot_id: string
+  ot_folio: string
+  patente: string
+  equipo: string | null
+  ncs: number
+  horas_estimadas: number | null
+  /** Sólo las mías: el reloj de la OS es por persona. */
+  mis_horas: number
+  trabajando: boolean
+  asignado_desde: string
+  asignado_por: string | null
+  motivo: string | null
+  /** Lo que impide arrancar, dicho antes de apretar y no después. */
+  bloqueo: string | null
+}
+
+/**
+ * Lo que el jefe de taller me repartió.
+ *
+ * Sólo lee. Acá nadie se asigna trabajo solo: si la lista viene vacía es porque
+ * no hay nada asignado, o porque la cuenta no está vinculada a un técnico (la
+ * compartida, por ejemplo).
+ */
+export async function getMisOS(): Promise<MiOS[]> {
+  const { data, error } = await supabase.rpc('rpc_taller_mis_os')
+  if (error) throw new Error(error.message)
+  return (data ?? []) as MiOS[]
+}
+
+/** El técnico que hay detrás de la sesión; null si la cuenta no está vinculada. */
+export async function getMiTecnicoId(): Promise<string | null> {
+  const { data, error } = await supabase.rpc('fn_taller_mi_tecnico_id')
+  if (error) throw new Error(error.message)
+  return (data as string | null) ?? null
+}
