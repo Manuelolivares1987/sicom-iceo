@@ -56,3 +56,6 @@ reportes/forense/paginas/
 reportes/forense/tc8/
 reportes/forense/render/
 reportes/*.xlsx
+
+# Entrega de cuentas del taller (tiene claves escritas)
+CUENTAS_TALLER.txt
