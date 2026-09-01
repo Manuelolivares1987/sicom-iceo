@@ -4,7 +4,7 @@ import { useState, useRef, useEffect, useMemo } from 'react'
 import { useToast } from '@/contexts/toast-context'
 import { getTecnicosActivos } from '@/lib/services/taller-plan-semanal'
 import {
-  getOSDeOT, getPersonasDeOS, crearOS, asignarOS, ESTADO_OS_LABEL,
+  getOSDeOT, getPersonasDeOS, crearOS, asignarOS, getPresupuestoOT, ESTADO_OS_LABEL,
 } from '@/lib/services/taller-os'
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import { useParams } from 'next/navigation'
@@ -2393,6 +2393,16 @@ function OrdenesDeServicioPanel({ otId }: { otId: string }) {
   const [resp, setResp] = useState('')
   const [sel, setSel] = useState<Set<string>>(new Set())
   const [verPersonas, setVerPersonas] = useState<string | null>(null)
+  // [MIG475] El techo de horas que puso el planificador, y lo que ya se repartió.
+  const { data: presu } = useQuery({
+    queryKey: ['os-presupuesto', otId],
+    queryFn: () => getPresupuestoOT(otId),
+    staleTime: 20_000,
+    retry: false,
+  })
+  const [justificacion, setJustificacion] = useState('')
+  const [pideJustificar, setPideJustificar] = useState<string | null>(null)
+
   const [asignando, setAsignando] = useState<string | null>(null)
   const [asigTec, setAsigTec] = useState('')
   const [asigMotivo, setAsigMotivo] = useState('')
@@ -2415,11 +2425,20 @@ function OrdenesDeServicioPanel({ otId }: { otId: string }) {
       otId, titulo, ncIds: Array.from(sel),
       responsableId: resp || null,
       horasEstimadas: horas.trim() ? Number(horas) : null,
+      justificacion: justificacion.trim() || null,
     }),
     onSuccess: (r) => {
+      // [MIG475] La suma de las OS se pasó del techo del planificador. No es un
+      // error: hay que decir por qué, y queda escrito con el nombre.
+      if (r.requiere_justificacion) {
+        setPideJustificar(r.motivo ?? 'Se pasa del tiempo que dio el planificador.')
+        return
+      }
       toast.success(`${r.folio} creada con ${r.nc_asignadas} no conformidad(es)`)
       setAbierto(false); setTitulo(''); setHoras(''); setResp(''); setSel(new Set())
+      setJustificacion(''); setPideJustificar(null)
       qc.invalidateQueries({ queryKey: ['os-de-ot', otId] })
+      qc.invalidateQueries({ queryKey: ['os-presupuesto', otId] })
     },
     onError: (e) => toast.error((e as Error).message),
   })
@@ -2445,6 +2464,31 @@ function OrdenesDeServicioPanel({ otId }: { otId: string }) {
           </button>
         )}
       </div>
+
+      {/* [MIG475] El techo lo pone el planificador; el checklist es referencia. */}
+      {presu && (
+        <div className={`mt-2 rounded-lg border px-3 py-2 text-[11px] ${
+          presu.sin_techo ? 'border-gray-200 bg-gray-50 text-gray-600'
+          : presu.excedida ? 'border-amber-300 bg-amber-50 text-amber-900'
+          : 'border-blue-200 bg-blue-50 text-blue-900'}`}>
+          {presu.sin_techo ? (
+            <>
+              <b>El planificador todavía no le puso horas a esta visita.</b> Sin eso no hay techo
+              que respetar y las OS se pueden repartir sin límite. De referencia, el checklist
+              estima {presu.horas_checklist} h.
+            </>
+          ) : (
+            <>
+              <b>{presu.horas_en_os} h repartidas</b> de las <b>{presu.horas_plan} h</b> que dio el
+              planificador
+              {presu.horas_libres > 0 && <> · quedan {presu.horas_libres} h libres</>}
+              {presu.excedida && <> · <b>se pasó del tiempo de la visita</b></>}
+              {presu.horas_reales > 0 && <> · {presu.horas_reales} h trabajadas de verdad</>}
+              <span className="opacity-70"> · el checklist estimaba {presu.horas_checklist} h</span>
+            </>
+          )}
+        </div>
+      )}
 
       {oss.length > 0 && (
         <div className="mt-2 space-y-2">
@@ -2572,12 +2616,29 @@ function OrdenesDeServicioPanel({ otId }: { otId: string }) {
             </p>
           </div>
 
+          {pideJustificar && (
+            <div className="rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-2">
+              <p className="text-[11px] font-medium text-amber-900">{pideJustificar}</p>
+              <input value={justificacion} onChange={(e) => setJustificacion(e.target.value)}
+                     placeholder="Por qué se pasa (mínimo 10 caracteres)"
+                     className="mt-1.5 w-full rounded border border-amber-300 px-2 py-1.5 text-sm" />
+              <p className="mt-1 text-[10px] text-amber-800">
+                Queda guardado en la OS con tu nombre. El bono se calcula contra estas horas.
+              </p>
+            </div>
+          )}
+
           <div className="flex gap-2">
-            <Button size="sm" disabled={crear.isPending || titulo.trim().length < 4}
+            <Button size="sm"
+                    disabled={crear.isPending || titulo.trim().length < 4
+                              || (!!pideJustificar && justificacion.trim().length < 10)}
                     onClick={() => crear.mutate()}>
-              Crear la OS
+              {pideJustificar ? 'Crear igual, con la justificación' : 'Crear la OS'}
             </Button>
-            <Button size="sm" variant="outline" onClick={() => setAbierto(false)}>Cancelar</Button>
+            <Button size="sm" variant="outline"
+                    onClick={() => { setAbierto(false); setPideJustificar(null); setJustificacion('') }}>
+              Cancelar
+            </Button>
           </div>
         </div>
       )}
