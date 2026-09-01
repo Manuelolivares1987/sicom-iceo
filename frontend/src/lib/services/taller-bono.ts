@@ -184,6 +184,10 @@ export type ConceptoBono = {
   dias_optimizado: number
   dias_normal: number
   dias_demora: number
+  /** [MIG476] Las horas que el estándar le da al equipo para este tipo de tarea. */
+  horas_estandar: number | null
+  /** De dónde salió ese número: mediana histórica o derivación declarada. */
+  horas_fuente: string | null
 }
 
 /** La leyenda, leída de los parámetros: si el acta cambia un plazo, cambia sola. */

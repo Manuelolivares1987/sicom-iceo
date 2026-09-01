@@ -2473,18 +2473,21 @@ function OrdenesDeServicioPanel({ otId }: { otId: string }) {
           : 'border-blue-200 bg-blue-50 text-blue-900'}`}>
           {presu.sin_techo ? (
             <>
-              <b>El planificador todavía no le puso horas a esta visita.</b> Sin eso no hay techo
-              que respetar y las OS se pueden repartir sin límite. De referencia, el checklist
-              estima {presu.horas_checklist} h.
+              <b>El plan todavía no le puso horas a este equipo.</b> Sin eso no hay techo que
+              respetar y las OS se reparten sin límite. De referencia, el checklist estima{' '}
+              {presu.horas_checklist} h.
             </>
           ) : (
             <>
-              <b>{presu.horas_en_os} h repartidas</b> de las <b>{presu.horas_plan} h</b> que dio el
-              planificador
+              <b>{presu.horas_en_os} h repartidas en OS</b> de las <b>{presu.techo_os} h</b> que
+              quedan
+              {presu.horas_revision > 0 && (
+                <> — el plan dio {presu.horas_plan} h y la revisión se llevó {presu.horas_revision} h</>
+              )}
+              {presu.horas_revision === 0 && <> del plan ({presu.horas_plan} h)</>}
               {presu.horas_libres > 0 && <> · quedan {presu.horas_libres} h libres</>}
-              {presu.excedida && <> · <b>se pasó del tiempo de la visita</b></>}
-              {presu.horas_reales > 0 && <> · {presu.horas_reales} h trabajadas de verdad</>}
-              <span className="opacity-70"> · el checklist estimaba {presu.horas_checklist} h</span>
+              {presu.excedida && <> · <b>se pasó del tiempo del equipo</b></>}
+              {presu.horas_reales_os > 0 && <> · {presu.horas_reales_os} h trabajadas de verdad</>}
             </>
           )}
         </div>
