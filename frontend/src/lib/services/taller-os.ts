@@ -63,10 +63,44 @@ export async function getPersonasDeOS(osId: string): Promise<OSPersona[]> {
   return (data ?? []) as OSPersona[]
 }
 
+// ── [MIG475] El techo de horas de la visita ─────────────────────────────────
+//
+// Lo pone el PLANIFICADOR en la jornada del plan, no el checklist. La suma de
+// las OS no puede pasarlo sin que alguien escriba por qué.
+
+export type PresupuestoOT = {
+  /** Lo que el planificador le dio a la visita. null = todavía no lo definió. */
+  horas_plan: number | null
+  /** Lo que el checklist estima. Referencia, no manda. */
+  horas_checklist: number
+  sin_techo: boolean
+  horas_en_os: number
+  horas_libres: number
+  excedida: boolean
+  horas_reales: number
+}
+
+export async function getPresupuestoOT(otId: string): Promise<PresupuestoOT> {
+  const { data, error } = await supabase.rpc('rpc_taller_ot_presupuesto', { p_ot_id: otId })
+  if (error) throw new Error(error.message)
+  return data as PresupuestoOT
+}
+
+export type CrearOSResp = {
+  success: boolean
+  os_id?: string; folio?: string; nc_asignadas?: number
+  /** Cuando la suma pasa el techo del planificador y falta explicar por qué. */
+  requiere_justificacion?: boolean
+  horas_plan?: number; horas_en_os?: number; horas_con_esta?: number
+  motivo?: string
+  sin_techo?: boolean; excedida?: boolean
+}
+
 export async function crearOS(p: {
   otId: string; titulo: string; ncIds?: string[]
   responsableId?: string | null; horasEstimadas?: number | null
   descripcion?: string | null; prioridad?: string | null
+  justificacion?: string | null
 }) {
   const { data, error } = await supabase.rpc('rpc_taller_os_crear', {
     p_ot_id: p.otId,
@@ -76,9 +110,10 @@ export async function crearOS(p: {
     p_horas_estimadas: p.horasEstimadas ?? null,
     p_descripcion: p.descripcion ?? null,
     p_prioridad: p.prioridad ?? null,
+    p_justificacion: p.justificacion ?? null,
   })
   if (error) throw new Error(error.message)
-  return data as { success: boolean; os_id: string; folio: string; nc_asignadas: number }
+  return data as CrearOSResp
 }
 
 // ── [MIG474] Al operador lo mueve el jefe ───────────────────────────────────
