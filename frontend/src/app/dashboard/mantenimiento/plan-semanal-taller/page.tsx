@@ -45,7 +45,7 @@ import { useNetworkStatus } from '@/hooks/use-calama-offline'
 import {
   lunesDeIso, getJornadaEventos, getOtArrastre, descartarOt,
   CATEGORIA_TAREA_LABEL, CATEGORIAS_TAREA_LIBRE, medicionesNeumaticos, getCuadrillaJornada,
-  rpcSetCuadrilla,
+  rpcSetCuadrilla, rpcGetOrCreatePlanSemanal,
   type TallerPlanOTFull, type ChecklistV3Item, type TallerJornadaEvento,
   type TallerTecnico, type CategoriaTareaTaller, type TallerOtArrastre,
 } from '@/lib/services/taller-plan-semanal'
@@ -61,6 +61,7 @@ import {
 import { MAX_MECANICOS } from '@/lib/taller-grupos'
 import { isoToday } from '@/lib/semana'
 import { getConceptosBono, setConceptoOT } from '@/lib/services/taller-bono'
+import { setMetaOT } from '@/lib/services/taller-os'
 import { getCierresPorValidar, validarCierre } from '@/lib/services/taller-planificacion'
 import { usePermissions } from '@/hooks/use-permissions'
 
@@ -1568,6 +1569,28 @@ function ProgramarOtDialog({ target, planSemanalId, dias, onClose, onDone, agreg
   // Ese número es el paraguas del que después cuelgan las Órdenes de Servicio.
   const [horasEquipo, setHorasEquipo] = useState('')
   const [horasTocadas, setHorasTocadas] = useState(false)
+  // [MIG477] El planificador COMPROMETE una meta dentro de los límites del tipo:
+  // optimizado o normal. Antes el sistema contaba los días y después avisaba en
+  // qué tramo habían caído — al revés de como se planifica.
+  const [meta, setMeta] = useState<'optimizado' | 'normal'>('normal')
+  // [MIG477] La semana siguiente, para trabajos que no caben en cinco días.
+  const [verSemana2, setVerSemana2] = useState(false)
+  const lunesSemana2 = useMemo(() => {
+    const base = dias[0]?.fecha
+    if (!base) return null
+    const d = new Date(base + 'T12:00:00'); d.setDate(d.getDate() + 7)
+    return lunesDeIso(d)
+  }, [dias])
+  const { data: plan2 } = useQuery({
+    queryKey: ['plan-semana-siguiente', lunesSemana2],
+    queryFn: () => rpcGetOrCreatePlanSemanal(lunesSemana2!),
+    enabled: verSemana2 && !!lunesSemana2,
+  })
+  const { data: dias2 } = useDiasPlanSemanalTaller(plan2?.plan_semanal_id ?? null)
+  const diasSemana2 = dias2 ?? []
+  const diasMeta = meta === 'optimizado'
+    ? conceptoSel?.dias_optimizado ?? null
+    : conceptoSel?.dias_normal ?? null
   useEffect(() => {
     if (horasTocadas || !conceptoSel?.horas_estandar) return
     setHorasEquipo(String(conceptoSel.horas_estandar))
@@ -1616,10 +1639,16 @@ function ProgramarOtDialog({ target, planSemanalId, dias, onClose, onDone, agreg
       // para esta visita, no una cuota por día. La suma de las jornadas es el
       // paraguas, así que repetirlas en cada día lo multiplicaría.
       const horasN = horasEquipo.trim() ? Number(horasEquipo) : null
+      // [MIG477] La meta que se compromete: los días se miden contra ella.
+      await setMetaOT(r.id, meta)
       let primera = true
       for (const f of fechas) {
+        // [MIG477] Cada fecha va al plan de SU semana. Si el trabajo cruza el
+        // domingo, las jornadas se reparten entre los dos planes solas.
+        const deSemana2 = diasSemana2.some((d) => d.fecha === f)
         const j = await agregarJornada.mutateAsync({
-          planSemanalId, otId: r.id, fecha: f,
+          planSemanalId: deSemana2 ? (plan2?.plan_semanal_id ?? planSemanalId) : planSemanalId,
+          otId: r.id, fecha: f,
           horasPlanificadas: primera ? horasN : null,
         })
         if (mecanicos.length) await rpcSetCuadrilla(j.plan_ot_id, mecanicos)
@@ -1761,6 +1790,30 @@ function ProgramarOtDialog({ target, planSemanalId, dias, onClose, onDone, agreg
                 De dónde sale: {conceptoSel.horas_fuente}
               </p>
             )}
+
+            {/* [MIG477] Entre los dos límites del tipo, el planificador elige. */}
+            <div className="mt-2 border-t border-emerald-200 pt-2">
+              <span className="text-[11px] font-semibold text-emerald-900">
+                A qué te comprometes
+              </span>
+              <div className="mt-1 flex flex-wrap gap-1.5">
+                {(['optimizado', 'normal'] as const).map((m) => {
+                  const d = m === 'optimizado' ? conceptoSel?.dias_optimizado : conceptoSel?.dias_normal
+                  return (
+                    <button key={m} type="button" onClick={() => setMeta(m)}
+                            className={`rounded border px-2 py-1 text-[11px] capitalize ${
+                              meta === m ? 'border-emerald-600 bg-emerald-600 text-white'
+                                         : 'border-emerald-300 bg-white text-emerald-800'}`}>
+                      {m} · {d ?? '—'} {d === 1 ? 'día' : 'días'}
+                    </button>
+                  )
+                })}
+              </div>
+              <p className="mt-1 text-[10px] text-emerald-800">
+                Las horas son las mismas: optimizado no es trabajar menos, es terminar antes.
+                Los días de la visita se van a medir contra esta meta.
+              </p>
+            </div>
           </div>
 
           {tramoPlan && (
@@ -1773,6 +1826,9 @@ function ProgramarOtDialog({ target, planSemanalId, dias, onClose, onDone, agreg
                 Del {fmtFecha(tramoPlan.desde)} al {fmtFecha(tramoPlan.hasta)} ·{' '}
                 {tramoPlan.dias} {tramoPlan.dias === 1 ? 'día' : 'días'} ·{' '}
                 {concepto} cae en «{tramoPlan.tramo}»
+                {diasMeta != null && tramoPlan.dias > diasMeta && (
+                  <> — te comprometiste a {meta} en {diasMeta} {diasMeta === 1 ? 'día' : 'días'}</>
+                )}
               </p>
               {tramoPlan.arrastra && (
                 <p className="mt-0.5">
@@ -1823,9 +1879,19 @@ function ProgramarOtDialog({ target, planSemanalId, dias, onClose, onDone, agreg
           </div>
         )}
 
-        {/* Días (multidía) */}
+        {/* Días (multidía). [MIG477] Un trabajo de más de una semana se planifica
+            de una vez: la semana siguiente se abre acá mismo, sin salir del modal
+            ni volver a arrastrar la patente. */}
         <div>
-          <label className="text-xs font-medium">Días (puede ser más de uno)</label>
+          <div className="flex flex-wrap items-baseline gap-2">
+            <label className="text-xs font-medium">Días (puede ser más de uno)</label>
+            {!verSemana2 && (
+              <button type="button" onClick={() => setVerSemana2(true)}
+                      className="text-[11px] font-medium text-blue-600 underline">
+                + agregar la semana siguiente
+              </button>
+            )}
+          </div>
           <div className="mt-1 grid grid-cols-4 gap-1">
             {dias.map((d) => {
               const on = fechasSel.has(d.fecha)
@@ -1839,6 +1905,29 @@ function ProgramarOtDialog({ target, planSemanalId, dias, onClose, onDone, agreg
               )
             })}
           </div>
+
+          {verSemana2 && (
+            <>
+              <p className="mt-2 text-[11px] font-medium text-gray-500">Semana siguiente</p>
+              <div className="mt-1 grid grid-cols-4 gap-1">
+                {diasSemana2.map((d) => {
+                  const on = fechasSel.has(d.fecha)
+                  return (
+                    <button key={d.fecha} type="button" onClick={() => toggleDia(d.fecha)}
+                            className={`rounded border px-1.5 py-1 text-[11px] capitalize transition-colors ${
+                              on ? 'border-blue-500 bg-blue-500 text-white' : 'border-gray-200 bg-white text-gray-600 hover:bg-blue-50'
+                            }`}>
+                      {d.nombre_dia.slice(0, 3)} {fmtFecha(d.fecha)}
+                    </button>
+                  )
+                })}
+              </div>
+              <p className="mt-1 text-[10px] text-gray-500">
+                Las jornadas de la semana siguiente se crean en su propio plan. Es la misma OT: un
+                folio, un checklist, un avance.
+              </p>
+            </>
+          )}
         </div>
 
         {/* Mecánicos a cargo (hasta 2) */}
