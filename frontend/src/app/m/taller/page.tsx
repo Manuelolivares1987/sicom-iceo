@@ -7,7 +7,9 @@ import {
   Wrench, ChevronRight, ChevronDown, RefreshCw, WifiOff, CloudOff, CheckCircle2, Play, Pause, User, LogOut,
   ArrowLeft, PackageSearch, Download, ChevronLeft, Calendar,
 } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
 import { Spinner } from '@/components/ui/spinner'
+import { getMiTecnicoId } from '@/lib/services/taller-os'
 import { useAuth } from '@/contexts/auth-context'
 import { MECANICOS } from '@/lib/taller-grupos'
 import {
@@ -16,6 +18,7 @@ import {
 } from '@/hooks/use-taller-mecanico'
 import { useTallerTecnicos } from '@/hooks/use-taller-plan-semanal'
 import type { MecanicoOT } from '@/lib/offline/taller-mecanico-sync'
+import { MisOrdenesDeServicio } from './mis-os'
 import {
   DIAS_INICIAL, isoToday, startOfWeekISOOffset, endOfWeekISOOffset, diasDeSemana,
   rangoSemanaLabel, formatDiaCorto,
@@ -111,9 +114,18 @@ export default function MecanicoHomePage() {
   // cuando se necesita — y para el operador que todavía no dice quién es, se
   // abre solo, porque ese es su primer paso.
   const [pickerAbierto, setPickerAbierto] = useState(false)
+  // [MIG479] Con cuenta personal la sesión ya dice quién es: el picker deja de
+  // abrirse solo. Sigue disponible para la cuenta compartida, que es la única
+  // que necesita que alguien declare su nombre a mano.
+  const { data: miTecnicoId } = useQuery({
+    queryKey: ['mi-tecnico'],
+    queryFn: getMiTecnicoId,
+    staleTime: 10 * 60_000,
+    retry: false,
+  })
   useEffect(() => {
-    if (esOperador && !mecanico) setPickerAbierto(true)
-  }, [esOperador, mecanico])
+    if (esOperador && !mecanico && !miTecnicoId) setPickerAbierto(true)
+  }, [esOperador, mecanico, miTecnicoId])
 
   function elegir(m: string) {
     // Volver a tocar el nombre elegido lo suelta. Antes no había forma de
@@ -352,6 +364,12 @@ export default function MecanicoHomePage() {
         </div>
       </div>
       {descargaMsg && <p className="text-center text-xs text-green-600">{descargaMsg}</p>}
+
+      {/* [MIG479 · Fase 3] Lo primero de la pantalla es lo que me toca ahora.
+          Se muestra sólo si la cuenta está vinculada a un técnico: con la
+          cuenta compartida no hay a quién atribuirle el reloj, y un tiempo que
+          no se puede atribuir no sirve para el bono. */}
+      <MisOrdenesDeServicio online={online} />
 
       {/* [MIG386] Lo del taller que no es de ningún equipo. Vive fuera de las OT
           a propósito: quien busca guantes no está buscando una orden. */}
