@@ -15,6 +15,8 @@ import { supabase } from '@/lib/supabase'
 
 interface DocPublico {
   tipo: string
+  /** [MIG484] El nombre real del papel cuando el tipo es «otra». */
+  etiqueta?: string | null
   fecha_emision: string | null
   fecha_vencimiento: string | null
   dias_restantes: number | null
@@ -52,7 +54,7 @@ export default function DocumentosEquipoPage() {
   const f = ficha as any
   const ordenados = [...docs].sort((a, b) =>
     (ORDEN_ESTADO[a.estado] ?? 9) - (ORDEN_ESTADO[b.estado] ?? 9) ||
-    (TIPO_DOC_LABEL[a.tipo] ?? a.tipo).localeCompare(TIPO_DOC_LABEL[b.tipo] ?? b.tipo))
+    (a.etiqueta?.trim() || TIPO_DOC_LABEL[a.tipo] || a.tipo).localeCompare(b.etiqueta?.trim() || TIPO_DOC_LABEL[b.tipo] || b.tipo))
   const vencidos = docs.filter((d) => d.estado === 'vencido').length
   const porConfirmar = docs.filter((d) => d.estado === 'sin_fecha').length
 
@@ -110,7 +112,7 @@ export default function DocumentosEquipoPage() {
                   <div key={d.tipo} className="flex items-center gap-2 rounded-lg border border-gray-100 bg-gray-50/60 px-2.5 py-2">
                     <FileText className="h-4 w-4 shrink-0 text-gray-300" />
                     <div className="flex-1 min-w-0">
-                      <p className="truncate text-xs font-medium text-gray-800">{TIPO_DOC_LABEL[d.tipo] ?? d.tipo}</p>
+                      <p className="truncate text-xs font-medium text-gray-800">{d.etiqueta?.trim() || TIPO_DOC_LABEL[d.tipo] || d.tipo}</p>
                       {d.estado !== 'permanente' && d.fecha_vencimiento && (
                         <p className={cn('text-[10px]',
                           d.estado === 'vencido' ? 'text-red-600 font-semibold'

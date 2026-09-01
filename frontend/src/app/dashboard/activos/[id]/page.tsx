@@ -71,10 +71,11 @@ import {
   useCertificacionesByActivo,
   useCostosByActivo,
 } from '@/hooks/use-activos'
-import { useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useToast } from '@/contexts/toast-context'
 import {
   TIPOS_DOC_OPCIONES,
+  getTiposOtrosUsados,
   subirDocumentoCert,
   renovarCertificacion,
   adjuntarArchivoCertificacion,
@@ -314,7 +315,7 @@ export default function ActivoDetailPage() {
               <div className="mt-1 space-y-0.5">
                 {certsAlerta.items.slice(0, 5).map((c: any) => (
                   <p key={c.id} className="text-xs text-gray-600">
-                    {getTipoCertificacionLabel(c.tipo)}: vence {formatDate(c.fecha_vencimiento)}
+                    {etiquetaDoc(c.tipo, c.tipo_otro)}: vence {formatDate(c.fecha_vencimiento)}
                     {c.estado === 'vencido' && <span className="text-red-600 font-bold"> (VENCIDO)</span>}
                     {c.estado === 'por_vencer' && <span className="text-amber-600"> ({getDiasRestantes(c.fecha_vencimiento)} dias)</span>}
                   </p>
@@ -514,8 +515,21 @@ function TabIdentificacion({ activo, onUpdate }: { activo: any; onUpdate: (field
 // ---------------------------------------------------------------------------
 // Tab: Certificaciones / Documentos (REESCRITO — con upload y alertas)
 // ---------------------------------------------------------------------------
+/**
+ * [MIG484] Cómo se llama este papel en pantalla.
+ *
+ * El nombre escrito manda sobre la etiqueta del tipo: un «otro» se lee por lo
+ * que es —«Instalación de ADAS»— y no por su casilla del catálogo.
+ */
+function etiquetaDoc(tipo: string, tipoOtro?: string | null): string {
+  const propio = (tipoOtro ?? '').trim()
+  return propio || getTipoCertificacionLabel(tipo)
+}
+
 const EMPTY_DOC_FORM = {
   tipo: 'revision_tecnica',
+  // [MIG484] Cuando el tipo es «otra», el papel tiene que decir cuál es.
+  tipo_otro: '',
   fecha_emision: '',
   fecha_vencimiento: '',
   entidad_certificadora: '',
@@ -529,6 +543,13 @@ function TabCertificaciones({ activoId, patente }: { activoId: string; patente?:
   const toast = useToast()
   const [showAdd, setShowAdd] = useState(false)
   const [newCert, setNewCert] = useState({ ...EMPTY_DOC_FORM })
+  // Los nombres de «otro» que ya usó la flota, para no escribir tres variantes
+  // del mismo papel.
+  const { data: otrosUsados = [] } = useQuery({
+    queryKey: ['tipos-otros-usados'],
+    queryFn: getTiposOtrosUsados,
+    staleTime: 5 * 60_000,
+  })
   const [newFile, setNewFile] = useState<File | null>(null)
   // [26-08] El sistema lee el papel al momento de subirlo: comprueba que sea un
   // archivo de verdad, que hable de ESTE equipo y de este tipo de certificado, y
@@ -603,6 +624,12 @@ function TabCertificaciones({ activoId, patente }: { activoId: string; patente?:
       setFormError('El vencimiento no puede ser anterior a la emisión.')
       return
     }
+    // [MIG484] «Otro» a secas no sirve: en la carpeta se lee igual que los demás
+    // «otros» del equipo, y el sistema los toma por el mismo papel.
+    if (newCert.tipo === 'otra' && newCert.tipo_otro.trim().length < 3) {
+      setFormError('Escribe qué certificado es. «Otro» sin nombre se confunde con los demás.')
+      return
+    }
     setSaving(true)
     try {
       let archivoUrl: string | null = null
@@ -617,12 +644,14 @@ function TabCertificaciones({ activoId, patente }: { activoId: string; patente?:
         numero: newCert.numero_certificado || null,
         entidad: newCert.entidad_certificadora || null,
         bloqueante: newCert.bloqueante,
+        tipoOtro: newCert.tipo === 'otra' ? newCert.tipo_otro.trim() : null,
         // [MIG433] Quién afirma la fecha: el archivo o la persona.
         origen: lectura?.origen === 'documento' ? 'documento' : 'manual',
       })
 
       refrescar()
-      toast.success(`${getTipoCertificacionLabel(newCert.tipo)} actualizado — vence ${newCert.fecha_vencimiento}`)
+      queryClient.invalidateQueries({ queryKey: ['tipos-otros-usados'] })
+      toast.success(`${etiquetaDoc(newCert.tipo, newCert.tipo_otro)} actualizado — vence ${newCert.fecha_vencimiento}`)
       setShowAdd(false)
       setNewFile(null)
       setNewCert({ ...EMPTY_DOC_FORM })
@@ -639,6 +668,9 @@ function TabCertificaciones({ activoId, patente }: { activoId: string; patente?:
   const handleRenovar = (c: any) => {
     setNewCert({
       tipo: c.tipo,
+      // [MIG484] Renovar un «otro» es renovar ESE papel, no abrir uno nuevo con
+      // el mismo nombre genérico: el nombre viaja con la renovación.
+      tipo_otro: c.tipo_otro ?? '',
       fecha_emision: todayISO(),
       fecha_vencimiento: '',
       entidad_certificadora: c.entidad_certificadora ?? '',
@@ -709,6 +741,31 @@ function TabCertificaciones({ activoId, patente }: { activoId: string; patente?:
                   {TIPOS_DOC_OPCIONES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
                 </select>
               </div>
+
+              {/* [MIG484] El escape del catálogo tiene que decir qué es. Sin
+                  nombre, dos «otros» del mismo equipo se tapan entre ellos: el
+                  sistema los trata como versiones del mismo papel. */}
+              {newCert.tipo === 'otra' && (
+                <div className="col-span-2 md:col-span-2">
+                  <label className="text-xs font-medium text-gray-600">
+                    ¿Qué certificado es? <span className="text-red-600">*</span>
+                  </label>
+                  <input
+                    list="tipos-otros-usados"
+                    className="w-full rounded border px-2 py-1.5 text-sm mt-1"
+                    placeholder="Ej: Instalación de dispositivo ADAS (tercer ojo)"
+                    value={newCert.tipo_otro}
+                    onChange={(e) => setNewCert({ ...newCert, tipo_otro: e.target.value })}
+                  />
+                  <datalist id="tipos-otros-usados">
+                    {otrosUsados.map((o: { nombre: string }) => <option key={o.nombre} value={o.nombre} />)}
+                  </datalist>
+                  <p className="mt-1 text-[11px] text-gray-500">
+                    Así se va a leer en la carpeta del equipo y en el QR del cliente.
+                    {otrosUsados.length > 0 && ' Si ya existe, elígelo de la lista para que no queden dos nombres del mismo papel.'}
+                  </p>
+                </div>
+              )}
               <div>
                 <label className="text-xs font-medium text-gray-600">Fecha Emision</label>
                 <input type="date" className="w-full rounded border px-2 py-1.5 text-sm mt-1"
@@ -889,7 +946,7 @@ function DocumentoCard({ c, subiendo, reemplazado, tipoVence, onSubirArchivo, on
           <div className="space-y-1">
             <div className="flex items-center gap-2">
               <span className="text-sm font-bold text-gray-900">
-                {getTipoCertificacionLabel(c.tipo)}
+                {etiquetaDoc(c.tipo, c.tipo_otro)}
               </span>
               {estado === 'reemplazado' ? (
                 <Badge className="bg-gray-100 text-gray-600">Reemplazado</Badge>
