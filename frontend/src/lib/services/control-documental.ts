@@ -71,6 +71,10 @@ export type PapelEquipo = {
   vigencia_observacion: string | null
   /** La fecha la cargó el sistema y no se puede sostener: ahí sí no vale. */
   vigencia_dudosa_nota: string | null
+  /** [MIG484] Cómo se llama el papel cuando el tipo es «otra». */
+  tipo_otro: string | null
+  /** El nombre escrito si lo hay, la etiqueta del tipo si no. */
+  etiqueta: string | null
 }
 
 export async function getEquiposDocumental(): Promise<EquipoDocumental[]> {
@@ -201,10 +205,29 @@ export const TIPO_DOC: Record<string, string> = {
   optico_sobrellenado: 'Óptico de sobrellenado', calibracion: 'Calibración', tc8_sec: 'TC8 SEC',
   inscripcion_sec: 'Inscripción SEC', inscripcion_rnvm: 'Inscripción RNVM', padron: 'Padrón',
   ficha_tecnica: 'Ficha técnica', factura_compra: 'Factura de compra', homologacion: 'Homologación',
-  gps: 'GPS', cert_gancho: 'Certificado de gancho', sec: 'SEC', seremi: 'SEREMI', otra: 'Otro',
+  gps: 'GPS', cert_gancho: 'Certificado de gancho', sec: 'SEC', seremi: 'SEREMI',
+  otra: 'Otro (especificar cuál)',
 }
 
 export const nombreTipo = (t: string) => TIPO_DOC[t] ?? t.replace(/_/g, ' ')
+
+/**
+ * [MIG484] Cómo se llama este papel en pantalla.
+ *
+ * El nombre escrito manda sobre la etiqueta del tipo. Un «otro» se lee por lo
+ * que es —«Instalación de ADAS»— y no por su casilla del catálogo, que es lo
+ * que hacía que tres certificados distintos del mismo camión se leyeran igual.
+ */
+export const nombrePapel = (p: { tipo: string; etiqueta?: string | null; tipo_otro?: string | null }) =>
+  (p.etiqueta ?? p.tipo_otro ?? '').trim() || nombreTipo(p.tipo)
+
+/** Los nombres de «otro» que ya se usaron, para no escribir tres variantes. */
+export async function getTiposOtrosUsados(): Promise<{ nombre: string; usos: number }[]> {
+  const { data, error } = await supabase
+    .from('v_certificado_tipos_otros').select('nombre, usos')
+  if (error) throw error
+  return (data ?? []) as { nombre: string; usos: number }[]
+}
 
 // ── Cuánto dura cada papel, según sus propios documentos ────────────────────
 // [MIG415] La regla de 2 años era un acuerdo para papeles que no declaran

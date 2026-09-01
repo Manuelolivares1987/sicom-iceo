@@ -44,7 +44,7 @@ import { useRequireAuth } from '@/hooks/use-require-auth'
 import {
   getEquiposDocumental, getPapelesEquipo, fijarFecha, descartarPropuesta,
   marcarNoCaduca, vuelveACaducar,
-  ESTADO_DOC, CONFIANZA, nombreTipo,
+  ESTADO_DOC, CONFIANZA, nombreTipo, nombrePapel, getTiposOtrosUsados, TIPO_DOC,
   type EquipoDocumental, type PapelEquipo,
 } from '@/lib/services/control-documental'
 
@@ -61,6 +61,10 @@ export default function ControlDocumentalPage() {
   const [noCaduca, setNoCaduca] = useState<PapelEquipo | null>(null)
   // El papel cuyo archivo se está por reemplazar por uno nuevo.
   const [subiendo, setSubiendo] = useState<PapelEquipo | null>(null)
+  // [MIG484] Un papel que el equipo todavía no tiene. Antes sólo se podía
+  // agregar desde la ficha del activo, que es justo donde NO se está cuando uno
+  // descubre que falta un certificado: se descubre acá.
+  const [agregando, setAgregando] = useState(false)
   // [MIG428] El status va primero porque es la pregunta que se hace primero:
   // «de los que están arrendados, ¿cuáles tienen los papeles al día?».
   // El QR y la emisión son del EQUIPO, no de un papel: van en la cabecera.
@@ -256,6 +260,9 @@ export default function ControlDocumentalPage() {
                   <FileCheck2 className="mr-1 h-3.5 w-3.5" />
                   {verCertificados ? 'Ocultar los certificados' : 'Certificados del equipo'}
                 </Button>
+                <Button variant="outline" className="h-8 text-xs" onClick={() => setAgregando(true)}>
+                  <Upload className="mr-1 h-3.5 w-3.5" /> Agregar un documento
+                </Button>
               </div>
               {verQr && (
                 <EquipoQrCard activoId={eqSel.activo_id} codigo={eqSel.patente}
@@ -338,6 +345,11 @@ export default function ControlDocumentalPage() {
         <ModalSubirPapel p={subiendo} onClose={() => setSubiendo(null)}
                          onListo={() => { setSubiendo(null); refrescar() }} />
       )}
+      {agregando && eqSel && (
+        <ModalAgregarPapel activoId={eqSel.activo_id} patente={eqSel.patente}
+                           onClose={() => setAgregando(false)}
+                           onListo={() => { setAgregando(false); refrescar() }} />
+      )}
       {emitiendo && eqSel && (
         <ModalEmitirHermeticidad activoId={eqSel.activo_id} patente={eqSel.patente}
                                  onClose={() => setEmitiendo(false)}
@@ -398,7 +410,7 @@ function PapelCard({ p, onAceptar, onDescartar, onEditar, onNoCaduca, onVuelveAC
       : p.estado === 'sin_fecha' ? 'border-l-4 border-l-orange-500'
       : p.estado === 'por_vencer' ? 'border-l-4 border-l-amber-500' : ''}`}>
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-sm font-semibold text-gray-800">{nombreTipo(p.tipo)}</span>
+        <span className="text-sm font-semibold text-gray-800">{nombrePapel(p)}</span>
         <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${est.cls}`}>{est.label}</span>
         {p.bloqueante && (
           <span className="flex items-center gap-0.5 text-[10px] font-semibold text-red-600">
@@ -573,6 +585,9 @@ function ModalSubirPapel({ p, onClose, onListo }: {
       await renovarCertificacion({
         activoId: p.activo_id,
         tipo: p.tipo,
+        // [MIG484] El nombre viaja con la renovación: sin esto, renovar un
+        // «otro» abriría un papel nuevo en vez de reemplazar al anterior.
+        tipoOtro: p.tipo_otro,
         fechaEmision: emi || venc,
         fechaVencimiento: venc,
         archivoUrl: url,
@@ -584,7 +599,7 @@ function ModalSubirPapel({ p, onClose, onListo }: {
           ? `Fecha leída del documento al subirlo. ${lectura.evidencia ?? ''}`.slice(0, 400)
           : 'Fecha escrita a mano al subir el papel.',
       })
-      toast.success(`${nombreTipo(p.tipo)} del ${p.patente} actualizado — vence ${venc}`)
+      toast.success(`${nombrePapel(p)} del ${p.patente} actualizado — vence ${venc}`)
       onListo()
     } catch (e) {
       toast.error((e as Error).message)
@@ -601,7 +616,7 @@ function ModalSubirPapel({ p, onClose, onListo }: {
       <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white p-5 shadow-xl"
            onClick={(e) => e.stopPropagation()}>
         <h3 className="text-base font-bold">Subir el papel nuevo</h3>
-        <p className="mt-0.5 text-xs text-gray-500">{nombreTipo(p.tipo)} · {p.patente}</p>
+        <p className="mt-0.5 text-xs text-gray-500">{nombrePapel(p)} · {p.patente}</p>
         <p className="mt-2 rounded bg-gray-50 p-2 text-[11px] text-gray-600">
           El anterior no se borra: queda en el historial del equipo. Desde ahora rige
           el que subas, y el QR del camión lo muestra al toque.
@@ -696,7 +711,7 @@ function ModalNoCaduca({ p, onClose, onListo }: {
       <div className="w-full max-w-lg rounded-xl bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
         <h3 className="text-base font-bold">Este documento no caduca</h3>
         <p className="mt-0.5 text-xs text-gray-500">
-          {nombreTipo(p.tipo)} · {p.patente}
+          {nombrePapel(p)} · {p.patente}
         </p>
 
         <div className="mt-4 space-y-2">
@@ -705,7 +720,7 @@ function ModalNoCaduca({ p, onClose, onListo }: {
             <input type="radio" className="mt-1" checked={alcance === 'tipo'}
                    onChange={() => setAlcance('tipo')} />
             <span>
-              <span className="block text-sm font-semibold">Ningún «{nombreTipo(p.tipo)}» caduca</span>
+              <span className="block text-sm font-semibold">Ningún «{nombrePapel(p)}» caduca</span>
               <span className="block text-xs text-gray-500">
                 Vale para toda la flota y para los que se carguen más adelante. Es el caso
                 del certificado de cabina: no vence en ningún equipo.
@@ -776,7 +791,7 @@ function ModalFecha({ p, onClose, onListo }: {
   }
 
   return (
-    <Modal open onClose={onClose} title={`${nombreTipo(p.tipo)} · ${p.patente}`}>
+    <Modal open onClose={onClose} title={`${nombrePapel(p)} · ${p.patente}`}>
       <div className="space-y-3">
         {p.archivo_url && (
           <a href={p.archivo_url} target="_blank" rel="noreferrer"
@@ -808,6 +823,171 @@ function ModalFecha({ p, onClose, onListo }: {
         <Button disabled={busy || !venc} onClick={guardar}>
           {busy ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Check className="mr-1 h-4 w-4" />}
           Guardar
+        </Button>
+      </ModalFooter>
+    </Modal>
+  )
+}
+
+
+/**
+ * [MIG484] Agregar un documento que el equipo todavia no tiene.
+ *
+ * El catalogo cubre 38 papeles, pero la flota recibe certificados que no estan
+ * ahi -instalacion de ADAS, DSM, capacidad de frenado-. Para esos existe
+ * «Otro», y hasta hoy los tres se leian igual en la carpeta: «Otro». Peor: el
+ * sistema los tomaba por versiones del mismo papel y mostraba uno solo.
+ *
+ * Por eso, si el tipo es «Otro», el nombre es obligatorio. Y se ofrecen los
+ * nombres que ya uso la flota, para que el mismo certificado no termine escrito
+ * de tres formas distintas.
+ */
+function ModalAgregarPapel({ activoId, patente, onClose, onListo }: {
+  activoId: string; patente: string; onClose: () => void; onListo: () => void
+}) {
+  const toast = useToast()
+  const [tipo, setTipo] = useState('otra')
+  const [tipoOtro, setTipoOtro] = useState('')
+  const [emi, setEmi] = useState('')
+  const [venc, setVenc] = useState('')
+  const [numero, setNumero] = useState('')
+  const [entidad, setEntidad] = useState('')
+  const [file, setFile] = useState<File | null>(null)
+  const [lectura, setLectura] = useState<LecturaDocumento | null>(null)
+  const [leyendo, setLeyendo] = useState(false)
+  const [busy, setBusy] = useState(false)
+
+  const { data: otrosUsados = [] } = useQuery({
+    queryKey: ['tipos-otros-usados'],
+    queryFn: getTiposOtrosUsados,
+    staleTime: 5 * 60_000,
+  })
+
+  const opciones = useMemo(
+    () => Object.entries(TIPO_DOC)
+      .map(([value, label]) => ({ value, label }))
+      .sort((a, b) => a.label.localeCompare(b.label, 'es')),
+    [])
+
+  const revisar = async (f: File | null) => {
+    setFile(f); setLectura(null)
+    if (!f) return
+    setLeyendo(true)
+    try {
+      const r = await leerDocumento(f, { patente, tipo })
+      setLectura(r)
+      if (r.vencimiento) setVenc(r.vencimiento)
+      if (r.emision) setEmi(r.emision)
+    } catch {
+      // Leer es una ayuda, no un requisito.
+    } finally { setLeyendo(false) }
+  }
+
+  const faltaNombre = tipo === 'otra' && tipoOtro.trim().length < 3
+  const bloqueado = !!lectura?.avisos.some((a) => a.severidad === 'bloqueante')
+  const puedeGuardar = !!venc && !!emi && !faltaNombre && !bloqueado && !busy
+
+  const guardar = async () => {
+    setBusy(true)
+    try {
+      let url: string | null = null
+      if (file) url = await subirDocumentoCert(activoId, tipo, file)
+      await renovarCertificacion({
+        activoId, tipo,
+        tipoOtro: tipo === 'otra' ? tipoOtro.trim() : null,
+        fechaEmision: emi,
+        fechaVencimiento: venc,
+        archivoUrl: url,
+        numero: numero || null,
+        entidad: entidad || null,
+        origen: lectura?.origen === 'documento' ? 'documento' : 'manual',
+      })
+      toast.success(`${tipo === 'otra' ? tipoOtro.trim() : nombreTipo(tipo)} del ${patente} agregado`)
+      onListo()
+    } catch (e) {
+      toast.error((e as Error).message)
+    } finally { setBusy(false) }
+  }
+
+  return (
+    <Modal open onClose={onClose} title={`Agregar un documento · ${patente}`}>
+      <div className="space-y-3">
+        <div>
+          <label className="text-xs font-medium text-gray-600">Tipo de documento</label>
+          <select className="mt-1 w-full rounded border px-2 py-1.5 text-sm"
+                  value={tipo} onChange={(e) => setTipo(e.target.value)}>
+            {opciones.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+        </div>
+
+        {tipo === 'otra' && (
+          <div>
+            <label className="text-xs font-medium text-gray-600">
+              ¿Qué certificado es? <span className="text-red-600">*</span>
+            </label>
+            <input list="tipos-otros-cd" value={tipoOtro} onChange={(e) => setTipoOtro(e.target.value)}
+                   placeholder="Ej: Instalación de dispositivo ADAS (tercer ojo)"
+                   className="mt-1 w-full rounded border px-2 py-1.5 text-sm" />
+            <datalist id="tipos-otros-cd">
+              {otrosUsados.map((o: { nombre: string }) => <option key={o.nombre} value={o.nombre} />)}
+            </datalist>
+            <p className="mt-1 text-[11px] text-gray-500">
+              Así se va a leer acá, en la ficha del equipo y en el QR del cliente.
+              {otrosUsados.length > 0 && ' Si ya existe, elígelo de la lista para que no queden dos nombres del mismo papel.'}
+            </p>
+          </div>
+        )}
+
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="text-xs font-medium text-gray-600">Emisión</label>
+            <input type="date" value={emi} onChange={(e) => setEmi(e.target.value)}
+                   className="mt-1 w-full rounded border px-2 py-1.5 text-sm" />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-gray-600">Vencimiento</label>
+            <input type="date" value={venc} onChange={(e) => setVenc(e.target.value)}
+                   className="mt-1 w-full rounded border px-2 py-1.5 text-sm" />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-gray-600">N° de certificado</label>
+            <input value={numero} onChange={(e) => setNumero(e.target.value)}
+                   className="mt-1 w-full rounded border px-2 py-1.5 text-sm" />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-gray-600">Entidad</label>
+            <input value={entidad} onChange={(e) => setEntidad(e.target.value)}
+                   placeholder="Ej: PRT, SEC…"
+                   className="mt-1 w-full rounded border px-2 py-1.5 text-sm" />
+          </div>
+        </div>
+
+        <div>
+          <label className="text-xs font-medium text-gray-600">Archivo (PDF o imagen)</label>
+          <input type="file" accept=".pdf,.jpg,.jpeg,.png"
+                 onChange={(e) => void revisar(e.target.files?.[0] ?? null)}
+                 className="mt-1 block w-full text-sm file:mr-3 file:rounded file:border-0 file:bg-blue-100 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-blue-700" />
+          {leyendo && (
+            <p className="mt-2 flex items-center gap-1.5 text-[11px] text-gray-500">
+              <Loader2 className="h-3 w-3 animate-spin" /> Revisando el documento…
+            </p>
+          )}
+          {lectura?.avisos.map((a, i) => (
+            <p key={i} className={`mt-1.5 rounded border px-2 py-1 text-[11px] ${
+              a.severidad === 'bloqueante' ? 'border-red-300 bg-red-50 text-red-800'
+              : a.severidad === 'grave' ? 'border-orange-300 bg-orange-50 text-orange-900'
+              : a.severidad === 'aviso' ? 'border-amber-200 bg-amber-50 text-amber-900'
+              : 'border-green-200 bg-green-50 text-green-800'}`}>
+              <b>{a.titulo}</b>{a.detalle && <span className="block opacity-90">{a.detalle}</span>}
+            </p>
+          ))}
+        </div>
+      </div>
+
+      <ModalFooter>
+        <Button variant="outline" onClick={onClose}>Cancelar</Button>
+        <Button onClick={guardar} disabled={!puedeGuardar}>
+          {busy ? 'Guardando…' : 'Agregar el documento'}
         </Button>
       </ModalFooter>
     </Modal>

@@ -341,6 +341,12 @@ export async function renovarCertificacion(p: {
    * descalifica, devolviendo «falta la fecha» sobre un papel recién cargado.
    */
   origen?: 'manual' | 'documento'
+  /**
+   * [MIG484] Cómo se llama el papel cuando el tipo es «otra». Obligatorio ahí:
+   * sin nombre, dos «otros» del mismo equipo se tapan uno al otro —el sistema
+   * los toma por versiones del mismo documento—.
+   */
+  tipoOtro?: string | null
 }) {
   const { data, error } = await supabase.rpc('rpc_renovar_certificacion', {
     p_activo_id: p.activoId,
@@ -353,6 +359,7 @@ export async function renovarCertificacion(p: {
     p_bloqueante: p.bloqueante ?? null,
     p_notas: p.notas ?? null,
     p_origen: p.origen ?? 'manual',
+    p_tipo_otro: p.tipoOtro?.trim() || null,
   })
   if (error) throw error
   return data
@@ -582,4 +589,17 @@ export async function validarCierre(otId: string, aprueba: boolean, comentario?:
   })
   if (error) throw new Error(error.message)
   return data as { success: boolean; folio: string; estado: string }
+}
+
+/**
+ * [MIG484] Los nombres de «otro» que ya se usaron en la flota.
+ *
+ * Se ofrecen al cargar uno nuevo para que el mismo papel no termine escrito de
+ * tres formas distintas («ADAS», «Adas tercer ojo», «Certificado ADAS»).
+ */
+export async function getTiposOtrosUsados(): Promise<{ nombre: string; usos: number }[]> {
+  const { data, error } = await supabase
+    .from('v_certificado_tipos_otros').select('nombre, usos')
+  if (error) throw new Error(error.message)
+  return (data ?? []) as { nombre: string; usos: number }[]
 }

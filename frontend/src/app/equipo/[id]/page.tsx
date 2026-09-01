@@ -19,6 +19,8 @@ import { supabase } from '@/lib/supabase'
 // vigencia calculada en el servidor (MIG227).
 interface DocPublico {
   tipo: string
+  /** [MIG484] El nombre real del papel cuando el tipo es «otra». */
+  etiqueta?: string | null
   fecha_vencimiento: string | null
   dias_restantes: number | null
   estado: 'vigente' | 'por_vencer' | 'vencido' | 'permanente'
