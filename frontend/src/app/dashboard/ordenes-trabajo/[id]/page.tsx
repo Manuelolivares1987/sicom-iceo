@@ -4,7 +4,8 @@ import { useState, useRef, useEffect, useMemo } from 'react'
 import { useToast } from '@/contexts/toast-context'
 import { getTecnicosActivos } from '@/lib/services/taller-plan-semanal'
 import {
-  getOSDeOT, getPersonasDeOS, crearOS, asignarOS, getPresupuestoOT, ESTADO_OS_LABEL,
+  getOSDeOT, getPersonasDeOS, crearOS, asignarOS, getPresupuestoOT,
+  declararOSExterna, autorizarOSExterna, ESTADO_OS_LABEL,
 } from '@/lib/services/taller-os'
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import { useParams } from 'next/navigation'
@@ -2361,6 +2362,7 @@ function NotaANoConformidad({ notaId, ncId, otId }: { notaId: string; ncId: stri
 function OrdenesDeServicioPanel({ otId }: { otId: string }) {
   const toast = useToast()
   const qc = useQueryClient()
+  const { rol: rolActual } = usePermissions()
   const { data: oss = [] } = useQuery({
     queryKey: ['os-de-ot', otId],
     queryFn: () => getOSDeOT(otId),
@@ -2406,6 +2408,30 @@ function OrdenesDeServicioPanel({ otId }: { otId: string }) {
   const [asignando, setAsignando] = useState<string | null>(null)
   const [asigTec, setAsigTec] = useState('')
   const [asigMotivo, setAsigMotivo] = useState('')
+
+  // [MIG477] Mandar una OS afuera: lo declara la jefatura, lo autoriza gerencia.
+  const [externo, setExterno] = useState<string | null>(null)
+  const [extProv, setExtProv] = useState('')
+  const [extMotivo, setExtMotivo] = useState('')
+  const puedeAutorizar = ['administrador', 'subgerente_operaciones'].includes(rolActual ?? '')
+
+  const refrescarOS = () => {
+    qc.invalidateQueries({ queryKey: ['os-de-ot', otId] })
+    qc.invalidateQueries({ queryKey: ['os-presupuesto', otId] })
+  }
+  const declararExt = useMutation({
+    mutationFn: declararOSExterna,
+    onSuccess: () => {
+      toast.success('Queda a la espera de gerencia')
+      setExterno(null); setExtProv(''); setExtMotivo(''); refrescarOS()
+    },
+    onError: (e) => toast.error((e as Error).message),
+  })
+  const autorizarExt = useMutation({
+    mutationFn: autorizarOSExterna,
+    onSuccess: (r) => { toast.success(`${r.folio} autorizada`); refrescarOS() },
+    onError: (e) => toast.error((e as Error).message),
+  })
 
   const asignar = useMutation({
     mutationFn: asignarOS,
@@ -2528,13 +2554,73 @@ function OrdenesDeServicioPanel({ otId }: { otId: string }) {
                 {/* [MIG474] Mover a alguien es del jefe. El operador sólo
                     ejecuta lo que le asignaron, así que el botón vive acá y no
                     en el teléfono. */}
-                {os.estado !== 'finalizada' && os.estado !== 'anulada' && (
+                {os.estado !== 'finalizada' && os.estado !== 'anulada' && !os.es_externo && (
                   <button onClick={() => { setAsignando(os.id); setAsigTec(''); setAsigMotivo('') }}
                           className="text-[11px] font-medium text-blue-600 underline">
                     {os.responsable ? 'Cambiar quién la hace' : 'Asignar a alguien'}
                   </button>
                 )}
+                {os.estado !== 'finalizada' && os.estado !== 'anulada' && (
+                  <button onClick={() => {
+                            if (os.es_externo) {
+                              declararExt.mutate({ osId: os.id, externo: false })
+                            } else { setExterno(os.id); setExtProv(''); setExtMotivo('') }
+                          }}
+                          className="text-[11px] font-medium text-amber-700 underline">
+                    {os.es_externo ? 'La hace el taller después de todo' : 'La hace un externo'}
+                  </button>
+                )}
               </div>
+
+              {os.es_externo && (
+                <div className={`mt-1.5 rounded border px-2 py-1.5 text-[11px] ${
+                  os.externo_autorizado_at ? 'border-gray-200 bg-gray-50 text-gray-700'
+                                           : 'border-amber-300 bg-amber-50 text-amber-900'}`}>
+                  <b>Trabajo de externo</b> · {os.proveedor_externo}
+                  {os.motivo_externo && <> · {os.motivo_externo}</>}
+                  {os.externo_autorizado_at ? (
+                    <> · autorizado por {os.externo_autorizado_por}</>
+                  ) : (
+                    <>
+                      <p className="mt-0.5">
+                        Falta la autorización de gerencia. Hasta entonces no arranca, y no cuenta
+                        para el bono ni ocupa horas del equipo.
+                      </p>
+                      {puedeAutorizar && (
+                        <Button size="sm" className="mt-1.5" disabled={autorizarExt.isPending}
+                                onClick={() => autorizarExt.mutate(os.id)}>
+                          Autorizar el trabajo externo
+                        </Button>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+
+              {externo === os.id && (
+                <div className="mt-2 rounded-lg border border-amber-300 bg-amber-50 p-2.5">
+                  <label className="text-[11px] font-medium text-gray-700">Empresa que lo hace</label>
+                  <input value={extProv} onChange={(e) => setExtProv(e.target.value)}
+                         placeholder="Nombre del proveedor"
+                         className="mt-0.5 w-full rounded border border-gray-300 px-2 py-1.5 text-sm" />
+                  <label className="mt-1.5 block text-[11px] font-medium text-gray-700">
+                    Por qué sale del taller
+                  </label>
+                  <textarea rows={2} value={extMotivo} onChange={(e) => setExtMotivo(e.target.value)}
+                            placeholder="Es lo que va a leer quien autoriza (mínimo 10 caracteres)"
+                            className="mt-0.5 w-full rounded border border-gray-300 px-2 py-1.5 text-sm" />
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <Button size="sm"
+                            disabled={declararExt.isPending || extProv.trim().length < 3
+                                      || extMotivo.trim().length < 10}
+                            onClick={() => declararExt.mutate({
+                              osId: os.id, externo: true, proveedor: extProv, motivo: extMotivo })}>
+                      Mandar afuera
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => setExterno(null)}>Cancelar</Button>
+                  </div>
+                </div>
+              )}
 
               {asignando === os.id && (
                 <div className="mt-2 rounded-lg border border-blue-200 bg-blue-50 p-2.5">

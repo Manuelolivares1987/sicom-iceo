@@ -33,6 +33,12 @@ export type OrdenServicio = {
   horas_reales: number
   /** Quiénes trabajaron en ella, no sólo el responsable. */
   quienes: string | null
+  /** [MIG477] El trabajo se manda afuera: necesita gerencia y no paga bono. */
+  es_externo: boolean
+  proveedor_externo: string | null
+  motivo_externo: string | null
+  externo_autorizado_at: string | null
+  externo_autorizado_por: string | null
 }
 
 export type OSPersona = {
@@ -202,4 +208,38 @@ export const ESTADO_OS_LABEL: Record<string, string> = {
   pausada: 'Pausada',
   finalizada: 'Terminada',
   anulada: 'Anulada',
+}
+
+// ── [MIG477] La meta del planificador, y las OS que se van afuera ───────────
+
+/** Optimizado o normal: a qué se compromete quien planifica, dentro del tipo. */
+export async function setMetaOT(otId: string, meta: 'optimizado' | 'normal') {
+  const { data, error } = await supabase.rpc('rpc_taller_ot_set_meta', {
+    p_ot_id: otId, p_meta: meta,
+  })
+  if (error) throw new Error(error.message)
+  return data as { success: boolean; meta: string; dias: number | null }
+}
+
+/**
+ * Declara que una OS la hace un tercero.
+ *
+ * Lo declara la jefatura de taller; lo autoriza gerencia, y hasta entonces la OS
+ * no arranca. Tampoco cuenta para el bono ni ocupa el techo de horas: las horas
+ * de un externo no son horas del taller.
+ */
+export async function declararOSExterna(p: {
+  osId: string; externo: boolean; proveedor?: string | null; motivo?: string | null
+}) {
+  const { error } = await supabase.rpc('rpc_taller_os_declarar_externo', {
+    p_os_id: p.osId, p_externo: p.externo,
+    p_proveedor: p.proveedor ?? null, p_motivo: p.motivo ?? null,
+  })
+  if (error) throw new Error(error.message)
+}
+
+export async function autorizarOSExterna(osId: string) {
+  const { data, error } = await supabase.rpc('rpc_taller_os_autorizar_externo', { p_os_id: osId })
+  if (error) throw new Error(error.message)
+  return data as { success: boolean; folio: string }
 }
