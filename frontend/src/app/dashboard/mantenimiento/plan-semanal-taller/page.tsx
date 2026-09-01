@@ -1562,6 +1562,16 @@ function ProgramarOtDialog({ target, planSemanalId, dias, onClose, onDone, agreg
   // días, y eso cambia el tramo. Y si se reutiliza una OT abierta, el reloj ya
   // viene corriendo desde antes.
   const conceptoSel = conceptos.find((c) => c.concepto === concepto) ?? null
+
+  // [MIG476] El tipo de tarea da el tiempo total del equipo. El planificador ya
+  // no parte de una hoja en blanco: el estándar propone, él confirma o ajusta.
+  // Ese número es el paraguas del que después cuelgan las Órdenes de Servicio.
+  const [horasEquipo, setHorasEquipo] = useState('')
+  const [horasTocadas, setHorasTocadas] = useState(false)
+  useEffect(() => {
+    if (horasTocadas || !conceptoSel?.horas_estandar) return
+    setHorasEquipo(String(conceptoSel.horas_estandar))
+  }, [conceptoSel, horasTocadas])
   const tramoPlan = useMemo(() => {
     if (!conceptoSel || fechasSel.size === 0) return null
     const orden = Array.from(fechasSel).sort()
@@ -1602,9 +1612,18 @@ function ProgramarOtDialog({ target, planSemanalId, dias, onClose, onDone, agreg
       })
       // [MIG471] Igual que en recepción: se guardan PERSONAS, no un texto con
       // ids adentro. De esto depende que la OT le pague a alguien.
+      // [MIG476] Las horas van en la PRIMERA jornada: son el total del equipo
+      // para esta visita, no una cuota por día. La suma de las jornadas es el
+      // paraguas, así que repetirlas en cada día lo multiplicaría.
+      const horasN = horasEquipo.trim() ? Number(horasEquipo) : null
+      let primera = true
       for (const f of fechas) {
-        const j = await agregarJornada.mutateAsync({ planSemanalId, otId: r.id, fecha: f })
+        const j = await agregarJornada.mutateAsync({
+          planSemanalId, otId: r.id, fecha: f,
+          horasPlanificadas: primera ? horasN : null,
+        })
         if (mecanicos.length) await rpcSetCuadrilla(j.plan_ot_id, mecanicos)
+        primera = false
       }
       // [MIG466] Se declara después de crear la OT porque antes no existe. Si
       // esto falla, la OT queda igual: cae a la deducción automática, que es
@@ -1707,6 +1726,31 @@ function ProgramarOtDialog({ target, planSemanalId, dias, onClose, onDone, agreg
               </p>
             </div>
           )}
+
+          <div className="mt-2">
+            <label className="text-[11px] font-semibold text-emerald-900">
+              Horas para el equipo en esta visita
+            </label>
+            <div className="mt-0.5 flex items-center gap-2">
+              <input type="number" step="0.5" min="0" value={horasEquipo}
+                     onChange={(e) => { setHorasTocadas(true); setHorasEquipo(e.target.value) }}
+                     className="w-28 rounded border border-emerald-300 bg-white px-2 py-1.5 text-sm" />
+              <span className="text-[11px] text-emerald-800">
+                {conceptoSel?.horas_estandar
+                  ? <>el estándar de {concepto} son {conceptoSel.horas_estandar} h</>
+                  : 'sin estándar para este tipo'}
+              </span>
+            </div>
+            <p className="mt-1 text-[10px] text-emerald-800">
+              Es el paraguas total del equipo: cubre la revisión y las Órdenes de Servicio que
+              salgan de ella. Si el jefe reparte más horas, va a tener que justificarlo.
+            </p>
+            {conceptoSel?.horas_fuente && (
+              <p className="mt-0.5 text-[10px] text-emerald-700 opacity-80">
+                {conceptoSel.horas_fuente}
+              </p>
+            )}
+          </div>
 
           {tramoPlan && (
             <div className={`mt-2 rounded-lg border px-2.5 py-2 text-[11px] ${

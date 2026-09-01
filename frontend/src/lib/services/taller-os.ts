@@ -69,15 +69,19 @@ export async function getPersonasDeOS(osId: string): Promise<OSPersona[]> {
 // las OS no puede pasarlo sin que alguien escriba por qué.
 
 export type PresupuestoOT = {
-  /** Lo que el planificador le dio a la visita. null = todavía no lo definió. */
+  /** El paraguas: lo que el plan le dio al equipo. null = no lo definió. */
   horas_plan: number | null
+  /** [MIG476] Lo que ya se fue en revisar. Sale del mismo paraguas. */
+  horas_revision: number
+  /** Lo que queda para repartir en OS: plan menos revisión. */
+  techo_os: number | null
   /** Lo que el checklist estima. Referencia, no manda. */
   horas_checklist: number
   sin_techo: boolean
   horas_en_os: number
   horas_libres: number
   excedida: boolean
-  horas_reales: number
+  horas_reales_os: number
 }
 
 export async function getPresupuestoOT(otId: string): Promise<PresupuestoOT> {
