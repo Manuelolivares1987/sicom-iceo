@@ -1703,6 +1703,7 @@ function ProgramarOtDialog({ target, planSemanalId, dias, onClose, onDone, agreg
                 <thead className="text-emerald-800">
                   <tr>
                     <th className="py-1 text-left font-semibold">Tipo</th>
+                    <th className="py-1 text-right font-semibold">Horas del equipo</th>
                     <th className="py-1 text-right font-semibold">Optimizado</th>
                     <th className="py-1 text-right font-semibold">Normal</th>
                     <th className="py-1 text-right font-semibold">Con demora</th>
@@ -1713,6 +1714,9 @@ function ProgramarOtDialog({ target, planSemanalId, dias, onClose, onDone, agreg
                     <tr key={c.concepto}
                         className={c.concepto === concepto ? 'font-semibold' : 'opacity-70'}>
                       <td className="py-0.5">{c.concepto}</td>
+                      <td className="py-0.5 text-right tabular-nums">
+                        {c.horas_estandar != null ? `${c.horas_estandar} h` : '—'}
+                      </td>
                       <td className="py-0.5 text-right tabular-nums">hasta {c.dias_optimizado} d</td>
                       <td className="py-0.5 text-right tabular-nums">hasta {c.dias_normal} d</td>
                       <td className="py-0.5 text-right tabular-nums">desde {c.dias_demora} d</td>
@@ -1721,33 +1725,40 @@ function ProgramarOtDialog({ target, planSemanalId, dias, onClose, onDone, agreg
                 </tbody>
               </table>
               <p className="mt-1 text-[10px] text-emerald-800">
-                Cerrar dentro del plazo optimizado paga el máximo del tramo. Pasado el plazo de
-                demora, esa OT no paga.
+                Las <b>horas del equipo</b> son el tiempo que el tipo de tarea le da a la visita:
+                es el tiempo del planificador, y de ahí cuelgan las Órdenes de Servicio. Los plazos
+                en días son los del incentivo: cerrar dentro del optimizado paga el máximo del
+                tramo, y pasado el de demora esa OT no paga.
               </p>
             </div>
           )}
 
-          <div className="mt-2">
-            <label className="text-[11px] font-semibold text-emerald-900">
-              Horas para el equipo en esta visita
-            </label>
-            <div className="mt-0.5 flex items-center gap-2">
+          <div className="mt-2 rounded border border-emerald-300 bg-white px-2.5 py-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[11px] font-semibold text-emerald-900">
+                Tiempo del equipo para esta visita
+              </span>
               <input type="number" step="0.5" min="0" value={horasEquipo}
                      onChange={(e) => { setHorasTocadas(true); setHorasEquipo(e.target.value) }}
-                     className="w-28 rounded border border-emerald-300 bg-white px-2 py-1.5 text-sm" />
-              <span className="text-[11px] text-emerald-800">
-                {conceptoSel?.horas_estandar
-                  ? <>el estándar de {concepto} son {conceptoSel.horas_estandar} h</>
-                  : 'sin estándar para este tipo'}
-              </span>
+                     className="w-24 rounded border border-emerald-300 px-2 py-1 text-sm tabular-nums" />
+              <span className="text-[11px] text-emerald-800">horas</span>
+              {horasTocadas && conceptoSel?.horas_estandar != null
+                && Number(horasEquipo) !== Number(conceptoSel.horas_estandar) && (
+                <button type="button"
+                        onClick={() => { setHorasTocadas(false); setHorasEquipo(String(conceptoSel.horas_estandar)) }}
+                        className="text-[11px] font-medium text-emerald-700 underline">
+                  volver a las {conceptoSel.horas_estandar} h de {concepto}
+                </button>
+              )}
             </div>
             <p className="mt-1 text-[10px] text-emerald-800">
-              Es el paraguas total del equipo: cubre la revisión y las Órdenes de Servicio que
-              salgan de ella. Si el jefe reparte más horas, va a tener que justificarlo.
+              Viene del tipo de tarea que elegiste arriba. Es el paraguas total: cubre la revisión
+              del equipo y todas las Órdenes de Servicio que salgan de ella. Se puede ajustar, y si
+              el jefe reparte más horas que éstas va a tener que justificarlo.
             </p>
             {conceptoSel?.horas_fuente && (
-              <p className="mt-0.5 text-[10px] text-emerald-700 opacity-80">
-                {conceptoSel.horas_fuente}
+              <p className="mt-0.5 text-[10px] text-emerald-700 opacity-75">
+                De dónde sale: {conceptoSel.horas_fuente}
               </p>
             )}
           </div>
