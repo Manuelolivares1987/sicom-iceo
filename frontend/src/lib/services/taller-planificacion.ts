@@ -58,6 +58,12 @@ export interface PlanActivo {
   duracion_estimada_hrs: number | null
   /** [MIG490] Cuántos pasos trae la pauta: es el checklist que abre el mecánico. */
   pasos: number
+  /**
+   * Los pasos, en texto. El planificador tiene que poder ver QUÉ manda hacer la
+   * pauta antes de programarla — si no, «PM Mensual» es una sigla y nadie sabe
+   * si es lo que el camión necesita esta semana.
+   */
+  actividades: string[]
 }
 
 export async function getPlanesActivo(activoId: string): Promise<PlanActivo[]> {
@@ -72,15 +78,29 @@ export async function getPlanesActivo(activoId: string): Promise<PlanActivo[]> {
   if (error) throw error
   type Raw = {
     id: string; nombre: string | null
-    pauta: { nombre: string; duracion_estimada_hrs: number | null; items_checklist: unknown } | null
+    pauta: { nombre: string; duracion_estimada_hrs: number | null; items_checklist: unknown[] } | null
   }
-  return ((data ?? []) as unknown as Raw[]).map((r) => ({
-    id: r.id,
-    nombre: r.nombre,
-    pauta_nombre: r.pauta?.nombre ?? null,
-    duracion_estimada_hrs: r.pauta?.duracion_estimada_hrs ?? null,
-    pasos: Array.isArray(r.pauta?.items_checklist) ? r.pauta!.items_checklist.length : 0,
-  }))
+  return ((data ?? []) as unknown as Raw[]).map((r) => {
+    // Los ítems vienen en dos formas en la base: texto suelto («Cambio aceite
+    // motor + filtro») y objeto con orden/obligatorio/foto. Se leen las dos.
+    const crudos = Array.isArray(r.pauta?.items_checklist) ? r.pauta!.items_checklist : []
+    const actividades = crudos
+      .map((it) => typeof it === 'string'
+        ? it
+        : (it as Record<string, unknown>)?.descripcion
+          ?? (it as Record<string, unknown>)?.item
+          ?? (it as Record<string, unknown>)?.nombre ?? '')
+      .map((t) => String(t).trim())
+      .filter(Boolean)
+    return {
+      id: r.id,
+      nombre: r.nombre,
+      pauta_nombre: r.pauta?.nombre ?? null,
+      duracion_estimada_hrs: r.pauta?.duracion_estimada_hrs ?? null,
+      pasos: actividades.length,
+      actividades,
+    }
+  })
 }
 
 // Tareas (ítems no_ok) del checklist de recepción del equipo
