@@ -8,7 +8,7 @@ import {
   rpcAgregarJornadaOT,
   rpcQuitarJornada, rpcConfirmarPlanSemanal, rpcLiberarOts,
   rpcV3SetTiempo, rpcV3SetExcluido, rpcV3AgregarItem, rpcV3EliminarCustom,
-  rpcAdminSembrarPlanesFaltantes, rpcSetCuadrilla,
+  rpcAdminSembrarPlanesFaltantes, rpcSetCuadrilla, rpcSacarOtDelPlan,
 } from '@/lib/services/taller-plan-semanal'
 // Capa offline del Kanban del jefe: lecturas cacheadas + cola de mutaciones
 // que se sincroniza al recuperar internet.
@@ -179,6 +179,21 @@ export function useMoverJornadaTaller(planId: string | null) {
     onSuccess: () => invalidate(),
   })
 }
+/**
+ * [MIG488] Sacar la OT entera del plan, con todas sus jornadas.
+ *
+ * No pasa por la cola offline a propósito: descartar una OT es una decisión que
+ * el jefe tiene que ver confirmada, no algo que se sincroniza después.
+ */
+export function useSacarOtDelPlan(planId: string | null) {
+  const invalidate = useInvalidatePlan(planId)
+  return useMutation({
+    networkMode: 'always',
+    mutationFn: rpcSacarOtDelPlan,
+    onSuccess: () => invalidate(),
+  })
+}
+
 export function useQuitarJornadaTaller(planId: string | null) {
   const invalidate = useInvalidatePlan(planId)
   return useMutation({

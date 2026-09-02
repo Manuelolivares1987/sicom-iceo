@@ -9,7 +9,7 @@ import {
   Calendar, ArrowLeft, ChevronLeft, ChevronRight, Lock, Unlock, AlertTriangle, Trash2, User,
   Play, Pause, CheckCircle2, BarChart3, ShieldAlert, RefreshCw, Wrench, Layers, FileSpreadsheet,
   Truck, Mail, Pencil, Plus, Clock, Camera, ExternalLink, ListChecks, Upload, Package, X, Search,
-  Smartphone, FileWarning,
+  Smartphone, FileWarning, XCircle,
 } from 'lucide-react'
 import { exportarPlanSemanalExcel, descargarBlob } from '@/lib/export/plan-semanal-excel'
 import { buildPlanSemanalTallerEmailHtml } from '@/lib/email/plan-semanal-taller-email'
@@ -25,7 +25,7 @@ import {
   useGetOrCreatePlanSemanalTaller, useDiasPlanSemanalTaller, useJornadasPlanSemanalTaller,
   useKpiSemanalTaller, useCumplimientoPmMesTaller,
   useCoberturaPm, useActivosSinPlan,
-  useAgregarJornadaTaller, useMoverJornadaTaller, useQuitarJornadaTaller,
+  useAgregarJornadaTaller, useMoverJornadaTaller, useQuitarJornadaTaller, useSacarOtDelPlan,
   useAsignarResponsableTaller, useConfirmarPlanSemanalTaller, useLiberarOtsTaller,
   useIniciarEjecucionTaller, usePausarEjecucionTaller, useFinalizarEjecucionTaller,
   useAdminSembrarPlanesFaltantes,
@@ -166,6 +166,14 @@ export default function PlanSemanalTallerPage() {
   const moverJornada = useMoverJornadaTaller(planSemanalId)
   const agregarJornada = useAgregarJornadaTaller(planSemanalId)
   const quitarJornada = useQuitarJornadaTaller(planSemanalId)
+  // [MIG488] Sacar la OT completa. Una OT multidía tiene una jornada por día:
+  // quitarlas de a una dejaba el equipo en el tablero y parecía que no se podía.
+  const sacarOt = useSacarOtDelPlan(planSemanalId)
+  const [sacarTarget, setSacarTarget] = useState<TallerPlanOTFull | null>(null)
+  const [sacarDescartar, setSacarDescartar] = useState(true)
+  const [sacarMotivo, setSacarMotivo] = useState('')
+  const [sacarForzar, setSacarForzar] = useState(false)
+  const [sacarAviso, setSacarAviso] = useState<string | null>(null)
   // Los días de una OT que YA está en el tablero.
   const [diasOtTarget, setDiasOtTarget] = useState<TallerPlanOTFull | null>(null)
   // Quitar una jornada que está corriendo: se pregunta antes de detenerla.
@@ -659,6 +667,9 @@ export default function PlanSemanalTallerPage() {
                           onError: (err) => toast.error((err as Error).message),
                         })
                       }}
+                      onSacarOt={(j) => {
+                        setSacarTarget(j); setSacarMotivo(''); setSacarForzar(false); setSacarAviso(null)
+                      }}
                       onDias={(j) => setDiasOtTarget(j)}
                       onIniciar={(j) => j.ot_id && iniciarEjec.mutate({ otId: j.ot_id, planOtId: j.plan_ot_id }, {
                         onSuccess: () => toast.success('OT iniciada'),
@@ -839,6 +850,88 @@ export default function PlanSemanalTallerPage() {
 
       {/* Renovar un papel se hace en Control documental, que es donde se
           guarda el archivo y se deja la trazabilidad. Acá se planifica. */}
+
+      {/* [MIG488] Sacar la OT completa del plan */}
+      {sacarTarget && (
+        <Modal open onClose={() => { setSacarTarget(null); setSacarAviso(null) }}
+               title={`Sacar del plan · ${sacarTarget.ot_folio ?? sacarTarget.activo_patente ?? ''}`}>
+          <div className="space-y-3">
+            <p className="text-sm text-gray-700">
+              Saca <b>todas las jornadas</b> de esta OT del plan, no sólo la de este día.
+              Lo que esté corriendo se detiene y el tiempo trabajado queda registrado.
+            </p>
+
+            <label className="flex items-start gap-2 rounded-lg border border-gray-200 bg-gray-50 p-2.5">
+              <input type="checkbox" className="mt-0.5" checked={sacarDescartar}
+                     onChange={(e) => setSacarDescartar(e.target.checked)} />
+              <span className="text-xs text-gray-700">
+                <b>Descartar también la OT.</b> Si no, la OT queda abierta y vuelve a aparecer
+                en «viene de semanas anteriores» — que es el mismo tablero por otra puerta.
+              </span>
+            </label>
+
+            {sacarDescartar && (
+              <div>
+                <label className="text-xs font-medium text-gray-600">¿Por qué se descarta?</label>
+                <input value={sacarMotivo} onChange={(e) => setSacarMotivo(e.target.value)}
+                       placeholder="Ej: era una prueba, se rehace"
+                       className="mt-1 w-full rounded border border-gray-300 px-2 py-1.5 text-sm" />
+                <p className="mt-1 text-[11px] text-gray-500">
+                  Queda escrito en la OT con tu nombre. Las no conformidades no se borran:
+                  si el hallazgo es real, sigue siéndolo.
+                </p>
+              </div>
+            )}
+
+            {sacarAviso && (
+              <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                <p>{sacarAviso}</p>
+                <label className="mt-1.5 flex items-start gap-2">
+                  <input type="checkbox" className="mt-0.5" checked={sacarForzar}
+                         onChange={(e) => setSacarForzar(e.target.checked)} />
+                  <span>
+                    Descartarla igual. El movimiento de bodega no se deshace —el material
+                    salió— y queda colgando de una OT descartada.
+                  </span>
+                </label>
+              </div>
+            )}
+          </div>
+
+          <ModalFooter>
+            <Button variant="outline" onClick={() => { setSacarTarget(null); setSacarAviso(null) }}>
+              Cancelar
+            </Button>
+            <Button disabled={sacarOt.isPending || (sacarDescartar && sacarMotivo.trim().length < 5)}
+                    onClick={() => {
+                      const j = sacarTarget
+                      if (!j?.ot_id) return
+                      sacarOt.mutate({
+                        otId: j.ot_id, descartar: sacarDescartar,
+                        motivo: sacarMotivo || null, forzar: sacarForzar,
+                      }, {
+                        onSuccess: (r) => {
+                          // El bloqueo informa; no cierra el modal, ofrece forzar.
+                          if (r.no_se_pudo_descartar && !r.ot_cancelada) {
+                            setSacarAviso(r.no_se_pudo_descartar)
+                            toast.success(`${r.jornadas_quitadas} jornada(s) fuera del plan`)
+                            return
+                          }
+                          toast.success(
+                            `${r.folio}: ${r.jornadas_quitadas} jornada(s) fuera del plan`
+                            + (r.ot_cancelada ? ' y la OT quedó descartada' : '')
+                            + (r.nc_abiertas > 0 ? `. Quedan ${r.nc_abiertas} NC abierta(s) por agendar` : ''))
+                          setSacarTarget(null); setSacarAviso(null)
+                          setSacarMotivo(''); setSacarForzar(false)
+                        },
+                        onError: (err) => toast.error((err as Error).message),
+                      })
+                    }}>
+              {sacarOt.isPending ? 'Sacando…' : 'Sacar del plan'}
+            </Button>
+          </ModalFooter>
+        </Modal>
+      )}
 
       {/* Quitar una jornada que está corriendo */}
       {detenerTarget && (
@@ -2219,13 +2312,15 @@ function TareaLibreDialog({ dias, tecnicos, operacionInicial, enviando, onClose,
   )
 }
 
-function DiaColumna({ fecha, nombre, jornadas, onAsignar, onDetalle, onQuitar, onDias, onIniciar, onPausar, onFinalizar, onLiberar }: {
+function DiaColumna({ fecha, nombre, jornadas, onAsignar, onDetalle, onQuitar, onSacarOt, onDias, onIniciar, onPausar, onFinalizar, onLiberar }: {
   fecha: string
   nombre: string
   jornadas: TallerPlanOTFull[]
   onAsignar: (j: TallerPlanOTFull) => void
   onDetalle: (j: TallerPlanOTFull) => void
   onQuitar: (j: TallerPlanOTFull) => void
+  /** [MIG488] La OT completa, con todas sus jornadas. */
+  onSacarOt: (j: TallerPlanOTFull) => void
   onDias: (j: TallerPlanOTFull) => void
   onIniciar: (j: TallerPlanOTFull) => void
   onPausar: (j: TallerPlanOTFull) => void
@@ -2309,7 +2404,8 @@ function DiaColumna({ fecha, nombre, jornadas, onAsignar, onDetalle, onQuitar, o
         ) : (
           jornadas.map((j) => (
             <JornadaCard key={j.plan_ot_id} jornada={j}
-                         onAsignar={onAsignar} onDetalle={onDetalle} onQuitar={onQuitar} onDias={onDias}
+                         onAsignar={onAsignar} onDetalle={onDetalle} onQuitar={onQuitar}
+                         onSacarOt={onSacarOt} onDias={onDias}
                          onIniciar={onIniciar} onPausar={onPausar} onFinalizar={onFinalizar}
                          onLiberar={onLiberar} />
           ))
@@ -2320,11 +2416,13 @@ function DiaColumna({ fecha, nombre, jornadas, onAsignar, onDetalle, onQuitar, o
 }
 
 
-function JornadaCard({ jornada, onAsignar, onDetalle, onQuitar, onDias, onIniciar, onPausar, onFinalizar, onLiberar }: {
+function JornadaCard({ jornada, onAsignar, onDetalle, onQuitar, onSacarOt, onDias, onIniciar, onPausar, onFinalizar, onLiberar }: {
   jornada: TallerPlanOTFull
   onAsignar: (j: TallerPlanOTFull) => void
   onDetalle: (j: TallerPlanOTFull) => void
   onQuitar: (j: TallerPlanOTFull) => void
+  /** [MIG488] La OT completa, con todas sus jornadas. */
+  onSacarOt: (j: TallerPlanOTFull) => void
   onDias: (j: TallerPlanOTFull) => void
   onIniciar: (j: TallerPlanOTFull) => void
   onPausar: (j: TallerPlanOTFull) => void
@@ -2525,13 +2623,23 @@ function JornadaCard({ jornada, onAsignar, onDetalle, onQuitar, onDias, onInicia
                 title={finalizada
                   ? 'Esta jornada ya se finalizó: es parte del historial del plan y no se saca'
                   : enEjec
-                    ? 'Quitar del plan — hay que detener el trabajo primero'
-                    : 'Quitar del plan'}
+                    ? 'Quitar este día del plan — hay que detener el trabajo primero'
+                    : 'Quitar este día del plan'}
                 className={`text-[9px] px-1.5 py-0.5 rounded ml-auto ${
                   finalizada ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
                              : 'bg-red-50 hover:bg-red-100 text-red-600'}`}>
           <Trash2 className="h-3 w-3" />
         </button>
+        {/* [MIG488] La OT entera. El botón de al lado saca ESTE día; una OT
+            multidía tiene una tarjeta por día, y sacarlas de a una dejaba el
+            equipo en el tablero — se leía como que no se podía sacar. */}
+        {jornada.ot_id && !finalizada && (
+          <button onClick={() => onSacarOt(jornada)}
+                  title="Sacar la OT completa del plan (todas sus jornadas)"
+                  className="text-[9px] px-1.5 py-0.5 rounded bg-red-100 hover:bg-red-200 text-red-700 font-semibold">
+            <XCircle className="h-3 w-3" />
+          </button>
+        )}
         </>
         )}
       </div>

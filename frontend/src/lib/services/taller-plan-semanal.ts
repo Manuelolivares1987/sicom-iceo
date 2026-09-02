@@ -560,6 +560,39 @@ export async function rpcQuitarJornada(planOtId: string, detener = false) {
   return data as { success: boolean; detenida?: boolean; ot_descartada?: string | null }
 }
 
+/**
+ * [MIG488] Sacar la OT ENTERA del plan, no jornada por jornada.
+ *
+ * Una OT multidía tiene una fila por día: sacar una dejaba las otras cuatro y
+ * el equipo seguía en el tablero. Y aunque se sacaran todas, la OT abierta
+ * volvía por «viene de semanas anteriores», que es el mismo tablero por otra
+ * puerta. Por eso esto hace las dos cosas de una vez.
+ *
+ * `descartar` cancela la OT. `forzar` levanta el bloqueo de una OT que ya sacó
+ * material de bodega: es de gerencia, exige motivo y queda escrito en la OT.
+ */
+export async function rpcSacarOtDelPlan(p: {
+  otId: string; descartar?: boolean; motivo?: string | null; forzar?: boolean
+}) {
+  const { data, error } = await supabase.rpc('rpc_taller_sacar_ot_del_plan', {
+    p_ot_id: p.otId,
+    p_descartar: p.descartar ?? false,
+    p_motivo: p.motivo ?? null,
+    p_forzar: p.forzar ?? false,
+  })
+  if (error) throw error
+  return data as {
+    success: boolean
+    folio: string
+    jornadas_quitadas: number
+    jornadas_finalizadas: number
+    ejecuciones_detenidas: number
+    ot_cancelada: boolean
+    nc_abiertas: number
+    no_se_pudo_descartar: string | null
+  }
+}
+
 export async function rpcAsignarResponsable(planOtId: string, responsableId: string | null, cuadrilla?: string | null, motivo?: string | null) {
   const { data, error } = await supabase.rpc('rpc_taller_asignar_responsable', {
     p_plan_ot_id: planOtId,
