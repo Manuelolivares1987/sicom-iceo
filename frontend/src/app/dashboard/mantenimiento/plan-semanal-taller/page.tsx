@@ -45,7 +45,7 @@ import { useNetworkStatus } from '@/hooks/use-calama-offline'
 import {
   lunesDeIso, getJornadaEventos, getOtArrastre, descartarOt,
   CATEGORIA_TAREA_LABEL, CATEGORIAS_TAREA_LIBRE, medicionesNeumaticos, getCuadrillaJornada,
-  rpcSetCuadrilla, rpcGetOrCreatePlanSemanal,
+  rpcSetCuadrilla, rpcGetOrCreatePlanSemanal, rpcSetHorasPlan,
   type TallerPlanOTFull, type ChecklistV3Item, type TallerJornadaEvento,
   type TallerTecnico, type CategoriaTareaTaller, type TallerOtArrastre,
 } from '@/lib/services/taller-plan-semanal'
@@ -1694,16 +1694,21 @@ function ProgramarOtDialog({ target, planSemanalId, dias, onClose, onDone, agreg
   const diasMeta = meta === 'optimizado'
     ? conceptoSel?.dias_optimizado ?? null
     : conceptoSel?.dias_normal ?? null
+  // [MIG493] Las horas las manda la META, que es el compromiso: optimizado o
+  // normal por la jornada del taller. Los días del calendario son los que
+  // ocupan el taller, pero el número que se compromete es el del tramo.
+  const horasMeta = diasMeta != null ? diasMeta * HORAS_JORNADA : null
+  // El tramo NORMAL es el techo de lo que se compromete sin explicar.
+  const topeSinJustificar = conceptoSel?.dias_normal != null
+    ? conceptoSel.dias_normal * HORAS_JORNADA : null
+  const horasNum = Number(horasEquipo) || 0
+  const excedeNormal = topeSinJustificar != null && horasNum > topeSinJustificar
+  const [justHoras, setJustHoras] = useState('')
+
   useEffect(() => {
-    // [MIG491] El tiempo del equipo para ESTA visita sale de los días que puso
-    // el planificador, no del estándar del tipo de tarea. Antes elegías 3 días
-    // y el campo seguía diciendo las 32,5 h de una MTN: el número no mentía
-    // —es el estándar— pero no era el tiempo de esta visita, que es lo que el
-    // campo promete. El estándar sigue a la vista, al lado, para comparar.
     if (horasTocadas) return
-    const dias = fechasSel.size
-    setHorasEquipo(dias > 0 ? String(dias * HORAS_JORNADA) : '')
-  }, [fechasSel, horasTocadas])
+    setHorasEquipo(horasMeta != null ? String(horasMeta) : '')
+  }, [horasMeta, horasTocadas])
   const tramoPlan = useMemo(() => {
     if (!conceptoSel || fechasSel.size === 0) return null
     const orden = Array.from(fechasSel).sort()
@@ -1762,6 +1767,16 @@ function ProgramarOtDialog({ target, planSemanalId, dias, onClose, onDone, agreg
         })
         if (mecanicos.length) await rpcSetCuadrilla(j.plan_ot_id, mecanicos)
         primera = false
+      }
+      // [MIG493] Las horas comprometidas pasan por el RPC, que es quien valida
+      // el tramo normal. La pantalla ya avisó; acá se confirma contra la base.
+      if (horasN) {
+        const rh = await rpcSetHorasPlan(r.id, horasN, justHoras.trim() || null)
+        if (rh?.requiere_justificacion) {
+          toast.error(rh.motivo ?? 'Faltó justificar las horas de la visita')
+          setEnviando(false)
+          return
+        }
       }
       // [MIG466] Se declara después de crear la OT porque antes no existe. Si
       // esto falla, la OT queda igual: cae a la deducción automática, que es
@@ -1880,38 +1895,55 @@ function ProgramarOtDialog({ target, planSemanalId, dias, onClose, onDone, agreg
                      onChange={(e) => { setHorasTocadas(true); setHorasEquipo(e.target.value) }}
                      className="w-24 rounded border border-emerald-300 px-2 py-1 text-sm tabular-nums" />
               <span className="text-[11px] text-emerald-800">horas</span>
-              {horasTocadas && fechasSel.size > 0
-                && Number(horasEquipo) !== fechasSel.size * HORAS_JORNADA && (
+              {horasTocadas && horasMeta != null && horasNum !== horasMeta && (
                 <button type="button"
-                        onClick={() => { setHorasTocadas(false); setHorasEquipo(String(fechasSel.size * HORAS_JORNADA)) }}
+                        onClick={() => { setHorasTocadas(false); setHorasEquipo(String(horasMeta)); setJustHoras('') }}
                         className="text-[11px] font-medium text-emerald-700 underline">
-                  volver a las {fechasSel.size * HORAS_JORNADA} h de {fechasSel.size} día{fechasSel.size > 1 ? 's' : ''}
+                  volver a las {horasMeta} h de la meta {meta}
                 </button>
               )}
             </div>
             <p className="mt-1 text-[10px] text-emerald-800">
-              {fechasSel.size > 0
-                ? <>Sale de los días que elegiste: <b>{fechasSel.size} día{fechasSel.size > 1 ? 's' : ''}
-                    × {HORAS_JORNADA} h</b> de jornada. Se recalcula al agregar o quitar días, y se
-                    puede ajustar a mano.</>
-                : <>Elige los días abajo y el tiempo se calcula solo: días × {HORAS_JORNADA} h de jornada.</>}
+              {horasMeta != null
+                ? <>Sale de la meta que elegiste arriba: <b>{meta} · {diasMeta} día
+                    {(diasMeta ?? 0) > 1 ? 's' : ''} × {HORAS_JORNADA} h</b> de jornada. Cambia sola
+                    al cambiar de meta, y se puede ajustar a mano.</>
+                : <>Elige el tipo de tarea y la meta, y el tiempo se calcula solo.</>}
             </p>
             {/* [MIG491] El estándar del tipo de tarea NO se va: es otra cosa y
                 conviene verla al lado. Uno dice cuánto TRABAJO tiene una MTN;
                 el otro, cuánto va a estar el camión detenido. */}
-            {conceptoSel?.horas_estandar != null && fechasSel.size > 0 && (() => {
-              const plan = Number(horasEquipo) || 0
+            {conceptoSel?.horas_estandar != null && horasNum > 0 && (() => {
               const est = Number(conceptoSel.horas_estandar)
-              const holgura = plan - est
+              const holgura = horasNum - est
               return (
                 <p className={`mt-1 text-[10px] ${holgura < 0 ? 'text-amber-800 font-medium' : 'text-emerald-700'}`}>
                   El estándar de {concepto} son <b>{est} h de trabajo</b>.
                   {holgura >= 0
-                    ? ` Con estos días quedan ${holgura.toFixed(1)} h de holgura.`
-                    : ` Con estos días faltan ${Math.abs(holgura).toFixed(1)} h: el trabajo no cabe en el plazo.`}
+                    ? ` Con esta meta quedan ${holgura.toFixed(1)} h de holgura.`
+                    : ` Con esta meta faltan ${Math.abs(holgura).toFixed(1)} h: el trabajo no cabe en el plazo.`}
                 </p>
               )
             })()}
+
+            {/* [MIG493] Pasarse del tramo normal se puede, pero se explica: ahí
+                el equipo entra en demora, que es donde el incentivo castiga y
+                donde el camión está detenido de más. El candado real está en el
+                RPC; esto es para no hacerte escribir la OT dos veces. */}
+            {excedeNormal && (
+              <div className="mt-2 rounded border border-amber-300 bg-amber-50 px-2.5 py-2">
+                <p className="text-[11px] font-medium text-amber-900">
+                  Estás comprometiendo {horasNum} h y el tramo normal de {concepto} son{' '}
+                  {topeSinJustificar} h. ¿Por qué esta visita necesita más?
+                </p>
+                <input value={justHoras} onChange={(e) => setJustHoras(e.target.value)}
+                       placeholder="Ej: el motor sale a rectificado y vuelve recién el jueves"
+                       className="mt-1.5 w-full rounded border border-amber-300 px-2 py-1.5 text-sm" />
+                <p className="mt-1 text-[10px] text-amber-800">
+                  Queda escrito en la OT con tu nombre. Sin esto no se puede programar.
+                </p>
+              </div>
+            )}
             <p className="mt-1 text-[10px] text-emerald-800">
               Es el paraguas total: cubre la revisión del equipo y todas las Órdenes de Servicio
               que salgan de ella. Si el jefe reparte más horas que éstas va a tener que justificarlo.
