@@ -56,22 +56,30 @@ export interface PlanActivo {
   nombre: string | null
   pauta_nombre: string | null
   duracion_estimada_hrs: number | null
+  /** [MIG490] Cuántos pasos trae la pauta: es el checklist que abre el mecánico. */
+  pasos: number
 }
 
 export async function getPlanesActivo(activoId: string): Promise<PlanActivo[]> {
   const { data, error } = await supabase
     .from('planes_mantenimiento')
-    .select('id, nombre, pauta:pautas_fabricante(nombre, duracion_estimada_hrs)')
+    // [MIG490] items_checklist: los pasos que el fabricante manda hacer. Ahora
+    // son el checklist que abre el mecánico, así que se muestran al planificar.
+    .select('id, nombre, pauta:pautas_fabricante(nombre, duracion_estimada_hrs, items_checklist)')
     .eq('activo_id', activoId)
     .eq('activo_plan', true)
     .order('proxima_ejecucion_fecha', { ascending: true, nullsFirst: false })
   if (error) throw error
-  type Raw = { id: string; nombre: string | null; pauta: { nombre: string; duracion_estimada_hrs: number | null } | null }
+  type Raw = {
+    id: string; nombre: string | null
+    pauta: { nombre: string; duracion_estimada_hrs: number | null; items_checklist: unknown } | null
+  }
   return ((data ?? []) as unknown as Raw[]).map((r) => ({
     id: r.id,
     nombre: r.nombre,
     pauta_nombre: r.pauta?.nombre ?? null,
     duracion_estimada_hrs: r.pauta?.duracion_estimada_hrs ?? null,
+    pasos: Array.isArray(r.pauta?.items_checklist) ? r.pauta!.items_checklist.length : 0,
   }))
 }
 

@@ -83,6 +83,16 @@ const ESTADO_INFO: Record<string, { label: string; cls: string }> = {
   H: { label: 'Sin clasificar', cls: 'bg-gray-100 text-gray-600' },
 }
 const ORDEN_ESTADO: Record<string, number> = { M: 0, F: 1, T: 2 }
+
+/**
+ * [MIG491] Horas de taller que tiene un día planificado.
+ *
+ * Vive también en la base (`taller_bono_parametros.horas_jornada` y
+ * `fn_taller_horas_por_dias`), que es la fuente si el taller cambia de turno.
+ * Acá se repite para que el campo se recalcule sin ir al servidor en cada
+ * clic sobre un día; si cambia allá, hay que cambiarlo acá.
+ */
+const HORAS_JORNADA = 8
 function ordenEstado(cod: string | null): number {
   return cod && cod in ORDEN_ESTADO ? ORDEN_ESTADO[cod] : 9
 }
@@ -1685,9 +1695,15 @@ function ProgramarOtDialog({ target, planSemanalId, dias, onClose, onDone, agreg
     ? conceptoSel?.dias_optimizado ?? null
     : conceptoSel?.dias_normal ?? null
   useEffect(() => {
-    if (horasTocadas || !conceptoSel?.horas_estandar) return
-    setHorasEquipo(String(conceptoSel.horas_estandar))
-  }, [conceptoSel, horasTocadas])
+    // [MIG491] El tiempo del equipo para ESTA visita sale de los días que puso
+    // el planificador, no del estándar del tipo de tarea. Antes elegías 3 días
+    // y el campo seguía diciendo las 32,5 h de una MTN: el número no mentía
+    // —es el estándar— pero no era el tiempo de esta visita, que es lo que el
+    // campo promete. El estándar sigue a la vista, al lado, para comparar.
+    if (horasTocadas) return
+    const dias = fechasSel.size
+    setHorasEquipo(dias > 0 ? String(dias * HORAS_JORNADA) : '')
+  }, [fechasSel, horasTocadas])
   const tramoPlan = useMemo(() => {
     if (!conceptoSel || fechasSel.size === 0) return null
     const orden = Array.from(fechasSel).sort()
@@ -1864,19 +1880,41 @@ function ProgramarOtDialog({ target, planSemanalId, dias, onClose, onDone, agreg
                      onChange={(e) => { setHorasTocadas(true); setHorasEquipo(e.target.value) }}
                      className="w-24 rounded border border-emerald-300 px-2 py-1 text-sm tabular-nums" />
               <span className="text-[11px] text-emerald-800">horas</span>
-              {horasTocadas && conceptoSel?.horas_estandar != null
-                && Number(horasEquipo) !== Number(conceptoSel.horas_estandar) && (
+              {horasTocadas && fechasSel.size > 0
+                && Number(horasEquipo) !== fechasSel.size * HORAS_JORNADA && (
                 <button type="button"
-                        onClick={() => { setHorasTocadas(false); setHorasEquipo(String(conceptoSel.horas_estandar)) }}
+                        onClick={() => { setHorasTocadas(false); setHorasEquipo(String(fechasSel.size * HORAS_JORNADA)) }}
                         className="text-[11px] font-medium text-emerald-700 underline">
-                  volver a las {conceptoSel.horas_estandar} h de {concepto}
+                  volver a las {fechasSel.size * HORAS_JORNADA} h de {fechasSel.size} día{fechasSel.size > 1 ? 's' : ''}
                 </button>
               )}
             </div>
             <p className="mt-1 text-[10px] text-emerald-800">
-              Viene del tipo de tarea que elegiste arriba. Es el paraguas total: cubre la revisión
-              del equipo y todas las Órdenes de Servicio que salgan de ella. Se puede ajustar, y si
-              el jefe reparte más horas que éstas va a tener que justificarlo.
+              {fechasSel.size > 0
+                ? <>Sale de los días que elegiste: <b>{fechasSel.size} día{fechasSel.size > 1 ? 's' : ''}
+                    × {HORAS_JORNADA} h</b> de jornada. Se recalcula al agregar o quitar días, y se
+                    puede ajustar a mano.</>
+                : <>Elige los días abajo y el tiempo se calcula solo: días × {HORAS_JORNADA} h de jornada.</>}
+            </p>
+            {/* [MIG491] El estándar del tipo de tarea NO se va: es otra cosa y
+                conviene verla al lado. Uno dice cuánto TRABAJO tiene una MTN;
+                el otro, cuánto va a estar el camión detenido. */}
+            {conceptoSel?.horas_estandar != null && fechasSel.size > 0 && (() => {
+              const plan = Number(horasEquipo) || 0
+              const est = Number(conceptoSel.horas_estandar)
+              const holgura = plan - est
+              return (
+                <p className={`mt-1 text-[10px] ${holgura < 0 ? 'text-amber-800 font-medium' : 'text-emerald-700'}`}>
+                  El estándar de {concepto} son <b>{est} h de trabajo</b>.
+                  {holgura >= 0
+                    ? ` Con estos días quedan ${holgura.toFixed(1)} h de holgura.`
+                    : ` Con estos días faltan ${Math.abs(holgura).toFixed(1)} h: el trabajo no cabe en el plazo.`}
+                </p>
+              )
+            })()}
+            <p className="mt-1 text-[10px] text-emerald-800">
+              Es el paraguas total: cubre la revisión del equipo y todas las Órdenes de Servicio
+              que salgan de ella. Si el jefe reparte más horas que éstas va a tener que justificarlo.
             </p>
             {conceptoSel?.horas_fuente && (
               <p className="mt-0.5 text-[10px] text-emerald-700 opacity-75">
@@ -1969,6 +2007,24 @@ function ProgramarOtDialog({ target, planSemanalId, dias, onClose, onDone, agreg
             {planes && planes.length === 0 && (
               <p className="text-[10px] text-amber-600 mt-1">Este equipo no tiene pautas cargadas; se usará el checklist genérico del tipo de OT.</p>
             )}
+            {/* [MIG490] Con pauta elegida, el mecánico abre los pasos del
+                fabricante en vez de los 188 ítems de la inspección general. */}
+            {(() => {
+              const pl = (planes ?? []).find((x: PlanActivo) => x.id === planId)
+              if (!pl) return planId === '' && planes && planes.length > 0 ? (
+                <p className="mt-1 text-[10px] text-gray-500">
+                  Sin pauta, el mecánico abre el checklist de inspección general.
+                </p>
+              ) : null
+              return (
+                <p className="mt-1 text-[10px] text-emerald-700">
+                  El mecánico va a ver <b>los {pl.pasos} pasos de esta pauta</b> en su teléfono,
+                  no la inspección general.
+                  {pl.duracion_estimada_hrs
+                    ? ` El fabricante estima ${pl.duracion_estimada_hrs} h de trabajo.` : ''}
+                </p>
+              )
+            })()}
           </div>
         )}
 
