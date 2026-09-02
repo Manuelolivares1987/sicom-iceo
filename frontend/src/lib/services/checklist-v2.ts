@@ -359,3 +359,25 @@ export async function aplicarDiffAInforme(recepcionInstanceId: string): Promise<
   if (error) throw error
   return data as { ok: boolean; informe_id: string; hallazgos_insertados: number }
 }
+
+/**
+ * [MIG495] Trae el checklist de una OT a la versión vigente de su pauta.
+ *
+ * El checklist es una copia de la pauta al momento de crear la OT — tiene que
+ * serlo, porque si no, editar una pauta le cambiaría las preguntas a un mecánico
+ * que ya está respondiendo. Esto es la puerta para el caso legítimo: un
+ * checklist que nadie tocó todavía se puede poner al día sin costo.
+ */
+export async function rpcActualizarChecklistPauta(otId: string) {
+  const { data, error } = await supabase.rpc('rpc_taller_ot_actualizar_checklist_pauta', {
+    p_ot_id: otId,
+  })
+  if (error) throw error
+  return data as {
+    success: boolean
+    ya_estaba?: boolean
+    pasos?: number
+    instance_id?: string
+    motivo?: string
+  }
+}
