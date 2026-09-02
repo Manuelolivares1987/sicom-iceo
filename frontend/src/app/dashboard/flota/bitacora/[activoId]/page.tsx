@@ -3,10 +3,11 @@
 import { useMemo, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Wrench, History, ShieldCheck, FileText, Clock, ClipboardList, ChevronDown, ChevronRight,
   Camera, CheckCircle2, XCircle, MinusCircle, Truck, ExternalLink, FileCheck, Eye,
+  FileBadge, Pencil, Trash2,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Spinner } from '@/components/ui/spinner'
@@ -15,6 +16,9 @@ import { useRequireAuth } from '@/hooks/use-require-auth'
 import { getBitacoraEquipo, getActivoBasico, getOtDetalleBitacora, type BitacoraEvento } from '@/lib/services/bitacora'
 import { getInformeDetalle, getSignedPdfUrl } from '@/lib/services/informe-intervencion'
 import { cn } from '@/lib/utils'
+import {
+  ModalCorregirPapel, ModalAnularPapel,
+} from '@/components/documental/papel-modales'
 
 const TIPO_META: Record<string, { icon: any; label: string; color: string }> = {
   ot:                { icon: Wrench,        label: 'OT',              color: 'text-blue-600' },
@@ -24,9 +28,13 @@ const TIPO_META: Record<string, { icon: any; label: string; color: string }> = {
   diferido:          { icon: Clock,         label: 'Pendiente',       color: 'text-amber-600' },
   checklist_cliente: { icon: ClipboardList, label: 'Checklist cliente', color: 'text-indigo-600' },
   informe_tecnico:   { icon: FileCheck,     label: 'Informe técnico', color: 'text-green-600' },
+  // [MIG487] Los papeles del equipo son historia igual que lo demás: cuándo se
+  // emitió la revisión técnica, cuándo se renovó el seguro.
+  documento:         { icon: FileBadge,     label: 'Documento',       color: 'text-sky-600' },
 }
 
-const TIPOS = ['ot', 'os_legacy', 'auditoria', 'recepcion', 'diferido', 'checklist_cliente', 'informe_tecnico'] as const
+const TIPOS = ['ot', 'os_legacy', 'auditoria', 'recepcion', 'diferido', 'checklist_cliente',
+               'informe_tecnico', 'documento'] as const
 
 export default function BitacoraEquipoPage() {
   useRequireAuth()
@@ -40,6 +48,12 @@ export default function BitacoraEquipoPage() {
     queryFn: async () => { const { data, error } = await getBitacoraEquipo(activoId); if (error) throw error; return data },
   })
   const [filtros, setFiltros] = useState<Set<string>>(new Set())
+  // [MIG486] Corregir o anular un papel sin salir de la historia del equipo.
+  const [corrigiendo, setCorrigiendo] = useState<BitacoraEvento | null>(null)
+  const [anulando, setAnulando] = useState<BitacoraEvento | null>(null)
+  const qc = useQueryClient()
+  const refrescar = () => qc.invalidateQueries({ queryKey: ['bitacora', activoId] })
+  const patente = activo?.patente ?? activo?.codigo ?? ''
 
   const lista = useMemo(
     () => filtros.size ? eventos.filter((e) => filtros.has(e.tipo_registro)) : eventos,
@@ -83,16 +97,42 @@ export default function BitacoraEquipoPage() {
       {isLoading && <Spinner className="h-6 w-6" />}
 
       <div className="relative border-l-2 border-muted ml-3 space-y-3">
-        {lista.map((e) => <EventoFila key={`${e.tipo_registro}-${e.ref_id}`} e={e} />)}
-        {!isLoading && lista.length === 0 && (
-          <p className="text-sm text-muted-foreground py-8 pl-6">Sin eventos para este equipo.</p>
-        )}
+        {lista.map((e) => (
+          <EventoFila key={`${e.tipo_registro}-${e.ref_id}`} e={e}
+                      patente={activo?.patente ?? activo?.codigo ?? ''}
+                      onCorregir={setCorrigiendo} onAnular={setAnulando} />
+        ))}
       </div>
+
+      {!isLoading && lista.length === 0 && (
+        <p className="text-sm text-muted-foreground py-8 pl-6">Sin eventos para este equipo.</p>
+      )}
+
+      {corrigiendo && (
+        <ModalCorregirPapel
+          p={{ certificacion_id: corrigiendo.ref_id, patente, tipo: 'otra',
+               etiqueta: corrigiendo.titulo }}
+          onClose={() => setCorrigiendo(null)}
+          onListo={() => { setCorrigiendo(null); refrescar() }} />
+      )}
+      {anulando && (
+        <ModalAnularPapel
+          p={{ certificacion_id: anulando.ref_id, patente, tipo: 'otra',
+               etiqueta: anulando.titulo }}
+          onClose={() => setAnulando(null)}
+          onListo={() => { setAnulando(null); refrescar() }} />
+      )}
     </div>
   )
 }
 
-function EventoFila({ e }: { e: BitacoraEvento }) {
+function EventoFila({ e, patente, onCorregir, onAnular }: {
+  e: BitacoraEvento
+  patente: string
+  /** [MIG486] Los papeles se corrigen desde donde se están mirando. */
+  onCorregir?: (e: BitacoraEvento) => void
+  onAnular?: (e: BitacoraEvento) => void
+}) {
   const m = TIPO_META[e.tipo_registro] ?? TIPO_META.ot
   const [open, setOpen] = useState(false)
   const expandible = e.tipo_registro === 'ot' || e.tipo_registro === 'informe_tecnico'
@@ -124,6 +164,20 @@ function EventoFila({ e }: { e: BitacoraEvento }) {
               {e.tipo_registro === 'ot' && (
                 <Link href={`/dashboard/ordenes-trabajo/${e.ref_id}`} onClick={(ev) => ev.stopPropagation()}
                   className="text-blue-600"><ExternalLink className="h-4 w-4" /></Link>
+              )}
+              {e.tipo_registro === 'documento' && onCorregir && onAnular && (
+                <>
+                  <button onClick={(ev) => { ev.stopPropagation(); onCorregir(e) }}
+                          title="Corregir este documento"
+                          className="text-gray-400 hover:text-blue-600">
+                    <Pencil className="h-3.5 w-3.5" />
+                  </button>
+                  <button onClick={(ev) => { ev.stopPropagation(); onAnular(e) }}
+                          title="Anular este documento"
+                          className="text-gray-400 hover:text-red-600">
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </>
               )}
               {expandible && (open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />)}
             </div>

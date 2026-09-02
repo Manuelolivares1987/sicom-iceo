@@ -24,7 +24,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 // `Infinity` es un valor global de JavaScript: se importa con alias para no
 // sombrearlo dentro de este archivo.
-import { Infinity as IconoSinVencimiento, Upload } from 'lucide-react'
+import { Infinity as IconoSinVencimiento, Upload, Pencil, Trash2, Archive } from 'lucide-react'
 import { subirDocumentoCert, renovarCertificacion } from '@/lib/services/taller-planificacion'
 import { leerDocumento, type LecturaDocumento } from '@/lib/documentos/leer-documento'
 // El status y sus colores se toman de donde ya viven: es el mismo vocabulario
@@ -47,6 +47,11 @@ import {
   ESTADO_DOC, CONFIANZA, nombreTipo, nombrePapel, getTiposOtrosUsados, TIPO_DOC,
   type EquipoDocumental, type PapelEquipo,
 } from '@/lib/services/control-documental'
+// [MIG486] Los modales viven en un componente compartido: los mismos tres se
+// usan acá, en la ficha del activo y en la bitácora.
+import {
+  ModalCorregirPapel, ModalAnularPapel, ModalAnulados,
+} from '@/components/documental/papel-modales'
 
 export default function ControlDocumentalPage() {
   const { loading: authLoading } = useRequireAuth()
@@ -65,6 +70,10 @@ export default function ControlDocumentalPage() {
   // agregar desde la ficha del activo, que es justo donde NO se está cuando uno
   // descubre que falta un certificado: se descubre acá.
   const [agregando, setAgregando] = useState(false)
+  // [MIG486] Corregir un papel mal cargado, o sacarlo de circulación.
+  const [corrigiendo, setCorrigiendo] = useState<PapelEquipo | null>(null)
+  const [anulando, setAnulando] = useState<PapelEquipo | null>(null)
+  const [verAnulados, setVerAnulados] = useState(false)
   // [MIG428] El status va primero porque es la pregunta que se hace primero:
   // «de los que están arrendados, ¿cuáles tienen los papeles al día?».
   // El QR y la emisión son del EQUIPO, no de un papel: van en la cabecera.
@@ -263,6 +272,10 @@ export default function ControlDocumentalPage() {
                 <Button variant="outline" className="h-8 text-xs" onClick={() => setAgregando(true)}>
                   <Upload className="mr-1 h-3.5 w-3.5" /> Agregar un documento
                 </Button>
+                <Button variant="ghost" className="h-8 text-xs text-gray-500"
+                        onClick={() => setVerAnulados(true)}>
+                  <Archive className="mr-1 h-3.5 w-3.5" /> Anulados
+                </Button>
               </div>
               {verQr && (
                 <EquipoQrCard activoId={eqSel.activo_id} codigo={eqSel.patente}
@@ -291,6 +304,8 @@ export default function ControlDocumentalPage() {
                            onEditar={() => setEditando(p)}
                            onNoCaduca={() => setNoCaduca(p)}
                            onSubir={() => setSubiendo(p)}
+                           onCorregir={() => setCorrigiendo(p)}
+                           onAnular={() => setAnulando(p)}
                            onVuelveACaducar={async () => {
                              try {
                                // Si el TIPO estaba marcado, revertir sólo este papel
@@ -350,6 +365,19 @@ export default function ControlDocumentalPage() {
                            onClose={() => setAgregando(false)}
                            onListo={() => { setAgregando(false); refrescar() }} />
       )}
+      {corrigiendo && (
+        <ModalCorregirPapel p={corrigiendo} onClose={() => setCorrigiendo(null)}
+                            onListo={() => { setCorrigiendo(null); refrescar() }} />
+      )}
+      {anulando && (
+        <ModalAnularPapel p={anulando} onClose={() => setAnulando(null)}
+                          onListo={() => { setAnulando(null); refrescar() }} />
+      )}
+      {verAnulados && eqSel && (
+        <ModalAnulados activoId={eqSel.activo_id} patente={eqSel.patente}
+                       onClose={() => setVerAnulados(false)}
+                       onListo={refrescar} />
+      )}
       {emitiendo && eqSel && (
         <ModalEmitirHermeticidad activoId={eqSel.activo_id} patente={eqSel.patente}
                                  onClose={() => setEmitiendo(false)}
@@ -389,9 +417,11 @@ function Chip({ n, cls, t }: { n: number; cls: string; t: string }) {
   return <span title={t} className={`rounded-full px-1.5 text-[10px] font-bold ${cls}`}>{n}</span>
 }
 
-function PapelCard({ p, onAceptar, onDescartar, onEditar, onNoCaduca, onVuelveACaducar, onSubir }: {
+function PapelCard({ p, onAceptar, onDescartar, onEditar, onNoCaduca, onVuelveACaducar,
+                     onSubir, onCorregir, onAnular }: {
   p: PapelEquipo; onAceptar: () => void; onDescartar: () => void; onEditar: () => void
   onNoCaduca: () => void; onVuelveACaducar: () => void; onSubir: () => void
+  onCorregir: () => void; onAnular: () => void
 }) {
   const [busy, setBusy] = useState(false)
   const est = ESTADO_DOC[p.estado] ?? ESTADO_DOC.no_aplica
@@ -515,6 +545,15 @@ function PapelCard({ p, onAceptar, onDescartar, onEditar, onNoCaduca, onVuelveAC
             las demás sólo corrigen la fecha del que ya no sirve. */}
         <Button variant="outline" className="h-7 text-xs" onClick={onSubir}>
           <Upload className="mr-1 h-3 w-3" /> Subir el papel nuevo
+        </Button>
+
+        {/* [MIG486] Corregir es para el dato mal cargado —el tipo equivocado, el
+            número, la entidad—. Anular es para el papel que no debió estar. */}
+        <Button variant="outline" className="h-7 text-xs" onClick={onCorregir}>
+          <Pencil className="mr-1 h-3 w-3" /> Corregir
+        </Button>
+        <Button variant="ghost" className="h-7 text-xs text-red-600" onClick={onAnular}>
+          <Trash2 className="mr-1 h-3 w-3" /> Anular
         </Button>
 
         {p.propuesta_id && !yaNoCaduca && (
