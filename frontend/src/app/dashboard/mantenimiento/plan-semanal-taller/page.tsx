@@ -52,6 +52,7 @@ import {
 import { getFlotaDashboard, type FlotaDashboardActivo } from '@/lib/services/flota-dashboard'
 import {
   getPlanesActivo, getPreventivasDue, programarOtTaller, getOtAbiertaDelTrabajo,
+  getActividadesDelPlan,
   getEquiposPadre, getRecepcionesPorPlanificar, programarRecepcion,
   getNcOtsPorAgendar,
   getPapelesProblema, papelProblemaTexto, TIPO_DOC_LABEL,
@@ -1626,6 +1627,15 @@ function ProgramarOtDialog({ target, planSemanalId, dias, onClose, onDone, agreg
   const [tipo, setTipo] = useState<TipoOtTaller>(target.tipoPre)
   const [planId, setPlanId] = useState<string>(target.planIdPre ?? '')
   const [verPauta, setVerPauta] = useState(false)
+  // [MIG494] Los pasos como los va a ver el mecánico: con las referencias entre
+  // servicios abiertas. La pauta cruda dice «SM2 completo», que en el teléfono
+  // no le sirve a nadie.
+  const { data: actividadesPlan = [], isLoading: cargandoPauta } = useQuery({
+    queryKey: ['pauta-actividades', planId],
+    queryFn: () => getActividadesDelPlan(planId),
+    enabled: !!planId && verPauta,
+    staleTime: 5 * 60_000,
+  })
   const [prioridad, setPrioridad] = useState<PrioridadTaller>('normal')
   const [mecanicos, setMecanicos] = useState<string[]>([])
   // [MIG466] El tipo de trabajo del bono se declara acá, al planificar. Antes se
@@ -2058,25 +2068,41 @@ function ProgramarOtDialog({ target, planSemanalId, dias, onClose, onDone, agreg
             {verPauta && (() => {
               const pl = (planes ?? []).find((x: PlanActivo) => x.id === planId)
               if (!pl) return null
-              if (pl.actividades.length === 0) return (
+              if (cargandoPauta) return (
+                <div className="mt-1.5 flex justify-center py-3"><Spinner className="h-4 w-4" /></div>
+              )
+              // Se muestran los pasos expandidos; si por lo que sea no hay
+              // checklist armado, se cae a la pauta cruda antes que no mostrar nada.
+              const pasos = actividadesPlan.length > 0
+                ? actividadesPlan.map((a) => a.descripcion)
+                : pl.actividades
+              if (pasos.length === 0) return (
                 <p className="mt-1.5 rounded border border-amber-200 bg-amber-50 px-2.5 py-2 text-[11px] text-amber-800">
                   Esta pauta no tiene actividades cargadas. Se va a programar igual, pero el
                   mecánico no va a tener los pasos del fabricante en el teléfono.
                 </p>
               )
+              const heredados = pasos.filter((t) => / · /.test(t)).length
               return (
                 <div className="mt-1.5 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-2">
                   <p className="text-[11px] font-semibold text-blue-900">
-                    {pl.pauta_nombre ?? pl.nombre} · {pl.actividades.length} actividad
-                    {pl.actividades.length > 1 ? 'es' : ''}
+                    {pl.pauta_nombre ?? pl.nombre} · {pasos.length} actividad
+                    {pasos.length > 1 ? 'es' : ''}
                     {pl.duracion_estimada_hrs ? ` · ${pl.duracion_estimada_hrs} h estimadas por el fabricante` : ''}
                   </p>
                   <ol className="mt-1.5 max-h-56 list-decimal space-y-0.5 overflow-y-auto pl-5 pr-1">
-                    {pl.actividades.map((a: string, i: number) => (
+                    {pasos.map((a: string, i: number) => (
                       <li key={i} className="text-[11px] leading-snug text-blue-900">{a}</li>
                     ))}
                   </ol>
-                  <p className="mt-1.5 text-[10px] text-blue-700">
+                  {heredados > 0 && (
+                    <p className="mt-1.5 text-[10px] text-blue-700">
+                      Los servicios del fabricante son escalonados: {heredados} de estos pasos
+                      vienen de un servicio anterior que éste incluye completo, y llevan
+                      anotado de cuál.
+                    </p>
+                  )}
+                  <p className="mt-1 text-[10px] text-blue-700">
                     Es lo que el mecánico va a ver como checklist. Si la pauta está mal, se
                     corrige en la pauta del modelo y se actualiza sola.
                   </p>

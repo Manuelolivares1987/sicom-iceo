@@ -62,6 +62,10 @@ export interface PlanActivo {
    * Los pasos, en texto. El planificador tiene que poder ver QUÉ manda hacer la
    * pauta antes de programarla — si no, «PM Mensual» es una sigla y nadie sabe
    * si es lo que el camión necesita esta semana.
+   *
+   * [MIG494] Ojo: esto es la pauta CRUDA, donde un servicio escalonado dice
+   * «SM2 completo». Para ver lo que realmente va a ver el mecánico, con esas
+   * referencias abiertas, está `getActividadesDelPlan`.
    */
   actividades: string[]
 }
@@ -630,4 +634,24 @@ export async function getTiposOtrosUsados(): Promise<{ nombre: string; usos: num
     .from('v_certificado_tipos_otros').select('nombre, usos')
   if (error) throw new Error(error.message)
   return (data ?? []) as { nombre: string; usos: number }[]
+}
+
+/**
+ * [MIG494] Los pasos que va a ver el mecánico para este plan.
+ *
+ * No es lo mismo que `plan.actividades`: los servicios del fabricante son
+ * escalonados y en la pauta el SM3 dice «SM2 completo». Acá esa referencia
+ * viene abierta, con cada paso heredado marcado con el servicio del que sale.
+ * El planificador tiene que aprobar la misma lista que recibe el taller.
+ */
+export async function getActividadesDelPlan(planId: string): Promise<{
+  orden: number; descripcion: string; ayuda: string | null
+}[]> {
+  const { data, error } = await supabase
+    .from('v_pauta_actividades')
+    .select('orden, descripcion, ayuda')
+    .eq('plan_mantenimiento_id', planId)
+    .order('orden')
+  if (error) throw error
+  return (data ?? []) as { orden: number; descripcion: string; ayuda: string | null }[]
 }
