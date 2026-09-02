@@ -17,6 +17,13 @@ export interface OTFilters {
   fecha_desde?: string
   fecha_hasta?: string
   prioridad?: Prioridad
+  /**
+   * Una OT cancelada no es trabajo: se descartó. Por defecto no aparece en
+   * ninguna lista —se colaba en el panel de mantenimiento y en el plan, y quien
+   * mira no tiene cómo saber que ese folio ya no va—. Se ven pidiendo
+   * explícitamente el estado «cancelada», o con esta bandera.
+   */
+  incluir_canceladas?: boolean
 }
 
 // ── Select strings ───────────────────────────────────────────────────
@@ -45,7 +52,13 @@ export async function getOrdenesTrabajo(filters?: OTFilters) {
     .select(OT_LIST_SELECT)
 
   if (filters?.tipo) query = query.eq('tipo', filters.tipo)
-  if (filters?.estado) query = query.eq('estado', filters.estado)
+  if (filters?.estado) {
+    query = query.eq('estado', filters.estado)
+  } else if (!filters?.incluir_canceladas) {
+    // Quien filtra por «cancelada» a propósito sí las ve: el filtro explícito
+    // manda sobre el default.
+    query = query.neq('estado', 'cancelada')
+  }
   if (filters?.faena_id) query = query.eq('faena_id', filters.faena_id)
   if (filters?.responsable_id) query = query.eq('responsable_id', filters.responsable_id)
   if (filters?.prioridad) query = query.eq('prioridad', filters.prioridad)
