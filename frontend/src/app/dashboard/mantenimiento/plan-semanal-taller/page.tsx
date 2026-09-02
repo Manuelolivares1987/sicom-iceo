@@ -9,7 +9,7 @@ import {
   Calendar, ArrowLeft, ChevronLeft, ChevronRight, Lock, Unlock, AlertTriangle, Trash2, User,
   Play, Pause, CheckCircle2, BarChart3, ShieldAlert, RefreshCw, Wrench, Layers, FileSpreadsheet,
   Truck, Mail, Pencil, Plus, Clock, Camera, ExternalLink, ListChecks, Upload, Package, X, Search,
-  Smartphone, FileWarning, XCircle,
+  Smartphone, FileWarning, XCircle, Info,
 } from 'lucide-react'
 import { exportarPlanSemanalExcel, descargarBlob } from '@/lib/export/plan-semanal-excel'
 import { buildPlanSemanalTallerEmailHtml } from '@/lib/email/plan-semanal-taller-email'
@@ -1625,6 +1625,7 @@ function ProgramarOtDialog({ target, planSemanalId, dias, onClose, onDone, agreg
   const { data: tecnicos } = useTallerTecnicos()
   const [tipo, setTipo] = useState<TipoOtTaller>(target.tipoPre)
   const [planId, setPlanId] = useState<string>(target.planIdPre ?? '')
+  const [verPauta, setVerPauta] = useState(false)
   const [prioridad, setPrioridad] = useState<PrioridadTaller>('normal')
   const [mecanicos, setMecanicos] = useState<string[]>([])
   // [MIG466] El tipo de trabajo del bono se declara acá, al planificar. Antes se
@@ -2026,7 +2027,19 @@ function ProgramarOtDialog({ target, planSemanalId, dias, onClose, onDone, agreg
 
         {tipo === 'preventivo' && (
           <div>
-            <label className="text-xs font-medium">Pauta / actividades</label>
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="text-xs font-medium">Pauta / actividades</label>
+              {/* El planificador tiene que poder ver QUÉ manda hacer la pauta
+                  antes de programarla: «PM Mensual» es una sigla, y de ahí no
+                  se deduce si es lo que el camión necesita esta semana. */}
+              {planId && (
+                <button type="button" onClick={() => setVerPauta((v) => !v)}
+                        className="flex items-center gap-1 text-[11px] font-medium text-blue-600 underline">
+                  <Info className="h-3 w-3" />
+                  {verPauta ? 'ocultar las actividades' : 'ver las actividades'}
+                </button>
+              )}
+            </div>
             <select value={planId} onChange={(e) => setPlanId(e.target.value)}
                     className="w-full rounded border px-2 py-1.5 text-sm">
               <option value="">— Sin pauta (checklist genérico) —</option>
@@ -2039,6 +2052,37 @@ function ProgramarOtDialog({ target, planSemanalId, dias, onClose, onDone, agreg
             {planes && planes.length === 0 && (
               <p className="text-[10px] text-amber-600 mt-1">Este equipo no tiene pautas cargadas; se usará el checklist genérico del tipo de OT.</p>
             )}
+
+            {/* Las actividades de la pauta elegida, tal como las va a ver el
+                mecánico en su teléfono. */}
+            {verPauta && (() => {
+              const pl = (planes ?? []).find((x: PlanActivo) => x.id === planId)
+              if (!pl) return null
+              if (pl.actividades.length === 0) return (
+                <p className="mt-1.5 rounded border border-amber-200 bg-amber-50 px-2.5 py-2 text-[11px] text-amber-800">
+                  Esta pauta no tiene actividades cargadas. Se va a programar igual, pero el
+                  mecánico no va a tener los pasos del fabricante en el teléfono.
+                </p>
+              )
+              return (
+                <div className="mt-1.5 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-2">
+                  <p className="text-[11px] font-semibold text-blue-900">
+                    {pl.pauta_nombre ?? pl.nombre} · {pl.actividades.length} actividad
+                    {pl.actividades.length > 1 ? 'es' : ''}
+                    {pl.duracion_estimada_hrs ? ` · ${pl.duracion_estimada_hrs} h estimadas por el fabricante` : ''}
+                  </p>
+                  <ol className="mt-1.5 max-h-56 list-decimal space-y-0.5 overflow-y-auto pl-5 pr-1">
+                    {pl.actividades.map((a: string, i: number) => (
+                      <li key={i} className="text-[11px] leading-snug text-blue-900">{a}</li>
+                    ))}
+                  </ol>
+                  <p className="mt-1.5 text-[10px] text-blue-700">
+                    Es lo que el mecánico va a ver como checklist. Si la pauta está mal, se
+                    corrige en la pauta del modelo y se actualiza sola.
+                  </p>
+                </div>
+              )
+            })()}
             {/* [MIG490/492] Con pauta elegida Y tipo de tarea MPN, el mecánico
                 abre los pasos del fabricante. En una MTN —la mantención total
                 cuando el equipo vuelve de arriendo— lo que corresponde es la
