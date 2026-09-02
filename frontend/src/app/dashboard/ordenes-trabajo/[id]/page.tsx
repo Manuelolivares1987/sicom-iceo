@@ -24,6 +24,7 @@ import {
   actualizarItem as actualizarItemV3,
   subirFotoItem as subirFotoItemV3,
   BLOQUE_LABELS,
+  rpcActualizarChecklistPauta,
 } from '@/lib/services/checklist-v2'
 import {
   ArrowLeft,
@@ -51,6 +52,7 @@ import {
   Unlock,
   Trash2,
   StickyNote,
+  RefreshCw,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -469,6 +471,28 @@ function ChecklistTab({
   // Arrastre de NC: el equipo ya se inspeccionó completo (MIG270)
   const [arrastreBusy, setArrastreBusy] = useState(false)
   const [arrastreMsg, setArrastreMsg] = useState<string | null>(null)
+  // [MIG495] El checklist de una OT es una COPIA de la pauta al momento de
+  // crearla — tiene que serlo, si no editar una pauta le cambiaría las preguntas
+  // a quien ya está respondiendo. Cuando la pauta cambió después, esto lo trae
+  // al día, y sólo si nadie respondió nada.
+  const [pautaBusy, setPautaBusy] = useState(false)
+
+  async function actualizarPauta() {
+    setPautaBusy(true); setArrastreMsg(null)
+    try {
+      const r = await rpcActualizarChecklistPauta(otId)
+      if (r.success) {
+        setArrastreMsg(r.ya_estaba
+          ? 'El checklist ya estaba en la versión vigente de la pauta.'
+          : `Checklist actualizado: ahora trae ${r.pasos} pasos de la pauta vigente.`)
+        invalidate()
+      } else {
+        setArrastreMsg(r.motivo ?? 'No se pudo actualizar el checklist')
+      }
+    } catch (e) {
+      setArrastreMsg(e instanceof Error ? e.message : 'No se pudo actualizar el checklist')
+    } finally { setPautaBusy(false) }
+  }
 
   function invalidate() { qc.invalidateQueries({ queryKey: ['checklist-v3', otId] }) }
 
@@ -623,6 +647,13 @@ function ChecklistTab({
                 {arrastreBusy ? <Spinner size="sm" /> : <History className="h-3.5 w-3.5" />} Dejar solo las no conformidades
               </button>
             )}
+            {/* [MIG495] Si la pauta del fabricante cambió después de crear esta
+                OT, el checklist se quedó con la versión con la que nació. */}
+            <button onClick={actualizarPauta} disabled={pautaBusy}
+                    title="Si la pauta del fabricante cambió después de crear esta OT, trae el checklist a la versión vigente (sólo si nadie respondió nada)"
+                    className="inline-flex items-center gap-1 rounded-lg border border-blue-300 bg-white px-2 py-1.5 text-xs text-blue-800 hover:bg-blue-50 disabled:opacity-50">
+              {pautaBusy ? <Spinner size="sm" /> : <RefreshCw className="h-3.5 w-3.5" />} Actualizar a la pauta vigente
+            </button>
           </div>
         </div>
       )}
