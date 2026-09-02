@@ -2710,8 +2710,11 @@ function JornadaCard({ jornada, onAsignar, onDetalle, onQuitar, onSacarOt, onDia
         })()}
       </div>
 
-      {/* Acciones */}
-      <div className="flex gap-1 mt-1.5">
+      {/* Acciones.
+          `flex-wrap`: la tarjeta vive en una columna angosta y con OT liberada
+          llega a tener siete botones. Sin envolver, los últimos —entre ellos el
+          basurero— se salían de la tarjeta y no se veían. */}
+      <div className="flex flex-wrap gap-1 mt-1.5">
         {libre ? (
           /* Tarea libre: asignar técnicos + quitar (sin ejecución de OT) */
           <>
