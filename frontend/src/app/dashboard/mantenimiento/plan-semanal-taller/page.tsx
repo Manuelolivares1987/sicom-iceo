@@ -2007,8 +2007,10 @@ function ProgramarOtDialog({ target, planSemanalId, dias, onClose, onDone, agreg
             {planes && planes.length === 0 && (
               <p className="text-[10px] text-amber-600 mt-1">Este equipo no tiene pautas cargadas; se usará el checklist genérico del tipo de OT.</p>
             )}
-            {/* [MIG490] Con pauta elegida, el mecánico abre los pasos del
-                fabricante en vez de los 188 ítems de la inspección general. */}
+            {/* [MIG490/492] Con pauta elegida Y tipo de tarea MPN, el mecánico
+                abre los pasos del fabricante. En una MTN —la mantención total
+                cuando el equipo vuelve de arriendo— lo que corresponde es la
+                revisión completa, así que ahí manda el checklist genérico. */}
             {(() => {
               const pl = (planes ?? []).find((x: PlanActivo) => x.id === planId)
               if (!pl) return planId === '' && planes && planes.length > 0 ? (
@@ -2016,12 +2018,19 @@ function ProgramarOtDialog({ target, planSemanalId, dias, onClose, onDone, agreg
                   Sin pauta, el mecánico abre el checklist de inspección general.
                 </p>
               ) : null
+              if (concepto && concepto !== 'MPN') return (
+                <p className="mt-1 text-[10px] text-amber-700">
+                  La pauta del fabricante se abre en las <b>MPN</b>. Como esta la declaraste
+                  <b> {concepto}</b>, el mecánico va a ver la inspección general.
+                </p>
+              )
               return (
                 <p className="mt-1 text-[10px] text-emerald-700">
                   El mecánico va a ver <b>los {pl.pasos} pasos de esta pauta</b> en su teléfono,
                   no la inspección general.
                   {pl.duracion_estimada_hrs
                     ? ` El fabricante estima ${pl.duracion_estimada_hrs} h de trabajo.` : ''}
+                  {!concepto && ' (Se aplica al declarar el tipo de tarea como MPN.)'}
                 </p>
               )
             })()}
