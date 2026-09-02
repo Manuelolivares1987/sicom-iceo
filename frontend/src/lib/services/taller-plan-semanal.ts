@@ -593,6 +593,30 @@ export async function rpcSacarOtDelPlan(p: {
   }
 }
 
+/**
+ * [MIG493] Las horas que el planificador compromete para la visita.
+ *
+ * Salen de la META —optimizado o normal— por la jornada del taller. Pasarse del
+ * tramo normal se puede, pero hay que decir por qué: ahí el equipo entra en
+ * demora, que es donde el incentivo castiga y donde el camión está detenido de
+ * más. La validación es del servidor, no de la pantalla.
+ */
+export async function rpcSetHorasPlan(otId: string, horas: number, justificacion?: string | null) {
+  const { data, error } = await supabase.rpc('rpc_taller_ot_set_horas_plan', {
+    p_ot_id: otId, p_horas: horas, p_justificacion: justificacion ?? null,
+  })
+  if (error) throw error
+  return data as {
+    success: boolean
+    requiere_justificacion?: boolean
+    tope_normal?: number | null
+    concepto?: string
+    motivo?: string
+    horas?: number
+    justificada?: boolean
+  }
+}
+
 export async function rpcAsignarResponsable(planOtId: string, responsableId: string | null, cuadrilla?: string | null, motivo?: string | null) {
   const { data, error } = await supabase.rpc('rpc_taller_asignar_responsable', {
     p_plan_ot_id: planOtId,
