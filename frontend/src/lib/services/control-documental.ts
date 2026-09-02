@@ -263,3 +263,98 @@ export function mesesEntre(desdeISO: string, hastaISO: string): number | null {
   if (isNaN(+d) || isNaN(+h)) return null
   return Math.round((+h - +d) / (1000 * 60 * 60 * 24 * 30.44))
 }
+
+// ── [MIG486] Corregir y anular un papel ─────────────────────────────────────
+//
+// Antes un documento sólo se podía renovar. Si alguien se equivocaba de tipo, de
+// fecha o subía el archivo del camión de al lado, había que entrar por SQL — y
+// mientras tanto el error competía por ser «el vigente».
+
+export async function editarCertificacion(p: {
+  certificacionId: string
+  tipo?: string | null
+  tipoOtro?: string | null
+  fechaEmision?: string | null
+  fechaVencimiento?: string | null
+  numero?: string | null
+  entidad?: string | null
+  bloqueante?: boolean | null
+  archivoUrl?: string | null
+  motivo?: string | null
+}) {
+  const { data, error } = await supabase.rpc('rpc_certificacion_editar', {
+    p_certificacion_id: p.certificacionId,
+    p_tipo: p.tipo ?? null,
+    p_tipo_otro: p.tipoOtro ?? null,
+    p_fecha_emision: p.fechaEmision || null,
+    p_fecha_vencimiento: p.fechaVencimiento || null,
+    p_numero: p.numero || null,
+    p_entidad: p.entidad || null,
+    p_bloqueante: p.bloqueante ?? null,
+    p_archivo_url: p.archivoUrl || null,
+    p_motivo: p.motivo || null,
+  })
+  if (error) throw new Error(error.message)
+  return data as { success: boolean; etiqueta: string }
+}
+
+/**
+ * Anular NO borra.
+ *
+ * Estos papeles son la prueba de qué se declaró vigente y cuándo; con un
+ * contrato con multas de por medio, borrar la fila deja al sistema sin cómo
+ * explicar por qué el semáforo estaba verde el mes pasado. El papel sale de las
+ * vistas, del QR y de los conteos, y la fila queda con quién, cuándo y por qué.
+ */
+export async function anularCertificacion(certificacionId: string, motivo: string) {
+  const { data, error } = await supabase.rpc('rpc_certificacion_anular', {
+    p_certificacion_id: certificacionId, p_motivo: motivo,
+  })
+  if (error) throw new Error(error.message)
+  return data as { success: boolean; ya_estaba?: boolean; vuelve_a_vigente?: string | null }
+}
+
+export async function restaurarCertificacion(certificacionId: string) {
+  const { error } = await supabase.rpc('rpc_certificacion_restaurar', {
+    p_certificacion_id: certificacionId,
+  })
+  if (error) throw new Error(error.message)
+}
+
+export type PapelAnulado = {
+  id: string; activo_id: string; patente: string
+  tipo: string; tipo_otro: string | null; etiqueta: string
+  fecha_emision: string | null; fecha_vencimiento: string | null
+  archivo_url: string | null
+  anulado_at: string; anulado_motivo: string | null; anulado_por: string | null
+}
+
+/** Lo anulado de un equipo, para poder deshacerlo. */
+export async function getAnuladosEquipo(activoId: string): Promise<PapelAnulado[]> {
+  const { data, error } = await supabase
+    .from('v_certificaciones_anuladas').select('*')
+    .eq('activo_id', activoId).order('anulado_at', { ascending: false })
+  if (error) throw new Error(error.message)
+  return (data ?? []) as PapelAnulado[]
+}
+
+/**
+ * Un papel por su id, con todo lo que hace falta para corregirlo.
+ *
+ * La bitácora muestra el documento como un evento —título y fecha— y no arrastra
+ * el tipo ni el número. Antes que hacerle inventar campos a la línea de tiempo,
+ * el modal de corrección busca el papel de verdad.
+ */
+export async function getCertificacion(id: string) {
+  const { data, error } = await supabase
+    .from('certificaciones')
+    .select('id, activo_id, tipo, tipo_otro, fecha_emision, fecha_vencimiento, numero_certificado, entidad_certificadora, bloqueante, archivo_url, anulado_at')
+    .eq('id', id).single()
+  if (error) throw new Error(error.message)
+  return data as {
+    id: string; activo_id: string; tipo: string; tipo_otro: string | null
+    fecha_emision: string | null; fecha_vencimiento: string | null
+    numero_certificado: string | null; entidad_certificadora: string | null
+    bloqueante: boolean | null; archivo_url: string | null; anulado_at: string | null
+  }
+}

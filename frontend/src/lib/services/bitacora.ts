@@ -6,7 +6,10 @@ import { supabase } from '@/lib/supabase'
 
 export type BitacoraEvento = {
   activo_id: string
-  tipo_registro: 'ot' | 'os_legacy' | 'auditoria' | 'recepcion' | 'diferido' | 'checklist_cliente' | 'informe_tecnico'
+  tipo_registro: 'ot' | 'os_legacy' | 'auditoria' | 'recepcion' | 'diferido' | 'checklist_cliente'
+    | 'informe_tecnico'
+    /** [MIG487] Los papeles del equipo: una carga de documento es un evento más. */
+    | 'documento'
   ref_id: string
   fecha: string
   titulo: string

@@ -93,6 +93,9 @@ import { CarpetaCertificados } from '@/components/activos/carpeta-certificados'
 import { HistoricoContratosCard } from '@/components/activos/historico-contratos-card'
 import { useHistorialArriendos, useUltimoArriendo } from '@/hooks/use-arriendos'
 import { Building2 } from 'lucide-react'
+import {
+  ModalCorregirPapel, ModalAnularPapel, ModalAnulados,
+} from '@/components/documental/papel-modales'
 import { leerDocumento, type LecturaDocumento } from '@/lib/documentos/leer-documento'
 import { getVigenciasEstandar, sumarMeses, mesesEntre } from '@/lib/services/control-documental'
 
@@ -526,6 +529,8 @@ function etiquetaDoc(tipo: string, tipoOtro?: string | null): string {
   return propio || getTipoCertificacionLabel(tipo)
 }
 
+// [MIG486] Corregir un papel mal cargado o sacarlo de circulación. Los mismos
+// modales que usa Control documental: una sola regla para el mismo papel.
 const EMPTY_DOC_FORM = {
   tipo: 'revision_tecnica',
   // [MIG484] Cuando el tipo es «otra», el papel tiene que decir cuál es.
@@ -543,6 +548,9 @@ function TabCertificaciones({ activoId, patente }: { activoId: string; patente?:
   const toast = useToast()
   const [showAdd, setShowAdd] = useState(false)
   const [newCert, setNewCert] = useState({ ...EMPTY_DOC_FORM })
+  const [corrigiendo, setCorrigiendo] = useState<any | null>(null)
+  const [anulando, setAnulando] = useState<any | null>(null)
+  const [verAnulados, setVerAnulados] = useState(false)
   // Los nombres de «otro» que ya usó la flota, para no escribir tres variantes
   // del mismo papel.
   const { data: otrosUsados = [] } = useQuery({
@@ -716,9 +724,15 @@ function TabCertificaciones({ activoId, patente }: { activoId: string; patente?:
 
       <div className="flex justify-between items-center">
         <h3 className="text-base font-semibold">Documentos y Certificaciones</h3>
-        <Button size="sm" onClick={() => { setNewCert({ ...EMPTY_DOC_FORM }); setNewFile(null); setFormError(''); setShowAdd(!showAdd) }}>
-          <Plus className="h-4 w-4 mr-1" /> Agregar
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button size="sm" variant="ghost" className="text-gray-500"
+                  onClick={() => setVerAnulados(true)}>
+            Anulados
+          </Button>
+          <Button size="sm" onClick={() => { setNewCert({ ...EMPTY_DOC_FORM }); setNewFile(null); setFormError(''); setShowAdd(!showAdd) }}>
+            <Plus className="h-4 w-4 mr-1" /> Agregar
+          </Button>
+        </div>
       </div>
 
       {/* Form para agregar / renovar */}
@@ -889,9 +903,35 @@ function TabCertificaciones({ activoId, patente }: { activoId: string; patente?:
                 subiendo={subiendo}
                 onSubirArchivo={() => handleFileUpload(c.id)}
                 onRenovar={() => handleRenovar(c)}
+                onCorregir={() => setCorrigiendo(c)}
+                onAnular={() => setAnulando(c)}
               />
             ))}
         </div>
+      )}
+
+      {corrigiendo && (
+        <ModalCorregirPapel
+          p={{ certificacion_id: corrigiendo.id, patente: patente ?? '', tipo: corrigiendo.tipo,
+               tipo_otro: corrigiendo.tipo_otro, etiqueta: corrigiendo.etiqueta,
+               fecha_emision: corrigiendo.fecha_emision,
+               fecha_vencimiento: corrigiendo.fecha_vencimiento,
+               numero_certificado: corrigiendo.numero_certificado,
+               entidad_certificadora: corrigiendo.entidad_certificadora }}
+          onClose={() => setCorrigiendo(null)}
+          onListo={() => { setCorrigiendo(null); refrescar() }} />
+      )}
+      {anulando && (
+        <ModalAnularPapel
+          p={{ certificacion_id: anulando.id, patente: patente ?? '', tipo: anulando.tipo,
+               tipo_otro: anulando.tipo_otro, etiqueta: anulando.etiqueta,
+               fecha_vencimiento: anulando.fecha_vencimiento }}
+          onClose={() => setAnulando(null)}
+          onListo={() => { setAnulando(null); refrescar() }} />
+      )}
+      {verAnulados && (
+        <ModalAnulados activoId={activoId} patente={patente ?? ''}
+                       onClose={() => setVerAnulados(false)} onListo={refrescar} />
       )}
 
       {reemplazados.length > 0 && (
@@ -917,7 +957,8 @@ function TabCertificaciones({ activoId, patente }: { activoId: string; patente?:
   )
 }
 
-function DocumentoCard({ c, subiendo, reemplazado, tipoVence, onSubirArchivo, onRenovar }: {
+function DocumentoCard({ c, subiendo, reemplazado, tipoVence, onSubirArchivo, onRenovar,
+                         onCorregir, onAnular }: {
   c: any
   /** [MIG407] Si el tipo de este papel vence, un 2099 es un hueco, no «permanente». */
   tipoVence?: boolean
@@ -925,6 +966,9 @@ function DocumentoCard({ c, subiendo, reemplazado, tipoVence, onSubirArchivo, on
   reemplazado?: boolean
   onSubirArchivo?: () => void
   onRenovar?: () => void
+  /** [MIG486] Arreglar el dato mal cargado / sacar el papel que no debió estar. */
+  onCorregir?: () => void
+  onAnular?: () => void
 }) {
   const estado = reemplazado ? 'reemplazado' : estadoDocumento(c.fecha_vencimiento, {
     tieneArchivo: !!c.archivo_url, tipoVence,
@@ -1002,6 +1046,16 @@ function DocumentoCard({ c, subiendo, reemplazado, tipoVence, onSubirArchivo, on
                 <Button size="sm" onClick={onRenovar}>
                   <RefreshCw className="h-3.5 w-3.5 mr-1" /> Renovar
                 </Button>
+                {onCorregir && (
+                  <Button variant="outline" size="sm" onClick={onCorregir}>
+                    <Pencil className="h-3.5 w-3.5 mr-1" /> Corregir
+                  </Button>
+                )}
+                {onAnular && (
+                  <Button variant="ghost" size="sm" className="text-red-600" onClick={onAnular}>
+                    <Trash2 className="h-3.5 w-3.5 mr-1" /> Anular
+                  </Button>
+                )}
               </>
             )}
           </div>
