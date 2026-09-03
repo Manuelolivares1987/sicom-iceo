@@ -48,6 +48,9 @@ export type NcRecepcion = {
   /** [MIG405] Guardada en el historial: sale de la bandeja pero no se borra. */
   archivado_at: string | null
   archivado_motivo: string | null
+  /** [MIG499] La OS que ya la está trabajando (una NC vive en UNA OS). */
+  os_id: string | null
+  os_folio: string | null
 }
 
 // Quién paga el hallazgo (default_cobrable_enum, MIG54).

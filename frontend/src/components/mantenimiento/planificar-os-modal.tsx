@@ -22,9 +22,11 @@ import { getTallerTecnicos } from '@/lib/services/taller-plan-semanal'
 import { planificarOsDesdeNc } from '@/lib/services/taller-os'
 import type { NcRecepcion } from '@/lib/services/no-conformidades'
 
-export function PlanificarOsModal({ patente, ncs, onClose, onDone }: {
+export function PlanificarOsModal({ patente, ncs, preSeleccion, onClose, onDone }: {
   patente: string
   ncs: NcRecepcion[]
+  /** NC marcadas con el check de la tabla: el modal parte con esas elegidas. */
+  preSeleccion?: string[]
   onClose: () => void
   onDone: () => void
 }) {
@@ -33,17 +35,25 @@ export function PlanificarOsModal({ patente, ncs, onClose, onDone }: {
     queryKey: ['taller-tecnicos-activos'], queryFn: () => getTallerTecnicos(), staleTime: 300_000,
   })
 
-  // Solo lo que todavía se puede trabajar. Si una NC ya vive en otra OS, el
-  // servidor lo dice con nombre y apellido al intentar.
+  // Solo lo que todavía se puede trabajar. Una NC vive en UNA OS: la que ya
+  // tiene una no se vuelve a ofrecer (MIG499 expone os_folio en la bandeja).
   const elegibles = useMemo(
-    () => ncs.filter((nc) => !['resuelta', 'descartada'].includes(nc.estado_planificacion)),
+    () => ncs.filter((nc) => !['resuelta', 'descartada'].includes(nc.estado_planificacion) && !nc.os_id),
     [ncs],
   )
 
-  const [sel, setSel] = useState<Set<string>>(() => new Set(elegibles.map((n) => n.id)))
+  const [sel, setSel] = useState<Set<string>>(() => {
+    const pre = (preSeleccion ?? []).filter((id) => elegibles.some((n) => n.id === id))
+    return new Set(pre.length ? pre : elegibles.map((n) => n.id))
+  })
   const [quienes, setQuienes] = useState<string[]>([])
   const [horas, setHoras] = useState('')
   const [titulo, setTitulo] = useState(`Corrección NC · ${patente}`)
+  // [MIG499] «Incluso puede existir una OS para un externo»: sin técnicos
+  // nuestros, con proveedor y motivo. La autoriza gerencia y no paga bono.
+  const [externo, setExterno] = useState(false)
+  const [proveedor, setProveedor] = useState('')
+  const [motivoExterno, setMotivoExterno] = useState('')
   // [MIG475] Si la suma de OS pasa el techo del planificador, el servidor pide
   // explicar por qué en vez de crear a medias.
   const [motivoTecho, setMotivoTecho] = useState<string | null>(null)
@@ -57,10 +67,13 @@ export function PlanificarOsModal({ patente, ncs, onClose, onDone }: {
   const crear = useMutation({
     mutationFn: () => planificarOsDesdeNc({
       ncIds: Array.from(sel),
-      tecnicoIds: quienes,
+      tecnicoIds: externo ? [] : quienes,
       horas: Number(horas),
       titulo: titulo.trim() || null,
       justificacion: justificacion.trim() || null,
+      externo,
+      proveedor: externo ? proveedor.trim() || null : null,
+      motivoExterno: externo ? motivoExterno.trim() || null : null,
     }),
     onSuccess: (r) => {
       if (r.requiere_justificacion) {
@@ -68,15 +81,18 @@ export function PlanificarOsModal({ patente, ncs, onClose, onDone }: {
         return
       }
       const avisos = (r.avisos ?? []).filter(Boolean)
-      toast.success(`OS ${r.folio} creada: ${sel.size} NC · ${quienes.length} técnico${quienes.length > 1 ? 's' : ''} · ${horas} h.`
-        + ' Le llega al mecánico a su teléfono.')
+      toast.success(externo
+        ? `OS ${r.folio} creada para ${proveedor.trim()}: falta que gerencia la autorice.`
+        : `OS ${r.folio} creada: ${sel.size} NC · ${quienes.length} técnico${quienes.length > 1 ? 's' : ''} · ${horas} h.`
+          + ' Le llega al mecánico a su teléfono.')
       for (const a of avisos) toast.success(a)
       onDone()
     },
     onError: (e) => toast.error((e as Error).message),
   })
 
-  const puedeCrear = sel.size > 0 && quienes.length > 0 && Number(horas) > 0
+  const puedeCrear = sel.size > 0 && Number(horas) > 0
+    && (externo ? proveedor.trim().length > 1 : quienes.length > 0)
     && (!motivoTecho || justificacion.trim().length >= 10)
 
   return (
@@ -123,25 +139,51 @@ export function PlanificarOsModal({ patente, ncs, onClose, onDone }: {
 
         {/* ── Quién la ejecuta ── */}
         <div>
-          <p className="flex items-center gap-1 text-xs font-semibold text-gray-700">
-            <Users className="h-3.5 w-3.5" /> Quién la ejecuta (uno, o de a pares)
-          </p>
-          <div className="mt-1.5 flex flex-wrap gap-1">
-            {tecnicos.map((t) => {
-              const on = quienes.includes(t.id)
-              return (
-                <button key={t.id} type="button" onClick={() => toggleTec(t.id)} title={t.especialidad || undefined}
-                        className={`rounded border px-2 py-1 text-[11px] ${
-                          on ? 'border-blue-500 bg-blue-500 text-white' : 'border-gray-200 bg-white text-gray-600'}`}>
-                  {t.nombre}
-                  {t.especialidad && <span className={`ml-1 text-[9px] ${on ? 'text-blue-100' : 'text-gray-400'}`}>{t.especialidad}</span>}
-                </button>
-              )
-            })}
+          <div className="flex items-center justify-between gap-2">
+            <p className="flex items-center gap-1 text-xs font-semibold text-gray-700">
+              <Users className="h-3.5 w-3.5" /> Quién la ejecuta (uno, o de a pares)
+            </p>
+            <label className="flex cursor-pointer items-center gap-1.5 text-[11px] font-medium text-gray-600">
+              <input type="checkbox" checked={externo}
+                     onChange={(e) => { setExterno(e.target.checked); if (e.target.checked) setQuienes([]) }}
+                     className="h-3.5 w-3.5 cursor-pointer" />
+              La hace un externo
+            </label>
           </div>
-          <p className="mt-1 text-[10px] text-gray-500">
-            Si alguno está en otra OS ahora mismo, se le saca de ahí (su reloj se cierra y queda el motivo escrito).
-          </p>
+          {externo ? (
+            <div className="mt-1.5 space-y-1.5 rounded-lg border border-indigo-200 bg-indigo-50/60 p-2">
+              <input value={proveedor} onChange={(e) => setProveedor(e.target.value)}
+                     placeholder="Proveedor que hace el trabajo (obligatorio)"
+                     className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm" />
+              <input value={motivoExterno} onChange={(e) => setMotivoExterno(e.target.value)}
+                     placeholder="Por qué se manda afuera (opcional)"
+                     className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm" />
+              <p className="text-[10px] text-indigo-800">
+                La OS externa la autoriza gerencia antes de arrancar, no ocupa técnicos del taller y no paga bono.
+              </p>
+            </div>
+          ) : (
+            <>
+              <div className="mt-1.5 flex flex-wrap gap-1">
+                {tecnicos.map((t) => {
+                  const on = quienes.includes(t.id)
+                  return (
+                    <button key={t.id} type="button" onClick={() => toggleTec(t.id)} title={t.especialidad || undefined}
+                            className={`rounded border px-2 py-1 text-[11px] ${
+                              on ? 'border-blue-500 bg-blue-500 text-white' : 'border-gray-200 bg-white text-gray-600'}`}>
+                      {t.nombre}
+                      {t.especialidad && <span className={`ml-1 text-[9px] ${on ? 'text-blue-100' : 'text-gray-400'}`}>{t.especialidad}</span>}
+                    </button>
+                  )
+                })}
+              </div>
+              <p className="mt-1 text-[10px] text-gray-500">
+                {/* [MIG499] Asignar ya no saca a nadie de su otra OS: el trabajo
+                    anterior queda PAUSADO y sigue en su teléfono. */}
+                Si alguno tiene el reloj corriendo en otra OS, ese trabajo queda pausado (no se le quita).
+              </p>
+            </>
+          )}
         </div>
 
         {/* ── Cuánto debe demorar ── */}
