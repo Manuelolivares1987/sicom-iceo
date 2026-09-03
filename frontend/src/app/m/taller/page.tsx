@@ -19,6 +19,8 @@ import {
 import { useTallerTecnicos } from '@/hooks/use-taller-plan-semanal'
 import type { MecanicoOT } from '@/lib/offline/taller-mecanico-sync'
 import { MisOrdenesDeServicio, OsDelTaller } from './mis-os'
+import { getOSAbiertas } from '@/lib/services/taller-os'
+import { CalendarDays } from 'lucide-react'
 import {
   DIAS_INICIAL, isoToday, startOfWeekISOOffset, endOfWeekISOOffset, diasDeSemana,
   rangoSemanaLabel, formatDiaCorto,
@@ -223,17 +225,32 @@ export default function MecanicoHomePage() {
     }
   }, [diaSeleccionado, weekStart, weekEnd])
 
-  // Cuántas OTs tiene cada día de la semana visible. Se cuenta sobre lo que ya
-  // dejaron pasar los filtros de mecánico y estado: si estás mirando las de
-  // Marcos, la tira te dice los días de Marcos.
+  // [MIG508] Las OS también viven en la tira: el día que Manuel les puso al
+  // planificarlas cuenta y se ve, igual que una OT.
+  const { data: osAbiertas = [] } = useQuery({
+    queryKey: ['os-abiertas-taller'],
+    queryFn: getOSAbiertas,
+    staleTime: 60_000,
+    retry: false,
+  })
+  const osDelDia = useMemo(
+    () => diaSeleccionado ? osAbiertas.filter((o) => o.fecha_programada === diaSeleccionado) : [],
+    [osAbiertas, diaSeleccionado])
+
+  // Cuántas OTs (y OS, MIG508) tiene cada día de la semana visible. Se cuenta
+  // sobre lo que ya dejaron pasar los filtros de mecánico y estado.
   const conteosPorDia = useMemo(() => {
     const m = new Map<string, number>()
     for (const o of misOts) {
       if (!o.fecha_programada) continue
       m.set(o.fecha_programada, (m.get(o.fecha_programada) ?? 0) + 1)
     }
+    for (const o of osAbiertas) {
+      if (!o.fecha_programada) continue
+      m.set(o.fecha_programada, (m.get(o.fecha_programada) ?? 0) + 1)
+    }
     return m
-  }, [misOts])
+  }, [misOts, osAbiertas])
 
   const totalSemana = useMemo(
     () => diasSemanaVisible.reduce((acc, d) => acc + (conteosPorDia.get(d) ?? 0), 0),
@@ -537,7 +554,7 @@ export default function MecanicoHomePage() {
               : soloMias && mecanico
                 ? (esOperador ? 'OTs con mi nombre' : `OTs de ${mecanico}`)
                 : 'OTs liberadas a ejecución'}
-          <span className="ml-1.5 font-normal text-gray-400">{otsEnVista.length}</span>
+          <span className="ml-1.5 font-normal text-gray-400">{otsEnVista.length + osDelDia.length}</span>
         </h2>
         <button onClick={() => refetch()} aria-label="Actualizar"
                 className="text-gray-400 hover:text-gray-600" disabled={isFetching}>
@@ -545,8 +562,40 @@ export default function MecanicoHomePage() {
         </button>
       </div>
 
+      {/* [MIG508] Las OS programadas para el día elegido, junto a las OT de ese
+          día: es lo que Manuel planificó con fecha y tiene que verse acá. */}
+      {osDelDia.length > 0 && (
+        <div className="space-y-2">
+          {osDelDia.map((os) => (
+            <Link key={os.os_id} href={`/m/taller/os/${os.os_id}`}
+                  className="block rounded-xl border border-blue-200 bg-blue-50/60 p-3 active:bg-blue-100">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="rounded bg-white px-1.5 py-0.5 font-mono text-[11px] text-blue-800">{os.folio}</span>
+                <span className="text-sm font-bold text-gray-900">{os.patente ?? '—'}</span>
+                <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-700">
+                  Orden de servicio
+                </span>
+              </div>
+              <p className="mt-0.5 text-sm text-gray-800">{os.titulo}</p>
+              <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[11px] text-gray-600">
+                {os.responsable && <span>asignada a <b>{os.responsable}</b></span>}
+                {os.horas_estimadas ? <span>· {os.horas_estimadas} h</span> : null}
+                {os.ncs > 0 && <span>· {os.ncs} actividad{os.ncs > 1 ? 'es' : ''}</span>}
+                <span className="ml-auto flex items-center gap-0.5 font-semibold text-blue-700">
+                  <CalendarDays className="h-3 w-3" /> ver actividades
+                </span>
+              </p>
+            </Link>
+          ))}
+        </div>
+      )}
+
       {isLoading ? (
         <div className="flex justify-center py-8"><Spinner /></div>
+      ) : otsEnVista.length === 0 && osDelDia.length > 0 ? (
+        <p className="pb-2 text-center text-[11px] text-gray-400">
+          Sin OTs programadas este día — las órdenes de servicio de arriba son el trabajo del día.
+        </p>
       ) : otsEnVista.length === 0 ? (
         <div className="py-8 text-center text-sm text-gray-400">
           {/* El vacío tiene que decir cuál de los filtros lo dejó vacío, y

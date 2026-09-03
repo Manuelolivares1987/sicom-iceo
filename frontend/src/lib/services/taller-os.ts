@@ -338,6 +338,42 @@ export async function getOSAbiertas(): Promise<OSAbierta[]> {
   return (data ?? []) as OSAbierta[]
 }
 
+// ── [MIG508] El detalle de UNA OS: cabecera + sus actividades ───────────────
+export type OSActividad = {
+  nc_id: string
+  descripcion: string
+  severidad: string | null
+  foto_url: string | null
+  observacion: string | null
+  resuelto: boolean
+}
+
+export type OSDetalle = {
+  os_id: string
+  folio: string
+  titulo: string
+  descripcion: string | null
+  estado: string
+  fecha_programada: string | null
+  horas_estimadas: number | null
+  es_externo: boolean
+  ot_id: string
+  ot_folio: string
+  patente: string | null
+  equipo: string | null
+  responsable: string | null
+  /** ¿La OS es del técnico detrás de esta sesión? (habilita el reloj) */
+  mi_asignada: boolean
+  asignados: string[]
+  actividades: OSActividad[]
+}
+
+export async function getOSDetalle(osId: string): Promise<OSDetalle> {
+  const { data, error } = await supabase.rpc('rpc_taller_os_detalle', { p_os_id: osId })
+  if (error) throw new Error(error.message)
+  return data as OSDetalle
+}
+
 /**
  * Lo que el jefe de taller me repartió.
  *

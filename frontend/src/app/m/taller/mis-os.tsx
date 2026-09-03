@@ -230,7 +230,9 @@ function TarjetaOS(p: {
             )
           })()}
         </div>
-        <Link href={`/m/taller/ot/${os.ot_id}`} aria-label="Ver la orden de trabajo"
+        {/* [MIG508] Abre el detalle de la OS (sus actividades); desde ahí se
+            llega al checklist completo de la OT. */}
+        <Link href={`/m/taller/os/${os.os_id}`} aria-label="Ver las actividades de la OS"
               className="shrink-0 rounded-md border border-gray-200 p-1.5 text-gray-400 active:bg-gray-50">
           <ChevronRight className="h-4 w-4" />
         </Link>
@@ -314,7 +316,9 @@ export function OsDelTaller() {
       {abierto && oss.map((os) => {
         const f = os.fecha_programada ? fechaLegible(os.fecha_programada) : null
         return (
-          <div key={os.os_id} className="rounded-lg border border-gray-200 bg-white p-3">
+          // [MIG508] La tarjeta se ABRE, como una OT: adentro están las actividades.
+          <Link key={os.os_id} href={`/m/taller/os/${os.os_id}`}
+                className="block rounded-lg border border-gray-200 bg-white p-3 active:bg-gray-50">
             <div className="flex flex-wrap items-center gap-1.5">
               <span className="rounded bg-gray-100 px-1.5 py-0.5 font-mono text-[11px] text-gray-700">{os.folio}</span>
               <span className="text-sm font-bold text-gray-900">{os.patente ?? '—'}</span>
@@ -336,8 +340,11 @@ export function OsDelTaller() {
               )}
               {os.horas_estimadas ? <span>· {os.horas_estimadas} h</span> : null}
               {os.ncs > 0 && <span>· {os.ncs} NC</span>}
+              <span className="ml-auto flex items-center gap-0.5 font-semibold text-blue-600">
+                ver actividades <ChevronRight className="h-3 w-3" />
+              </span>
             </p>
-          </div>
+          </Link>
         )
       })}
       {abierto && (
