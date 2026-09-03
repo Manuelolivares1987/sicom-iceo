@@ -27,8 +27,10 @@ type Rt = {
   codigo: string | null
   nombre: string | null
   cliente: string | null
-  /** [MIG505] La faena donde el equipo está físicamente: así se coordina la RT. */
+  /** [MIG506] La zona que se administra: Coquimbo o Calama (activos.operacion). */
   zona: string
+  /** Dónde está exactamente dentro de la zona (faena o ubicación). */
+  faena: string | null
   fecha_vencimiento: string | null
   dias_restantes: number | null
   estado: 'vencido' | 'por_vencer'
@@ -78,15 +80,15 @@ export async function POST(req: Request) {
       : chipEstado(`vence en ${f.dias_restantes} d`, MARCA.ambar, MARCA.ambarFondo)
     return `<tr>
       ${celda(`<b>${esc(equipo)}</b><br><span style="color:#9ca3af;font-size:11px">${esc(f.nombre ?? '')}</span>`, z)}
-      ${celda(esc(f.cliente ?? '—'), z)}
+      ${celda(`${esc(f.faena ?? '—')}${f.cliente ? `<br><span style="color:#9ca3af;font-size:11px">${esc(f.cliente)}</span>` : ''}`, z)}
       ${celda(`<span style="white-space:nowrap">${fmtFecha(f.fecha_vencimiento)}</span>`, z)}
       ${celda(chip, z, 'text-align:right')}
     </tr>`
   }
 
-  // [MIG505] Agrupado POR ZONA (la faena donde el equipo está): los de Spence
-  // juntos, los del taller Coquimbo juntos — como se coordina la ida a la
-  // planta de revisión. Dentro de cada zona, las vencidas primero.
+  // [MIG506] Agrupado por ZONA = la operación que se administra: los vehículos
+  // de COQUIMBO y los de CALAMA (los mismos cuadrantes del Panel de Gerencia).
+  // La faena queda como detalle de cada fila. Vencidas primero en cada zona.
   const porZona = new Map<string, Rt[]>()
   for (const f of filas) {
     const k = f.zona || 'Sin zona'
@@ -100,7 +102,7 @@ export async function POST(req: Request) {
       `📍 ${esc(zona)} · ${xs.length} equipo${xs.length > 1 ? 's' : ''}${nVenc > 0 ? ` · ${nVenc} vencida${nVenc > 1 ? 's' : ''}` : ''}`,
       nVenc > 0 ? MARCA.rojo : MARCA.verdeOscuro,
       nVenc > 0 ? MARCA.rojoFondo : MARCA.verdeClaro)}
-    ${tablaAbrir(['Equipo', 'Cliente', 'Vence', 'Plazo'])}
+    ${tablaAbrir(['Equipo', 'Dónde está', 'Vence', 'Plazo'])}
     ${xs.map(fila).join('')}
     ${tablaCerrar}`
   }).join('')
