@@ -1902,45 +1902,84 @@ function PlanSemanalBanner({ otId }: { otId: string }) {
   )
 }
 
-// ── NC recobrables al cliente de este equipo (atajo al informe de recobro) ──
-// El informe de recobro vive en la bandeja de NC (se arma por patente, con las
-// NC valorizadas y folio). Desde la OT, el jefe ve cuántas hay por cobrar y
-// llega en un click al modal que lo arma.
-function RecobrablesCard({ activoId }: { activoId: string }) {
-  const { data: n = 0 } = useQuery({
-    queryKey: ['nc-recobrables-activo', activoId],
+// ── Informe de recobro: la CUENTA al cliente ────────────────────────────────
+// [03-09] Manuel: «es clave que estén en un solo lugar». Los dos informes de
+// la visita viven juntos acá en la OT: este (la cuenta — NC valorizadas con
+// materiales + HH, folio para cobrar) y el técnico (el relato). El modal que
+// ARMA el recobro sigue siendo el de la bandeja (trabaja por patente, con
+// todas las NC del equipo): el link lo abre directo con ?recobro=<activoId>.
+function InformeRecobroSeccion({ activoId }: { activoId: string }) {
+  const { data } = useQuery({
+    queryKey: ['recobro-del-activo', activoId],
     queryFn: async () => {
-      const { count, error } = await supabase
+      const { data: rows, error } = await supabase
         .from('v_nc_recepcion')
-        .select('id', { count: 'exact', head: true })
+        .select('recobro, recobro_informe_id, recobro_informe_folio, recobro_informe_estado')
         .eq('activo_id', activoId)
-        .in('recobro', ['cliente', 'compartido'])
-        .is('archivado_at', null)
-        .is('recobro_informe_id', null)
       if (error) throw new Error(error.message)
-      return count ?? 0
+      const lista = (rows ?? []) as Array<{
+        recobro: string | null
+        recobro_informe_id: string | null
+        recobro_informe_folio: string | null
+        recobro_informe_estado: string | null
+      }>
+      const pendientes = lista.filter(
+        (r) => (r.recobro === 'cliente' || r.recobro === 'compartido') && !r.recobro_informe_id,
+      ).length
+      const informes = Array.from(
+        new Map(lista.filter((r) => r.recobro_informe_id)
+          .map((r) => [r.recobro_informe_id as string, r])).values(),
+      )
+      return { pendientes, informes }
     },
     staleTime: 30_000,
     retry: false,
   })
-  if (!n) return null
+  const pendientes = data?.pendientes ?? 0
+  const informes = data?.informes ?? []
+
   return (
-    <Card className="mt-4 border-violet-200 bg-violet-50/50">
-      <CardContent className="flex flex-wrap items-center gap-3 p-4">
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold text-violet-900">
-            Este equipo tiene {n} NC recobrable{n > 1 ? 's' : ''} al cliente sin informe
-          </p>
-          <p className="text-xs text-violet-700">
-            El informe de recobro se arma por patente con las NC valorizadas (materiales + HH) y sale
-            con folio para cobrarlo. Es distinto del informe técnico: este es la cuenta, aquel es el relato.
-          </p>
+    <Card className="mt-4">
+      <CardContent className="p-4 sm:p-6">
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <h3 className="text-base font-bold text-gray-900">Informe de recobro</h3>
+          <span className="text-xs text-gray-500">la cuenta al cliente — NC valorizadas con folio</span>
         </div>
-        <Link href={`/dashboard/mantenimiento/no-conformidades?recobro=${activoId}`}>
-          <Button variant="secondary" size="sm" className="border-violet-300 text-violet-700">
-            Armar informe de recobro
-          </Button>
-        </Link>
+
+        {informes.length > 0 && (
+          <div className="mb-2 space-y-1.5">
+            {informes.map((inf) => (
+              <Link key={inf.recobro_informe_id}
+                    href={`/dashboard/flota/recepcion/${inf.recobro_informe_id}/emitir`}
+                    className="flex items-center gap-2 rounded-lg border border-violet-200 bg-violet-50/60 px-3 py-2 text-sm hover:bg-violet-100/60">
+                <span className="font-mono text-xs font-bold text-violet-900">{inf.recobro_informe_folio}</span>
+                <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-medium text-violet-700">
+                  {inf.recobro_informe_estado ?? '—'}
+                </span>
+                <span className="ml-auto text-xs text-violet-700 underline">abrir</span>
+              </Link>
+            ))}
+          </div>
+        )}
+
+        {pendientes > 0 ? (
+          <div className="flex flex-wrap items-center gap-3 rounded-lg border border-violet-200 bg-violet-50/50 px-3 py-2.5">
+            <p className="min-w-0 flex-1 text-sm text-violet-900">
+              <b>{pendientes} NC recobrable{pendientes > 1 ? 's' : ''}</b> al cliente todavía sin informe.
+            </p>
+            <Link href={`/dashboard/mantenimiento/no-conformidades?recobro=${activoId}`}>
+              <Button variant="secondary" size="sm" className="border-violet-300 text-violet-700">
+                Armar informe de recobro
+              </Button>
+            </Link>
+          </div>
+        ) : informes.length === 0 ? (
+          <p className="text-sm text-gray-400">
+            Este equipo no tiene NC recobrables pendientes ni informes de recobro armados.
+          </p>
+        ) : (
+          <p className="text-xs text-gray-500">Todas las NC recobrables del equipo ya están en un informe.</p>
+        )}
       </CardContent>
     </Card>
   )
@@ -2147,11 +2186,16 @@ export default function OrdenTrabajoDetailPage() {
         </CardContent>
       </Card>
 
-      {/* NC recobrables al cliente: atajo al informe de recobro (la cuenta) */}
-      {otData.activo_id && <RecobrablesCard activoId={otData.activo_id} />}
-
-      {/* Informe técnico de intervención (Incremento 1): el relato de la visita */}
+      {/* [03-09] Los DOS informes de la visita, en un solo lugar: el técnico
+          (el relato de lo que se hizo) y el de recobro (la cuenta al cliente). */}
+      <div className="mt-6">
+        <h2 className="text-lg font-bold text-gray-900">Informes de la visita</h2>
+        <p className="text-xs text-gray-500">
+          El <b>técnico</b> cuenta qué se le hizo al equipo; el de <b>recobro</b> cobra lo que es del cliente.
+        </p>
+      </div>
       {id && <InformeTecnicoSeccion otId={id} activoId={otData.activo_id} otEstado={otData.estado} />}
+      {otData.activo_id && <InformeRecobroSeccion activoId={otData.activo_id} />}
 
       {/* Bottom action bar — technician actions */}
       <OTActionBar
