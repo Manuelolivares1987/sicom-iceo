@@ -288,7 +288,9 @@ function TarjetaOS(p: {
 // solo con cuenta vinculada — la cuenta compartida del teléfono del taller no
 // veía nada. Ver el trabajo repartido no es personal; mover el reloj sí.
 export function OsDelTaller() {
-  const [abierto, setAbierto] = useState(false)
+  // Abierta por defecto: la razón de existir de esta lista es que se VEA
+  // (Manuel, 03-09: «no puedo ver la orden de servicio planificada»).
+  const [abierto, setAbierto] = useState(true)
   const { data: oss = [], isLoading } = useQuery({
     queryKey: ['os-abiertas-taller'],
     queryFn: getOSAbiertas,
