@@ -56,6 +56,8 @@ export function useMarcarItem(otId: string) {
       file?: File | null; files?: (File | Blob)[]
       mediciones?: MedicionItem
       valor_numerico?: number | null
+      /** [MIG496] Firmas del cierre de recepción (B11.07). */
+      firmas?: { campo: 'firma_operador_url' | 'firma_taller_url'; blob: Blob }[]
     }) => queueItem({ otId, ...p }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: keyChecklist(otId) })
@@ -246,7 +248,12 @@ export function useGuardarMedidores(otId: string) {
       if (error) throw error
       return data as { success: boolean; requiere_confirmacion?: boolean; motivo?: string }
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['mec-medidores', otId] }) },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['mec-medidores', otId] })
+      // [MIG496] El servidor llena solo el «próximo horómetro de pauta»
+      // (B11.04 = horómetro + 300): refrescar el checklist para que se vea.
+      qc.invalidateQueries({ queryKey: ['mec-checklist', otId] })
+    },
   })
 }
 

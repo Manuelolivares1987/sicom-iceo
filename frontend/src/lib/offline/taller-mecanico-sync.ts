@@ -43,6 +43,10 @@ export type MecanicoOT = {
   checklist_total: number | null
   checklist_completados: number | null
   tiempo_estimado_total_min: number | null
+  /** [MIG496] Lo que comprometió el planificador (MIG493): total HH de la visita. */
+  horas_planificadas: number | null
+  /** [MIG496] Último día planificado de la OT: la fecha de entrega comprometida. */
+  fecha_entrega_plan: string | null
 }
 
 const isOnline = () => (typeof navigator === 'undefined' ? true : navigator.onLine)
@@ -96,6 +100,7 @@ export async function getChecklistMecanico(otId: string): Promise<ChecklistV3Ite
   const acc = new Map<string, {
     resultado?: string; observacion?: string | null; fotos_blob_ids?: string[]
     mediciones?: MedicionItem; valor_numerico?: number | null
+    firmas_blob_ids?: { campo: string; blob_id: string }[]
   }>()
   for (const p of pend) {
     if (!p.instance_item_id) continue
@@ -107,6 +112,7 @@ export async function getChecklistMecanico(otId: string): Promise<ChecklistV3Ite
     if (nuevas.length) cur.fotos_blob_ids = [...(cur.fotos_blob_ids ?? []), ...nuevas]
     if (p.mediciones !== undefined) cur.mediciones = p.mediciones
     if (p.valor_numerico !== undefined) cur.valor_numerico = p.valor_numerico
+    if (p.firmas_blob_ids?.length) cur.firmas_blob_ids = [...(cur.firmas_blob_ids ?? []), ...p.firmas_blob_ids]
     acc.set(p.instance_item_id, cur)
   }
 
@@ -119,13 +125,23 @@ export async function getChecklistMecanico(otId: string): Promise<ChecklistV3Ite
       const b = await tallerDB().blobs.get(bid)
       if (b) fotos.push(URL.createObjectURL(b.blob))
     }
+    // [MIG496] Firmas pendientes de subir: mostrarlas ya firmadas (object URL).
+    let mediciones = a.mediciones !== undefined ? a.mediciones : it.mediciones
+    if (a.firmas_blob_ids?.length) {
+      const cap: Record<string, unknown> = { ...((mediciones && !Array.isArray(mediciones) ? mediciones : {}) as object) }
+      for (const f of a.firmas_blob_ids) {
+        const b = await tallerDB().blobs.get(f.blob_id)
+        if (b) cap[f.campo] = URL.createObjectURL(b.blob)
+      }
+      mediciones = cap as MedicionItem
+    }
     return {
       ...it,
       resultado: (a.resultado as ChecklistV3Item['resultado']) ?? it.resultado,
       observacion: a.observacion !== undefined ? a.observacion : it.observacion,
       foto_url: fotos[0] ?? it.foto_url,
       foto_urls: fotos.length ? fotos : it.foto_urls,
-      mediciones: a.mediciones !== undefined ? a.mediciones : it.mediciones,
+      mediciones,
       valor_numerico: a.valor_numerico !== undefined ? a.valor_numerico : it.valor_numerico,
     }
   }))
@@ -307,6 +323,9 @@ export async function queueItem(params: {
   mediciones?: MedicionItem
   /** [MIG444] Ítems de captura numérica, como el próximo horómetro de pauta. */
   valor_numerico?: number | null
+  /** [MIG496] Firmas del cierre de recepción (B11.07): se suben al sincronizar
+   *  y la URL queda en mediciones bajo el campo indicado. */
+  firmas?: { campo: 'firma_operador_url' | 'firma_taller_url'; blob: Blob }[]
 }): Promise<void> {
   const db = tallerDB()
   const files = params.files ?? (params.file ? [params.file] : [])
@@ -316,12 +335,19 @@ export async function queueItem(params: {
     await db.blobs.put({ blob_id: bid, blob: f, mime: (f as File).type || 'image/jpeg' })
     fotosIds.push(bid)
   }
+  const firmasIds: { campo: string; blob_id: string }[] = []
+  for (const f of params.firmas ?? []) {
+    const bid = newId()
+    await db.blobs.put({ blob_id: bid, blob: f.blob, mime: 'image/png' })
+    firmasIds.push({ campo: f.campo, blob_id: bid })
+  }
   const row: TallerPending = {
     local_id: newId(), client_uuid: newId(), ot_id: params.otId, kind: 'item',
     instance_item_id: params.instanceItemId, instance_id: params.instanceId,
     resultado: params.resultado,
     observacion: params.observacion,
     fotos_blob_ids: fotosIds.length ? fotosIds : undefined,
+    firmas_blob_ids: firmasIds.length ? firmasIds : undefined,
     mediciones: params.mediciones,
     valor_numerico: params.valor_numerico,
     sync_status: 'pending', retries: 0, last_error: null, created_at: new Date().toISOString(),
@@ -399,6 +425,17 @@ export async function syncTallerPending(): Promise<{ ok: number; failed: number 
             if (b) nuevasUrls.push(await subirFotoItem(p.instance_id, p.instance_item_id, b.blob))
           }
         }
+        // [MIG496] Firmas del cierre de recepción: subir y anotar la URL en
+        // mediciones bajo su campo (firma_operador_url / firma_taller_url).
+        let mediciones = p.mediciones
+        if (p.firmas_blob_ids?.length) {
+          const cap: Record<string, unknown> = { ...((mediciones && !Array.isArray(mediciones) ? mediciones : {}) as object) }
+          for (const f of p.firmas_blob_ids) {
+            const b = await db.blobs.get(f.blob_id)
+            if (b) cap[f.campo] = await subirFirmaMecanico(b.blob)
+          }
+          mediciones = cap as MedicionItem
+        }
         if (nuevasUrls.length && p.instance_item_id) {
           // Anexar a las evidencias que ya tenga el ítem (no pisar las previas).
           const { data: cur } = await supabase
@@ -407,16 +444,17 @@ export async function syncTallerPending(): Promise<{ ok: number; failed: number 
           const merged = [...prev, ...nuevasUrls]
           await actualizarItem(p.instance_item_id, {
             resultado: p.resultado, observacion: p.observacion ?? undefined,
-            foto_urls: merged, foto_url: merged[0], mediciones: p.mediciones,
+            foto_urls: merged, foto_url: merged[0], mediciones,
             valor_numerico: p.valor_numerico,
           })
         } else {
           await actualizarItem(p.instance_item_id!, {
-            resultado: p.resultado, observacion: p.observacion ?? undefined, mediciones: p.mediciones,
+            resultado: p.resultado, observacion: p.observacion ?? undefined, mediciones,
             valor_numerico: p.valor_numerico,
           })
         }
         for (const bid of blobIds) await db.blobs.delete(bid)
+        for (const f of p.firmas_blob_ids ?? []) await db.blobs.delete(f.blob_id)
       } else if (p.kind === 'recurso') {
         // Subir primero las fotos del repuesto (si las hay)
         const fotosUrls: string[] = []
