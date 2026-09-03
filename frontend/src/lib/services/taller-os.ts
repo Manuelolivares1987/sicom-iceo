@@ -111,6 +111,8 @@ export async function crearOS(p: {
   responsableId?: string | null; horasEstimadas?: number | null
   descripcion?: string | null; prioridad?: string | null
   justificacion?: string | null
+  /** [MIG507] Qué día se programa ejecutar. */
+  fechaProgramada?: string | null
 }) {
   const { data, error } = await supabase.rpc('rpc_taller_os_crear', {
     p_ot_id: p.otId,
@@ -121,6 +123,7 @@ export async function crearOS(p: {
     p_descripcion: p.descripcion ?? null,
     p_prioridad: p.prioridad ?? null,
     p_justificacion: p.justificacion ?? null,
+    p_fecha_programada: p.fechaProgramada ?? null,
   })
   if (error) throw new Error(error.message)
   return data as CrearOSResp
@@ -142,6 +145,8 @@ export type PlanificarOsResp = CrearOSResp & {
 
 export async function planificarOsDesdeNc(p: {
   ncIds: string[]; tecnicoIds: string[]; horas: number
+  /** [MIG507] Planificar ES ponerle día — obligatorio (YYYY-MM-DD). */
+  fechaProgramada: string
   titulo?: string | null; descripcion?: string | null; justificacion?: string | null
   /** [MIG499] El trabajo lo hace un tercero: sin técnicos nuestros, con
    *  proveedor y motivo. La autoriza gerencia y no paga bono (MIG477). */
@@ -151,6 +156,7 @@ export async function planificarOsDesdeNc(p: {
     p_nc_ids: p.ncIds,
     p_tecnico_ids: p.tecnicoIds,
     p_horas: p.horas,
+    p_fecha_programada: p.fechaProgramada,
     p_titulo: p.titulo ?? null,
     p_descripcion: p.descripcion ?? null,
     p_justificacion: p.justificacion ?? null,
@@ -304,6 +310,32 @@ export type MiOS = {
   motivo: string | null
   /** Lo que impide arrancar, dicho antes de apretar y no después. */
   bloqueo: string | null
+  /** [MIG507] Qué día está programada. */
+  fecha_programada: string | null
+}
+
+// ── [MIG507] TODAS las OS abiertas, de solo lectura ─────────────────────────
+// Ver el trabajo repartido no es personal (la cuenta compartida también puede);
+// mover el reloj sí lo es.
+export type OSAbierta = {
+  os_id: string
+  folio: string
+  titulo: string
+  estado: string
+  patente: string | null
+  equipo: string | null
+  ot_folio: string
+  responsable: string | null
+  fecha_programada: string | null
+  horas_estimadas: number | null
+  ncs: number
+  es_externo: boolean
+}
+
+export async function getOSAbiertas(): Promise<OSAbierta[]> {
+  const { data, error } = await supabase.rpc('rpc_taller_os_abiertas')
+  if (error) throw new Error(error.message)
+  return (data ?? []) as OSAbierta[]
 }
 
 /**

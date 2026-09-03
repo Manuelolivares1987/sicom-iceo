@@ -48,6 +48,9 @@ export function PlanificarOsModal({ patente, ncs, preSeleccion, onClose, onDone 
   })
   const [quienes, setQuienes] = useState<string[]>([])
   const [horas, setHoras] = useState('')
+  // [MIG507] Planificar ES ponerle día: obligatorio, y no puede ser pasado.
+  const [fecha, setFecha] = useState('')
+  const hoy = new Date().toISOString().slice(0, 10)
   const [titulo, setTitulo] = useState(`Corrección NC · ${patente}`)
   // [MIG499] «Incluso puede existir una OS para un externo»: sin técnicos
   // nuestros, con proveedor y motivo. La autoriza gerencia y no paga bono.
@@ -69,6 +72,7 @@ export function PlanificarOsModal({ patente, ncs, preSeleccion, onClose, onDone 
       ncIds: Array.from(sel),
       tecnicoIds: externo ? [] : quienes,
       horas: Number(horas),
+      fechaProgramada: fecha,
       titulo: titulo.trim() || null,
       justificacion: justificacion.trim() || null,
       externo,
@@ -91,7 +95,7 @@ export function PlanificarOsModal({ patente, ncs, preSeleccion, onClose, onDone 
     onError: (e) => toast.error((e as Error).message),
   })
 
-  const puedeCrear = sel.size > 0 && Number(horas) > 0
+  const puedeCrear = sel.size > 0 && Number(horas) > 0 && fecha >= hoy
     && (externo ? proveedor.trim().length > 1 : quienes.length > 0)
     && (!motivoTecho || justificacion.trim().length >= 10)
 
@@ -187,8 +191,15 @@ export function PlanificarOsModal({ patente, ncs, preSeleccion, onClose, onDone 
           )}
         </div>
 
-        {/* ── Cuánto debe demorar ── */}
+        {/* ── Qué día y cuánto debe demorar ── */}
         <div className="grid grid-cols-2 gap-2">
+          <label className="text-xs font-medium">
+            {/* [MIG507] Planificar ES ponerle día. */}
+            📅 Día programado (obligatorio)
+            <input type="date" value={fecha} min={hoy}
+                   onChange={(e) => setFecha(e.target.value)}
+                   className="mt-0.5 w-full rounded border border-gray-300 px-2 py-1.5 text-sm" />
+          </label>
           <label className="text-xs font-medium">
             <span className="flex items-center gap-1"><Clock className="h-3.5 w-3.5" /> Tiempo asignado (horas)</span>
             <input type="number" inputMode="decimal" min="0" step="0.5" value={horas}
@@ -196,7 +207,7 @@ export function PlanificarOsModal({ patente, ncs, preSeleccion, onClose, onDone 
                    placeholder="ej: 4"
                    className="mt-0.5 w-full rounded border border-gray-300 px-2 py-1.5 text-sm" />
           </label>
-          <label className="text-xs font-medium">
+          <label className="col-span-2 text-xs font-medium">
             Título (lo lee el mecánico)
             <input value={titulo} onChange={(e) => setTitulo(e.target.value)}
                    className="mt-0.5 w-full rounded border border-gray-300 px-2 py-1.5 text-sm" />
