@@ -124,8 +124,11 @@ export async function POST(req: Request) {
            <b style="color:${MARCA.rojo}">vencida</b> no puede circular. Cada zona trae
            primero sus vencidas, para agendar la planta de revisión por lugar.</p>` : ''}
       ${bloques}`,
-    ctaUrl: `${base}/dashboard/flota/verificar/`,
-    ctaTexto: 'Ver papeles de la flota',
+    // Confirmado por Manuel: el botón lleva al Control documental de flota,
+    // donde se ven los vencimientos y se renueva el papel. (La ruta anterior,
+    // /flota/verificar/, exige un parámetro y daba 404.)
+    ctaUrl: `${base}/dashboard/flota/control-documental/`,
+    ctaTexto: 'Abrir Control documental de flota',
     pie: 'Resumen semanal (lunes) de la revisión técnica, según el último certificado cargado por '
        + 'equipo. Al cargar la RT renovada en SICOM, el equipo sale solo de esta lista. '
        + 'Correo automático de SICOM · Pillado Empresas.',
