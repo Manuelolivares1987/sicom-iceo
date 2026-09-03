@@ -18,7 +18,7 @@ import {
 } from '@/hooks/use-taller-mecanico'
 import { useTallerTecnicos } from '@/hooks/use-taller-plan-semanal'
 import type { MecanicoOT } from '@/lib/offline/taller-mecanico-sync'
-import { MisOrdenesDeServicio } from './mis-os'
+import { MisOrdenesDeServicio, OsDelTaller } from './mis-os'
 import {
   DIAS_INICIAL, isoToday, startOfWeekISOOffset, endOfWeekISOOffset, diasDeSemana,
   rangoSemanaLabel, formatDiaCorto,
@@ -370,6 +370,11 @@ export default function MecanicoHomePage() {
           cuenta compartida no hay a quién atribuirle el reloj, y un tiempo que
           no se puede atribuir no sirve para el bono. */}
       <MisOrdenesDeServicio online={online} />
+
+      {/* [MIG507] Todas las OS abiertas del taller, de solo lectura: visibles
+          desde cualquier cuenta (la compartida incluida). El reloj sigue
+          siendo personal; ver el trabajo repartido, no. */}
+      <OsDelTaller />
 
       {/* [MIG386] Lo del taller que no es de ningún equipo. Vive fuera de las OT
           a propósito: quien busca guantes no está buscando una orden. */}

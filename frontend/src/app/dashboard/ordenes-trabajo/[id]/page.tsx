@@ -2604,6 +2604,8 @@ function OrdenesDeServicioPanel({ otId }: { otId: string }) {
   const [abierto, setAbierto] = useState(false)
   const [titulo, setTitulo] = useState('')
   const [horas, setHoras] = useState('')
+  // [MIG507] El día en que se programa ejecutar la OS.
+  const [fechaOS, setFechaOS] = useState('')
   const [resp, setResp] = useState('')
   const [sel, setSel] = useState<Set<string>>(new Set())
   const [verPersonas, setVerPersonas] = useState<string | null>(null)
@@ -2664,6 +2666,7 @@ function OrdenesDeServicioPanel({ otId }: { otId: string }) {
       responsableId: resp || null,
       horasEstimadas: horas.trim() ? Number(horas) : null,
       justificacion: justificacion.trim() || null,
+      fechaProgramada: fechaOS || null,
     }),
     onSuccess: (r) => {
       // [MIG475] La suma de las OS se pasó del techo del planificador. No es un
@@ -2673,7 +2676,7 @@ function OrdenesDeServicioPanel({ otId }: { otId: string }) {
         return
       }
       toast.success(`${r.folio} creada con ${r.nc_asignadas} no conformidad(es)`)
-      setAbierto(false); setTitulo(''); setHoras(''); setResp(''); setSel(new Set())
+      setAbierto(false); setTitulo(''); setHoras(''); setResp(''); setFechaOS(''); setSel(new Set())
       setJustificacion(''); setPideJustificar(null)
       qc.invalidateQueries({ queryKey: ['os-de-ot', otId] })
       qc.invalidateQueries({ queryKey: ['os-presupuesto', otId] })
@@ -2876,7 +2879,7 @@ function OrdenesDeServicioPanel({ otId }: { otId: string }) {
                    placeholder="Ej: Sistema de frenos · Eléctrico · Neumáticos"
                    className="mt-0.5 w-full rounded border border-gray-300 px-2 py-1.5 text-sm" />
           </div>
-          <div className="grid gap-2 sm:grid-cols-2">
+          <div className="grid gap-2 sm:grid-cols-3">
             <div>
               <label className="text-xs font-medium">Quién la hace</label>
               <select value={resp} onChange={(e) => setResp(e.target.value)}
@@ -2884,6 +2887,13 @@ function OrdenesDeServicioPanel({ otId }: { otId: string }) {
                 <option value="">— Sin asignar todavía —</option>
                 {tecnicos.map((t) => <option key={t.id} value={t.id}>{t.nombre}</option>)}
               </select>
+            </div>
+            <div>
+              {/* [MIG507] Planificar es ponerle día. */}
+              <label className="text-xs font-medium">📅 Día programado</label>
+              <input type="date" value={fechaOS} min={new Date().toISOString().slice(0, 10)}
+                     onChange={(e) => setFechaOS(e.target.value)}
+                     className="mt-0.5 w-full rounded border border-gray-300 px-2 py-1.5 text-sm" />
             </div>
             <div>
               <label className="text-xs font-medium">Horas estimadas</label>

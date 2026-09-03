@@ -24,9 +24,12 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Play, Pause, CheckCircle2, ChevronRight, Clock, AlertTriangle, WifiOff } from 'lucide-react'
+import { Play, Pause, CheckCircle2, ChevronRight, ChevronDown, Clock, AlertTriangle, WifiOff, CalendarDays } from 'lucide-react'
 import { Spinner } from '@/components/ui/spinner'
-import { getMisOS, getMiTecnicoId, iniciarOS, pausarOS, finalizarOS, type MiOS } from '@/lib/services/taller-os'
+import {
+  getMisOS, getMiTecnicoId, getOSAbiertas, iniciarOS, pausarOS, finalizarOS,
+  type MiOS, ESTADO_OS_LABEL,
+} from '@/lib/services/taller-os'
 
 /** Horas decimales a lo que se lee en un teléfono: «2 h 15 min». */
 function horasLegibles(h: number): string {
@@ -36,6 +39,18 @@ function horasLegibles(h: number): string {
   if (hh === 0) return `${mm} min`
   if (mm === 0) return `${hh} h`
   return `${hh} h ${mm} min`
+}
+
+/** [MIG507] La fecha programada, dicha como se habla: hoy / mañana / vie 05-09. */
+function fechaLegible(f: string): { texto: string; atrasada: boolean; esHoy: boolean } {
+  const hoy = new Date(); hoy.setHours(0, 0, 0, 0)
+  const d = new Date(`${f}T00:00:00`)
+  const dias = Math.round((d.getTime() - hoy.getTime()) / 86_400_000)
+  if (dias === 0) return { texto: 'programada para HOY', atrasada: false, esHoy: true }
+  if (dias === 1) return { texto: 'programada para mañana', atrasada: false, esHoy: false }
+  const txt = d.toLocaleDateString('es-CL', { weekday: 'short', day: '2-digit', month: '2-digit' })
+  if (dias < 0) return { texto: `programada para el ${txt} (atrasada)`, atrasada: true, esHoy: false }
+  return { texto: `programada para el ${txt}`, atrasada: false, esHoy: false }
 }
 
 export function MisOrdenesDeServicio({ online }: { online: boolean }) {
@@ -177,6 +192,16 @@ function TarjetaOS(p: {
             )}
           </div>
           <p className="mt-0.5 text-sm text-gray-800">{os.titulo}</p>
+          {/* [MIG507] El día que el jefe programó: lo primero que decide qué hago hoy. */}
+          {os.fecha_programada && (() => {
+            const f = fechaLegible(os.fecha_programada)
+            return (
+              <p className={`mt-0.5 flex items-center gap-1 text-[11px] font-semibold ${
+                f.atrasada ? 'text-red-600' : f.esHoy ? 'text-orange-700' : 'text-gray-600'}`}>
+                <CalendarDays className="h-3 w-3" /> {f.texto}
+              </p>
+            )
+          })()}
           <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-gray-500">
             {os.ncs > 0 && <span>{os.ncs} no conformidad{os.ncs === 1 ? '' : 'es'}</span>}
             <span className="flex items-center gap-1">
@@ -255,5 +280,69 @@ function TarjetaOS(p: {
         </div>
       )}
     </div>
+  )
+}
+
+// ── [MIG507] Todas las OS del taller, de solo lectura ───────────────────────
+// «El operador no puede ver la orden de servicio»: podía, pero solo la suya y
+// solo con cuenta vinculada — la cuenta compartida del teléfono del taller no
+// veía nada. Ver el trabajo repartido no es personal; mover el reloj sí.
+export function OsDelTaller() {
+  const [abierto, setAbierto] = useState(false)
+  const { data: oss = [], isLoading } = useQuery({
+    queryKey: ['os-abiertas-taller'],
+    queryFn: getOSAbiertas,
+    staleTime: 60_000,
+    retry: false,
+  })
+
+  if (!isLoading && oss.length === 0) return null
+
+  return (
+    <section className="space-y-2">
+      <button type="button" onClick={() => setAbierto((v) => !v)}
+              className="flex w-full items-center gap-1.5 rounded-lg bg-gray-100 px-3 py-2 text-left active:bg-gray-200">
+        <ChevronDown className={`h-4 w-4 shrink-0 text-gray-500 transition-transform ${abierto ? '' : '-rotate-90'}`} />
+        <span className="text-sm font-bold text-gray-900">Órdenes de servicio del taller</span>
+        <span className="ml-auto text-[11px] text-gray-500">
+          {oss.length} abierta{oss.length === 1 ? '' : 's'}
+        </span>
+      </button>
+
+      {abierto && oss.map((os) => {
+        const f = os.fecha_programada ? fechaLegible(os.fecha_programada) : null
+        return (
+          <div key={os.os_id} className="rounded-lg border border-gray-200 bg-white p-3">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="rounded bg-gray-100 px-1.5 py-0.5 font-mono text-[11px] text-gray-700">{os.folio}</span>
+              <span className="text-sm font-bold text-gray-900">{os.patente ?? '—'}</span>
+              <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-600">
+                {ESTADO_OS_LABEL[os.estado] ?? os.estado}
+              </span>
+              {os.es_externo && (
+                <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-[10px] font-medium text-indigo-700">externo</span>
+              )}
+            </div>
+            <p className="mt-0.5 text-sm text-gray-800">{os.titulo}</p>
+            <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-gray-500">
+              {os.responsable && <span>asignada a <b className="text-gray-700">{os.responsable}</b></span>}
+              {f && (
+                <span className={`flex items-center gap-1 font-semibold ${
+                  f.atrasada ? 'text-red-600' : f.esHoy ? 'text-orange-700' : 'text-gray-600'}`}>
+                  <CalendarDays className="h-3 w-3" /> {f.texto}
+                </span>
+              )}
+              {os.horas_estimadas ? <span>· {os.horas_estimadas} h</span> : null}
+              {os.ncs > 0 && <span>· {os.ncs} NC</span>}
+            </p>
+          </div>
+        )
+      })}
+      {abierto && (
+        <p className="text-[10px] text-gray-400">
+          Para mover el reloj de una OS entra con tu propia cuenta: el tiempo que se mide es el que se reparte.
+        </p>
+      )}
+    </section>
   )
 }
