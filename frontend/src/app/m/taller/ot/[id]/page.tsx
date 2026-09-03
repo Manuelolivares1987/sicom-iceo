@@ -176,7 +176,11 @@ function NeumaticosProfundidad({ item, onSave, saving }: {
  */
 function CapturaItem({ it, onGuardar, saving }: {
   it: ChecklistV3Item
-  onGuardar: (p: { observacion?: string | null; valor_numerico?: number | null; mediciones?: MedicionItem }) => void
+  onGuardar: (p: {
+    observacion?: string | null; valor_numerico?: number | null; mediciones?: MedicionItem
+    resultado?: 'ok'
+    firmas?: { campo: 'firma_operador_url' | 'firma_taller_url'; blob: Blob }[]
+  }) => void
   saving: boolean
 }) {
   const cap: RespuestaCaptura = respuestaCaptura(it.mediciones)
@@ -184,33 +188,96 @@ function CapturaItem({ it, onGuardar, saving }: {
   const [numero, setNumero] = useState(it.valor_numerico != null ? String(it.valor_numerico) : '')
   const [fecha, setFecha] = useState(cap.fecha ?? '')
   const [opcion, setOpcion] = useState(cap.opcion ?? '')
+  // [MIG496] Firmas + RUT del cierre de recepción (B11.07): se firman acá mismo.
+  const [rutOp, setRutOp] = useState(cap.rut_operador ?? '')
+  const [rutTa, setRutTa] = useState(cap.rut_taller ?? '')
+  const [firmaOp, setFirmaOp] = useState('')
+  const [firmaTa, setFirmaTa] = useState('')
+
+  // [MIG496] B11.04 se llena solo al guardar los medidores (horómetro + 300 h):
+  // cuando el valor llega del servidor, reflejarlo en el input.
+  useEffect(() => {
+    setNumero(it.valor_numerico != null ? String(it.valor_numerico) : '')
+  }, [it.valor_numerico])
 
   const cls = 'w-full rounded-lg border border-gray-300 px-2 py-1.5 text-sm'
+  const esProximaPauta = it.codigo === 'B11.04'
 
   if (it.tipo_respuesta === 'firma') {
-    // Las firmas y los RUT ya se capturan al CERRAR el checklist
-    // (rpc_cerrar_checklist_v2 recibe firma y RUT de operador y de cliente).
-    // Repetirlas acá sería pedir dos veces lo mismo y guardar dos verdades.
+    const firmadoOp = !!cap.firma_operador_url
+    const firmadoTa = !!cap.firma_taller_url
+    const sucio = !!firmaOp || !!firmaTa
+      || rutOp !== (cap.rut_operador ?? '') || rutTa !== (cap.rut_taller ?? '')
+    const guardarFirmas = () => {
+      const firmas: { campo: 'firma_operador_url' | 'firma_taller_url'; blob: Blob }[] = []
+      if (firmaOp) firmas.push({ campo: 'firma_operador_url', blob: dataUrlToBlob(firmaOp) })
+      if (firmaTa) firmas.push({ campo: 'firma_taller_url', blob: dataUrlToBlob(firmaTa) })
+      const completo = (!!firmaOp || firmadoOp) && (!!firmaTa || firmadoTa)
+      onGuardar({
+        mediciones: { ...cap, rut_operador: rutOp.trim() || null, rut_taller: rutTa.trim() || null },
+        firmas: firmas.length ? firmas : undefined,
+        resultado: completo ? 'ok' : undefined,
+      })
+      setFirmaOp(''); setFirmaTa('')
+    }
     return (
-      <p className="mt-2 rounded-lg border border-gray-200 bg-gray-50 px-2 py-1.5 text-[11px] text-gray-600">
-        Las firmas y los RUT se piden al cerrar el checklist, en un solo paso.
-      </p>
+      <div className="mt-2 space-y-2.5">
+        <div className="rounded-lg border border-gray-200 bg-gray-50/60 p-2.5">
+          <p className="flex items-center gap-1.5 text-[11px] font-semibold text-gray-700">
+            Operador que entrega el equipo
+            {firmadoOp && <span className="flex items-center gap-0.5 text-green-700"><Check className="h-3 w-3" /> firmado</span>}
+          </p>
+          <input value={rutOp} onChange={(e) => setRutOp(e.target.value)}
+                 placeholder="RUT (ej: 12.345.678-9)" inputMode="text"
+                 className={cls + ' mt-1.5 max-w-[220px]'} />
+          <div className="mt-1.5">
+            <SignaturePad label="Firma del operador" onCapture={setFirmaOp} existingUrl={cap.firma_operador_url} />
+          </div>
+        </div>
+        <div className="rounded-lg border border-gray-200 bg-gray-50/60 p-2.5">
+          <p className="flex items-center gap-1.5 text-[11px] font-semibold text-gray-700">
+            Responsable del taller que recibe
+            {firmadoTa && <span className="flex items-center gap-0.5 text-green-700"><Check className="h-3 w-3" /> firmado</span>}
+          </p>
+          <input value={rutTa} onChange={(e) => setRutTa(e.target.value)}
+                 placeholder="RUT (ej: 12.345.678-9)" inputMode="text"
+                 className={cls + ' mt-1.5 max-w-[220px]'} />
+          <div className="mt-1.5">
+            <SignaturePad label="Firma del responsable de taller" onCapture={setFirmaTa} existingUrl={cap.firma_taller_url} />
+          </div>
+        </div>
+        <button type="button" disabled={saving || !sucio} onClick={guardarFirmas}
+                className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40">
+          Guardar firmas y RUT
+        </button>
+      </div>
     )
   }
 
   if (it.tipo_respuesta === 'numero') {
     const sucio = numero !== (it.valor_numerico != null ? String(it.valor_numerico) : '')
     return (
-      <div className="mt-2 flex items-center gap-2">
-        <input type="number" inputMode="decimal" step="0.1" min="0" value={numero}
-               onChange={(e) => setNumero(e.target.value)}
-               placeholder="0" className={cls + ' max-w-[140px] tabular-nums'} />
-        <span className="text-xs text-gray-500">h</span>
-        <button type="button" disabled={saving || !sucio}
-                onClick={() => onGuardar({ valor_numerico: numero.trim() === '' ? null : Number(numero) })}
-                className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40">
-          Guardar
-        </button>
+      <div className="mt-2">
+        {esProximaPauta && (
+          <p className="mb-1 rounded-lg border border-blue-200 bg-blue-50 px-2 py-1 text-[11px] text-blue-800">
+            Se calcula solo al guardar los medidores: horómetro al recibir + 300 h.
+            Corrígelo únicamente si esta pauta dice otra cosa.
+          </p>
+        )}
+        <div className="flex items-center gap-2">
+          <input type="number" inputMode="decimal" step="0.1" min="0" value={numero}
+                 onChange={(e) => setNumero(e.target.value)}
+                 placeholder="0" className={cls + ' max-w-[140px] tabular-nums'} />
+          <span className="text-xs text-gray-500">h</span>
+          <button type="button" disabled={saving || !sucio}
+                  onClick={() => onGuardar({
+                    valor_numerico: numero.trim() === '' ? null : Number(numero),
+                    resultado: numero.trim() === '' ? undefined : 'ok',
+                  })}
+                  className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40">
+            Guardar
+          </button>
+        </div>
       </div>
     )
   }
@@ -221,7 +288,7 @@ function CapturaItem({ it, onGuardar, saving }: {
       <div className="mt-2 flex items-center gap-2">
         <input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} className={cls + ' max-w-[190px]'} />
         <button type="button" disabled={saving || !sucio}
-                onClick={() => onGuardar({ mediciones: { ...cap, fecha: fecha || null } })}
+                onClick={() => onGuardar({ mediciones: { ...cap, fecha: fecha || null }, resultado: fecha ? 'ok' : undefined })}
                 className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40">
           Guardar
         </button>
@@ -236,7 +303,7 @@ function CapturaItem({ it, onGuardar, saving }: {
         <input value={opcion} onChange={(e) => setOpcion(e.target.value)}
                placeholder="OT-XX-XX" className={cls + ' max-w-[190px] font-mono'} />
         <button type="button" disabled={saving || !sucio}
-                onClick={() => onGuardar({ mediciones: { ...cap, opcion: opcion.trim() || null } })}
+                onClick={() => onGuardar({ mediciones: { ...cap, opcion: opcion.trim() || null }, resultado: opcion.trim() ? 'ok' : undefined })}
                 className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40">
           Guardar
         </button>
@@ -251,7 +318,7 @@ function CapturaItem({ it, onGuardar, saving }: {
       <textarea rows={2} value={texto} onChange={(e) => setTexto(e.target.value)}
                 placeholder="Escribe acá…" className={cls} />
       <button type="button" disabled={saving || !sucio}
-              onClick={() => onGuardar({ observacion: texto.trim() || null })}
+              onClick={() => onGuardar({ observacion: texto.trim() || null, resultado: texto.trim() ? 'ok' : undefined })}
               className="mt-1 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40">
         Guardar
       </button>
@@ -259,7 +326,11 @@ function CapturaItem({ it, onGuardar, saving }: {
   )
 }
 
-function MedidoresSection({ otId, online }: { otId: string; online: boolean }) {
+function MedidoresSection({ otId, online, onGuardado }: {
+  otId: string; online: boolean
+  /** [MIG496] Avisa cuando la persona guardó los medidores (para partir el reloj). */
+  onGuardado?: () => void
+}) {
   const { data: med, isLoading } = useMedidoresOT(otId)
   const guardar = useGuardarMedidores(otId)
   const [hm, setHm] = useState('')
@@ -287,8 +358,8 @@ function MedidoresSection({ otId, online }: { otId: string; online: boolean }) {
   // hecha, y el número lo arrastra el sistema del último valor conocido. Por eso
   // en producción hay 83 checklists con medidores y CERO escritos por alguien:
   // la sección se veía cerrada y nadie escribía nunca la lectura real. Ahora se
-  // queda abierta hasta que la confirme una persona. No bloquea: se puede seguir
-  // con el checklist igual.
+  // queda abierta hasta que la confirme una persona — y [MIG496] mientras no la
+  // confirme, el checklist entero queda bloqueado y el reloj no parte.
   const cerrado = !falta && med.anotado_por_persona && !editando
 
   const enviar = (confirmado: boolean) => {
@@ -303,6 +374,7 @@ function MedidoresSection({ otId, online }: { otId: string; online: boolean }) {
       onSuccess: (r) => {
         if (r?.requiere_confirmacion) { setAviso(r.motivo ?? 'Revisa el número.'); return }
         setAviso(null); setEditando(false)
+        onGuardado?.()
       },
       onError: (e) => setAviso((e as Error).message),
     })
@@ -740,6 +812,17 @@ export default function MecanicoOTPage() {
   const { data: items, isLoading } = useMecanicoChecklist(otId)
   const marcar = useMarcarItem(otId)
   const timing = useTimingMecanico(otId)
+  // [MIG496] Sin medidores guardados POR UNA PERSONA no se toca ninguna tarea:
+  // de ese número salen la próxima pauta y lo que se cobra. Y al guardarlos,
+  // el reloj de la jornada parte solo. (Si la consulta no cargó —p.ej. sin
+  // señal— no se bloquea: bloquear a ciegas dejaría inutilizable el offline.)
+  const { data: med } = useMedidoresOT(otId)
+  const medidoresPendientes = !!med && (
+    med.horometro == null
+    || (med.exige_kilometraje && med.kilometraje == null)
+    || (med.exige_cuenta_litros && med.cuenta_litros == null)
+    || !med.anotado_por_persona
+  )
 
   const [observations, setObservations] = useState<Record<string, string>>({})
   const fileRefs = useRef<Record<string, HTMLInputElement | null>>({})
@@ -885,6 +968,25 @@ export default function MecanicoOTPage() {
           {ot?.activo_codigo} {ot?.activo_patente && <span className="text-gray-500">· {ot.activo_patente}</span>}
         </div>
         <div className="text-xs text-gray-500">{ot?.activo_nombre}</div>
+        {/* [MIG496] El compromiso del plan es un DATO, no una pregunta del
+            checklist: horas de la visita (MIG493) y último día planificado. */}
+        {(() => {
+          const horas = ot?.horas_planificadas
+            ?? (ot?.tiempo_estimado_total_min != null && ot.tiempo_estimado_total_min > 0
+                ? Math.round(ot.tiempo_estimado_total_min / 6) / 10 : null)
+          const fecha = ot?.fecha_entrega_plan ?? ot?.fecha_programada
+          if (horas == null && !fecha) return null
+          const fmt = (d: string) =>
+            new Date(d.includes('T') ? d : `${d}T00:00:00`).toLocaleDateString('es-CL')
+          return (
+            <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 rounded-lg bg-blue-50 px-2 py-1 text-[11px] font-medium text-blue-800">
+              {horas != null && (
+                <span className="flex items-center gap-1"><Clock className="h-3 w-3" /> {horas} HH comprometidas</span>
+              )}
+              {fecha && <span>Entrega: {fmt(fecha)}</span>}
+            </div>
+          )
+        })()}
         <div className="mt-2 flex items-center gap-2 text-xs text-gray-600">
           <span className="font-semibold">{hechos}/{total} tareas</span>
           {total > 0 && (
@@ -904,7 +1006,7 @@ export default function MecanicoOTPage() {
       ) : (
       <div className="flex gap-2">
         {estado === 'asignada' && (
-          <button onClick={() => doTiming('iniciar')} disabled={timing.isPending}
+          <button onClick={() => doTiming('iniciar')} disabled={timing.isPending || medidoresPendientes}
                   className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-green-600 py-3 text-sm font-semibold text-white disabled:opacity-50">
             <Play className="h-4 w-4" /> Iniciar jornada
           </button>
@@ -953,8 +1055,16 @@ export default function MecanicoOTPage() {
       </p>
 
       {/* [MIG397] Con cuánto uso volvió el equipo. Va antes que todo lo demás
-          porque finalizar lo exige y se descubre tarde si queda al final. */}
-      <MedidoresSection otId={otId} online={online} />
+          porque [MIG496] sin medidores no se abre el checklist, y al guardarlos
+          el reloj de la jornada parte solo. */}
+      <MedidoresSection otId={otId} online={online}
+                        onGuardado={() => { if (estado === 'asignada') doTiming('iniciar') }} />
+      {medidoresPendientes && (
+        <p className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-900">
+          El checklist está bloqueado hasta que guardes los medidores del equipo.
+          Al guardarlos, el reloj de la jornada parte solo.
+        </p>
+      )}
 
       {/* Repuestos y materiales para reparar (los valida el jefe) */}
       <RecursosSection otId={otId} online={online}
@@ -971,13 +1081,15 @@ export default function MecanicoOTPage() {
         </p>
       )}
 
-      {/* Checklist */}
+      {/* Checklist — [MIG496] bloqueado (gris, sin toques) hasta guardar medidores */}
       {isLoading ? (
         <div className="flex justify-center py-8"><Spinner /></div>
       ) : total === 0 ? (
         <p className="py-8 text-center text-sm text-gray-400">Esta OT no tiene checklist (¿se cargó con conexión?).</p>
       ) : (
-        grupos.map((g) => {
+        <div aria-disabled={medidoresPendientes}
+             className={medidoresPendientes ? 'pointer-events-none select-none space-y-3 opacity-50' : 'space-y-3'}>
+        {grupos.map((g) => {
           const abierto = bloquesAbiertos.has(g.bloque)
           const nTotal = g.items.length
           const nHechas = g.items.filter((i) => i.resultado && i.resultado !== 'pendiente').length
@@ -1097,7 +1209,8 @@ export default function MecanicoOTPage() {
             )}
           </div>
           )
-        })
+        })}
+        </div>
       )}
 
       {/* Modal finalizar con firma del técnico */}

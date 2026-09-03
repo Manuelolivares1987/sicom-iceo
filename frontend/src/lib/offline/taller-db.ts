@@ -26,6 +26,9 @@ export type TallerPending = {
   foto_blob_id?: string | null
   mediciones?: MedicionItem                          // neumáticos (MIG203) o captura (MIG444)
   valor_numerico?: number | null                     // ítems de captura numérica (MIG444)
+  /** [MIG496] Firmas del ítem B11.07: al sincronizar se suben y su URL se
+   *  escribe en mediciones bajo el campo indicado (firma_operador_url / firma_taller_url). */
+  firmas_blob_ids?: { campo: string; blob_id: string }[]
   // kind = 'timing' (cronómetro de jornada)
   accion?: 'iniciar' | 'pausar' | 'finalizar'
   tecnico_id?: string | null        // quién apretó el reloj (MIG448)
