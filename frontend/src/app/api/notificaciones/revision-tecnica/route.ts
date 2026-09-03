@@ -27,6 +27,8 @@ type Rt = {
   codigo: string | null
   nombre: string | null
   cliente: string | null
+  /** [MIG505] La faena donde el equipo está físicamente: así se coordina la RT. */
+  zona: string
   fecha_vencimiento: string | null
   dias_restantes: number | null
   estado: 'vencido' | 'por_vencer'
@@ -82,29 +84,44 @@ export async function POST(req: Request) {
     </tr>`
   }
 
-  const tabla = (titulo: string, xs: Rt[], color: string, fondo: string) => xs.length === 0 ? '' : `
-    ${seccionTitulo(`${titulo} · ${xs.length}`, color, fondo)}
+  // [MIG505] Agrupado POR ZONA (la faena donde el equipo está): los de Spence
+  // juntos, los del taller Coquimbo juntos — como se coordina la ida a la
+  // planta de revisión. Dentro de cada zona, las vencidas primero.
+  const porZona = new Map<string, Rt[]>()
+  for (const f of filas) {
+    const k = f.zona || 'Sin zona'
+    porZona.set(k, [...(porZona.get(k) ?? []), f])
+  }
+
+  const bloques = Array.from(porZona.entries()).map(([zona, xs]) => {
+    const nVenc = xs.filter((x) => x.estado === 'vencido').length
+    return `
+    ${seccionTitulo(
+      `📍 ${esc(zona)} · ${xs.length} equipo${xs.length > 1 ? 's' : ''}${nVenc > 0 ? ` · ${nVenc} vencida${nVenc > 1 ? 's' : ''}` : ''}`,
+      nVenc > 0 ? MARCA.rojo : MARCA.verdeOscuro,
+      nVenc > 0 ? MARCA.rojoFondo : MARCA.verdeClaro)}
     ${tablaAbrir(['Equipo', 'Cliente', 'Vence', 'Plazo'])}
     ${xs.map(fila).join('')}
     ${tablaCerrar}`
+  }).join('')
 
   const base = process.env.NEXT_PUBLIC_SITE_URL || 'https://pilladoiceo.netlify.app'
   const html = emailShell({
     titulo: 'Revisión técnica de la flota',
-    subtitulo: `Resumen semanal · ${new Date().toLocaleDateString('es-CL', { day: '2-digit', month: 'long' })}`,
+    subtitulo: `Resumen semanal por zona · ${new Date().toLocaleDateString('es-CL', { day: '2-digit', month: 'long' })}`,
     chips: [
       ...(vencidas.length > 0
         ? [{ n: vencidas.length, label: 'RT vencidas', color: MARCA.rojo, fondo: MARCA.rojoFondo }] : []),
       ...(porVencer.length > 0
         ? [{ n: porVencer.length, label: 'Vencen en ≤30 días', color: MARCA.ambar, fondo: MARCA.ambarFondo }] : []),
+      { n: porZona.size, label: `Zona${porZona.size > 1 ? 's' : ''}`, color: MARCA.verdeOscuro, fondo: MARCA.verdeClaro },
     ],
     cuerpo: `
       ${vencidas.length > 0
         ? `<p style="margin:14px 0 0;font-size:13px;color:#4b5563">Un equipo con la RT
-           <b style="color:${MARCA.rojo}">vencida</b> no puede circular: agenda la planta de
-           revisión primero para estos.</p>` : ''}
-      ${tabla('Vencidas — no pueden circular', vencidas, MARCA.rojo, MARCA.rojoFondo)}
-      ${tabla('Por vencer (30 días)', porVencer, MARCA.ambar, MARCA.ambarFondo)}`,
+           <b style="color:${MARCA.rojo}">vencida</b> no puede circular. Cada zona trae
+           primero sus vencidas, para agendar la planta de revisión por lugar.</p>` : ''}
+      ${bloques}`,
     ctaUrl: `${base}/dashboard/flota/verificar/`,
     ctaTexto: 'Ver papeles de la flota',
     pie: 'Resumen semanal (lunes) de la revisión técnica, según el último certificado cargado por '
@@ -118,5 +135,5 @@ export async function POST(req: Request) {
 
   const r = await sendMail({ to, subject: asunto, html })
   if (!r.ok) return NextResponse.json({ error: r.error ?? 'No se pudo enviar' }, { status: 500 })
-  return NextResponse.json({ ok: true, equipos: filas.length, vencidas: vencidas.length, por_vencer: porVencer.length })
+  return NextResponse.json({ ok: true, equipos: filas.length, vencidas: vencidas.length, por_vencer: porVencer.length, zonas: porZona.size })
 }
