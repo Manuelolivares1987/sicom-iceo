@@ -19,6 +19,7 @@ import {
   rpcV3SetTiempo, rpcV3SetExcluido, rpcV3SetExcluidoBloque, rpcV3AgregarItem, rpcV3EliminarCustom,
   rpcV3ArrastrarNc, rpcV3RestaurarCompleto,
   rpcLiberarEjecucion, rpcReabrirPreparacion,
+  rpcSetCuadrilla, getTallerTecnicos,
 } from '@/lib/services/taller-plan-semanal'
 import {
   actualizarItem as actualizarItemV3,
@@ -1785,15 +1786,62 @@ function EditarOTCard({ otData, otId }: { otData: any; otId: string }) {
 // Main page
 // ---------------------------------------------------------------------------
 function PlanSemanalBanner({ otId }: { otId: string }) {
+  const qc = useQueryClient()
+  const { rol } = usePermissions()
+  // [03-09] El jefe verifica el checklist acá mismo y manda a producción:
+  // también acá tiene que poder cambiar la pareja de mecánicos, sin ir al
+  // Kanban del plan. rpcSetCuadrilla (MIG451) escribe tabla + texto.
+  const puedeEditarCuadrilla = ['administrador', 'subgerente_operaciones',
+    'jefe_mantenimiento', 'supervisor', 'planificador'].includes(rol ?? '')
   const { data: jornadas = [] } = useQuery({ queryKey: ['ot-jornadas', otId], queryFn: () => getJornadasDeOT(otId), enabled: !!otId, staleTime: 30_000 })
-  if (jornadas.length === 0) return null
+  const { data: tecnicos = [] } = useQuery({
+    queryKey: ['taller-tecnicos-activos'], queryFn: () => getTallerTecnicos(),
+    staleTime: 300_000, enabled: puedeEditarCuadrilla,
+  })
+  const [editando, setEditando] = useState(false)
+  const [sel, setSel] = useState<string[]>([])
+  const [errorCuadrilla, setErrorCuadrilla] = useState<string | null>(null)
+
   // [MIG455] Deduplicar por NOMBRE, no por el texto completo de cada jornada.
   // «Marco Díaz, Joel Coo», «Marco Díaz» y «Joel Coo, Marco Díaz» son tres textos
   // distintos: un Set sobre ellos los deja pasar a los tres y la lista repite gente.
   const cuadrillas = Array.from(new Set(
     jornadas.flatMap((j) => (j.cuadrilla ?? '').split(',')).map((n) => n.trim()).filter(Boolean),
   )).sort((a, b) => a.localeCompare(b, 'es'))
+
+  const guardar = useMutation({
+    mutationFn: async () => {
+      // La pareja es de la VISITA: se escribe en cada jornada para que el plan
+      // y la OT no puedan discrepar (misma regla que el modal del conjunto).
+      for (const j of jornadas) {
+        await rpcSetCuadrilla(j.plan_ot_id, sel, 'Editada desde la OT al verificar el checklist')
+      }
+    },
+    onSuccess: () => {
+      setEditando(false); setErrorCuadrilla(null)
+      qc.invalidateQueries({ queryKey: ['ot-jornadas', otId] })
+    },
+    onError: (e) => setErrorCuadrilla((e as Error).message),
+  })
+
+  if (jornadas.length === 0) return null
   const responsable = cuadrillas.length ? cuadrillas.join(' · ') : (jornadas.find((j) => j.responsable)?.responsable ?? 'Sin asignar')
+
+  const abrirEditor = () => {
+    // Pre-marcar a los que ya están, casando el nombre del texto con el catálogo.
+    const actuales = new Set(cuadrillas.map((n) => n.toLowerCase()))
+    setSel(tecnicos.filter((t) => actuales.has(t.nombre.trim().toLowerCase())).map((t) => t.id))
+    setErrorCuadrilla(null)
+    setEditando(true)
+  }
+  // El RPC (MIG451) acepta máximo 2: es la pareja, no una cuadrilla abierta.
+  const toggleTec = (id: string) =>
+    setSel((p) => {
+      if (p.includes(id)) return p.filter((x) => x !== id)
+      if (p.length >= 2) return [p[1], id]  // entra el nuevo, sale el más antiguo
+      return [...p, id]
+    })
+
   return (
     <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 p-3">
       <div className="text-sm font-medium text-blue-800">
@@ -1807,8 +1855,94 @@ function PlanSemanalBanner({ otId }: { otId: string }) {
           </span>
         ))}
       </div>
-      <div className="mt-1.5 text-xs text-blue-700">Responsable / cuadrilla del plan: <b>{responsable}</b></div>
+
+      {editando ? (
+        <div className="mt-2 rounded-lg border border-blue-200 bg-white p-2.5">
+          <p className="text-xs font-semibold text-gray-700">
+            ¿Quiénes trabajan esta visita? <span className="font-normal text-gray-400">(máximo 2 — la pareja)</span>
+          </p>
+          <div className="mt-1.5 flex flex-wrap gap-1">
+            {tecnicos.map((t) => {
+              const on = sel.includes(t.id)
+              return (
+                <button key={t.id} type="button" onClick={() => toggleTec(t.id)} title={t.especialidad || undefined}
+                        className={`rounded border px-2 py-1 text-[11px] ${
+                          on ? 'border-blue-500 bg-blue-500 text-white' : 'border-gray-200 bg-white text-gray-600'}`}>
+                  {t.nombre}
+                  {t.especialidad && <span className={`ml-1 text-[9px] ${on ? 'text-blue-100' : 'text-gray-400'}`}>{t.especialidad}</span>}
+                </button>
+              )
+            })}
+          </div>
+          {errorCuadrilla && (
+            <p className="mt-1.5 rounded border border-red-200 bg-red-50 px-2 py-1 text-[11px] text-red-700">{errorCuadrilla}</p>
+          )}
+          <div className="mt-2 flex gap-2">
+            <Button size="sm" disabled={sel.length === 0 || guardar.isPending} onClick={() => guardar.mutate()}>
+              {guardar.isPending ? <Spinner className="mr-1 h-3.5 w-3.5" /> : null}
+              Guardar cuadrilla ({sel.length})
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setEditando(false)} disabled={guardar.isPending}>
+              Cancelar
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-blue-700">
+          <span>Responsable / cuadrilla del plan: <b>{responsable}</b></span>
+          {puedeEditarCuadrilla && (
+            <button type="button" onClick={abrirEditor}
+                    className="font-semibold text-blue-600 underline">
+              Cambiar la pareja
+            </button>
+          )}
+        </div>
+      )}
     </div>
+  )
+}
+
+// ── NC recobrables al cliente de este equipo (atajo al informe de recobro) ──
+// El informe de recobro vive en la bandeja de NC (se arma por patente, con las
+// NC valorizadas y folio). Desde la OT, el jefe ve cuántas hay por cobrar y
+// llega en un click al modal que lo arma.
+function RecobrablesCard({ activoId }: { activoId: string }) {
+  const { data: n = 0 } = useQuery({
+    queryKey: ['nc-recobrables-activo', activoId],
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from('v_nc_recepcion')
+        .select('id', { count: 'exact', head: true })
+        .eq('activo_id', activoId)
+        .in('recobro', ['cliente', 'compartido'])
+        .is('archivado_at', null)
+        .is('recobro_informe_id', null)
+      if (error) throw new Error(error.message)
+      return count ?? 0
+    },
+    staleTime: 30_000,
+    retry: false,
+  })
+  if (!n) return null
+  return (
+    <Card className="mt-4 border-violet-200 bg-violet-50/50">
+      <CardContent className="flex flex-wrap items-center gap-3 p-4">
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold text-violet-900">
+            Este equipo tiene {n} NC recobrable{n > 1 ? 's' : ''} al cliente sin informe
+          </p>
+          <p className="text-xs text-violet-700">
+            El informe de recobro se arma por patente con las NC valorizadas (materiales + HH) y sale
+            con folio para cobrarlo. Es distinto del informe técnico: este es la cuenta, aquel es el relato.
+          </p>
+        </div>
+        <Link href={`/dashboard/mantenimiento/no-conformidades?recobro=${activoId}`}>
+          <Button variant="secondary" size="sm" className="border-violet-300 text-violet-700">
+            Armar informe de recobro
+          </Button>
+        </Link>
+      </CardContent>
+    </Card>
   )
 }
 
@@ -2013,7 +2147,10 @@ export default function OrdenTrabajoDetailPage() {
         </CardContent>
       </Card>
 
-      {/* Informe técnico de intervención (Incremento 1) */}
+      {/* NC recobrables al cliente: atajo al informe de recobro (la cuenta) */}
+      {otData.activo_id && <RecobrablesCard activoId={otData.activo_id} />}
+
+      {/* Informe técnico de intervención (Incremento 1): el relato de la visita */}
       {id && <InformeTecnicoSeccion otId={id} activoId={otData.activo_id} otEstado={otData.estado} />}
 
       {/* Bottom action bar — technician actions */}
