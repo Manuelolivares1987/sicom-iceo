@@ -178,9 +178,10 @@ export function PlanificarOsModal({ patente, ncs, preSeleccion, onClose, onDone 
                 })}
               </div>
               <p className="mt-1 text-[10px] text-gray-500">
-                {/* [MIG499] Asignar ya no saca a nadie de su otra OS: el trabajo
-                    anterior queda PAUSADO y sigue en su teléfono. */}
-                Si alguno tiene el reloj corriendo en otra OS, ese trabajo queda pausado (no se le quita).
+                {/* [MIG500] En terreno el jefe MUEVE a la gente (salió una
+                    emergencia): el sistema lo saca de la OS anterior y lo pone
+                    acá. Una persona no está en dos OS en paralelo. */}
+                Si alguno está en otra OS, se le saca de ahí (su reloj se cierra y queda el motivo escrito).
               </p>
             </>
           )}
