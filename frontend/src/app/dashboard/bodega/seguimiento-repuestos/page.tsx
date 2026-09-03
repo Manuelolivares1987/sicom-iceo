@@ -22,6 +22,7 @@ import {
   registrarNumeroOcExterno, RECURSO_ESTADO_LABEL, type OTRecursoSeguimiento,
 } from '@/lib/services/ot-recursos'
 import { buscarProductos, } from '@/lib/services/ot-materiales'
+import { enviarCorreoCompras } from '@/lib/services/correo-compras'
 import { listarProveedoresActivos } from '@/lib/services/bodega-oc'
 
 type Filtro = 'pedidos' | 'por_comprar' | 'en_compra' | 'recibido' | 'todos'
@@ -152,6 +153,17 @@ export default function SeguimientoRepuestosPage() {
   const [filtro, setFiltro] = useState<Filtro>('por_comprar')
   const [sel, setSel] = useState<Set<string>>(new Set())
   const [vincular, setVincular] = useState<OTRecursoSeguimiento | null>(null)
+  // [03-09] Correo a compras con autorización explícita (fase de pruebas).
+  const [cotizar, setCotizar] = useState<{ recursoId: string; nombre: string; cantidad: number } | null>(null)
+  const [cotizarBusy, setCotizarBusy] = useState(false)
+  async function confirmarCotizar() {
+    if (!cotizar) return
+    setCotizarBusy(true)
+    const r = await enviarCorreoCompras(cotizar.recursoId)
+    setCotizarBusy(false)
+    if (r.ok) { toast.success(`Correo enviado a compras (${r.enviado_a})`); setCotizar(null) }
+    else toast.error(r.error ?? 'No se pudo enviar el correo')
+  }
   // Modal generar OC
   const [ocOpen, setOcOpen] = useState(false)
   const [proveedor, setProveedor] = useState('')
@@ -322,6 +334,14 @@ export default function SeguimientoRepuestosPage() {
                             {f.producto_id ? 'Otro código' : 'Vincular a producto para comprar'}
                           </button>
                         )}
+                        {/* [03-09] Fase de pruebas: el correo a compras sale solo
+                            con autorización explícita, desde acá o desde el vale. */}
+                        {f.por_comprar && (
+                          <button onClick={() => setCotizar({ recursoId: f.id, nombre: f.producto_nombre ?? f.descripcion ?? 'ítem', cantidad: f.cantidad_aprobada ?? f.cantidad })}
+                                  className="mt-1 flex items-center gap-1 rounded border border-violet-300 bg-violet-50 px-2 py-0.5 text-[11px] font-semibold text-violet-700">
+                            ✉ Cotizar por correo a compras
+                          </button>
+                        )}
                       </td>
                       <td className="p-2 whitespace-nowrap">
                         <div className="font-mono text-xs font-semibold">{f.ot_folio}</div>
@@ -437,6 +457,33 @@ export default function SeguimientoRepuestosPage() {
                     })}>
               {generarOc.isPending ? <Spinner className="h-4 w-4 mr-1" /> : <ShoppingCart className="h-4 w-4 mr-1" />}
               Generar OC
+            </Button>
+          </ModalFooter>
+        </Modal>
+      )}
+
+      {/* [03-09] ¿Enviar correo a compras? Autorización explícita (fase de pruebas). */}
+      {cotizar && (
+        <Modal open onClose={() => setCotizar(null)} title="¿Enviar correo a compras?">
+          <div className="space-y-3">
+            <div className="rounded-lg border bg-gray-50 p-2 text-sm">
+              <div className="font-medium text-gray-800">{cotizar.nombre}</div>
+              <div className="text-xs text-gray-500">{cotizar.cantidad} para cotizar</div>
+            </div>
+            <p className="text-xs text-gray-600">
+              Se enviará un correo a <b>compras</b> con la foto del repuesto, la descripción, el
+              código y los datos del camión — todo lo necesario para cotizar. La respuesta te
+              llega directo a ti.
+            </p>
+            <p className="text-[11px] text-gray-400">Nada sale automático: parte solo si tú lo autorizas aquí.</p>
+          </div>
+          <ModalFooter>
+            <Button variant="outline" onClick={() => setCotizar(null)} disabled={cotizarBusy}>
+              No, por ahora
+            </Button>
+            <Button disabled={cotizarBusy} onClick={confirmarCotizar}>
+              {cotizarBusy ? <Spinner className="h-4 w-4 mr-1" /> : <ShoppingCart className="h-4 w-4 mr-1" />}
+              Sí, enviar correo
             </Button>
           </ModalFooter>
         </Modal>

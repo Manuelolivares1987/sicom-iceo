@@ -27,6 +27,7 @@ import {
 } from '@/lib/services/bodega-tickets'
 import { buscarProductos } from '@/lib/services/ot-materiales'
 import { getSolicitudesBodega, atenderSolicitudBodega, type BodegaSolicitud } from '@/lib/services/bodega-solicitudes'
+import { enviarCorreoCompras } from '@/lib/services/correo-compras'
 import { PortalesValeCard } from '@/components/bodega/portales-vale-card'
 import { InsumosAprobadosCard } from '@/components/bodega/insumos-aprobados-card'
 import { useMaterialesPendientesDespacho, useDespacharMaterialOT } from '@/hooks/use-ot-materiales'
@@ -423,6 +424,20 @@ function DespacharTab() {
     setACompraMotivo('')
     setACompraTarget({ id: i.id, nombre: i.producto_nombre ?? i.descripcion ?? 'ítem', pendiente: i.pendiente })
   }
+  // [03-09] Fase de pruebas del correo a compras: NADA sale automático. Al
+  // mandar a compra, la pantalla pregunta si además avisar por correo, y solo
+  // con ese OK se envía (con foto, descripción y datos del camión).
+  const [correoCompras, setCorreoCompras] = useState<{ recursoId: string; nombre: string; cantidad: number } | null>(null)
+  const [correoBusy, setCorreoBusy] = useState(false)
+  async function confirmarEnvioCorreo() {
+    if (!correoCompras) return
+    setCorreoBusy(true)
+    const r = await enviarCorreoCompras(correoCompras.recursoId)
+    setCorreoBusy(false)
+    if (r.ok) { toast.success(`Correo enviado a compras (${r.enviado_a})`); setCorreoCompras(null) }
+    else toast.error(r.error ?? 'No se pudo enviar el correo')
+  }
+
   async function confirmarACompra() {
     if (!aCompraTarget) return
     setACompraBusy(aCompraTarget.id)
@@ -430,6 +445,7 @@ function DespacharTab() {
       const r = await enviarItemACompra(aCompraTarget.id, aCompraMotivo.trim() || null)
       toast.success(`"${aCompraTarget.nombre}" enviado a compra (${r.cantidad}). Síguelo en Seguimiento repuestos.`)
       qc.invalidateQueries({ queryKey: ['ticket-items'] })
+      setCorreoCompras({ recursoId: r.recurso_id, nombre: aCompraTarget.nombre, cantidad: r.cantidad })
       setACompraTarget(null)
     } catch (e) { toast.error((e as Error).message) } finally { setACompraBusy(null) }
   }
@@ -720,6 +736,36 @@ function DespacharTab() {
             : '✓ Entrega PARCIAL registrada — el ticket sigue abierto por el saldo.'}
           {resultado.despacho && <div className="mt-1 font-mono text-xs">Despacho: {resultado.despacho}</div>}
         </div>
+      )}
+
+      {/* [03-09] ¿Avisar a compras por correo? Solo con autorización explícita
+          (fase de pruebas): sale con foto, descripción y datos del camión. */}
+      {correoCompras && (
+        <Modal open onClose={() => setCorreoCompras(null)} title="¿Enviar correo a compras?">
+          <div className="space-y-3">
+            <div className="rounded-lg border bg-gray-50 p-2 text-sm">
+              <div className="font-medium text-gray-800">{correoCompras.nombre}</div>
+              <div className="text-xs text-gray-500">{correoCompras.cantidad} para cotizar</div>
+            </div>
+            <p className="text-xs text-gray-600">
+              Se enviará un correo a <b>compras</b> con la foto del repuesto, la descripción,
+              el código y los datos del camión — todo lo necesario para cotizar. La respuesta
+              de compras te llega directo a ti.
+            </p>
+            <p className="text-[11px] text-gray-400">
+              Nada sale automático: el correo parte solo si tú lo autorizas aquí.
+            </p>
+          </div>
+          <ModalFooter>
+            <Button variant="outline" onClick={() => setCorreoCompras(null)} disabled={correoBusy}>
+              No, por ahora
+            </Button>
+            <Button onClick={confirmarEnvioCorreo} disabled={correoBusy}>
+              {correoBusy ? <Spinner className="h-4 w-4 mr-1" /> : <PenLine className="h-4 w-4 mr-1" />}
+              Sí, enviar correo
+            </Button>
+          </ModalFooter>
+        </Modal>
       )}
 
       {/* Modal: enviar ítem a compra (reemplaza el prompt del navegador) */}
