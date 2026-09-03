@@ -1,27 +1,25 @@
 'use client'
 
-// Las solicitudes de repuestos que el operador levantó y esperan al jefe.
+// [03-09] Las solicitudes de repuestos del operador, como ADVERTENCIA.
 //
-// Antes esto solo avisaba por la campanita, y el jefe de taller —que anda en
-// terreno, no frente al computador— simplemente no la mira. Ahora vive donde
-// él ya entra a trabajar: arriba de la bandeja de no conformidades, con la
-// foto del operador y los dos botones a mano. Se aprueba desde el teléfono
-// sin abrir el Plan Taller.
+// Antes este bloque traía los botones Aprobar/Rechazar arriba de la bandeja.
+// Manuel lo dio vuelta: arriba va solo el aviso — la APROBACIÓN se hace al
+// ANALIZAR cada NC, donde el jefe ve la evidencia completa (foto del hallazgo,
+// quién paga, qué más necesita el equipo) y no un pedido suelto fuera de
+// contexto. Desde MIG497 el pedido del operador cae amarrado a su NC, así que
+// la ficha de la NC lo muestra y ahí mismo se aprueba o se ajusta.
+//
+// Los pedidos que no cuelgan de ningún equipo (insumos del taller) se siguen
+// validando en el Plan Taller, como siempre.
 
-import { useState } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { PackageCheck, Loader2, Camera, Clock } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
+import { AlertTriangle, Camera, Clock } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { useToast } from '@/contexts/toast-context'
-import { getSeguimientoRecursos, validarRecurso, type OTRecursoSeguimiento } from '@/lib/services/ot-recursos'
+import { getSeguimientoRecursos } from '@/lib/services/ot-recursos'
 import { cn } from '@/lib/utils'
 
 export function RepuestosPorAprobar({ onCambio }: { onCambio?: () => void }) {
-  const qc = useQueryClient()
-  const toast = useToast()
-  const [busy, setBusy] = useState<string | null>(null)
-  const [ajuste, setAjuste] = useState<Record<string, string>>({})
+  void onCambio // la advertencia no decide nada: no hay cambio que avisar
 
   const { data: todos = [] } = useQuery({
     queryKey: ['recursos-por-aprobar'],
@@ -30,115 +28,43 @@ export function RepuestosPorAprobar({ onCambio }: { onCambio?: () => void }) {
   })
   const pendientes = todos.filter((r) => r.estado === 'solicitado')
 
-  async function decidir(r: OTRecursoSeguimiento, accion: 'aprobar' | 'rechazar') {
-    setBusy(r.id)
-    try {
-      // Si el jefe corrigió la cantidad, se aprueba la que él puso.
-      const txt = ajuste[r.id]
-      const cant = txt !== undefined && txt !== '' ? Number(txt) : null
-      if (accion === 'aprobar' && cant !== null && (!Number.isFinite(cant) || cant <= 0)) {
-        toast.error('La cantidad tiene que ser mayor que cero'); return
-      }
-      await validarRecurso({ recursoId: r.id, accion, cantidadAprobada: accion === 'aprobar' ? cant : null })
-      toast.success(accion === 'aprobar'
-        ? `Aprobado: ${cant ?? r.cantidad} ${r.unidad ?? 'un'} de ${r.producto_nombre ?? r.descripcion} para ${r.activo_patente ?? r.ot_folio}`
-        : `Rechazado el pedido de ${r.activo_patente ?? r.ot_folio}`)
-      qc.invalidateQueries({ queryKey: ['recursos-por-aprobar'] })
-      qc.invalidateQueries({ queryKey: ['vale-equipos-listos'] })
-      onCambio?.()
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'No se pudo registrar la decisión')
-    } finally { setBusy(null) }
-  }
-
   if (pendientes.length === 0) return null
 
   return (
-    <Card className="border-orange-300 bg-orange-50/60">
+    <Card className="border-amber-300 bg-amber-50/70">
       <CardContent className="p-3 sm:p-4">
-        <div className="mb-3 flex items-center gap-2">
-          <PackageCheck className="h-5 w-5 shrink-0 text-orange-600" />
-          <h2 className="text-base font-bold text-orange-900">
-            {pendientes.length} pedido{pendientes.length > 1 ? 's' : ''} esperando tu aprobación
+        <div className="flex items-center gap-2">
+          <AlertTriangle className="h-5 w-5 shrink-0 text-amber-600" />
+          <h2 className="text-base font-bold text-amber-900">
+            El operador pidió repuestos: {pendientes.length} pedido{pendientes.length > 1 ? 's' : ''} sin aprobar
           </h2>
         </div>
+        <p className="mt-1 text-xs text-amber-800">
+          Se aprueban <b>al analizar la NC</b>: abre el equipo abajo y entra a la ficha del
+          hallazgo — ahí está el pedido con su foto, junto a la evidencia y el recobro.
+          Los insumos del taller (sin equipo) se validan en el Plan Taller.
+        </p>
 
-        <div className="grid gap-2 lg:grid-cols-2">
+        <div className="mt-2 flex flex-wrap gap-1.5">
           {pendientes.map((r) => {
             const espera = r.dias_desde_solicitud ?? 0
             return (
-              <div key={r.id} className="rounded-lg border border-orange-200 bg-white p-3">
-                <div className="flex items-start gap-3">
-                  {/* La foto del operador es la evidencia: grande y clickeable. */}
-                  {r.fotos?.[0] ? (
-                    <a href={r.fotos[0]} target="_blank" rel="noreferrer" className="shrink-0" title="Ver la foto del operador">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={r.fotos[0]} alt="Foto del pedido" className="h-16 w-16 rounded border object-cover hover:opacity-80" />
-                    </a>
-                  ) : (
-                    <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded border border-dashed border-gray-300 text-gray-300">
-                      <Camera className="h-5 w-5" />
-                    </span>
-                  )}
-
-                  <div className="min-w-0 flex-1">
-                    {/* [MIG386] Un pedido va contra un equipo o contra el
-                        taller. Mostrar «OT null» en los del taller dejaba al
-                        jefe sin saber a qué le está dando el visto bueno. */}
-                    {r.es_insumo_taller ? (
-                      <p className="text-sm font-bold text-gray-900">
-                        {r.ceco_nombre ?? 'Taller'}
-                        <span className="ml-1.5 rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-semibold text-gray-600">
-                          insumo del taller
-                        </span>
-                      </p>
-                    ) : (
-                      <p className="text-sm font-bold text-gray-900">
-                        {r.activo_patente ?? r.activo_codigo ?? '—'}
-                        <span className="ml-1.5 text-[11px] font-normal text-muted-foreground">OT {r.ot_folio}</span>
-                      </p>
-                    )}
-                    <p className="text-sm text-gray-800">
-                      {r.cantidad} {r.unidad ?? 'un'} · {r.producto_nombre ?? r.descripcion ?? 'Sin descripción'}
-                    </p>
-                    {r.comentario && <p className="mt-0.5 text-xs text-gray-600">«{r.comentario}»</p>}
-                    <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[11px] text-muted-foreground">
-                      <span>{r.solicitado_nombre ?? 'Operador'}</span>
-                      {espera > 0 && (
-                        <span className={cn('inline-flex items-center gap-0.5', espera >= 3 && 'font-semibold text-red-600')}>
-                          <Clock className="h-3 w-3" />
-                          {espera} día{espera > 1 ? 's' : ''} esperando
-                        </span>
-                      )}
-                      {r.stock_total !== null && (
-                        <span className={r.stock_total > 0 ? 'text-emerald-700' : 'text-amber-700'}>
-                          {r.stock_total > 0 ? `${r.stock_total} en bodega` : 'sin stock — habrá que comprarlo'}
-                        </span>
-                      )}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Botones grandes: esto se aprieta con el dedo, en terreno. */}
-                <div className="mt-2.5 flex items-center gap-2">
-                  <input
-                    type="number" inputMode="decimal" min={0} step="any"
-                    placeholder={`${r.cantidad}`}
-                    value={ajuste[r.id] ?? ''}
-                    onChange={(e) => setAjuste((p) => ({ ...p, [r.id]: e.target.value }))}
-                    title="Cambia la cantidad solo si vas a aprobar menos de lo pedido"
-                    className="w-20 rounded-md border px-2 py-2 text-sm"
-                  />
-                  <Button size="sm" disabled={busy === r.id} onClick={() => decidir(r, 'aprobar')}
-                          className="flex-1 bg-emerald-600 py-2.5 font-bold hover:bg-emerald-700">
-                    {busy === r.id ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Aprobar'}
-                  </Button>
-                  <Button size="sm" variant="outline" disabled={busy === r.id} onClick={() => decidir(r, 'rechazar')}
-                          className="border-red-300 py-2.5 text-red-700 hover:bg-red-50">
-                    Rechazar
-                  </Button>
-                </div>
-              </div>
+              <span key={r.id}
+                    className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-white px-2.5 py-1 text-[11px] text-gray-700">
+                <b className="text-gray-900">
+                  {r.es_insumo_taller ? (r.ceco_nombre ?? 'Taller') : (r.activo_patente ?? r.activo_codigo ?? r.ot_folio ?? '—')}
+                </b>
+                <span className="max-w-[180px] truncate">
+                  {r.cantidad} {r.unidad ?? 'un'} · {r.producto_nombre ?? r.descripcion ?? 'sin descripción'}
+                </span>
+                {r.fotos?.[0] && <Camera className="h-3 w-3 text-gray-400" />}
+                {espera > 0 && (
+                  <span className={cn('inline-flex items-center gap-0.5 text-gray-500',
+                                      espera >= 3 && 'font-semibold text-red-600')}>
+                    <Clock className="h-3 w-3" /> {espera} d
+                  </span>
+                )}
+              </span>
             )
           })}
         </div>

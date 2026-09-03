@@ -18,7 +18,7 @@ import { usePermissions } from '@/hooks/use-permissions'
 import {
   getNcRecepcion, planificarNcEquipo, asignarRecursosNcEquipo, getNcMaterialesEquipo,
   registrarNcAdhoc, generarNcDesdeRecepcion, setRecobroNc, armarInformeRecobro,
-  guardarManoObraNc, planificarNc, getNcMateriales,
+  planificarNc, getNcMateriales,
   getRecepcionesParaNc, getActivosParaNc, subirFotoNc, RECOBRO_LABEL, RECOBRO_FUENTE_TXT,
   type NcRecepcion, type NcMaterial, type RecobroValor,
 } from '@/lib/services/no-conformidades'
@@ -781,9 +781,10 @@ function RecobroResumenEquipo({ eq, onDone }: { eq: EquipoNC; onDone: () => void
 }
 
 // ── Ficha de UNA No Conformidad (MIG251) ────────────────────────────────────
-// Todo el análisis de la NC en un solo lugar: la evidencia, quién paga, los
-// recursos que necesita (grupo, horas, materiales), lo que pidió el operador y
-// las notas — y de ahí sale planificada o al informe de recobro.
+// Todo el ANÁLISIS de la NC en un solo lugar: la evidencia, quién paga, los
+// insumos (aprobar lo que pidió el operador y agregar más) y las notas — y de
+// ahí sale planificada o al informe de recobro. La mano de obra (grupo, HH,
+// días) NO va acá: se define al planificar, donde el conjunto genera la orden.
 function NcFichaModal({ nc, patente, onClose, onDone }: {
   nc: NcRecepcion; patente: string; onClose: () => void; onDone: () => void
 }) {
@@ -792,42 +793,18 @@ function NcFichaModal({ nc, patente, onClose, onDone }: {
   const { canEdit, canCreate } = usePermissions()
   const puedeGestionar = canEdit('mantenimiento') || canCreate('mantenimiento')
 
-  const { data: prodRes } = useQuery({ queryKey: ['productos-nc'], queryFn: () => getProductos(), staleTime: 300_000 })
-  const productos = (prodRes?.data ?? []) as Array<{ id: string; codigo: string; nombre: string; categoria: string }>
-  const { data: categorias = [] } = useQuery({ queryKey: ['producto-categorias-activas'], queryFn: () => getCategoriasProducto(true), staleTime: 300_000 })
-  const { data: tecnicosCat = [] } = useQuery({ queryKey: ['taller-tecnicos-activos'], queryFn: () => getTallerTecnicos(), staleTime: 300_000 })
-  const { data: matsGuardados, isLoading: cargandoMats } = useQuery({
-    queryKey: ['nc-materiales', nc.id], queryFn: () => getNcMateriales(nc.id),
-  })
-
-  type MatRow = NcMaterial & { solicitar?: boolean; foto?: File | null }
-  const [mecanicos, setMecanicos] = useState<string[]>(() => nombresUnicos(nc.grupo_trabajo))
-  const [horas, setHoras] = useState(nc.horas_estimadas ? String(nc.horas_estimadas) : '')
-  const [dias, setDias] = useState(nc.tiempo_estimado_dias ? String(nc.tiempo_estimado_dias) : '')
   const [recobro, setRecobro] = useState<RecobroValor | null>(nc.recobro)
   const [recobroNota, setRecobroNota] = useState(nc.recobro_nota ?? '')
   const [saving, setSaving] = useState(false)
   const [planificando, setPlanificando] = useState(false)
 
-  const opcionesTecnicos = useMemo(() => {
-    const base = tecnicosCat.length > 0
-      ? tecnicosCat.map((t) => ({ nombre: t.nombre, especialidad: t.especialidad }))
-      : (MECANICOS as readonly string[]).map((m) => ({ nombre: m, especialidad: '' }))
-    const extra = mecanicos.filter((m) => !base.some((b) => b.nombre === m)).map((m) => ({ nombre: m, especialidad: '' }))
-    return [...base, ...extra]
-  }, [tecnicosCat, mecanicos])
-
+  // [03-09] La mano de obra (grupo, HH, días) SALIÓ de esta ficha: eso se
+  // decide al PLANIFICAR, donde el conjunto de NC del equipo genera la orden
+  // de trabajo/servicio. Analizar la NC es: mirar la evidencia, decidir quién
+  // paga y aprobar los insumos que pidió el operador.
   const guardar = async () => {
     setSaving(true)
     try {
-      // Solo mano de obra: los insumos se piden uno a uno en su propio panel, y
-      // guardarlos aquí los borraría (fn_asignar_recursos_nc reescribe la lista).
-      await guardarManoObraNc({
-        ncId: nc.id,
-        grupo: mecanicos.length ? mecanicos.join(', ') : null,
-        horas: horas ? Number(horas) : null,
-        tiempoDias: dias ? Number(dias) : null,
-      })
       // La clasificación de recobro solo se toca si el jefe la cambió
       if (recobro !== nc.recobro || (recobroNota.trim() || null) !== nc.recobro_nota) {
         await setRecobroNc([nc.id], recobro, recobroNota.trim() || null)
@@ -915,33 +892,14 @@ function NcFichaModal({ nc, patente, onClose, onDone }: {
                  className="mt-1.5 w-full rounded border border-gray-300 px-2 py-1.5 text-xs" />
         </div>
 
-        {/* ── Recursos de ESTA NC ── */}
-        <div>
-          <label className="text-xs font-medium">Grupo de trabajo (mano de obra)</label>
-          <div className="mt-1 flex flex-wrap gap-1">
-            {opcionesTecnicos.map((t) => {
-              const on = mecanicos.includes(t.nombre)
-              return (
-                <button key={t.nombre} type="button" disabled={!puedeGestionar} title={t.especialidad || undefined}
-                        onClick={() => setMecanicos((p) => p.includes(t.nombre) ? p.filter((x) => x !== t.nombre) : [...p, t.nombre])}
-                        className={`rounded border px-2 py-1 text-[11px] disabled:opacity-50 ${on ? 'border-blue-500 bg-blue-500 text-white' : 'border-gray-200 bg-white text-gray-600'}`}>
-                  {t.nombre}
-                  {t.especialidad && <span className={`ml-1 text-[9px] ${on ? 'text-blue-100' : 'text-gray-400'}`}>{t.especialidad}</span>}
-                </button>
-              )
-            })}
-          </div>
-        </div>
-        <div className="grid grid-cols-2 gap-2">
-          <label className="text-xs font-medium">Horas estimadas (HH)
-            <input type="number" value={horas} onChange={(e) => setHoras(e.target.value)} disabled={!puedeGestionar}
-                   className="mt-0.5 w-full rounded border px-2 py-1.5 text-sm" />
-          </label>
-          <label className="text-xs font-medium">Tiempo (días)
-            <input type="number" value={dias} onChange={(e) => setDias(e.target.value)} disabled={!puedeGestionar}
-                   className="mt-0.5 w-full rounded border px-2 py-1.5 text-sm" />
-          </label>
-        </div>
+        {/* [03-09] Acá había «Grupo de trabajo» y «Horas estimadas». Se fueron:
+            la mano de obra se define al PLANIFICAR, donde el conjunto de NC del
+            equipo genera la orden. Pedírsela al que analiza era hacerle decidir
+            dos veces lo mismo, en dos pantallas distintas. */}
+        <p className="rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-1.5 text-[11px] text-gray-500">
+          El grupo de trabajo y las horas se asignan al <b>planificar</b> (ahí el conjunto de
+          NC del equipo genera la orden de trabajo).
+        </p>
 
         {/* ── UN solo lugar para pedir a bodega (MIG254) ── */}
         <InsumosNC ncId={nc.id} puedeGestionar={puedeGestionar} otId={nc.plan_ot_id ?? nc.ot_id} />
