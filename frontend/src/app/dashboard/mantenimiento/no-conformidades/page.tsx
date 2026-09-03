@@ -184,6 +184,11 @@ export default function NoConformidadesPage() {
   const [genOpen, setGenOpen] = useState(false)
   const [adhocOpen, setAdhocOpen] = useState(false)
   const [valeOpen, setValeOpen] = useState(false)
+  // [03-09] Llegada desde la OT con ?recobro=<activoId>: abrir directo el
+  // modal del informe de recobro de ese equipo.
+  const [recobroParam] = useState(() =>
+    typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('recobro') : null)
+  const [recobroAutoAbierto, setRecobroAutoAbierto] = useState(false)
   // [26-08] Lo mejor de esta pantalla —la foto del daño y la frase textual del
   // mecánico— venía plegado, y la instrucción para abrirlo estaba en gris de
   // once píxeles dentro de un párrafo de sesenta palabras que nadie lee.
@@ -275,6 +280,15 @@ export default function NoConformidadesPage() {
     setExpandido(Object.fromEntries(equipos.slice(0, 1).map((e) => [e.activoId, true])))
     setAutoAbierto(true)
   }, [equipos, autoAbierto])
+
+  // [03-09] Atajo desde la OT: ?recobro=<activoId> abre el modal del informe
+  // de recobro de ese equipo apenas cargan los datos.
+  useEffect(() => {
+    if (!recobroParam || recobroAutoAbierto || equipos.length === 0) return
+    const eq = equipos.find((e) => e.activoId === recobroParam)
+    if (eq) setRecobroEquipo(eq)
+    setRecobroAutoAbierto(true)
+  }, [recobroParam, recobroAutoAbierto, equipos])
 
   const kpi = useMemo(() => ({
     total: equipos.length,
