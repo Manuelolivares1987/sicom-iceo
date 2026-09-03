@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { sendMail, parseRecipients, mailerConfigured } from '@/lib/email/mailer'
+import {
+  emailShell, seccionTitulo, chipEstado, tablaAbrir, tablaCerrar, celda, MARCA,
+} from '@/lib/email/plantilla'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -70,46 +73,60 @@ export async function POST(req: Request) {
     porCliente.set(k, [...(porCliente.get(k) ?? []), p])
   }
 
-  const fila = (p: Pendiente) => {
+  const nunca = pendientes.filter((p) => p.estado === 'sin_check').length
+
+  // [2026-09-03] Rediseño con la plantilla de marca: tarjetas con el número
+  // grande, un bloque tipo píldora por CLIENTE (a quién hay que llamar), filas
+  // cebra y chip con los días de atraso.
+  const fila = (p: Pendiente, i: number) => {
     const equipo = [p.patente, p.codigo].filter(Boolean).join(' · ') || '—'
-    const ultimo = p.ultima_fecha
-      ? `${new Date(`${p.ultima_fecha}T12:00:00`).toLocaleDateString('es-CL')} (hace ${p.dias_desde_ultimo} días)`
-      : 'NUNCA'
+    const z = i % 2 === 1
     const rojo = p.estado === 'sin_check' || (p.dias_desde_ultimo ?? 0) > 14
+    const chip = p.ultima_fecha
+      ? chipEstado(`hace ${p.dias_desde_ultimo} días`, rojo ? MARCA.rojo : MARCA.ambar,
+                   rojo ? MARCA.rojoFondo : MARCA.ambarFondo)
+      : chipEstado('NUNCA', MARCA.rojo, MARCA.rojoFondo)
+    const ultimo = p.ultima_fecha
+      ? new Date(`${p.ultima_fecha}T12:00:00`).toLocaleDateString('es-CL')
+      : 'sin registro'
     return `<tr>
-      <td style="padding:6px 10px;border-bottom:1px solid #eee"><b>${esc(equipo)}</b><br>
-          <span style="color:#666;font-size:12px">${esc(p.nombre ?? '')}</span></td>
-      <td style="padding:6px 10px;border-bottom:1px solid #eee;color:${rojo ? '#B91C1C' : '#C2410C'};font-weight:600">
-          ${esc(ultimo)}</td>
+      ${celda(`<b>${esc(equipo)}</b><br><span style="color:#9ca3af;font-size:11px">${esc(p.nombre ?? '')}</span>`, z)}
+      ${celda(`<span style="white-space:nowrap">${esc(ultimo)}</span>`, z)}
+      ${celda(chip, z, 'text-align:right')}
     </tr>`
   }
 
   const bloques = Array.from(porCliente.entries()).map(([cliente, eqs]) => `
-    <h3 style="margin:18px 0 6px;font-size:15px">${esc(cliente)} — ${eqs.length} equipo${eqs.length > 1 ? 's' : ''}</h3>
-    <table style="border-collapse:collapse;width:100%;font-family:sans-serif;font-size:13px">
-      <tr style="background:#f3f4f6;text-align:left">
-        <th style="padding:6px 10px">Equipo</th>
-        <th style="padding:6px 10px">Último checklist del cliente</th>
-      </tr>
-      ${eqs.map(fila).join('')}
-    </table>`).join('')
+    ${seccionTitulo(`${esc(cliente)} · ${eqs.length} equipo${eqs.length > 1 ? 's' : ''}`,
+                    MARCA.verdeOscuro, MARCA.verdeClaro)}
+    ${tablaAbrir(['Equipo', 'Último checklist', 'Atraso'])}
+    ${eqs.map(fila).join('')}
+    ${tablaCerrar}`).join('')
 
-  const html = `
-    <div style="font-family:sans-serif;max-width:640px">
-      <h2 style="color:#B91C1C">⚠️ Checklist del cliente pendiente</h2>
-      <p style="font-size:14px">${pendientes.length} equipo${pendientes.length > 1 ? 's' : ''} fuera de
-      instalaciones ${pendientes.length > 1 ? 'llevan' : 'lleva'} más de 7 días sin el checklist semanal
-      que el cliente debe hacer por el QR (o nunca lo han tenido).</p>
-      ${bloques}
-      <p style="font-size:12px;color:#666;margin-top:16px">
-        Detalle y panel de cumplimiento: https://pilladoiceo.netlify.app/dashboard/flota/checklist-cliente/<br>
-        Este aviso se repite a diario mientras el atraso siga. Es automático (SICOM).
-      </p>
-    </div>`
+  const base = process.env.NEXT_PUBLIC_SITE_URL || 'https://pilladoiceo.netlify.app'
+  const html = emailShell({
+    titulo: 'Checklist del cliente pendiente',
+    subtitulo: `Inspección semanal por QR · ${new Date().toLocaleDateString('es-CL', { day: '2-digit', month: 'long' })}`,
+    chips: [
+      ...(nunca > 0 ? [{ n: nunca, label: 'Nunca lo han hecho', color: MARCA.rojo, fondo: MARCA.rojoFondo }] : []),
+      ...(pendientes.length - nunca > 0
+        ? [{ n: pendientes.length - nunca, label: 'Atrasados (>7 días)', color: MARCA.ambar, fondo: MARCA.ambarFondo }] : []),
+      { n: porCliente.size, label: `Cliente${porCliente.size > 1 ? 's' : ''}`, color: MARCA.verdeOscuro, fondo: MARCA.verdeClaro },
+    ],
+    cuerpo: `
+      <p style="margin:14px 0 0;font-size:13px;color:#4b5563">
+        Estos equipos fuera de instalaciones llevan <b>más de 7 días</b> sin el checklist
+        semanal que el cliente debe hacer escaneando el QR del equipo.</p>
+      ${bloques}`,
+    ctaUrl: `${base}/dashboard/flota/checklist-cliente/`,
+    ctaTexto: 'Ver panel de cumplimiento',
+    pie: 'Este aviso se repite a diario mientras el atraso siga; cuando todos los clientes están '
+       + 'al día, no llega nada. Correo automático de SICOM · Pillado Empresas.',
+  })
 
   const r = await sendMail({
     to,
-    subject: `⚠️ ${pendientes.length} equipo(s) sin checklist del cliente — ${new Date().toLocaleDateString('es-CL')}`,
+    subject: `⚠️ ${pendientes.length} equipo(s) sin checklist del cliente · ${porCliente.size} cliente(s) · PILLADO`,
     html,
   })
   if (!r.ok) {

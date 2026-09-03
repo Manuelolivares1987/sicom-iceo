@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { sendMail, mailerConfigured } from '@/lib/email/mailer'
+import {
+  emailShell, seccionTitulo, chipEstado, tablaAbrir, tablaCerrar, celda, MARCA,
+} from '@/lib/email/plantilla'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -165,55 +168,56 @@ async function enviarCorreoFaena(
   const vencidos = filas.filter((f) => f.nivel === 'vencido' || f.nivel === 'sin_dato')
   const proximos = filas.filter((f) => f.nivel !== 'vencido' && f.nivel !== 'sin_dato')
 
-  const fila = (f: Alerta) => {
+  // [2026-09-03] Rediseño con la plantilla de marca (lib/email/plantilla):
+  // tarjetas con el número grande, secciones tipo píldora, filas cebra y chip
+  // de plazo por persona. Y el ritmo cambió: UN resumen semanal (lunes).
+  const fila = (f: Alerta, i: number) => {
     const n = NIVEL[f.nivel as keyof typeof NIVEL] ?? NIVEL.medio
-    const dias = f.dias_restantes == null ? '—'
-      : f.dias_restantes < 0 ? `hace ${-f.dias_restantes} d`
-      : `en ${f.dias_restantes} d`
+    const dias = f.dias_restantes == null ? 'SIN DATO'
+      : f.dias_restantes < 0 ? `vencido hace ${-f.dias_restantes} d`
+      : f.dias_restantes === 0 ? 'vence HOY'
+      : `vence en ${f.dias_restantes} d`
+    const z = i % 2 === 1
     return `<tr>
-      <td style="padding:6px 8px;border-bottom:1px solid #eee">${esc(f.persona)}<br>
-        <span style="color:#888;font-size:11px">${esc(f.rut)}</span></td>
-      <td style="padding:6px 8px;border-bottom:1px solid #eee">${esc(f.tipo_nombre)}</td>
-      <td style="padding:6px 8px;border-bottom:1px solid #eee">${esc(f.laboratorio ?? '—')}</td>
-      <td style="padding:6px 8px;border-bottom:1px solid #eee;white-space:nowrap">${fmtFecha(f.fecha_vencimiento)}</td>
-      <td style="padding:6px 8px;border-bottom:1px solid #eee;white-space:nowrap;color:${n.color};font-weight:600">${dias}</td>
+      ${celda(`<b>${esc(f.persona)}</b><br><span style="color:#9ca3af;font-size:11px">${esc(f.rut)}</span>`, z)}
+      ${celda(`${esc(f.tipo_nombre)}<br><span style="color:#9ca3af;font-size:11px">${esc(f.laboratorio ?? '')}</span>`, z)}
+      ${celda(`<span style="white-space:nowrap">${fmtFecha(f.fecha_vencimiento)}</span>`, z)}
+      ${celda(chipEstado(dias, n.color, n.fondo), z, 'text-align:right')}
     </tr>`
   }
 
   const tabla = (titulo: string, xs: Alerta[], color: string, fondo: string) => xs.length === 0 ? '' : `
-    <h3 style="margin:18px 0 6px;padding:6px 10px;background:${fondo};color:${color};
-               border-radius:6px;font-size:14px">${titulo} (${xs.length})</h3>
-    <table style="border-collapse:collapse;width:100%;font-size:13px">
-      <thead><tr style="background:#f5f5f5;text-align:left">
-        <th style="padding:6px 8px">Persona</th><th style="padding:6px 8px">Examen</th>
-        <th style="padding:6px 8px">Laboratorio</th><th style="padding:6px 8px">Vence</th>
-        <th style="padding:6px 8px">Plazo</th>
-      </tr></thead>
-      <tbody>${xs.map(fila).join('')}</tbody>
-    </table>`
+    ${seccionTitulo(`${titulo} · ${xs.length}`, color, fondo)}
+    ${tablaAbrir(['Persona', 'Examen', 'Vence', 'Plazo'])}
+    ${xs.map(fila).join('')}
+    ${tablaCerrar}`
 
   const base = process.env.NEXT_PUBLIC_SITE_URL || 'https://pilladoiceo.netlify.app'
-  const html = `
-    <div style="font-family:system-ui,Arial,sans-serif;font-size:14px;color:#222;max-width:760px">
-      <h2 style="margin:0 0 4px">Control documental de personal — ${esc(faena)}</h2>
-      <p style="margin:0 0 12px;color:#555">
-        ${vencidos.length > 0
-          ? `<b style="color:#B91C1C">${vencidos.length} examen(es) VENCIDO(S)</b> y ${proximos.length} por vencer.`
-          : `${proximos.length} examen(es) por vencer.`}
-        La alerta se repite con más frecuencia a medida que se acerca la fecha.
-      </p>
-      ${tabla('Vencidos o sin registro — no pueden acreditar documentación al día',
-              vencidos, '#B91C1C', '#FEE2E2')}
-      ${tabla('Por vencer', proximos, '#B45309', '#FEF3C7')}
-      <p style="margin:16px 0 0;font-size:12px;color:#888">
-        Renovar (subiendo el nuevo examen) en
-        <a href="${base}/dashboard/prevencion/personal">${base}/dashboard/prevencion/personal</a>
-      </p>
-    </div>`
+  const html = emailShell({
+    titulo: 'Control documental de personal',
+    subtitulo: `Faena ${esc(faena)} · resumen semanal — ${new Date().toLocaleDateString('es-CL', { day: '2-digit', month: 'long' })}`,
+    chips: [
+      ...(vencidos.length > 0
+        ? [{ n: vencidos.length, label: 'Vencidos / sin dato', color: MARCA.rojo, fondo: MARCA.rojoFondo }] : []),
+      ...(proximos.length > 0
+        ? [{ n: proximos.length, label: 'Por vencer', color: MARCA.ambar, fondo: MARCA.ambarFondo }] : []),
+    ],
+    cuerpo: `
+      ${vencidos.length > 0
+        ? `<p style="margin:14px 0 0;font-size:13px;color:#4b5563">Las personas con examen
+           <b style="color:${MARCA.rojo}">vencido o sin registro</b> no pueden acreditar
+           documentación al día ante el mandante.</p>` : ''}
+      ${tabla('Vencidos o sin registro', vencidos, MARCA.rojo, MARCA.rojoFondo)}
+      ${tabla('Por vencer', proximos, MARCA.ambar, MARCA.ambarFondo)}`,
+    ctaUrl: `${base}/dashboard/prevencion/personal`,
+    ctaTexto: 'Renovar exámenes en SICOM',
+    pie: 'Resumen semanal (lunes) del control documental. Los datos son del momento del envío. '
+       + 'Correo automático de SICOM · Pillado Empresas.',
+  })
 
   const asunto = vencidos.length > 0
-    ? `🔴 ${vencidos.length} examen(es) vencido(s) · ${faena} · PILLADO`
-    : `⚠ ${proximos.length} examen(es) por vencer · ${faena} · PILLADO`
+    ? `🔴 Exámenes: ${vencidos.length} vencido(s) y ${proximos.length} por vencer · ${faena} · PILLADO`
+    : `🟡 Exámenes: ${proximos.length} por vencer · ${faena} · PILLADO`
 
   return sendMail({ to, cc, subject: asunto, html })
 }
