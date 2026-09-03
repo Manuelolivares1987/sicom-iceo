@@ -143,6 +143,9 @@ export type PlanificarOsResp = CrearOSResp & {
 export async function planificarOsDesdeNc(p: {
   ncIds: string[]; tecnicoIds: string[]; horas: number
   titulo?: string | null; descripcion?: string | null; justificacion?: string | null
+  /** [MIG499] El trabajo lo hace un tercero: sin técnicos nuestros, con
+   *  proveedor y motivo. La autoriza gerencia y no paga bono (MIG477). */
+  externo?: boolean; proveedor?: string | null; motivoExterno?: string | null
 }) {
   const { data, error } = await supabase.rpc('rpc_nc_planificar_os', {
     p_nc_ids: p.ncIds,
@@ -151,6 +154,9 @@ export async function planificarOsDesdeNc(p: {
     p_titulo: p.titulo ?? null,
     p_descripcion: p.descripcion ?? null,
     p_justificacion: p.justificacion ?? null,
+    p_externo: p.externo ?? false,
+    p_proveedor: p.proveedor ?? null,
+    p_motivo_externo: p.motivoExterno ?? null,
   })
   if (error) throw new Error(error.message)
   return data as PlanificarOsResp

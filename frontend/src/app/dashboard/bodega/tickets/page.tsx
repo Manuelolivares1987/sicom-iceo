@@ -318,6 +318,27 @@ function EmitirTab() {
   )
 }
 
+// [03-09] Lo que piden, visible SIN abrir el vale. El bodeguero está en
+// terreno: antes cada tarjeta decía «3 ítems» y había que abrir una por una
+// para saber si era un filtro o una caja de pernos.
+function ResumenItemsVale({ ticketId }: { ticketId: string }) {
+  const { data: items } = useTicketItems(ticketId)
+  if (!items?.length) return null
+  return (
+    <ul className="mt-1.5 space-y-0.5 rounded-lg bg-gray-50 px-2 py-1.5">
+      {items.map((i) => (
+        <li key={i.id} className="flex items-baseline gap-1.5 text-sm text-gray-800">
+          <b className="shrink-0 tabular-nums">{i.pendiente > 0 ? i.pendiente : i.cantidad_solicitada}</b>
+          <span className="shrink-0 text-xs text-gray-500">{i.unidad ?? 'un'}</span>
+          <span className="min-w-0 flex-1 truncate">{i.producto_nombre ?? i.descripcion ?? '—'}</span>
+          {i.producto_codigo && <span className="shrink-0 font-mono text-[10px] text-gray-400">{i.producto_codigo}</span>}
+          {i.pendiente <= 0 && <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-green-600" />}
+        </li>
+      ))}
+    </ul>
+  )
+}
+
 /**
  * Días que lleva esperando un vale. La antigüedad es la única forma que tiene
  * bodega de priorizar: hasta ahora los diez vales se veían idénticos.
@@ -490,15 +511,19 @@ function DespacharTab() {
                       className="w-full text-left">
                 <Card className="border-orange-200 hover:bg-orange-50/50 transition-colors">
                   <CardContent className="flex items-center gap-3 p-3">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-xs font-bold">{t.folio}</span>
+                    <div className="flex-1 min-w-0">
+                      {/* La patente primero y GRANDE: es como el bodeguero
+                          nombra el trabajo («lo del FJTJ-60»), no por el folio. */}
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-base font-bold text-gray-900">{aQuienSeCarga(t).titulo}</span>
+                        <span className="font-mono text-[11px] text-gray-500">{t.folio}</span>
                         <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${estadoBadge(t.estado)}`}>{t.estado}</span>
                       </div>
-                      <div className="text-sm font-semibold text-gray-800">{aQuienSeCarga(t).titulo} <span className="font-normal text-gray-500">{t.activo_nombre}</span></div>
                       <div className="text-[11px] text-gray-500">
-                        {aQuienSeCarga(t).detalle} · {t.n_items} ítem{t.n_items !== 1 ? 's' : ''} · emitió {t.emitido_por_nombre ?? '—'} · {new Date(t.created_at).toLocaleDateString('es-CL')}
+                        {aQuienSeCarga(t).detalle}{t.activo_nombre ? ` · ${t.activo_nombre}` : ''} · emitió {t.emitido_por_nombre ?? '—'} · {new Date(t.created_at).toLocaleDateString('es-CL')}
                       </div>
+                      {/* Qué están pidiendo, sin abrir nada. */}
+                      <ResumenItemsVale ticketId={t.id} />
                       <div className="mt-1 flex flex-wrap items-center gap-1.5">
                         {/* Cuánto lleva esperando. Sin esto, un vale de hace 50
                             días se ve igual que el de hoy y nadie sabe cuál

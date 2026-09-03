@@ -282,10 +282,21 @@ export default function NoConformidadesPage() {
   }), [equipos, ncs])
 
   // [MIG498] Planificar ya no crea la OT a secas: abre el modal de la Orden de
-  // Servicio (quién ejecuta —puede ser de a pares— y en cuánto tiempo). La OT
-  // correctiva se asegura sola por dentro, reutilizando la abierta.
+  // Servicio (quién ejecuta —puede ser de a pares o un externo— y en cuánto
+  // tiempo). La OT correctiva se asegura sola por dentro, reutilizando la
+  // abierta. [MIG499] Una NC que ya está en una OS no se vuelve a ofrecer.
   const ncTrabajables = (eq: EquipoNC) =>
-    eq.ncs.filter((nc) => !['resuelta', 'descartada'].includes(nc.estado_planificacion))
+    eq.ncs.filter((nc) => !['resuelta', 'descartada'].includes(nc.estado_planificacion) && !nc.os_id)
+
+  // [MIG499] El check al lado de cada NC: el equipo se ataca POR PARTES — una
+  // OS para una pareja, otra para otra, otra para un externo. Se marcan las NC
+  // y «Planificar OS» parte con esas.
+  const [selNcs, setSelNcs] = useState<Set<string>>(new Set())
+  const toggleSelNc = (id: string) => setSelNcs((p) => {
+    const n = new Set(p); if (n.has(id)) n.delete(id); else n.add(id); return n
+  })
+  const selDelEquipo = (eq: EquipoNC) =>
+    ncTrabajables(eq).filter((nc) => selNcs.has(nc.id)).map((nc) => nc.id)
 
   return (
     <div className="space-y-6">
@@ -533,9 +544,11 @@ export default function NoConformidadesPage() {
                         )}
                         {ncTrabajables(eq).length > 0 ? (
                           <Button size="sm" className="ml-1" onClick={() => setOsEquipo(eq)}
-                                  title="Armar la Orden de Servicio: elegir las NC, quién la ejecuta (puede ser de a pares) y en cuánto tiempo. Le llega al mecánico a su teléfono.">
+                                  title="Armar la Orden de Servicio: marca las NC con el check (o entran todas), elige quién —de a pares o un externo— y en cuánto tiempo. Le llega al mecánico a su teléfono.">
                             <Wrench className="h-3.5 w-3.5 mr-1" />
-                            Planificar OS ({ncTrabajables(eq).length})
+                            {selDelEquipo(eq).length > 0
+                              ? `Planificar OS (${selDelEquipo(eq).length} elegidas)`
+                              : `Planificar OS (${ncTrabajables(eq).length})`}
                           </Button>
                         ) : (
                           <Badge variant="en_ejecucion" className="ml-1 text-[10px]">Nada por trabajar</Badge>
@@ -548,6 +561,25 @@ export default function NoConformidadesPage() {
                           onClick={() => setFichaNc({ nc, patente: eq.patente })}>
                         <td className="p-2 pl-8" colSpan={2}>
                           <div className="flex gap-2">
+                            {/* [MIG499] El check para armar la OS por partes: se
+                                marcan las NC que se trabajan juntas y el botón
+                                «Planificar OS» parte con esas. Una NC ya en OS
+                                no se puede volver a elegir. */}
+                            {!['resuelta', 'descartada'].includes(nc.estado_planificacion) && (
+                              nc.os_folio ? (
+                                <span onClick={(e) => e.stopPropagation()}
+                                      title="Esta NC ya está en una Orden de Servicio"
+                                      className="mt-1 shrink-0 self-start rounded bg-sky-100 px-1.5 py-0.5 font-mono text-[10px] font-bold text-sky-800">
+                                  {nc.os_folio}
+                                </span>
+                              ) : (
+                                <input type="checkbox" checked={selNcs.has(nc.id)}
+                                       onClick={(ev) => ev.stopPropagation()}
+                                       onChange={() => toggleSelNc(nc.id)}
+                                       title="Elegir esta NC para armar una Orden de Servicio"
+                                       className="mt-1 h-4 w-4 shrink-0 cursor-pointer self-start" />
+                              )
+                            )}
                             {/* La evidencia es lo primero que mira el jefe: foto grande y clickeable */}
                             {nc.foto_url ? (
                               <a href={nc.foto_url} target="_blank" rel="noreferrer" title="Ver la foto del hallazgo"
@@ -645,9 +677,18 @@ export default function NoConformidadesPage() {
         <PlanificarOsModal
           patente={osEquipo.patente}
           ncs={ncTrabajables(osEquipo)}
+          preSeleccion={selDelEquipo(osEquipo)}
           onClose={() => setOsEquipo(null)}
           onDone={() => {
-            setOsEquipo(null); invalidar()
+            setOsEquipo(null)
+            // Las NC recién puestas en la OS salen de la selección: lo que
+            // queda marcado sirve para armar la SIGUIENTE OS del equipo.
+            setSelNcs((p) => {
+              const n = new Set(p)
+              for (const id of selDelEquipo(osEquipo)) n.delete(id)
+              return n
+            })
+            invalidar()
             qc.invalidateQueries({ queryKey: ['ordenes-trabajo'] })
             qc.invalidateQueries({ queryKey: ['nc-ot-por-agendar'] })
           }} />
@@ -835,7 +876,6 @@ function NcFichaModal({ nc, patente, onClose, onDone }: {
   }
 
   const yaPlanificada = !!nc.plan_ot_id
-  const otIds = [nc.ot_id, nc.plan_ot_id].filter(Boolean) as string[]
 
   return (
     // Más ancho que el modal por defecto: aquí conviven evidencia, recobro,
@@ -913,8 +953,9 @@ function NcFichaModal({ nc, patente, onClose, onDone }: {
         {/* ── UN solo lugar para pedir a bodega (MIG254) ── */}
         <InsumosNC ncId={nc.id} puedeGestionar={puedeGestionar} otId={nc.plan_ot_id ?? nc.ot_id} />
 
-        {/* ── Notas del operador ── */}
-        {otIds.length > 0 && <NotasOperadorEquipo otIds={otIds} />}
+        {/* [03-09] Las notas del operador SALIERON de acá: se repetían en cada
+            NC y confundían. Viven una sola vez por patente, al desplegar el
+            equipo en la tabla. La ficha es para analizar: recobro + insumos. */}
       </div>
 
       <ModalFooter>
