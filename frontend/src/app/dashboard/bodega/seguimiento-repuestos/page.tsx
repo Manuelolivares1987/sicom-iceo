@@ -24,10 +24,14 @@ import {
 import { buscarProductos, } from '@/lib/services/ot-materiales'
 import { listarProveedoresActivos } from '@/lib/services/bodega-oc'
 
-type Filtro = 'por_comprar' | 'en_compra' | 'recibido' | 'todos'
+type Filtro = 'pedidos' | 'por_comprar' | 'en_compra' | 'recibido' | 'todos'
 type ProductoLite = { id: string; codigo: string | null; nombre: string; unidad_medida: string | null }
 
 const FILTROS: [Filtro, string][] = [
+  // [03-09] Lo que el operador acaba de pedir en terreno, ANTES de que el jefe
+  // lo apruebe. No es para actuar: es para que bodega vaya adelantando —mirar
+  // si hay stock, dónde está, qué habría que cotizar si no hay.
+  ['pedidos', 'Recién pedidos'],
   ['por_comprar', 'Por comprar'],
   ['en_compra', 'En compra'],
   ['recibido', 'Recibidos'],
@@ -181,6 +185,7 @@ export default function SeguimientoRepuestosPage() {
   const lista = useMemo(() => {
     const all = (filas ?? []).filter((f) => f.estado !== 'rechazado')
     switch (filtro) {
+      case 'pedidos':     return all.filter((f) => f.estado === 'solicitado')
       case 'por_comprar': return all.filter((f) => f.por_comprar)
       case 'en_compra':   return all.filter((f) => f.estado === 'en_compra')
       case 'recibido':    return all.filter((f) => f.estado === 'recibido')
@@ -191,6 +196,7 @@ export default function SeguimientoRepuestosPage() {
   const counts = useMemo(() => {
     const all = (filas ?? []).filter((f) => f.estado !== 'rechazado')
     return {
+      pedidos: all.filter((f) => f.estado === 'solicitado').length,
       por_comprar: all.filter((f) => f.por_comprar).length,
       en_compra: all.filter((f) => f.estado === 'en_compra').length,
       recibido: all.filter((f) => f.estado === 'recibido').length,
@@ -236,6 +242,14 @@ export default function SeguimientoRepuestosPage() {
         ))}
       </div>
 
+      {filtro === 'pedidos' && counts.pedidos > 0 && (
+        <p className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800">
+          Esto lo acaba de pedir el operador en terreno y <b>el jefe de taller aún no lo aprueba</b>.
+          Sirve para adelantar: mira si hay stock, dónde está y qué habría que cotizar si no hay.
+          La compra o el vale salen recién cuando el jefe apruebe (al analizar la NC).
+        </p>
+      )}
+
       <Card>
         <CardContent className="p-0 overflow-x-auto">
           {isLoading ? (
@@ -244,6 +258,8 @@ export default function SeguimientoRepuestosPage() {
             <p className="p-8 text-center text-sm text-gray-400">
               {filtro === 'por_comprar'
                 ? 'Nada por comprar: no hay repuestos aprobados sin stock.'
+                : filtro === 'pedidos'
+                ? 'Nada recién pedido: el taller no tiene solicitudes esperando aprobación.'
                 : 'Sin repuestos en esta etapa.'}
             </p>
           ) : (

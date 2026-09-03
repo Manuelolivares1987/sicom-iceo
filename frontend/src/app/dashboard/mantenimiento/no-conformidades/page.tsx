@@ -16,7 +16,7 @@ import { useToast } from '@/contexts/toast-context'
 import { useRequireAuth } from '@/hooks/use-require-auth'
 import { usePermissions } from '@/hooks/use-permissions'
 import {
-  getNcRecepcion, planificarNcEquipo, asignarRecursosNcEquipo, getNcMaterialesEquipo,
+  getNcRecepcion, asignarRecursosNcEquipo, getNcMaterialesEquipo,
   registrarNcAdhoc, generarNcDesdeRecepcion, setRecobroNc, armarInformeRecobro,
   planificarNc, getNcMateriales,
   getRecepcionesParaNc, getActivosParaNc, subirFotoNc, RECOBRO_LABEL, RECOBRO_FUENTE_TXT,
@@ -44,6 +44,7 @@ import { getTallerTecnicos } from '@/lib/services/taller-plan-semanal'
 import { RepuestosPorAprobar } from '@/components/mantenimiento/repuestos-por-aprobar'
 import { PedidoManualBodega } from '@/components/mantenimiento/pedido-manual-bodega'
 import { NcEquipoCard } from '@/components/mantenimiento/nc-equipo-card'
+import { PlanificarOsModal } from '@/components/mantenimiento/planificar-os-modal'
 import { InformesRecobroEnCurso } from '@/components/mantenimiento/informes-recobro-en-curso'
 import { cn } from '@/lib/utils'
 import { BarraArchivar } from '@/components/ui/barra-archivar'
@@ -105,7 +106,7 @@ type PasoClave = 'aprobar' | 'recursos' | 'planificar' | 'vale' | 'taller' | 'li
 const PASOS: { k: PasoClave; label: string; hacer: string; color: string }[] = [
   { k: 'aprobar',    label: 'Aprobar insumos', hacer: 'El operador pidió repuestos: aprobar o ajustar', color: 'bg-orange-600' },
   { k: 'recursos',   label: 'Definir recursos', hacer: 'Asignar grupo, horas y materiales', color: 'bg-amber-500' },
-  { k: 'planificar', label: 'Planificar la OT', hacer: 'Crear la OT correctiva del equipo', color: 'bg-sky-600' },
+  { k: 'planificar', label: 'Planificar la OS', hacer: 'Armar la Orden de Servicio: quién la ejecuta y en cuánto tiempo', color: 'bg-sky-600' },
   { k: 'vale',       label: 'Emitir el vale', hacer: 'Emitir el vale para que bodega prepare', color: 'bg-violet-600' },
   { k: 'taller',     label: 'En taller', hacer: 'El trabajo está en ejecución', color: 'bg-emerald-600' },
   { k: 'listo',      label: 'Resueltos', hacer: 'Sin nada pendiente', color: 'bg-gray-400' },
@@ -178,10 +179,11 @@ export default function NoConformidadesPage() {
   const [recursosEquipo, setRecursosEquipo] = useState<EquipoNC | null>(null)
   const [fichaNc, setFichaNc] = useState<{ nc: NcRecepcion; patente: string } | null>(null)
   const [recobroEquipo, setRecobroEquipo] = useState<EquipoNC | null>(null)
+  // [MIG498] El modal que arma la Orden de Servicio: NC elegidas + quién + tiempo.
+  const [osEquipo, setOsEquipo] = useState<EquipoNC | null>(null)
   const [genOpen, setGenOpen] = useState(false)
   const [adhocOpen, setAdhocOpen] = useState(false)
   const [valeOpen, setValeOpen] = useState(false)
-  const [busyId, setBusyId] = useState<string | null>(null)
   // [26-08] Lo mejor de esta pantalla —la foto del daño y la frase textual del
   // mecánico— venía plegado, y la instrucción para abrirlo estaba en gris de
   // once píxeles dentro de un párrafo de sesenta palabras que nadie lee.
@@ -279,17 +281,11 @@ export default function NoConformidadesPage() {
     recobrables: ncs.filter((n) => n.recobro === 'cliente' || n.recobro === 'compartido').length,
   }), [equipos, ncs])
 
-  const planificar = async (eq: EquipoNC) => {
-    setBusyId(eq.activoId)
-    try {
-      const r = await planificarNcEquipo(eq.activoId)
-      if (!r.ot_id) { toast.error(r.mensaje ?? 'Sin NC pendientes'); return }
-      toast.success(r.ot_reutilizada
-        ? `${r.n_ncs} NC de ${eq.patente} sumadas a la OT correctiva ya abierta`
-        : `OT correctiva creada para ${eq.patente} con ${r.n_ncs} NC`)
-      invalidar(); qc.invalidateQueries({ queryKey: ['ordenes-trabajo'] }); qc.invalidateQueries({ queryKey: ['nc-ot-por-agendar'] })
-    } catch (e) { toast.error(e instanceof Error ? e.message : 'Error al planificar') } finally { setBusyId(null) }
-  }
+  // [MIG498] Planificar ya no crea la OT a secas: abre el modal de la Orden de
+  // Servicio (quién ejecuta —puede ser de a pares— y en cuánto tiempo). La OT
+  // correctiva se asegura sola por dentro, reutilizando la abierta.
+  const ncTrabajables = (eq: EquipoNC) =>
+    eq.ncs.filter((nc) => !['resuelta', 'descartada'].includes(nc.estado_planificacion))
 
   return (
     <div className="space-y-6">
@@ -405,15 +401,15 @@ export default function NoConformidadesPage() {
               key={eq.activoId}
               patente={eq.patente} nombre={eq.nombre} nNc={eq.ncs.length} sevMax={eq.sevMax}
               pasoLabel={PASO_TXT[eq.paso]} pasoHacer={pasoEq.hacer} pasoColor={pasoEq.color}
-              nPendientes={eq.pendientes.length} nRecobrables={eq.nRecobrables}
+              nPendientes={ncTrabajables(eq).length} nRecobrables={eq.nRecobrables}
               nInsumosOperador={eq.nInsumosOperador} nDelCliente={eq.nDelCliente}
               recursosTxt={eq.grupos || eq.horas > 0 || eq.nMateriales > 0
                 ? `${eq.grupos ?? '—'}${eq.horas ? ` · ${eq.horas}h` : ''}${eq.nMateriales ? ` · ${eq.nMateriales} mat.` : ''}`
                 : 'Sin recursos asignados'}
-              abierto={abierto} ocupado={busyId === eq.activoId}
+              abierto={abierto} ocupado={false}
               onToggle={() => setExpandido((p) => ({ ...p, [eq.activoId]: !abierto }))}
               onRecursos={() => setRecursosEquipo(eq)}
-              onPlanificar={() => planificar(eq)}
+              onPlanificar={() => setOsEquipo(eq)}
               onRecobro={() => setRecobroEquipo(eq)}
             >
               {/* Cada hallazgo con su foto: es lo que el jefe va a mirar. */}
@@ -535,13 +531,14 @@ export default function NoConformidadesPage() {
                             <Receipt className="h-3.5 w-3.5 mr-1" /> Recobro ({eq.nRecobrables})
                           </Button>
                         )}
-                        {eq.pendientes.length > 0 ? (
-                          <Button size="sm" className="ml-1" disabled={busyId === eq.activoId} onClick={() => planificar(eq)}>
-                            {busyId === eq.activoId ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wrench className="h-3.5 w-3.5 mr-1" />}
-                            Planificar equipo ({eq.pendientes.length})
+                        {ncTrabajables(eq).length > 0 ? (
+                          <Button size="sm" className="ml-1" onClick={() => setOsEquipo(eq)}
+                                  title="Armar la Orden de Servicio: elegir las NC, quién la ejecuta (puede ser de a pares) y en cuánto tiempo. Le llega al mecánico a su teléfono.">
+                            <Wrench className="h-3.5 w-3.5 mr-1" />
+                            Planificar OS ({ncTrabajables(eq).length})
                           </Button>
                         ) : (
-                          <Badge variant="en_ejecucion" className="ml-1 text-[10px]">OT creada</Badge>
+                          <Badge variant="en_ejecucion" className="ml-1 text-[10px]">Nada por trabajar</Badge>
                         )}
                       </td>
                     </tr>
@@ -643,6 +640,18 @@ export default function NoConformidadesPage() {
                              onDone={() => { setRecobroEquipo(null); invalidar() }} />
       )}
       {recursosEquipo && <RecursosEquipoModal equipo={recursosEquipo} onClose={() => setRecursosEquipo(null)} onDone={() => { setRecursosEquipo(null); invalidar() }} />}
+      {/* [MIG498] La OS: qué NC se trabajan juntas, quién (de a pares se puede) y en cuánto tiempo */}
+      {osEquipo && (
+        <PlanificarOsModal
+          patente={osEquipo.patente}
+          ncs={ncTrabajables(osEquipo)}
+          onClose={() => setOsEquipo(null)}
+          onDone={() => {
+            setOsEquipo(null); invalidar()
+            qc.invalidateQueries({ queryKey: ['ordenes-trabajo'] })
+            qc.invalidateQueries({ queryKey: ['nc-ot-por-agendar'] })
+          }} />
+      )}
       {genOpen && <GenerarDesdeRecepcionModal onClose={() => setGenOpen(false)} onDone={() => { setGenOpen(false); invalidar() }} />}
       {adhocOpen && <RegistrarNcModal onClose={() => setAdhocOpen(false)} onDone={() => { setAdhocOpen(false); invalidar() }} />}
       {valeOpen && (

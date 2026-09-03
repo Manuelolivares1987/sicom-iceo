@@ -181,9 +181,29 @@ function TarjetaOS(p: {
             {os.ncs > 0 && <span>{os.ncs} no conformidad{os.ncs === 1 ? '' : 'es'}</span>}
             <span className="flex items-center gap-1">
               <Clock className="h-3 w-3" /> llevo {horasLegibles(os.mis_horas)}
-              {os.horas_estimadas ? ` · estimado ${os.horas_estimadas} h` : ''}
+              {os.horas_estimadas ? ` · asignado ${os.horas_estimadas} h` : ''}
             </span>
           </p>
+          {/* [MIG498] El trabajo viene CON tiempo: el mecánico lo ve correr
+              contra lo asignado, y se da cuenta solo cuando se está pasando. */}
+          {os.horas_estimadas != null && os.horas_estimadas > 0 && (() => {
+            const frac = os.mis_horas / os.horas_estimadas
+            const pasado = frac > 1
+            return (
+              <div className="mt-1.5">
+                <div className="h-1.5 w-full rounded-full bg-gray-100">
+                  <div className={`h-1.5 rounded-full ${pasado ? 'bg-red-500' : frac > 0.8 ? 'bg-amber-500' : 'bg-green-500'}`}
+                       style={{ width: `${Math.min(100, Math.round(frac * 100))}%` }} />
+                </div>
+                {pasado && (
+                  <p className="mt-0.5 text-[11px] font-semibold text-red-600">
+                    Te pasaste del tiempo asignado por {horasLegibles(os.mis_horas - os.horas_estimadas)}.
+                    Avísale al jefe de taller.
+                  </p>
+                )}
+              </div>
+            )
+          })()}
         </div>
         <Link href={`/m/taller/ot/${os.ot_id}`} aria-label="Ver la orden de trabajo"
               className="shrink-0 rounded-md border border-gray-200 p-1.5 text-gray-400 active:bg-gray-50">

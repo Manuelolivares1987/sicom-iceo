@@ -126,6 +126,36 @@ export async function crearOS(p: {
   return data as CrearOSResp
 }
 
+// ── [MIG498] La OS nace de las NC, en la bandeja del jefe ───────────────────
+//
+// El modal de planificación en una sola llamada: asegura la OT correctiva del
+// equipo (reutilizando la abierta), crea la OS con las NC seleccionadas y
+// asigna a los técnicos elegidos («de a pares» = varios). Al asignar, a cada
+// técnico se le saca de donde estaba con su reloj cerrado (regla de MIG474);
+// los avisos de eso vienen en `avisos`.
+
+export type PlanificarOsResp = CrearOSResp & {
+  ot_id?: string
+  tecnicos?: number
+  avisos?: string[]
+}
+
+export async function planificarOsDesdeNc(p: {
+  ncIds: string[]; tecnicoIds: string[]; horas: number
+  titulo?: string | null; descripcion?: string | null; justificacion?: string | null
+}) {
+  const { data, error } = await supabase.rpc('rpc_nc_planificar_os', {
+    p_nc_ids: p.ncIds,
+    p_tecnico_ids: p.tecnicoIds,
+    p_horas: p.horas,
+    p_titulo: p.titulo ?? null,
+    p_descripcion: p.descripcion ?? null,
+    p_justificacion: p.justificacion ?? null,
+  })
+  if (error) throw new Error(error.message)
+  return data as PlanificarOsResp
+}
+
 // ── [MIG474] Al operador lo mueve el jefe ───────────────────────────────────
 //
 // Asignar es la decisión del jefe: a quién le toca esta OS. Mover a alguien es

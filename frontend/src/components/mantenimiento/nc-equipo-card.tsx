@@ -80,12 +80,14 @@ export function NcEquipoCard(p: NcEquipoCardProps) {
           <Package className="mr-1 h-3.5 w-3.5" /> Recursos
         </Button>
         {p.nPendientes > 0 ? (
+          // [MIG498] Abre el modal de la Orden de Servicio: qué NC se trabajan
+          // juntas, quién la ejecuta (de a pares se puede) y en cuánto tiempo.
           <Button size="sm" className="flex-1 py-2" disabled={p.ocupado} onClick={p.onPlanificar}>
             {p.ocupado ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wrench className="mr-1 h-3.5 w-3.5" />}
-            Planificar ({p.nPendientes})
+            Planificar OS ({p.nPendientes})
           </Button>
         ) : (
-          <Badge variant="en_ejecucion" className="flex-1 justify-center py-1.5 text-[10px]">OT creada</Badge>
+          <Badge variant="en_ejecucion" className="flex-1 justify-center py-1.5 text-[10px]">Nada por trabajar</Badge>
         )}
         {p.nRecobrables > 0 && (
           <Button size="sm" variant="outline" onClick={p.onRecobro}
