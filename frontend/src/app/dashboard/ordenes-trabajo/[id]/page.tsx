@@ -2103,6 +2103,21 @@ export default function OrdenTrabajoDetailPage() {
       {/* Concordancia con el plan semanal: días programados + cuadrilla */}
       {id && <PlanSemanalBanner otId={id} />}
 
+      {/* [04-09] Acceso directo a los informes: la sección vive al final de una
+          página larga y el jefe de taller no la encontraba. Un click y baja. */}
+      <div className="mb-4 flex flex-wrap gap-2">
+        <button type="button"
+                onClick={() => document.getElementById('informe-tecnico')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                className="flex items-center gap-1.5 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800 hover:bg-emerald-100">
+          📄 Informe técnico de intervención
+        </button>
+        <button type="button"
+                onClick={() => document.getElementById('informe-recobro')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                className="flex items-center gap-1.5 rounded-lg border border-violet-300 bg-violet-50 px-3 py-2 text-xs font-semibold text-violet-800 hover:bg-violet-100">
+          💰 Informe de recobro
+        </button>
+      </div>
+
       {/* Editar OT — only visible for creada/asignada */}
       {(otData.estado === 'creada' || otData.estado === 'asignada') && id && (
         <EditarOTCard otData={otData} otId={id} />
@@ -2194,8 +2209,12 @@ export default function OrdenTrabajoDetailPage() {
           El <b>técnico</b> cuenta qué se le hizo al equipo; el de <b>recobro</b> cobra lo que es del cliente.
         </p>
       </div>
-      {id && <InformeTecnicoSeccion otId={id} activoId={otData.activo_id} otEstado={otData.estado} />}
-      {otData.activo_id && <InformeRecobroSeccion activoId={otData.activo_id} />}
+      <div id="informe-tecnico" className="scroll-mt-4">
+        {id && <InformeTecnicoSeccion otId={id} activoId={otData.activo_id} otEstado={otData.estado} />}
+      </div>
+      <div id="informe-recobro" className="scroll-mt-4">
+        {otData.activo_id && <InformeRecobroSeccion activoId={otData.activo_id} />}
+      </div>
 
       {/* Bottom action bar — technician actions */}
       <OTActionBar
