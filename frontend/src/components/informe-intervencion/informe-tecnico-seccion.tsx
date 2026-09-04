@@ -16,6 +16,7 @@ import {
   aprobar, cerrar, crearNuevaVersion, generarYSubirPDF, getSignedPdfUrl,
   type InformeIntervencion, type EstadoInformeIntervencion, type CamposBorradorInforme,
 } from '@/lib/services/informe-intervencion'
+import { getChecklistV3OT } from '@/lib/services/taller-plan-semanal'
 
 // Roles que pueden crear/editar el informe (espejo del backend fn_ii_puede('edit')).
 const ROLES_EDIT = new Set([
@@ -49,6 +50,26 @@ export function InformeTecnicoSeccion({ otId, otEstado }: Props) {
   const { rol } = usePermissions()
   const puedeEditar = !!rol && ROLES_EDIT.has(rol)
   const puedeAprobar = !!rol && ROLES_APPROVE.has(rol)
+
+  // La ejecución real (checklist V03 con fotos): es lo que el PDF imprime en
+  // «Trabajos realizados» — se muestra acá para que se vea ANTES de generar.
+  const { data: ejecucion } = useQuery({
+    queryKey: ['informe-ejecucion-v3', otId],
+    queryFn: async () => {
+      const items = await getChecklistV3OT(otId)
+      return items
+        .filter((i) => !i.excluido && i.resultado != null && i.resultado !== 'pendiente')
+        .map((i) => ({
+          id: i.instance_item_id,
+          descripcion: i.descripcion,
+          resultado: i.resultado,
+          observacion: i.observacion,
+          fotos: Array.from(new Set([...(i.foto_urls ?? []), i.foto_url].filter((u): u is string => !!u))),
+        }))
+    },
+    enabled: !!otId,
+    staleTime: 60_000,
+  })
 
   const { data: informe, isLoading } = useQuery({
     queryKey: ['informe-intervencion', otId],
@@ -219,6 +240,40 @@ export function InformeTecnicoSeccion({ otId, otEstado }: Props) {
               <div className="flex items-start gap-2 rounded-lg border border-orange-200 bg-orange-50 p-3 text-sm text-orange-800">
                 <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                 <span><strong>Observaciones del revisor:</strong> {informe.motivo_correccion}</span>
+              </div>
+            )}
+
+            {/* Trabajos ejecutados con sus fotos — lo mismo que imprime el PDF
+                en «7. Trabajos realizados» (formato informe de recobro). */}
+            {(ejecucion ?? []).length > 0 && (
+              <div className="rounded-lg border border-gray-200">
+                <p className="border-b border-gray-100 px-3 py-2 text-xs font-semibold text-gray-600">
+                  Trabajos ejecutados ({(ejecucion ?? []).length}) — así salen en el PDF, con sus fotos
+                </p>
+                <div className="max-h-80 space-y-2 overflow-y-auto p-3">
+                  {(ejecucion ?? []).map((e, i) => (
+                    <div key={e.id} className="rounded border border-gray-100 bg-gray-50 p-2">
+                      <p className="text-sm font-medium">
+                        {i + 1}. {e.descripcion}
+                        <span className={`ml-2 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
+                          e.resultado === 'ok' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                          {e.resultado === 'ok' ? 'OK' : e.resultado === 'no_ok' ? 'NO OK' : e.resultado}
+                        </span>
+                      </p>
+                      {e.observacion && <p className="mt-0.5 text-xs text-gray-600">{e.observacion}</p>}
+                      {e.fotos.length > 0 && (
+                        <div className="mt-1.5 flex flex-wrap gap-1.5">
+                          {e.fotos.map((url, j) => (
+                            <a key={j} href={url} target="_blank" rel="noreferrer">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img src={url} alt="" className="h-16 w-24 rounded border object-cover" />
+                            </a>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
 

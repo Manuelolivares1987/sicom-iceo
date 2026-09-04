@@ -107,7 +107,7 @@ function TextSection({ title, value }: { title: string; value?: string | null })
 }
 
 export function InformeTecnicoPDF({ data }: { data: InformeIntervencionDetalle }) {
-  const { informe, activo, ot, trabajos, materiales, manoobra, pruebas } = data
+  const { informe, activo, ot, trabajos, ejecucion, materiales, manoobra, pruebas } = data
 
   const trabajosNC = trabajos.filter((t) => t.nc_id)
   const evidencias = trabajos.flatMap((t) =>
@@ -171,17 +171,43 @@ export function InformeTecnicoPDF({ data }: { data: InformeIntervencionDetalle }
         {/* 6. Trabajos planificados */}
         <TextSection title="6. Trabajos planificados" value={informe.trabajo_planificado_resumen} />
 
-        {/* 7. Trabajos realizados (resumen + detalle por ítem) */}
-        <View style={styles.section} wrap={false}>
+        {/* 7. Trabajos realizados — el formato del informe de recobro que
+            pidió Manuel: por cada trabajo, QUÉ se hizo en particular (la
+            observación del mecánico) y SUS FOTOS. La fuente es la ejecución
+            real del checklist V03; los trabajos precargados quedan de
+            respaldo para OTs sin V03. */}
+        <View style={styles.section}>
           <Text style={styles.sectionTitle}>7. Trabajos realizados</Text>
-          {informe.trabajo_realizado_resumen?.trim() ? (
+          {ejecucion.length > 0 ? (
+            ejecucion.map((e, i) => (
+              <View key={e.instance_item_id} style={styles.itemBox} wrap={false}>
+                <Text style={{ fontWeight: 'bold', fontSize: 9 }}>
+                  {i + 1}. {e.descripcion}
+                </Text>
+                <Text style={styles.chip}>
+                  {e.bloque ? `${e.bloque}  ·  ` : ''}
+                  Resultado: {e.resultado === 'ok' ? 'EJECUTADO OK'
+                    : e.resultado === 'no_ok' ? 'NO OK (No Conformidad)' : e.resultado}
+                </Text>
+                {e.observacion ? (
+                  <Text style={{ fontSize: 8.5, marginTop: 2 }}>{e.observacion}</Text>
+                ) : null}
+                {e.fotos.length > 0 && (
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
+                    {e.fotos.slice(0, 4).map((url, j) => (
+                      /* eslint-disable-next-line jsx-a11y/alt-text */
+                      <Image key={j} src={url} style={{ width: 118, height: 88, objectFit: 'cover' }} />
+                    ))}
+                  </View>
+                )}
+              </View>
+            ))
+          ) : informe.trabajo_realizado_resumen?.trim() ? (
             <Text style={[styles.paragraph, { marginBottom: 5 }]}>{informe.trabajo_realizado_resumen}</Text>
           ) : (
             <Text style={[styles.muted, { marginBottom: 5 }]}>Sin resumen.</Text>
           )}
-          {trabajos.length === 0 ? (
-            <Text style={styles.muted}>Sin ítems de trabajo registrados.</Text>
-          ) : (
+          {ejecucion.length === 0 && trabajos.length > 0 && (
             trabajos.map((t, i) => (
               <View key={t.id} style={styles.itemBox}>
                 <Text style={{ fontWeight: 'bold', fontSize: 9 }}>
@@ -382,5 +408,14 @@ export function InformeTecnicoPDF({ data }: { data: InformeIntervencionDetalle }
 
 /** Genera el PDF del informe técnico como Blob. */
 export async function generarPDFInformeTecnico(data: InformeIntervencionDetalle): Promise<Blob> {
-  return pdf(<InformeTecnicoPDF data={data} />).toBlob()
+  // Las fotos del checklist van comprimidas y como data URL: react-pdf se
+  // CUELGA si su fetch interno de una imagen remota falla, y las fotos de
+  // cámara sin comprimir hacían PDFs imposibles (lección del informe ENEX).
+  const { aDataUrlComprimida, enLotes } = await import('@/lib/utils/foto-pdf')
+  const ejecucion = await enLotes(data.ejecucion, 4, async (e) => {
+    const fotos = (await Promise.all(e.fotos.slice(0, 4).map((u) => aDataUrlComprimida(u, 1200, 0.7))))
+      .filter((u): u is string => !!u)
+    return { ...e, fotos }
+  })
+  return pdf(<InformeTecnicoPDF data={{ ...data, ejecucion }} />).toBlob()
 }

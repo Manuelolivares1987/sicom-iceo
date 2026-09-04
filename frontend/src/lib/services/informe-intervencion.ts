@@ -157,11 +157,27 @@ export interface ActivoInformeInfo {
   modelo: string | null
 }
 
+/**
+ * Lo EJECUTADO de verdad: los ítems visibles del checklist V03 de la OT, con
+ * el resultado, la observación del mecánico y sus fotos. Es lo que Manuel
+ * pidió ver en el informe («como el de recobro: fotos y qué se hizo en
+ * particular») — los `trabajos` precargados son el plan, esto es el hecho.
+ */
+export interface EjecucionItemInforme {
+  instance_item_id: string
+  bloque: string | null
+  descripcion: string
+  resultado: string | null
+  observacion: string | null
+  fotos: string[]
+}
+
 export interface InformeIntervencionDetalle {
   informe: InformeIntervencion
   activo: ActivoInformeInfo
   ot: { folio: string | null; tipo: string | null; estado: string | null } | null
   trabajos: TrabajoInforme[]
+  ejecucion: EjecucionItemInforme[]
   materiales: MaterialInforme[]
   manoobra: ManoObraInforme[]
   pruebas: PruebaInforme[]
@@ -219,7 +235,7 @@ export async function getInformeDetalle(
 
   const cab = informe as InformeIntervencion
 
-  const [trabajos, materiales, manoobra, pruebas, activoRes, otRes] = await Promise.all([
+  const [trabajos, materiales, manoobra, pruebas, activoRes, otRes, v3Res] = await Promise.all([
     supabase
       .from('informe_intervencion_trabajos')
       .select('*')
@@ -250,6 +266,13 @@ export async function getInformeDetalle(
       .select('folio, tipo, estado')
       .eq('id', cab.ot_id)
       .maybeSingle(),
+    supabase
+      .from('v_taller_ot_checklist_v3')
+      .select('instance_item_id, bloque, descripcion, resultado, observacion, foto_url, foto_urls')
+      .eq('ot_id', cab.ot_id)
+      .eq('excluido', false)
+      .order('bloque_orden')
+      .order('orden'),
   ])
 
   const activoRaw = activoRes.data as
@@ -264,12 +287,31 @@ export async function getInformeDetalle(
     modelo: activoRaw?.modelo?.nombre ?? null,
   }
 
+  // Solo lo respondido cuenta como ejecutado; las fotos se juntan de las dos
+  // columnas (foto_url legado + foto_urls múltiple) sin repetir.
+  const v3Rows = (v3Res.data ?? []) as {
+    instance_item_id: string; bloque: string | null; descripcion: string
+    resultado: string | null; observacion: string | null
+    foto_url: string | null; foto_urls: string[] | null
+  }[]
+  const ejecucion: EjecucionItemInforme[] = v3Rows
+    .filter((r) => r.resultado != null && r.resultado !== 'pendiente')
+    .map((r) => ({
+      instance_item_id: r.instance_item_id,
+      bloque: r.bloque,
+      descripcion: r.descripcion,
+      resultado: r.resultado,
+      observacion: r.observacion,
+      fotos: Array.from(new Set([...(r.foto_urls ?? []), r.foto_url].filter((u): u is string => !!u))),
+    }))
+
   return {
     data: {
       informe: cab,
       activo,
       ot: (otRes.data as { folio: string | null; tipo: string | null; estado: string | null } | null) ?? null,
       trabajos: (trabajos.data as TrabajoInforme[] | null) ?? [],
+      ejecucion,
       materiales: (materiales.data as MaterialInforme[] | null) ?? [],
       manoobra: (manoobra.data as ManoObraInforme[] | null) ?? [],
       pruebas: (pruebas.data as PruebaInforme[] | null) ?? [],
