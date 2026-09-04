@@ -175,7 +175,11 @@ export interface EjecucionItemInforme {
 export interface InformeIntervencionDetalle {
   informe: InformeIntervencion
   activo: ActivoInformeInfo
-  ot: { folio: string | null; tipo: string | null; estado: string | null } | null
+  ot: {
+    folio: string | null; tipo: string | null; estado: string | null
+    /** La firma que el técnico puso al FINALIZAR la OT (modal del teléfono). */
+    firma_tecnico_url: string | null
+  } | null
   trabajos: TrabajoInforme[]
   ejecucion: EjecucionItemInforme[]
   materiales: MaterialInforme[]
@@ -263,7 +267,7 @@ export async function getInformeDetalle(
       .maybeSingle(),
     supabase
       .from('ordenes_trabajo')
-      .select('folio, tipo, estado')
+      .select('folio, tipo, estado, firma_tecnico_url')
       .eq('id', cab.ot_id)
       .maybeSingle(),
     supabase
@@ -309,7 +313,7 @@ export async function getInformeDetalle(
     data: {
       informe: cab,
       activo,
-      ot: (otRes.data as { folio: string | null; tipo: string | null; estado: string | null } | null) ?? null,
+      ot: (otRes.data as { folio: string | null; tipo: string | null; estado: string | null; firma_tecnico_url: string | null } | null) ?? null,
       trabajos: (trabajos.data as TrabajoInforme[] | null) ?? [],
       ejecucion,
       materiales: (materiales.data as MaterialInforme[] | null) ?? [],

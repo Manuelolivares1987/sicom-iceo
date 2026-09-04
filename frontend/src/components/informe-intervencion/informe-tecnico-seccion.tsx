@@ -193,7 +193,7 @@ export function InformeTecnicoSeccion({ otId, otEstado }: Props) {
       const [{ generarPDFTrabajos }, otRes] = await Promise.all([
         import('@/components/informe-intervencion/pdf-informe-trabajos'),
         supabase.from('ordenes_trabajo')
-          .select('folio, tipo, fecha_inicio, fecha_termino, activo_id')
+          .select('folio, tipo, fecha_inicio, fecha_termino, activo_id, firma_tecnico_url')
           .eq('id', otId).single(),
       ])
       if (otRes.error || !otRes.data) throw otRes.error ?? new Error('No se pudo leer la OT')
@@ -217,7 +217,8 @@ export function InformeTecnicoSeccion({ otId, otEstado }: Props) {
           instance_item_id: e.id, bloque: null, descripcion: e.descripcion,
           resultado: e.resultado, observacion: e.observacion, fotos: e.fotos,
         })),
-        firmaTecnicoUrl: informe?.firma_ejecutor_url ?? null,
+        // La firma que el técnico puso al FINALIZAR la OT en el teléfono.
+        firmaTecnicoUrl: (otRes.data.firma_tecnico_url as string | null) ?? informe?.firma_ejecutor_url ?? null,
         estadoSalida: informe?.estado_salida ?? null,
       })
       window.open(URL.createObjectURL(blob), '_blank')
