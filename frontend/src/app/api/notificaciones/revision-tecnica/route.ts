@@ -53,13 +53,19 @@ export async function POST(req: Request) {
   if (!url || !anon) {
     return NextResponse.json({ error: 'Falta configuración de Supabase.' }, { status: 500 })
   }
-  const to = parseRecipients(process.env.RT_EMAIL_TO)
+  // [MIG531] Modo PRUEBA (?prueba=1): la consulta trae SOLO el equipo de
+  // laboratorio y el correo va únicamente a Manuel, con asunto [PRUEBA].
+  // El cron real jamás ve el laboratorio (la función lo excluye por defecto).
+  const esPrueba = new URL(req.url).searchParams.get('prueba') === '1'
+  const to = esPrueba
+    ? ['manuel.olivares@pilladoempresas.cl']
+    : parseRecipients(process.env.RT_EMAIL_TO)
   if (!mailerConfigured() || to.length === 0) {
     return NextResponse.json({ error: 'SMTP o RT_EMAIL_TO no configurados.' }, { status: 500 })
   }
 
   const sb = createClient(url, anon, { auth: { persistSession: false } })
-  const { data, error } = await sb.rpc('fn_rt_por_vencer_cron', { p_secreto: secret })
+  const { data, error } = await sb.rpc('fn_rt_por_vencer_cron', { p_secreto: secret, p_incluir_pruebas: esPrueba })
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
   const filas = (data ?? []) as Rt[]
@@ -134,9 +140,9 @@ export async function POST(req: Request) {
        + 'Correo automático de SICOM · Pillado Empresas.',
   })
 
-  const asunto = vencidas.length > 0
+  const asunto = (esPrueba ? '[PRUEBA] ' : '') + (vencidas.length > 0
     ? `🔴 Revisión técnica: ${vencidas.length} vencida(s) y ${porVencer.length} por vencer · PILLADO`
-    : `🟡 Revisión técnica: ${porVencer.length} equipo(s) vencen en 30 días · PILLADO`
+    : `🟡 Revisión técnica: ${porVencer.length} equipo(s) vencen en 30 días · PILLADO`)
 
   const r = await sendMail({ to, subject: asunto, html })
   if (!r.ok) return NextResponse.json({ error: r.error ?? 'No se pudo enviar' }, { status: 500 })

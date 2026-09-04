@@ -50,13 +50,18 @@ export async function POST(req: Request) {
   if (!url || !anon) {
     return NextResponse.json({ error: 'Falta configuración de Supabase.' }, { status: 500 })
   }
-  const to = parseRecipients(process.env.CHECKLIST_CLIENTE_EMAIL_TO)
+  // [MIG531] Modo PRUEBA (?prueba=1): la consulta trae SOLO el equipo de
+  // laboratorio y el correo va únicamente a Manuel, con asunto [PRUEBA].
+  const esPrueba = new URL(req.url).searchParams.get('prueba') === '1'
+  const to = esPrueba
+    ? ['manuel.olivares@pilladoempresas.cl']
+    : parseRecipients(process.env.CHECKLIST_CLIENTE_EMAIL_TO)
   if (!mailerConfigured() || to.length === 0) {
     return NextResponse.json({ error: 'SMTP o CHECKLIST_CLIENTE_EMAIL_TO no configurados.' }, { status: 500 })
   }
 
   const sb = createClient(url, anon, { auth: { persistSession: false } })
-  const { data, error } = await sb.rpc('fn_checklist_cliente_pendientes_cron', { p_secreto: secret })
+  const { data, error } = await sb.rpc('fn_checklist_cliente_pendientes_cron', { p_secreto: secret, p_incluir_pruebas: esPrueba })
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
@@ -126,7 +131,7 @@ export async function POST(req: Request) {
 
   const r = await sendMail({
     to,
-    subject: `⚠️ ${pendientes.length} equipo(s) sin checklist del cliente · ${porCliente.size} cliente(s) · PILLADO`,
+    subject: `${esPrueba ? '[PRUEBA] ' : ''}⚠️ ${pendientes.length} equipo(s) sin checklist del cliente · ${porCliente.size} cliente(s) · PILLADO`,
     html,
   })
   if (!r.ok) {
