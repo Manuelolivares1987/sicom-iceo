@@ -1,28 +1,33 @@
 'use client'
 
-// [MIG508] La página de UNA Orden de Servicio en el teléfono.
+// [MIG508/509] La página de UNA Orden de Servicio en el teléfono — EJECUTABLE.
 //
-// Manuel: «necesito que sea igual que cuando revisa las actividades el
-// operador cuando se planifica OT — hoy no sale nada». La OS se abre como una
-// OT: cabecera con el equipo y el día, y abajo las ACTIVIDADES — las no
-// conformidades que resuelve, cada una con su foto y observación.
+// Manuel (04-09): «al hacer clic para ejecutar, debe aparecer como checklist
+// las actividades que me encomendaron, donde pueda colocar foto y comentario;
+// además volver a pedir repuestos (pasa por el ciclo anterior) y hacer
+// comentarios que el jefe vuelve a evaluar».
 //
-// El reloj (empezar/parar/terminé) aparece solo si la OS es del técnico que
-// abrió sesión; el resto la ve completa igual (regla MIG507).
+// Cada actividad es una NC, y su canal de ejecución es el ÍTEM del checklist
+// del que nació: la foto y el comentario se escriben ahí (mismo canal offline
+// de siempre), así se ven también en la OT y en la bandeja del jefe. El pedido
+// de repuesto va amarrado al hallazgo y lo evalúa el jefe (ciclo MIG197/497).
+// La nota general va a las notas de la OT, que el jefe puede convertir en NC.
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowLeft, Play, Pause, CheckCircle2, Clock, CalendarDays, Users,
-  ImageOff, ChevronRight, AlertTriangle,
+  ImageOff, ChevronRight, AlertTriangle, Camera, Package, StickyNote, Loader2, X, Check,
 } from 'lucide-react'
 import { Spinner } from '@/components/ui/spinner'
-import { useNetworkStatus } from '@/hooks/use-taller-mecanico'
+import {
+  useNetworkStatus, useMarcarItem, useSolicitarRecurso, useAgregarNota,
+} from '@/hooks/use-taller-mecanico'
 import {
   getOSDetalle, getMisOS, getMiTecnicoId, iniciarOS, pausarOS, finalizarOS,
-  ESTADO_OS_LABEL,
+  ESTADO_OS_LABEL, type OSActividad,
 } from '@/lib/services/taller-os'
 
 const SEV_CLS: Record<string, string> = {
@@ -42,6 +47,153 @@ function fechaLegible(f: string): { texto: string; atrasada: boolean } {
   return { texto: txt, atrasada: dias < 0 }
 }
 
+// ── Una actividad, ejecutable: foto + comentario + pedir repuesto ───────────
+function ActividadCard({ a, otId, onCambio }: {
+  a: OSActividad
+  otId: string
+  onCambio: () => void
+}) {
+  const marcar = useMarcarItem(otId)
+  const solicitar = useSolicitarRecurso(otId)
+  const fotoRef = useRef<HTMLInputElement | null>(null)
+  const [comentario, setComentario] = useState(a.observacion ?? '')
+  const [pidiendo, setPidiendo] = useState(false)
+  const [repDesc, setRepDesc] = useState('')
+  const [repCant, setRepCant] = useState('')
+  const [repFoto, setRepFoto] = useState<File | null>(null)
+  const repFotoRef = useRef<HTMLInputElement | null>(null)
+
+  const ejecutable = !!a.item_id && !!a.instance_id
+
+  const guardarFotos = (files: File[]) => {
+    if (!ejecutable || files.length === 0) return
+    marcar.mutate(
+      { instanceItemId: a.item_id!, instanceId: a.instance_id!, files },
+      { onSuccess: onCambio },
+    )
+  }
+  const guardarComentario = () => {
+    if (!ejecutable || comentario === (a.observacion ?? '')) return
+    marcar.mutate(
+      { instanceItemId: a.item_id!, instanceId: a.instance_id!, observacion: comentario.trim() || null },
+      { onSuccess: onCambio },
+    )
+  }
+  const pedirRepuesto = () => {
+    const n = Number(repCant)
+    if (!n || n <= 0 || repDesc.trim().length < 3) return
+    const nombre = typeof window !== 'undefined' ? localStorage.getItem('taller-mecanico') : null
+    solicitar.mutate({
+      productoId: null,
+      descripcion: repDesc.trim(),
+      cantidad: n,
+      comentario: `Hallazgo: ${a.descripcion}`,
+      solicitadoNombre: nombre,
+      fotos: repFoto ? [repFoto] : undefined,
+      instanceItemId: a.item_id ?? null,
+    }, {
+      onSuccess: () => { setPidiendo(false); setRepDesc(''); setRepCant(''); setRepFoto(null) },
+    })
+  }
+
+  const fotos = a.fotos.length ? a.fotos : (a.foto_url ? [a.foto_url] : [])
+
+  return (
+    <div className={`rounded-xl border bg-white p-3 ${a.resuelto ? 'border-green-200' : 'border-gray-200'}`}>
+      <div className="flex items-start gap-1.5">
+        <p className="flex-1 text-sm text-gray-800">{a.descripcion}</p>
+        {a.severidad && (
+          <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${SEV_CLS[a.severidad] ?? SEV_CLS.baja}`}>
+            {a.severidad}
+          </span>
+        )}
+        {a.resuelto && (
+          <span className="flex shrink-0 items-center gap-0.5 rounded-full bg-green-100 px-1.5 py-0.5 text-[10px] font-medium text-green-700">
+            <Check className="h-3 w-3" /> resuelta
+          </span>
+        )}
+      </div>
+
+      {/* La evidencia: la del hallazgo + lo que el mecánico va sumando */}
+      {fotos.length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {fotos.map((u, i) => (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img key={i} src={u} alt={`evidencia ${i + 1}`} loading="lazy"
+                 onClick={() => window.open(u, '_blank')}
+                 className="h-16 w-16 rounded-lg border object-cover" />
+          ))}
+        </div>
+      )}
+      {fotos.length === 0 && (
+        <span className="mt-2 flex h-14 w-14 items-center justify-center rounded-lg border border-dashed border-gray-300 text-gray-300">
+          <ImageOff className="h-5 w-5" />
+        </span>
+      )}
+
+      {ejecutable ? (
+        <>
+          {/* Comentario + foto: el checklist de siempre, actividad por actividad */}
+          <div className="mt-2 flex gap-2">
+            <input type="text" value={comentario} onChange={(e) => setComentario(e.target.value)}
+                   onBlur={guardarComentario} placeholder="Comentario de la ejecución…"
+                   className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm" />
+            <button type="button" onClick={() => fotoRef.current?.click()}
+                    title="Agregar foto o video"
+                    className="flex h-10 min-w-10 items-center justify-center rounded-lg border border-blue-300 bg-blue-50 px-2 text-blue-600">
+              {marcar.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
+            </button>
+            <input ref={fotoRef} type="file" accept="image/*,video/*" capture="environment" multiple
+                   className="hidden"
+                   onChange={(e) => { const fs = Array.from(e.target.files ?? []) as File[]; guardarFotos(fs); e.target.value = '' }} />
+          </div>
+
+          {/* Pedir repuesto: mismo ciclo de siempre — lo evalúa el jefe */}
+          {pidiendo ? (
+            <div className="mt-2 space-y-2 rounded-lg border border-orange-200 bg-orange-50/60 p-2">
+              <input value={repDesc} onChange={(e) => setRepDesc(e.target.value)}
+                     placeholder="¿Qué repuesto necesitas?"
+                     className="w-full rounded-lg border border-gray-200 px-2.5 py-2 text-sm" />
+              <div className="flex items-center gap-2">
+                <input type="number" inputMode="decimal" min="0" value={repCant}
+                       onChange={(e) => setRepCant(e.target.value)} placeholder="Cant."
+                       className="w-20 rounded-lg border border-gray-200 px-2.5 py-2 text-sm" />
+                <button type="button" onClick={() => repFotoRef.current?.click()}
+                        className={`flex items-center gap-1 rounded-lg border px-2 py-2 text-[11px] font-medium ${
+                          repFoto ? 'border-green-300 bg-green-50 text-green-700' : 'border-gray-300 text-gray-600'}`}>
+                  <Camera className="h-3.5 w-3.5" /> {repFoto ? 'Foto lista' : 'Foto'}
+                </button>
+                <input ref={repFotoRef} type="file" accept="image/*" capture="environment" className="hidden"
+                       onChange={(e) => { const f = e.target.files?.[0]; if (f) setRepFoto(f); e.target.value = '' }} />
+                <button type="button" disabled={solicitar.isPending || !Number(repCant) || repDesc.trim().length < 3}
+                        onClick={pedirRepuesto}
+                        className="ml-auto rounded-lg bg-orange-600 px-3 py-2 text-[11px] font-semibold text-white disabled:opacity-50">
+                  {solicitar.isPending ? 'Enviando…' : 'Pedir al jefe'}
+                </button>
+                <button type="button" onClick={() => setPidiendo(false)} className="text-gray-500">
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              {solicitar.isError && (
+                <p className="text-[11px] font-medium text-red-700">{(solicitar.error as Error).message}</p>
+              )}
+            </div>
+          ) : (
+            <button type="button" onClick={() => setPidiendo(true)}
+                    className="mt-2 flex items-center gap-1 rounded-lg border border-orange-300 bg-orange-50 px-2 py-1.5 text-[11px] font-semibold text-orange-700">
+              <Package className="h-3.5 w-3.5" /> Pedir repuesto (lo evalúa el jefe)
+            </button>
+          )}
+        </>
+      ) : (
+        <p className="mt-2 rounded-lg bg-gray-50 px-2 py-1.5 text-[11px] text-gray-500">
+          Esta NC no nació de un checklist: la foto y el comentario van en la nota al jefe (abajo).
+        </p>
+      )}
+    </div>
+  )
+}
+
 export default function OsDetallePage() {
   const params = useParams()
   const osId = params?.id as string
@@ -57,12 +209,24 @@ export default function OsDetallePage() {
   const { data: tecnicoId } = useQuery({
     queryKey: ['mi-tecnico'], queryFn: getMiTecnicoId, staleTime: 10 * 60_000, retry: false,
   })
-  // El estado del reloj (trabajando / mis horas) sale de mis OS.
   const { data: misOs = [] } = useQuery({
     queryKey: ['mis-os'], queryFn: getMisOS, enabled: !!tecnicoId,
     refetchInterval: online ? 60_000 : false, retry: false,
   })
   const mia = misOs.find((o) => o.os_id === osId)
+
+  // Nota general al jefe (va a las notas de la OT: él la evalúa y puede
+  // convertirla en NC — el «volver a evaluar» que pidió Manuel).
+  const agregarNota = useAgregarNota(os?.ot_id ?? '')
+  const [nota, setNota] = useState('')
+  const [notaOk, setNotaOk] = useState(false)
+  const guardarNota = () => {
+    if (!nota.trim() || !os) return
+    const nombre = typeof window !== 'undefined' ? localStorage.getItem('taller-mecanico') : null
+    agregarNota.mutate({ texto: `[${os.folio}] ${nota.trim()}`, autor: nombre }, {
+      onSuccess: () => { setNota(''); setNotaOk(true); setTimeout(() => setNotaOk(false), 4000) },
+    })
+  }
 
   const refrescar = () => {
     qc.invalidateQueries({ queryKey: ['os-detalle', osId] })
@@ -177,7 +341,7 @@ export default function OsDetallePage() {
         </p>
       )}
 
-      {/* Actividades — lo que esta OS resuelve, con la evidencia a la vista */}
+      {/* Actividades — el checklist de la OS: foto, comentario y repuestos */}
       <div className="flex items-baseline justify-between pt-1">
         <h2 className="text-sm font-bold text-gray-900">Actividades</h2>
         <span className="text-[11px] text-gray-500">
@@ -194,49 +358,35 @@ export default function OsDetallePage() {
       )}
 
       {os.actividades.map((a) => (
-        <div key={a.nc_id} className={`rounded-xl border bg-white p-3 ${a.resuelto ? 'border-green-200 opacity-70' : 'border-gray-200'}`}>
-          <div className="flex gap-2.5">
-            {a.foto_url ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={a.foto_url} alt="Evidencia" loading="lazy"
-                   onClick={() => window.open(a.foto_url!, '_blank')}
-                   className="h-16 w-16 shrink-0 rounded-lg border object-cover" />
-            ) : (
-              <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-lg border border-dashed border-gray-300 text-gray-300">
-                <ImageOff className="h-5 w-5" />
-              </span>
-            )}
-            <div className="min-w-0 flex-1">
-              <p className="text-sm text-gray-800">{a.descripcion}</p>
-              {a.observacion && <p className="mt-0.5 text-[11px] text-gray-600">«{a.observacion}»</p>}
-              <div className="mt-1 flex flex-wrap items-center gap-1">
-                {a.severidad && (
-                  <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${SEV_CLS[a.severidad] ?? SEV_CLS.baja}`}>
-                    {a.severidad}
-                  </span>
-                )}
-                {a.resuelto && (
-                  <span className="flex items-center gap-0.5 rounded-full bg-green-100 px-1.5 py-0.5 text-[10px] font-medium text-green-700">
-                    <CheckCircle2 className="h-3 w-3" /> resuelta
-                  </span>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
+        <ActividadCard key={a.nc_id} a={a} otId={os.ot_id}
+                       onCambio={() => qc.invalidateQueries({ queryKey: ['os-detalle', osId] })} />
       ))}
 
-      {/* La ejecución fina (marcar ítems, fotos, repuestos) vive en la OT */}
+      {/* Nota general al jefe: la evalúa y puede convertirla en NC */}
+      <div className="rounded-xl border border-gray-200 bg-white p-3">
+        <p className="flex items-center gap-1.5 text-sm font-semibold text-gray-800">
+          <StickyNote className="h-4 w-4 text-blue-600" /> Comentario al jefe de taller
+        </p>
+        <textarea rows={2} value={nota} onChange={(e) => setNota(e.target.value)}
+                  placeholder="Algo que el jefe deba evaluar de este trabajo (lo ve en la bandeja y puede convertirlo en NC)…"
+                  className="mt-1.5 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm" maxLength={1000} />
+        <div className="mt-1.5 flex items-center gap-2">
+          {notaOk && <span className="text-[11px] font-medium text-green-700">Nota enviada al jefe ✓</span>}
+          <button type="button" onClick={guardarNota} disabled={!nota.trim() || agregarNota.isPending}
+                  className="ml-auto rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50">
+            {agregarNota.isPending ? 'Enviando…' : 'Enviar al jefe'}
+          </button>
+        </div>
+      </div>
+
+      {/* La ejecución fina del resto del equipo vive en la OT */}
       <Link href={`/m/taller/ot/${os.ot_id}`}
             className="flex items-center justify-between rounded-xl border border-blue-200 bg-blue-50 px-3 py-3 active:bg-blue-100">
         <span className="text-sm font-semibold text-blue-800">
-          Abrir el checklist de la OT {os.ot_folio}
+          Abrir el checklist completo de la OT {os.ot_folio}
         </span>
         <ChevronRight className="h-4 w-4 text-blue-600" />
       </Link>
-      <p className="text-[10px] text-gray-400">
-        Ahí se marcan las tareas, se suben las fotos y se piden los repuestos — igual que siempre.
-      </p>
     </div>
   )
 }

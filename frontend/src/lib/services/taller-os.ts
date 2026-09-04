@@ -151,6 +151,9 @@ export async function planificarOsDesdeNc(p: {
   /** [MIG499] El trabajo lo hace un tercero: sin técnicos nuestros, con
    *  proveedor y motivo. La autoriza gerencia y no paga bono (MIG477). */
   externo?: boolean; proveedor?: string | null; motivoExterno?: string | null
+  /** [MIG509] Trabajo APARTE: abrir OTRA OT para estas NC (preventivo +
+   *  correctivo el mismo día son dos OT). Solo con NC sin OT previa. */
+  otSeparada?: boolean
 }) {
   const { data, error } = await supabase.rpc('rpc_nc_planificar_os', {
     p_nc_ids: p.ncIds,
@@ -163,6 +166,7 @@ export async function planificarOsDesdeNc(p: {
     p_externo: p.externo ?? false,
     p_proveedor: p.proveedor ?? null,
     p_motivo_externo: p.motivoExterno ?? null,
+    p_ot_separada: p.otSeparada ?? false,
   })
   if (error) throw new Error(error.message)
   return data as PlanificarOsResp
@@ -346,6 +350,11 @@ export type OSActividad = {
   foto_url: string | null
   observacion: string | null
   resuelto: boolean
+  /** [MIG509] El ítem del checklist del que nació la NC: por ahí se escriben
+   *  la foto y el comentario de la ejecución (mismo canal de siempre). */
+  item_id: string | null
+  instance_id: string | null
+  fotos: string[]
 }
 
 export type OSDetalle = {

@@ -57,6 +57,14 @@ export function PlanificarOsModal({ patente, ncs, preSeleccion, onClose, onDone 
   const [externo, setExterno] = useState(false)
   const [proveedor, setProveedor] = useState('')
   const [motivoExterno, setMotivoExterno] = useState('')
+  // [MIG509] Misma patente, mismo día, pero OTRO trabajo: un preventivo y una
+  // correctiva son dos OT. Si el equipo ya tiene OT correctiva abierta, el
+  // sistema PREGUNTA; «aparte» solo se puede con NC que aún no viven en una OT.
+  const hayOtAbierta = useMemo(() => ncs.some((nc) => !!nc.plan_ot_id), [ncs])
+  const [otSeparada, setOtSeparada] = useState(false)
+  const puedeSeparar = useMemo(
+    () => Array.from(sel).every((id) => !ncs.find((n) => n.id === id)?.plan_ot_id),
+    [sel, ncs])
   // [MIG475] Si la suma de OS pasa el techo del planificador, el servidor pide
   // explicar por qué en vez de crear a medias.
   const [motivoTecho, setMotivoTecho] = useState<string | null>(null)
@@ -78,6 +86,7 @@ export function PlanificarOsModal({ patente, ncs, preSeleccion, onClose, onDone 
       externo,
       proveedor: externo ? proveedor.trim() || null : null,
       motivoExterno: externo ? motivoExterno.trim() || null : null,
+      otSeparada: otSeparada && puedeSeparar,
     }),
     onSuccess: (r) => {
       if (r.requiere_justificacion) {
@@ -190,6 +199,33 @@ export function PlanificarOsModal({ patente, ncs, preSeleccion, onClose, onDone 
             </>
           )}
         </div>
+
+        {/* ── ¿Misma OT o trabajo aparte? (MIG509) ── */}
+        {hayOtAbierta && (
+          <div className="rounded-lg border border-gray-200 bg-gray-50 p-2.5">
+            <p className="text-xs font-semibold text-gray-700">
+              Este equipo ya tiene una OT correctiva abierta — ¿dónde va este trabajo?
+            </p>
+            <label className="mt-1.5 flex cursor-pointer items-start gap-2 text-xs text-gray-700">
+              <input type="radio" name="ot-destino" checked={!otSeparada}
+                     onChange={() => setOtSeparada(false)} className="mt-0.5" />
+              <span><b>En la misma OT abierta</b> (recomendado) — la OS se suma al trabajo del equipo.</span>
+            </label>
+            <label className={`mt-1 flex items-start gap-2 text-xs ${
+              puedeSeparar ? 'cursor-pointer text-gray-700' : 'cursor-not-allowed text-gray-400'}`}>
+              <input type="radio" name="ot-destino" checked={otSeparada} disabled={!puedeSeparar}
+                     onChange={() => setOtSeparada(true)} className="mt-0.5" />
+              <span><b>Es un trabajo aparte: abrir OTRA OT</b> — ej: un preventivo y una correctiva
+                el mismo día son dos actividades distintas, dos OT.
+                {!puedeSeparar && (
+                  <span className="block text-[10px] text-amber-700">
+                    Alguna NC elegida ya vive en una OT: quítala de la selección para poder abrir una aparte.
+                  </span>
+                )}
+              </span>
+            </label>
+          </div>
+        )}
 
         {/* ── Qué día y cuánto debe demorar ── */}
         <div className="grid grid-cols-2 gap-2">

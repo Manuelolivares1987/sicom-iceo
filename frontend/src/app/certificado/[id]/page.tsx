@@ -133,6 +133,17 @@ export default function CertificadoImprimiblePage() {
           })}
         </ul>
 
+        {/* [04-09] La tarea que se hizo, con nombre y apellido: es lo que el
+            cliente necesita leer para saber qué está certificando este papel. */}
+        {typeof datos.trabajo_realizado === 'string' && datos.trabajo_realizado.trim() !== '' && (
+          <>
+            <p className="mt-8 underline underline-offset-4">Trabajo realizado:</p>
+            <p className="mt-3 whitespace-pre-wrap rounded border border-gray-300 p-4 text-justify leading-relaxed">
+              {datos.trabajo_realizado}
+            </p>
+          </>
+        )}
+
         {/* Cierre */}
         <p className="mt-10 text-justify">
           Este documento se emite a petición del cliente, para los fines que estime convenientes.

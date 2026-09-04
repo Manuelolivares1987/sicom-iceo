@@ -262,6 +262,18 @@ export function CarpetaCertificados({ activoId, acciones }: {
                              onChange={(e) => setDatos((p) => ({ ...p, [c.key]: e.target.value }))} />
                     </div>
                   ))}
+                  {/* [04-09] Manuel: «al emitir los certificados se debe
+                      especificar cuál es la tarea que se ha hecho». El recuadro
+                      queda en el JSONB de datos y se imprime en el certificado. */}
+                  <div className="col-span-2">
+                    <label className="text-xs font-medium text-gray-600">
+                      Trabajo realizado <span className="font-normal text-gray-400">(qué se le hizo al equipo — sale impreso)</span>
+                    </label>
+                    <textarea rows={3} className="w-full rounded border px-2 py-1.5 text-sm"
+                              placeholder="Ej: mantención preventiva 300 h — cambio de aceite y filtros de motor, revisión de frenos y engrase general…"
+                              value={datos.trabajo_realizado ?? ''}
+                              onChange={(e) => setDatos((p) => ({ ...p, trabajo_realizado: e.target.value }))} />
+                  </div>
                   <div>
                     <label className="text-xs font-medium text-gray-600">Fecha de emisión</label>
                     <input type="date" className="w-full rounded border px-2 py-1.5 text-sm"
