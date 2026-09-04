@@ -12,17 +12,27 @@ import type { InformeIntervencionDetalle } from '@/lib/services/informe-interven
 // FIFO y mano de obra por tiempo efectivo).
 // ============================================================================
 
+// Colores institucionales Pillado: el verde de la marca manda (el mismo de
+// los correos y el sitio), con el logo en el membrete.
+const VERDE = '#1E5929'
+const VERDE_CLARO = '#A7D3B0'
+
 const styles = StyleSheet.create({
   page: { padding: 32, fontSize: 9, fontFamily: 'Helvetica', color: '#111827' },
+  membrete: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end',
+    marginBottom: 8,
+  },
+  membreteTexto: { fontSize: 8, color: '#6b7280', textAlign: 'right' },
   header: {
-    backgroundColor: '#1f2937', color: 'white', padding: 12, marginBottom: 12, borderRadius: 4,
+    backgroundColor: VERDE, color: 'white', padding: 12, marginBottom: 12, borderRadius: 4,
   },
   title: { fontSize: 15, fontWeight: 'bold', marginBottom: 2 },
-  subtitle: { fontSize: 8, color: '#d1d5db' },
+  subtitle: { fontSize: 8, color: '#d7e8da' },
   section: { marginBottom: 10 },
   sectionTitle: {
-    fontSize: 10, fontWeight: 'bold', color: '#1f2937',
-    borderBottomWidth: 1, borderBottomColor: '#d1d5db', paddingBottom: 2, marginBottom: 5,
+    fontSize: 10, fontWeight: 'bold', color: VERDE,
+    borderBottomWidth: 1, borderBottomColor: VERDE_CLARO, paddingBottom: 2, marginBottom: 5,
   },
   row: { flexDirection: 'row', marginBottom: 2 },
   label: { width: '32%', color: '#6b7280' },
@@ -105,7 +115,7 @@ function TextSection({ title, value }: { title: string; value?: string | null })
   )
 }
 
-export function InformeTecnicoPDF({ data }: { data: InformeIntervencionDetalle }) {
+export function InformeTecnicoPDF({ data, logo }: { data: InformeIntervencionDetalle; logo?: string | null }) {
   const { informe, activo, ot, trabajos, ejecucion, materiales, manoobra, pruebas } = data
   // La firma que Joel (o quien sea) puso al FINALIZAR la OT manda; la del
   // informe queda de respaldo.
@@ -126,6 +136,20 @@ export function InformeTecnicoPDF({ data }: { data: InformeIntervencionDetalle }
   return (
     <Document>
       <Page size="A4" style={styles.page} wrap>
+        {/* Membrete institucional */}
+        <View style={styles.membrete}>
+          {logo ? (
+            /* eslint-disable-next-line jsx-a11y/alt-text */
+            <Image src={logo} style={{ height: 42 }} />
+          ) : (
+            <Text style={{ fontSize: 13, fontWeight: 'bold', color: VERDE }}>PILLADO EMPRESAS</Text>
+          )}
+          <View>
+            <Text style={styles.membreteTexto}>Pillado y Compañía Ltda.</Text>
+            <Text style={styles.membreteTexto}>Trayectoria y compromiso</Text>
+          </View>
+        </View>
+
         {/* Encabezado */}
         <View style={styles.header}>
           <Text style={styles.title}>INFORME TÉCNICO DE INTERVENCIÓN</Text>
@@ -400,7 +424,8 @@ export function InformeTecnicoPDF({ data }: { data: InformeIntervencionDetalle }
         <Text style={styles.footer} fixed>
           {informe.folio} · v{informe.version} · Estado {informe.estado}
           {informe.pdf_sha256 ? `\nSHA-256: ${informe.pdf_sha256}` : ''}
-          {'\n'}SICOM-ICEO · Documento técnico interno generado automáticamente
+          {'\n'}Pillado y Cía. Ltda. · Fono: 051 – 2232159 · contacto@pilladoempresas.cl
+          {'\n'}SICOM-ICEO · Documento generado automáticamente desde la plataforma
         </Text>
       </Page>
     </Document>
@@ -413,6 +438,7 @@ export async function generarPDFInformeTecnico(data: InformeIntervencionDetalle)
   // CUELGA si su fetch interno de una imagen remota falla, y las fotos de
   // cámara sin comprimir hacían PDFs imposibles (lección del informe ENEX).
   const { aDataUrlComprimida, aDataUrl, enLotes } = await import('@/lib/utils/foto-pdf')
+  const logo = await aDataUrl('/images/logo.jpg')
   const ot = data.ot
     ? { ...data.ot, firma_tecnico_url: await aDataUrl(data.ot.firma_tecnico_url) }
     : null
@@ -421,5 +447,5 @@ export async function generarPDFInformeTecnico(data: InformeIntervencionDetalle)
       .filter((u): u is string => !!u)
     return { ...e, fotos }
   })
-  return pdf(<InformeTecnicoPDF data={{ ...data, ot, ejecucion }} />).toBlob()
+  return pdf(<InformeTecnicoPDF data={{ ...data, ot, ejecucion }} logo={logo} />).toBlob()
 }

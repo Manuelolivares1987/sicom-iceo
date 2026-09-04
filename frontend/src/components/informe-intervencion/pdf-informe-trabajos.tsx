@@ -13,22 +13,31 @@ import {
 } from '@react-pdf/renderer'
 import type { EjecucionItemInforme } from '@/lib/services/informe-intervencion'
 
-// Estilos calcados del informe de recobro.
+// Estilos calcados del informe de recobro, con los colores institucionales
+// Pillado (verde de la marca + logo en el membrete).
+const VERDE = '#1E5929'
+const VERDE_CLARO = '#A7D3B0'
+
 const styles = StyleSheet.create({
   page: { padding: 32, fontSize: 10, fontFamily: 'Helvetica', color: '#111827' },
+  membrete: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end',
+    marginBottom: 8,
+  },
+  membreteTexto: { fontSize: 8, color: '#6b7280', textAlign: 'right' },
   header: {
-    backgroundColor: '#1f2937',
+    backgroundColor: VERDE,
     color: 'white',
     padding: 12,
     marginBottom: 12,
     borderRadius: 4,
   },
   title: { fontSize: 16, fontWeight: 'bold', marginBottom: 2 },
-  subtitle: { fontSize: 9, color: '#d1d5db' },
+  subtitle: { fontSize: 9, color: '#d7e8da' },
   section: { marginBottom: 12 },
   sectionTitle: {
-    fontSize: 11, fontWeight: 'bold',
-    borderBottomWidth: 1, borderBottomColor: '#d1d5db',
+    fontSize: 11, fontWeight: 'bold', color: VERDE,
+    borderBottomWidth: 1, borderBottomColor: VERDE_CLARO,
     paddingBottom: 2, marginBottom: 6,
   },
   row: { flexDirection: 'row', marginBottom: 2 },
@@ -65,6 +74,7 @@ export interface DatosInformeTrabajos {
   tecnicoNombre?: string | null
   firmaTecnicoUrl?: string | null
   estadoSalida?: string | null
+  logo?: string | null
 }
 
 const fmtFecha = (s: string | null | undefined) =>
@@ -75,6 +85,20 @@ export function InformeTrabajosPDF({ datos }: { datos: DatosInformeTrabajos }) {
   return (
     <Document>
       <Page size="A4" style={styles.page}>
+        {/* Membrete institucional */}
+        <View style={styles.membrete}>
+          {datos.logo ? (
+            /* eslint-disable-next-line jsx-a11y/alt-text */
+            <Image src={datos.logo} style={{ height: 42 }} />
+          ) : (
+            <Text style={{ fontSize: 13, fontWeight: 'bold', color: VERDE }}>PILLADO EMPRESAS</Text>
+          )}
+          <View>
+            <Text style={styles.membreteTexto}>Pillado y Compañía Ltda.</Text>
+            <Text style={styles.membreteTexto}>Trayectoria y compromiso</Text>
+          </View>
+        </View>
+
         <View style={styles.header}>
           <Text style={styles.title}>INFORME TÉCNICO DE TRABAJOS REALIZADOS</Text>
           <Text style={styles.subtitle}>
@@ -148,7 +172,8 @@ export function InformeTrabajosPDF({ datos }: { datos: DatosInformeTrabajos }) {
         </View>
 
         <Text style={styles.footer}>
-          SICOM-ICEO · Pillado Empresas · Documento emitido automáticamente desde la plataforma
+          Pillado y Cía. Ltda. · Fono: 051 – 2232159 · contacto@pilladoempresas.cl
+          {'\n'}SICOM-ICEO · Documento emitido automáticamente desde la plataforma
         </Text>
       </Page>
     </Document>
@@ -164,5 +189,6 @@ export async function generarPDFTrabajos(datos: DatosInformeTrabajos): Promise<B
     return { ...e, fotos }
   })
   const firmaTecnicoUrl = await aDataUrl(datos.firmaTecnicoUrl)
-  return pdf(<InformeTrabajosPDF datos={{ ...datos, ejecucion, firmaTecnicoUrl }} />).toBlob()
+  const logo = await aDataUrl('/images/logo.jpg')
+  return pdf(<InformeTrabajosPDF datos={{ ...datos, ejecucion, firmaTecnicoUrl, logo }} />).toBlob()
 }
