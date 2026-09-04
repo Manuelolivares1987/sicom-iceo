@@ -17,6 +17,7 @@ import {
   type InformeIntervencion, type EstadoInformeIntervencion, type CamposBorradorInforme,
 } from '@/lib/services/informe-intervencion'
 import { getChecklistV3OT } from '@/lib/services/taller-plan-semanal'
+import { supabase } from '@/lib/supabase'
 
 // Roles que pueden crear/editar el informe (espejo del backend fn_ii_puede('edit')).
 const ROLES_EDIT = new Set([
@@ -183,6 +184,50 @@ export function InformeTecnicoSeccion({ otId, otEstado }: Props) {
     }
   }
 
+  // El informe simple: mismo formato del recobro, con lo realmente ejecutado.
+  // Se genera al vuelo y se abre — sin borradores ni circuito de revisión.
+  async function handleInformeTrabajos() {
+    if (!(ejecucion ?? []).length) return
+    setBusy('pdf-trabajos'); setError(null)
+    try {
+      const [{ generarPDFTrabajos }, otRes] = await Promise.all([
+        import('@/components/informe-intervencion/pdf-informe-trabajos'),
+        supabase.from('ordenes_trabajo')
+          .select('folio, tipo, fecha_inicio, fecha_termino, activo_id')
+          .eq('id', otId).single(),
+      ])
+      if (otRes.error || !otRes.data) throw otRes.error ?? new Error('No se pudo leer la OT')
+      const { data: act } = await supabase.from('activos')
+        .select('patente, codigo, nombre, horas_uso_actual, kilometraje_actual, modelo:modelos(nombre, marca:marcas(nombre))')
+        .eq('id', otRes.data.activo_id).maybeSingle()
+      const actRaw = act as unknown as {
+        patente: string | null; codigo: string | null; nombre: string | null
+        horas_uso_actual: number | null; kilometraje_actual: number | null
+        modelo?: { nombre?: string | null; marca?: { nombre?: string | null } | null } | null
+      } | null
+      const blob = await generarPDFTrabajos({
+        ot: { folio: otRes.data.folio, tipo: otRes.data.tipo as string | null,
+              fecha_inicio: otRes.data.fecha_inicio, fecha_termino: otRes.data.fecha_termino },
+        activo: {
+          patente: actRaw?.patente, codigo: actRaw?.codigo, nombre: actRaw?.nombre,
+          marca: actRaw?.modelo?.marca?.nombre ?? null, modelo: actRaw?.modelo?.nombre ?? null,
+          horas_uso_actual: actRaw?.horas_uso_actual, kilometraje_actual: actRaw?.kilometraje_actual,
+        },
+        ejecucion: (ejecucion ?? []).map((e) => ({
+          instance_item_id: e.id, bloque: null, descripcion: e.descripcion,
+          resultado: e.resultado, observacion: e.observacion, fotos: e.fotos,
+        })),
+        firmaTecnicoUrl: informe?.firma_ejecutor_url ?? null,
+        estadoSalida: informe?.estado_salida ?? null,
+      })
+      window.open(URL.createObjectURL(blob), '_blank')
+    } catch (e) {
+      setError(mensajeError(e, 'No se pudo generar el informe de trabajos'))
+    } finally {
+      setBusy(null)
+    }
+  }
+
   return (
     <Card className="mt-4">
       <CardContent className="p-4 sm:p-6">
@@ -191,12 +236,26 @@ export function InformeTecnicoSeccion({ otId, otEstado }: Props) {
             <FileText className="h-5 w-5 text-pillado-green-600" />
             <h3 className="text-base font-bold text-gray-900">Informe técnico de intervención</h3>
           </div>
-          {informe && (
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-gray-500">{informe.folio} · v{informe.version}</span>
-              <Badge className={ESTADO_META[informe.estado].className}>{ESTADO_META[informe.estado].label}</Badge>
-            </div>
-          )}
+          <div className="flex items-center gap-2">
+            {/* [04-09] Manuel: «simplemente un informe con lo que realmente se
+                ha hecho, el mismo formato del recobro». UN clic, sin estados
+                ni revisión: se arma con la ejecución del checklist y se abre. */}
+            {(ejecucion ?? []).length > 0 && (
+              <Button
+                variant="primary" size="sm"
+                loading={busy === 'pdf-trabajos'}
+                onClick={handleInformeTrabajos}
+              >
+                <FileText className="h-4 w-4" /> Informe de trabajos (PDF)
+              </Button>
+            )}
+            {informe && (
+              <>
+                <span className="text-xs text-gray-500">{informe.folio} · v{informe.version}</span>
+                <Badge className={ESTADO_META[informe.estado].className}>{ESTADO_META[informe.estado].label}</Badge>
+              </>
+            )}
+          </div>
         </div>
 
         {/* Feedback */}
