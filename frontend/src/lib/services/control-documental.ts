@@ -75,6 +75,8 @@ export type PapelEquipo = {
   tipo_otro: string | null
   /** El nombre escrito si lo hay, la etiqueta del tipo si no. */
   etiqueta: string | null
+  /** [MIG511/512] Descripción libre del papel, editable en «Corregir». */
+  descripcion: string | null
 }
 
 export async function getEquiposDocumental(): Promise<EquipoDocumental[]> {
@@ -281,6 +283,9 @@ export async function editarCertificacion(p: {
   bloqueante?: boolean | null
   archivoUrl?: string | null
   motivo?: string | null
+  /** [MIG511] Descripción libre del papel (certificaciones.notas).
+   *  undefined = no tocar; '' = borrar. */
+  descripcion?: string | null
 }) {
   const { data, error } = await supabase.rpc('rpc_certificacion_editar', {
     p_certificacion_id: p.certificacionId,
@@ -293,6 +298,7 @@ export async function editarCertificacion(p: {
     p_bloqueante: p.bloqueante ?? null,
     p_archivo_url: p.archivoUrl || null,
     p_motivo: p.motivo || null,
+    p_descripcion: p.descripcion === undefined ? null : p.descripcion,
   })
   if (error) throw new Error(error.message)
   return data as { success: boolean; etiqueta: string }
@@ -348,7 +354,7 @@ export async function getAnuladosEquipo(activoId: string): Promise<PapelAnulado[
 export async function getCertificacion(id: string) {
   const { data, error } = await supabase
     .from('certificaciones')
-    .select('id, activo_id, tipo, tipo_otro, fecha_emision, fecha_vencimiento, numero_certificado, entidad_certificadora, bloqueante, archivo_url, anulado_at')
+    .select('id, activo_id, tipo, tipo_otro, fecha_emision, fecha_vencimiento, numero_certificado, entidad_certificadora, bloqueante, archivo_url, anulado_at, notas')
     .eq('id', id).single()
   if (error) throw new Error(error.message)
   return data as {
@@ -356,5 +362,6 @@ export async function getCertificacion(id: string) {
     fecha_emision: string | null; fecha_vencimiento: string | null
     numero_certificado: string | null; entidad_certificadora: string | null
     bloqueante: boolean | null; archivo_url: string | null; anulado_at: string | null
+    notas: string | null
   }
 }
