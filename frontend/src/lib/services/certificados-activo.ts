@@ -37,6 +37,9 @@ export type ActivoCertificado = {
   firma_jefe_url: string
   ot_id: string | null
   created_at: string
+  /** [MIG514] Vigencia por horas: vale vigencia_horas desde horometro_emision. */
+  horometro_emision: number | null
+  vigencia_horas: number | null
   // vista
   titulo: string
   cuerpo: string
@@ -114,6 +117,13 @@ export async function emitirCertificado(params: {
    * afirmarle al cliente que una mantención no caduca es falso.
    */
   venceEl?: string | null
+  /**
+   * [MIG514] La vigencia de los certificados de mantención es POR HORAS:
+   * vence cuando el equipo alcanza horometroEmision + vigenciaHoras. Si van,
+   * mandan sobre la fecha.
+   */
+  horometroEmision?: number | null
+  vigenciaHoras?: number | null
 }) {
   const firmaOperador = await subirFirmaCertificado(params.firmaOperadorDataUrl, 'operador')
   const firmaJefe = await subirFirmaCertificado(params.firmaJefeDataUrl, 'jefe')
@@ -125,6 +135,8 @@ export async function emitirCertificado(params: {
     p_firma_operador_url: firmaOperador,
     p_firma_jefe_url: firmaJefe,
     p_vence_el: params.venceEl ?? null,
+    p_horometro_emision: params.horometroEmision ?? null,
+    p_vigencia_horas: params.vigenciaHoras ?? null,
     p_operador_tecnico_id: params.operadorTecnicoId ?? null,
     p_fecha_emision: params.fechaEmision ?? null,
     p_ciudad: params.ciudad ?? 'Coquimbo',

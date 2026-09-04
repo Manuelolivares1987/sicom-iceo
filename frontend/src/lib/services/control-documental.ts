@@ -77,6 +77,14 @@ export type PapelEquipo = {
   etiqueta: string | null
   /** [MIG511/512] Descripción libre del papel, editable en «Corregir». */
   descripcion: string | null
+  /**
+   * [MIG514] La vigencia de los certificados de mantención es POR HORAS:
+   * el papel vence cuando el equipo alcanza este horómetro, y el semáforo
+   * se calcula contra el horómetro real (no contra la fecha).
+   */
+  horometro_emision: number | null
+  horometro_vence: number | null
+  horas_restantes: number | null
 }
 
 export async function getEquiposDocumental(): Promise<EquipoDocumental[]> {
