@@ -460,7 +460,13 @@ function PapelCard({ p, onAceptar, onDescartar, onEditar, onNoCaduca, onVuelveAC
       </div>
 
       <div className="mt-0.5 text-[11px] text-gray-500">
-        {yaNoCaduca ? 'Este documento no vence'
+        {/* [MIG514] Vigencia por horas: manda el horómetro, no el calendario. */}
+        {p.horometro_vence != null
+          ? <>Vence a las {Number(p.horometro_vence).toLocaleString('es-CL')} h de horómetro{
+              p.horas_restantes != null && (p.horas_restantes >= 0
+                ? ` · le quedan ${Number(p.horas_restantes).toLocaleString('es-CL')} h`
+                : ` · pasado por ${Number(-p.horas_restantes).toLocaleString('es-CL')} h`)}</>
+          : yaNoCaduca ? 'Este documento no vence'
           : p.fecha_vencimiento
           ? <>Vence {p.fecha_vencimiento}{p.dias_restantes != null && ` · ${p.dias_restantes} días`}</>
           : 'Sin fecha de vencimiento registrada'}

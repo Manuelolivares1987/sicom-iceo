@@ -144,6 +144,18 @@ export default function CertificadoImprimiblePage() {
           </>
         )}
 
+        {/* [MIG514] La vigencia de la mantención es por horas de horómetro:
+            queda impresa para que el que lee el papel sepa hasta cuándo vale. */}
+        {cert.vigencia_horas != null && cert.horometro_emision != null && (
+          <p className="mt-8 text-justify leading-relaxed">
+            <span className="underline underline-offset-4">Vigencia</span>: este certificado es
+            válido por <span className="font-bold">{Number(cert.vigencia_horas).toLocaleString('es-CL')} horas</span> de
+            operación desde el horómetro de emisión
+            ({Number(cert.horometro_emision).toLocaleString('es-CL')} h), es decir, hasta que el equipo
+            alcance las <span className="font-bold">{(Number(cert.horometro_emision) + Number(cert.vigencia_horas)).toLocaleString('es-CL')} h</span>.
+          </p>
+        )}
+
         {/* Cierre */}
         <p className="mt-10 text-justify">
           Este documento se emite a petición del cliente, para los fines que estime convenientes.

@@ -25,12 +25,13 @@ type ActivoLite = {
   nombre: string | null
   patente: string | null
   codigo: string
+  horas_uso_actual: number | null
   modelo?: { nombre: string; marca?: { nombre: string } | null } | null
 }
 
 async function getActivoLite(activoId: string): Promise<ActivoLite | null> {
   const { data, error } = await supabase.from('activos')
-    .select('nombre, patente, codigo, modelo:modelos(nombre, marca:marcas(nombre))')
+    .select('nombre, patente, codigo, horas_uso_actual, modelo:modelos(nombre, marca:marcas(nombre))')
     .eq('id', activoId).maybeSingle()
   if (error) throw error
   return (data as unknown as ActivoLite | null) ?? null
@@ -76,6 +77,11 @@ export function CarpetaCertificados({ activoId, acciones }: {
   // [MIG436] Hasta cuándo vale. Sin esto el papel del equipo quedaba como
   // «no vence», que sobre un certificado de mantención es falso.
   const [venceEl, setVenceEl] = useState('')
+  // [MIG514] La vigencia de los certificados de mantención es POR HORAS:
+  // horómetro de emisión + horas (300, la pauta compañía). La fecha queda
+  // solo para los certificados de calendario.
+  const [horometro, setHorometro] = useState('')
+  const [vigenciaHoras, setVigenciaHoras] = useState('300')
   const [operadorId, setOperadorId] = useState('')
   const [operadorNombre, setOperadorNombre] = useState('')
   const [firmaOperador, setFirmaOperador] = useState('')
@@ -86,6 +92,8 @@ export function CarpetaCertificados({ activoId, acciones }: {
   function abrirModal() {
     const hoy = new Date().toISOString().slice(0, 10)
     setTipoCodigo(''); setFecha(hoy); setVenceEl('')
+    setHorometro(activo?.horas_uso_actual != null ? String(activo.horas_uso_actual) : '')
+    setVigenciaHoras('300')
     setDatos({
       equipo: activo?.nombre ?? '',
       marca: activo?.modelo?.marca?.nombre ?? '',
@@ -114,11 +122,19 @@ export function CarpetaCertificados({ activoId, acciones }: {
       : operadorNombre
     if (!nombreOp.trim()) { toast.error('Indica el operador que realizó el trabajo'); return }
     if (!firmaOperador || !firmaJefe) { toast.error('Faltan firmas: el certificado lo firman el operador Y el jefe de taller'); return }
+    // [MIG514] Si hay vigencia por horas, manda el horómetro y la fecha sobra.
+    const porHoras = vigenciaHoras.trim() !== '' && Number(vigenciaHoras) > 0
+    if (porHoras && (horometro.trim() === '' || Number.isNaN(Number(horometro)))) {
+      toast.error('Anota el horómetro del equipo: la vigencia por horas se cuenta desde ahí'); return
+    }
     emitir.mutate({
       activoId, tipoCodigo: tipo.codigo, datos,
       operadorNombre: nombreOp.trim(), operadorTecnicoId: operadorId || null,
       firmaOperadorDataUrl: firmaOperador, firmaJefeDataUrl: firmaJefe,
-      fechaEmision: fecha || null, venceEl: venceEl || null,
+      fechaEmision: fecha || null,
+      venceEl: porHoras ? null : venceEl || null,
+      horometroEmision: porHoras ? Number(horometro) : null,
+      vigenciaHoras: porHoras ? Number(vigenciaHoras) : null,
     })
   }
 
@@ -279,17 +295,37 @@ export function CarpetaCertificados({ activoId, acciones }: {
                     <input type="date" className="w-full rounded border px-2 py-1.5 text-sm"
                            value={fecha} onChange={(e) => setFecha(e.target.value)} />
                   </div>
+                  {/* [MIG514] La vigencia de la mantención es POR HORAS, no por
+                      fecha: vale desde el horómetro de emisión + N horas (300,
+                      la pauta compañía). */}
                   <div>
-                    <label className="text-xs font-medium text-gray-600">Vale hasta</label>
-                    <input type="date" className="w-full rounded border px-2 py-1.5 text-sm"
-                           value={venceEl} min={fecha}
-                           onChange={(e) => setVenceEl(e.target.value)} />
+                    <label className="text-xs font-medium text-gray-600">Horómetro al emitir (h)</label>
+                    <input type="number" inputMode="decimal" className="w-full rounded border px-2 py-1.5 text-sm"
+                           value={horometro} placeholder="Ej: 12.450"
+                           onChange={(e) => setHorometro(e.target.value)} />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-gray-600">Vigencia (horas)</label>
+                    <input type="number" inputMode="numeric" className="w-full rounded border px-2 py-1.5 text-sm"
+                           value={vigenciaHoras}
+                           onChange={(e) => setVigenciaHoras(e.target.value)} />
                     <p className="mt-0.5 text-[10px] leading-tight text-gray-500">
-                      {venceEl
-                        ? 'El papel del equipo va a quedar vigente hasta esa fecha.'
-                        : 'Si lo dejas en blanco, el papel queda como «falta la fecha» y aparece pendiente en Control documental.'}
+                      {vigenciaHoras.trim() !== '' && Number(vigenciaHoras) > 0 && horometro.trim() !== ''
+                        ? `Vence cuando el equipo llegue a las ${(Number(horometro) + Number(vigenciaHoras)).toLocaleString('es-CL')} h de horómetro.`
+                        : 'Mantención = 300 h. El certificado vence por horómetro, no por calendario.'}
                     </p>
                   </div>
+                  {(vigenciaHoras.trim() === '' || Number(vigenciaHoras) <= 0) && (
+                    <div>
+                      <label className="text-xs font-medium text-gray-600">Vale hasta (fecha)</label>
+                      <input type="date" className="w-full rounded border px-2 py-1.5 text-sm"
+                             value={venceEl} min={fecha}
+                             onChange={(e) => setVenceEl(e.target.value)} />
+                      <p className="mt-0.5 text-[10px] leading-tight text-gray-500">
+                        Solo para certificados que vencen por calendario. Si lo dejas en blanco, el papel queda como «falta la fecha».
+                      </p>
+                    </div>
+                  )}
                   <div>
                     <label className="text-xs font-medium text-gray-600">Operador que realizó el trabajo</label>
                     <select value={operadorId} onChange={(e) => setOperadorId(e.target.value)}
