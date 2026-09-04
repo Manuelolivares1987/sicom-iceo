@@ -75,6 +75,18 @@ export function InformeTecnicoSeccion({ otId, otEstado }: Props) {
     setTimeout(() => setOk(null), 4000)
   }
 
+  // El error de Supabase (PostgrestError) trae .message pero NO es instanceof
+  // Error: sin esto quedaba un genérico mudo que escondía el motivo real
+  // (p. ej. «Faltan campos mínimos…»).
+  function mensajeError(e: unknown, fallback: string): string {
+    if (e instanceof Error) return e.message
+    if (typeof e === 'object' && e !== null && 'message' in e
+        && typeof (e as { message?: unknown }).message === 'string') {
+      return (e as { message: string }).message
+    }
+    return fallback
+  }
+
   async function run(tag: string, fn: () => Promise<{ error: unknown }>, successMsg: string) {
     setBusy(tag); setError(null); setOk(null)
     try {
@@ -83,7 +95,7 @@ export function InformeTecnicoSeccion({ otId, otEstado }: Props) {
       invalidate()
       flashOk(successMsg)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Ocurrió un error')
+      setError(mensajeError(e, 'Ocurrió un error'))
     } finally {
       setBusy(null)
     }
@@ -97,7 +109,7 @@ export function InformeTecnicoSeccion({ otId, otEstado }: Props) {
       invalidate()
       flashOk('Informe técnico creado desde la OT')
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Error al crear el informe')
+      setError(mensajeError(e, 'Error al crear el informe'))
     } finally {
       setBusy(null)
     }
@@ -111,7 +123,7 @@ export function InformeTecnicoSeccion({ otId, otEstado }: Props) {
       if (e || !data) throw e ?? new Error('No se pudo obtener el PDF')
       window.open(data, '_blank')
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Error al abrir el PDF')
+      setError(mensajeError(e, 'Error al abrir el PDF'))
     } finally {
       setBusy(null)
     }
@@ -127,7 +139,7 @@ export function InformeTecnicoSeccion({ otId, otEstado }: Props) {
       flashOk('PDF generado y registrado')
       if (signedUrl) window.open(signedUrl, '_blank')
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Error al generar el PDF')
+      setError(mensajeError(e, 'Error al generar el PDF'))
     } finally {
       setBusy(null)
     }
@@ -144,7 +156,7 @@ export function InformeTecnicoSeccion({ otId, otEstado }: Props) {
       invalidate()
       flashOk('Nueva versión creada (borrador)')
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Error al crear la nueva versión')
+      setError(mensajeError(e, 'Error al crear la nueva versión'))
     } finally {
       setBusy(null)
     }
