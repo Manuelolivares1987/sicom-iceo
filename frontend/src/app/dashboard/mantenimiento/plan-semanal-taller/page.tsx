@@ -886,7 +886,16 @@ export default function PlanSemanalTallerPage() {
                 <label className="text-xs font-medium text-gray-600">¿Por qué se descarta?</label>
                 <input value={sacarMotivo} onChange={(e) => setSacarMotivo(e.target.value)}
                        placeholder="Ej: era una prueba, se rehace"
-                       className="mt-1 w-full rounded border border-gray-300 px-2 py-1.5 text-sm" />
+                       className={`mt-1 w-full rounded border px-2 py-1.5 text-sm ${
+                         sacarMotivo.trim().length < 5 ? 'border-amber-400 bg-amber-50' : 'border-gray-300'}`} />
+                {/* El botón antes se deshabilitaba en silencio y parecía que
+                    «no dejaba» sacar la OT: ahora el porqué está a la vista. */}
+                {sacarMotivo.trim().length < 5 && (
+                  <p className="mt-1 text-[11px] font-medium text-amber-700">
+                    Escribe el motivo (mínimo 5 letras) para poder descartar — o desmarca
+                    el cuadro de arriba si solo quieres sacarla del plan.
+                  </p>
+                )}
                 <p className="mt-1 text-[11px] text-gray-500">
                   Queda escrito en la OT con tu nombre. Las no conformidades no se borran:
                   si el hallazgo es real, sigue siéndolo.
@@ -913,10 +922,20 @@ export default function PlanSemanalTallerPage() {
             <Button variant="outline" onClick={() => { setSacarTarget(null); setSacarAviso(null) }}>
               Cancelar
             </Button>
-            <Button disabled={sacarOt.isPending || (sacarDescartar && sacarMotivo.trim().length < 5)}
+            <Button disabled={sacarOt.isPending}
                     onClick={() => {
                       const j = sacarTarget
-                      if (!j?.ot_id) return
+                      // Antes el botón se deshabilitaba sin decir por qué y el
+                      // silencio se leía como «el sistema no me deja»: ahora
+                      // el clic siempre contesta.
+                      if (sacarDescartar && sacarMotivo.trim().length < 5) {
+                        toast.error('Para descartar la OT escribe el motivo (mínimo 5 letras). Si solo quieres sacarla del plan, desmarca «Descartar también la OT».')
+                        return
+                      }
+                      if (!j?.ot_id) {
+                        toast.error('Esta tarjeta no tiene una OT asociada: no hay OT que sacar.')
+                        return
+                      }
                       sacarOt.mutate({
                         otId: j.ot_id, descartar: sacarDescartar,
                         motivo: sacarMotivo || null, forzar: sacarForzar,
