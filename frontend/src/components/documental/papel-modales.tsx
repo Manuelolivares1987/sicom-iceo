@@ -61,16 +61,23 @@ export function ModalCorregirPapel({ p, onClose, onListo }: {
   p: PapelEditable; onClose: () => void; onListo: () => void
 }) {
   const toast = useToast()
-  // Si vino sin tipo (la bitácora), se busca el papel: corregir con un tipo
-  // inventado le cambiaría la categoría al documento sin que nadie lo pidiera.
+  // [MIG511] El papel SIEMPRE se busca al abrir: además del caso sin tipo (la
+  // bitácora), la descripción vive en la base y las filas de la pantalla no
+  // siempre la traen — editarla partiendo de un campo vacío la borraría.
   const { data: real, isLoading: cargando } = useQuery({
     queryKey: ['certificacion', p.certificacion_id],
     queryFn: () => getCertificacion(p.certificacion_id),
-    enabled: !p.tipo,
   })
 
   const [tipo, setTipo] = useState(p.tipo ?? '')
   const [tipoOtro, setTipoOtro] = useState(p.tipo_otro ?? '')
+  // [MIG511] Descripción libre del papel: siempre editable, sea el tipo que sea.
+  const [descripcion, setDescripcion] = useState('')
+  const [descCargada, setDescCargada] = useState(false)
+  if (!descCargada && real) {
+    setDescCargada(true)
+    setDescripcion(real.notas ?? '')
+  }
   const [emi, setEmi] = useState(p.fecha_emision ?? '')
   const [venc, setVenc] = useState(
     p.fecha_vencimiento && p.fecha_vencimiento < '2099-01-01' ? p.fecha_vencimiento : '')
@@ -111,6 +118,9 @@ export function ModalCorregirPapel({ p, onClose, onListo }: {
         fechaEmision: emi || null,
         fechaVencimiento: venc || null,
         numero, entidad, motivo,
+        // Sólo si el valor real alcanzó a cargar: mandar '' sin haberlo visto
+        // borraría una descripción que ya existía.
+        descripcion: descCargada ? descripcion.trim() : undefined,
       })
       toast.success('Documento corregido')
       onListo()
@@ -158,6 +168,19 @@ export function ModalCorregirPapel({ p, onClose, onListo }: {
             </datalist>
           </div>
         )}
+
+        {/* [MIG511] «No puedo corregir el nombre del documento»: el tipo es del
+            catálogo (eso ordena el control documental), pero la DESCRIPCIÓN es
+            libre y siempre editable — para precisar qué papel es este. */}
+        <div>
+          <label className="text-xs font-medium text-gray-600">Descripción (opcional)</label>
+          <input value={descripcion} onChange={(e) => setDescripcion(e.target.value)}
+                 placeholder="Ej: certificado de mantención de la grúa pluma · póliza flota liviana…"
+                 className="mt-1 w-full rounded border px-2 py-1.5 text-sm" />
+          <p className="mt-1 text-[11px] text-gray-500">
+            Se muestra bajo el nombre del documento. El tipo de arriba sigue mandando la categoría.
+          </p>
+        </div>
 
         <div className="grid grid-cols-2 gap-3">
           <div>

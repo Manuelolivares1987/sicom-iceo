@@ -441,6 +441,10 @@ function PapelCard({ p, onAceptar, onDescartar, onEditar, onNoCaduca, onVuelveAC
       : p.estado === 'por_vencer' ? 'border-l-4 border-l-amber-500' : ''}`}>
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-sm font-semibold text-gray-800">{nombrePapel(p)}</span>
+        {/* [MIG511] La descripción libre del papel, al lado del nombre. */}
+        {p.descripcion && (
+          <span className="text-xs italic text-gray-500">— {p.descripcion}</span>
+        )}
         <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${est.cls}`}>{est.label}</span>
         {p.bloqueante && (
           <span className="flex items-center gap-0.5 text-[10px] font-semibold text-red-600">
