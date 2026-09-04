@@ -93,21 +93,23 @@ function Field({ label, value }: { label: string; value?: string | null }) {
   )
 }
 
+// [04-09] Manuel: «debería estar solo lo que se ha ejecutado». Una sección
+// sin contenido no se imprime — un rosario de «Sin información» no informa.
 function TextSection({ title, value }: { title: string; value?: string | null }) {
+  if (!value || !value.trim()) return null
   return (
     <View style={styles.section}>
       <Text style={styles.sectionTitle}>{title}</Text>
-      {value && value.trim() ? (
-        <Text style={styles.paragraph}>{value}</Text>
-      ) : (
-        <Text style={styles.muted}>Sin información.</Text>
-      )}
+      <Text style={styles.paragraph}>{value}</Text>
     </View>
   )
 }
 
 export function InformeTecnicoPDF({ data }: { data: InformeIntervencionDetalle }) {
   const { informe, activo, ot, trabajos, ejecucion, materiales, manoobra, pruebas } = data
+  // La firma que Joel (o quien sea) puso al FINALIZAR la OT manda; la del
+  // informe queda de respaldo.
+  const firmaTecnico = ot?.firma_tecnico_url ?? informe.firma_ejecutor_url ?? null
 
   const trabajosNC = trabajos.filter((t) => t.nc_id)
   const evidencias = trabajos.flatMap((t) =>
@@ -135,7 +137,7 @@ export function InformeTecnicoPDF({ data }: { data: InformeIntervencionDetalle }
 
         {/* 1. Identificación del activo */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>1. Identificación del equipo</Text>
+          <Text style={styles.sectionTitle}>Identificación del equipo</Text>
           <Field label="Patente / Código" value={activo.patente ?? activo.codigo} />
           <Field label="Equipo" value={activo.nombre} />
           <Field label="Marca / Modelo" value={[activo.marca, activo.modelo].filter(Boolean).join(' ') || null} />
@@ -143,7 +145,7 @@ export function InformeTecnicoPDF({ data }: { data: InformeIntervencionDetalle }
 
         {/* 2. Orden de trabajo */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>2. Orden de trabajo</Text>
+          <Text style={styles.sectionTitle}>Orden de trabajo</Text>
           <Field label="Folio OT" value={ot?.folio} />
           <Field label="Tipo / Estado OT" value={ot ? `${ot.tipo ?? '—'} · ${ot.estado ?? '—'}` : null} />
           <Field label="Ingreso" value={fmtDate(informe.fecha_ingreso)} />
@@ -152,24 +154,27 @@ export function InformeTecnicoPDF({ data }: { data: InformeIntervencionDetalle }
 
         {/* 3. Tipo y motivo de intervención */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>3. Tipo y motivo de intervención</Text>
+          <Text style={styles.sectionTitle}>Tipo y motivo de intervención</Text>
           <Field label="Tipo de intervención" value={informe.tipo_intervencion} />
           <Field label="Motivo de ingreso" value={informe.motivo_ingreso} />
           <Field label="Condición de ingreso" value={informe.condicion_ingreso} />
         </View>
 
-        {/* 4. Lecturas de ingreso/salida */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>4. Lecturas de ingreso y salida</Text>
-          <Field label="Kilometraje (ingreso → salida)" value={`${fmtNum(informe.kilometraje_ingreso)} → ${fmtNum(informe.kilometraje_salida)}`} />
-          <Field label="Horómetro (ingreso → salida)" value={`${fmtNum(informe.horometro_ingreso)} → ${fmtNum(informe.horometro_salida)}`} />
-        </View>
+        {/* Lecturas de ingreso/salida — solo si alguien las anotó */}
+        {[informe.kilometraje_ingreso, informe.kilometraje_salida,
+          informe.horometro_ingreso, informe.horometro_salida].some((v) => v != null) && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Lecturas de ingreso y salida</Text>
+            <Field label="Kilometraje (ingreso → salida)" value={`${fmtNum(informe.kilometraje_ingreso)} → ${fmtNum(informe.kilometraje_salida)}`} />
+            <Field label="Horómetro (ingreso → salida)" value={`${fmtNum(informe.horometro_ingreso)} → ${fmtNum(informe.horometro_salida)}`} />
+          </View>
+        )}
 
         {/* 5. Diagnóstico */}
-        <TextSection title="5. Diagnóstico" value={informe.diagnostico_resumen} />
+        <TextSection title="Diagnóstico" value={informe.diagnostico_resumen} />
 
         {/* 6. Trabajos planificados */}
-        <TextSection title="6. Trabajos planificados" value={informe.trabajo_planificado_resumen} />
+        <TextSection title="Trabajos planificados" value={informe.trabajo_planificado_resumen} />
 
         {/* 7. Trabajos realizados — el formato del informe de recobro que
             pidió Manuel: por cada trabajo, QUÉ se hizo en particular (la
@@ -177,7 +182,7 @@ export function InformeTecnicoPDF({ data }: { data: InformeIntervencionDetalle }
             real del checklist V03; los trabajos precargados quedan de
             respaldo para OTs sin V03. */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>7. Trabajos realizados</Text>
+          <Text style={styles.sectionTitle}>Trabajos realizados</Text>
           {ejecucion.length > 0 ? (
             ejecucion.map((e, i) => (
               <View key={e.instance_item_id} style={styles.itemBox} wrap={false}>
@@ -227,16 +232,13 @@ export function InformeTecnicoPDF({ data }: { data: InformeIntervencionDetalle }
           )}
         </View>
 
-        {/* 8. Trabajos pendientes */}
-        <TextSection title="8. Trabajos pendientes" value={informe.trabajos_pendientes_resumen} />
+        <TextSection title="Trabajos pendientes" value={informe.trabajos_pendientes_resumen} />
 
-        {/* 9. No conformidades */}
+        {/* No conformidades — solo si hay */}
+        {trabajosNC.length > 0 && (
         <View style={styles.section} wrap={false}>
-          <Text style={styles.sectionTitle}>9. No conformidades asociadas</Text>
-          {trabajosNC.length === 0 ? (
-            <Text style={styles.muted}>Sin no conformidades asociadas.</Text>
-          ) : (
-            trabajosNC.map((t, i) => (
+          <Text style={styles.sectionTitle}>No conformidades asociadas</Text>
+          {trabajosNC.map((t, i) => (
               <View key={t.id} style={styles.ncBox}>
                 <Text style={{ fontWeight: 'bold', fontSize: 9 }}>
                   NC {i + 1}. {t.sintoma || t.componente || 'No conformidad'}
@@ -244,16 +246,15 @@ export function InformeTecnicoPDF({ data }: { data: InformeIntervencionDetalle }
                 {t.diagnostico ? <Text style={{ fontSize: 8, marginTop: 2 }}>Acción: {t.diagnostico}</Text> : null}
                 {t.observacion ? <Text style={{ fontSize: 8, marginTop: 1, color: '#6b7280' }}>{t.observacion}</Text> : null}
               </View>
-            ))
-          )}
+          ))}
         </View>
+        )}
 
-        {/* 10. Materiales (costo interno) */}
+        {/* Materiales — solo si hubo consumo */}
+        {materiales.length > 0 && (
         <View style={styles.section} wrap={false}>
-          <Text style={styles.sectionTitle}>10. Materiales consumidos (costo interno)</Text>
-          {materiales.length === 0 ? (
-            <Text style={styles.muted}>Sin materiales consumidos.</Text>
-          ) : (
+          <Text style={styles.sectionTitle}>Materiales consumidos (costo interno)</Text>
+          {(
             <View>
               <View style={styles.tableHeader}>
                 <Text style={{ width: '18%' }}>Código</Text>
@@ -280,13 +281,13 @@ export function InformeTecnicoPDF({ data }: { data: InformeIntervencionDetalle }
             </View>
           )}
         </View>
+        )}
 
-        {/* 11. Mano de obra y tiempo efectivo */}
+        {/* Mano de obra — solo si hay registro */}
+        {manoobra.length > 0 && (
         <View style={styles.section} wrap={false}>
-          <Text style={styles.sectionTitle}>11. Mano de obra y tiempo efectivo</Text>
-          {manoobra.length === 0 ? (
-            <Text style={styles.muted}>Sin mano de obra registrada.</Text>
-          ) : (
+          <Text style={styles.sectionTitle}>Mano de obra y tiempo efectivo</Text>
+          {(
             <View>
               <View style={styles.tableHeader}>
                 <Text style={{ width: '40%' }}>Técnico</Text>
@@ -309,16 +310,16 @@ export function InformeTecnicoPDF({ data }: { data: InformeIntervencionDetalle }
             </View>
           )}
         </View>
+        )}
 
-        {/* 12. Pruebas */}
+        {/* Pruebas — solo si se registraron */}
+        {(pruebas.length > 0 || informe.pruebas_resumen?.trim() || informe.resultado_pruebas) && (
         <View style={styles.section} wrap={false}>
-          <Text style={styles.sectionTitle}>12. Pruebas de salida</Text>
+          <Text style={styles.sectionTitle}>Pruebas de salida</Text>
           {informe.pruebas_resumen?.trim() ? (
             <Text style={[styles.paragraph, { marginBottom: 4 }]}>{informe.pruebas_resumen}</Text>
           ) : null}
-          {pruebas.length === 0 ? (
-            <Text style={styles.muted}>Sin pruebas registradas.</Text>
-          ) : (
+          {pruebas.length > 0 && (
             <View>
               <View style={styles.tableHeader}>
                 <Text style={{ width: '30%' }}>Prueba</Text>
@@ -344,13 +345,13 @@ export function InformeTecnicoPDF({ data }: { data: InformeIntervencionDetalle }
             <Field label="Resultado global pruebas" value={informe.resultado_pruebas} />
           ) : null}
         </View>
+        )}
 
-        {/* 13. Evidencias */}
+        {/* Evidencias — solo si hay */}
+        {evidencias.length > 0 && (
         <View style={styles.section} wrap={false}>
-          <Text style={styles.sectionTitle}>13. Evidencias</Text>
-          {evidencias.length === 0 ? (
-            <Text style={styles.muted}>Sin evidencias fotográficas asociadas.</Text>
-          ) : (
+          <Text style={styles.sectionTitle}>Evidencias</Text>
+          {(
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
               {evidencias.slice(0, 9).map((e, i) => (
                 <View key={i} style={{ width: 90, alignItems: 'center' }}>
@@ -362,38 +363,38 @@ export function InformeTecnicoPDF({ data }: { data: InformeIntervencionDetalle }
             </View>
           )}
         </View>
+        )}
 
-        {/* 14. Estado de salida */}
-        <TextSection title="14. Estado de salida del equipo" value={informe.estado_salida} />
+        <TextSection title="Estado de salida del equipo" value={informe.estado_salida} />
+        <TextSection title="Restricciones operacionales" value={informe.restricciones_operacionales} />
+        <TextSection title="Recomendaciones" value={informe.recomendaciones} />
 
-        {/* 15. Restricciones operacionales */}
-        <TextSection title="15. Restricciones operacionales" value={informe.restricciones_operacionales} />
-
-        {/* 16. Recomendaciones */}
-        <TextSection title="16. Recomendaciones" value={informe.recomendaciones} />
-
-        {/* 17. Firmas */}
+        {/* Firmas — la del técnico se rescata del CIERRE de la OT (el modal
+            «Finalizar OT» del teléfono la exige); solo se imprimen las que
+            existen de verdad. */}
+        {(firmaTecnico || informe.firma_jefe_url) && (
         <View style={styles.section} wrap={false}>
-          <Text style={styles.sectionTitle}>17. Firmas y responsables</Text>
+          <Text style={styles.sectionTitle}>Firmas y responsables</Text>
           <View style={styles.firmaWrap}>
-            <View style={styles.firma}>
-              {informe.firma_ejecutor_url ? (
-                // eslint-disable-next-line jsx-a11y/alt-text
-                <Image src={informe.firma_ejecutor_url} style={{ height: 38, marginBottom: 4 }} />
-              ) : null}
-              <View style={styles.firmaBox} />
-              <Text style={styles.firmaLabel}>Ejecutor / Técnico responsable</Text>
-            </View>
-            <View style={styles.firma}>
-              {informe.firma_jefe_url ? (
-                // eslint-disable-next-line jsx-a11y/alt-text
+            {firmaTecnico && (
+              <View style={styles.firma}>
+                {/* eslint-disable-next-line jsx-a11y/alt-text */}
+                <Image src={firmaTecnico} style={{ height: 38, marginBottom: 4 }} />
+                <View style={styles.firmaBox} />
+                <Text style={styles.firmaLabel}>Ejecutor / Técnico responsable</Text>
+              </View>
+            )}
+            {informe.firma_jefe_url && (
+              <View style={styles.firma}>
+                {/* eslint-disable-next-line jsx-a11y/alt-text */}
                 <Image src={informe.firma_jefe_url} style={{ height: 38, marginBottom: 4 }} />
-              ) : null}
-              <View style={styles.firmaBox} />
-              <Text style={styles.firmaLabel}>Jefe de taller / Aprobador</Text>
-            </View>
+                <View style={styles.firmaBox} />
+                <Text style={styles.firmaLabel}>Jefe de taller / Aprobador</Text>
+              </View>
+            )}
           </View>
         </View>
+        )}
 
         {/* 18. Folio, versión y hash */}
         <Text style={styles.footer} fixed>
@@ -411,11 +412,14 @@ export async function generarPDFInformeTecnico(data: InformeIntervencionDetalle)
   // Las fotos del checklist van comprimidas y como data URL: react-pdf se
   // CUELGA si su fetch interno de una imagen remota falla, y las fotos de
   // cámara sin comprimir hacían PDFs imposibles (lección del informe ENEX).
-  const { aDataUrlComprimida, enLotes } = await import('@/lib/utils/foto-pdf')
+  const { aDataUrlComprimida, aDataUrl, enLotes } = await import('@/lib/utils/foto-pdf')
+  const ot = data.ot
+    ? { ...data.ot, firma_tecnico_url: await aDataUrl(data.ot.firma_tecnico_url) }
+    : null
   const ejecucion = await enLotes(data.ejecucion, 4, async (e) => {
     const fotos = (await Promise.all(e.fotos.slice(0, 4).map((u) => aDataUrlComprimida(u, 1200, 0.7))))
       .filter((u): u is string => !!u)
     return { ...e, fotos }
   })
-  return pdf(<InformeTecnicoPDF data={{ ...data, ejecucion }} />).toBlob()
+  return pdf(<InformeTecnicoPDF data={{ ...data, ot, ejecucion }} />).toBlob()
 }
