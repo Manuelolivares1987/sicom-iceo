@@ -331,6 +331,12 @@ export function HistorialMantenimiento({
               {resumen.kmUltimo && ` · ${num(resumen.kmUltimo)} km en la última lectura`}
             </p>
           </div>
+          <div className="flex flex-wrap items-center gap-2">
+          {/* [04-09] El informe emitible del historial: lo que el cliente/mandante pide en papel. */}
+          <Link href={`/dashboard/flota/historial-informe/${activoId}`} target="_blank"
+                className="rounded-md border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-100">
+            🖨 Informe del historial
+          </Link>
           <div className="flex gap-1 rounded-lg bg-gray-100 p-1">
             {([
               ['todo', 'Todo'],
@@ -348,6 +354,7 @@ export function HistorialMantenimiento({
                 {label}
               </button>
             ))}
+          </div>
           </div>
         </div>
       )}
