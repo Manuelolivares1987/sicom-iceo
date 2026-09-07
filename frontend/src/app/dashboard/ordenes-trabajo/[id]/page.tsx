@@ -2279,7 +2279,17 @@ export default function OrdenTrabajoDetailPage() {
               readOnly={isOTClosed}
               liberadoAt={otData.preparacion_ok_at}
               onLiberar={() => liberarMut.mutate()}
-              onReabrir={() => reabrirMut.mutate()}
+              // Reabrir la preparación SACA la OT de los teléfonos (la vista
+              // del mecánico exige liberación). Si ya está andando, avisar:
+              // así desapareció la OT-202609-00011 a media ejecución.
+              onReabrir={() => {
+                if (['en_ejecucion', 'pausada'].includes(otData.estado)
+                    && !window.confirm(
+                      'Esta OT está EN EJECUCIÓN. Al reabrir la preparación desaparece ' +
+                      'de la app de los mecánicos hasta que se vuelva a liberar.\n\n' +
+                      '¿Reabrir de todas formas?')) return
+                reabrirMut.mutate()
+              }}
               liberando={liberarMut.isPending}
               reabriendo={reabrirMut.isPending}
               canPrepare={puedePreparar}
