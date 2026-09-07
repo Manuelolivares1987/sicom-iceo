@@ -1665,7 +1665,9 @@ function ProgramarOtDialog({ target, planSemanalId, dias, onClose, onDone, agreg
   const { data: conceptos = [] } = useQuery({
     queryKey: ['conceptos-bono'], queryFn: getConceptosBono, staleTime: 10 * 60_000,
   })
-  const conceptoSugerido = tipo === 'correctivo' ? 'RSR' : 'MPN'
+  // La entrega en arriendo no es un trabajo de taller: no se mide contra el
+  // plan de incentivo, así que no lleva concepto ni meta.
+  const conceptoSugerido = tipo === 'entrega' ? '' : tipo === 'correctivo' ? 'RSR' : 'MPN'
   useEffect(() => { setConcepto(conceptoSugerido); setMotivoConcepto('') }, [conceptoSugerido])
   const conceptoCambiado = !!concepto && concepto !== conceptoSugerido
 
@@ -1788,7 +1790,8 @@ function ProgramarOtDialog({ target, planSemanalId, dias, onClose, onDone, agreg
       // paraguas, así que repetirlas en cada día lo multiplicaría.
       const horasN = horasEquipo.trim() ? Number(horasEquipo) : null
       // [MIG477] La meta que se compromete: los días se miden contra ella.
-      await setMetaOT(r.id, meta)
+      // La entrega queda fuera del incentivo: sin meta ni concepto.
+      if (tipo !== 'entrega') await setMetaOT(r.id, meta)
       let primera = true
       for (const f of fechas) {
         // [MIG477] Cada fecha va al plan de SU semana. Si el trabajo cruza el
@@ -1879,7 +1882,9 @@ function ProgramarOtDialog({ target, planSemanalId, dias, onClose, onDone, agreg
 
         {/* [MIG466] Qué tipo de tarea es, en términos del plan de incentivo.
             Decide el estándar de días contra el que se mide el trabajo, así que
-            tiene que estar decidido ANTES de ejecutar, no deducido después. */}
+            tiene que estar decidido ANTES de ejecutar, no deducido después.
+            La ENTREGA no: no es mantención, no entra al plan de incentivo. */}
+        {tipo !== 'entrega' && (
         <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-2.5">
           <label className="text-xs font-semibold text-emerald-900">
             Tipo de tarea para el plan de incentivo
@@ -2066,6 +2071,7 @@ function ProgramarOtDialog({ target, planSemanalId, dias, onClose, onDone, agreg
             </div>
           )}
         </div>
+        )}
 
         {tipo === 'preventivo' && (
           <div>
