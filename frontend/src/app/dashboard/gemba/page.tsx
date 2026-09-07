@@ -227,10 +227,16 @@ export default function GembaPage() {
       {/* ── Hallazgos abiertos (plan de acción global) ── */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <AlertTriangle className="h-5 w-5 text-amber-500" />
-            Plan de acción — hallazgos abiertos ({hallazgosAbiertos?.length ?? 0})
-          </CardTitle>
+          <div className="flex items-center justify-between gap-2">
+            <CardTitle className="text-base flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-amber-500" />
+              Plan de acción — hallazgos abiertos ({hallazgosAbiertos?.length ?? 0})
+            </CardTitle>
+            <Link href="/dashboard/gemba/hallazgos"
+                  className="shrink-0 rounded-lg bg-amber-500 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-amber-600">
+              Gestionar →
+            </Link>
+          </div>
         </CardHeader>
         <CardContent>
           {hallazgosAbiertos && hallazgosAbiertos.length > 0 ? (

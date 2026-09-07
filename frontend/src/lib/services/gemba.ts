@@ -159,6 +159,8 @@ export interface GembaHallazgo {
   // Joined
   responsable?: { nombre_completo?: string; email?: string }
   recorrido?: { fecha: string; lugar_tipo: GembaLugarTipo; sector?: string }
+  /** El ítem del checklist que originó el hallazgo, con su evidencia (MIG389). */
+  respuesta?: { item: string; seccion: string; foto_url?: string | null; observacion?: string | null } | null
 }
 
 export interface GembaRecorridoResumen {
@@ -244,7 +246,7 @@ export async function getGembaHallazgos(recorridoId?: string, soloAbiertos = fal
   let q = supabase
     .from('gemba_hallazgos')
     .select(
-      '*, responsable:usuarios_perfil(nombre_completo, email), recorrido:gemba_recorridos(fecha, lugar_tipo, sector)'
+      '*, responsable:usuarios_perfil(nombre_completo, email), recorrido:gemba_recorridos(fecha, lugar_tipo, sector), respuesta:gemba_respuestas(item, seccion, foto_url, observacion)'
     )
   if (recorridoId) q = q.eq('recorrido_id', recorridoId)
   if (soloAbiertos) q = q.neq('estado', 'cerrada')

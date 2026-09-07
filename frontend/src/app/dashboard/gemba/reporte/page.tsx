@@ -180,9 +180,16 @@ export default function GembaReportePage() {
           {/* ── Plan de acción ── */}
           <Card>
             <CardContent className="p-4">
-              <h2 className="mb-2 flex items-center gap-1.5 text-sm font-bold text-gray-800">
-                <AlertTriangle className="h-4 w-4 text-amber-500" /> Plan de acción
-              </h2>
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <h2 className="flex items-center gap-1.5 text-sm font-bold text-gray-800">
+                  <AlertTriangle className="h-4 w-4 text-amber-500" /> Plan de acción
+                </h2>
+                {/* La gestión de verdad: cada hallazgo con responsable, plazo y cierre. */}
+                <Link href="/dashboard/gemba/hallazgos"
+                      className="rounded-lg bg-amber-500 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-amber-600">
+                  Gestionar hallazgos →
+                </Link>
+              </div>
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                 {[
                   { l: 'Abiertos', v: h?.abiertos ?? 0, c: 'text-amber-700 bg-amber-50 border-amber-200' },
