@@ -18,7 +18,7 @@ import {
 } from '@/hooks/use-taller-mecanico'
 import { useTallerTecnicos } from '@/hooks/use-taller-plan-semanal'
 import type { MecanicoOT } from '@/lib/offline/taller-mecanico-sync'
-import { MisOrdenesDeServicio, OsDelTaller } from './mis-os'
+import { MisOrdenesDeServicio } from './mis-os'
 import { getOSAbiertas } from '@/lib/services/taller-os'
 import { CalendarDays } from 'lucide-react'
 import {
@@ -388,10 +388,23 @@ export default function MecanicoHomePage() {
           no se puede atribuir no sirve para el bono. */}
       <MisOrdenesDeServicio online={online} />
 
-      {/* [MIG507] Todas las OS abiertas del taller, de solo lectura: visibles
-          desde cualquier cuenta (la compartida incluida). El reloj sigue
-          siendo personal; ver el trabajo repartido, no. */}
-      <OsDelTaller />
+      {/* [07-09] Manuel: las OS se ven EN SU DÍA de la tira (tarjetas azules,
+          MIG508), no en una lista arriba que confunde. Solo si alguna OS
+          quedara sin día asignado se avisa acá — que no vuelva a pasar lo
+          del 03-09 («no puedo ver la orden de servicio planificada»). */}
+      {osAbiertas.some((o) => !o.fecha_programada) && (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+          <p className="font-semibold">
+            {osAbiertas.filter((o) => !o.fecha_programada).length} orden(es) de servicio sin día asignado:
+          </p>
+          {osAbiertas.filter((o) => !o.fecha_programada).map((os) => (
+            <Link key={os.os_id} href={`/m/taller/os/${os.os_id}`} className="block underline">
+              {os.folio} · {os.titulo ?? ''}
+            </Link>
+          ))}
+          <p className="mt-0.5 text-[10px]">Pídele al planificador que les ponga día para que aparezcan en la tira.</p>
+        </div>
+      )}
 
       {/* [MIG386] Lo del taller que no es de ningún equipo. Vive fuera de las OT
           a propósito: quien busca guantes no está buscando una orden. */}
