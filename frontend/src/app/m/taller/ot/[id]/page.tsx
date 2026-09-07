@@ -190,6 +190,8 @@ function CapturaItem({ it, onGuardar, saving }: {
   const [opcion, setOpcion] = useState(cap.opcion ?? '')
   // [MIG496/534] Firma + RUT del cierre (B11.07): firma solo el ejecutor.
   const [rutOp, setRutOp] = useState(cap.rut_operador ?? '')
+  // El acta de entrega imprime NOMBRE de quien entrega y quien acepta.
+  const [nombreOp, setNombreOp] = useState(cap.nombre_operador ?? '')
   const [firmaOp, setFirmaOp] = useState('')
 
   // [MIG496] B11.04 se llena solo al guardar los medidores (horómetro + 300 h):
@@ -206,13 +208,13 @@ function CapturaItem({ it, onGuardar, saving }: {
     // después las ve el jefe de taller». La firma del responsable de taller
     // sale de B11: el jefe revisa y aprueba el checklist al verificar.
     const firmadoOp = !!cap.firma_operador_url
-    const sucio = !!firmaOp || rutOp !== (cap.rut_operador ?? '')
+    const sucio = !!firmaOp || rutOp !== (cap.rut_operador ?? '') || nombreOp !== (cap.nombre_operador ?? '')
     const guardarFirmas = () => {
       const firmas: { campo: 'firma_operador_url' | 'firma_taller_url'; blob: Blob }[] = []
       if (firmaOp) firmas.push({ campo: 'firma_operador_url', blob: dataUrlToBlob(firmaOp) })
       const completo = !!firmaOp || firmadoOp
       onGuardar({
-        mediciones: { ...cap, rut_operador: rutOp.trim() || null },
+        mediciones: { ...cap, rut_operador: rutOp.trim() || null, nombre_operador: nombreOp.trim() || null },
         firmas: firmas.length ? firmas : undefined,
         resultado: completo ? 'ok' : undefined,
       })
@@ -228,6 +230,9 @@ function CapturaItem({ it, onGuardar, saving }: {
             {it.descripcion}
             {firmadoOp && <span className="flex items-center gap-0.5 text-green-700"><Check className="h-3 w-3" /> firmado</span>}
           </p>
+          <input value={nombreOp} onChange={(e) => setNombreOp(e.target.value)}
+                 placeholder="Nombre y apellido" inputMode="text"
+                 className={cls + ' mt-1.5 max-w-[260px]'} />
           <input value={rutOp} onChange={(e) => setRutOp(e.target.value)}
                  placeholder="RUT (ej: 12.345.678-9)" inputMode="text"
                  className={cls + ' mt-1.5 max-w-[220px]'} />

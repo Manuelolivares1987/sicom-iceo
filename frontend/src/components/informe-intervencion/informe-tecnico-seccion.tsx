@@ -16,7 +16,7 @@ import {
   aprobar, cerrar, crearNuevaVersion, generarYSubirPDF, getSignedPdfUrl,
   type InformeIntervencion, type EstadoInformeIntervencion, type CamposBorradorInforme,
 } from '@/lib/services/informe-intervencion'
-import { getChecklistV3OT } from '@/lib/services/taller-plan-semanal'
+import { getChecklistV3OT, respuestaCaptura } from '@/lib/services/taller-plan-semanal'
 import { supabase } from '@/lib/supabase'
 
 // Roles que pueden crear/editar el informe (espejo del backend fn_ii_puede('edit')).
@@ -54,23 +54,25 @@ export function InformeTecnicoSeccion({ otId, otEstado }: Props) {
 
   // La ejecución real (checklist V03 con fotos): es lo que el PDF imprime en
   // «Trabajos realizados» — se muestra acá para que se vea ANTES de generar.
-  const { data: ejecucion } = useQuery({
+  const { data: itemsV3 } = useQuery({
     queryKey: ['informe-ejecucion-v3', otId],
-    queryFn: async () => {
-      const items = await getChecklistV3OT(otId)
-      return items
-        .filter((i) => !i.excluido && i.resultado != null && i.resultado !== 'pendiente')
-        .map((i) => ({
-          id: i.instance_item_id,
-          descripcion: i.descripcion,
-          resultado: i.resultado,
-          observacion: i.observacion,
-          fotos: Array.from(new Set([...(i.foto_urls ?? []), i.foto_url].filter((u): u is string => !!u))),
-        }))
-    },
+    queryFn: () => getChecklistV3OT(otId),
     enabled: !!otId,
     staleTime: 60_000,
   })
+  // [MIG539] Si el checklist es el de ENTREGA, esta OT no lleva informe de
+  // trabajos: lleva el Acta de Entrega, con la firma del que entrega (ED.08)
+  // y la del representante del cliente que acepta (ED.09).
+  const esEntrega = (itemsV3 ?? []).some((i) => (i.bloque ?? '').includes('entrega'))
+  const ejecucion = (itemsV3 ?? [])
+    .filter((i) => !i.excluido && i.resultado != null && i.resultado !== 'pendiente')
+    .map((i) => ({
+      id: i.instance_item_id,
+      descripcion: i.descripcion,
+      resultado: i.resultado,
+      observacion: i.observacion,
+      fotos: Array.from(new Set([...(i.foto_urls ?? []), i.foto_url].filter((u): u is string => !!u))),
+    }))
 
   const { data: informe, isLoading } = useQuery({
     queryKey: ['informe-intervencion', otId],
@@ -229,19 +231,88 @@ export function InformeTecnicoSeccion({ otId, otEstado }: Props) {
     }
   }
 
+  // El acta de la ENTREGA: verificaciones por bloque + las dos firmas del
+  // cierre en terreno (quien entrega y quien acepta), con nombre y RUT.
+  async function handleActaEntrega() {
+    setBusy('pdf-entrega'); setError(null)
+    try {
+      const [{ generarPDFActaEntrega }, otRes] = await Promise.all([
+        import('@/components/informe-intervencion/pdf-informe-entrega'),
+        supabase.from('ordenes_trabajo')
+          .select('folio, fecha_inicio, fecha_termino, activo_id')
+          .eq('id', otId).single(),
+      ])
+      if (otRes.error || !otRes.data) throw otRes.error ?? new Error('No se pudo leer la OT')
+      const { data: act } = await supabase.from('activos')
+        .select('patente, codigo, nombre, horas_uso_actual, kilometraje_actual, cliente_actual, modelo:modelos(nombre, marca:marcas(nombre))')
+        .eq('id', otRes.data.activo_id).maybeSingle()
+      const actRaw = act as unknown as {
+        patente: string | null; codigo: string | null; nombre: string | null
+        horas_uso_actual: number | null; kilometraje_actual: number | null
+        cliente_actual: string | null
+        modelo?: { nombre?: string | null; marca?: { nombre?: string | null } | null } | null
+      } | null
+      const firmaDe = (codigo: string) => {
+        const cap = respuestaCaptura((itemsV3 ?? []).find((i) => i.codigo === codigo)?.mediciones)
+        return {
+          url: cap.firma_operador_url ?? null,
+          nombre: cap.nombre_operador ?? null,
+          rut: cap.rut_operador ?? null,
+        }
+      }
+      const blob = await generarPDFActaEntrega({
+        ot: { folio: otRes.data.folio, fecha_inicio: otRes.data.fecha_inicio,
+              fecha_termino: otRes.data.fecha_termino },
+        activo: {
+          patente: actRaw?.patente, codigo: actRaw?.codigo, nombre: actRaw?.nombre,
+          marca: actRaw?.modelo?.marca?.nombre ?? null, modelo: actRaw?.modelo?.nombre ?? null,
+          horas_uso_actual: actRaw?.horas_uso_actual, kilometraje_actual: actRaw?.kilometraje_actual,
+          cliente: actRaw?.cliente_actual ?? null,
+        },
+        items: (itemsV3 ?? [])
+          .filter((i) => !i.excluido && i.tipo_respuesta !== 'firma'
+            && i.resultado != null && i.resultado !== 'pendiente')
+          .map((i) => ({
+            id: i.instance_item_id, bloque: i.bloque, descripcion: i.descripcion,
+            resultado: i.resultado, observacion: i.observacion,
+            fotos: Array.from(new Set([...(i.foto_urls ?? []), i.foto_url].filter((u): u is string => !!u))),
+          })),
+        firmaEntrega: firmaDe('ED.08'),
+        firmaAcepta: firmaDe('ED.09'),
+      })
+      window.open(URL.createObjectURL(blob), '_blank')
+    } catch (e) {
+      setError(mensajeError(e, 'No se pudo generar el acta de entrega'))
+    } finally {
+      setBusy(null)
+    }
+  }
+
   return (
     <Card className="mt-4">
       <CardContent className="p-4 sm:p-6">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <FileText className="h-5 w-5 text-pillado-green-600" />
-            <h3 className="text-base font-bold text-gray-900">Informe técnico de intervención</h3>
+            <h3 className="text-base font-bold text-gray-900">
+              {esEntrega ? 'Acta de entrega en arriendo' : 'Informe técnico de intervención'}
+            </h3>
           </div>
           <div className="flex items-center gap-2">
             {/* [04-09] Manuel: «simplemente un informe con lo que realmente se
                 ha hecho, el mismo formato del recobro». UN clic, sin estados
-                ni revisión: se arma con la ejecución del checklist y se abre. */}
-            {(ejecucion ?? []).length > 0 && (
+                ni revisión: se arma con la ejecución del checklist y se abre.
+                Para la ENTREGA el informe es otro: el acta con las dos firmas
+                (quien entrega y quien acepta). */}
+            {(ejecucion ?? []).length > 0 && (esEntrega ? (
+              <Button
+                variant="primary" size="sm"
+                loading={busy === 'pdf-entrega'}
+                onClick={handleActaEntrega}
+              >
+                <FileText className="h-4 w-4" /> Acta de entrega (PDF)
+              </Button>
+            ) : (
               <Button
                 variant="primary" size="sm"
                 loading={busy === 'pdf-trabajos'}
@@ -249,7 +320,7 @@ export function InformeTecnicoSeccion({ otId, otEstado }: Props) {
               >
                 <FileText className="h-4 w-4" /> Informe de trabajos (PDF)
               </Button>
-            )}
+            ))}
             {informe && (
               <>
                 <span className="text-xs text-gray-500">{informe.folio} · v{informe.version}</span>
@@ -273,6 +344,14 @@ export function InformeTecnicoSeccion({ otId, otEstado }: Props) {
 
         {isLoading ? (
           <div className="flex justify-center py-6"><Spinner size="md" className="text-pillado-green-500" /></div>
+        ) : !informe && esEntrega ? (
+          // ── Entrega: el documento de la OT es el ACTA, no el informe
+          //    técnico. No se empuja a crear un circuito que acá no aplica. ──
+          <p className="text-sm text-gray-500">
+            El documento de esta OT es el <strong>Acta de entrega</strong> (botón de arriba):
+            imprime las verificaciones del Check-List V02 y las firmas de quien
+            entrega y quien acepta. No requiere circuito de revisión.
+          </p>
         ) : !informe ? (
           // ── Inexistente ──────────────────────────────────
           <div className="space-y-3">
@@ -308,7 +387,7 @@ export function InformeTecnicoSeccion({ otId, otEstado }: Props) {
             {(ejecucion ?? []).length > 0 && (
               <div className="rounded-lg border border-gray-200">
                 <p className="border-b border-gray-100 px-3 py-2 text-xs font-semibold text-gray-600">
-                  Trabajos ejecutados ({(ejecucion ?? []).length}) — así salen en el PDF, con sus fotos
+                  {esEntrega ? 'Verificaciones de la entrega' : 'Trabajos ejecutados'} ({(ejecucion ?? []).length}) — así salen en el PDF, con sus fotos
                 </p>
                 <div className="max-h-80 space-y-2 overflow-y-auto p-3">
                   {(ejecucion ?? []).map((e, i) => (
