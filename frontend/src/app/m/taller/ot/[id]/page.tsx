@@ -835,7 +835,11 @@ export default function MecanicoOTPage() {
       if (!x) { x = { bloque: it.bloque, items: [] }; g.push(x) }
       x.items.push(it)
     }
-    return g
+    // [07-09] Manuel: «el cierre y responsabilidades SIEMPRE abajo, porque
+    // como están confunden». El cierre se firma al final del trabajo: va al
+    // final de la lista, pase lo que pase con el orden de los demás bloques.
+    const esCierre = (b: string) => b.toLowerCase().includes('cierre')
+    return [...g.filter((x) => !esCierre(x.bloque)), ...g.filter((x) => esCierre(x.bloque))]
   }, [visibles])
 
   // Bloques abiertos (colapsables). Arrancan COLAPSADOS para no mostrar un mar
