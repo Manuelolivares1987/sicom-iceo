@@ -25,6 +25,7 @@ import { cn } from '@/lib/utils'
 import { useRequireAuth } from '@/hooks/use-require-auth'
 import { useGembaReporte } from '@/hooks/use-gemba'
 import { CADENCIA_LABEL, MESES_GEMBA, type GembaProgramaFila } from '@/lib/services/gemba'
+import { PlanAccionLista } from '@/components/gemba/plan-accion-lista'
 
 const hoy = () => { const d = new Date(); return { anio: d.getFullYear(), mes: d.getMonth() + 1 } }
 
@@ -218,6 +219,13 @@ export default function GembaReportePage() {
                     <b>{h!.sin_plazo}</b> acción(es) abierta(s) sin fecha de compromiso: sin plazo no hay seguimiento.
                   </p>
                 )}
+              </div>
+
+              {/* Manuel: «necesito que se vea aquí». La gestión completa, en la
+                  misma página del reporte: filtrar, asignar, avanzar, cerrar.
+                  Los hallazgos son el plan VIVO, no van por mes como el resto. */}
+              <div className="mt-4 border-t border-gray-100 pt-3">
+                <PlanAccionLista />
               </div>
             </CardContent>
           </Card>
