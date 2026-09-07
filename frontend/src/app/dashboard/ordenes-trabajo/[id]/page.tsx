@@ -1703,6 +1703,7 @@ function EditarOTCard({ otData, otId }: { otData: any; otId: string }) {
     setEditSuccess(false)
     // La pareja se escribe en TODAS las jornadas de la visita (regla del
     // banner del plan): el plan y la OT no pueden discrepar.
+    let tecnicoFinal = tecnicoId
     if (parejaSel !== null && jornadas.length > 0) {
       if (parejaSel.length === 0) {
         setEditError('La pareja no puede quedar vacía: elige 1 o 2 técnicos.')
@@ -1718,18 +1719,23 @@ function EditarOTCard({ otData, otId }: { otData: any; otId: string }) {
         setEditError((e as Error).message)
         return
       }
+      // [07-09] Manuel: «solo deja una opción». Con la OT en el plan, la
+      // pareja manda: el responsable de la OT se deriva del primer técnico
+      // elegido, sin un segundo selector que diga otra cosa.
+      tecnicoFinal = parejaSel[0]
+      setTecnicoId(parejaSel[0])
     }
-    const tec = tecnicos.find((t) => t.id === tecnicoId)
+    const tec = tecnicos.find((t) => t.id === tecnicoFinal)
     updateOT.mutate(
       {
         id: otId,
         data: {
           prioridad,
           fecha_programada: fechaProgramada || null,
-          tecnico_id: tecnicoId || null,
+          tecnico_id: tecnicoFinal || null,
           // La cuenta responsable sigue al técnico (si tiene login propio);
           // sin técnico elegido se conserva la cuenta que ya tenía la OT.
-          responsable_id: tecnicoId ? (tec?.usuario_perfil_id ?? null) : (otData.responsable_id ?? null),
+          responsable_id: tecnicoFinal ? (tec?.usuario_perfil_id ?? null) : (otData.responsable_id ?? null),
           observaciones: observaciones || null,
         },
       },
@@ -1776,19 +1782,24 @@ function EditarOTCard({ otData, otId }: { otData: any; otId: string }) {
               className="h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm text-gray-700 focus:border-pillado-green-500 focus:outline-none focus:ring-2 focus:ring-pillado-green-500/20"
             />
           </div>
-          <div>
-            <label className="mb-1 block text-xs font-medium text-gray-500">Responsable (técnico de taller)</label>
-            <select
-              value={tecnicoId}
-              onChange={(e) => setTecnicoId(e.target.value)}
-              className="h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm text-gray-700 focus:border-pillado-green-500 focus:outline-none focus:ring-2 focus:ring-pillado-green-500/20"
-            >
-              <option value="">Sin asignar</option>
-              {tecnicos.map((t) => (
-                <option key={t.id} value={t.id}>{t.nombre} ({t.especialidad})</option>
-              ))}
-            </select>
-          </div>
+          {/* [07-09] Con la OT en el plan hay UNA sola opción: la pareja.
+              El responsable se deriva de ella; este selector queda solo
+              para OTs sin jornadas planificadas. */}
+          {jornadas.length === 0 && (
+            <div>
+              <label className="mb-1 block text-xs font-medium text-gray-500">Responsable (técnico de taller)</label>
+              <select
+                value={tecnicoId}
+                onChange={(e) => setTecnicoId(e.target.value)}
+                className="h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm text-gray-700 focus:border-pillado-green-500 focus:outline-none focus:ring-2 focus:ring-pillado-green-500/20"
+              >
+                <option value="">Sin asignar</option>
+                {tecnicos.map((t) => (
+                  <option key={t.id} value={t.id}>{t.nombre} ({t.especialidad})</option>
+                ))}
+              </select>
+            </div>
+          )}
           <div>
             <label className="mb-1 block text-xs font-medium text-gray-500">Observaciones</label>
             <textarea
