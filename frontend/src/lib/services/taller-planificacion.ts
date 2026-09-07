@@ -503,7 +503,7 @@ export async function asignarPauta(activoId: string, pautaId: string): Promise<v
   if (error) throw error
 }
 
-export type TipoOtTaller = 'correctivo' | 'preventivo' | 'inspeccion'
+export type TipoOtTaller = 'correctivo' | 'preventivo' | 'inspeccion' | 'entrega'
 export type PrioridadTaller = 'emergencia' | 'alta' | 'normal' | 'baja'
 
 /**
@@ -534,6 +534,26 @@ export async function programarOtTaller(params: {
   return data as { id: string; folio: string; estado: string; reutilizada?: boolean; mensaje?: string }
 }
 
+/**
+ * [MIG538] Programar una ENTREGA en arriendo: OT por el camino del plan (tipo
+ * inspección, siempre nueva) con el Check-List de Entrega V02 en vez de la
+ * inspección. El operador la ve y la ejecuta en /m/taller.
+ */
+export async function programarEntregaArriendo(params: {
+  activoId: string
+  prioridad: PrioridadTaller
+  fecha: string | null
+}): Promise<{ id: string; folio: string; estado: string }> {
+  const { data, error } = await supabase.rpc('rpc_programar_entrega_arriendo', {
+    p_activo_id: params.activoId,
+    p_prioridad: params.prioridad,
+    p_fecha: params.fecha,
+    p_responsable_id: null,
+  })
+  if (error) throw error
+  return data as { id: string; folio: string; estado: string }
+}
+
 /** Una OT sigue «abierta» mientras no se ejecute, cierre ni cancele. Es el
  *  complemento exacto del filtro de fn_ot_abierta_reutilizable (MIG256). */
 export const ESTADOS_OT_ABIERTA = ['creada', 'asignada', 'en_ejecucion', 'pausada'] as const
@@ -546,6 +566,9 @@ export async function getOtAbiertaDelTrabajo(
   /** [MIG466] Desde cuándo corre el reloj: el bono cuenta días reales, no jornadas. */
   fecha_inicio: string | null; created_at: string
 } | null> {
+  // [MIG538] Cada entrega es su propio evento: nunca se reutiliza una OT
+  // ('entrega' además no existe en el enum de la base).
+  if (tipo === 'entrega') return null
   let q = supabase
     .from('ordenes_trabajo')
     .select('id, folio, estado, fecha_programada, fecha_inicio, created_at, plan_mantenimiento_id')

@@ -221,19 +221,19 @@ function CapturaItem({ it, onGuardar, saving }: {
     return (
       <div className="mt-2 space-y-2.5">
         <div className="rounded-lg border border-gray-200 bg-gray-50/60 p-2.5">
+          {/* [MIG538] El rótulo es el del ÍTEM: en la entrega firman el técnico
+              (ED.08) Y el representante del cliente (ED.09), cada uno en su
+              propio recuadro. */}
           <p className="flex items-center gap-1.5 text-[11px] font-semibold text-gray-700">
-            Técnico ejecutor
+            {it.descripcion}
             {firmadoOp && <span className="flex items-center gap-0.5 text-green-700"><Check className="h-3 w-3" /> firmado</span>}
           </p>
           <input value={rutOp} onChange={(e) => setRutOp(e.target.value)}
                  placeholder="RUT (ej: 12.345.678-9)" inputMode="text"
                  className={cls + ' mt-1.5 max-w-[220px]'} />
           <div className="mt-1.5">
-            <SignaturePad label="Firma del técnico ejecutor" onCapture={setFirmaOp} existingUrl={cap.firma_operador_url} />
+            <SignaturePad label="Firma" onCapture={setFirmaOp} existingUrl={cap.firma_operador_url} />
           </div>
-          <p className="mt-1.5 text-[10px] text-gray-500">
-            El jefe de taller revisa y aprueba el checklist después de finalizar.
-          </p>
         </div>
         <button type="button" disabled={saving || !sucio} onClick={guardarFirmas}
                 className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40">
