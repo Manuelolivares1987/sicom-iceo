@@ -163,6 +163,8 @@ export type RespuestaCaptura = {
   opcion?: string | null
   firma_operador_url?: string | null
   rut_operador?: string | null
+  /** Nombre de quien firma (acta de entrega: quien entrega / quien acepta). */
+  nombre_operador?: string | null
   firma_taller_url?: string | null
   rut_taller?: string | null
 }
