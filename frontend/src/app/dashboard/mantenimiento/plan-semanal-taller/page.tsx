@@ -51,7 +51,7 @@ import {
 } from '@/lib/services/taller-plan-semanal'
 import { getFlotaDashboard, type FlotaDashboardActivo } from '@/lib/services/flota-dashboard'
 import {
-  getPlanesActivo, getPreventivasDue, programarOtTaller, getOtAbiertaDelTrabajo,
+  getPlanesActivo, getPreventivasDue, programarOtTaller, programarEntregaArriendo, getOtAbiertaDelTrabajo,
   getActividadesDelPlan,
   getEquiposPadre, getRecepcionesPorPlanificar, programarRecepcion,
   getNcOtsPorAgendar,
@@ -1771,12 +1771,16 @@ function ProgramarOtDialog({ target, planSemanalId, dias, onClose, onDone, agreg
       const fechas = Array.from(fechasSel).sort()
 
       // Una sola OT (con su checklist desde la pauta); se agrega como jornada en cada día.
-      const r = await programarOtTaller({
-        activoId: target.activoId, tipo, prioridad, fecha: fechas[0],
-        responsableId: null,
-        planId: tipo === 'preventivo' ? (planId || null) : null,
-        reutilizar: !forzarNueva,
-      })
+      // [MIG538] La entrega va por su propio camino: SIEMPRE OT nueva y con el
+      // Check-List de Entrega V02 en vez de la inspección.
+      const r = tipo === 'entrega'
+        ? await programarEntregaArriendo({ activoId: target.activoId, prioridad, fecha: fechas[0] })
+        : await programarOtTaller({
+            activoId: target.activoId, tipo, prioridad, fecha: fechas[0],
+            responsableId: null,
+            planId: tipo === 'preventivo' ? (planId || null) : null,
+            reutilizar: !forzarNueva,
+          })
       // [MIG471] Igual que en recepción: se guardan PERSONAS, no un texto con
       // ids adentro. De esto depende que la OT le pague a alguien.
       // [MIG476] Las horas van en la PRIMERA jornada: son el total del equipo
@@ -1861,7 +1865,16 @@ function ProgramarOtDialog({ target, planSemanalId, dias, onClose, onDone, agreg
             <option value="preventivo">Preventivo (actividades desde pauta)</option>
             <option value="correctivo">Correctivo</option>
             <option value="inspeccion">Inspección</option>
+            {/* [MIG538] La entrega se planifica y la ejecuta el operador. */}
+            <option value="entrega">Entrega en arriendo (Check-List V02)</option>
           </select>
+          {tipo === 'entrega' && (
+            <p className="mt-1 text-[11px] text-gray-500">
+              La OT llega al teléfono del operador con el Check-List de Entrega:
+              pruebas funcionales, estado del equipo y las firmas del técnico y
+              del representante del cliente.
+            </p>
+          )}
         </div>
 
         {/* [MIG466] Qué tipo de tarea es, en términos del plan de incentivo.
