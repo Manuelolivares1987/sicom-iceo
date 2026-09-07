@@ -464,6 +464,7 @@ function ChecklistTab({
   const [tiempos, setTiempos] = useState<Record<string, string>>({})
   const [nuevaTarea, setNuevaTarea] = useState('')
   const [nuevoTiempo, setNuevoTiempo] = useState('')
+  const [nuevoTipo, setNuevoTipo] = useState<'ok_no_ok' | 'texto'>('ok_no_ok')
   const [busy, setBusy] = useState(false)
   // Vista amigable con pautas grandes: bloques colapsables + búsqueda.
   const [bloquesAbiertos, setBloquesAbiertos] = useState<Record<string, boolean>>({})
@@ -589,8 +590,8 @@ function ChecklistTab({
     if (!nuevaTarea.trim()) return
     setBusy(true)
     try {
-      await rpcV3AgregarItem(otId, nuevaTarea.trim(), nuevoTiempo ? Number(nuevoTiempo) : null)
-      setNuevaTarea(''); setNuevoTiempo(''); invalidate()
+      await rpcV3AgregarItem(otId, nuevaTarea.trim(), nuevoTiempo ? Number(nuevoTiempo) : null, nuevoTipo)
+      setNuevaTarea(''); setNuevoTiempo(''); setNuevoTipo('ok_no_ok'); invalidate()
     } catch { /* retry */ } finally { setBusy(false) }
   }
 
@@ -926,6 +927,15 @@ function ChecklistTab({
               onKeyDown={(e) => { if (e.key === 'Enter') agregarTarea() }}
               className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm"
             />
+          </div>
+          {/* [MIG536] Manuel: el jefe elige cómo se responde la tarea. */}
+          <div className="w-36">
+            <label className="mb-1 block text-xs font-medium text-gray-500">Se responde con</label>
+            <select value={nuevoTipo} onChange={(e) => setNuevoTipo(e.target.value as 'ok_no_ok' | 'texto')}
+                    className="h-10 w-full rounded-lg border border-gray-300 bg-white px-2 text-sm">
+              <option value="ok_no_ok">OK / NO OK</option>
+              <option value="texto">Texto (escribe)</option>
+            </select>
           </div>
           <div className="w-20">
             <label className="mb-1 block text-xs font-medium text-gray-500">Min</label>

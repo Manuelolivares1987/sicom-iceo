@@ -756,9 +756,14 @@ export async function rpcV3SetExcluido(itemId: string, excluido: boolean) {
   return data as { success: boolean }
 }
 
-export async function rpcV3AgregarItem(otId: string, descripcion: string, tiempoMin: number | null) {
+export async function rpcV3AgregarItem(
+  otId: string, descripcion: string, tiempoMin: number | null,
+  // [MIG536] Cómo se responde la tarea a medida: lo elige quien la crea.
+  tipoRespuesta: 'ok_no_ok' | 'texto' = 'ok_no_ok',
+) {
   const { data, error } = await supabase.rpc('rpc_taller_v3_agregar_item', {
     p_ot_id: otId, p_descripcion: descripcion, p_tiempo_min: tiempoMin,
+    p_tipo_respuesta: tipoRespuesta,
   })
   if (error) throw error
   return data as { success: boolean; item_id: string; instance_id: string }
