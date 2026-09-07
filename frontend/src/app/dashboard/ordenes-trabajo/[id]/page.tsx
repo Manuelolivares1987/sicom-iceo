@@ -605,12 +605,17 @@ function ChecklistTab({
     return <p className="py-8 text-center text-gray-400">Esta OT no tiene checklist</p>
   }
 
-  const grupos: { bloque: string; items: ChecklistV3Item[] }[] = []
+  const gruposBase: { bloque: string; items: ChecklistV3Item[] }[] = []
   for (const it of visibles) {
-    let g = grupos.find((x) => x.bloque === it.bloque)
-    if (!g) { g = { bloque: it.bloque, items: [] }; grupos.push(g) }
+    let g = gruposBase.find((x) => x.bloque === it.bloque)
+    if (!g) { g = { bloque: it.bloque, items: [] }; gruposBase.push(g) }
     g.items.push(it)
   }
+  // [07-09] El cierre y responsabilidades SIEMPRE al final (misma regla que
+  // la app del mecánico): se firma cuando el trabajo terminó.
+  const esBloqueCierre = (b: string) => b.toLowerCase().includes('cierre')
+  const grupos = [...gruposBase.filter((g) => !esBloqueCierre(g.bloque)),
+                  ...gruposBase.filter((g) => esBloqueCierre(g.bloque))]
   const activos = all.filter((i) => !i.excluido)
   const hechos = activos.filter((i) => i.resultado && i.resultado !== 'pendiente').length
   const tiempoTotal = activos.reduce((s, i) => s + (i.tiempo_min ?? 0), 0)
