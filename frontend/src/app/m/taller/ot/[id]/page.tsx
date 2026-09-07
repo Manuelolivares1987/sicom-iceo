@@ -188,11 +188,9 @@ function CapturaItem({ it, onGuardar, saving }: {
   const [numero, setNumero] = useState(it.valor_numerico != null ? String(it.valor_numerico) : '')
   const [fecha, setFecha] = useState(cap.fecha ?? '')
   const [opcion, setOpcion] = useState(cap.opcion ?? '')
-  // [MIG496] Firmas + RUT del cierre de recepción (B11.07): se firman acá mismo.
+  // [MIG496/534] Firma + RUT del cierre (B11.07): firma solo el ejecutor.
   const [rutOp, setRutOp] = useState(cap.rut_operador ?? '')
-  const [rutTa, setRutTa] = useState(cap.rut_taller ?? '')
   const [firmaOp, setFirmaOp] = useState('')
-  const [firmaTa, setFirmaTa] = useState('')
 
   // [MIG496] B11.04 se llena solo al guardar los medidores (horómetro + 300 h):
   // cuando el valor llega del servidor, reflejarlo en el input.
@@ -204,51 +202,42 @@ function CapturaItem({ it, onGuardar, saving }: {
   const esProximaPauta = it.codigo === 'B11.04'
 
   if (it.tipo_respuesta === 'firma') {
+    // [MIG534] Manuel: «debería pedir solo la firma del ejecutor, porque
+    // después las ve el jefe de taller». La firma del responsable de taller
+    // sale de B11: el jefe revisa y aprueba el checklist al verificar.
     const firmadoOp = !!cap.firma_operador_url
-    const firmadoTa = !!cap.firma_taller_url
-    const sucio = !!firmaOp || !!firmaTa
-      || rutOp !== (cap.rut_operador ?? '') || rutTa !== (cap.rut_taller ?? '')
+    const sucio = !!firmaOp || rutOp !== (cap.rut_operador ?? '')
     const guardarFirmas = () => {
       const firmas: { campo: 'firma_operador_url' | 'firma_taller_url'; blob: Blob }[] = []
       if (firmaOp) firmas.push({ campo: 'firma_operador_url', blob: dataUrlToBlob(firmaOp) })
-      if (firmaTa) firmas.push({ campo: 'firma_taller_url', blob: dataUrlToBlob(firmaTa) })
-      const completo = (!!firmaOp || firmadoOp) && (!!firmaTa || firmadoTa)
+      const completo = !!firmaOp || firmadoOp
       onGuardar({
-        mediciones: { ...cap, rut_operador: rutOp.trim() || null, rut_taller: rutTa.trim() || null },
+        mediciones: { ...cap, rut_operador: rutOp.trim() || null },
         firmas: firmas.length ? firmas : undefined,
         resultado: completo ? 'ok' : undefined,
       })
-      setFirmaOp(''); setFirmaTa('')
+      setFirmaOp('')
     }
     return (
       <div className="mt-2 space-y-2.5">
         <div className="rounded-lg border border-gray-200 bg-gray-50/60 p-2.5">
           <p className="flex items-center gap-1.5 text-[11px] font-semibold text-gray-700">
-            Operador que entrega el equipo
+            Técnico ejecutor
             {firmadoOp && <span className="flex items-center gap-0.5 text-green-700"><Check className="h-3 w-3" /> firmado</span>}
           </p>
           <input value={rutOp} onChange={(e) => setRutOp(e.target.value)}
                  placeholder="RUT (ej: 12.345.678-9)" inputMode="text"
                  className={cls + ' mt-1.5 max-w-[220px]'} />
           <div className="mt-1.5">
-            <SignaturePad label="Firma del operador" onCapture={setFirmaOp} existingUrl={cap.firma_operador_url} />
+            <SignaturePad label="Firma del técnico ejecutor" onCapture={setFirmaOp} existingUrl={cap.firma_operador_url} />
           </div>
-        </div>
-        <div className="rounded-lg border border-gray-200 bg-gray-50/60 p-2.5">
-          <p className="flex items-center gap-1.5 text-[11px] font-semibold text-gray-700">
-            Responsable del taller que recibe
-            {firmadoTa && <span className="flex items-center gap-0.5 text-green-700"><Check className="h-3 w-3" /> firmado</span>}
+          <p className="mt-1.5 text-[10px] text-gray-500">
+            El jefe de taller revisa y aprueba el checklist después de finalizar.
           </p>
-          <input value={rutTa} onChange={(e) => setRutTa(e.target.value)}
-                 placeholder="RUT (ej: 12.345.678-9)" inputMode="text"
-                 className={cls + ' mt-1.5 max-w-[220px]'} />
-          <div className="mt-1.5">
-            <SignaturePad label="Firma del responsable de taller" onCapture={setFirmaTa} existingUrl={cap.firma_taller_url} />
-          </div>
         </div>
         <button type="button" disabled={saving || !sucio} onClick={guardarFirmas}
                 className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40">
-          Guardar firmas y RUT
+          Guardar firma y RUT
         </button>
       </div>
     )
