@@ -543,7 +543,7 @@ export async function programarEntregaArriendo(params: {
   activoId: string
   prioridad: PrioridadTaller
   fecha: string | null
-}): Promise<{ id: string; folio: string; estado: string }> {
+}): Promise<{ id: string; folio: string; estado: string; reutilizada?: boolean; mensaje?: string }> {
   const { data, error } = await supabase.rpc('rpc_programar_entrega_arriendo', {
     p_activo_id: params.activoId,
     p_prioridad: params.prioridad,
