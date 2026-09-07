@@ -1656,10 +1656,19 @@ function HistorialTab({ otId }: { otId: string }) {
 // ---------------------------------------------------------------------------
 function EditarOTCard({ otData, otId }: { otData: any; otId: string }) {
   const updateOT = useUpdateOT()
+  const qc = useQueryClient()
   const [prioridad, setPrioridad] = useState(otData.prioridad || 'normal')
   const [fechaProgramada, setFechaProgramada] = useState(otData.fecha_programada || '')
   const [tecnicoId, setTecnicoId] = useState(otData.tecnico_id || '')
   const [observaciones, setObservaciones] = useState(otData.observaciones || '')
+  // [07-09] Manuel: «en editar órdenes no puedo editar la pareja de mecánicos
+  // asignada en primera instancia». La pareja es de las JORNADAS del plan
+  // (rpcSetCuadrilla, MIG451) — se edita acá mismo, junto al resto de la OT.
+  const { data: jornadas = [] } = useQuery({
+    queryKey: ['ot-jornadas', otId], queryFn: () => getJornadasDeOT(otId),
+    enabled: !!otId, staleTime: 30_000,
+  })
+  const [parejaSel, setParejaSel] = useState<string[] | null>(null)
   // Responsable = técnico del catálogo de taller (misma lista que el plan
   // semanal, MIG195) — no cuentas de la plataforma.
   const [tecnicos, setTecnicos] = useState<{id: string; nombre: string; especialidad: string; usuario_perfil_id: string | null}[]>([])
@@ -1673,9 +1682,43 @@ function EditarOTCard({ otData, otId }: { otData: any; otId: string }) {
       })
   }, [])
 
-  function handleGuardar() {
+  // Nombres actuales de la pareja (texto de las jornadas) → ids del catálogo.
+  const nombresPareja = Array.from(new Set(
+    jornadas.flatMap((j: any) => (j.cuadrilla ?? '').split(',')).map((n: string) => n.trim()).filter(Boolean),
+  ))
+  const parejaActualIds = tecnicos
+    .filter((t) => nombresPareja.some((n) => n.toLowerCase() === t.nombre.trim().toLowerCase()))
+    .map((t) => t.id)
+  const pareja = parejaSel ?? parejaActualIds
+  const togglePareja = (id: string) =>
+    setParejaSel(() => {
+      const p = pareja
+      if (p.includes(id)) return p.filter((x) => x !== id)
+      if (p.length >= 2) return [p[1], id]  // entra el nuevo, sale el más antiguo
+      return [...p, id]
+    })
+
+  async function handleGuardar() {
     setEditError(null)
     setEditSuccess(false)
+    // La pareja se escribe en TODAS las jornadas de la visita (regla del
+    // banner del plan): el plan y la OT no pueden discrepar.
+    if (parejaSel !== null && jornadas.length > 0) {
+      if (parejaSel.length === 0) {
+        setEditError('La pareja no puede quedar vacía: elige 1 o 2 técnicos.')
+        return
+      }
+      try {
+        for (const j of jornadas as any[]) {
+          await rpcSetCuadrilla(j.plan_ot_id, parejaSel, 'Editada desde Editar Orden')
+        }
+        qc.invalidateQueries({ queryKey: ['ot-jornadas', otId] })
+        setParejaSel(null)
+      } catch (e) {
+        setEditError((e as Error).message)
+        return
+      }
+    }
     const tec = tecnicos.find((t) => t.id === tecnicoId)
     updateOT.mutate(
       {
@@ -1756,6 +1799,30 @@ function EditarOTCard({ otData, otId }: { otData: any; otId: string }) {
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700 focus:border-pillado-green-500 focus:outline-none focus:ring-2 focus:ring-pillado-green-500/20"
             />
           </div>
+          {jornadas.length > 0 && (
+            <div className="sm:col-span-2">
+              <label className="mb-1 block text-xs font-medium text-gray-500">
+                Pareja de mecánicos (todas las jornadas del plan) <span className="font-normal text-gray-400">— máximo 2</span>
+              </label>
+              <div className="flex flex-wrap gap-1">
+                {tecnicos.map((t) => {
+                  const on = pareja.includes(t.id)
+                  return (
+                    <button key={t.id} type="button" onClick={() => togglePareja(t.id)}
+                            className={`rounded border px-2 py-1 text-[11px] ${
+                              on ? 'border-pillado-green-600 bg-pillado-green-600 text-white'
+                                 : 'border-gray-200 bg-white text-gray-600'}`}>
+                      {t.nombre}
+                      {t.especialidad && <span className={`ml-1 text-[9px] ${on ? 'text-green-100' : 'text-gray-400'}`}>{t.especialidad}</span>}
+                    </button>
+                  )
+                })}
+              </div>
+              <p className="mt-1 text-[11px] text-gray-500">
+                Se guarda en las {jornadas.length} jornada{jornadas.length > 1 ? 's' : ''} del plan al apretar «Guardar Cambios».
+              </p>
+            </div>
+          )}
         </div>
         <div className="mt-4 flex items-center gap-3">
           <Button
