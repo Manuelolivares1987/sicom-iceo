@@ -2399,7 +2399,10 @@ export default function OrdenTrabajoDetailPage() {
             setFinalizarError(`Hay ${pendingMandatory.length} items obligatorios sin completar en el checklist. Vaya a la tab "Checklist" y complete todos los ítems obligatorios.`)
             return
           }
-          if ((evidenciasData ?? []).length === 0) {
+          // [MIG539] La entrega en arriendo no exige foto: su evidencia son
+          // las firmas del Check-List V02. El mismo criterio vive en la BD.
+          const esEntrega = (checklistData ?? []).some((c) => (c.bloque ?? '').includes('entrega'))
+          if ((evidenciasData ?? []).length === 0 && !esEntrega) {
             setFinalizarError('No se puede finalizar sin evidencia fotográfica. Vaya a la tab "Evidencias" y suba al menos 1 foto.')
             return
           }
