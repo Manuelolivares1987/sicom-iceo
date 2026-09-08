@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
   Wrench, ChevronRight, ChevronDown, RefreshCw, WifiOff, CloudOff, CheckCircle2, Play, Pause, User, LogOut,
-  ArrowLeft, PackageSearch, Download, ChevronLeft, Calendar,
+  ArrowLeft, PackageSearch, Download, ChevronLeft, Calendar, Bot,
 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { Spinner } from '@/components/ui/spinner'
@@ -420,6 +420,16 @@ export default function MecanicoHomePage() {
         <span className="text-sm font-semibold text-gray-900">Pedir insumos</span>
         <span className="truncate text-[11px] text-gray-500">guantes, trapos, discos</span>
         <ChevronRight className="ml-auto h-4 w-4 shrink-0 text-gray-400" />
+      </Link>
+
+      {/* Copiloto Técnico: diagnóstico con los manuales de la flota. Desde la
+          OT entra con el contexto del equipo; desde acá, consulta general. */}
+      <Link href="/m/taller/copiloto"
+            className="flex items-center gap-2 rounded-lg border border-indigo-300 bg-indigo-50 px-3 py-2 active:bg-indigo-100">
+        <Bot className="h-4 w-4 shrink-0 text-indigo-600" />
+        <span className="text-sm font-semibold text-indigo-900">Copiloto Técnico</span>
+        <span className="truncate text-[11px] text-indigo-600">diagnóstico con manuales</span>
+        <ChevronRight className="ml-auto h-4 w-4 shrink-0 text-indigo-400" />
       </Link>
 
       {/* [MIG460] Acá iba «Mi bono». Se saca hasta que la marcha blanca demuestre
