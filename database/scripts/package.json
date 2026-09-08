@@ -9,6 +9,7 @@
     "psql": "node psql-cli.mjs"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.124.0",
     "dotenv": "^16.4.0",
     "exceljs": "^4.4.0",
     "pg": "^8.21.0"
