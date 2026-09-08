@@ -7,6 +7,7 @@ import { usePathname } from 'next/navigation'
 import { useAuth } from '@/contexts/auth-context'
 import { usePermissions, type Module, type ExtendedModule } from '@/hooks/use-permissions'
 import {
+  Bot,
   LayoutDashboard,
   FileText,
   Share2,
@@ -193,6 +194,11 @@ const navGroups: NavGroup[] = [
           // sistema ya guardaba: checklist, repuesto y no conformidad.
           { label: 'Cuánto nos demoramos', href: '/dashboard/mantenimiento/tiempos', icon: Clock, module: 'mantenimiento', badge: 'NUEVO',
             tooltip: 'Cuánto toma el checklist, conseguir un repuesto y resolver una NC' },
+          // [MIG543] El copiloto de diagnóstico: qué pregunta el taller, si las
+          // respuestas sirven, casos resueltos y vacíos del corpus.
+          { label: 'Copiloto Técnico', href: '/dashboard/mantenimiento/copiloto', icon: Bot, module: 'mantenimiento', badge: 'NUEVO',
+            roles: ['administrador', 'gerencia', 'subgerente_operaciones', 'jefe_operaciones', 'jefe_mantenimiento', 'planificador'],
+            tooltip: 'Consultas y diagnósticos del taller con IA: feedback, casos técnicos, fallas recurrentes y costo' },
           // [MIG406] Elegir la patente y pasar todo lo suyo a historia, para
           // empezar limpio después del mes de prueba.
           { label: 'Guardar en el historial', href: '/dashboard/mantenimiento/historial-equipos', icon: Archive, module: 'mantenimiento', badge: 'NUEVO',

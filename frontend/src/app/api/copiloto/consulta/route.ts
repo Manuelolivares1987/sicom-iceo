@@ -29,7 +29,9 @@ REGLAS OBLIGATORIAS:
 7. Diagnóstico como hipótesis ordenadas de más a menos probable, cada una con cómo comprobarla con lo que hay en un taller (multitester, manómetro, inspección visual).
 8. Respuestas CORTAS: párrafos de 2-3 líneas, listas, sin relleno. Es una pantalla de teléfono.
 9. No mezcles información de otras marcas o modelos distintos al equipo consultado.
-10. Si hay foto, describe lo que se ve objetivamente y qué NO se puede confirmar solo con la imagen.`
+10. Si hay foto, describe lo que se ve objetivamente y qué NO se puede confirmar solo con la imagen.
+11. Si el contexto trae CASOS RESUELTOS ANTERIORES, esa es la pista MÁS valiosa de todas: experiencia real de este taller con este equipo o modelo. Cítala primero ("En este mismo equipo / en otro GU813 esto se resolvió con...").
+12. Si hay un DIAGNÓSTICO EN CURSO, trabaja sobre él: considera las comprobaciones ya hechas (no pidas repetirlas), sugiere LA siguiente comprobación más discriminante (una a la vez, con herramienta y valor esperado), y pide que registre el resultado con el botón "Registrar comprobación". Cuando la evidencia apunte a una causa concreta, dilo y recuérdale marcar "Encontré la causa" para que el caso quede guardado para el próximo mecánico.`
 
 type Turno = { rol: 'user' | 'assistant'; texto: string }
 
@@ -37,6 +39,7 @@ type Body = {
   pregunta?: string
   activoId?: string
   otId?: string
+  diagnosticoId?: string
   historial?: Turno[]
   fotoBase64?: string
   fotoTipo?: string
@@ -123,7 +126,7 @@ export async function POST(req: Request) {
   let modeloSlug: string | null = null
 
   if (body.activoId) {
-    const [act, hist, ncs, ot] = await Promise.all([
+    const [act, hist, ncs, ot, casos, dx] = await Promise.all([
       sb.from('activos')
         .select('codigo, nombre, patente, tipo, estado, horas_uso_actual, kilometraje_actual, modelo:modelos(nombre, marca:marcas(nombre))')
         .eq('id', body.activoId).maybeSingle(),
@@ -134,6 +137,13 @@ export async function POST(req: Request) {
         .order('created_at', { ascending: false }).limit(10),
       body.otId
         ? sb.from('ordenes_trabajo').select('folio, tipo, estado, prioridad, observaciones').eq('id', body.otId).maybeSingle()
+        : Promise.resolve({ data: null, error: null }),
+      // Experiencia interna: casos resueltos del mismo equipo o modelo (MIG543)
+      sb.rpc('rpc_copiloto_casos_similares', {
+        p_activo_id: body.activoId, p_texto: pregunta || 'falla', p_limit: 3,
+      }),
+      body.diagnosticoId
+        ? sb.from('copiloto_diagnosticos').select('sintoma, sistema, estado, comprobaciones').eq('id', body.diagnosticoId).maybeSingle()
         : Promise.resolve({ data: null, error: null }),
     ])
 
@@ -152,6 +162,38 @@ export async function POST(req: Request) {
     if (ncs.data?.length) {
       contextoEquipo += `\nNO CONFORMIDADES ABIERTAS (${ncs.data.length}):\n`
         + ncs.data.map((r) => `- ${filaATexto(r as Record<string, unknown>)}`).join('\n') + '\n'
+    }
+
+    // La experiencia real del taller pesa más que cualquier manual (regla 11)
+    type Caso = {
+      equipo: string; mismo_equipo: boolean; sintoma: string; causa_raiz: string
+      reparacion: string | null; sistema: string | null; resuelto_at: string
+      comprobaciones: { descripcion?: string; resultado?: string; valor?: string }[]
+    }
+    const casosData = (casos.data ?? []) as Caso[]
+    if (casosData.length) {
+      contextoEquipo += `\nCASOS RESUELTOS ANTERIORES (experiencia interna del taller):\n`
+        + casosData.map((c) => {
+          const compr = (c.comprobaciones ?? [])
+            .map((x) => `${x.descripcion}${x.valor ? ` = ${x.valor}` : ''} (${x.resultado})`).join('; ')
+          return `- [${c.mismo_equipo ? 'ESTE MISMO EQUIPO' : `mismo modelo, ${c.equipo}`} · ${(c.resuelto_at ?? '').slice(0, 10)}] `
+            + `Síntoma: ${c.sintoma}. Causa raíz: ${c.causa_raiz}.`
+            + `${c.reparacion ? ` Reparación: ${c.reparacion}.` : ''}`
+            + `${compr ? ` Comprobaciones: ${compr}.` : ''}`
+        }).join('\n') + '\n'
+    }
+
+    const dxData = dx.data as {
+      sintoma: string; sistema: string | null; estado: string
+      comprobaciones: { descripcion?: string; resultado?: string; valor?: string }[]
+    } | null
+    if (dxData && dxData.estado === 'abierto') {
+      const compr = (dxData.comprobaciones ?? [])
+        .map((x, i) => `${i + 1}. ${x.descripcion}${x.valor ? ` = ${x.valor}` : ''} → ${x.resultado}`)
+        .join('\n')
+      contextoEquipo += `\nDIAGNÓSTICO EN CURSO (regla 12):\nSíntoma declarado: ${dxData.sintoma}`
+        + `${dxData.sistema ? ` · Sistema: ${dxData.sistema}` : ''}\n`
+        + (compr ? `Comprobaciones ya registradas:\n${compr}\n` : 'Aún sin comprobaciones registradas.\n')
     }
   }
 
@@ -203,6 +245,7 @@ export async function POST(req: Request) {
     usuario_id: uid,
     activo_id: body.activoId ?? null,
     ot_id: body.otId ?? null,
+    diagnostico_id: body.diagnosticoId ?? null,
     pregunta: pregunta || '(solo foto)',
     con_foto: !!body.fotoBase64,
     modelo: MODELO_IA,
