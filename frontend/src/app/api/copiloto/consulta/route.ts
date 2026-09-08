@@ -12,7 +12,7 @@ export const maxDuration = 120
 // del equipo (ficha + historial + NC + OT desde SICOM) más los manuales
 // relevantes (proyecto Supabase paralelo "copiloto-corpus") y responde Claude
 // con reglas estrictas de no-invención y citas de fuente. Cada consulta queda
-// auditada en copiloto_consultas (MIG541).
+// auditada en copiloto_consultas (MIG542).
 // ============================================================================
 
 const MODELO_IA = 'claude-opus-5'
@@ -158,7 +158,7 @@ export async function POST(req: Request) {
       : 'FUENTES: el corpus de manuales aún no está disponible. Responde solo con el contexto del equipo y criterio general de taller, dejando claro qué valores habría que confirmar en el manual.'
   }
 
-  // ── Registrar la consulta ANTES de llamar a la IA (auditoría MIG541) ──────
+  // ── Registrar la consulta ANTES de llamar a la IA (auditoría MIG542) ──────
   const { data: ins } = await sb.from('copiloto_consultas').insert({
     usuario_id: uid,
     activo_id: body.activoId ?? null,

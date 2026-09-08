@@ -22,7 +22,7 @@ servidor con la service key; no hay una "segunda app".
 ```
 /m/taller (misma app, mismo login)
     └── /api/copiloto/consulta (servidor)
-          ├── SICOM DB ............ contexto del equipo + auditoría (MIG541)
+          ├── SICOM DB ............ contexto del equipo + auditoría (MIG542)
           ├── copiloto-corpus ..... buscar_chunks() sobre los manuales
           └── Claude API .......... claude-opus-5, streaming, citas
 ```
@@ -67,7 +67,7 @@ contexto del equipo y avisa que los manuales aún no están disponibles.
 
 ## Auditoría y costo
 
-Cada consulta queda en `copiloto_consultas` (SICOM, MIG541): usuario, equipo,
+Cada consulta queda en `copiloto_consultas` (SICOM, MIG542): usuario, equipo,
 pregunta, respuesta, fuentes usadas, tokens y feedback 👍/👎 del mecánico.
 Jefatura (administrador/gerencia/jefe_mantenimiento/planificador) ve todo;
 cada mecánico ve lo suyo. Con eso se mide: qué se pregunta, qué vacíos tiene

@@ -1,5 +1,5 @@
 -- ============================================================================
--- MIG541 · Copiloto Técnico del taller — auditoría de consultas
+-- MIG542 · Copiloto Técnico del taller — auditoría de consultas
 -- ============================================================================
 --
 -- LO QUE PIDIÓ MANUEL (08-09-2026)
@@ -93,5 +93,5 @@ GRANT EXECUTE ON FUNCTION rpc_copiloto_feedback(UUID,TEXT,TEXT) TO authenticated
 
 COMMIT;
 
-SELECT 'MIG541 aplicada' AS resultado,
+SELECT 'MIG542 aplicada' AS resultado,
        EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'copiloto_consultas') AS tabla_ok;
