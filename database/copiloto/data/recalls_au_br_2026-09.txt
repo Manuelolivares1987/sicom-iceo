@@ -1,0 +1,125 @@
+MARCA: scania
+FUENTE: Australia vehiclerecalls.gov.au
+ID: REC-001191
+MODELOS: Scania G-410, 450, 500, 540; P-280, 320, 360, 370, 380, 410, 450; R-500, 520, 540, 580, 620, 650, 730 — 2020-2021 (353 unidades)
+DEFECTO: In some vehicles, the nut holding the cab tilt cylinder has not been tightened, and because of this, the cab may fall forwards when it's tilted.
+RIESGO: Potential for a crushing hazard if the cab falls forwards while a person is near or underneath the vehicle, which may result in serious injury or death.
+SOLUCION: Contactar al dealer Scania para reparación sin costo (apriete de la tuerca del cilindro de volteo de cabina).
+URL: https://www.vehiclerecalls.gov.au/recalls/rec-001191
+-----
+MARCA: scania
+FUENTE: Australia vehiclerecalls.gov.au
+ID: REC-003900
+MODELOS: Scania G410, G500, P280, P380, R520, R620, R650, R730 (39 unidades, 30-09-2019)
+DEFECTO: If the control handle is released and bounces back after activating the parking brake, the brake system may interpret this as a request to release the brake.
+RIESGO: If the park brake is released, the vehicle may roll away, increasing the risk of an accident or causing an injury.
+SOLUCION: Campaña de corrección en dealer Scania, sin costo (partes y mano de obra).
+URL: https://www.vehiclerecalls.gov.au/recalls/rec-003900
+-----
+MARCA: scania
+FUENTE: Australia vehiclerecalls.gov.au
+ID: REC-003310
+MODELOS: Scania P, R y G Series (también buses K) — 197 unidades, 26-07-2010
+DEFECTO: A number of vehicles may have been delivered with deficient quality in the welding that holds the foot plate to the brake and clutch pedal.
+RIESGO: no indicado
+SOLUCION: Inspección en dealer autorizado Scania y reemplazo del pedal si corresponde.
+URL: https://www.vehiclerecalls.gov.au/recalls/rec-003310
+-----
+MARCA: scania
+FUENTE: Australia vehiclerecalls.gov.au (cross-ref oficial: Product Safety New Zealand)
+ID: recall marzo 2026 (nº REC no indexado)
+MODELOS: Scania L, P, G, R, S con caja Opticruise tipo G25, G33, G38 — 1.066 unidades 2018-2026
+DEFECTO: The gearshift fork spiral pin may dislodge and move out of position leading to an internal transmission failure (el pasador espiral de la horquilla de cambios puede soltarse).
+RIESGO: The gearbox ends up in a false neutral gear; the vehicle may move forward unintentionally — riesgo de accidente grave.
+SOLUCION: Agendar de inmediato en taller Scania; rectificación sin costo.
+URL: https://www.productsafety.govt.nz/recalls/scania-trucks-in-the-lpgrs-series-with-gearbox-of-the-type-g25-g33-g38
+-----
+MARCA: mack
+FUENTE: Australia vehiclerecalls.gov.au
+ID: REC-000848
+MODELOS: Mack Granite, Trident, Titan y Super-Liner 2009-2016 con cardán SPL250 y ejes traseros Meritor específicos (2.083 unidades)
+DEFECTO: Vehicles may experience rear axle yoke failure potentially causing the driveshaft to disconnect (falla del yugo del eje trasero, el cardán puede desconectarse).
+RIESGO: Cardán desconectado en ruta — peligro para el vehículo y terceros.
+SOLUCION: Inspección del yugo del eje trasero y reemplazo si corresponde, en dealer autorizado Volvo Group.
+URL: https://www.vehiclerecalls.gov.au/recalls/rec-000848
+-----
+MARCA: mack
+FUENTE: Australia vehiclerecalls.gov.au
+ID: REC-003904
+MODELOS: Mack CMH Trident, CLX Superliner, CMM Granite, CSM Metro-Liner (14 unidades, 19-11-2019)
+DEFECTO: The self-adjustment mechanism within the brake caliper housing may be defective, resulting in reduced or lost braking performance when applying the parking brake or service brake.
+RIESGO: Pérdida o reducción de frenado (freno de servicio y de parqueo).
+SOLUCION: Reemplazo/corrección de calipers en dealer autorizado Volvo Group Australia.
+URL: https://www.vehiclerecalls.gov.au/recalls/rec-003904
+-----
+MARCA: mack
+FUENTE: Australia vehiclerecalls.gov.au
+ID: REC-001424
+MODELOS: Mack CSM Metro-liner, CMM Granite, CMH Trident, CXX Titan, CLX Superliner 2007-2016 (7.820 unidades, 31-10-2017)
+DEFECTO: The air system warning is set too low (la alarma de baja presión de aire está calibrada demasiado bajo).
+RIESGO: El conductor no es alertado a tiempo de baja presión en el sistema de frenos.
+SOLUCION: Recalibración de la alarma vía dealer autorizado Volvo Group (no indicado en detalle en el extracto).
+URL: https://www.vehiclerecalls.gov.au/recalls/rec-001424
+-----
+MARCA: mack
+FUENTE: Australia vehiclerecalls.gov.au
+ID: REC-005737
+MODELOS: Mack ANA, CLX, CMM (Granite), CMH y CSM 2018-2022 (2.828 unidades, 02-08-2023)
+DEFECTO: The fuse power stud located in the battery box may corrode over time, which may cause an electrical short circuit with the mounting bracket and could result in a vehicle fire (el perno de poder del fusible en la caja de baterías se corroe y puede hacer cortocircuito con el soporte).
+RIESGO: Incendio del vehículo.
+SOLUCION: Corrección en dealer autorizado Volvo Group, sin costo. NOTA TALLER: en Granite con falla eléctrica intermitente, inspeccionar corrosión del perno de fusibles de la caja de baterías.
+URL: https://www.vehiclerecalls.gov.au/recalls/rec-005737
+-----
+MARCA: volvo
+FUENTE: Australia vehiclerecalls.gov.au
+ID: REC-006331
+MODELOS: Volvo FH, FMX (FMX 64R 1A, FMX 64T 3A, FMX 84RF 1A, FMX 84RF 1L), y Mack ANA/CLX/CMH 2023-2025
+DEFECTO: A manufacturing defect within the battery isolation switch could be susceptible to water ingress (entrada de agua al interruptor aislador de baterías).
+RIESGO: Unexpected loss of power to the complete vehicle at any time without warning — pérdida total de energía eléctrica del camión sin aviso, con pérdida de sistemas de seguridad.
+SOLUCION: Llevar de inmediato a taller autorizado; conducir solo de día y sin carga hasta la reparación. NOTA TALLER: en FMX que se apaga por completo sin aviso, revisar el interruptor aislador de baterías por entrada de agua.
+URL: https://www.vehiclerecalls.gov.au/recalls/rec-006331
+-----
+MARCA: mercedes-benz
+FUENTE: Brasil Procon-SP
+ID: recall Accelo (2ª fase)
+MODELOS: Accelo 1316 6x2, fabricados septiembre/2015 a junio/2017
+DEFECTO: Os cilindros de freio do eixo auxiliar (lados direito e esquerdo) podem apresentar trincas ou quebra; pode ocorrer o desprendimento do cilindro (cilindros de freno del eje auxiliar con grietas o quiebre).
+RIESGO: Accidentes y lesiones a ocupantes y terceros.
+SOLUCION: Substituição dos cilindros de freio do eixo auxiliar em ambos os lados na rede de concessionárias (0800 970 9090).
+URL: https://www.procon.sp.gov.br/recall-caminhoes-accelo/
+-----
+MARCA: mercedes-benz
+FUENTE: Brasil Procon-SP
+ID: recall Actros
+MODELOS: Actros rodoviário 6x4 y 6x2, fabricados octubre/2016 a diciembre/2018
+DEFECTO: A proteção antipó (peça plástica que envolve motor e ventilador) pode apresentar trincas e quebra das peças plásticas (protección antipolvo plástica con grietas).
+RIESGO: La parte inferior puede desprenderse y caer en la vía; no afecta el funcionamiento del vehículo.
+SOLUCION: Substituição da peça de proteção antipó na rede de concessionárias (0800 970 9090).
+URL: https://www.procon.sp.gov.br/recall-caminhoes-actros/
+-----
+MARCA: mercedes-benz
+FUENTE: Brasil Procon-SP
+ID: recall Atego 4x4
+MODELOS: Atego 1725 4x4 y Atego 1726 4x4, fabricados 01/2006 a 05/2016 (chasis 9BM9580785B430734 a 9BM958078HB038845)
+DEFECTO: Falta de lubrificação no cardan dianteiro, combinada com operação constante acima de 90 km/h, pode causar desgaste prematuro das cruzetas, vibração da caixa de transferência e perda de torque dos parafusos do suporte (desgaste de crucetas del cardán delantero por falta de lubricación; la vibración suelta los pernos del soporte de la caja de transferencia).
+RIESGO: Afrouxamento e eventual queda da caixa de transferência (caída de la caja de transferencia).
+SOLUCION: Atendimento do recall na rede de concessionárias Mercedes-Benz (0800 970 9090). NOTA TALLER: en Atego 4x4 con vibración de transmisión, revisar lubricación de crucetas del cardán delantero y torque de pernos del soporte de la transfer.
+URL: https://www.procon.sp.gov.br/recall-mercedes-benz-3/
+-----
+MARCA: mercedes-benz
+FUENTE: Brasil Procon-SP
+ID: recall Axor (soporte cilindro de aire)
+MODELOS: Família Axor, fabricados febrero/2011 a noviembre/2018 (chasis 9BM958453BB813628 a 9BM958443JB112371)
+DEFECTO: O suporte do cilindro de ar, abaixo da cabine lado direito, pode apresentar trincas ou quebras por falha estrutural (soporte del cilindro de aire con grietas).
+RIESGO: El cilindro puede desprenderse del vehículo.
+SOLUCION: Substituição do suporte do cilindro de ar em concessionária autorizada (0800 970 9090).
+URL: https://www.procon.sp.gov.br/recall-mercedes-familia-axor/
+-----
+MARCA: mercedes-benz
+FUENTE: Brasil Procon-SP
+ID: recall Axor (tanque auxiliar)
+MODELOS: Família Axor, fabricados diciembre/2015 a marzo/2018
+DEFECTO: O aperto dos parafusos de fixação do suporte do tanque auxiliar de combustível pode ter excedido as especificações; pode gerar trincas ou quebra dos parafusos (pernos del soporte del tanque auxiliar sobre-apretados, con riesgo de quiebre).
+RIESGO: Desprendimento do suporte e do tanque auxiliar de combustible.
+SOLUCION: Substituição dos parafusos de fixação do suporte do tanque auxiliar em concessionária (0800 970 9090).
+URL: https://www.procon.sp.gov.br/recall-mercedes-benz-7/
