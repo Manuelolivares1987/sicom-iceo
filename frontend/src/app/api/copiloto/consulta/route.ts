@@ -57,6 +57,33 @@ function filaATexto(row: Record<string, unknown>): string {
   return partes.join(' · ')
 }
 
+// Parte del corpus está en inglés (Mack Body Builder, Fuso, Atlas Copco) y el
+// mecánico pregunta en español: la búsqueda FTS no cruza idiomas, así que se
+// expande la consulta con los equivalentes de taller. El OR-fallback del RPC
+// hace el resto.
+const ES_EN: Record<string, string> = {
+  fusible: 'fuse', fusibles: 'fuses', rele: 'relay', relé: 'relay', reles: 'relays',
+  bomba: 'pump', freno: 'brake', frenos: 'brakes', embrague: 'clutch',
+  caja: 'transmission', cambios: 'gearbox', motor: 'engine', correa: 'belt',
+  aceite: 'oil', filtro: 'filter', filtros: 'filters', refrigerante: 'coolant',
+  direccion: 'steering', dirección: 'steering', suspension: 'suspension',
+  eje: 'axle', ejes: 'axles', rueda: 'wheel', neumatico: 'tire', neumático: 'tire',
+  bateria: 'battery', batería: 'battery', alternador: 'alternator',
+  arranque: 'starter', cableado: 'wiring', diagrama: 'diagram',
+  falla: 'fault', fallas: 'faults', codigo: 'code', código: 'code',
+  torque: 'torque', apriete: 'torque', presion: 'pressure', presión: 'pressure',
+  luces: 'lights', luz: 'lamp', tablero: 'dashboard', sensor: 'sensor',
+  compresor: 'compressor', estanque: 'tank', mantencion: 'maintenance',
+  mantención: 'maintenance', mantenimiento: 'maintenance', sumergible: 'submersible',
+}
+function traduccionTaller(q: string): string | null {
+  const extras = new Set<string>()
+  for (const w of q.toLowerCase().split(/[^a-záéíóúñü]+/)) {
+    if (ES_EN[w]) extras.add(ES_EN[w])
+  }
+  return extras.size ? [...extras].join(' ') : null
+}
+
 function slug(v?: string | null): string | null {
   if (!v) return null
   return v.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim().replace(/\s+/g, '-')
@@ -140,10 +167,23 @@ export async function POST(req: Request) {
   if (corpusUrl && corpusKey) {
     try {
       const corpus = createClient(corpusUrl, corpusKey, { auth: { persistSession: false } })
-      const { data, error } = await corpus.rpc('buscar_chunks', {
-        p_query: pregunta, p_marca: marcaSlug, p_modelo: modeloSlug, p_limit: 8,
-      })
-      if (!error) { corpusDisponible = true; fuentes = (data ?? []) as ChunkRow[] }
+      // Búsqueda en español + búsqueda con los términos de taller traducidos
+      // (parte del corpus está en inglés); se mezclan sin duplicar.
+      const traduccion = traduccionTaller(pregunta)
+      const [es, en] = await Promise.all([
+        corpus.rpc('buscar_chunks', { p_query: pregunta, p_marca: marcaSlug, p_modelo: modeloSlug, p_limit: 8 }),
+        traduccion
+          ? corpus.rpc('buscar_chunks', { p_query: traduccion, p_marca: marcaSlug, p_modelo: modeloSlug, p_limit: 4 })
+          : Promise.resolve({ data: null, error: null }),
+      ])
+      if (!es.error) {
+        corpusDisponible = true
+        const vistos = new Set<number>()
+        fuentes = [...((es.data ?? []) as (ChunkRow & { chunk_id: number })[]),
+                   ...(((en.data ?? []) as (ChunkRow & { chunk_id: number })[]))]
+          .filter((f) => (vistos.has(f.chunk_id) ? false : (vistos.add(f.chunk_id), true)))
+          .slice(0, 10)
+      }
     } catch { /* corpus caído no bota la consulta: se responde sin manuales */ }
   }
 
