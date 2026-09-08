@@ -51,6 +51,10 @@ if (!DB_URL && !dryRun) {
 }
 const filtro = args.includes('--carpeta') ? args[args.indexOf('--carpeta') + 1] : null
 const maxFiles = args.includes('--max') ? Number(args[args.indexOf('--max') + 1]) : Infinity
+// --dir: ingesta una carpeta arbitraria (fuera del corpus raíz), con filtro
+// de nombre para quedarse con lo técnico y dejar fuera lo comercial.
+const extraDir = args.includes('--dir') ? args[args.indexOf('--dir') + 1] : null
+const filtroNombre = args.includes('--filtro-nombre') ? new RegExp(args[args.indexOf('--filtro-nombre') + 1], 'i') : null
 
 // ── Clasificación por carpeta y nombre ──────────────────────────────────────
 function clasificar(ruta, nombre) {
@@ -58,16 +62,19 @@ function clasificar(ruta, nombre) {
   let marca = null, modelo = null, equipo = null
 
   if (r.includes('mercedes actros')) { marca = 'mercedes-benz'; modelo = 'actros' }
-  else if (r.includes('\\mack') || r.includes('/mack') || n.includes('mack')) { marca = 'mack' }
-  else if (r.includes('volvo fmx')) { marca = 'volvo'; modelo = 'fmx-420' }
-  else if (r.includes('\\volvo') || r.includes('/volvo')) { marca = 'volvo' }
-  else if (r.includes('scania')) { marca = 'scania' }
-  else if (r.includes('renault')) { marca = 'renault'; modelo = 'c440' }
+  else if (n.includes('accelo')) { marca = 'mercedes-benz'; modelo = 'accelo' }
+  else if (/mack|granite|gu ?813|mdrive|maxitorque|mp8/.test(n) || r.includes('\\mack') || r.includes('/mack')) { marca = 'mack' }
+  else if (/scania|p ?450/.test(n) || r.includes('scania')) { marca = 'scania'; modelo = 'p450b' }
+  else if (/vm ?350/.test(n)) { marca = 'volvo'; modelo = 'vm-350' }
+  else if (/fmx/.test(n) || r.includes('volvo fmx')) { marca = 'volvo'; modelo = 'fmx' }
+  else if (r.includes('\\volvo') || r.includes('/volvo') || n.includes('volvo')) { marca = 'volvo' }
+  else if (r.includes('renault') || n.includes('c440')) { marca = 'renault'; modelo = 'c440' }
   else if (r.includes('yale')) { marca = 'yale' }
   else if (r.includes('jpzv-22')) { marca = 'imt'; equipo = 'JPZV-22' }
   else if (n.includes('actros')) { marca = 'mercedes-benz'; modelo = 'actros' }
   else if (n.includes('atego')) { marca = 'mercedes-benz'; modelo = 'atego' }
   else if (n.includes('axor')) { marca = 'mercedes-benz'; modelo = 'axor' }
+  else if (n.includes('canter')) { marca = 'mitsubishi'; modelo = 'canter' }
   else if (n.includes('np300') || n.includes('nissan')) { marca = 'nissan'; modelo = 'np300' }
 
   let sistema = null
@@ -168,9 +175,15 @@ if (soloSchema) {
 }
 
 let archivos = []
-for (const c of CARPETAS) {
-  const dir = join(CORPUS_ROOT, c)
-  if (existsSync(dir)) archivos.push(...pdfsDe(dir))
+if (extraDir) {
+  if (!existsSync(extraDir)) { console.error(`ERROR: no existe ${extraDir}`); process.exit(2) }
+  archivos = [...pdfsDe(extraDir)]
+  if (filtroNombre) archivos = archivos.filter((a) => filtroNombre.test(basename(a)))
+} else {
+  for (const c of CARPETAS) {
+    const dir = join(CORPUS_ROOT, c)
+    if (existsSync(dir)) archivos.push(...pdfsDe(dir))
+  }
 }
 if (filtro) archivos = archivos.filter((a) => a.toLowerCase().includes(filtro.toLowerCase()))
 // Mercedes primero (el caso del camión 42 es eléctrico y la flota es mayormente MB)
@@ -184,7 +197,7 @@ const t0 = Date.now()
 
 for (const [i, ruta] of archivos.entries()) {
   const nombre = basename(ruta)
-  const rel = relative(CORPUS_ROOT, ruta)
+  const rel = relative(extraDir ?? CORPUS_ROOT, ruta)
   try {
     const buf = readFileSync(ruta)
     const hash = createHash('sha256').update(buf).digest('hex')
