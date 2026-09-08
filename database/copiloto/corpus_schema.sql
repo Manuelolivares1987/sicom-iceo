@@ -40,7 +40,8 @@ CREATE TABLE IF NOT EXISTS copiloto_documentos (
   hash             TEXT UNIQUE NOT NULL,      -- sha256 del archivo (evita duplicados)
   tipo_documento   TEXT NOT NULL DEFAULT 'manual_oficial'
                    CHECK (tipo_documento IN ('manual_oficial','procedimiento_interno',
-                                             'catalogo_partes','ficha_tecnica','otro')),
+                                             'catalogo_partes','ficha_tecnica',
+                                             'reporte_falla','otro')),
   marca            TEXT,                      -- slug: mercedes-benz, mack, volvo... NULL = aplica a todos
   modelo           TEXT,                      -- slug: actros, t310... NULL = toda la marca
   sistema          TEXT,                      -- transmision, electrico, frenos, motor...
@@ -106,6 +107,7 @@ BEGIN
               WHEN 'procedimiento_interno' THEN 0.85
               WHEN 'catalogo_partes'       THEN 0.70
               WHEN 'ficha_tecnica'         THEN 0.70
+              WHEN 'reporte_falla'         THEN 0.60
               ELSE 0.50 END
           * CASE WHEN p_marca IS NOT NULL AND d.marca = p_marca THEN 1.2 ELSE 1.0 END
          )::REAL AS rank
