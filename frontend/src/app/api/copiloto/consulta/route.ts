@@ -81,7 +81,7 @@ function traduccionTaller(q: string): string | null {
   for (const w of q.toLowerCase().split(/[^a-záéíóúñü]+/)) {
     if (ES_EN[w]) extras.add(ES_EN[w])
   }
-  return extras.size ? [...extras].join(' ') : null
+  return extras.size ? Array.from(extras).join(' ') : null
 }
 
 function slug(v?: string | null): string | null {
