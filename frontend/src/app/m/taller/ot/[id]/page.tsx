@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import {
   ArrowLeft, Camera, Check, X, Minus, Play, Pause, CheckCircle2, Loader2, WifiOff, AlertTriangle, Clock,
-  Package, Plus, Gauge, ChevronDown, StickyNote,
+  Package, Plus, Gauge, ChevronDown, StickyNote, Bot,
 } from 'lucide-react'
 import { Spinner } from '@/components/ui/spinner'
 import { Button } from '@/components/ui/button'
@@ -952,9 +952,19 @@ export default function MecanicoOTPage() {
 
   return (
     <div className="p-3 space-y-3">
-      <Link href="/m/taller" className="inline-flex items-center gap-1 text-sm text-gray-500">
-        <ArrowLeft className="h-4 w-4" /> Mis OTs
-      </Link>
+      <div className="flex items-center justify-between">
+        <Link href="/m/taller" className="inline-flex items-center gap-1 text-sm text-gray-500">
+          <ArrowLeft className="h-4 w-4" /> Mis OTs
+        </Link>
+        {/* Copiloto Técnico: diagnóstico con manuales + historial del equipo */}
+        {ot?.activo_id && (
+          <Link
+            href={`/m/taller/copiloto?ot=${ot.ot_id}&activo=${ot.activo_id}&equipo=${encodeURIComponent(ot.activo_patente ?? ot.activo_codigo ?? '')}`}
+            className="inline-flex items-center gap-1.5 rounded-full bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white">
+            <Bot className="h-3.5 w-3.5" /> Copiloto
+          </Link>
+        )}
+      </div>
 
       {/* Cabecera */}
       <div className="rounded-xl border border-gray-200 bg-white p-3">
