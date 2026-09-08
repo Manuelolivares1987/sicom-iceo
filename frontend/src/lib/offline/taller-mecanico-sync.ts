@@ -47,6 +47,11 @@ export type MecanicoOT = {
   horas_planificadas: number | null
   /** [MIG496] Último día planificado de la OT: la fecha de entrega comprometida. */
   fecha_entrega_plan: string | null
+  /**
+   * [MIG541] El día VIGENTE del plan: la próxima jornada (o la última si todas
+   * pasaron). Una OT replanificada agrupa acá, no en su fecha original.
+   */
+  fecha_grupo: string | null
 }
 
 const isOnline = () => (typeof navigator === 'undefined' ? true : navigator.onLine)

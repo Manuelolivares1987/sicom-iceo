@@ -28,6 +28,11 @@ import {
 
 const LS_KEY = 'taller-mecanico'
 
+// [MIG541] La OT vive en su día VIGENTE del plan: si se replanificó, agrupa
+// en la nueva fecha y no en la original (la OT-00011 quedó «3 días de
+// atraso» estando planificada para hoy, y nadie la encontraba).
+const diaDe = (o: MecanicoOT) => o.fecha_grupo ?? o.fecha_programada
+
 // Etiqueta de día para agrupar las OTs igual que el plan del jefe de taller
 // (Hoy / Mañana / día de la semana + fecha). Recibe 'YYYY-MM-DD'.
 function diaLabel(fecha: string | null): string {
@@ -242,8 +247,9 @@ export default function MecanicoHomePage() {
   const conteosPorDia = useMemo(() => {
     const m = new Map<string, number>()
     for (const o of misOts) {
-      if (!o.fecha_programada) continue
-      m.set(o.fecha_programada, (m.get(o.fecha_programada) ?? 0) + 1)
+      const f = diaDe(o)
+      if (!f) continue
+      m.set(f, (m.get(f) ?? 0) + 1)
     }
     for (const o of osAbiertas) {
       if (!o.fecha_programada) continue
@@ -260,9 +266,9 @@ export default function MecanicoHomePage() {
   const enSemanaActual = weekOffset === 0
 
   const otsEnVista = useMemo(() => {
-    if (diaSeleccionado) return misOts.filter((o) => o.fecha_programada === diaSeleccionado)
+    if (diaSeleccionado) return misOts.filter((o) => diaDe(o) === diaSeleccionado)
     if (enSemanaActual) return misOts
-    return misOts.filter((o) => !!o.fecha_programada && o.fecha_programada >= weekStart && o.fecha_programada <= weekEnd)
+    return misOts.filter((o) => { const f = diaDe(o); return !!f && f >= weekStart && f <= weekEnd })
   }, [misOts, diaSeleccionado, enSemanaActual, weekStart, weekEnd])
 
   // Agrupar por día (fecha_programada), igual que el plan del jefe de taller.
@@ -271,7 +277,7 @@ export default function MecanicoHomePage() {
   const gruposPorDia = useMemo(() => {
     const m = new Map<string, MecanicoOT[]>()
     for (const o of otsEnVista) {
-      const k = o.fecha_programada ?? ''
+      const k = diaDe(o) ?? ''
       const arr = m.get(k) ?? []
       arr.push(o)
       m.set(k, arr)
