@@ -24,6 +24,7 @@ import {
 import {
   actualizarItem as actualizarItemV3,
   subirFotoItem as subirFotoItemV3,
+  quitarFotoItem as quitarFotoItemV3,
   BLOQUE_LABELS,
   rpcActualizarChecklistPauta,
 } from '@/lib/services/checklist-v2'
@@ -578,6 +579,12 @@ function ChecklistTab({
       invalidate()
     } catch { /* retry */ } finally { setUploadingItemId(null) }
   }
+  // El operador se equivocó de foto: quitarla para poder subir la buena.
+  async function handleQuitarFoto(it: ChecklistV3Item, url: string) {
+    setUploadingItemId(it.instance_item_id)
+    try { await quitarFotoItemV3(it.instance_item_id, url); invalidate() }
+    catch { /* retry */ } finally { setUploadingItemId(null) }
+  }
   // — edición (jefe) —
   async function guardarTiempo(it: ChecklistV3Item) {
     const raw = tiempos[it.instance_item_id]
@@ -882,11 +889,26 @@ function ChecklistTab({
                       )}
                     </div>
 
-                    {item.foto_url && (
-                      <div className="mt-2">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={item.foto_url} alt={`Foto ${idx + 1}`}
-                             className="h-20 w-20 rounded-lg border border-gray-200 object-cover" />
+                    {(item.foto_urls?.length ? item.foto_urls : (item.foto_url ? [item.foto_url] : [])).length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {(item.foto_urls?.length ? item.foto_urls : [item.foto_url!]).map((u, fIdx) => (
+                          <div key={fIdx} className="relative">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={u} alt={`Foto ${idx + 1}.${fIdx + 1}`}
+                                 className="h-20 w-20 rounded-lg border border-gray-200 object-cover" />
+                            {!readOnly && (
+                              <button
+                                type="button"
+                                title="Quitar esta foto (para subir otra)"
+                                disabled={uploadingItemId === item.instance_item_id}
+                                onClick={() => handleQuitarFoto(item, u)}
+                                className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full border border-red-200 bg-white text-red-600 shadow-sm hover:bg-red-50 disabled:opacity-50"
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                            )}
+                          </div>
+                        ))}
                       </div>
                     )}
 
