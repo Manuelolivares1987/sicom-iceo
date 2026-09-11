@@ -873,6 +873,13 @@ export default function MecanicoOTPage() {
   const pendientesOblig = visibles.filter((i) => i.obligatorio && (!i.resultado || i.resultado === 'pendiente')).length
   // Hallazgos NO OK sin foto: bloquean pausar/finalizar (la NC nace con foto).
   const noOkSinFoto = visibles.filter((i) => i.resultado === 'no_ok' && !i.foto_url).length
+  // [MIG544] En la entrega en arriendo la foto del ítem es la defensa del
+  // recobro: todo ítem con cámara debe llevar foto (N/A queda exento). La BD
+  // rebota igual; acá se avisa antes y con los códigos.
+  const esEntrega = visibles.some((i) => (i.bloque ?? '').includes('entrega'))
+  const fotosEntrega = esEntrega
+    ? visibles.filter((i) => i.requiere_foto && !i.foto_url && i.resultado !== 'na')
+    : []
   const [warnFoto, setWarnFoto] = useState(false)
   const [sinNombre, setSinNombre] = useState(false)
   const [prefillRecurso, setPrefillRecurso] = useState<RecursoPrefill | null>(null)
@@ -916,7 +923,7 @@ export default function MecanicoOTPage() {
   const pidePendientes = timing.isError && (timing.error as Error).name === 'PENDIENTES'
 
   function abrirFinalizar() {
-    if (noOkSinFoto > 0) { setWarnFoto(true); return }
+    if (noOkSinFoto > 0 || fotosEntrega.length > 0) { setWarnFoto(true); return }
     setWarnFoto(false)
     if (pendientesOblig > 0 && !confirm(`Quedan ${pendientesOblig} tareas obligatorias sin marcar. ¿Finalizar igual?`)) return
     // Limpiar el error de una acción anterior (p.ej. un pausar fallido) para
@@ -1050,6 +1057,13 @@ export default function MecanicoOTPage() {
         <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
           Hay {noOkSinFoto} hallazgo{noOkSinFoto > 1 ? 's' : ''} NO OK sin foto. Saca la foto de cada
           hallazgo antes de pausar o finalizar — la No Conformidad se reporta con esa foto.
+        </p>
+      )}
+      {warnFoto && fotosEntrega.length > 0 && (
+        <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
+          Entrega en arriendo: faltan {fotosEntrega.length} foto{fotosEntrega.length > 1 ? 's' : ''} obligatoria
+          {fotosEntrega.length > 1 ? 's' : ''} del checklist ({fotosEntrega.map((i) => i.codigo).filter(Boolean).join(', ')}).
+          La foto del estado al entregar es la defensa del recobro cuando el equipo vuelva.
         </p>
       )}
       {timing.isError && (
