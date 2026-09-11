@@ -70,6 +70,84 @@ function ResultRadio({ value, disabled, sinNA, onChange }: {
   )
 }
 
+/**
+ * [Entrega] La pantalla del cliente: el checklist ya viene avanzado por el
+ * técnico; acá el representante ve el RESUMEN (qué se revisó y qué salió
+ * NO OK), pone su nombre y RUT, firma, y listo. La firma cae en el ítem de
+ * firma del cliente del acta (ED.09) igual que si la capturara ítem a ítem.
+ */
+function RevisionClienteModal({ items, equipo, folio, saving, onFirmar, onClose }: {
+  items: ChecklistV3Item[]
+  equipo: string
+  folio: string
+  saving: boolean
+  onFirmar: (p: { nombre: string; rut: string; firma: string }) => void
+  onClose: () => void
+}) {
+  const [nombre, setNombre] = useState('')
+  const [rut, setRut] = useState('')
+  const [firma, setFirma] = useState('')
+  const respondidos = items.filter((i) => i.resultado && i.resultado !== 'pendiente')
+  const noOks = items.filter((i) => i.resultado === 'no_ok')
+  const fotos = items.reduce((s, i) => s + (i.foto_urls?.length ?? (i.foto_url ? 1 : 0)), 0)
+  const puedeFirmar = !!firma && nombre.trim().length > 2 && rut.trim().length > 6
+  return (
+    <Modal open onClose={onClose} title="Revisión y firma del cliente">
+      <div className="space-y-3">
+        <div className="rounded-lg bg-gray-50 px-3 py-2 text-sm">
+          <p className="font-semibold">{equipo}</p>
+          <p className="text-xs text-gray-500">Acta de entrega · {folio}</p>
+        </div>
+        <div className="grid grid-cols-3 gap-2 text-center">
+          <div className="rounded-lg border border-green-200 bg-green-50 py-2">
+            <p className="text-lg font-bold text-green-700">{respondidos.length - noOks.length}</p>
+            <p className="text-[10px] text-green-700">ítems OK</p>
+          </div>
+          <div className={`rounded-lg border py-2 ${noOks.length ? 'border-red-200 bg-red-50' : 'border-gray-200 bg-gray-50'}`}>
+            <p className={`text-lg font-bold ${noOks.length ? 'text-red-700' : 'text-gray-500'}`}>{noOks.length}</p>
+            <p className={`text-[10px] ${noOks.length ? 'text-red-700' : 'text-gray-500'}`}>NO OK</p>
+          </div>
+          <div className="rounded-lg border border-blue-200 bg-blue-50 py-2">
+            <p className="text-lg font-bold text-blue-700">{fotos}</p>
+            <p className="text-[10px] text-blue-700">fotos</p>
+          </div>
+        </div>
+        {noOks.length > 0 && (
+          <div className="space-y-1.5">
+            <p className="text-xs font-semibold text-red-700">Observaciones que acepta al recibir:</p>
+            {noOks.map((i) => (
+              <div key={i.instance_item_id} className="rounded-lg border border-red-200 bg-red-50 px-2.5 py-1.5 text-xs text-red-800">
+                <span className="font-mono text-[10px] text-red-500">{i.codigo}</span> {i.descripcion}
+                {i.observacion && <span className="block text-[11px] text-red-600">{i.observacion}</span>}
+              </div>
+            ))}
+          </div>
+        )}
+        <p className="text-[11px] text-gray-500">
+          Al firmar, el representante acepta la entrega del equipo en las condiciones
+          registradas en este check-list (los detalles y fotos quedan en el acta).
+        </p>
+        <input value={nombre} onChange={(e) => setNombre(e.target.value)}
+               placeholder="Nombre y apellido del representante"
+               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
+        <input value={rut} onChange={(e) => setRut(e.target.value)}
+               placeholder="RUT (ej: 12.345.678-9)"
+               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
+        <SignaturePad label="Firma del representante" onCapture={setFirma} existingUrl={firma || null} />
+        <ModalFooter>
+          <Button variant="outline" onClick={onClose}>Cancelar</Button>
+          <Button disabled={!puedeFirmar || saving}
+                  onClick={() => onFirmar({ nombre, rut, firma })}
+                  className="bg-green-600 hover:bg-green-700">
+            {saving ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-1 h-4 w-4" />}
+            Firmar y aceptar entrega
+          </Button>
+        </ModalFooter>
+      </div>
+    </Modal>
+  )
+}
+
 type ProductoLite = { id: string; codigo: string | null; nombre: string; unidad_medida: string | null }
 
 export type RecursoPrefill = { instanceItemId: string; texto: string }
@@ -883,6 +961,34 @@ export default function MecanicoOTPage() {
   const fotosEntrega = esEntrega
     ? visibles.filter((i) => i.requiere_foto && !i.foto_url && i.resultado !== 'na')
     : []
+  // [Entrega] El checklist se deja AVANZADO (tareas, fotos y firma del técnico,
+  // días antes si hace falta — la OT queda pausada). Cuando el cliente llega,
+  // solo revisa el resumen y firma: ese paso es este botón/modal. La firma del
+  // cliente es el ÚLTIMO ítem de firma del acta (ED.09).
+  const firmasEntrega = esEntrega
+    ? visibles.filter((i) => i.tipo_respuesta === 'firma')
+        .sort((a, b) => (a.bloque_orden - b.bloque_orden) || (a.orden - b.orden))
+    : []
+  const itemFirmaCliente = firmasEntrega.length > 1 ? firmasEntrega[firmasEntrega.length - 1] : undefined
+  const clienteFirmado = itemFirmaCliente?.resultado === 'ok'
+  const faltanCliente = itemFirmaCliente
+    ? visibles.filter((i) => i.instance_item_id !== itemFirmaCliente.instance_item_id
+        && i.obligatorio && (!i.resultado || i.resultado === 'pendiente')).length
+    : 0
+  const listoParaCliente = !!itemFirmaCliente && !clienteFirmado
+    && faltanCliente === 0 && fotosEntrega.length === 0
+  const [revCliente, setRevCliente] = useState(false)
+  function firmarCliente(p: { nombre: string; rut: string; firma: string }) {
+    if (!itemFirmaCliente) return
+    const cap = respuestaCaptura(itemFirmaCliente.mediciones)
+    marcar.mutate({
+      instanceItemId: itemFirmaCliente.instance_item_id,
+      instanceId: itemFirmaCliente.instance_id,
+      mediciones: { ...cap, rut_operador: p.rut.trim() || null, nombre_operador: p.nombre.trim() || null },
+      firmas: [{ campo: 'firma_operador_url', blob: dataUrlToBlob(p.firma) }],
+      resultado: 'ok',
+    }, { onSuccess: () => setRevCliente(false) })
+  }
   const [warnFoto, setWarnFoto] = useState(false)
   const [sinNombre, setSinNombre] = useState(false)
   const [prefillRecurso, setPrefillRecurso] = useState<RecursoPrefill | null>(null)
@@ -1106,6 +1212,27 @@ export default function MecanicoOTPage() {
         </p>
       )}
 
+      {/* [Entrega] Paso del cliente: revisar el resumen y firmar, y listo */}
+      {esEntrega && itemFirmaCliente && !medidoresPendientes && total > 0 && (
+        clienteFirmado ? (
+          <p className="rounded-lg border border-green-300 bg-green-50 px-3 py-2 text-xs font-semibold text-green-800">
+            ✓ El cliente ya firmó la entrega. Pulsa <span className="font-bold">Finalizar</span> para cerrar el acta.
+          </p>
+        ) : listoParaCliente ? (
+          <button type="button" onClick={() => setRevCliente(true)}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-green-600 px-4 py-3 text-sm font-bold text-white active:bg-green-700">
+            <CheckCircle2 className="h-5 w-5" /> Cliente: revisar y firmar
+          </button>
+        ) : (
+          <p className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-[11px] text-blue-800">
+            <span className="font-semibold">Deja el checklist avanzado antes de que llegue el cliente.</span>{' '}
+            {faltanCliente > 0 && `Faltan ${faltanCliente} tareas (incluida la firma del técnico). `}
+            {fotosEntrega.length > 0 && `Faltan ${fotosEntrega.length} fotos (${fotosEntrega.map((i) => i.codigo).filter(Boolean).join(', ')}). `}
+            Cuando esté todo listo, el cliente solo revisa el resumen y firma.
+          </p>
+        )
+      )}
+
       {/* Checklist — [MIG496] bloqueado (gris, sin toques) hasta guardar medidores */}
       {isLoading ? (
         <div className="flex justify-center py-8"><Spinner /></div>
@@ -1249,6 +1376,18 @@ export default function MecanicoOTPage() {
           )
         })}
         </div>
+      )}
+
+      {/* [Entrega] El cliente revisa el resumen y firma la aceptación */}
+      {revCliente && itemFirmaCliente && (
+        <RevisionClienteModal
+          items={visibles.filter((i) => i.tipo_respuesta !== 'firma')}
+          equipo={`${ot?.activo_codigo ?? ''}${ot?.activo_patente ? ` · ${ot.activo_patente}` : ''}`}
+          folio={ot?.ot_folio ?? ''}
+          saving={marcar.isPending}
+          onFirmar={firmarCliente}
+          onClose={() => setRevCliente(false)}
+        />
       )}
 
       {/* Modal finalizar con firma del técnico */}
