@@ -270,6 +270,33 @@ export async function subirFotoItem(
   return data.publicUrl
 }
 
+/**
+ * Quita UNA foto de un ítem (el operador se equivocó y quiere subir otra).
+ * Reescribe foto_urls sin esa URL y deja foto_url apuntando a la primera que
+ * quede (o NULL). Borrar el archivo del bucket es best-effort: si el storage
+ * lo niega, la foto queda huérfana pero el ítem ya no la referencia.
+ */
+export async function quitarFotoItem(itemId: string, url: string): Promise<void> {
+  const { data, error } = await supabase
+    .from('checklist_v2_instance_item')
+    .select('foto_url, foto_urls')
+    .eq('id', itemId)
+    .single()
+  if (error) throw error
+  const lista = ((data?.foto_urls as string[] | null) ?? []).filter(Boolean)
+  const actuales = lista.length ? lista : (data?.foto_url ? [data.foto_url as string] : [])
+  const restantes = actuales.filter((u) => u !== url)
+  const { error: e2 } = await supabase
+    .from('checklist_v2_instance_item')
+    .update({ foto_urls: restantes.length ? restantes : null, foto_url: restantes[0] ?? null })
+    .eq('id', itemId)
+  if (e2) throw e2
+  try {
+    const m = url.match(/\/object\/public\/([^/]+)\/(.+)$/)
+    if (m) await supabase.storage.from(m[1]).remove([decodeURIComponent(m[2])])
+  } catch { /* best-effort */ }
+}
+
 export async function subirFirma(
   instanceId: string,
   tipo: 'operador' | 'cliente',

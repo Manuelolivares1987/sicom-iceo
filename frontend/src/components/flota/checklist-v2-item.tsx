@@ -1,11 +1,11 @@
 'use client'
 
 import { useState } from 'react'
-import { Check, X, Minus, Camera, Upload, AlertCircle } from 'lucide-react'
+import { Check, X, Minus, Camera, Upload, AlertCircle, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
-  actualizarItem, subirFotoItem, PRUEBA_LABELS,
+  actualizarItem, subirFotoItem, quitarFotoItem, PRUEBA_LABELS,
   type ChecklistV2Item, type ResultadoItem,
 } from '@/lib/services/checklist-v2'
 
@@ -52,6 +52,20 @@ export function ChecklistV2ItemRow({ item, instanceId, bloqueado, sinNA, onChang
   }
 
   const guardarObs = () => persist({ observacion: obs })
+
+  // El operador se equivocó de foto: quitarla para poder subir la buena.
+  const onQuitarFoto = async () => {
+    if (!item.foto_url) return
+    setSaving(true); setError(null)
+    try {
+      await quitarFotoItem(item.id, item.foto_url)
+      onChange({ ...item, foto_url: null })
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setSaving(false)
+    }
+  }
 
   const onFotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -217,8 +231,19 @@ export function ChecklistV2ItemRow({ item, instanceId, bloqueado, sinNA, onChang
               </span>
             </label>
             {item.foto_url && (
-              <a href={item.foto_url} target="_blank" rel="noopener noreferrer"
-                 className="text-xs text-blue-600 underline">Ver foto</a>
+              <>
+                <a href={item.foto_url} target="_blank" rel="noopener noreferrer"
+                   className="text-xs text-blue-600 underline">Ver foto</a>
+                {!bloqueado && (
+                  <button
+                    type="button"
+                    onClick={onQuitarFoto}
+                    disabled={saving}
+                    className="inline-flex items-center gap-0.5 text-xs text-red-600 underline disabled:opacity-50">
+                    <Trash2 className="h-3 w-3" /> Quitar foto
+                  </button>
+                )}
+              </>
             )}
           </div>
         )}

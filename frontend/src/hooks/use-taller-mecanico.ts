@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNetworkStatus } from '@/hooks/use-calama-offline'
 import { supabase } from '@/lib/supabase'
 import type { MedicionItem } from '@/lib/services/taller-plan-semanal'
+import { quitarFotoItem } from '@/lib/services/checklist-v2'
 import {
   getOTs, getChecklistMecanico, queueItem, queueTiming, syncTallerPending, getPendingCount,
   prepareTallerOffline, getRecursosMecanico, queueRecurso,
@@ -43,6 +44,23 @@ export function usePendingCount(autoRefreshMs = 4000) {
     queryFn: getPendingCount,
     networkMode: 'always',
     refetchInterval: autoRefreshMs,
+  })
+}
+
+/**
+ * Quita una foto de un ítem (el mecánico se equivocó y quiere subir otra).
+ * Va DIRECTO al servidor —no pasa por la cola offline— así que solo se
+ * ofrece con conexión: deshacer algo ya subido no tiene versión local.
+ */
+export function useQuitarFotoItem(otId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    networkMode: 'always',
+    mutationFn: (p: { instanceItemId: string; url: string }) =>
+      quitarFotoItem(p.instanceItemId, p.url),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: keyChecklist(otId) })
+    },
   })
 }
 

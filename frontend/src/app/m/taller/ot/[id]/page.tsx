@@ -21,7 +21,7 @@ import {
 import { RECURSO_ESTADO_LABEL } from '@/lib/services/ot-recursos'
 import { buscarProductos } from '@/lib/services/ot-materiales'
 import {
-  useMecanicoOTs, useMecanicoChecklist, useMarcarItem, useTimingMecanico,
+  useMecanicoOTs, useMecanicoChecklist, useMarcarItem, useQuitarFotoItem, useTimingMecanico,
   useAutoSyncTaller, useNetworkStatus, useRecursosOT, useSolicitarRecurso,
   useNotasOT, useAgregarNota,
   useMedidoresOT, useGuardarMedidores,
@@ -807,6 +807,7 @@ export default function MecanicoOTPage() {
   const ot = useMemo(() => (ots ?? []).find((o) => o.ot_id === otId), [ots, otId])
   const { data: items, isLoading } = useMecanicoChecklist(otId)
   const marcar = useMarcarItem(otId)
+  const quitarFoto = useQuitarFotoItem(otId)
   const timing = useTimingMecanico(otId)
   // [MIG496] Sin medidores guardados POR UNA PERSONA no se toca ninguna tarea:
   // de ese número salen la próxima pauta y lo que se cobra. Y al guardarlos,
@@ -1198,11 +1199,24 @@ export default function MecanicoOTPage() {
                       <div className="mt-2 flex flex-wrap gap-2">
                         {evid.map((u, idx) => {
                           const esVideo = /\.(mp4|mov|webm|m4v|3gp)(\?|$)/i.test(u)
-                          return esVideo ? (
-                            <video key={idx} src={u} controls className="h-20 w-20 rounded-lg border object-cover" />
-                          ) : (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img key={idx} src={u} alt={`evidencia ${idx + 1}`} className="h-20 w-20 rounded-lg border object-cover" />
+                          return (
+                            <div key={idx} className="relative">
+                              {esVideo ? (
+                                <video src={u} controls className="h-20 w-20 rounded-lg border object-cover" />
+                              ) : (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img src={u} alt={`evidencia ${idx + 1}`} className="h-20 w-20 rounded-lg border object-cover" />
+                              )}
+                              {/* Quitar una foto equivocada: directo al servidor, solo con conexión */}
+                              {online && (
+                                <button type="button" title="Quitar esta foto"
+                                        disabled={quitarFoto.isPending}
+                                        onClick={() => quitarFoto.mutate({ instanceItemId: it.instance_item_id, url: u })}
+                                        className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full border border-red-200 bg-white text-red-600 shadow-sm disabled:opacity-50">
+                                  <X className="h-3 w-3" />
+                                </button>
+                              )}
+                            </div>
                           )
                         })}
                       </div>
