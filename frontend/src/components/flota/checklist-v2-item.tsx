@@ -13,10 +13,12 @@ interface Props {
   item: ChecklistV2Item
   instanceId: string
   bloqueado: boolean
+  /** [MIG545] La entrega en arriendo no admite N/A: todo ítem es atingente. */
+  sinNA?: boolean
   onChange: (updated: ChecklistV2Item) => void
 }
 
-export function ChecklistV2ItemRow({ item, instanceId, bloqueado, onChange }: Props) {
+export function ChecklistV2ItemRow({ item, instanceId, bloqueado, sinNA, onChange }: Props) {
   const [saving, setSaving]   = useState(false)
   const [error, setError]     = useState<string | null>(null)
   const [obs, setObs]         = useState(item.observacion ?? '')
@@ -127,13 +129,15 @@ export function ChecklistV2ItemRow({ item, instanceId, bloqueado, onChange }: Pr
               disabled={bloqueado || saving}>
               <X className="mr-1 h-4 w-4" /> NO OK
             </Button>
-            <Button
-              size="sm"
-              variant={item.resultado === 'na' ? 'primary' : 'outline'}
-              onClick={() => setResultado('na')}
-              disabled={bloqueado || saving}>
-              <Minus className="mr-1 h-4 w-4" /> N/A
-            </Button>
+            {!sinNA && (
+              <Button
+                size="sm"
+                variant={item.resultado === 'na' ? 'primary' : 'outline'}
+                onClick={() => setResultado('na')}
+                disabled={bloqueado || saving}>
+                <Minus className="mr-1 h-4 w-4" /> N/A
+              </Button>
+            )}
           </div>
         )}
 
@@ -156,13 +160,15 @@ export function ChecklistV2ItemRow({ item, instanceId, bloqueado, onChange }: Pr
                 placeholder="—"
               />
             </div>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setResultado('na')}
-              disabled={bloqueado || saving}>
-              N/A
-            </Button>
+            {!sinNA && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setResultado('na')}
+                disabled={bloqueado || saving}>
+                N/A
+              </Button>
+            )}
           </div>
         )}
 
