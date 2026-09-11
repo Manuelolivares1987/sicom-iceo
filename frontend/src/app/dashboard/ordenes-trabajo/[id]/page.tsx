@@ -162,16 +162,19 @@ function ResultRadio({
   value,
   onChange,
   disabled,
+  sinNA,
 }: {
   value: string | null
   onChange: (v: string) => void
   disabled?: boolean
+  /** [MIG545] La entrega en arriendo no admite N/A: todo ítem es atingente. */
+  sinNA?: boolean
 }) {
   const options = [
     { val: 'ok', label: 'OK', color: 'bg-green-500', icon: Check },
     { val: 'no_ok', label: 'NO OK', color: 'bg-red-500', icon: X },
     { val: 'na', label: 'N/A', color: 'bg-gray-400', icon: Minus },
-  ]
+  ].filter((o) => !(sinNA && o.val === 'na'))
   return (
     <div className="flex gap-2">
       {options.map((o) => {
@@ -455,6 +458,9 @@ function ChecklistTab({
   const { data: items, isLoading } = useQuery({
     queryKey: ['checklist-v3', otId], queryFn: () => getChecklistV3OT(otId), enabled: !!otId,
   })
+  // [MIG545] En la entrega en arriendo no existe N/A: todo ítem del acta es
+  // atingente (Manuel 2026-09-11). Se esconde el botón; la BD además lo rechaza.
+  const esChecklistEntrega = (items ?? []).some((c) => (c.bloque ?? '').includes('entrega'))
   // estado ejecución
   const [observations, setObservations] = useState<Record<string, string>>({})
   const [savingId, setSavingId] = useState<string | null>(null)
@@ -864,6 +870,7 @@ function ChecklistTab({
                         <ResultRadio
                           value={item.resultado}
                           disabled={readOnly || savingId === item.instance_item_id}
+                          sinNA={esChecklistEntrega}
                           onChange={(v) => setResultado(item, v as 'ok' | 'no_ok' | 'na')}
                         />
                       ) : (

@@ -43,14 +43,16 @@ function bloqueLabel(b: string): string {
   return t.charAt(0).toUpperCase() + t.slice(1)
 }
 
-function ResultRadio({ value, disabled, onChange }: {
-  value: string | null; disabled?: boolean; onChange: (v: 'ok' | 'no_ok' | 'na') => void
+function ResultRadio({ value, disabled, sinNA, onChange }: {
+  value: string | null; disabled?: boolean; sinNA?: boolean; onChange: (v: 'ok' | 'no_ok' | 'na') => void
 }) {
-  const opts = [
+  // [MIG545] En la entrega en arriendo no existe N/A: todo ítem del acta es
+  // atingente (Manuel 2026-09-11). sinNA lo esconde; la BD además lo rechaza.
+  const opts = ([
     { val: 'ok', label: 'OK', color: 'bg-green-500', icon: Check },
     { val: 'no_ok', label: 'NO OK', color: 'bg-red-500', icon: X },
     { val: 'na', label: 'N/A', color: 'bg-gray-400', icon: Minus },
-  ] as const
+  ] as const).filter((o) => !(sinNA && o.val === 'na'))
   return (
     <div className="flex gap-1.5">
       {opts.map((o) => {
@@ -1155,7 +1157,7 @@ export default function MecanicoOTPage() {
                   )}
 
                   {it.tipo_respuesta === 'ok_no_ok' ? (
-                    <div className="mt-2"><ResultRadio value={it.resultado} onChange={(v) => setResultado(it, v)} /></div>
+                    <div className="mt-2"><ResultRadio value={it.resultado} sinNA={esEntrega} onChange={(v) => setResultado(it, v)} /></div>
                   ) : (
                     <CapturaItem it={it} saving={marcar.isPending}
                       onGuardar={(p) => marcar.mutate({

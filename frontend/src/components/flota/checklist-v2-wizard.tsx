@@ -229,6 +229,7 @@ export function ChecklistV2Wizard({ instanceId, onClosed }: Props) {
               item={i}
               instanceId={instance.id}
               bloqueado={bloqueado}
+              sinNA={esEntrega}
               onChange={handleItemChange}
             />
           ))
