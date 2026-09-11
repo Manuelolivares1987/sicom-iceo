@@ -3,7 +3,7 @@
 import { useMemo, useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import {
-  DndContext, DragEndEvent, PointerSensor, useDraggable, useDroppable, useSensor, useSensors,
+  DndContext, DragEndEvent, MouseSensor, TouchSensor, useDraggable, useDroppable, useSensor, useSensors,
 } from '@dnd-kit/core'
 import {
   Calendar, ArrowLeft, ChevronLeft, ChevronRight, Lock, Unlock, AlertTriangle, Trash2, User,
@@ -300,10 +300,31 @@ export default function PlanSemanalTallerPage() {
     setSemanaIso(lunesDeIso(d))
   }
 
-  // Drag & drop
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
+  // Drag & drop. En el celular el drag pelea con el scroll: el TouchSensor
+  // exige mantener presionado 250 ms para "levantar" la tarjeta, y además
+  // TOCAR una patente/preventiva abre el mismo diálogo de programación sin
+  // arrastrar nada (pedido Manuel 2026-09-11: planificar desde el teléfono).
+  const sensors = useSensors(
+    // MouseSensor ignora el touch; el par Mouse+Touch evita que el scroll del
+    // teléfono "agarre" tarjetas (el PointerSensor de antes capturaba ambos).
+    useSensor(MouseSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 8 } }),
+  )
+
+  // Un drag que termina dispara igual el click del elemento origen en algunos
+  // navegadores: se ignora el tap si acaba de soltarse un arrastre.
+  const dragEndAt = useRef(0)
+  const fechaTapDefault = () => {
+    const hoy = new Date().toISOString().slice(0, 10)
+    return (dias ?? []).some((d) => d.fecha === hoy) ? hoy : ((dias ?? [])[0]?.fecha ?? hoy)
+  }
+  const tapProgramar = (t: DropTarget) => {
+    if (Date.now() - dragEndAt.current < 400) return
+    setDropTarget(t)
+  }
 
   const handleDragEnd = (e: DragEndEvent) => {
+    dragEndAt.current = Date.now()
     const aOver = e.over?.id?.toString()
     const aActive = e.active?.id?.toString()
     if (!aOver || !aActive || !aOver.startsWith('dia:')) return
@@ -651,6 +672,13 @@ export default function PlanSemanalTallerPage() {
               total={fleet?.length ?? 0}
               filtro={filtroPatente}
               onFiltro={setFiltroPatente}
+              onTap={(a) => tapProgramar({
+                activoId: a.activo_id,
+                label: a.patente ? `${a.patente} · ${a.activo_codigo}` : a.activo_codigo,
+                fecha: fechaTapDefault(),
+                planIdPre: null,
+                tipoPre: 'preventivo',
+              })}
             />
 
             {/* Días + preventivas sugeridas */}
@@ -712,8 +740,17 @@ export default function PlanSemanalTallerPage() {
                   checklist del cliente, recepción— no sólo de recepción. */}
               <NcOtPorAgendarCard items={ncOts ?? []} />
 
-              {/* Preventivas sugeridas (arrástralas a un día) */}
-              <PreventivasSugeridas items={preventivasPatentes} />
+              {/* Preventivas sugeridas (arrástralas a un día, o tócalas) */}
+              <PreventivasSugeridas
+                items={preventivasPatentes}
+                onTap={(p) => tapProgramar({
+                  activoId: p.activo_id,
+                  label: `${p.patente} · ${p.pauta_nombre ?? 'PM'}`,
+                  fecha: fechaTapDefault(),
+                  planIdPre: p.plan_id,
+                  tipoPre: 'preventivo',
+                })}
+              />
 
               {/* Los papeles NO viven acá. Estaban en dos tarjetas más —Revisión
                   Técnica por vencer y Documentos con problemas— que repetían lo
@@ -1124,11 +1161,13 @@ function KpiCard({ label, valor, color }: { label: string; valor: string | numbe
   )
 }
 
-function PatentesPanel({ items, total, filtro, onFiltro }: {
+function PatentesPanel({ items, total, filtro, onFiltro, onTap }: {
   items: FlotaDashboardActivo[]
   total: number
   filtro: string
   onFiltro: (v: string) => void
+  /** Tocar la tarjeta programa sin arrastrar (imprescindible en el celular). */
+  onTap: (a: FlotaDashboardActivo) => void
 }) {
   return (
     <Card>
@@ -1140,12 +1179,12 @@ function PatentesPanel({ items, total, filtro, onFiltro }: {
       <CardContent className="p-2 space-y-2">
         <Input value={filtro} onChange={(e) => onFiltro(e.target.value)}
                placeholder="Buscar patente / código…" className="h-8 text-xs" />
-        <div className="text-[10px] text-gray-400">Mantención y fuera de servicio primero. Arrastra a un día →</div>
+        <div className="text-[10px] text-gray-400">Mantención y fuera de servicio primero. Arrastra a un día → o tócala para programarla.</div>
         <div className="max-h-[64vh] overflow-y-auto space-y-1.5">
           {items.length === 0 ? (
             <div className="text-xs text-gray-400 p-4 text-center">Sin patentes</div>
           ) : (
-            items.map((a) => <PatenteCard key={a.activo_id} a={a} />)
+            items.map((a) => <PatenteCard key={a.activo_id} a={a} onTap={() => onTap(a)} />)
           )}
         </div>
       </CardContent>
@@ -1153,7 +1192,7 @@ function PatentesPanel({ items, total, filtro, onFiltro }: {
   )
 }
 
-function PatenteCard({ a }: { a: FlotaDashboardActivo }) {
+function PatenteCard({ a, onTap }: { a: FlotaDashboardActivo; onTap: () => void }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: `patente:${a.activo_id}` })
   const style = transform
     ? { transform: `translate3d(${transform.x}px,${transform.y}px,0)`, opacity: isDragging ? 0.5 : 1 }
@@ -1161,7 +1200,7 @@ function PatenteCard({ a }: { a: FlotaDashboardActivo }) {
   const est = a.estado_codigo_hoy ? ESTADO_INFO[a.estado_codigo_hoy] : undefined
 
   return (
-    <div ref={setNodeRef} style={style} {...listeners} {...attributes}
+    <div ref={setNodeRef} style={style} {...listeners} {...attributes} onClick={onTap}
          className="rounded border bg-white p-2 cursor-grab active:cursor-grabbing hover:border-blue-400 shadow-sm">
       <div className="flex items-center justify-between gap-1">
         <span className="text-[11px] font-mono font-bold">{a.patente ?? a.activo_codigo}</span>
@@ -1175,13 +1214,13 @@ function PatenteCard({ a }: { a: FlotaDashboardActivo }) {
   )
 }
 
-function PreventivasSugeridas({ items }: { items: PreventivaDue[] }) {
+function PreventivasSugeridas({ items, onTap }: { items: PreventivaDue[]; onTap: (p: PreventivaDue) => void }) {
   return (
     <Card className="border-amber-200">
       <CardHeader className="pb-2">
         <CardTitle className="text-sm flex items-center gap-2 text-amber-800">
           <ShieldAlert className="h-4 w-4" /> Preventivas sugeridas ({items.length})
-          <span className="text-[10px] font-normal text-gray-400">— vencidas o próximas (15 días). Arrástralas a un día.</span>
+          <span className="text-[10px] font-normal text-gray-400">— vencidas o próximas (15 días). Arrástralas a un día, o tócalas para programarlas.</span>
         </CardTitle>
       </CardHeader>
       <CardContent className="p-2">
@@ -1189,7 +1228,7 @@ function PreventivasSugeridas({ items }: { items: PreventivaDue[] }) {
           <div className="text-xs text-gray-400 p-3 text-center">Sin preventivas vencidas ni próximas.</div>
         ) : (
           <div className="flex gap-2 overflow-x-auto pb-1">
-            {items.map((p) => <PreventivaCard key={`${p.activo_id}:${p.plan_id}`} p={p} />)}
+            {items.map((p) => <PreventivaCard key={`${p.activo_id}:${p.plan_id}`} p={p} onTap={() => onTap(p)} />)}
           </div>
         )}
       </CardContent>
@@ -1197,7 +1236,7 @@ function PreventivasSugeridas({ items }: { items: PreventivaDue[] }) {
   )
 }
 
-function PreventivaCard({ p }: { p: PreventivaDue }) {
+function PreventivaCard({ p, onTap }: { p: PreventivaDue; onTap: () => void }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: `preventiva:${p.activo_id}:${p.plan_id}`,
   })
@@ -1208,7 +1247,7 @@ function PreventivaCard({ p }: { p: PreventivaDue }) {
   const ejeIcon = p.eje_critico === 'km' ? '🛣' : p.eje_critico === 'horas' ? '⏱' : '📅'
 
   return (
-    <div ref={setNodeRef} style={style} {...listeners} {...attributes}
+    <div ref={setNodeRef} style={style} {...listeners} {...attributes} onClick={onTap}
          title={`${p.detalle}${p.pauta_nombre ? ` · ${p.pauta_nombre}` : ''}${!p.baseline_confiable ? ' · ⚠ revisar lectura km/h del plan' : ''}`}
          className={`rounded border px-2.5 py-1.5 cursor-grab active:cursor-grabbing shadow-sm min-w-[120px] ${
            vencida ? 'border-red-300 bg-red-50 text-red-800' : 'border-amber-200 bg-amber-50 text-amber-800'
