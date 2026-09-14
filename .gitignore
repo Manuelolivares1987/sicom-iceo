@@ -59,3 +59,6 @@ reportes/*.xlsx
 
 # Entrega de cuentas del taller (tiene claves escritas)
 CUENTAS_TALLER.txt
+
+# Hojas de claves de capacitación — NUNCA commitear
+docs/capacitacion/Claves_*.xlsx
