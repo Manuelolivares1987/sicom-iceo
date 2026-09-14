@@ -392,6 +392,39 @@ export function getSupervisoresFaena(faenaId: string) {
   return supabase.rpc('rpc_prevencion_supervisores_faena', { p_faena_id: faenaId })
 }
 
+// ── Supervisores rotativos (MIG548): asignación supervisor ↔ faenas ─────────
+// Los de Calama cubren Lomas y Centinela a la vez; la asignación define a
+// quién se le cobra la carga del mes en el monitoreo (no restringe la carga).
+
+export interface SupervisorAsignable {
+  usuario_id: string
+  nombre: string
+  email: string
+  rol: string
+  faena_fija: boolean
+  asignado: boolean
+}
+
+export function getSupervisoresAsignables(faenaId: string) {
+  return supabase.rpc('rpc_prevencion_supervisores_asignables', { p_faena_id: faenaId })
+}
+
+export async function asignarSupervisorFaena(usuarioId: string, faenaId: string) {
+  const { data: auth } = await supabase.auth.getUser()
+  return supabase.from('prevencion_supervisor_faenas').upsert(
+    { usuario_id: usuarioId, faena_id: faenaId, created_by: auth?.user?.id ?? null },
+    { onConflict: 'usuario_id,faena_id' },
+  )
+}
+
+export function quitarSupervisorFaena(usuarioId: string, faenaId: string) {
+  return supabase
+    .from('prevencion_supervisor_faenas')
+    .delete()
+    .eq('usuario_id', usuarioId)
+    .eq('faena_id', faenaId)
+}
+
 export async function urlEvidencia(path: string): Promise<string | null> {
   const { data } = await supabase.storage
     .from('prevencion-evidencias')
