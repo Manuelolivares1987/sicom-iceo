@@ -51,10 +51,10 @@ export async function generarEntregable(params: {
     const { data: ind, error } = await getIndicadoresAnio(faenaId, anio)
     if (error) throw error
     const fila = ((ind ?? []) as IndicadoresFila[]).find((f) => f.mes === mes) ?? null
-    // Hoja de DATOS para transcribir a SIMIN — el E-200 oficial es del
-    // Gobierno y no se replica (corrección Manuel 2026-09-14).
+    // Réplica FIEL del formulario estatal (corrección Manuel 2026-09-14:
+    // «debe ser el mismo porque es estatal»).
     const blob = await generarE200Excel({ config, indicadores: fila, anio, mes, faenaNombre })
-    return { blob, filename: `Datos_E200_${slug(faenaNombre)}_${anio}-${mm}.xlsx` }
+    return { blob, filename: `Formulario_E-200_${slug(faenaNombre)}_${anio}-${mm}.xlsx` }
   }
 
   // El resto necesita el consolidado + los registros del mes.

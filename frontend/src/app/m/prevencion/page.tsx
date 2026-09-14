@@ -10,7 +10,8 @@
 // ============================================================================
 
 import { useMemo, useState } from 'react'
-import { CheckCircle2, ClipboardList, HardHat, Loader2, Paperclip, Plus } from 'lucide-react'
+import Link from 'next/link'
+import { CheckCircle2, ChevronRight, ClipboardList, HardHat, Loader2, Paperclip, Plus, ShieldCheck } from 'lucide-react'
 import { useAuth } from '@/contexts/auth-context'
 import { useExigirSesion } from '@/hooks/use-exigir-sesion'
 import { SinSesionOffline } from '@/components/enex/sin-sesion-offline'
@@ -24,6 +25,9 @@ import { useCerrarRegistro, useMisRegistros } from '@/hooks/use-prevencion-repor
 
 const ROLES_CREAR = ['administrador', 'prevencionista', 'supervisor',
   'jefe_operaciones', 'jefe_mantenimiento', 'subgerente_operaciones']
+// Los que además chequean el mes y generan los documentos (el «portal» tiene
+// dos puertas: el supervisor completa, prevención controla).
+const ROLES_CONTROL = ['administrador', 'prevencionista', 'jefe_operaciones', 'subgerente_operaciones']
 
 export default function PrevencionMobileHome() {
   const { verificando, sinSesionOffline } = useExigirSesion()
@@ -95,6 +99,18 @@ export default function PrevencionMobileHome() {
             Su cuenta no tiene el rol para cargar registros de prevención.
             Avise a quien administra el sistema.
           </p>
+        )}
+
+        {!!perfil?.rol && ROLES_CONTROL.includes(perfil.rol) && (
+          <Link href="/m/prevencion/control"
+                className="flex w-full items-center gap-3 rounded-xl border-2 border-gray-900 bg-gray-900 p-4 text-white active:scale-[0.99]">
+            <ShieldCheck className="h-6 w-6 shrink-0" />
+            <div className="min-w-0 flex-1 text-left">
+              <p className="text-base font-bold">Control del mes</p>
+              <p className="text-xs opacity-70">Quién cargó, qué falta y generar los documentos</p>
+            </div>
+            <ChevronRight className="h-5 w-5 shrink-0 opacity-60" />
+          </Link>
         )}
 
         {puedeCrear && (
