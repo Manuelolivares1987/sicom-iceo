@@ -631,10 +631,8 @@ function TabIndicadores({ faenaId, anio, mes, puedeAdmin }: {
                         <td className="py-1.5 pr-3">{d.fecha}</td>
                         <td className="py-1.5 pr-3">
                           {d.supervisor_nombre ?? '—'}
-                          {(d.asistentes?.length ?? 0) > 0 && (
-                            <p className="text-xs text-gray-500">
-                              Subieron: {d.asistentes!.join(', ')}
-                            </p>
+                          {d.instalacion && (
+                            <p className="text-xs text-gray-500">{d.instalacion}</p>
                           )}
                         </td>
                         <td className="py-1.5 pr-3 text-right">{d.hombres}</td>
