@@ -338,6 +338,15 @@ const navGroups: NavGroup[] = [
     label: 'Compliance',
     items: [
       { label: 'Prevención', href: '/dashboard/prevencion', icon: HardHat, module: 'prevencion' },
+      // [MIG546] El repositorio que pidió prevención: los supervisores cargan
+      // sus RIT/VAT/VCT con evidencia y el consolidado mensual (informe GRP,
+      // E-200) sale solo, en vez de pedirse por correo a cada supervisor.
+      { label: 'Reportabilidad faenas', href: '/dashboard/prevencion/reportabilidad',
+        icon: BarChart3, module: 'prevencion', badge: 'Nuevo',
+        tooltip: 'RIT/VAT/VCT por faena y mes, indicadores E-200 y checklist de entregas al mandante' },
+      { label: 'Registro terreno (móvil)', href: '/m/prevencion',
+        icon: Smartphone, module: 'prevencion',
+        tooltip: 'Lo que ve el supervisor en su teléfono: cargar RIT/VAT/VCT/charlas con foto y cerrar los abiertos' },
       // Sin `roles`: lo ve todo el que tenga el módulo, incluido el jefe de
       // operaciones —es quien responde por la gente que entra a faena—.
       { label: 'Control documental personal', href: '/dashboard/prevencion/personal',
