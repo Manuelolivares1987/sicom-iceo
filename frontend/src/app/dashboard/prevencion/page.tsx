@@ -142,6 +142,15 @@ export default function PrevencionPage() {
             historial de un equipo, que es lo que se necesita para investigar
             un incidente. */}
         <div className="flex flex-wrap gap-2">
+          {/* [MIG546] La reportabilidad mensual por faena: RIT/VAT/VCT de los
+              supervisores, indicadores E-200 y checklist de entregas. */}
+          <Link
+            href="/dashboard/prevencion/reportabilidad"
+            className="inline-flex items-center gap-2 rounded-lg border border-green-300 bg-green-50 px-4 py-2 text-sm font-medium text-green-800 transition-colors hover:bg-green-100"
+          >
+            <FileCheck className="h-4 w-4" />
+            Reportabilidad faenas
+          </Link>
           <Link
             href="/dashboard/prevencion/personal"
             className="inline-flex items-center gap-2 rounded-lg border border-red-300 bg-red-50 px-4 py-2 text-sm font-medium text-red-800 transition-colors hover:bg-red-100"
