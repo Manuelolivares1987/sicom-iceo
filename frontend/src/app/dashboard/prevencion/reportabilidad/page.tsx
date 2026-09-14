@@ -14,7 +14,8 @@
 import { useMemo, useState } from 'react'
 import {
   AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, Download,
-  FileCheck, FileWarning, HardHat, Loader2, Paperclip, Plus, Undo2,
+  Eye, FileCheck, FileWarning, HardHat, Loader2, Paperclip, Plus,
+  Settings2, Sparkles, Undo2, UserX,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -28,15 +29,17 @@ import { useAuth } from '@/contexts/auth-context'
 import { cn } from '@/lib/utils'
 import { RegistroTerrenoForm } from '@/components/prevencion/registro-terreno-form'
 import {
-  useCerrarRegistro, useConsolidadoMes, useDesmarcarEnvio, useFaenasPrevencion,
-  useIndicadoresAnio, useMarcarEnviada, useRegistros, useUpsertIndicadores,
-  useUpsertMeta,
+  useCerrarRegistro, useConsolidadoMes, useDesmarcarEnvio, useFaenaConfig,
+  useFaenasPrevencion, useIndicadoresAnio, useMarcarEnviada, useMonitoreoMes,
+  useRegistros, useSupervisoresFaena, useUpsertFaenaConfig,
+  useUpsertIndicadores, useUpsertMeta,
 } from '@/hooks/use-prevencion-reportabilidad'
 import {
   subirEvidencia, urlEvidencia,
-  type EvidenciaArchivo, type IndicadoresFila, type PrevencionRegistro,
-  type ReportabilidadEstado,
+  type EvidenciaArchivo, type FaenaConfigDatos, type IndicadoresFila,
+  type PrevencionRegistro, type ReportabilidadEstado,
 } from '@/lib/services/prevencion-reportabilidad'
+import { descargarBlob, generarEntregable } from '@/lib/entregables/prevencion-generar'
 
 const ROLES_CREAR = ['administrador', 'prevencionista', 'supervisor',
   'jefe_operaciones', 'jefe_mantenimiento', 'subgerente_operaciones']
@@ -62,7 +65,7 @@ export default function ReportabilidadPrevencionPage() {
   const { data: faenas } = useFaenasPrevencion()
   const [faenaId, setFaenaId] = useState<string | null>(null)
   const [periodo, setPeriodo] = useState(mesActualISO())   // 'YYYY-MM'
-  const [tab, setTab] = useState<'gestion' | 'registros' | 'indicadores' | 'entregas'>('gestion')
+  const [tab, setTab] = useState<'gestion' | 'registros' | 'indicadores' | 'entregas' | 'monitoreo'>('gestion')
   const [nuevoOpen, setNuevoOpen] = useState(false)
 
   const anio = Number(periodo.slice(0, 4))
@@ -78,6 +81,7 @@ export default function ReportabilidadPrevencionPage() {
     { id: 'registros' as const, label: 'Registros' },
     { id: 'indicadores' as const, label: 'Indicadores' },
     { id: 'entregas' as const, label: 'Entregas del mes' },
+    { id: 'monitoreo' as const, label: 'Monitoreo' },
   ]
 
   return (
@@ -148,7 +152,12 @@ export default function ReportabilidadPrevencionPage() {
           )}
           {tab === 'entregas' && (
             <TabEntregas consolidado={consolidado} faenaId={faenaEfectiva}
-                         anio={anio} mes={mes} puedeAdmin={puedeAdmin} />
+                         anio={anio} mes={mes} puedeAdmin={puedeAdmin}
+                         faenaNombre={(faenas ?? []).find((f: any) => f.id === faenaEfectiva)?.nombre ?? ''} />
+          )}
+          {tab === 'monitoreo' && (
+            <TabMonitoreo consolidado={consolidado} faenaId={faenaEfectiva}
+                          anio={anio} mes={mes} puedeAdmin={puedeAdmin} />
           )}
         </>
       )}
@@ -662,12 +671,13 @@ function Kpi({ label, value, rojo }: { label: string; value: number | string; ro
 
 // ── Tab 4: Entregas del mes (checklist de reportabilidad) ────────────────────
 
-function TabEntregas({ consolidado, faenaId, anio, mes, puedeAdmin }: {
+function TabEntregas({ consolidado, faenaId, anio, mes, puedeAdmin, faenaNombre }: {
   consolidado: any
   faenaId: string
   anio: number
   mes: number
   puedeAdmin: boolean
+  faenaNombre: string
 }) {
   const toast = useToast()
   const marcar = useMarcarEnviada()
@@ -677,6 +687,33 @@ function TabEntregas({ consolidado, faenaId, anio, mes, puedeAdmin }: {
   const [obs, setObs] = useState('')
   const [archivos, setArchivos] = useState<File[]>([])
   const [subiendo, setSubiendo] = useState(false)
+  const [generando, setGenerando] = useState<string | null>(null)   // item_id
+  const [progresoGen, setProgresoGen] = useState('')
+
+  // El botón que pidió Manuel: «quisiera que todo saliera automático».
+  // Junta lo cargado por supervisores + indicadores + config y produce el
+  // archivo en el formato que pide ese mandante. Se descarga para revisar;
+  // luego se adjunta al marcar la entrega.
+  const generar = async (it: ReportabilidadEstado) => {
+    if (!it.plantilla) return
+    setGenerando(it.item_id)
+    setProgresoGen('Preparando…')
+    try {
+      const { blob, filename } = await generarEntregable({
+        plantilla: it.plantilla,
+        itemNombre: it.nombre,
+        faenaId, faenaNombre, anio, mes,
+        onProgreso: setProgresoGen,
+      })
+      descargarBlob(blob, filename)
+      toast.success(`${filename} generado — revíselo y márquelo enviado adjuntándolo`)
+    } catch (e: any) {
+      toast.error(e?.message ?? 'No se pudo generar el entregable')
+    } finally {
+      setGenerando(null)
+      setProgresoGen('')
+    }
+  }
 
   // Plazo: día N del MES SIGUIENTE al informado (el E-200 de agosto se declara
   // dentro de los primeros días de septiembre).
@@ -755,6 +792,16 @@ function TabEntregas({ consolidado, faenaId, anio, mes, puedeAdmin }: {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
+                    {it.plantilla && (
+                      <Button size="sm" variant="outline"
+                              disabled={generando !== null}
+                              onClick={() => generar(it)}>
+                        {generando === it.item_id
+                          ? <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                          : <Sparkles className="mr-1 h-4 w-4" />}
+                        {generando === it.item_id ? (progresoGen || 'Generando…') : 'Generar'}
+                      </Button>
+                    )}
                     {it.enviado ? (
                       <>
                         <span className="text-xs font-medium text-green-700">
@@ -821,5 +868,239 @@ function TabEntregas({ consolidado, faenaId, anio, mes, puedeAdmin }: {
         </div>
       </Modal>
     </Card>
+  )
+}
+
+// ── Tab 5: Monitoreo (lo que pidió Manuel: el prevencionista viendo quién
+//    cargó, quién no, y cuánto falta para cerrar el mes) ─────────────────────
+
+function TabMonitoreo({ consolidado, faenaId, anio, mes, puedeAdmin }: {
+  consolidado: any
+  faenaId: string
+  anio: number
+  mes: number
+  puedeAdmin: boolean
+}) {
+  const { data: monitoreo, isLoading } = useMonitoreoMes(faenaId, anio, mes)
+  const { data: esperados } = useSupervisoresFaena(faenaId)
+  const [configOpen, setConfigOpen] = useState(false)
+
+  const filas = monitoreo ?? []
+  const cargaron = new Set(filas.map((m) => m.creado_por))
+  const sinCargar = (esperados ?? []).filter((s) => !cargaron.has(s.usuario_id))
+  const totalRegistros = filas.reduce((a, m) => a + m.total, 0)
+  const entregas: ReportabilidadEstado[] = consolidado?.reportabilidad ?? []
+  const entregasHechas = entregas.filter((e) => e.enviado).length
+  const indicadoresOk = !!consolidado?.indicadores
+  const metasDefinidas = (consolidado?.gestion ?? []).filter((g: any) => g.meta > 0).length
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <Kpi label="Registros del mes" value={totalRegistros} />
+        <Kpi label="Supervisores con carga"
+             value={`${cargaron.size}${esperados?.length ? ` / ${esperados.length}` : ''}`}
+             rojo={!!esperados?.length && cargaron.size < esperados.length} />
+        <Kpi label="Indicadores del mes" value={indicadoresOk ? 'Cargados' : 'Faltan'}
+             rojo={!indicadoresOk} />
+        <Kpi label="Entregas al mandante"
+             value={`${entregasHechas} / ${entregas.length}`}
+             rojo={entregas.length > 0 && entregasHechas < entregas.length} />
+      </div>
+
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="text-base">
+            Carga por supervisor — {MESES[mes - 1]} {anio}
+          </CardTitle>
+          {puedeAdmin && (
+            <Button size="sm" variant="outline" onClick={() => setConfigOpen(true)}>
+              <Settings2 className="mr-1 h-4 w-4" /> Datos de la faena
+            </Button>
+          )}
+        </CardHeader>
+        <CardContent>
+          {isLoading ? (
+            <div className="flex justify-center py-8"><Spinner className="h-6 w-6" /></div>
+          ) : (
+            <>
+              {filas.length === 0 && (
+                <p className="py-4 text-center text-sm text-gray-500">
+                  Nadie ha cargado registros este mes en esta faena.
+                </p>
+              )}
+              {filas.length > 0 && (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b text-left text-xs uppercase text-gray-500">
+                        <th className="py-2 pr-3">Supervisor</th>
+                        <th className="py-2 pr-3 text-right">Total</th>
+                        <th className="py-2 pr-3">Por tipo</th>
+                        <th className="py-2 pr-3 text-right">Abiertos</th>
+                        <th className="py-2 text-right">Última carga</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filas.map((m) => (
+                        <tr key={m.creado_por} className="border-b last:border-0">
+                          <td className="py-2 pr-3 font-medium text-gray-900">
+                            {m.supervisor}
+                            {m.rol && m.rol !== 'supervisor' && (
+                              <span className="ml-1 text-xs text-gray-400">({m.rol})</span>
+                            )}
+                          </td>
+                          <td className="py-2 pr-3 text-right font-bold">{m.total}</td>
+                          <td className="py-2 pr-3">
+                            <div className="flex flex-wrap gap-1">
+                              {Object.entries(m.por_tipo ?? {}).map(([t, n]) => (
+                                <span key={t} className="rounded bg-gray-100 px-1.5 py-0.5 text-xs">
+                                  {t}: <b>{n as number}</b>
+                                </span>
+                              ))}
+                            </div>
+                          </td>
+                          <td className={cn('py-2 pr-3 text-right', m.abiertos > 0 && 'font-bold text-amber-600')}>
+                            {m.abiertos}
+                          </td>
+                          <td className="py-2 text-right text-xs text-gray-500">
+                            {new Date(m.ultima_carga).toLocaleDateString('es-CL')}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {sinCargar.length > 0 && (
+                <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3">
+                  <p className="mb-1 flex items-center gap-1.5 text-sm font-bold text-red-700">
+                    <UserX className="h-4 w-4" />
+                    Sin cargas este mes ({sinCargar.length})
+                  </p>
+                  <ul className="text-sm text-red-800">
+                    {sinCargar.map((s) => (
+                      <li key={s.usuario_id}>
+                        {s.nombre} <span className="text-xs text-red-500">· {s.email}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="mt-1 text-xs text-red-600">
+                    Cargan desde el teléfono en /m/prevencion — sin su carga el consolidado sale corto.
+                  </p>
+                </div>
+              )}
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      <ConfigFaenaModal open={configOpen} onClose={() => setConfigOpen(false)} faenaId={faenaId} />
+    </div>
+  )
+}
+
+// ── Datos fijos de la faena (alimentan los generadores) ──────────────────────
+
+const CONFIG_SECCIONES: Array<{ grupo: string; titulo: string; campos: Array<[string, string]> }> = [
+  {
+    grupo: 'mandante', titulo: 'Mandante',
+    campos: [['razon_social', 'Razón social'], ['rut', 'RUT'], ['nombre_fantasia', 'Nombre fantasía'], ['region', 'Región']],
+  },
+  {
+    grupo: 'instalacion', titulo: 'Instalación (E-200)',
+    campos: [['nombre', 'Nombre'], ['estado', 'Estado'], ['tipo', 'Tipo'], ['region', 'Región'],
+      ['provincia', 'Provincia'], ['comuna', 'Comuna'], ['datum', 'Datum'], ['huso', 'Huso'],
+      ['cota', 'Cota (m.s.n.m.)'], ['coord_norte', 'Coordenada Norte'], ['coord_este', 'Coordenada Este']],
+  },
+  {
+    grupo: 'contrato', titulo: 'Contrato',
+    campos: [['numero', 'N° contrato / OC'], ['inicio', 'Inicio'], ['vigencia', 'Vigencia'],
+      ['administrador', 'Administrador Pillado'], ['asesor_prevencion', 'Asesor prevención'],
+      ['instalacion_informe', 'Instalación (informe)'], ['superintendencia', 'Superintendencia'],
+      ['admin_mandante', 'Admin. contrato mandante'], ['cargo_admin_mandante', 'Cargo admin. mandante'],
+      ['operador_mandante', 'Operador contrato mandante'], ['cargo_operador_mandante', 'Cargo operador']],
+  },
+  {
+    grupo: 'experto', titulo: 'Experto / asesor SNGM',
+    campos: [['nombre', 'Nombre'], ['run', 'RUN'], ['registro_sngm', 'Registro SNGM'],
+      ['cargo', 'Cargo'], ['telefono', 'Teléfono'], ['email', 'E-mail']],
+  },
+  {
+    grupo: 'empresa', titulo: 'Empresa (Pillado — común a todas)',
+    campos: [['rut', 'RUT'], ['razon_social', 'Razón social'], ['nombre_fantasia', 'Nombre fantasía'],
+      ['categoria', 'Categoría'], ['direccion', 'Dirección'], ['region', 'Región'],
+      ['provincia', 'Provincia'], ['comuna', 'Comuna'], ['telefono', 'Teléfono'], ['email', 'E-mail'],
+      ['rep_legal', 'Representante legal'], ['rep_legal_rut', 'RUT rep. legal'],
+      ['rep_legal_telefono', 'Teléfono rep. legal'], ['rep_legal_email', 'E-mail rep. legal']],
+  },
+]
+
+function ConfigFaenaModal({ open, onClose, faenaId }: {
+  open: boolean
+  onClose: () => void
+  faenaId: string
+}) {
+  const toast = useToast()
+  const { data: config } = useFaenaConfig(open ? faenaId : null)
+  const guardar = useUpsertFaenaConfig()
+  const [form, setForm] = useState<FaenaConfigDatos | null>(null)
+
+  // El formulario parte del config cargado; si prevención cambia de faena con
+  // el modal cerrado, al reabrir se resetea (open pasa a true de nuevo).
+  const datos = form ?? config ?? {}
+
+  const setCampo = (grupo: string, campo: string, valor: string) => {
+    const base = { ...(form ?? config ?? {}) } as any
+    base[grupo] = { ...(base[grupo] ?? {}), [campo]: valor }
+    setForm(base)
+  }
+
+  const onGuardar = async () => {
+    try {
+      await guardar.mutateAsync({ faenaId, datos: (form ?? config ?? {}) as FaenaConfigDatos })
+      toast.success('Datos de la faena guardados')
+      setForm(null)
+      onClose()
+    } catch (e: any) {
+      toast.error(e?.message ?? 'No se pudo guardar')
+    }
+  }
+
+  return (
+    <Modal open={open} onClose={() => { setForm(null); onClose() }}
+           title="Datos fijos de la faena (alimentan E-200 e informes)" className="max-w-2xl">
+      <div className="max-h-[65vh] space-y-4 overflow-y-auto pr-1">
+        <div className="space-y-1">
+          <label className="block text-sm font-medium text-gray-700">Nombre oficial de la faena (E-200)</label>
+          <Input value={String((datos as any).faena_nombre ?? '')}
+                 onChange={(e) => {
+                   const base = { ...(form ?? config ?? {}) } as any
+                   base.faena_nombre = e.target.value
+                   setForm(base)
+                 }} />
+        </div>
+        {CONFIG_SECCIONES.map((sec) => (
+          <div key={sec.grupo}>
+            <p className="mb-1.5 text-sm font-bold text-gray-700">{sec.titulo}</p>
+            <div className="grid grid-cols-2 gap-2">
+              {sec.campos.map(([campo, label]) => (
+                <Input key={campo} label={label}
+                       value={String(((datos as any)[sec.grupo] ?? {})[campo] ?? '')}
+                       onChange={(e) => setCampo(sec.grupo, campo, e.target.value)} />
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="mt-3 flex gap-2 border-t pt-3">
+        <Button className="flex-1" onClick={onGuardar} disabled={guardar.isPending}>
+          {guardar.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+          Guardar
+        </Button>
+        <Button variant="outline" onClick={() => { setForm(null); onClose() }}>Cancelar</Button>
+      </div>
+    </Modal>
   )
 }

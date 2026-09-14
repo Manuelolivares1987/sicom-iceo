@@ -13,7 +13,13 @@ import {
   upsertIndicadores,
   marcarEnviada,
   desmarcarEnvio,
+  getFaenaConfig,
+  upsertFaenaConfig,
+  getMonitoreoMes,
+  getSupervisoresFaena,
+  type FaenaConfigDatos,
   type IndicadoresFila,
+  type MonitoreoSupervisor,
   type PrevencionRegistro,
 } from '@/lib/services/prevencion-reportabilidad'
 
@@ -173,6 +179,55 @@ export function useMarcarEnviada() {
       if (error) throw error
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: [K.consolidado] }),
+  })
+}
+
+// ── Fase 2 (MIG547) ──────────────────────────────────────────────────────────
+
+export function useFaenaConfig(faenaId: string | null) {
+  return useQuery({
+    queryKey: ['prev-repo-config', faenaId],
+    enabled: !!faenaId,
+    queryFn: async () => {
+      const { data, error } = await getFaenaConfig(faenaId!)
+      if (error) throw error
+      return (data?.datos ?? {}) as FaenaConfigDatos
+    },
+  })
+}
+
+export function useUpsertFaenaConfig() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ faenaId, datos }: { faenaId: string; datos: FaenaConfigDatos }) => {
+      const { error } = await upsertFaenaConfig(faenaId, datos)
+      if (error) throw error
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['prev-repo-config'] }),
+  })
+}
+
+export function useMonitoreoMes(faenaId: string | null, anio: number, mes: number) {
+  return useQuery({
+    queryKey: ['prev-repo-monitoreo', faenaId, anio, mes],
+    enabled: !!faenaId,
+    queryFn: async () => {
+      const { data, error } = await getMonitoreoMes(faenaId!, anio, mes)
+      if (error) throw error
+      return (data ?? []) as MonitoreoSupervisor[]
+    },
+  })
+}
+
+export function useSupervisoresFaena(faenaId: string | null) {
+  return useQuery({
+    queryKey: ['prev-repo-supervisores', faenaId],
+    enabled: !!faenaId,
+    queryFn: async () => {
+      const { data, error } = await getSupervisoresFaena(faenaId!)
+      if (error) throw error
+      return (data ?? []) as Array<{ usuario_id: string; nombre: string; email: string }>
+    },
   })
 }
 

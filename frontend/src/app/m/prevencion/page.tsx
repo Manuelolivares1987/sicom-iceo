@@ -43,6 +43,18 @@ export default function PrevencionMobileHome() {
     [registros],
   )
 
+  // Mi avance del mes: lo que YO llevo cargado, por tipo. Es lo que el
+  // prevencionista ve en su monitoreo — así el supervisor sabe si va corto
+  // antes de que se lo pidan.
+  const avanceMes = useMemo(() => {
+    const ahora = new Date()
+    const prefijo = `${ahora.getFullYear()}-${String(ahora.getMonth() + 1).padStart(2, '0')}`
+    const delMes = (registros ?? []).filter((r) => r.fecha_actividad.startsWith(prefijo))
+    const porTipo = new Map<string, number>()
+    for (const r of delMes) porTipo.set(r.tipo_codigo, (porTipo.get(r.tipo_codigo) ?? 0) + 1)
+    return { total: delMes.length, porTipo: Array.from(porTipo.entries()) }
+  }, [registros])
+
   if (verificando) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gray-50">
@@ -100,6 +112,21 @@ export default function PrevencionMobileHome() {
               </p>
             </div>
           </button>
+        )}
+
+        {puedeCrear && avanceMes.total > 0 && (
+          <div className="rounded-xl border border-gray-200 bg-white p-3">
+            <p className="mb-1.5 text-xs font-bold uppercase text-gray-500">
+              Mi avance del mes · {avanceMes.total} registros
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {avanceMes.porTipo.map(([t, n]) => (
+                <span key={t} className="rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-700">
+                  {t}: <b>{n}</b>
+                </span>
+              ))}
+            </div>
+          </div>
         )}
 
         {abiertos.length > 0 && (

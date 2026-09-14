@@ -61,6 +61,7 @@ export interface ReportabilidadEstado {
   destino: string | null
   fuente: string | null
   dia_limite: number | null
+  plantilla: 'e200' | 'grp_cmp' | 'informe_franke' | 'ppt_evidencias' | null
   enviado: boolean
   fecha_envio: string | null
   archivos: EvidenciaArchivo[] | null
@@ -326,6 +327,69 @@ export async function subirEvidencia(
     },
     error: null,
   }
+}
+
+// ── Fase 2 (MIG547): config por faena, monitoreo y generadores ──────────────
+
+export interface FaenaConfigDatos {
+  empresa?: Record<string, string>
+  experto?: Record<string, string>
+  mandante?: Record<string, string>
+  faena_nombre?: string
+  instalacion?: Record<string, string>
+  contrato?: Record<string, string>
+  mutual?: string
+  [k: string]: unknown
+}
+
+export function getFaenaConfig(faenaId: string) {
+  return supabase
+    .from('prevencion_faena_config')
+    .select('faena_id, datos, updated_at')
+    .eq('faena_id', faenaId)
+    .maybeSingle()
+}
+
+export async function upsertFaenaConfig(faenaId: string, datos: FaenaConfigDatos) {
+  const { data: auth } = await supabase.auth.getUser()
+  return supabase
+    .from('prevencion_faena_config')
+    .upsert(
+      {
+        faena_id: faenaId,
+        datos,
+        updated_by: auth?.user?.id ?? null,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'faena_id' },
+    )
+}
+
+export interface MonitoreoSupervisor {
+  faena_id: string
+  anio: number
+  mes: number
+  creado_por: string
+  supervisor: string
+  rol: string | null
+  total: number
+  abiertos: number
+  ultima_carga: string
+  por_tipo: Record<string, number> | null
+}
+
+export function getMonitoreoMes(faenaId: string, anio: number, mes: number) {
+  return supabase
+    .from('v_prevencion_monitoreo_supervisores')
+    .select('*')
+    .eq('faena_id', faenaId)
+    .eq('anio', anio)
+    .eq('mes', mes)
+    .order('total', { ascending: false })
+}
+
+export function getSupervisoresFaena(faenaId: string) {
+  return supabase.rpc('rpc_prevencion_supervisores_faena', { p_faena_id: faenaId })
 }
 
 export async function urlEvidencia(path: string): Promise<string | null> {

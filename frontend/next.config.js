@@ -24,6 +24,31 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
+  webpack: (config, { isServer, webpack }) => {
+    // pptxgenjs (PPT de evidencias de prevención, MIG547): TODOS sus bundles
+    // traen `import 'node:fs'` (guardado en runtime para Node, muerto en el
+    // navegador), y webpack se cae en el esquema `node:` antes de poder
+    // aplicar el campo browser del paquete. Se le quita el prefijo y el
+    // fallback deja esos módulos en false — en el navegador pptxgenjs nunca
+    // los toca.
+    if (!isServer) {
+      config.plugins.push(
+        new webpack.NormalModuleReplacementPlugin(/^node:/, (resource) => {
+          resource.request = resource.request.replace(/^node:/, '')
+        }),
+      )
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        fs: false,
+        https: false,
+        http: false,
+        os: false,
+        path: false,
+        'image-size': false,
+      }
+    }
+    return config
+  },
   async redirects() {
     return [
       // Los Recorridos Gemba salieron de Prevención: no son un módulo de
