@@ -18,6 +18,7 @@ import {
   useActividadTipos,
   useCreateRegistro,
   useFaenasPrevencion,
+  useFaenaTipos,
 } from '@/hooks/use-prevencion-reportabilidad'
 import { subirEvidencia, type EvidenciaArchivo } from '@/lib/services/prevencion-reportabilidad'
 
@@ -38,6 +39,7 @@ export function RegistroTerrenoForm({
   const toast = useToast()
   const { data: tipos } = useActividadTipos()
   const { data: faenas } = useFaenasPrevencion()
+  const { data: faenaTipos } = useFaenaTipos()
   const crear = useCreateRegistro()
 
   const [faenaId, setFaenaId] = useState(faenaIdInicial ?? '')
@@ -61,11 +63,29 @@ export function RegistroTerrenoForm({
   // [MIG551] PGR y similares: el título se elige del catálogo del mandante.
   const titulosOpciones: string[] = (tipoSel as any)?.titulos_opciones ?? []
 
+  // [MIG552] Cada faena ofrece SOLO las herramientas de su mandante (Romeral:
+  // RIT/VAT/VCT/EPF; Centinela: PGR…). Faena sin mapeo = ve todos (fallback).
+  const tiposVisibles = useMemo(() => {
+    const permitidos = faenaId ? faenaTipos?.get(faenaId) : undefined
+    if (!permitidos?.size) return tipos ?? []
+    return (tipos ?? []).filter((t: any) => permitidos.has(t.codigo))
+  }, [tipos, faenaTipos, faenaId])
+
   const elegirTipo = (codigo: string) => {
     setTipoCodigo(codigo)
     // Al cambiar de tipo, un título que era del catálogo anterior no vale.
     const opciones = (tipos ?? []).find((t: any) => t.codigo === codigo)?.titulos_opciones
     if (opciones?.length && !opciones.includes(titulo)) setTitulo('')
+  }
+
+  const elegirFaena = (id: string) => {
+    setFaenaId(id)
+    // Un tipo que la faena nueva no ofrece se limpia (y su título de catálogo).
+    const permitidos = faenaTipos?.get(id)
+    if (tipoCodigo && permitidos?.size && !permitidos.has(tipoCodigo)) {
+      setTipoCodigo('')
+      if (titulosOpciones.length) setTitulo('')
+    }
   }
 
   const guardar = async () => {
@@ -117,15 +137,18 @@ export function RegistroTerrenoForm({
       <Select
         label="Faena"
         value={faenaId}
-        onChange={(e) => setFaenaId(e.target.value)}
+        onChange={(e) => elegirFaena(e.target.value)}
         placeholder="Elegir faena…"
         options={(faenas ?? []).map((f: any) => ({ value: f.id, label: f.nombre }))}
       />
 
       <div>
         <label className="mb-1.5 block text-sm font-medium text-gray-700">Tipo de actividad</label>
+        {!faenaId && (
+          <p className="mb-1 text-xs text-gray-400">Elija primero la faena: cada mandante tiene sus herramientas.</p>
+        )}
         <div className="flex flex-wrap gap-2">
-          {(tipos ?? []).map((t: any) => (
+          {tiposVisibles.map((t: any) => (
             <button
               key={t.codigo}
               type="button"
