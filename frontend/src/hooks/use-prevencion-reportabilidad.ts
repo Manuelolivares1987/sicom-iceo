@@ -3,6 +3,11 @@ import {
   getActividadTipos,
   getFaenaTipos,
   upsertDotacionDiaria,
+  getAmbientalConceptos,
+  upsertAmbientalRegistros,
+  getAmbientalMes,
+  type AmbientalConcepto,
+  type AmbientalMensual,
   getMisDotaciones,
   deleteDotacion,
   getDotacionMensual,
@@ -355,6 +360,42 @@ export function useDotacionDetalleMes(faenaId: string | null, anio: number, mes:
       const { data, error } = await getDotacionDetalleMes(faenaId!, anio, mes)
       if (error) throw error
       return (data ?? []) as DotacionDiaria[]
+    },
+  })
+}
+
+// ── Ambiental (MIG554) ──────────────────────────────────────────────────────
+
+export function useAmbientalConceptos() {
+  return useQuery({
+    queryKey: ['prev-repo-amb-conceptos'],
+    queryFn: async () => {
+      const { data, error } = await getAmbientalConceptos()
+      if (error) throw error
+      return (data ?? []) as AmbientalConcepto[]
+    },
+  })
+}
+
+export function useUpsertAmbiental() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (filas: Parameters<typeof upsertAmbientalRegistros>[0]) => {
+      const { error } = await upsertAmbientalRegistros(filas)
+      if (error) throw error
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['prev-repo-amb-mes'] }),
+  })
+}
+
+export function useAmbientalMes(faenaId: string | null, anio: number, mes: number) {
+  return useQuery({
+    queryKey: ['prev-repo-amb-mes', faenaId, anio, mes],
+    enabled: !!faenaId,
+    queryFn: async () => {
+      const { data, error } = await getAmbientalMes(faenaId!, anio, mes)
+      if (error) throw error
+      return (data ?? []) as AmbientalMensual[]
     },
   })
 }

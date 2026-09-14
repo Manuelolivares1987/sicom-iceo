@@ -29,7 +29,8 @@ import { useAuth } from '@/contexts/auth-context'
 import { cn } from '@/lib/utils'
 import { RegistroTerrenoForm } from '@/components/prevencion/registro-terreno-form'
 import {
-  useCerrarRegistro, useConsolidadoMes, useDesmarcarEnvio, useDotacionDetalleMes,
+  useAmbientalMes, useCerrarRegistro, useConsolidadoMes, useDesmarcarEnvio,
+  useDotacionDetalleMes,
   useDotacionMensual, useFaenaConfig, useFaenasPrevencion, useIndicadoresAnio,
   useMarcarEnviada, useMonitoreoMes, useRegistros, useSupervisoresAsignables,
   useSupervisoresFaena, useToggleSupervisorFaena, useUpsertFaenaConfig,
@@ -767,6 +768,9 @@ function TabEntregas({ consolidado, faenaId, anio, mes, puedeAdmin, faenaNombre 
   const toast = useToast()
   const marcar = useMarcarEnviada()
   const desmarcar = useDesmarcarEnvio()
+  // [MIG554] Lo ambiental que reportó el supervisor (Franke): se muestra junto
+  // a las entregas porque alimenta la «Documentación ambiental».
+  const { data: ambiental } = useAmbientalMes(faenaId, anio, mes)
   const items: ReportabilidadEstado[] = consolidado?.reportabilidad ?? []
   const [marcandoItem, setMarcandoItem] = useState<ReportabilidadEstado | null>(null)
   const [obs, setObs] = useState('')
@@ -839,6 +843,7 @@ function TabEntregas({ consolidado, faenaId, anio, mes, puedeAdmin, faenaNombre 
   }
 
   return (
+    <div className="space-y-4">
     <Card>
       <CardHeader>
         <CardTitle className="text-base">
@@ -953,6 +958,51 @@ function TabEntregas({ consolidado, faenaId, anio, mes, puedeAdmin, faenaNombre 
         </div>
       </Modal>
     </Card>
+
+    {(ambiental?.length ?? 0) > 0 && (
+      <Card className="border-emerald-200">
+        <CardHeader>
+          <CardTitle className="text-base text-emerald-700">
+            Ambiental reportado por supervisión — {MESES[mes - 1]} {anio}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-4 md:grid-cols-2">
+          {([['residuo_retiro', 'Retiros de residuos (suma del mes)'],
+             ['insumo', 'Reporte de insumos del mes']] as const).map(([grupo, titulo]) => {
+            const filas = (ambiental ?? []).filter((a) => a.grupo === grupo)
+            if (!filas.length) return (
+              <div key={grupo}>
+                <p className="mb-1 text-sm font-bold text-gray-700">{titulo}</p>
+                <p className="text-sm text-gray-400">Sin reportes este mes.</p>
+              </div>
+            )
+            return (
+              <div key={grupo}>
+                <p className="mb-1 text-sm font-bold text-gray-700">{titulo}</p>
+                <table className="w-full text-sm">
+                  <tbody>
+                    {filas.map((a) => (
+                      <tr key={a.codigo} className="border-b last:border-0">
+                        <td className="py-1 pr-2">{a.nombre}</td>
+                        <td className="py-1 pr-2 text-right font-bold">{a.total}</td>
+                        <td className="py-1 text-xs text-gray-500">
+                          {a.unidad}{grupo === 'residuo_retiro' ? ` · ${a.reportes} retiro(s)` : ''}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )
+          })}
+          <p className="text-xs text-gray-500 md:col-span-2">
+            Lo carga el supervisor desde su teléfono (Residuos e insumos). Estos
+            totales alimentan la «Documentación ambiental» del informe.
+          </p>
+        </CardContent>
+      </Card>
+    )}
+    </div>
   )
 }
 
