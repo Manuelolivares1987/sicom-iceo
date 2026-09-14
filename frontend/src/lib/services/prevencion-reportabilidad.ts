@@ -304,6 +304,65 @@ export function getDotacionDetalleMes(faenaId: string, anio: number, mes: number
     .order('fecha')
 }
 
+// ── Ambiental (MIG554): retiros semanales + insumos mensuales (Franke) ──────
+
+export interface AmbientalConcepto {
+  id: string
+  faena_id: string
+  grupo: 'residuo_retiro' | 'insumo'
+  codigo: string
+  nombre: string
+  unidad: string
+  frecuencia: 'semanal' | 'mensual'
+  orden: number
+  activo: boolean
+}
+
+export interface AmbientalMensual {
+  faena_id: string
+  anio: number
+  mes: number
+  grupo: 'residuo_retiro' | 'insumo'
+  codigo: string
+  nombre: string
+  unidad: string
+  frecuencia: string
+  orden: number
+  total: number
+  reportes: number
+}
+
+export function getAmbientalConceptos() {
+  return supabase
+    .from('prevencion_ambiental_conceptos')
+    .select('*')
+    .eq('activo', true)
+    .order('orden')
+}
+
+/** Guarda un lote (retiro semanal completo o insumos del mes). Reenviar el
+ *  mismo concepto+fecha corrige. El 0 se guarda: el mandante lo exige. */
+export async function upsertAmbientalRegistros(
+  filas: Array<{ concepto_id: string; fecha: string; cantidad: number }>,
+) {
+  const { data: auth } = await supabase.auth.getUser()
+  if (!auth?.user) return { error: new Error('Sin sesión') }
+  return supabase.from('prevencion_ambiental_registros').upsert(
+    filas.map((f) => ({ ...f, creado_por: auth.user!.id })),
+    { onConflict: 'concepto_id,fecha,creado_por' },
+  )
+}
+
+export function getAmbientalMes(faenaId: string, anio: number, mes: number) {
+  return supabase
+    .from('v_prevencion_ambiental_mensual')
+    .select('*')
+    .eq('faena_id', faenaId)
+    .eq('anio', anio)
+    .eq('mes', mes)
+    .order('orden')
+}
+
 // ── Consolidado mensual (una llamada) ────────────────────────────────────────
 
 export async function getConsolidadoMes(faenaId: string, anio: number, mes: number) {

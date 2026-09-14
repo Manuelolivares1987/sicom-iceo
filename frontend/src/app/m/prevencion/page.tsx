@@ -11,7 +11,7 @@
 
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
-import { CheckCircle2, ChevronRight, ClipboardList, HardHat, Loader2, Paperclip, Plus, ShieldCheck, Trash2, Users } from 'lucide-react'
+import { CheckCircle2, ChevronRight, ClipboardList, HardHat, Leaf, Loader2, Paperclip, Plus, ShieldCheck, Trash2, Users } from 'lucide-react'
 import { useAuth } from '@/contexts/auth-context'
 import { useExigirSesion } from '@/hooks/use-exigir-sesion'
 import { SinSesionOffline } from '@/components/enex/sin-sesion-offline'
@@ -23,9 +23,10 @@ import { Modal } from '@/components/ui/modal'
 import { useToast } from '@/hooks/use-toast'
 import { cn } from '@/lib/utils'
 import { RegistroTerrenoForm } from '@/components/prevencion/registro-terreno-form'
+import { AmbientalForm } from '@/components/prevencion/ambiental-form'
 import {
-  useCerrarRegistro, useDeleteDotacion, useFaenasPrevencion, useMisDotaciones,
-  useMisRegistros, useUpsertDotacion,
+  useAmbientalConceptos, useCerrarRegistro, useDeleteDotacion,
+  useFaenasPrevencion, useMisDotaciones, useMisRegistros, useUpsertDotacion,
 } from '@/hooks/use-prevencion-reportabilidad'
 
 const ROLES_CREAR = ['administrador', 'prevencionista', 'supervisor',
@@ -51,6 +52,9 @@ export default function PrevencionMobileHome() {
   const guardarSubida = useUpsertDotacion()
   const borrarSubida = useDeleteDotacion()
   const [subidaOpen, setSubidaOpen] = useState(false)
+  // [MIG554] Ambiental: el botón aparece solo si alguna faena tiene catálogo.
+  const { data: ambConceptos } = useAmbientalConceptos()
+  const [ambientalOpen, setAmbientalOpen] = useState(false)
   const [subFaena, setSubFaena] = useState('')
   const [subFecha, setSubFecha] = useState(() => new Date().toISOString().slice(0, 10))
   const [subHombres, setSubHombres] = useState('')
@@ -185,6 +189,23 @@ export default function PrevencionMobileHome() {
           </button>
         )}
 
+        {puedeCrear && (ambConceptos?.length ?? 0) > 0 && (
+          <button
+            onClick={() => setAmbientalOpen(true)}
+            className="flex w-full items-center gap-3 rounded-xl border-2 border-emerald-500 bg-white p-4 active:scale-[0.99]"
+          >
+            <div className="grid h-12 w-12 shrink-0 place-items-center rounded-lg bg-emerald-500 text-white">
+              <Leaf className="h-6 w-6" />
+            </div>
+            <div className="min-w-0 flex-1 text-left">
+              <p className="text-base font-bold text-gray-900">Residuos e insumos (Franke)</p>
+              <p className="text-xs text-gray-500">
+                Retiro semanal de residuos e insumos del mes — doc. ambiental
+              </p>
+            </div>
+          </button>
+        )}
+
         {puedeCrear && (subidas?.length ?? 0) > 0 && (
           <div className="rounded-xl border border-blue-200 bg-white p-3">
             <p className="mb-1.5 text-xs font-bold uppercase text-gray-500">
@@ -301,6 +322,12 @@ export default function PrevencionMobileHome() {
           onGuardado={() => setNuevoOpen(false)}
           onCancelar={() => setNuevoOpen(false)}
         />
+      </Modal>
+
+      <Modal open={ambientalOpen} onClose={() => setAmbientalOpen(false)}
+             title="Residuos e insumos" className="max-w-[480px]">
+        <AmbientalForm onGuardado={() => setAmbientalOpen(false)}
+                       onCancelar={() => setAmbientalOpen(false)} />
       </Modal>
 
       <Modal open={subidaOpen} onClose={() => setSubidaOpen(false)}
