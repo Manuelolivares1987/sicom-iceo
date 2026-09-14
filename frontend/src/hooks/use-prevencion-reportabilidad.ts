@@ -2,6 +2,13 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   getActividadTipos,
   getFaenaTipos,
+  upsertDotacionDiaria,
+  getMisDotaciones,
+  deleteDotacion,
+  getDotacionMensual,
+  getDotacionDetalleMes,
+  type DotacionDiaria,
+  type DotacionMensual,
   getFaenasPrevencion,
   getRegistros,
   getMisRegistros,
@@ -281,6 +288,73 @@ export function useToggleSupervisorFaena() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['prev-repo-sup-asignables'] })
       qc.invalidateQueries({ queryKey: ['prev-repo-supervisores'] })
+    },
+  })
+}
+
+// ── Subidas a faena (MIG553): dotación diaria → HH E-200 ────────────────────
+
+export function useMisDotaciones(dias = 7) {
+  return useQuery({
+    queryKey: ['prev-repo-mis-dotaciones', dias],
+    queryFn: async () => {
+      const { data, error } = await getMisDotaciones(dias)
+      if (error) throw error
+      return (data ?? []) as DotacionDiaria[]
+    },
+  })
+}
+
+export function useUpsertDotacion() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (fila: Parameters<typeof upsertDotacionDiaria>[0]) => {
+      const { error } = await upsertDotacionDiaria(fila)
+      if (error) throw error
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['prev-repo-mis-dotaciones'] })
+      qc.invalidateQueries({ queryKey: ['prev-repo-dotacion-mes'] })
+      qc.invalidateQueries({ queryKey: ['prev-repo-dotacion-detalle'] })
+    },
+  })
+}
+
+export function useDeleteDotacion() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await deleteDotacion(id)
+      if (error) throw error
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['prev-repo-mis-dotaciones'] })
+      qc.invalidateQueries({ queryKey: ['prev-repo-dotacion-mes'] })
+      qc.invalidateQueries({ queryKey: ['prev-repo-dotacion-detalle'] })
+    },
+  })
+}
+
+export function useDotacionMensual(faenaId: string | null, anio: number, mes: number) {
+  return useQuery({
+    queryKey: ['prev-repo-dotacion-mes', faenaId, anio, mes],
+    enabled: !!faenaId,
+    queryFn: async () => {
+      const { data, error } = await getDotacionMensual(faenaId!, anio, mes)
+      if (error) throw error
+      return (data ?? null) as DotacionMensual | null
+    },
+  })
+}
+
+export function useDotacionDetalleMes(faenaId: string | null, anio: number, mes: number, enabled = true) {
+  return useQuery({
+    queryKey: ['prev-repo-dotacion-detalle', faenaId, anio, mes],
+    enabled: !!faenaId && enabled,
+    queryFn: async () => {
+      const { data, error } = await getDotacionDetalleMes(faenaId!, anio, mes)
+      if (error) throw error
+      return (data ?? []) as DotacionDiaria[]
     },
   })
 }

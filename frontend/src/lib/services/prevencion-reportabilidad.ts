@@ -222,6 +222,88 @@ export function deleteRegistro(id: string) {
   return supabase.from('prevencion_registros').delete().eq('id', id)
 }
 
+// ── Subidas a faena (MIG553): dotación diaria → HH del E-200 ────────────────
+// El supervisor reporta cuántos subieron (él incluido); HH = 8 × personas.
+
+export interface DotacionDiaria {
+  id: string
+  faena_id: string
+  fecha: string
+  hombres: number
+  mujeres: number
+  observacion: string | null
+  creado_por: string
+  supervisor_nombre: string | null
+}
+
+export interface DotacionMensual {
+  faena_id: string
+  anio: number
+  mes: number
+  dias_reportados: number
+  hh_hombres: number
+  hh_mujeres: number
+  hh_total: number
+  dotacion_max_hombres: number
+  dotacion_max_mujeres: number
+  primer_dia: string
+  ultimo_dia: string
+}
+
+export async function upsertDotacionDiaria(fila: {
+  faena_id: string
+  fecha: string
+  hombres: number
+  mujeres: number
+  observacion?: string | null
+}) {
+  const { data: auth } = await supabase.auth.getUser()
+  if (!auth?.user) return { error: new Error('Sin sesión') }
+  // Mismo supervisor + faena + día = la misma fila: reenviar corrige.
+  return supabase.from('prevencion_dotacion_diaria').upsert(
+    { ...fila, observacion: fila.observacion ?? null, creado_por: auth.user.id },
+    { onConflict: 'faena_id,fecha,creado_por' },
+  )
+}
+
+export async function getMisDotaciones(dias = 7) {
+  const { data: auth } = await supabase.auth.getUser()
+  if (!auth?.user) return { data: [], error: null }
+  const desde = new Date(Date.now() - dias * 86400000).toISOString().slice(0, 10)
+  return supabase
+    .from('prevencion_dotacion_diaria')
+    .select('*')
+    .eq('creado_por', auth.user.id)
+    .gte('fecha', desde)
+    .order('fecha', { ascending: false })
+}
+
+export function deleteDotacion(id: string) {
+  return supabase.from('prevencion_dotacion_diaria').delete().eq('id', id)
+}
+
+export function getDotacionMensual(faenaId: string, anio: number, mes: number) {
+  return supabase
+    .from('v_prevencion_dotacion_mensual')
+    .select('*')
+    .eq('faena_id', faenaId)
+    .eq('anio', anio)
+    .eq('mes', mes)
+    .maybeSingle()
+}
+
+export function getDotacionDetalleMes(faenaId: string, anio: number, mes: number) {
+  const desde = `${anio}-${String(mes).padStart(2, '0')}-01`
+  const hasta = new Date(anio, mes, 1).toISOString().slice(0, 10)
+  return supabase
+    .from('prevencion_dotacion_diaria')
+    .select('*')
+    .eq('faena_id', faenaId)
+    .gte('fecha', desde)
+    .lt('fecha', hasta)
+    .order('fecha')
+}
+
 // ── Consolidado mensual (una llamada) ────────────────────────────────────────
 
 export async function getConsolidadoMes(faenaId: string, anio: number, mes: number) {

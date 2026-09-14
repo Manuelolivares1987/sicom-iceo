@@ -29,11 +29,11 @@ import { useAuth } from '@/contexts/auth-context'
 import { cn } from '@/lib/utils'
 import { RegistroTerrenoForm } from '@/components/prevencion/registro-terreno-form'
 import {
-  useCerrarRegistro, useConsolidadoMes, useDesmarcarEnvio, useFaenaConfig,
-  useFaenasPrevencion, useIndicadoresAnio, useMarcarEnviada, useMonitoreoMes,
-  useRegistros, useSupervisoresAsignables, useSupervisoresFaena,
-  useToggleSupervisorFaena, useUpsertFaenaConfig, useUpsertIndicadores,
-  useUpsertMeta,
+  useCerrarRegistro, useConsolidadoMes, useDesmarcarEnvio, useDotacionDetalleMes,
+  useDotacionMensual, useFaenaConfig, useFaenasPrevencion, useIndicadoresAnio,
+  useMarcarEnviada, useMonitoreoMes, useRegistros, useSupervisoresAsignables,
+  useSupervisoresFaena, useToggleSupervisorFaena, useUpsertFaenaConfig,
+  useUpsertIndicadores, useUpsertMeta,
 } from '@/hooks/use-prevencion-reportabilidad'
 import {
   subirEvidencia, urlEvidencia,
@@ -520,6 +520,12 @@ function TabIndicadores({ faenaId, anio, mes, puedeAdmin }: {
   const [editando, setEditando] = useState(false)
   const [form, setForm] = useState<Record<string, string>>({})
 
+  // [MIG553] Lo que reportaron los supervisores en sus subidas: HH = 8 ×
+  // personas-día. Prellena el formulario y prevención lo valida.
+  const { data: dotacion } = useDotacionMensual(faenaId, anio, mes)
+  const [verDetalle, setVerDetalle] = useState(false)
+  const { data: detalle } = useDotacionDetalleMes(faenaId, anio, mes, verDetalle)
+
   const filaMes = useMemo(
     () => (filas ?? []).find((f) => f.mes === mes) ?? null,
     [filas, mes],
@@ -529,8 +535,27 @@ function TabIndicadores({ faenaId, anio, mes, puedeAdmin }: {
     const base: Record<string, string> = {}
     for (const c of CAMPOS_IND) base[c.key as string] = String(filaMes?.[c.key] ?? 0)
     base.observaciones = String(filaMes?.observaciones ?? '')
+    // Mes sin datos aún + subidas reportadas ⇒ partir de lo calculado.
+    if (!filaMes && dotacion) {
+      base.hh_hombres = String(dotacion.hh_hombres)
+      base.hh_mujeres = String(dotacion.hh_mujeres)
+      base.dotacion_hombres = String(dotacion.dotacion_max_hombres)
+      base.dotacion_mujeres = String(dotacion.dotacion_max_mujeres)
+    }
     setForm(base)
     setEditando(true)
+  }
+
+  const usarReportado = () => {
+    if (!dotacion) return
+    setForm((p) => ({
+      ...p,
+      hh_hombres: String(dotacion.hh_hombres),
+      hh_mujeres: String(dotacion.hh_mujeres),
+      dotacion_hombres: String(dotacion.dotacion_max_hombres),
+      dotacion_mujeres: String(dotacion.dotacion_max_mujeres),
+    }))
+    toast.success('HH y dotación tomados de las subidas reportadas — revise antes de guardar')
   }
 
   const guardar = async () => {
@@ -558,6 +583,60 @@ function TabIndicadores({ faenaId, anio, mes, puedeAdmin }: {
 
   return (
     <div className="space-y-4">
+      {dotacion && (
+        <Card className="border-blue-200">
+          <CardHeader>
+            <CardTitle className="text-base text-blue-700">
+              Subidas reportadas por supervisión — {MESES[mes - 1]} {anio}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <Kpi label="Días con subida" value={dotacion.dias_reportados} />
+              <Kpi label="HH hombres (8×pers.)" value={dotacion.hh_hombres} />
+              <Kpi label="HH mujeres (8×pers.)" value={dotacion.hh_mujeres} />
+              <Kpi label="Dotación peak H / M"
+                   value={`${dotacion.dotacion_max_hombres} / ${dotacion.dotacion_max_mujeres}`} />
+            </div>
+            <div className="mt-2 flex items-center justify-between">
+              <p className="text-xs text-gray-500">
+                HH = 8 × personas por día, sumado del {dotacion.primer_dia} al {dotacion.ultimo_dia}.
+                Al cargar el mes, estos números se prellenan — prevención valida y guarda.
+              </p>
+              <Button size="sm" variant="ghost" onClick={() => setVerDetalle(!verDetalle)}>
+                {verDetalle ? 'Ocultar detalle' : 'Ver día a día'}
+              </Button>
+            </div>
+            {verDetalle && (
+              <div className="mt-2 overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b text-left text-xs uppercase text-gray-500">
+                      <th className="py-1.5 pr-3">Fecha</th>
+                      <th className="py-1.5 pr-3">Supervisor</th>
+                      <th className="py-1.5 pr-3 text-right">Hombres</th>
+                      <th className="py-1.5 pr-3 text-right">Mujeres</th>
+                      <th className="py-1.5 text-right">HH día</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(detalle ?? []).map((d) => (
+                      <tr key={d.id} className="border-b last:border-0">
+                        <td className="py-1.5 pr-3">{d.fecha}</td>
+                        <td className="py-1.5 pr-3">{d.supervisor_nombre ?? '—'}</td>
+                        <td className="py-1.5 pr-3 text-right">{d.hombres}</td>
+                        <td className="py-1.5 pr-3 text-right">{d.mujeres}</td>
+                        <td className="py-1.5 text-right font-bold">{(d.hombres + d.mujeres) * 8}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-base">
@@ -581,11 +660,16 @@ function TabIndicadores({ faenaId, anio, mes, puedeAdmin }: {
               </div>
               <Input label="Observaciones" value={form.observaciones ?? ''}
                      onChange={(e) => setForm((p) => ({ ...p, observaciones: e.target.value }))} />
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <Button onClick={guardar} disabled={upsert.isPending}>
                   {upsert.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   Guardar
                 </Button>
+                {dotacion && (
+                  <Button variant="outline" onClick={usarReportado}>
+                    Usar lo reportado ({dotacion.hh_total} HH)
+                  </Button>
+                )}
                 <Button variant="outline" onClick={() => setEditando(false)}>Cancelar</Button>
               </div>
               <p className="text-xs text-gray-500">
