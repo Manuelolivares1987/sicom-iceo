@@ -16,6 +16,9 @@ export interface ActividadTipo {
   requiere_cierre: boolean
   activo: boolean
   orden: number
+  // [MIG551] Si el tipo trae títulos permitidos (PGR: H1 ARTP, H2 CtS…),
+  // el formulario los muestra como selector en vez de texto libre.
+  titulos_opciones: string[] | null
 }
 
 export interface EvidenciaArchivo {
