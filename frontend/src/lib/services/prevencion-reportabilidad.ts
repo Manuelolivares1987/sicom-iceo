@@ -235,7 +235,7 @@ export interface DotacionDiaria {
   hombres: number
   mujeres: number
   observacion: string | null
-  asistentes: string[] | null
+  instalacion: string | null
   creado_por: string
   supervisor_nombre: string | null
 }
@@ -260,20 +260,21 @@ export async function upsertDotacionDiaria(fila: {
   hombres: number
   mujeres: number
   observacion?: string | null
-  // [MIG555] Faenas con nómina (Calama): los nombres marcados.
-  asistentes?: string[] | null
+  // [MIG557] Centinela declara por instalación; el resto va NULL.
+  instalacion?: string | null
 }) {
   const { data: auth } = await supabase.auth.getUser()
   if (!auth?.user) return { error: new Error('Sin sesión') }
-  // Mismo supervisor + faena + día = la misma fila: reenviar corrige.
+  // Mismo supervisor + faena + día (+ instalación) = la misma fila:
+  // reenviar corrige.
   return supabase.from('prevencion_dotacion_diaria').upsert(
     {
       ...fila,
       observacion: fila.observacion ?? null,
-      asistentes: fila.asistentes ?? null,
+      instalacion: fila.instalacion ?? null,
       creado_por: auth.user.id,
     },
-    { onConflict: 'faena_id,fecha,creado_por' },
+    { onConflict: 'faena_id,fecha,creado_por,instalacion' },
   )
 }
 
@@ -319,6 +320,71 @@ export function getDotacionMensual(faenaId: string, anio: number, mes: number) {
     .eq('anio', anio)
     .eq('mes', mes)
     .maybeSingle()
+}
+
+// [MIG557] HH/dotación por instalación (Centinela declara así su estadística).
+export interface DotacionInstalacion {
+  faena_id: string
+  anio: number
+  mes: number
+  instalacion: string
+  dias_reportados: number
+  hh_hombres: number
+  hh_mujeres: number
+  dotacion_max_hombres: number
+  dotacion_max_mujeres: number
+}
+
+export function getDotacionInstalacionMes(faenaId: string, anio: number, mes: number) {
+  return supabase
+    .from('v_prevencion_dotacion_instalacion')
+    .select('*')
+    .eq('faena_id', faenaId)
+    .eq('anio', anio)
+    .eq('mes', mes)
+    .order('instalacion')
+}
+
+// [MIG557] Registros ambientales crudos del mes (el 4.5 de Franke arma un
+// bloque por CADA retiro, no solo el total).
+export interface AmbientalRegistroDetalle {
+  fecha: string
+  cantidad: number
+  codigo: string
+  nombre: string
+  grupo: 'residuo_retiro' | 'insumo'
+  unidad: string
+  orden: number
+}
+
+export async function getAmbientalRegistrosDetalle(faenaId: string, anio: number, mes: number) {
+  const { data: conceptos, error: e1 } = await supabase
+    .from('prevencion_ambiental_conceptos')
+    .select('id, codigo, nombre, grupo, unidad, orden')
+    .eq('faena_id', faenaId)
+  if (e1 || !conceptos?.length) return { data: [] as AmbientalRegistroDetalle[], error: e1 }
+  const porId = new Map(conceptos.map((c: any) => [c.id, c]))
+  const desde = `${anio}-${String(mes).padStart(2, '0')}-01`
+  const hasta = new Date(anio, mes, 1).toISOString().slice(0, 10)
+  const { data: regs, error: e2 } = await supabase
+    .from('prevencion_ambiental_registros')
+    .select('concepto_id, fecha, cantidad')
+    .in('concepto_id', conceptos.map((c: any) => c.id))
+    .gte('fecha', desde)
+    .lt('fecha', hasta)
+    .order('fecha')
+  if (e2) return { data: [] as AmbientalRegistroDetalle[], error: e2 }
+  return {
+    data: (regs ?? []).map((r: any) => {
+      const c = porId.get(r.concepto_id)!
+      return {
+        fecha: r.fecha, cantidad: Number(r.cantidad),
+        codigo: c.codigo, nombre: c.nombre, grupo: c.grupo,
+        unidad: c.unidad, orden: c.orden,
+      } as AmbientalRegistroDetalle
+    }),
+    error: null,
+  }
 }
 
 export function getDotacionDetalleMes(faenaId: string, anio: number, mes: number) {

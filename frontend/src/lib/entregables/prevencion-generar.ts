@@ -7,14 +7,17 @@
 // ============================================================================
 
 import {
-  getConsolidadoMes, getFaenaConfig, getIndicadoresAnio, getRegistros,
-  type FaenaConfigDatos, type IndicadoresFila, type PrevencionRegistro,
+  getAmbientalRegistrosDetalle, getConsolidadoMes, getDotacionInstalacionMes,
+  getFaenaConfig, getIndicadoresAnio, getRegistros,
+  type DotacionInstalacion, type FaenaConfigDatos, type IndicadoresFila,
+  type PrevencionRegistro,
 } from '@/lib/services/prevencion-reportabilidad'
-import { generarE200Excel } from './prevencion-e200-excel'
 import { generarInformeFrankeExcel } from './prevencion-informe-franke-excel'
 import { generarPptEvidencias } from './prevencion-ppt-evidencias'
 
-export type PlantillaEntregable = 'e200' | 'grp_cmp' | 'informe_franke' | 'ppt_evidencias'
+export type PlantillaEntregable =
+  | 'e200' | 'grp_cmp' | 'informe_franke' | 'ppt_evidencias'
+  | 'estadistica_esm' | 'franke_insumos' | 'franke_residuos'
 
 // Qué tipos de registro alimentan cada PPT de evidencias. Sin entrada = todos
 // los registros con evidencia del mes (caso Anexo 10.2 Lomas: lubricante y
@@ -51,10 +54,42 @@ export async function generarEntregable(params: {
     const { data: ind, error } = await getIndicadoresAnio(faenaId, anio)
     if (error) throw error
     const fila = ((ind ?? []) as IndicadoresFila[]).find((f) => f.mes === mes) ?? null
-    // Réplica FIEL del formulario estatal (corrección Manuel 2026-09-14:
-    // «debe ser el mismo porque es estatal»).
-    const blob = await generarE200Excel({ config, indicadores: fila, anio, mes, faenaNombre })
-    return { blob, filename: `Formulario_E-200_${slug(faenaNombre)}_${anio}-${mm}.xlsx` }
+    // [MIG557] Se RELLENA el Word oficial del Gobierno (plantilla con
+    // marcadores en /plantillas/) — sale idéntico al formato estatal.
+    onProgreso?.('Rellenando el formulario oficial…')
+    const { generarE200Docx } = await import('./prevencion-e200-docx')
+    const blob = await generarE200Docx({ config, indicadores: fila, anio, mes, faenaNombre })
+    return { blob, filename: `Formulario_E-200_${slug(faenaNombre)}_${anio}-${mm}.docx` }
+  }
+
+  if (plantilla === 'estadistica_esm') {
+    onProgreso?.('Cargando HH por instalación…')
+    const [{ data: porInst, error: e1 }, { data: ind, error: e2 }] = await Promise.all([
+      getDotacionInstalacionMes(faenaId, anio, mes),
+      getIndicadoresAnio(faenaId, anio),
+    ])
+    if (e1) throw e1
+    if (e2) throw e2
+    const fila = ((ind ?? []) as IndicadoresFila[]).find((f) => f.mes === mes) ?? null
+    const { generarEstadisticaEsmExcel } = await import('./prevencion-reportes-faena-excel')
+    const blob = await generarEstadisticaEsmExcel({
+      config, porInstalacion: (porInst ?? []) as DotacionInstalacion[],
+      indicadores: fila, anio, mes,
+    })
+    return { blob, filename: `Estadistica_RRHH_ESM_${slug(faenaNombre)}_${anio}-${mm}.xlsx` }
+  }
+
+  if (plantilla === 'franke_insumos' || plantilla === 'franke_residuos') {
+    onProgreso?.('Cargando lo reportado por el supervisor…')
+    const { data: detalle, error } = await getAmbientalRegistrosDetalle(faenaId, anio, mes)
+    if (error) throw error
+    const mod = await import('./prevencion-reportes-faena-excel')
+    if (plantilla === 'franke_insumos') {
+      const blob = await mod.generarFrankeInsumosExcel({ config, detalle, anio, mes })
+      return { blob, filename: `4.4_Reporte_insumos_${anio}-${mm}.xlsx` }
+    }
+    const blob = await mod.generarFrankeResiduosExcel({ config, detalle, anio, mes })
+    return { blob, filename: `4.5_Gestion_residuos_${anio}-${mm}.xlsx` }
   }
 
   // El resto necesita el consolidado + los registros del mes.
@@ -70,14 +105,14 @@ export async function generarEntregable(params: {
   const regs = (registros ?? []) as PrevencionRegistro[]
 
   if (plantilla === 'grp_cmp') {
-    onProgreso?.('Armando el informe GRP (fotos incluidas)…')
-    // Import dinámico: el módulo trae @react-pdf/renderer y no tiene por qué
-    // cargarse al abrir la página.
-    const { generarInformeCmpPdf } = await import('./prevencion-informe-cmp-pdf')
-    const blob = await generarInformeCmpPdf({
-      config, indicadores, gestion, registros: regs, anio, mes, faenaNombre,
+    // [MIG557] El formato real de CMP es una PRESENTACIÓN: sale PPTX editable
+    // con las 4 láminas del formato (reemplaza al PDF de MIG547).
+    onProgreso?.('Armando la presentación GRP (fotos incluidas)…')
+    const { generarGrpCmpPptx } = await import('./prevencion-grp-cmp-pptx')
+    const blob = await generarGrpCmpPptx({
+      config, indicadores, gestion, registros: regs, anio, mes,
     })
-    return { blob, filename: `Informe_GRP_${slug(faenaNombre)}_${anio}-${mm}.pdf` }
+    return { blob, filename: `REPORTE_GESTION_MENSUAL_PILLADO_${anio}-${mm}.pptx` }
   }
 
   if (plantilla === 'informe_franke') {

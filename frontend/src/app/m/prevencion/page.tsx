@@ -25,7 +25,7 @@ import { cn } from '@/lib/utils'
 import { RegistroTerrenoForm } from '@/components/prevencion/registro-terreno-form'
 import { AmbientalForm } from '@/components/prevencion/ambiental-form'
 import {
-  useAmbientalConceptos, useCerrarRegistro, useDeleteDotacion,
+  useAmbientalConceptos, useCerrarRegistro, useDeleteDotacion, useFaenaConfig,
   useFaenasPrevencion, useMisDotaciones, useMisRegistros,
   useUpsertDotacion,
 } from '@/hooks/use-prevencion-reportabilidad'
@@ -64,12 +64,20 @@ export default function PrevencionMobileHome() {
   // supervisor indica la cantidad y esa manda para las HH. La nómina de
   // Calama se usa en los ASISTENTES de las actividades (charlas), no aquí.
   const totalPersonas = (Number(subHombres) || 0) + (Number(subMujeres) || 0)
+  // [MIG557] Centinela declara HH POR INSTALACIÓN: si la ficha de la faena
+  // define instalaciones, la subida pide en cuál se trabajó.
+  const { data: subConfig } = useFaenaConfig(subFaena || null)
+  const instalaciones: string[] = ((subConfig as any)?.instalaciones ?? [])
+  const [subInstalacion, setSubInstalacion] = useState('')
 
   const nombreFaena = (id: string) =>
     (faenas ?? []).find((f: any) => f.id === id)?.nombre ?? '—'
 
   const confirmarSubida = async () => {
     if (!subFaena) return toast.error('Elija la faena')
+    if (instalaciones.length > 0 && !subInstalacion) {
+      return toast.error('Elija la instalación donde trabajaron (el mandante declara por instalación)')
+    }
     if (totalPersonas < 1) return toast.error('Indique cuántas personas subieron (usted incluido)')
     try {
       await guardarSubida.mutateAsync({
@@ -77,6 +85,7 @@ export default function PrevencionMobileHome() {
         fecha: subFecha,
         hombres: Number(subHombres) || 0,
         mujeres: Number(subMujeres) || 0,
+        instalacion: instalaciones.length > 0 ? subInstalacion : null,
       })
       toast.success(`Subida guardada: ${totalPersonas} personas = ${totalPersonas * 8} HH`)
       setSubidaOpen(false)
@@ -344,6 +353,15 @@ export default function PrevencionMobileHome() {
             placeholder="Elegir faena…"
             options={(faenas ?? []).map((f: any) => ({ value: f.id, label: f.nombre }))}
           />
+          {instalaciones.length > 0 && (
+            <Select
+              label="Instalación donde trabajaron"
+              value={subInstalacion}
+              onChange={(e) => setSubInstalacion(e.target.value)}
+              placeholder="Elegir instalación…"
+              options={instalaciones.map((i) => ({ value: i, label: i }))}
+            />
+          )}
           <Input label="Fecha de la subida" type="date" value={subFecha}
                  max={new Date().toISOString().slice(0, 10)}
                  onChange={(e) => setSubFecha(e.target.value)} />
