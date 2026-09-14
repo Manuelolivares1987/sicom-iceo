@@ -120,22 +120,24 @@ export function getActividadTipos() {
     .order('orden')
 }
 
-/** Faenas con reportabilidad configurada primero; el resto después. */
+/**
+ * SOLO las faenas donde Pillado tiene personal propio = las que tienen
+ * reportabilidad configurada (Manuel, 2026-09-14: Romeral, Franke, Lomas
+ * Bayas, Centinela y Spence). Las otras 18 faenas del sistema (talleres,
+ * arriendo puro) no aparecen en este módulo. Para sumar una faena nueva se
+ * le crean sus ítems de reportabilidad (MIG549 como ejemplo).
+ */
 export async function getFaenasPrevencion() {
-  const [{ data: items }, { data: faenas, error }] = await Promise.all([
-    supabase.from('prevencion_reportabilidad_items').select('faena_id'),
+  const [{ data: items, error: e1 }, { data: faenas, error }] = await Promise.all([
+    supabase.from('prevencion_reportabilidad_items').select('faena_id').eq('activo', true),
     supabase.from('faenas').select('id, nombre, codigo').order('nombre'),
   ])
-  if (error || !faenas) return { data: [], error }
+  if (error || !faenas) return { data: [], error: error ?? e1 }
   const conItems = new Set((items ?? []).map((i: any) => i.faena_id))
-  return {
-    data: [...faenas].sort((a: any, b: any) => {
-      const pa = conItems.has(a.id) ? 0 : 1
-      const pb = conItems.has(b.id) ? 0 : 1
-      return pa - pb || a.nombre.localeCompare(b.nombre)
-    }),
-    error: null,
-  }
+  const conPersonal = faenas.filter((f: any) => conItems.has(f.id))
+  // Fallback: si el catálogo quedara vacío por error, mejor mostrar todo que
+  // dejar el módulo ciego.
+  return { data: conPersonal.length ? conPersonal : faenas, error: null }
 }
 
 // ── Registros de terreno ─────────────────────────────────────────────────────
