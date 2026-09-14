@@ -17,7 +17,7 @@ import { generarPptEvidencias } from './prevencion-ppt-evidencias'
 
 export type PlantillaEntregable =
   | 'e200' | 'grp_cmp' | 'informe_franke' | 'ppt_evidencias'
-  | 'estadistica_esm' | 'franke_insumos' | 'franke_residuos'
+  | 'estadistica_esm' | 'franke_insumos' | 'franke_residuos' | 'anexo_102'
 
 // Qué tipos de registro alimentan cada PPT de evidencias. Sin entrada = todos
 // los registros con evidencia del mes (caso Anexo 10.2 Lomas: lubricante y
@@ -123,6 +123,17 @@ export async function generarEntregable(params: {
       config, indicadoresAnio: (ind ?? []) as IndicadoresFila[], gestion, registros: regs, anio, mes,
     })
     return { blob, filename: `Informe_Gestion_${slug(faenaNombre)}_${anio}-${mm}.xlsx` }
+  }
+
+  if (plantilla === 'anexo_102') {
+    // [MIG558] La guía manda: estructura exacta del Anexo 10.2, evidencias
+    // (fotos y PDF incrustados) en su subsección, constantes donde no hay.
+    onProgreso?.('Armando el Anexo 10.2 con su estructura…')
+    const { generarAnexo102Pptx } = await import('./prevencion-anexo102-pptx')
+    const blob = await generarAnexo102Pptx({
+      registros: regs, faenaNombre, anio, mes, onProgreso,
+    })
+    return { blob, filename: `Anexo_10.2_${slug(faenaNombre)}_${anio}-${mm}.pptx` }
   }
 
   if (plantilla === 'ppt_evidencias') {
