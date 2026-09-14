@@ -232,6 +232,7 @@ export interface DotacionDiaria {
   hombres: number
   mujeres: number
   observacion: string | null
+  asistentes: string[] | null
   creado_por: string
   supervisor_nombre: string | null
 }
@@ -256,14 +257,39 @@ export async function upsertDotacionDiaria(fila: {
   hombres: number
   mujeres: number
   observacion?: string | null
+  // [MIG555] Faenas con nómina (Calama): los nombres marcados.
+  asistentes?: string[] | null
 }) {
   const { data: auth } = await supabase.auth.getUser()
   if (!auth?.user) return { error: new Error('Sin sesión') }
   // Mismo supervisor + faena + día = la misma fila: reenviar corrige.
   return supabase.from('prevencion_dotacion_diaria').upsert(
-    { ...fila, observacion: fila.observacion ?? null, creado_por: auth.user.id },
+    {
+      ...fila,
+      observacion: fila.observacion ?? null,
+      asistentes: fila.asistentes ?? null,
+      creado_por: auth.user.id,
+    },
     { onConflict: 'faena_id,fecha,creado_por' },
   )
+}
+
+// [MIG555] Nómina de subida por faena (Calama: se marca QUIÉN subió).
+export interface PersonalFaena {
+  id: string
+  faena_id: string
+  nombre: string
+  sexo: 'M' | 'F'
+  activo: boolean
+  orden: number
+}
+
+export function getPersonalFaena() {
+  return supabase
+    .from('prevencion_personal_faena')
+    .select('*')
+    .eq('activo', true)
+    .order('orden')
 }
 
 export async function getMisDotaciones(dias = 7) {

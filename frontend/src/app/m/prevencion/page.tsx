@@ -26,7 +26,8 @@ import { RegistroTerrenoForm } from '@/components/prevencion/registro-terreno-fo
 import { AmbientalForm } from '@/components/prevencion/ambiental-form'
 import {
   useAmbientalConceptos, useCerrarRegistro, useDeleteDotacion,
-  useFaenasPrevencion, useMisDotaciones, useMisRegistros, useUpsertDotacion,
+  useFaenasPrevencion, useMisDotaciones, useMisRegistros, usePersonalFaena,
+  useUpsertDotacion,
 } from '@/hooks/use-prevencion-reportabilidad'
 
 const ROLES_CREAR = ['administrador', 'prevencionista', 'supervisor',
@@ -59,24 +60,52 @@ export default function PrevencionMobileHome() {
   const [subFecha, setSubFecha] = useState(() => new Date().toISOString().slice(0, 10))
   const [subHombres, setSubHombres] = useState('')
   const [subMujeres, setSubMujeres] = useState('0')
-  const totalPersonas = (Number(subHombres) || 0) + (Number(subMujeres) || 0)
+  // [MIG555] Faenas con nómina (Calama): se marca QUIÉN subió y las
+  // cantidades salen solas; sin nómina, conteo simple.
+  const { data: nominas } = usePersonalFaena()
+  const [marcados, setMarcados] = useState<Set<string>>(new Set())
+  const nomina = subFaena ? (nominas?.get(subFaena) ?? []) : []
+  const conNomina = nomina.length > 0
+
+  const totalPersonas = conNomina
+    ? marcados.size
+    : (Number(subHombres) || 0) + (Number(subMujeres) || 0)
 
   const nombreFaena = (id: string) =>
     (faenas ?? []).find((f: any) => f.id === id)?.nombre ?? '—'
 
+  const toggleAsistente = (nombre: string) => {
+    setMarcados((prev) => {
+      const s = new Set(prev)
+      if (s.has(nombre)) s.delete(nombre); else s.add(nombre)
+      return s
+    })
+  }
+
   const confirmarSubida = async () => {
     if (!subFaena) return toast.error('Elija la faena')
-    if (totalPersonas < 1) return toast.error('Indique cuántas personas subieron (usted incluido)')
+    if (totalPersonas < 1) {
+      return toast.error(conNomina
+        ? 'Marque quiénes subieron (usted incluido)'
+        : 'Indique cuántas personas subieron (usted incluido)')
+    }
+    const hombres = conNomina
+      ? nomina.filter((p) => marcados.has(p.nombre) && p.sexo === 'M').length
+      : (Number(subHombres) || 0)
+    const mujeres = conNomina
+      ? nomina.filter((p) => marcados.has(p.nombre) && p.sexo === 'F').length
+      : (Number(subMujeres) || 0)
     try {
       await guardarSubida.mutateAsync({
         faena_id: subFaena,
         fecha: subFecha,
-        hombres: Number(subHombres) || 0,
-        mujeres: Number(subMujeres) || 0,
+        hombres,
+        mujeres,
+        asistentes: conNomina ? Array.from(marcados) : null,
       })
       toast.success(`Subida guardada: ${totalPersonas} personas = ${totalPersonas * 8} HH`)
       setSubidaOpen(false)
-      setSubHombres(''); setSubMujeres('0')
+      setSubHombres(''); setSubMujeres('0'); setMarcados(new Set())
     } catch (e: any) {
       toast.error(e?.message ?? 'No se pudo guardar la subida')
     }
@@ -343,12 +372,32 @@ export default function PrevencionMobileHome() {
           <Input label="Fecha de la subida" type="date" value={subFecha}
                  max={new Date().toISOString().slice(0, 10)}
                  onChange={(e) => setSubFecha(e.target.value)} />
-          <div className="grid grid-cols-2 gap-3">
-            <Input label="Hombres (usted incluido)" type="number" min={0} inputMode="numeric"
-                   value={subHombres} onChange={(e) => setSubHombres(e.target.value)} />
-            <Input label="Mujeres" type="number" min={0} inputMode="numeric"
-                   value={subMujeres} onChange={(e) => setSubMujeres(e.target.value)} />
-          </div>
+          {conNomina ? (
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                ¿Quiénes subieron? (usted incluido)
+              </label>
+              <ul className="max-h-56 space-y-1 overflow-y-auto">
+                {nomina.map((p) => (
+                  <li key={p.id}>
+                    <label className="flex items-center gap-2.5 rounded-lg border border-gray-200 px-3 py-2 text-sm">
+                      <input type="checkbox" className="h-4 w-4"
+                             checked={marcados.has(p.nombre)}
+                             onChange={() => toggleAsistente(p.nombre)} />
+                      <span className="font-medium text-gray-900">{p.nombre}</span>
+                    </label>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-3">
+              <Input label="Hombres (usted incluido)" type="number" min={0} inputMode="numeric"
+                     value={subHombres} onChange={(e) => setSubHombres(e.target.value)} />
+              <Input label="Mujeres" type="number" min={0} inputMode="numeric"
+                     value={subMujeres} onChange={(e) => setSubMujeres(e.target.value)} />
+            </div>
+          )}
           <div className={cn(
             'rounded-lg border p-3 text-center',
             totalPersonas > 0 ? 'border-blue-200 bg-blue-50' : 'border-gray-200 bg-gray-50',

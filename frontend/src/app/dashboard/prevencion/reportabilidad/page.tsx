@@ -622,9 +622,16 @@ function TabIndicadores({ faenaId, anio, mes, puedeAdmin }: {
                   </thead>
                   <tbody>
                     {(detalle ?? []).map((d) => (
-                      <tr key={d.id} className="border-b last:border-0">
+                      <tr key={d.id} className="border-b last:border-0 align-top">
                         <td className="py-1.5 pr-3">{d.fecha}</td>
-                        <td className="py-1.5 pr-3">{d.supervisor_nombre ?? '—'}</td>
+                        <td className="py-1.5 pr-3">
+                          {d.supervisor_nombre ?? '—'}
+                          {(d.asistentes?.length ?? 0) > 0 && (
+                            <p className="text-xs text-gray-500">
+                              Subieron: {d.asistentes!.join(', ')}
+                            </p>
+                          )}
+                        </td>
                         <td className="py-1.5 pr-3 text-right">{d.hombres}</td>
                         <td className="py-1.5 pr-3 text-right">{d.mujeres}</td>
                         <td className="py-1.5 text-right font-bold">{(d.hombres + d.mujeres) * 8}</td>
