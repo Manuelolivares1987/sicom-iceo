@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   getActividadTipos,
+  getFaenaTipos,
   getFaenasPrevencion,
   getRegistros,
   getMisRegistros,
@@ -44,6 +45,23 @@ export function useActividadTipos() {
       const { data, error } = await getActividadTipos()
       if (error) throw error
       return data
+    },
+  })
+}
+
+export function useFaenaTipos() {
+  return useQuery({
+    queryKey: ['prev-repo-faena-tipos'],
+    queryFn: async () => {
+      const { data, error } = await getFaenaTipos()
+      if (error) throw error
+      // {faenaId: Set(tipos)} para filtrar los chips del formulario.
+      const mapa = new Map<string, Set<string>>()
+      for (const fila of (data ?? []) as Array<{ faena_id: string; tipo_codigo: string }>) {
+        if (!mapa.has(fila.faena_id)) mapa.set(fila.faena_id, new Set())
+        mapa.get(fila.faena_id)!.add(fila.tipo_codigo)
+      }
+      return mapa
     },
   })
 }

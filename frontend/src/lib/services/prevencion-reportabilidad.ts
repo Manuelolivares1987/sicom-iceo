@@ -124,6 +124,14 @@ export function getActividadTipos() {
 }
 
 /**
+ * [MIG552] Qué tipos ofrece cada faena (catálogo del mandante: Romeral usa
+ * RIT/VAT/VCT/EPF, Centinela usa PGR, etc.). Faena sin filas = ve todos.
+ */
+export function getFaenaTipos() {
+  return supabase.from('prevencion_faena_tipos').select('faena_id, tipo_codigo')
+}
+
+/**
  * SOLO las faenas donde Pillado tiene personal propio = las que tienen
  * reportabilidad configurada (Manuel, 2026-09-14: Romeral, Franke, Lomas
  * Bayas, Centinela y Spence). Las otras 18 faenas del sistema (talleres,
