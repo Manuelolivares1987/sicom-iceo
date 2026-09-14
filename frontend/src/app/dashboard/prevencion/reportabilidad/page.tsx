@@ -31,8 +31,9 @@ import { RegistroTerrenoForm } from '@/components/prevencion/registro-terreno-fo
 import {
   useCerrarRegistro, useConsolidadoMes, useDesmarcarEnvio, useFaenaConfig,
   useFaenasPrevencion, useIndicadoresAnio, useMarcarEnviada, useMonitoreoMes,
-  useRegistros, useSupervisoresFaena, useUpsertFaenaConfig,
-  useUpsertIndicadores, useUpsertMeta,
+  useRegistros, useSupervisoresAsignables, useSupervisoresFaena,
+  useToggleSupervisorFaena, useUpsertFaenaConfig, useUpsertIndicadores,
+  useUpsertMeta,
 } from '@/hooks/use-prevencion-reportabilidad'
 import {
   subirEvidencia, urlEvidencia,
@@ -884,6 +885,7 @@ function TabMonitoreo({ consolidado, faenaId, anio, mes, puedeAdmin }: {
   const { data: monitoreo, isLoading } = useMonitoreoMes(faenaId, anio, mes)
   const { data: esperados } = useSupervisoresFaena(faenaId)
   const [configOpen, setConfigOpen] = useState(false)
+  const [asignarOpen, setAsignarOpen] = useState(false)
 
   const filas = monitoreo ?? []
   const cargaron = new Set(filas.map((m) => m.creado_por))
@@ -914,9 +916,16 @@ function TabMonitoreo({ consolidado, faenaId, anio, mes, puedeAdmin }: {
             Carga por supervisor — {MESES[mes - 1]} {anio}
           </CardTitle>
           {puedeAdmin && (
-            <Button size="sm" variant="outline" onClick={() => setConfigOpen(true)}>
-              <Settings2 className="mr-1 h-4 w-4" /> Datos de la faena
-            </Button>
+            <div className="flex gap-2">
+              {/* [MIG548] Los rotativos de Calama cubren Lomas y Centinela:
+                  acá se define a quién se le cobra la carga de ESTA faena. */}
+              <Button size="sm" variant="outline" onClick={() => setAsignarOpen(true)}>
+                <UserX className="mr-1 h-4 w-4" /> Asignar supervisores
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => setConfigOpen(true)}>
+                <Settings2 className="mr-1 h-4 w-4" /> Datos de la faena
+              </Button>
+            </div>
           )}
         </CardHeader>
         <CardContent>
@@ -997,7 +1006,68 @@ function TabMonitoreo({ consolidado, faenaId, anio, mes, puedeAdmin }: {
       </Card>
 
       <ConfigFaenaModal open={configOpen} onClose={() => setConfigOpen(false)} faenaId={faenaId} />
+      <AsignarSupervisoresModal open={asignarOpen} onClose={() => setAsignarOpen(false)} faenaId={faenaId} />
     </div>
+  )
+}
+
+// ── Asignar supervisores a la faena (MIG548: los rotativos de Calama) ────────
+
+function AsignarSupervisoresModal({ open, onClose, faenaId }: {
+  open: boolean
+  onClose: () => void
+  faenaId: string
+}) {
+  const toast = useToast()
+  const { data: candidatos, isLoading } = useSupervisoresAsignables(faenaId, open)
+  const toggle = useToggleSupervisorFaena()
+
+  return (
+    <Modal open={open} onClose={onClose}
+           title="Quién debe reportar en esta faena" className="max-w-lg">
+      <p className="mb-3 text-xs text-gray-500">
+        Marcar a alguien lo agrega a los «esperados» del monitoreo (se le cobra
+        la carga del mes). Un supervisor rotativo puede estar en varias faenas
+        a la vez — los de Calama cubren Lomas Bayas y Centinela. Esto NO
+        restringe dónde puede cargar registros.
+      </p>
+      {isLoading ? (
+        <div className="flex justify-center py-8"><Spinner className="h-6 w-6" /></div>
+      ) : (
+        <ul className="max-h-[50vh] space-y-1 overflow-y-auto">
+          {(candidatos ?? []).map((c) => (
+            <li key={c.usuario_id}
+                className="flex items-center gap-3 rounded-lg border border-gray-200 px-3 py-2">
+              <input
+                type="checkbox"
+                className="h-4 w-4"
+                checked={c.faena_fija || c.asignado}
+                disabled={c.faena_fija || toggle.isPending}
+                onChange={async (e) => {
+                  try {
+                    await toggle.mutateAsync({
+                      usuarioId: c.usuario_id, faenaId, asignar: e.target.checked,
+                    })
+                  } catch (err: any) {
+                    toast.error(err?.message ?? 'No se pudo cambiar la asignación')
+                  }
+                }}
+              />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium text-gray-900">{c.nombre}</p>
+                <p className="truncate text-xs text-gray-500">
+                  {c.email} · {c.rol}
+                  {c.faena_fija && ' · faena fija (se cambia en Admin → usuarios)'}
+                </p>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="mt-3 border-t pt-3">
+        <Button variant="outline" className="w-full" onClick={onClose}>Listo</Button>
+      </div>
+    </Modal>
   )
 }
 

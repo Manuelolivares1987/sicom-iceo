@@ -17,7 +17,11 @@ import {
   upsertFaenaConfig,
   getMonitoreoMes,
   getSupervisoresFaena,
+  getSupervisoresAsignables,
+  asignarSupervisorFaena,
+  quitarSupervisorFaena,
   type FaenaConfigDatos,
+  type SupervisorAsignable,
   type IndicadoresFila,
   type MonitoreoSupervisor,
   type PrevencionRegistro,
@@ -227,6 +231,38 @@ export function useSupervisoresFaena(faenaId: string | null) {
       const { data, error } = await getSupervisoresFaena(faenaId!)
       if (error) throw error
       return (data ?? []) as Array<{ usuario_id: string; nombre: string; email: string }>
+    },
+  })
+}
+
+export function useSupervisoresAsignables(faenaId: string | null, enabled = true) {
+  return useQuery({
+    queryKey: ['prev-repo-sup-asignables', faenaId],
+    enabled: !!faenaId && enabled,
+    queryFn: async () => {
+      const { data, error } = await getSupervisoresAsignables(faenaId!)
+      if (error) throw error
+      return (data ?? []) as SupervisorAsignable[]
+    },
+  })
+}
+
+export function useToggleSupervisorFaena() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ usuarioId, faenaId, asignar }: {
+      usuarioId: string
+      faenaId: string
+      asignar: boolean
+    }) => {
+      const { error } = asignar
+        ? await asignarSupervisorFaena(usuarioId, faenaId)
+        : await quitarSupervisorFaena(usuarioId, faenaId)
+      if (error) throw error
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['prev-repo-sup-asignables'] })
+      qc.invalidateQueries({ queryKey: ['prev-repo-supervisores'] })
     },
   })
 }
