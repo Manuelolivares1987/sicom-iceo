@@ -19,6 +19,7 @@ import {
   useCreateRegistro,
   useFaenasPrevencion,
   useFaenaTipos,
+  usePersonalFaena,
 } from '@/hooks/use-prevencion-reportabilidad'
 import { subirEvidencia, type EvidenciaArchivo } from '@/lib/services/prevencion-reportabilidad'
 
@@ -50,6 +51,10 @@ export function RegistroTerrenoForm({
   const [area, setArea] = useState('')
   const [duracion, setDuracion] = useState('')
   const [asistentes, setAsistentes] = useState('')
+  // [MIG556] Faenas con nómina (Calama): los asistentes de la charla se
+  // MARCAN por nombre; la cantidad sale sola. Sin nómina, se digita.
+  const { data: nominas } = usePersonalFaena()
+  const [asistentesMarcados, setAsistentesMarcados] = useState<Set<string>>(new Set())
   const [quedaAbierto, setQuedaAbierto] = useState(false)
   const [archivos, setArchivos] = useState<File[]>([])
   const [subiendo, setSubiendo] = useState(false)
@@ -62,6 +67,16 @@ export function RegistroTerrenoForm({
   const esCapacitacion = tipoCodigo === 'CAPACITACION' || tipoCodigo === 'CHARLA'
   // [MIG551] PGR y similares: el título se elige del catálogo del mandante.
   const titulosOpciones: string[] = (tipoSel as any)?.titulos_opciones ?? []
+  const nomina = faenaId ? (nominas?.get(faenaId) ?? []) : []
+  const conNomina = esCapacitacion && nomina.length > 0
+
+  const toggleAsistente = (nombre: string) => {
+    setAsistentesMarcados((prev) => {
+      const s = new Set(prev)
+      if (s.has(nombre)) s.delete(nombre); else s.add(nombre)
+      return s
+    })
+  }
 
   // [MIG552] Cada faena ofrece SOLO las herramientas de su mandante (Romeral:
   // RIT/VAT/VCT/EPF; Centinela: PGR…). Faena sin mapeo = ve todos (fallback).
@@ -117,13 +132,18 @@ export function RegistroTerrenoForm({
         area_sector: area.trim() || null,
         estado: tipoSel?.requiere_cierre && quedaAbierto ? 'abierto' : 'cerrado',
         duracion_minutos: esCapacitacion && duracion ? Number(duracion) : null,
-        asistentes: esCapacitacion && asistentes ? Number(asistentes) : null,
+        asistentes: !esCapacitacion ? null
+          : conNomina ? asistentesMarcados.size
+          : (asistentes ? Number(asistentes) : null),
+        asistentes_nombres: conNomina && asistentesMarcados.size > 0
+          ? Array.from(asistentesMarcados) : null,
         evidencias,
       })
 
       toast.success('Registro guardado')
       setTitulo(''); setDescripcion(''); setArea('')
       setDuracion(''); setAsistentes(''); setArchivos([]); setQuedaAbierto(false)
+      setAsistentesMarcados(new Set())
       onGuardado?.()
     } catch (e: any) {
       toast.error(e?.message ?? 'No se pudo guardar el registro')
@@ -202,11 +222,34 @@ export function RegistroTerrenoForm({
       </div>
 
       {esCapacitacion && (
-        <div className="grid grid-cols-2 gap-3">
-          <Input label="Duración (min)" type="number" min={1} value={duracion}
-                 onChange={(e) => setDuracion(e.target.value)} />
-          <Input label="Asistentes" type="number" min={0} value={asistentes}
-                 onChange={(e) => setAsistentes(e.target.value)} />
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <Input label="Duración (min)" type="number" min={1} value={duracion}
+                   onChange={(e) => setDuracion(e.target.value)} />
+            {!conNomina && (
+              <Input label="Asistentes" type="number" min={0} value={asistentes}
+                     onChange={(e) => setAsistentes(e.target.value)} />
+            )}
+          </div>
+          {conNomina && (
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                Asistentes ({asistentesMarcados.size} marcados)
+              </label>
+              <ul className="max-h-52 space-y-1 overflow-y-auto">
+                {nomina.map((p) => (
+                  <li key={p.id}>
+                    <label className="flex items-center gap-2.5 rounded-lg border border-gray-200 px-3 py-2 text-sm">
+                      <input type="checkbox" className="h-4 w-4"
+                             checked={asistentesMarcados.has(p.nombre)}
+                             onChange={() => toggleAsistente(p.nombre)} />
+                      <span className="font-medium text-gray-900">{p.nombre}</span>
+                    </label>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       )}
 
