@@ -4,6 +4,8 @@ import {
   getFaenaTipos,
   upsertDotacionDiaria,
   getAmbientalConceptos,
+  getPersonalFaena,
+  type PersonalFaena,
   upsertAmbientalRegistros,
   getAmbientalMes,
   type AmbientalConcepto,
@@ -360,6 +362,23 @@ export function useDotacionDetalleMes(faenaId: string | null, anio: number, mes:
       const { data, error } = await getDotacionDetalleMes(faenaId!, anio, mes)
       if (error) throw error
       return (data ?? []) as DotacionDiaria[]
+    },
+  })
+}
+
+// [MIG555] Nómina de subida por faena → {faenaId: PersonalFaena[]}
+export function usePersonalFaena() {
+  return useQuery({
+    queryKey: ['prev-repo-personal-faena'],
+    queryFn: async () => {
+      const { data, error } = await getPersonalFaena()
+      if (error) throw error
+      const mapa = new Map<string, PersonalFaena[]>()
+      for (const p of (data ?? []) as PersonalFaena[]) {
+        if (!mapa.has(p.faena_id)) mapa.set(p.faena_id, [])
+        mapa.get(p.faena_id)!.push(p)
+      }
+      return mapa
     },
   })
 }
