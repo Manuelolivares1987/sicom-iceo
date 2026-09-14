@@ -11,17 +11,22 @@
 
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
-import { CheckCircle2, ChevronRight, ClipboardList, HardHat, Loader2, Paperclip, Plus, ShieldCheck } from 'lucide-react'
+import { CheckCircle2, ChevronRight, ClipboardList, HardHat, Loader2, Paperclip, Plus, ShieldCheck, Trash2, Users } from 'lucide-react'
 import { useAuth } from '@/contexts/auth-context'
 import { useExigirSesion } from '@/hooks/use-exigir-sesion'
 import { SinSesionOffline } from '@/components/enex/sin-sesion-offline'
 import { Spinner } from '@/components/ui/spinner'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Select } from '@/components/ui/select'
 import { Modal } from '@/components/ui/modal'
 import { useToast } from '@/hooks/use-toast'
 import { cn } from '@/lib/utils'
 import { RegistroTerrenoForm } from '@/components/prevencion/registro-terreno-form'
-import { useCerrarRegistro, useMisRegistros } from '@/hooks/use-prevencion-reportabilidad'
+import {
+  useCerrarRegistro, useDeleteDotacion, useFaenasPrevencion, useMisDotaciones,
+  useMisRegistros, useUpsertDotacion,
+} from '@/hooks/use-prevencion-reportabilidad'
 
 const ROLES_CREAR = ['administrador', 'prevencionista', 'supervisor',
   'jefe_operaciones', 'jefe_mantenimiento', 'subgerente_operaciones']
@@ -39,6 +44,39 @@ export default function PrevencionMobileHome() {
   const [nuevoOpen, setNuevoOpen] = useState(false)
   const [cerrandoId, setCerrandoId] = useState<string | null>(null)
   const [obsCierre, setObsCierre] = useState('')
+
+  // [MIG553] Subidas a faena: personas que subieron → HH = 8 × personas.
+  const { data: faenas } = useFaenasPrevencion()
+  const { data: subidas } = useMisDotaciones(7)
+  const guardarSubida = useUpsertDotacion()
+  const borrarSubida = useDeleteDotacion()
+  const [subidaOpen, setSubidaOpen] = useState(false)
+  const [subFaena, setSubFaena] = useState('')
+  const [subFecha, setSubFecha] = useState(() => new Date().toISOString().slice(0, 10))
+  const [subHombres, setSubHombres] = useState('')
+  const [subMujeres, setSubMujeres] = useState('0')
+  const totalPersonas = (Number(subHombres) || 0) + (Number(subMujeres) || 0)
+
+  const nombreFaena = (id: string) =>
+    (faenas ?? []).find((f: any) => f.id === id)?.nombre ?? '—'
+
+  const confirmarSubida = async () => {
+    if (!subFaena) return toast.error('Elija la faena')
+    if (totalPersonas < 1) return toast.error('Indique cuántas personas subieron (usted incluido)')
+    try {
+      await guardarSubida.mutateAsync({
+        faena_id: subFaena,
+        fecha: subFecha,
+        hombres: Number(subHombres) || 0,
+        mujeres: Number(subMujeres) || 0,
+      })
+      toast.success(`Subida guardada: ${totalPersonas} personas = ${totalPersonas * 8} HH`)
+      setSubidaOpen(false)
+      setSubHombres(''); setSubMujeres('0')
+    } catch (e: any) {
+      toast.error(e?.message ?? 'No se pudo guardar la subida')
+    }
+  }
 
   const puedeCrear = !!perfil?.rol && ROLES_CREAR.includes(perfil.rol)
 
@@ -130,6 +168,54 @@ export default function PrevencionMobileHome() {
           </button>
         )}
 
+        {puedeCrear && (
+          <button
+            onClick={() => setSubidaOpen(true)}
+            className="flex w-full items-center gap-3 rounded-xl border-2 border-blue-500 bg-white p-4 active:scale-[0.99]"
+          >
+            <div className="grid h-12 w-12 shrink-0 place-items-center rounded-lg bg-blue-500 text-white">
+              <Users className="h-6 w-6" />
+            </div>
+            <div className="min-w-0 flex-1 text-left">
+              <p className="text-base font-bold text-gray-900">Subida a faena</p>
+              <p className="text-xs text-gray-500">
+                Cuántos subieron hoy (usted incluido) — alimenta las HH del E-200
+              </p>
+            </div>
+          </button>
+        )}
+
+        {puedeCrear && (subidas?.length ?? 0) > 0 && (
+          <div className="rounded-xl border border-blue-200 bg-white p-3">
+            <p className="mb-1.5 text-xs font-bold uppercase text-gray-500">
+              Mis subidas — últimos 7 días
+            </p>
+            <ul className="space-y-1">
+              {(subidas ?? []).map((s) => (
+                <li key={s.id} className="flex items-center gap-2 text-sm">
+                  <span className="w-20 shrink-0 text-xs text-gray-500">{s.fecha}</span>
+                  <span className="min-w-0 flex-1 truncate font-medium">{nombreFaena(s.faena_id)}</span>
+                  <span className="shrink-0 rounded bg-blue-50 px-1.5 py-0.5 text-xs font-bold text-blue-700">
+                    {s.hombres + s.mujeres} pers · {(s.hombres + s.mujeres) * 8} HH
+                  </span>
+                  <button className="text-gray-300 hover:text-red-500"
+                          onClick={async () => {
+                            try {
+                              await borrarSubida.mutateAsync(s.id)
+                              toast.success('Subida borrada')
+                            } catch (e: any) { toast.error(e?.message ?? 'No se pudo borrar') }
+                          }}>
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <p className="mt-1 text-[11px] text-gray-400">
+              ¿Se equivocó? Vuelva a registrar el mismo día y faena: se corrige solo.
+            </p>
+          </div>
+        )}
+
         {puedeCrear && avanceMes.total > 0 && (
           <div className="rounded-xl border border-gray-200 bg-white p-3">
             <p className="mb-1.5 text-xs font-bold uppercase text-gray-500">
@@ -215,6 +301,44 @@ export default function PrevencionMobileHome() {
           onGuardado={() => setNuevoOpen(false)}
           onCancelar={() => setNuevoOpen(false)}
         />
+      </Modal>
+
+      <Modal open={subidaOpen} onClose={() => setSubidaOpen(false)}
+             title="Subida a faena" className="max-w-[480px]">
+        <div className="space-y-3">
+          <Select
+            label="Faena que visitó"
+            value={subFaena}
+            onChange={(e) => setSubFaena(e.target.value)}
+            placeholder="Elegir faena…"
+            options={(faenas ?? []).map((f: any) => ({ value: f.id, label: f.nombre }))}
+          />
+          <Input label="Fecha de la subida" type="date" value={subFecha}
+                 max={new Date().toISOString().slice(0, 10)}
+                 onChange={(e) => setSubFecha(e.target.value)} />
+          <div className="grid grid-cols-2 gap-3">
+            <Input label="Hombres (usted incluido)" type="number" min={0} inputMode="numeric"
+                   value={subHombres} onChange={(e) => setSubHombres(e.target.value)} />
+            <Input label="Mujeres" type="number" min={0} inputMode="numeric"
+                   value={subMujeres} onChange={(e) => setSubMujeres(e.target.value)} />
+          </div>
+          <div className={cn(
+            'rounded-lg border p-3 text-center',
+            totalPersonas > 0 ? 'border-blue-200 bg-blue-50' : 'border-gray-200 bg-gray-50',
+          )}>
+            <p className="text-xs text-gray-500">HH del día para el E-200 (8 × personas)</p>
+            <p className="text-2xl font-bold text-blue-700">
+              {totalPersonas > 0 ? `${totalPersonas} × 8 = ${totalPersonas * 8} HH` : '—'}
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <Button className="flex-1" onClick={confirmarSubida} disabled={guardarSubida.isPending}>
+              {guardarSubida.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Guardar subida
+            </Button>
+            <Button variant="outline" onClick={() => setSubidaOpen(false)}>Cancelar</Button>
+          </div>
+        </div>
       </Modal>
 
       <Modal open={!!cerrandoId} onClose={() => setCerrandoId(null)}
