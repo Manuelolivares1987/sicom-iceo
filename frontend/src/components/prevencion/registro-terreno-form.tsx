@@ -58,6 +58,15 @@ export function RegistroTerrenoForm({
     [tipos, tipoCodigo],
   )
   const esCapacitacion = tipoCodigo === 'CAPACITACION' || tipoCodigo === 'CHARLA'
+  // [MIG551] PGR y similares: el título se elige del catálogo del mandante.
+  const titulosOpciones: string[] = (tipoSel as any)?.titulos_opciones ?? []
+
+  const elegirTipo = (codigo: string) => {
+    setTipoCodigo(codigo)
+    // Al cambiar de tipo, un título que era del catálogo anterior no vale.
+    const opciones = (tipos ?? []).find((t: any) => t.codigo === codigo)?.titulos_opciones
+    if (opciones?.length && !opciones.includes(titulo)) setTitulo('')
+  }
 
   const guardar = async () => {
     if (!faenaId) return toast.error('Elija la faena')
@@ -120,7 +129,7 @@ export function RegistroTerrenoForm({
             <button
               key={t.codigo}
               type="button"
-              onClick={() => setTipoCodigo(t.codigo)}
+              onClick={() => elegirTipo(t.codigo)}
               className={
                 'rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ' +
                 (tipoCodigo === t.codigo
@@ -144,9 +153,19 @@ export function RegistroTerrenoForm({
                onChange={(e) => setArea(e.target.value)} />
       </div>
 
-      <Input label="Título" value={titulo} maxLength={200}
-             placeholder="Ej: VCT izaje con camión pluma"
-             onChange={(e) => setTitulo(e.target.value)} />
+      {titulosOpciones.length > 0 ? (
+        <Select
+          label="Título (catálogo del mandante)"
+          value={titulo}
+          onChange={(e) => setTitulo(e.target.value)}
+          placeholder="Elegir herramienta…"
+          options={titulosOpciones.map((t) => ({ value: t, label: t }))}
+        />
+      ) : (
+        <Input label="Título" value={titulo} maxLength={200}
+               placeholder="Ej: VCT izaje con camión pluma"
+               onChange={(e) => setTitulo(e.target.value)} />
+      )}
 
       <div>
         <label className="mb-1.5 block text-sm font-medium text-gray-700">
