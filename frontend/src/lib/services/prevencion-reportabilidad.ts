@@ -41,6 +41,7 @@ export interface PrevencionRegistro {
   cierre_observacion: string | null
   duracion_minutos: number | null
   asistentes: number | null
+  asistentes_nombres: string[] | null
   evidencias: EvidenciaArchivo[]
   creado_por: string
   supervisor_nombre: string | null
@@ -200,6 +201,8 @@ export function createRegistro(reg: {
   estado: 'abierto' | 'cerrado'
   duracion_minutos?: number | null
   asistentes?: number | null
+  // [MIG556] Faenas con nómina: quiénes asistieron a la charla/actividad.
+  asistentes_nombres?: string[] | null
   evidencias: EvidenciaArchivo[]
 }) {
   return supabase.from('prevencion_registros').insert(reg).select().single()

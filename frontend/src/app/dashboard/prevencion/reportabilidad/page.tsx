@@ -444,6 +444,11 @@ function TabRegistros({ faenaId, anio, mes, puedeAdmin, faenas }: {
                         {r.duracion_minutos && <> · {r.duracion_minutos} min</>}
                         {r.asistentes != null && r.asistentes > 0 && <> · {r.asistentes} asistentes</>}
                       </p>
+                      {(r.asistentes_nombres?.length ?? 0) > 0 && (
+                        <p className="text-xs text-gray-600">
+                          <b>Asistieron:</b> {r.asistentes_nombres!.join(', ')}
+                        </p>
+                      )}
                       {r.descripcion && <p className="whitespace-pre-wrap">{r.descripcion}</p>}
                       {r.estado === 'cerrado' && r.cierre_observacion && (
                         <p className="text-xs text-gray-600">
