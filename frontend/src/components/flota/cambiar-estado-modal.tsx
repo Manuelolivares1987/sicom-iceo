@@ -215,7 +215,14 @@ export function CambiarEstadoModal({ open, onClose, activo, estadoInicial, fecha
   // Etiqueta del contrato actual (último contrato del activo)
   const contratoActual = useMemo(() => {
     const c = contratos.find((x) => x.id === activo?.contrato_id)
-    return c ? `${c.codigo} · ${c.cliente}` : (activo?.cliente_actual || 'Sin contrato asignado')
+    if (c) return `${c.codigo} · ${c.cliente}`
+    if (!activo?.contrato_id) {
+      // Sin contrato: si quedó un cliente pegado se dice explícito, para que
+      // no parezca que el equipo sigue arrendado a ese cliente.
+      const cli = activo?.cliente_actual
+      return cli && cli !== 'Sin contrato' ? `Sin contrato (cliente registrado: ${cli})` : 'Sin contrato asignado'
+    }
+    return activo?.cliente_actual || 'Contrato no vigente'
   }, [contratos, activo?.contrato_id, activo?.cliente_actual])
 
   // ── Reset del formulario: SOLO al abrir o cambiar de activo.
@@ -319,7 +326,15 @@ export function CambiarEstadoModal({ open, onClose, activo, estadoInicial, fecha
       // Contrato: independiente del estado. Se aplica si el usuario eligió cambiarlo.
       const contratoOriginal = activo.contrato_id ?? null
       const contratoNuevo    = cambiarContrato ? (nuevoContratoId || null) : contratoOriginal
-      if (contratoNuevo !== contratoOriginal) {
+      // Cliente "pegado" (MIG564): el equipo ya está sin contrato pero
+      // cliente_actual conserva el cliente viejo (JGBY-10 quedó en AURA tras
+      // la devolución). Elegir «Sin contrato» ahí era "sin cambio" para este
+      // modal y no llamaba a nada; el RPC sí re-sincroniza el cliente en su
+      // rama sin_cambio, así que se le llama igual.
+      const clientePegado =
+        cambiarContrato && contratoNuevo === null && contratoOriginal === null &&
+        !!activo.cliente_actual && activo.cliente_actual !== 'Sin contrato'
+      if (contratoNuevo !== contratoOriginal || clientePegado) {
         try {
           await cambiarContratoActivo({
             activoId: activo.id,
@@ -700,7 +715,9 @@ export function CambiarEstadoModal({ open, onClose, activo, estadoInicial, fecha
                     onChange={(e) => setNuevoContratoId(e.target.value)}
                     helperText={
                       !nuevoContratoId
-                        ? 'Se QUITARÁ el contrato actual (queda sin contrato).'
+                        ? (activo?.contrato_id
+                            ? 'Se QUITARÁ el contrato actual (queda sin contrato).'
+                            : 'Ya está sin contrato: se limpiará el cliente registrado.')
                         : nuevoContratoId !== (activo?.contrato_id ?? '')
                         ? 'Se CAMBIARÁ al contrato seleccionado.'
                         : 'Es el mismo contrato actual.'
