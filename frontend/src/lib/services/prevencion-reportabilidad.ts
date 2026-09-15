@@ -46,6 +46,12 @@ export interface PrevencionRegistro {
   creado_por: string
   supervisor_nombre: string | null
   created_at: string
+  // [MIG561] Auditoría de prevención: la marca y su observación vuelven al
+  // supervisor en /m/prevencion.
+  revisado?: boolean
+  revisado_por?: string | null
+  revisado_at?: string | null
+  revision_observacion?: string | null
 }
 
 export interface GestionMensualFila {
@@ -232,6 +238,26 @@ export function updateRegistro(id: string, patch: Partial<PrevencionRegistro>) {
 
 export function deleteRegistro(id: string) {
   return supabase.from('prevencion_registros').delete().eq('id', id)
+}
+
+// [MIG561] Prevención audita lo cargado: marca revisado (o lo quita) con
+// observación opcional. Solo pasa la política de UPDATE para roles admin
+// del módulo (prevencionista, jefaturas, administrador).
+export async function marcarRevision(id: string, revisado: boolean, observacion?: string) {
+  const { data: auth } = await supabase.auth.getUser()
+  return supabase
+    .from('prevencion_registros')
+    .update(revisado
+      ? {
+          revisado: true,
+          revisado_por: auth?.user?.id ?? null,
+          revisado_at: new Date().toISOString(),
+          revision_observacion: observacion?.trim() || null,
+        }
+      : { revisado: false, revisado_por: null, revisado_at: null, revision_observacion: null })
+    .eq('id', id)
+    .select()
+    .single()
 }
 
 // ── Subidas a faena (MIG553): dotación diaria → HH del E-200 ────────────────

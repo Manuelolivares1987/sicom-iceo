@@ -22,6 +22,8 @@ import {
   createRegistro,
   cerrarRegistro,
   deleteRegistro,
+  updateRegistro,
+  marcarRevision,
   getConsolidadoMes,
   upsertMeta,
   getIndicadoresAnio,
@@ -165,6 +167,36 @@ export function useDeleteRegistro() {
     mutationFn: async (id: string) => {
       const { error } = await deleteRegistro(id)
       if (error) throw error
+    },
+    onSuccess: invalidar,
+  })
+}
+
+// [MIG561] El supervisor corrige lo suyo (abierto o < 24 h por RLS).
+export function useUpdateRegistro() {
+  const invalidar = useInvalidarRegistros()
+  return useMutation({
+    mutationFn: async ({ id, patch }: { id: string; patch: Partial<PrevencionRegistro> }) => {
+      const { data, error } = await updateRegistro(id, patch)
+      if (error) throw error
+      return data
+    },
+    onSuccess: invalidar,
+  })
+}
+
+// [MIG561] Prevención audita: marca/desmarca revisado con observación.
+export function useMarcarRevision() {
+  const invalidar = useInvalidarRegistros()
+  return useMutation({
+    mutationFn: async ({ id, revisado, observacion }: {
+      id: string
+      revisado: boolean
+      observacion?: string
+    }) => {
+      const { data, error } = await marcarRevision(id, revisado, observacion)
+      if (error) throw error
+      return data
     },
     onSuccess: invalidar,
   })
