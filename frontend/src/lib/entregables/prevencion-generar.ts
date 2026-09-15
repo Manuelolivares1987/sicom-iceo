@@ -128,10 +128,18 @@ export async function generarEntregable(params: {
   if (plantilla === 'anexo_102') {
     // [MIG558] La guía manda: estructura exacta del Anexo 10.2, evidencias
     // (fotos y PDF incrustados) en su subsección, constantes donde no hay.
+    // Las láminas que QUEDAN INTACTAS mes a mes (matriz legal, RIOHS,
+    // acreditaciones…) repiten la última evidencia cargada: se trae el
+    // histórico completo de ANEXO102 de la faena para arrastrarla.
+    onProgreso?.('Cargando el histórico del Anexo 10.2…')
+    const { data: historicos, error: eHist } = await getRegistros({ faenaId, tipoCodigo: 'ANEXO102' })
+    if (eHist) throw eHist
     onProgreso?.('Armando el Anexo 10.2 con su estructura…')
     const { generarAnexo102Pptx } = await import('./prevencion-anexo102-pptx')
     const blob = await generarAnexo102Pptx({
-      registros: regs, faenaNombre, anio, mes, onProgreso,
+      registros: regs,
+      registrosHistoricos: (historicos ?? []) as PrevencionRegistro[],
+      faenaNombre, anio, mes, onProgreso,
     })
     return { blob, filename: `Anexo_10.2_${slug(faenaNombre)}_${anio}-${mm}.pptx` }
   }
