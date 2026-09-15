@@ -391,9 +391,18 @@ function DespacharTab() {
   const [entregadoA, setEntregadoA] = useState('')
   const [resultado, setResultado] = useState<{ despacho: string | null; estado: string } | null>(null)
 
+  // La bodega por defecto es la DEL VALE. Antes se tomaba la primera de la
+  // lista —alfabética: «Bodega Central Combustibles - Mina Principal»—, así
+  // que un vale de oficina sin faena (el envío a Franke del 15-09-2026) mostraba
+  // los 43 insumos en cero aunque Coquimbo los tuviera contados. Si el vale no
+  // trae bodega, la de su faena; y sólo al final la primera de la lista.
+  useEffect(() => { setBodegaId(ticket?.bodega_id ?? '') }, [ticket?.id, ticket?.bodega_id])
   useEffect(() => {
-    if (bodegas.length && !bodegas.some((b) => b.id === bodegaId)) setBodegaId(bodegas[0].id)
-  }, [bodegas, bodegaId])
+    if (!bodegas.length || bodegas.some((b) => b.id === bodegaId)) return
+    const faena = ticket?.faena_id ?? null
+    const preferida = (faena && bodegas.find((b) => b.faena_id === faena)) || bodegas[0]
+    setBodegaId(preferida.id)
+  }, [bodegas, bodegaId, ticket?.faena_id])
 
   async function buscar(f: string) {
     const limpio = extraerFolio(f)
