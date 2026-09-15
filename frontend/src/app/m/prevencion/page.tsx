@@ -11,7 +11,7 @@
 
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
-import { CheckCircle2, ChevronRight, ClipboardList, HardHat, Leaf, Loader2, Paperclip, Plus, ShieldCheck, Trash2, Users } from 'lucide-react'
+import { CheckCircle2, ChevronRight, ClipboardList, HardHat, Leaf, Loader2, Paperclip, Pencil, Plus, ShieldCheck, Trash2, Users } from 'lucide-react'
 import { useAuth } from '@/contexts/auth-context'
 import { useExigirSesion } from '@/hooks/use-exigir-sesion'
 import { SinSesionOffline } from '@/components/enex/sin-sesion-offline'
@@ -23,7 +23,9 @@ import { Modal } from '@/components/ui/modal'
 import { useToast } from '@/hooks/use-toast'
 import { cn } from '@/lib/utils'
 import { RegistroTerrenoForm } from '@/components/prevencion/registro-terreno-form'
+import { RegistroEditarForm } from '@/components/prevencion/registro-editar-form'
 import { AmbientalForm } from '@/components/prevencion/ambiental-form'
+import type { PrevencionRegistro } from '@/lib/services/prevencion-reportabilidad'
 import {
   useAmbientalConceptos, useCerrarRegistro, useDeleteDotacion, useFaenaConfig,
   useFaenasPrevencion, useMisDotaciones, useMisRegistros,
@@ -46,6 +48,10 @@ export default function PrevencionMobileHome() {
   const [nuevoOpen, setNuevoOpen] = useState(false)
   const [cerrandoId, setCerrandoId] = useState<string | null>(null)
   const [obsCierre, setObsCierre] = useState('')
+  // [MIG561] Corrección: el supervisor edita o borra lo suyo (abierto o <24 h).
+  const [editando, setEditando] = useState<PrevencionRegistro | null>(null)
+  const puedeCorregir = (r: PrevencionRegistro) =>
+    r.estado === 'abierto' || Date.now() - new Date(r.created_at).getTime() < 24 * 3600 * 1000
 
   // [MIG553] Subidas a faena: personas que subieron → HH = 8 × personas.
   const { data: faenas } = useFaenasPrevencion()
@@ -66,17 +72,29 @@ export default function PrevencionMobileHome() {
   const totalPersonas = (Number(subHombres) || 0) + (Number(subMujeres) || 0)
   // [MIG557] Centinela declara HH POR INSTALACIÓN: si la ficha de la faena
   // define instalaciones, la subida pide en cuál se trabajó.
+  // [MIG559] El E-200 va POR LUGAR: primero la faena del mandante (Centinela
+  // Sulfuros / Oxido / Encuentro) y después la instalación. Lo guardado sigue
+  // siendo la clave «Faena — Instalación» (así la lee la dotación y el E-200).
   const { data: subConfig } = useFaenaConfig(subFaena || null)
   const instalaciones: string[] = ((subConfig as any)?.instalaciones ?? [])
+  const detalleInst = ((subConfig as any)?.instalaciones_detalle ?? {}) as Record<string, Record<string, string>>
+  const lugares = instalaciones.map((clave) => {
+    const det = detalleInst[clave] ?? {}
+    const [f, i] = clave.split('—').map((s) => s.trim())
+    return { clave, faena: det.faena ?? f ?? clave, instalacion: det.nombre ?? i ?? clave }
+  })
+  const faenasMandante = Array.from(new Set(lugares.map((l) => l.faena)))
+  const [subFaenaMandante, setSubFaenaMandante] = useState('')
   const [subInstalacion, setSubInstalacion] = useState('')
+  const instalacionesDelMandante = lugares.filter((l) => l.faena === subFaenaMandante)
 
   const nombreFaena = (id: string) =>
     (faenas ?? []).find((f: any) => f.id === id)?.nombre ?? '—'
 
   const confirmarSubida = async () => {
     if (!subFaena) return toast.error('Elija la faena')
-    if (instalaciones.length > 0 && !subInstalacion) {
-      return toast.error('Elija la instalación donde trabajaron (el mandante declara por instalación)')
+    if (lugares.length > 0 && (!subFaenaMandante || !subInstalacion)) {
+      return toast.error('Elija la faena del mandante y la instalación (el E-200 se declara por lugar)')
     }
     if (totalPersonas < 1) return toast.error('Indique cuántas personas subieron (usted incluido)')
     try {
@@ -85,7 +103,7 @@ export default function PrevencionMobileHome() {
         fecha: subFecha,
         hombres: Number(subHombres) || 0,
         mujeres: Number(subMujeres) || 0,
-        instalacion: instalaciones.length > 0 ? subInstalacion : null,
+        instalacion: lugares.length > 0 ? subInstalacion : null,
       })
       toast.success(`Subida guardada: ${totalPersonas} personas = ${totalPersonas * 8} HH`)
       setSubidaOpen(false)
@@ -302,25 +320,45 @@ export default function PrevencionMobileHome() {
           ) : (
             <ul className="space-y-1.5">
               {registros.map((r) => (
-                <li key={r.id} className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2">
-                  <span className="w-20 shrink-0 rounded bg-gray-100 px-1.5 py-0.5 text-center text-xs font-bold">
-                    {r.tipo_codigo}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium text-gray-900">{r.titulo}</p>
-                    <p className="text-[11px] text-gray-500">{r.fecha_actividad}</p>
-                  </div>
-                  {(r.evidencias?.length ?? 0) > 0 && (
-                    <span className="flex items-center gap-0.5 text-xs text-gray-400">
-                      <Paperclip className="h-3 w-3" />{r.evidencias.length}
+                <li key={r.id} className="rounded-lg border border-gray-200 bg-white px-3 py-2">
+                  <div className="flex items-center gap-2">
+                    <span className="w-20 shrink-0 rounded bg-gray-100 px-1.5 py-0.5 text-center text-xs font-bold">
+                      {r.tipo_codigo}
                     </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium text-gray-900">{r.titulo}</p>
+                      <p className="text-[11px] text-gray-500">{r.fecha_actividad}</p>
+                    </div>
+                    {(r.evidencias?.length ?? 0) > 0 && (
+                      <span className="flex items-center gap-0.5 text-xs text-gray-400">
+                        <Paperclip className="h-3 w-3" />{r.evidencias.length}
+                      </span>
+                    )}
+                    {r.revisado && (
+                      <span className="shrink-0 rounded-full bg-blue-100 px-2 py-0.5 text-[11px] font-bold text-blue-700"
+                            title="Auditado por prevención">
+                        revisado
+                      </span>
+                    )}
+                    <span className={cn(
+                      'shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold',
+                      r.estado === 'abierto' ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700',
+                    )}>
+                      {r.estado}
+                    </span>
+                    {puedeCorregir(r) && (
+                      <button className="shrink-0 p-1 text-gray-400 hover:text-gray-700"
+                              title="Corregir este registro"
+                              onClick={() => setEditando(r)}>
+                        <Pencil className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
+                  {r.revision_observacion && (
+                    <p className="mt-1 rounded bg-blue-50 px-2 py-1 text-[11px] text-blue-800">
+                      <b>Prevención:</b> {r.revision_observacion}
+                    </p>
                   )}
-                  <span className={cn(
-                    'shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold',
-                    r.estado === 'abierto' ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700',
-                  )}>
-                    {r.estado}
-                  </span>
                 </li>
               ))}
             </ul>
@@ -337,6 +375,17 @@ export default function PrevencionMobileHome() {
         />
       </Modal>
 
+      <Modal open={!!editando} onClose={() => setEditando(null)}
+             title="Corregir registro" className="max-w-[480px]">
+        {editando && (
+          <RegistroEditarForm
+            registro={editando}
+            onGuardado={() => setEditando(null)}
+            onCancelar={() => setEditando(null)}
+          />
+        )}
+      </Modal>
+
       <Modal open={ambientalOpen} onClose={() => setAmbientalOpen(false)}
              title="Residuos e insumos" className="max-w-[480px]">
         <AmbientalForm onGuardado={() => setAmbientalOpen(false)}
@@ -349,21 +398,40 @@ export default function PrevencionMobileHome() {
           <Select
             label="Faena que visitó"
             value={subFaena}
-            onChange={(e) => setSubFaena(e.target.value)}
+            onChange={(e) => {
+              setSubFaena(e.target.value)
+              // Las instalaciones son de cada faena: al cambiarla se limpian.
+              setSubFaenaMandante('')
+              setSubInstalacion('')
+            }}
             placeholder="Elegir faena…"
             options={(faenas ?? []).map((f: any) => ({ value: f.id, label: f.nombre }))}
           />
-          {instalaciones.length > 0 && (
-            <Select
-              label="Instalación donde trabajaron"
-              value={subInstalacion}
-              onChange={(e) => setSubInstalacion(e.target.value)}
-              placeholder="Elegir instalación…"
-              options={instalaciones.map((i) => ({ value: i, label: i }))}
-            />
+          {lugares.length > 0 && (
+            <>
+              <Select
+                label="Faena del mandante"
+                value={subFaenaMandante}
+                onChange={(e) => {
+                  setSubFaenaMandante(e.target.value)
+                  setSubInstalacion('')
+                }}
+                placeholder="Elegir faena del mandante…"
+                options={faenasMandante.map((f) => ({ value: f, label: f }))}
+              />
+              <Select
+                label="Instalación donde trabajaron"
+                value={subInstalacion}
+                onChange={(e) => setSubInstalacion(e.target.value)}
+                placeholder={subFaenaMandante ? 'Elegir instalación…' : 'Elija primero la faena del mandante'}
+                disabled={!subFaenaMandante}
+                options={instalacionesDelMandante.map((l) => ({ value: l.clave, label: l.instalacion }))}
+              />
+            </>
           )}
+          {/* [MIG559] Sin tope: el E-200 también se declara hacia adelante,
+              la dotación de días futuros se puede dejar registrada. */}
           <Input label="Fecha de la subida" type="date" value={subFecha}
-                 max={new Date().toISOString().slice(0, 10)}
                  onChange={(e) => setSubFecha(e.target.value)} />
           <div className="grid grid-cols-2 gap-3">
             <Input label="Hombres (usted incluido)" type="number" min={0} inputMode="numeric"
