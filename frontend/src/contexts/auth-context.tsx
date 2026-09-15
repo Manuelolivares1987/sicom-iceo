@@ -4,10 +4,12 @@ import {
   createContext,
   useContext,
   useEffect,
+  useRef,
   useState,
   useCallback,
   type ReactNode,
 } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import type { User } from '@supabase/supabase-js'
 import { supabase, leerSesionPersistida } from '@/lib/supabase'
 import type { UsuarioPerfil } from '@/types/database'
@@ -64,6 +66,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [sesionSinValidar, setSesionSinValidar] = useState(false)
+
+  // Cuando cambia QUIÉN está conectado, lo consultado antes no vale. Las
+  // consultas de React Query viven 5 minutos como "frescas" y sobreviven al
+  // cierre de sesión y al login siguiente (todo ocurre sin recargar la página):
+  // el supervisor de Calama entraba, abría «Nuevo registro» y la lista de
+  // faenas era la que se había pedido sin sesión —vacía— hasta apretar F5.
+  // Lo mismo aplica al arranque: la página dispara sus consultas antes de que
+  // la sesión guardada termine de cargar. Al aparecer el usuario se reinician
+  // y se vuelven a pedir con su token; al salir se borran, para que el
+  // siguiente que entre en el mismo equipo no vea nada del anterior.
+  const queryClient = useQueryClient()
+  const usuarioAnterior = useRef<string | null | undefined>(undefined)
+  useEffect(() => {
+    const actual = user?.id ?? null
+    if (usuarioAnterior.current !== undefined && usuarioAnterior.current !== actual) {
+      if (actual) void queryClient.resetQueries()
+      else queryClient.clear()
+    }
+    usuarioAnterior.current = actual
+  }, [user?.id, queryClient])
 
   const fetchPerfil = useCallback(async (userId: string) => {
     // Primero lo último conocido: en terreno el perfil (rol, nombre) tiene que

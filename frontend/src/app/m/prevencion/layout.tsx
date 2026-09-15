@@ -1,5 +1,5 @@
 import SugerenciaWidget from '@/components/sugerencias/sugerencia-widget'
-import { VolverAlPanel } from '@/components/layout/volver-al-panel'
+import { SalidaTerrenoPrevencion } from '@/components/prevencion/salida-terreno'
 
 export default function PrevencionMobileLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -8,7 +8,8 @@ export default function PrevencionMobileLayout({ children }: { children: React.R
       {/* El supervisor que carga sus RIT en el teléfono es quien mejor sabe si
           la pantalla le sirve o le estorba. */}
       <SugerenciaWidget />
-      <VolverAlPanel />
+      {/* Cerrar sesión para todos; «Volver al panel» sólo para quien tiene panel. */}
+      <SalidaTerrenoPrevencion />
     </div>
   )
 }

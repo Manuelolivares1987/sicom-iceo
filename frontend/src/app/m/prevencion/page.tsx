@@ -54,7 +54,7 @@ export default function PrevencionMobileHome() {
     r.estado === 'abierto' || Date.now() - new Date(r.created_at).getTime() < 24 * 3600 * 1000
 
   // [MIG553] Subidas a faena: personas que subieron → HH = 8 × personas.
-  const { data: faenas } = useFaenasPrevencion()
+  const { data: faenas, isPending: cargandoFaenas, isError: errorFaenas, refetch: recargarFaenas } = useFaenasPrevencion()
   const { data: subidas } = useMisDotaciones(7)
   const guardarSubida = useUpsertDotacion()
   const borrarSubida = useDeleteDotacion()
@@ -404,9 +404,16 @@ export default function PrevencionMobileHome() {
               setSubFaenaMandante('')
               setSubInstalacion('')
             }}
-            placeholder="Elegir faena…"
+            placeholder={cargandoFaenas ? 'Cargando faenas…' : errorFaenas ? 'No se pudieron cargar las faenas' : 'Elegir faena…'}
+            disabled={cargandoFaenas}
             options={(faenas ?? []).map((f: any) => ({ value: f.id, label: f.nombre }))}
           />
+          {errorFaenas && (
+            <button type="button" onClick={() => recargarFaenas()}
+                    className="-mt-1 text-xs font-medium text-red-600 underline">
+              Sin conexión con el servidor · Reintentar
+            </button>
+          )}
           {lugares.length > 0 && (
             <>
               <Select
