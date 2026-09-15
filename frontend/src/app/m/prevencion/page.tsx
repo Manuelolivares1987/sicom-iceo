@@ -66,17 +66,29 @@ export default function PrevencionMobileHome() {
   const totalPersonas = (Number(subHombres) || 0) + (Number(subMujeres) || 0)
   // [MIG557] Centinela declara HH POR INSTALACIÓN: si la ficha de la faena
   // define instalaciones, la subida pide en cuál se trabajó.
+  // [MIG559] El E-200 va POR LUGAR: primero la faena del mandante (Centinela
+  // Sulfuros / Oxido / Encuentro) y después la instalación. Lo guardado sigue
+  // siendo la clave «Faena — Instalación» (así la lee la dotación y el E-200).
   const { data: subConfig } = useFaenaConfig(subFaena || null)
   const instalaciones: string[] = ((subConfig as any)?.instalaciones ?? [])
+  const detalleInst = ((subConfig as any)?.instalaciones_detalle ?? {}) as Record<string, Record<string, string>>
+  const lugares = instalaciones.map((clave) => {
+    const det = detalleInst[clave] ?? {}
+    const [f, i] = clave.split('—').map((s) => s.trim())
+    return { clave, faena: det.faena ?? f ?? clave, instalacion: det.nombre ?? i ?? clave }
+  })
+  const faenasMandante = Array.from(new Set(lugares.map((l) => l.faena)))
+  const [subFaenaMandante, setSubFaenaMandante] = useState('')
   const [subInstalacion, setSubInstalacion] = useState('')
+  const instalacionesDelMandante = lugares.filter((l) => l.faena === subFaenaMandante)
 
   const nombreFaena = (id: string) =>
     (faenas ?? []).find((f: any) => f.id === id)?.nombre ?? '—'
 
   const confirmarSubida = async () => {
     if (!subFaena) return toast.error('Elija la faena')
-    if (instalaciones.length > 0 && !subInstalacion) {
-      return toast.error('Elija la instalación donde trabajaron (el mandante declara por instalación)')
+    if (lugares.length > 0 && (!subFaenaMandante || !subInstalacion)) {
+      return toast.error('Elija la faena del mandante y la instalación (el E-200 se declara por lugar)')
     }
     if (totalPersonas < 1) return toast.error('Indique cuántas personas subieron (usted incluido)')
     try {
@@ -85,7 +97,7 @@ export default function PrevencionMobileHome() {
         fecha: subFecha,
         hombres: Number(subHombres) || 0,
         mujeres: Number(subMujeres) || 0,
-        instalacion: instalaciones.length > 0 ? subInstalacion : null,
+        instalacion: lugares.length > 0 ? subInstalacion : null,
       })
       toast.success(`Subida guardada: ${totalPersonas} personas = ${totalPersonas * 8} HH`)
       setSubidaOpen(false)
@@ -349,21 +361,40 @@ export default function PrevencionMobileHome() {
           <Select
             label="Faena que visitó"
             value={subFaena}
-            onChange={(e) => setSubFaena(e.target.value)}
+            onChange={(e) => {
+              setSubFaena(e.target.value)
+              // Las instalaciones son de cada faena: al cambiarla se limpian.
+              setSubFaenaMandante('')
+              setSubInstalacion('')
+            }}
             placeholder="Elegir faena…"
             options={(faenas ?? []).map((f: any) => ({ value: f.id, label: f.nombre }))}
           />
-          {instalaciones.length > 0 && (
-            <Select
-              label="Instalación donde trabajaron"
-              value={subInstalacion}
-              onChange={(e) => setSubInstalacion(e.target.value)}
-              placeholder="Elegir instalación…"
-              options={instalaciones.map((i) => ({ value: i, label: i }))}
-            />
+          {lugares.length > 0 && (
+            <>
+              <Select
+                label="Faena del mandante"
+                value={subFaenaMandante}
+                onChange={(e) => {
+                  setSubFaenaMandante(e.target.value)
+                  setSubInstalacion('')
+                }}
+                placeholder="Elegir faena del mandante…"
+                options={faenasMandante.map((f) => ({ value: f, label: f }))}
+              />
+              <Select
+                label="Instalación donde trabajaron"
+                value={subInstalacion}
+                onChange={(e) => setSubInstalacion(e.target.value)}
+                placeholder={subFaenaMandante ? 'Elegir instalación…' : 'Elija primero la faena del mandante'}
+                disabled={!subFaenaMandante}
+                options={instalacionesDelMandante.map((l) => ({ value: l.clave, label: l.instalacion }))}
+              />
+            </>
           )}
+          {/* [MIG559] Sin tope: el E-200 también se declara hacia adelante,
+              la dotación de días futuros se puede dejar registrada. */}
           <Input label="Fecha de la subida" type="date" value={subFecha}
-                 max={new Date().toISOString().slice(0, 10)}
                  onChange={(e) => setSubFecha(e.target.value)} />
           <div className="grid grid-cols-2 gap-3">
             <Input label="Hombres (usted incluido)" type="number" min={0} inputMode="numeric"

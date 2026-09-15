@@ -140,16 +140,25 @@ export function getFaenaTipos() {
  * le crean sus ítems de reportabilidad (MIG549 como ejemplo).
  */
 export async function getFaenasPrevencion() {
-  const [{ data: items, error: e1 }, { data: faenas, error }] = await Promise.all([
+  // [MIG559] La lista NO puede salir solo de prevencion_reportabilidad_items:
+  // su RLS pasa por el candado solo_su_faena y a un supervisor con el candado
+  // le dejaba UNA faena en el selector (y sin faena no hay chips de tarea).
+  // prevencion_faena_tipos se lee con puede_ver O puede_crear, sin candado:
+  // todo el que carga registros ve las faenas con prevención configurada.
+  const [{ data: tiposFaena, error: e1 }, { data: items }, { data: faenas, error }] = await Promise.all([
+    supabase.from('prevencion_faena_tipos').select('faena_id'),
     supabase.from('prevencion_reportabilidad_items').select('faena_id').eq('activo', true),
     supabase.from('faenas').select('id, nombre, codigo').order('nombre'),
   ])
   if (error || !faenas) return { data: [], error: error ?? e1 }
-  const conItems = new Set((items ?? []).map((i: any) => i.faena_id))
-  const conPersonal = faenas.filter((f: any) => conItems.has(f.id))
+  const conPrevencion = new Set([
+    ...(tiposFaena ?? []).map((i: any) => i.faena_id),
+    ...(items ?? []).map((i: any) => i.faena_id),
+  ])
+  const lista = faenas.filter((f: any) => conPrevencion.has(f.id))
   // Fallback: si el catálogo quedara vacío por error, mejor mostrar todo que
   // dejar el módulo ciego.
-  return { data: conPersonal.length ? conPersonal : faenas, error: null }
+  return { data: lista.length ? lista : faenas, error: null }
 }
 
 // ── Registros de terreno ─────────────────────────────────────────────────────
@@ -586,6 +595,11 @@ export interface FaenaConfigDatos {
   mandante?: Record<string, string>
   faena_nombre?: string
   instalacion?: Record<string, string>
+  // [MIG557/559] Faenas que declaran POR LUGAR (Centinela): la lista de
+  // instalaciones («Faena mandante — Instalación», es lo que guarda la
+  // dotación diaria) y el detalle que el E-200 pide por cada una.
+  instalaciones?: string[]
+  instalaciones_detalle?: Record<string, Record<string, string>>
   contrato?: Record<string, string>
   mutual?: string
   [k: string]: unknown
