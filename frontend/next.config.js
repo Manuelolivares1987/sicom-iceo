@@ -14,8 +14,25 @@ const withPWA = require('@ducanh2912/next-pwa').default({
   fallbacks: {
     document: '/offline/',
   },
+  // La regla por defecto del plugin ("cross-origin", NetworkFirst con 10 s de
+  // espera y 1 h de vida) guardaba TODAS las respuestas de Supabase por URL,
+  // sin distinguir usuario: /auth/v1/user, el perfil, los permisos y cada
+  // consulta REST quedaban en la caché del navegador y, con red lenta o caída,
+  // el SW entregaba la respuesta de otra sesión o una lista vacía vieja (el
+  // selector de faenas de /m/prevencion salió sin opciones el 15-09-2026).
+  // Las llamadas a la API van siempre a la red; sólo Storage (fotos, PDF)
+  // sigue con la regla por defecto. Las apps de terreno guardan su trabajo
+  // sin señal en IndexedDB, no en esta caché.
+  extendDefaultRuntimeCaching: true,
   workboxOptions: {
     disableDevLogs: true,
+    runtimeCaching: [
+      {
+        urlPattern: /^https:\/\/[a-z0-9-]+\.supabase\.co\/(rest|auth|functions|realtime|graphql)\//i,
+        handler: 'NetworkOnly',
+        options: { cacheName: 'supabase-api-sin-cache' },
+      },
+    ],
   },
 })
 

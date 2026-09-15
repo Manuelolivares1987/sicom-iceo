@@ -39,7 +39,7 @@ export function RegistroTerrenoForm({
 }) {
   const toast = useToast()
   const { data: tipos } = useActividadTipos()
-  const { data: faenas } = useFaenasPrevencion()
+  const { data: faenas, isPending: cargandoFaenas, isError: errorFaenas, refetch: recargarFaenas } = useFaenasPrevencion()
   const { data: faenaTipos } = useFaenaTipos()
   const crear = useCreateRegistro()
 
@@ -154,13 +154,22 @@ export function RegistroTerrenoForm({
 
   return (
     <div className="space-y-3">
+      {/* Una lista vacía sin explicación se lee como "no puedo elegir la faena".
+          Mientras carga lo dice, y si falló ofrece reintentar en vez de callar. */}
       <Select
         label="Faena"
         value={faenaId}
         onChange={(e) => elegirFaena(e.target.value)}
-        placeholder="Elegir faena…"
+        placeholder={cargandoFaenas ? 'Cargando faenas…' : errorFaenas ? 'No se pudieron cargar las faenas' : 'Elegir faena…'}
+        disabled={cargandoFaenas}
         options={(faenas ?? []).map((f: any) => ({ value: f.id, label: f.nombre }))}
       />
+      {errorFaenas && (
+        <button type="button" onClick={() => recargarFaenas()}
+                className="-mt-1 text-xs font-medium text-red-600 underline">
+          Sin conexión con el servidor · Reintentar
+        </button>
+      )}
 
       <div>
         <label className="mb-1.5 block text-sm font-medium text-gray-700">Tipo de actividad</label>
