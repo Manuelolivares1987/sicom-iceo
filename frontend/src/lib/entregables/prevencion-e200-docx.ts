@@ -32,11 +32,17 @@ export async function generarE200Docx(params: {
   anio: number
   mes: number
   faenaNombre: string
+  // [MIG559] E-200 POR LUGAR: cuando la faena declara por instalación
+  // (Centinela), estos tres mandan sobre la ficha general — nombre de la
+  // faena del mandante, ficha de la instalación y dotación/HH del lugar.
+  faenaMandante?: string
+  instalacion?: Record<string, string>
+  dotacion?: { dot_h: number; hh_h: number; dot_m: number; hh_m: number }
 }): Promise<Blob> {
   const { config, indicadores, anio, mes } = params
   const emp = config.empresa ?? {}
   const man = config.mandante ?? {}
-  const inst = config.instalacion ?? {}
+  const inst = params.instalacion ?? config.instalacion ?? {}
   const exp = config.experto ?? {}
 
   const res = await fetch('/plantillas/e200_plantilla.docx')
@@ -62,14 +68,16 @@ export async function generarE200Docx(params: {
     FONO_REP: emp.rep_legal_telefono ?? '', EMAIL_REP: emp.rep_legal_email ?? '',
     RUT_MAND: rutM, DV_MAND: dvM, RAZON_MAND: man.razon_social ?? '',
     REGION_MAND: man.region ?? '', FANTASIA_MAND: man.nombre_fantasia ?? '',
-    FAENA: config.faena_nombre || params.faenaNombre,
+    FAENA: params.faenaMandante || config.faena_nombre || params.faenaNombre,
     INSTALACION: inst.nombre ?? '', ESTADO_INST: inst.estado ?? '',
     REGION_INST: inst.region ?? '', PROV_INST: inst.provincia ?? '',
     COMUNA_INST: inst.comuna ?? '', TIPO_INST: inst.tipo ?? '',
     DATUM: inst.datum ?? '', HUSO: inst.huso ?? '', COTA: inst.cota ?? '',
     NORTE: inst.coord_norte ?? '', ESTE: inst.coord_este ?? '',
-    DOT_H: num(indicadores?.dotacion_hombres), HH_H: num(indicadores ? Number(indicadores.hh_hombres) : ''),
-    DOT_M: num(indicadores?.dotacion_mujeres), HH_M: num(indicadores ? Number(indicadores.hh_mujeres) : ''),
+    DOT_H: params.dotacion ? num(params.dotacion.dot_h) : num(indicadores?.dotacion_hombres),
+    HH_H: params.dotacion ? num(params.dotacion.hh_h) : num(indicadores ? Number(indicadores.hh_hombres) : ''),
+    DOT_M: params.dotacion ? num(params.dotacion.dot_m) : num(indicadores?.dotacion_mujeres),
+    HH_M: params.dotacion ? num(params.dotacion.hh_m) : num(indicadores ? Number(indicadores.hh_mujeres) : ''),
     DOT_SH: '0', HH_SH: '0', DOT_SM: '0', HH_SM: '0',
     RUN_EXP: dvX ? `${runX}-${dvX}` : runX,
     REG_EXP: exp.registro_sngm ?? '',

@@ -29,10 +29,12 @@ import { useAuth } from '@/contexts/auth-context'
 import { cn } from '@/lib/utils'
 import { RegistroTerrenoForm } from '@/components/prevencion/registro-terreno-form'
 import {
+  useActividadTipos,
   useAmbientalMes, useCerrarRegistro, useConsolidadoMes, useDesmarcarEnvio,
   useDotacionDetalleMes,
   useDotacionMensual, useFaenaConfig, useFaenasPrevencion, useIndicadoresAnio,
-  useMarcarEnviada, useMonitoreoMes, useRegistros, useSupervisoresAsignables,
+  useMarcarEnviada, useMarcarRevision, useMonitoreoMes, useRegistros,
+  useSupervisoresAsignables,
   useSupervisoresFaena, useToggleSupervisorFaena, useUpsertFaenaConfig,
   useUpsertIndicadores, useUpsertMeta,
 } from '@/hooks/use-prevencion-reportabilidad'
@@ -329,6 +331,22 @@ function TabRegistros({ faenaId, anio, mes, puedeAdmin, faenas }: {
   const [cerrandoId, setCerrandoId] = useState<string | null>(null)
   const [obsCierre, setObsCierre] = useState('')
   const [abiertoId, setAbiertoId] = useState<string | null>(null)
+  // [MIG561] Auditoría: prevención marca revisado con observación opcional.
+  const { data: tiposCatalogo } = useActividadTipos()
+  const revisar = useMarcarRevision()
+  const [revisandoId, setRevisandoId] = useState<string | null>(null)
+  const [obsRevision, setObsRevision] = useState('')
+
+  const confirmarRevision = async () => {
+    if (!revisandoId) return
+    try {
+      await revisar.mutateAsync({ id: revisandoId, revisado: true, observacion: obsRevision })
+      toast.success('Registro marcado como revisado')
+      setRevisandoId(null); setObsRevision('')
+    } catch (e: any) {
+      toast.error(e?.message ?? 'No se pudo marcar la revisión')
+    }
+  }
 
   const exportarCSV = () => {
     const filas = registros ?? []
@@ -337,12 +355,13 @@ function TabRegistros({ faenaId, anio, mes, puedeAdmin, faenas }: {
     const esc = (v: any) => `"${String(v ?? '').replace(/"/g, '""')}"`
     const csv = [
       ['Faena', 'Tipo', 'Fecha', 'Título', 'Descripción', 'Área', 'Estado',
-       'Fecha cierre', 'Supervisor', 'Evidencias'].join(';'),
+       'Fecha cierre', 'Supervisor', 'Evidencias', 'Revisado', 'Obs. revisión'].join(';'),
       ...filas.map((r) => [
         esc(faenaNombre), esc(r.tipo_codigo), esc(r.fecha_actividad), esc(r.titulo),
         esc(r.descripcion), esc(r.area_sector), esc(r.estado),
         esc(r.fecha_cierre?.slice(0, 10)), esc(r.supervisor_nombre),
         esc((r.evidencias ?? []).length),
+        esc(r.revisado ? 'sí' : 'no'), esc(r.revision_observacion),
       ].join(';')),
     ].join('\n')
     const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' })
@@ -377,12 +396,13 @@ function TabRegistros({ faenaId, anio, mes, puedeAdmin, faenas }: {
           Registros — {MESES[mes - 1]} {anio} ({registros?.length ?? 0})
         </CardTitle>
         <div className="flex flex-wrap items-center gap-2">
+          {/* [MIG561] El filtro sale del catálogo real: los tipos nuevos
+              (ART, EPF, PGR, ANEXO102…) también se auditan. */}
           <select className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
                   value={filtroTipo} onChange={(e) => setFiltroTipo(e.target.value)}>
             <option value="">Todos los tipos</option>
-            {['RIT', 'VAT', 'VCT', 'CHARLA', 'CAPACITACION', 'INSPECCION', 'OBSERVACION',
-              'SIMULACRO', 'CAMPANA', 'HS_SAFEWORK', 'GCOM'].map((t) => (
-              <option key={t} value={t}>{t}</option>
+            {(tiposCatalogo ?? []).map((t: any) => (
+              <option key={t.codigo} value={t.codigo}>{t.codigo}</option>
             ))}
           </select>
           <select className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
@@ -428,6 +448,12 @@ function TabRegistros({ faenaId, anio, mes, puedeAdmin, faenas }: {
                         <Paperclip className="h-3 w-3" />{r.evidencias.length}
                       </span>
                     )}
+                    {r.revisado && (
+                      <span className="shrink-0 rounded-full bg-blue-100 px-2 py-0.5 text-xs font-bold text-blue-700"
+                            title="Auditado por prevención">
+                        revisado
+                      </span>
+                    )}
                     <span className={cn(
                       'shrink-0 rounded-full px-2 py-0.5 text-xs font-bold',
                       r.estado === 'abierto' ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700',
@@ -461,11 +487,35 @@ function TabRegistros({ faenaId, anio, mes, puedeAdmin, faenas }: {
                           <Paperclip className="h-3 w-3" /> {ev.nombre}
                         </button>
                       ))}
-                      {puedeCerrar && (
-                        <div>
-                          <Button size="sm" variant="outline" onClick={() => setCerrandoId(r.id)}>
-                            <CheckCircle2 className="mr-1 h-4 w-4" /> Cerrar registro
-                          </Button>
+                      {r.revisado && r.revision_observacion && (
+                        <p className="rounded bg-blue-50 px-2 py-1 text-xs text-blue-800">
+                          <b>Observación de la revisión:</b> {r.revision_observacion}
+                        </p>
+                      )}
+                      {(puedeCerrar || puedeAdmin) && (
+                        <div className="flex flex-wrap gap-2">
+                          {puedeCerrar && (
+                            <Button size="sm" variant="outline" onClick={() => setCerrandoId(r.id)}>
+                              <CheckCircle2 className="mr-1 h-4 w-4" /> Cerrar registro
+                            </Button>
+                          )}
+                          {puedeAdmin && !r.revisado && (
+                            <Button size="sm" variant="outline" onClick={() => setRevisandoId(r.id)}>
+                              <Eye className="mr-1 h-4 w-4" /> Marcar revisado
+                            </Button>
+                          )}
+                          {puedeAdmin && r.revisado && (
+                            <Button size="sm" variant="outline"
+                                    disabled={revisar.isPending}
+                                    onClick={async () => {
+                                      try {
+                                        await revisar.mutateAsync({ id: r.id, revisado: false })
+                                        toast.success('Revisión retirada')
+                                      } catch (e: any) { toast.error(e?.message ?? 'No se pudo') }
+                                    }}>
+                              <Undo2 className="mr-1 h-4 w-4" /> Quitar revisión
+                            </Button>
+                          )}
                         </div>
                       )}
                     </div>
@@ -492,6 +542,26 @@ function TabRegistros({ faenaId, anio, mes, puedeAdmin, faenas }: {
               Cerrar registro
             </Button>
             <Button variant="outline" onClick={() => setCerrandoId(null)}>Cancelar</Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal open={!!revisandoId} onClose={() => setRevisandoId(null)}
+             title="Marcar como revisado" className="max-w-md">
+        <div className="space-y-3">
+          <label className="block text-sm font-medium text-gray-700">
+            Observación de la revisión (opcional — el supervisor la ve en su teléfono)
+          </label>
+          <textarea
+            className="min-h-[80px] w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+            placeholder="Ej: falta la firma en la foto 2; corregir y avisar"
+            value={obsRevision} onChange={(e) => setObsRevision(e.target.value)} />
+          <div className="flex gap-2">
+            <Button className="flex-1" onClick={confirmarRevision} disabled={revisar.isPending}>
+              {revisar.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Marcar revisado
+            </Button>
+            <Button variant="outline" onClick={() => setRevisandoId(null)}>Cancelar</Button>
           </div>
         </div>
       </Modal>

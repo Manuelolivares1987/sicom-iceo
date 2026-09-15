@@ -50,6 +50,47 @@ export async function generarEntregable(params: {
   const config: FaenaConfigDatos = (cfgRow?.datos as FaenaConfigDatos) ?? {}
 
   if (plantilla === 'e200') {
+    const { generarE200Docx } = await import('./prevencion-e200-docx')
+
+    // [MIG559] El E-200 va POR LUGAR: si la ficha de la faena declara
+    // instalaciones (Centinela), sale UN formulario por cada una — con la
+    // faena del mandante, la ficha geográfica del lugar y la dotación/HH que
+    // los supervisores subieron para esa instalación — empaquetados en ZIP.
+    const instalaciones = config.instalaciones ?? []
+    if (instalaciones.length > 0) {
+      onProgreso?.('Cargando dotación por instalación…')
+      const { data: porInst, error } = await getDotacionInstalacionMes(faenaId, anio, mes)
+      if (error) throw error
+      const dotPorLugar = new Map(
+        ((porInst ?? []) as DotacionInstalacion[]).map((d) => [d.instalacion, d]),
+      )
+      const detalle = config.instalaciones_detalle ?? {}
+      const JSZip = (await import('jszip')).default
+      const zip = new JSZip()
+      for (const clave of instalaciones) {
+        const det = detalle[clave] ?? {}
+        // Sin ficha detallada, la clave misma trae «Faena — Instalación».
+        const [fParte, iParte] = clave.split('—').map((s) => s.trim())
+        const nombreInst = det.nombre ?? iParte ?? clave
+        const faenaMandante = det.faena ?? fParte ?? faenaNombre
+        const d = dotPorLugar.get(clave)
+        onProgreso?.(`Rellenando E-200 de ${nombreInst}…`)
+        const blob = await generarE200Docx({
+          config, indicadores: null, anio, mes, faenaNombre,
+          faenaMandante,
+          instalacion: { ...det, nombre: nombreInst },
+          dotacion: {
+            dot_h: Number(d?.dotacion_max_hombres ?? 0), hh_h: Number(d?.hh_hombres ?? 0),
+            dot_m: Number(d?.dotacion_max_mujeres ?? 0), hh_m: Number(d?.hh_mujeres ?? 0),
+          },
+        })
+        zip.file(`Formulario_E-200_${slug(faenaMandante)}_${slug(nombreInst)}_${anio}-${mm}.docx`, blob)
+      }
+      onProgreso?.('Empaquetando los formularios…')
+      const blob = await zip.generateAsync({ type: 'blob' })
+      return { blob, filename: `Formularios_E-200_${slug(faenaNombre)}_${anio}-${mm}.zip` }
+    }
+
     onProgreso?.('Cargando indicadores del mes…')
     const { data: ind, error } = await getIndicadoresAnio(faenaId, anio)
     if (error) throw error
@@ -57,7 +98,6 @@ export async function generarEntregable(params: {
     // [MIG557] Se RELLENA el Word oficial del Gobierno (plantilla con
     // marcadores en /plantillas/) — sale idéntico al formato estatal.
     onProgreso?.('Rellenando el formulario oficial…')
-    const { generarE200Docx } = await import('./prevencion-e200-docx')
     const blob = await generarE200Docx({ config, indicadores: fila, anio, mes, faenaNombre })
     return { blob, filename: `Formulario_E-200_${slug(faenaNombre)}_${anio}-${mm}.docx` }
   }
