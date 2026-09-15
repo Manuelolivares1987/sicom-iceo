@@ -169,6 +169,7 @@ export async function getDetalleFiabilidadFlota(
     )
     .in('tipo', ['camion_cisterna', 'camion', 'camioneta', 'lubrimovil', 'equipo_menor'])
     .neq('estado', 'dado_baja')
+    .eq('es_prueba', false) // MIG529: el equipo de prueba no entra a ningún agregado de flota
     .order('patente')
 
   if (errActivos || !activos) return { data: [], error: errActivos }
