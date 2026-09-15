@@ -22,7 +22,12 @@ const GRIS = '444444'
 // ── La guía: estructura del formato real, sección por sección ───────────────
 // `constante` = lo que va cuando el mes no trae evidencia de esa subsección
 // (los "No aplica" del formato son permanentes por dotación < 25).
-type Sub = { num: string; titulo: string; constante?: string; siempreConstante?: boolean }
+// `permanente` = la diapositiva QUEDA INTACTA mes a mes (lista de Manuel
+// 2026-09-14: 2.1, 2.3, 2.4, 3.1-3.3, 4.1, 4.4, 4.5; 5.1-5.4 ya son
+// constantes): son documentos que no cambian — matriz legal, RIOHS,
+// acreditaciones — así que si el mes no trae carga nueva, la lámina repite
+// la última evidencia cargada en meses anteriores.
+type Sub = { num: string; titulo: string; constante?: string; siempreConstante?: boolean; permanente?: boolean }
 type Seccion = { titulo: string; subs: Sub[] }
 
 const SIN_EVIDENCIA = 'Sin actividades registradas para este punto durante el período.'
@@ -38,23 +43,23 @@ const ESTRUCTURA: Seccion[] = [
     { num: '1.6', titulo: 'Asistencia a las reuniones semanales del Asesor HS de la ESE' },
   ]},
   { titulo: '2.- Gestión de riesgos y aspectos legales', subs: [
-    { num: '2.1', titulo: 'Cumplimiento y actualización QRA (controles críticos, aprendizajes y eventos)' },
+    { num: '2.1', titulo: 'Cumplimiento y actualización QRA (controles críticos, aprendizajes y eventos)', permanente: true },
     { num: '2.2', titulo: 'Programa de difusión de los riesgos y sus controles y cartillas de controles críticos' },
-    { num: '2.3', titulo: 'Matriz legal actualizada (evidencia referencial del documento)' },
-    { num: '2.4', titulo: 'Reglamento interno de orden y seguridad' },
+    { num: '2.3', titulo: 'Matriz legal actualizada (evidencia referencial del documento)', permanente: true },
+    { num: '2.4', titulo: 'Reglamento interno de orden y seguridad', permanente: true },
   ]},
   { titulo: '3.- Competencia y entrenamiento', subs: [
-    { num: '3.1', titulo: 'Registro completado y aprobado, Anexo 6 LB-RG-SHS-ALL-0013 (acreditación Competencias HS por Rol)' },
-    { num: '3.2', titulo: 'Capacitaciones ingresadas a plataforma webcontrol verificables por código QR' },
-    { num: '3.3', titulo: 'Cumplimiento de programa de capacitaciones según Anexo 6 LB-RG-SHS-ALL-0013' },
+    { num: '3.1', titulo: 'Registro completado y aprobado, Anexo 6 LB-RG-SHS-ALL-0013 (acreditación Competencias HS por Rol)', permanente: true },
+    { num: '3.2', titulo: 'Capacitaciones ingresadas a plataforma webcontrol verificables por código QR', permanente: true },
+    { num: '3.3', titulo: 'Cumplimiento de programa de capacitaciones según Anexo 6 LB-RG-SHS-ALL-0013', permanente: true },
   ]},
   { titulo: '4.- Salud ocupacional', subs: [
-    { num: '4.1', titulo: 'Aspectos y evaluación de riesgos de higiene y salud ocupacional (QRA / Matriz SO)',
+    { num: '4.1', titulo: 'Aspectos y evaluación de riesgos de higiene y salud ocupacional (QRA / Matriz SO)', permanente: true,
       constante: 'Se tiene incorporado a QRA aspectos y evaluación de riesgos de higiene y salud ocupacional (Sílice, Ruido, etc.).' },
     { num: '4.2', titulo: 'Autoevaluación diagnóstica de protocolos MINSAL y plan de cierre de brechas' },
     { num: '4.3', titulo: 'Proceso de gestión de casos relacionados con alcohol y drogas' },
-    { num: '4.4', titulo: 'Plan para gestión de casos contraindicados o con observaciones (exámenes pre y ocupacionales)' },
-    { num: '4.5', titulo: 'Programa de higiene y salud ocupacional' },
+    { num: '4.4', titulo: 'Plan para gestión de casos contraindicados o con observaciones (exámenes pre y ocupacionales)', permanente: true },
+    { num: '4.5', titulo: 'Programa de higiene y salud ocupacional', permanente: true },
   ]},
   { titulo: '5.- Seguridad operativa', subs: [
     { num: '5.1', titulo: 'Acta de constitución CPHS', constante: NO_APLICA_25, siempreConstante: true },
@@ -127,6 +132,9 @@ async function pdfPrimeraPagina(blob: Blob): Promise<string | null> {
 
 export async function generarAnexo102Pptx(params: {
   registros: PrevencionRegistro[]   // registros del mes de la faena
+  // TODOS los ANEXO102 históricos de la faena: alimentan las láminas
+  // permanentes cuando el mes no trae carga nueva.
+  registrosHistoricos?: PrevencionRegistro[]
   faenaNombre: string               // «Lomas Bayas — Lubricantes» / «— Combustible»
   anio: number
   mes: number
@@ -137,13 +145,27 @@ export async function generarAnexo102Pptx(params: {
 
   // Evidencias por subsección: registros ANEXO102 cuyo título empieza con el
   // número («1.1.- …»). Otros registros con evidencia no entran: la guía manda.
+  const subDe = (r: PrevencionRegistro) =>
+    r.tipo_codigo === 'ANEXO102' ? (r.titulo.match(/^(\d+\.\d+)/)?.[1] ?? null) : null
   const porSub = new Map<string, PrevencionRegistro[]>()
   for (const r of registros) {
-    if (r.tipo_codigo !== 'ANEXO102') continue
-    const m = r.titulo.match(/^(\d+\.\d+)/)
-    if (!m) continue
-    if (!porSub.has(m[1])) porSub.set(m[1], [])
-    porSub.get(m[1])!.push(r)
+    const num = subDe(r)
+    if (!num) continue
+    if (!porSub.has(num)) porSub.set(num, [])
+    porSub.get(num)!.push(r)
+  }
+
+  // Las láminas permanentes QUEDAN INTACTAS: sin carga nueva este mes, se
+  // repite el último registro cargado de esa subsección (de cualquier mes).
+  const historicos = params.registrosHistoricos ?? []
+  for (const sec of ESTRUCTURA) {
+    for (const sub of sec.subs) {
+      if (!sub.permanente || (porSub.get(sub.num)?.length ?? 0) > 0) continue
+      const ultimo = historicos
+        .filter((r) => subDe(r) === sub.num)
+        .sort((a, b) => b.fecha_actividad.localeCompare(a.fecha_actividad))[0]
+      if (ultimo) porSub.set(sub.num, [ultimo])
+    }
   }
 
   const pptx = new PptxGenJS()
