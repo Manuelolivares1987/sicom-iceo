@@ -52,6 +52,7 @@ import {
   Archive,
   Wallet,
   FileWarning,
+  PackagePlus,
 } from 'lucide-react'
 import { useNcPorDecidir } from '@/hooks/use-nc-por-decidir'
 import { cn } from '@/lib/utils'
@@ -305,6 +306,8 @@ const navGroups: NavGroup[] = [
       // permiso de bodega. Es la única entrada que tiene oficina (MIG374).
       { label: 'Pedir a bodega', href: '/dashboard/bodega/pedir', icon: PackageSearch, badge: 'Nuevo',
         tooltip: 'Pedir útiles, tóner, insumos de aseo o cualquier artículo que no venga de un hallazgo ni de una orden de trabajo' },
+      { label: 'Ingresar mercadería', href: '/dashboard/bodega/ingreso', icon: PackagePlus, extendedModule: 'bodega', badge: 'Nuevo',
+        tooltip: 'Llegó una factura o guía: proveedor, documento, productos → stock. Sin orden de compra' },
       { label: 'Panel Bodega', href: '/dashboard/inventario', icon: Package, extendedModule: 'bodega',
         tooltip: 'Stock, compras, salidas, combustible y reportes — todo en un solo panel' },
       { label: 'Pedidos a bodega', href: '/dashboard/bodega/tickets', icon: Ticket, extendedModule: 'bodega', badge: 'Nuevo',
