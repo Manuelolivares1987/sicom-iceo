@@ -41,6 +41,7 @@ import {
   type ProveedorBusqueda, type ProductoBusqueda, type DocTipo, type IngresoResult,
 } from '@/lib/services/bodega-ingreso'
 import { cn, formatCLP } from '@/lib/utils'
+import { RUBROS, rubroCorto, tipoDeRubro } from '@/lib/bodega-rubros'
 
 const ROLES_INGRESO = ['administrador', 'subgerente_operaciones', 'jefe_mantenimiento', 'supervisor',
   'operador_abastecimiento', 'bodeguero']
@@ -84,6 +85,7 @@ export default function IngresoBodegaPage() {
   const [crearProv, setCrearProv] = useState(false)
   const [nuevoProvNombre, setNuevoProvNombre] = useState('')
   const [nuevoProvRut, setNuevoProvRut] = useState('')
+  const [nuevoProvRubro, setNuevoProvRubro] = useState('Repuestos, automotriz y maquinaria')
   const [docTipo, setDocTipo] = useState<DocTipo>('factura')
   const [docNumero, setDocNumero] = useState('')
   const [docFecha, setDocFecha] = useState(hoy())
@@ -150,8 +152,8 @@ export default function IngresoBodegaPage() {
     if (rut && !rutValido(rut)) { toast.error('El RUT no cuadra (revisa el dígito verificador)'); return }
     setBusy(true)
     try {
-      const r = await crearProveedorRapido(nuevoProvNombre.trim(), rut || null)
-      setProveedor({ id: r.proveedor_id, codigo: r.codigo ?? '', nombre: nuevoProvNombre.trim().toUpperCase(), rut: rut ? formatearRut(rut) : null, tipo: 'otros' })
+      const r = await crearProveedorRapido(nuevoProvNombre.trim(), rut || null, tipoDeRubro(nuevoProvRubro), nuevoProvRubro)
+      setProveedor({ id: r.proveedor_id, codigo: r.codigo ?? '', nombre: nuevoProvNombre.trim().toUpperCase(), rut: rut ? formatearRut(rut) : null, tipo: tipoDeRubro(nuevoProvRubro), rubro: nuevoProvRubro, giro: null })
       toast.success(r.existia ? 'Ese proveedor ya existía: quedó seleccionado' : 'Proveedor creado')
       setCrearProv(false); setNuevoProvNombre(''); setNuevoProvRut('')
     } catch (e) { toast.error(e instanceof Error ? e.message : 'No se pudo crear el proveedor') }
@@ -252,6 +254,7 @@ export default function IngresoBodegaPage() {
           <PackagePlus className="h-6 w-6 text-emerald-700" /> Ingresar mercadería
         </h1>
         <span className="text-sm text-gray-500">Factura o guía en mano → stock. Sin orden de compra.</span>
+        <Link href="/dashboard/bodega/proveedores" className="ml-auto text-xs text-sky-700 underline">Lista de proveedores</Link>
       </div>
 
       {!puede && (
@@ -301,7 +304,10 @@ export default function IngresoBodegaPage() {
             {proveedor ? (
               <div className="mt-1 flex items-center gap-3 rounded-lg border-2 border-emerald-500 bg-emerald-50 px-3 py-2">
                 <Building2 className="h-4 w-4 shrink-0 text-emerald-700" />
-                <span className="min-w-0 flex-1 truncate font-bold text-gray-800">{proveedor.nombre}</span>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate font-bold text-gray-800">{proveedor.nombre}</div>
+                  <div className="truncate text-[11px] text-gray-500">{rubroCorto(proveedor.rubro)}{proveedor.giro ? ` · ${proveedor.giro}` : ''}</div>
+                </div>
                 <span className="text-xs text-gray-500">{proveedor.rut ?? proveedor.codigo}</span>
                 <button type="button" onClick={() => setProveedor(null)} aria-label="Cambiar proveedor" className="text-gray-500 hover:text-gray-800">
                   <X className="h-4 w-4" />
@@ -318,7 +324,10 @@ export default function IngresoBodegaPage() {
                     {provs.map((p) => (
                       <button key={p.id} type="button" onClick={() => elegirProveedor(p)}
                               className="flex w-full items-center gap-3 border-b border-gray-100 px-3 py-2 text-left hover:bg-emerald-50">
-                        <span className="min-w-0 flex-1 truncate text-sm font-medium text-gray-800">{p.nombre}</span>
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-sm font-medium text-gray-800">{p.nombre}</div>
+                          <div className="truncate text-[11px] text-gray-500">{rubroCorto(p.rubro)}{p.giro ? ` · ${p.giro}` : ''}</div>
+                        </div>
                         <span className="shrink-0 text-xs text-gray-500">{p.rut ?? p.codigo}</span>
                       </button>
                     ))}
@@ -334,10 +343,13 @@ export default function IngresoBodegaPage() {
               </div>
             )}
             {crearProv && !proveedor && (
-              <div className="mt-2 grid gap-2 rounded-lg border border-dashed border-emerald-400 bg-emerald-50/50 p-3 md:grid-cols-[1fr_180px_auto]">
+              <div className="mt-2 grid gap-2 rounded-lg border border-dashed border-emerald-400 bg-emerald-50/50 p-3 md:grid-cols-[1fr_160px_190px_auto]">
                 <Input value={nuevoProvNombre} onChange={(e) => setNuevoProvNombre(e.target.value)} placeholder="Razón social (como en la factura)" />
                 <Input value={nuevoProvRut} onChange={(e) => setNuevoProvRut(e.target.value)} placeholder="RUT 76.123.456-7"
                        className={cn(nuevoProvRut.trim() && !rutValido(nuevoProvRut) && 'border-red-400')} />
+                <select value={nuevoProvRubro} onChange={(e) => setNuevoProvRubro(e.target.value)} className="h-10 rounded-md border border-gray-300 bg-white px-2 text-sm" aria-label="Rubro">
+                  {RUBROS.map((r) => <option key={r.rubro} value={r.rubro}>{r.rubro}</option>)}
+                </select>
                 <div className="flex gap-2">
                   <Button type="button" size="sm" onClick={crearProveedor} disabled={busy}>Crear</Button>
                   <Button type="button" size="sm" variant="outline" onClick={() => setCrearProv(false)}>Cancelar</Button>

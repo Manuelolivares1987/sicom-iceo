@@ -11,6 +11,7 @@
 // ============================================================================
 
 import { supabase } from '@/lib/supabase'
+import { RUBROS_BODEGA } from '@/lib/bodega-rubros'
 
 export type DocTipo = 'factura' | 'guia' | 'boleta' | 'vale' | 'otro'
 
@@ -20,7 +21,18 @@ export interface ProveedorBusqueda {
   nombre: string
   rut: string | null
   tipo: string
+  rubro: string | null
+  giro: string | null
+  es_persona_natural?: boolean
+  activo?: boolean
+  contacto?: string | null
+  telefono?: string | null
+  email?: string | null
+  rubro_fuente?: string | null
+  rubro_confianza?: string | null
 }
+
+const PROV_COLS = 'id, codigo, nombre, rut, tipo, rubro, giro, es_persona_natural, activo, contacto, telefono, email, rubro_fuente, rubro_confianza'
 
 export interface ProductoBusqueda {
   id: string
@@ -92,30 +104,85 @@ export async function buscarProveedores(q: string, limit = 15): Promise<Proveedo
   const t = esc(q)
   if (!t) return []
   const rutNorm = t.replace(/[^0-9kK]/g, '')
-  let query = supabase.from('proveedores').select('id, codigo, nombre, rut, tipo').eq('activo', true)
+  let query = supabase.from('proveedores').select(PROV_COLS).eq('activo', true)
   // Si escribió un RUT (solo dígitos), buscar por código (= RUT sin DV) o por el RUT formateado.
   if (rutNorm.length >= 5 && /^[0-9kK]+$/.test(t.replace(/[.\-\s]/g, ''))) {
     const sinDv = rutNorm.length >= 8 ? rutNorm.slice(0, -1) : rutNorm
     query = query.or(`codigo.ilike.${sinDv}%,codigo.ilike.${rutNorm}%,nombre.ilike.%${t}%`)
   } else {
-    query = query.ilike('nombre', `%${t}%`)
+    // Nombre o giro: "neumáticos" encuentra a la vulcanización aunque el nombre no lo diga.
+    query = query.or(`nombre.ilike.%${t}%,giro.ilike.%${t}%`)
   }
-  const { data, error } = await query.order('nombre').limit(limit)
+  const { data, error } = await query.order('nombre').limit(limit * 2)
   if (error) throw error
-  return (data ?? []) as ProveedorBusqueda[]
+  const rows = (data ?? []) as ProveedorBusqueda[]
+  // Primero los que calzan por nombre y son del giro de bodega; después el resto.
+  const tl = t.toLowerCase()
+  const score = (p: ProveedorBusqueda) =>
+    (p.nombre.toLowerCase().includes(tl) ? 0 : 2) + (RUBROS_BODEGA.has(p.rubro ?? '') ? 0 : 1)
+  return rows.sort((a, b) => score(a) - score(b) || a.nombre.localeCompare(b.nombre)).slice(0, limit)
 }
 
-export async function crearProveedorRapido(nombre: string, rut: string | null, tipo = 'otros') {
+export async function crearProveedorRapido(nombre: string, rut: string | null, tipo = 'otros', rubro: string | null = null, giro: string | null = null) {
   const { data, error } = await supabase.rpc('rpc_proveedor_rapido', {
-    p_nombre: nombre, p_rut: rut, p_tipo: tipo,
+    p_nombre: nombre, p_rut: rut, p_tipo: tipo, p_rubro: rubro, p_giro: giro,
   })
   if (error) throw error
   return data as { success: boolean; proveedor_id: string; existia: boolean; codigo?: string }
 }
 
 export async function getProveedorById(id: string): Promise<ProveedorBusqueda | null> {
-  const { data } = await supabase.from('proveedores').select('id, codigo, nombre, rut, tipo').eq('id', id).maybeSingle()
+  const { data } = await supabase.from('proveedores').select(PROV_COLS).eq('id', id).maybeSingle()
   return (data as ProveedorBusqueda | null) ?? null
+}
+
+// ── Lista de proveedores (pantalla /dashboard/bodega/proveedores) ────────────
+
+export interface FiltroProveedores {
+  q?: string
+  rubro?: string | null
+  soloActivos?: boolean
+  soloRevisar?: boolean   // confianza baja o media: lo que conviene mirar a mano
+  limit?: number
+  offset?: number
+}
+
+export async function listarProveedores(f: FiltroProveedores): Promise<{ rows: ProveedorBusqueda[]; total: number }> {
+  let query = supabase.from('proveedores').select(PROV_COLS, { count: 'exact' })
+  if (f.soloActivos !== false) query = query.eq('activo', true)
+  if (f.rubro) query = query.eq('rubro', f.rubro)
+  if (f.soloRevisar) query = query.in('rubro_confianza', ['baja', 'media'])
+  const t = esc(f.q ?? '')
+  if (t) query = query.or(`nombre.ilike.%${t}%,giro.ilike.%${t}%,rut.ilike.%${t}%,codigo.ilike.%${t}%`)
+  const { data, error, count } = await query.order('nombre').range(f.offset ?? 0, (f.offset ?? 0) + (f.limit ?? 50) - 1)
+  if (error) throw error
+  return { rows: (data ?? []) as ProveedorBusqueda[], total: count ?? 0 }
+}
+
+export async function contarProveedoresPorRubro(): Promise<Record<string, number>> {
+  // Agregado en la BD: leer las filas cortaba en 1.000 y los totales salían mal.
+  const { data, error } = await supabase.from('v_proveedores_por_rubro').select('rubro, n')
+  if (error) throw error
+  const out: Record<string, number> = {}
+  for (const r of (data ?? []) as Array<{ rubro: string; n: number }>) out[r.rubro] = r.n
+  return out
+}
+
+export interface ProveedorPatch {
+  nombre?: string; rut?: string | null; tipo?: string; rubro?: string; giro?: string | null
+  contacto?: string | null; telefono?: string | null; email?: string | null; activo?: boolean
+}
+
+export async function actualizarProveedor(id: string, patch: ProveedorPatch) {
+  const { data, error } = await supabase.rpc('rpc_proveedor_actualizar', {
+    p_id: id,
+    p_nombre: patch.nombre ?? null, p_rut: patch.rut ?? null, p_tipo: patch.tipo ?? null,
+    p_rubro: patch.rubro ?? null, p_giro: patch.giro ?? null,
+    p_contacto: patch.contacto ?? null, p_telefono: patch.telefono ?? null, p_email: patch.email ?? null,
+    p_activo: patch.activo ?? null,
+  })
+  if (error) throw error
+  return data as { success: boolean }
 }
 
 export async function buscarProductos(q: string, limit = 20): Promise<ProductoBusqueda[]> {
