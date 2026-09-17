@@ -1,6 +1,7 @@
 // Recursos (repuestos/materiales) que el operador de taller pide para reparar
 // una OT y que el jefe valida antes de emitir el vale de bodega (MIG197).
 import { supabase } from '@/lib/supabase'
+import { subirEvidencia } from '@/lib/image/evidencia'
 import { subirFirmaTicket } from './bodega-tickets'
 
 export type OTRecursoEstado = 'solicitado' | 'aprobado' | 'rechazado' | 'en_compra' | 'recibido' | 'en_vale'
@@ -180,14 +181,7 @@ export async function solicitarRecurso(params: {
 
 /** Sube una foto del repuesto solicitado (mismo bucket de evidencias del checklist). */
 export async function subirFotoRecurso(otId: string, file: File | Blob): Promise<string> {
-  const BUCKET = 'evidencias-verificacion'
-  const ext = (file as File).name?.split('.').pop()?.toLowerCase() ?? 'jpg'
-  const path = `ot-recursos/${otId}/${Date.now()}_${Math.floor(Math.random() * 1e6)}.${ext}`
-  const { error } = await supabase.storage
-    .from(BUCKET)
-    .upload(path, file, { upsert: false, contentType: (file as File).type || 'image/jpeg' })
-  if (error) throw error
-  return supabase.storage.from(BUCKET).getPublicUrl(path).data.publicUrl
+  return subirEvidencia('evidencias-verificacion', `ot-recursos/${otId}/foto`, file)
 }
 
 export async function validarRecurso(params: {

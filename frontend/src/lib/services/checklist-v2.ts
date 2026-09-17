@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase'
+import { subirEvidencia } from '@/lib/image/evidencia'
 
 /** Bucket existente para fotos de verificacion/recepcion (MIG46). */
 export const CHECKLIST_BUCKET_FOTOS  = 'evidencias-verificacion'
@@ -258,16 +259,8 @@ export async function subirFotoItem(
   itemId: string,
   file: File | Blob,
 ): Promise<string> {
-  const ext  = (file as File).name?.split('.').pop()?.toLowerCase() ?? 'jpg'
-  // Sufijo aleatorio: varias fotos del mismo ítem pueden subirse en el mismo ms.
-  const rnd  = Math.random().toString(36).slice(2, 8)
-  const path = `checklist-v2/${instanceId}/${itemId}_${Date.now()}_${rnd}.${ext}`
-  const { error } = await supabase.storage
-    .from(CHECKLIST_BUCKET_FOTOS)
-    .upload(path, file, { upsert: false, contentType: (file as File).type || 'image/jpeg' })
-  if (error) throw error
-  const { data } = supabase.storage.from(CHECKLIST_BUCKET_FOTOS).getPublicUrl(path)
-  return data.publicUrl
+  // Convierte a JPEG antes de subir: la HEIC del iPhone rebotaba (subirEvidencia).
+  return subirEvidencia(CHECKLIST_BUCKET_FOTOS, `checklist-v2/${instanceId}/${itemId}`, file)
 }
 
 /**

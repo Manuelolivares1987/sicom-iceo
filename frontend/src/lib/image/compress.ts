@@ -23,8 +23,12 @@ export async function compressImage(
   const mimeType = opts.mimeType ?? 'image/jpeg'
   const skipUnderBytes = opts.skipUnderBytes ?? 350_000
 
-  if (!input.type.startsWith('image/')) return input
+  // Tipo vacío: el iPhone a veces no informa el de una HEIC; se intenta igual.
+  if (input.type && !input.type.startsWith('image/')) return input
   if (input.size <= skipUnderBytes && input.type === mimeType) return input
+  // HEIC y otros formatos que el navegador del PC no muestra (ni el bucket
+  // acepta) se convierten siempre, aunque el JPEG pese más que el original.
+  const formatoWeb = ['image/jpeg', 'image/png', 'image/webp'].includes(input.type)
 
   const bitmap = await loadBitmap(input)
   if (!bitmap) return input
@@ -44,7 +48,7 @@ export async function compressImage(
     const out = await encodeToBlob(bitmap, w, h, mimeType, quality)
     closeBitmap(bitmap)
     if (!out) return input
-    return out.size < input.size ? out : input
+    return !formatoWeb || out.size < input.size ? out : input
   } catch {
     closeBitmap(bitmap)
     return input
