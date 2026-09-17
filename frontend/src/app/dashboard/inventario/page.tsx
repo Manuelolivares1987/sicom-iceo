@@ -33,6 +33,7 @@ import {
   Repeat,
   ArrowRightLeft,
   PackageSearch,
+  PackagePlus,
 } from 'lucide-react'
 import { QuickActionsGrid } from '@/components/ui/quick-actions-grid'
 import { ProyeccionStockCard } from '@/components/combustible/proyeccion-stock-card'
@@ -262,7 +263,8 @@ export default function InventarioPage() {
         title="Compras y recepciones"
         cols={4}
         actions={[
-          { label: 'Nueva OC',           description: 'Crear orden de compra interna',  href: '/dashboard/abastecimiento/oc/nueva',      icon: Plus,            accent: 'green' },
+          { label: 'Ingresar mercadería', description: 'Factura o guía en mano → stock, sin OC', href: '/dashboard/bodega/ingreso',          icon: PackagePlus,     accent: 'green', badge: 'Nuevo' },
+          { label: 'Nueva OC',           description: 'Crear orden de compra interna',  href: '/dashboard/abastecimiento/oc/nueva',      icon: Plus,            accent: 'slate' },
           { label: 'Importar OC (PDF)',  description: 'Cargar OC externa desde PDF',    href: '/dashboard/abastecimiento/oc/importar',   icon: FileSpreadsheet, accent: 'blue' },
           { label: 'Listado OCs',        description: 'Ver y recepcionar OCs',          href: '/dashboard/abastecimiento/oc',            icon: FileText,        accent: 'amber' },
           { label: 'Seguimiento repuestos', description: 'Pedidos del taller sin stock → solicitud OC → llegada', href: '/dashboard/bodega/seguimiento-repuestos', icon: PackageSearch, accent: 'purple', badge: 'Nuevo' },
