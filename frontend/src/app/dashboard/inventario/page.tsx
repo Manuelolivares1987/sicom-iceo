@@ -34,6 +34,7 @@ import {
   ArrowRightLeft,
   PackageSearch,
   PackagePlus,
+  Building2,
 } from 'lucide-react'
 import { QuickActionsGrid } from '@/components/ui/quick-actions-grid'
 import { ProyeccionStockCard } from '@/components/combustible/proyeccion-stock-card'
@@ -320,6 +321,7 @@ export default function InventarioPage() {
         title="Administración"
         cols={3}
         actions={[
+          { label: 'Proveedores',       description: 'Lista por rubro: qué vende cada uno, corregir datos', href: '/dashboard/bodega/proveedores', icon: Building2, accent: 'blue', badge: 'Nuevo' },
           { label: 'Corregir ingreso',  description: 'Anular ingreso combustible mal cargado', href: '/dashboard/combustible/corregir-ingreso', icon: Ban,            accent: 'red',   badge: 'Admin' },
           { label: 'Costos FIFO',       description: 'Corregir el costo de las capas semilla ($1)', href: '/dashboard/inventario/costos-fifo',  icon: DollarSign,     accent: 'green', badge: 'Admin' },
           { label: 'Cargar maestro',    description: 'Importar productos desde Excel',         href: '/dashboard/inventario/cargar-maestro',    icon: FileSpreadsheet, accent: 'slate', badge: 'Admin' },
