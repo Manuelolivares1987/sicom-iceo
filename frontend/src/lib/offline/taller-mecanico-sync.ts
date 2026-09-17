@@ -427,7 +427,10 @@ export async function syncTallerPending(): Promise<{ ok: number; failed: number 
         if (blobIds.length && p.instance_id && p.instance_item_id) {
           for (const bid of blobIds) {
             const b = await db.blobs.get(bid)
-            if (b) nuevasUrls.push(await subirFotoItem(p.instance_id, p.instance_item_id, b.blob))
+            // Antes una foto que ya no estaba en el teléfono se saltaba en
+            // silencio: el resultado subía y la foto se perdía sin aviso.
+            if (!b) throw new Error('La foto ya no está guardada en el teléfono: vuelve a tomarla y descarta este pendiente.')
+            nuevasUrls.push(await subirFotoItem(p.instance_id, p.instance_item_id, b.blob))
           }
         }
         // [MIG496] Firmas del cierre de recepción: subir y anotar la URL en
@@ -551,6 +554,25 @@ export async function syncTallerPending(): Promise<{ ok: number; failed: number 
 
 export async function getPendingCount(): Promise<number> {
   return tallerDB().pending.count()
+}
+
+/** Lo que falta subir de una OT, con el último error de cada cambio. */
+export async function getPendientesOT(otId: string): Promise<TallerPending[]> {
+  const rows = await tallerDB().pending.where('ot_id').equals(otId).toArray()
+  return rows.sort((a, b) => a.created_at.localeCompare(b.created_at))
+}
+
+/** Descarta un cambio que no va a poder subir nunca (y sus fotos locales). */
+export async function descartarPendiente(localId: string): Promise<void> {
+  const db = tallerDB()
+  const p = await db.pending.get(localId)
+  if (!p) return
+  const blobs = [
+    ...(p.fotos_blob_ids ?? []), p.foto_blob_id, p.firma_blob_id,
+    ...(p.firmas_blob_ids ?? []).map((f) => f.blob_id),
+  ].filter((x): x is string => !!x)
+  for (const bid of blobs) await db.blobs.delete(bid)
+  await db.pending.delete(localId)
 }
 
 /** Pre-cachea la lista y el checklist de cada OT para operar sin internet. */

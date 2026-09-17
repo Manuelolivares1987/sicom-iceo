@@ -8,6 +8,7 @@ import type { MedicionItem } from '@/lib/services/taller-plan-semanal'
 import { quitarFotoItem } from '@/lib/services/checklist-v2'
 import {
   getOTs, getChecklistMecanico, queueItem, queueTiming, syncTallerPending, getPendingCount,
+  getPendientesOT, descartarPendiente,
   prepareTallerOffline, getRecursosMecanico, queueRecurso,
   getNotasMecanico, queueNota, type MecanicoOT,
 } from '@/lib/offline/taller-mecanico-sync'
@@ -44,6 +45,28 @@ export function usePendingCount(autoRefreshMs = 4000) {
     queryFn: getPendingCount,
     networkMode: 'always',
     refetchInterval: autoRefreshMs,
+  })
+}
+
+/** Cambios de ESTA OT que siguen en el teléfono (con su error, si rebotaron). */
+export function usePendientesOT(otId: string, autoRefreshMs = 4000) {
+  return useQuery({
+    queryKey: [...KEY_PENDING, otId],
+    queryFn: () => getPendientesOT(otId),
+    networkMode: 'always',
+    refetchInterval: autoRefreshMs,
+  })
+}
+
+export function useDescartarPendiente(otId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    networkMode: 'always',
+    mutationFn: descartarPendiente,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: KEY_PENDING })
+      qc.invalidateQueries({ queryKey: keyChecklist(otId) })
+    },
   })
 }
 

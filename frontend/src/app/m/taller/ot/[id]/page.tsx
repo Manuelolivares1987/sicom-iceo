@@ -25,6 +25,7 @@ import {
   useAutoSyncTaller, useNetworkStatus, useRecursosOT, useSolicitarRecurso,
   useNotasOT, useAgregarNota,
   useMedidoresOT, useGuardarMedidores,
+  usePendientesOT, useDescartarPendiente, useSyncTaller,
 } from '@/hooks/use-taller-mecanico'
 
 function dataUrlToBlob(dataUrl: string): Blob {
@@ -873,6 +874,70 @@ function NotasSection({ otId }: { otId: string }) {
   )
 }
 
+/**
+ * Lo que sigue en el teléfono sin llegar al servidor. En la app las fotos
+ * pendientes se ven igual que las subidas (se muestran desde el teléfono), así
+ * que si la subida rebota nadie se entera — y en el PC no aparece nada.
+ * OT-202609-00037 (iPhone, 2026-09-17) fue exactamente eso.
+ */
+function PendientesSubida({ otId, items }: { otId: string; items: ChecklistV3Item[] }) {
+  const { data: pend = [] } = usePendientesOT(otId)
+  const sync = useSyncTaller()
+  const descartar = useDescartarPendiente(otId)
+  const [confirmar, setConfirmar] = useState<string | null>(null)
+  if (pend.length === 0) return null
+
+  const fotos = pend.reduce((n, p) => n + (p.fotos_blob_ids?.length ?? (p.foto_blob_id ? 1 : 0)), 0)
+  const errores = pend.filter((p) => p.sync_status === 'error')
+  const nombreItem = (id?: string) => {
+    const it = items.find((i) => i.instance_item_id === id)
+    return it ? `${it.codigo ? `${it.codigo} · ` : ''}${it.descripcion}` : 'Cambio de la OT'
+  }
+
+  return (
+    <div className={`rounded-xl border p-3 text-sm ${errores.length ? 'border-red-300 bg-red-50' : 'border-amber-300 bg-amber-50'}`}>
+      <div className="flex items-start gap-2">
+        <AlertTriangle className={`mt-0.5 h-4 w-4 shrink-0 ${errores.length ? 'text-red-600' : 'text-amber-600'}`} />
+        <div className="min-w-0 flex-1">
+          <p className={`font-semibold ${errores.length ? 'text-red-800' : 'text-amber-800'}`}>
+            {pend.length} cambio{pend.length === 1 ? '' : 's'}{fotos ? ` (${fotos} foto${fotos === 1 ? '' : 's'})` : ''} todavía en este teléfono
+          </p>
+          <p className="text-xs text-gray-600">
+            No han llegado al sistema: en el PC no se ven. No cierres sesión ni borres los datos del navegador hasta que suban.
+          </p>
+        </div>
+      </div>
+      {errores.length > 0 && (
+        <ul className="mt-2 space-y-1.5">
+          {errores.map((p) => (
+            <li key={p.local_id} className="rounded-lg border border-red-200 bg-white px-2.5 py-2 text-xs">
+              <div className="font-medium text-gray-800">{nombreItem(p.instance_item_id)}</div>
+              <div className="mt-0.5 break-words text-red-700">{p.last_error ?? 'Error desconocido'}</div>
+              <div className="mt-1.5 flex justify-end">
+                {confirmar === p.local_id ? (
+                  <span className="flex items-center gap-2">
+                    <span className="text-gray-600">¿Descartar? Se pierde lo que no subió.</span>
+                    <button type="button" onClick={() => { descartar.mutate(p.local_id); setConfirmar(null) }}
+                            className="rounded-md bg-red-600 px-2 py-1 font-semibold text-white">Sí, descartar</button>
+                    <button type="button" onClick={() => setConfirmar(null)} className="px-1 text-gray-500">No</button>
+                  </span>
+                ) : (
+                  <button type="button" onClick={() => setConfirmar(p.local_id)} className="text-gray-500 underline">Descartar</button>
+                )}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+      <button type="button" onClick={() => sync.mutate()} disabled={sync.isPending}
+              className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg bg-gray-900 py-2 text-xs font-semibold text-white disabled:opacity-50">
+        {sync.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+        Subir ahora
+      </button>
+    </div>
+  )
+}
+
 export default function MecanicoOTPage() {
   useAutoSyncTaller()
   const params = useParams()
@@ -1081,6 +1146,8 @@ export default function MecanicoOTPage() {
           </Link>
         )}
       </div>
+
+      <PendientesSubida otId={otId} items={items ?? []} />
 
       {/* Cabecera */}
       <div className="rounded-xl border border-gray-200 bg-white p-3">

@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase'
+import { subirEvidencia } from '@/lib/image/evidencia'
 
 // Notas con foto del operador como anexo de la OT (MIG249). Se guardan en
 // evidencias_ot con tipo='nota'; el jefe las ve en la pestaña Evidencias.
@@ -79,14 +80,7 @@ function mapNota(r: any): OTNota {
 
 /** Sube una foto de la nota (mismo bucket de evidencias del checklist). */
 export async function subirFotoNota(otId: string, file: File | Blob): Promise<string> {
-  const BUCKET = 'evidencias-verificacion'
-  const ext = (file as File).name?.split('.').pop()?.toLowerCase() ?? 'jpg'
-  const path = `ot-notas/${otId}/${Date.now()}_${Math.floor(Math.random() * 1e6)}.${ext}`
-  const { error } = await supabase.storage
-    .from(BUCKET)
-    .upload(path, file, { upsert: false, contentType: (file as File).type || 'image/jpeg' })
-  if (error) throw error
-  return supabase.storage.from(BUCKET).getPublicUrl(path).data.publicUrl
+  return subirEvidencia('evidencias-verificacion', `ot-notas/${otId}/foto`, file)
 }
 
 /** Agrega una nota vía RPC SECURITY DEFINER (idempotente por client_uuid). */
