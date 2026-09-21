@@ -1,0 +1,434 @@
+[
+ {
+  "marca": "renault",
+  "aplica": "Renault Trucks C440 DTI 13 (variante 'ENG-VE13' del grupo Volvo) - referencia Volvo D13 EMS; validar con herramienta Renault",
+  "ecu": "Calculador de control del motor (ECM, MID 128)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 97 FMI 0",
+  "codigo_j1587": "MID 128 PID 97",
+  "descripcion": "Agua en combustible detectada (sensor WIF, sobre rango). Sintomas: marcha irregular, detencion del motor.",
+  "causas": [
+   "Agua en el combustible / separador lleno"
+  ],
+  "comprobaciones": [
+   "Drenar separador de agua (FMX nueva gen: menu MAINTENANCE > Water Draining, motor apagado, freno de estacionamiento aplicado)",
+   "Revisar calidad del combustible y drenar sedimentos del estanque"
+  ],
+  "sistema": "combustible",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "http://www.wheelingtruck.com/wp-content/uploads/diag-codes.pdf",
+  "referencia": "Volvo Trucks NA, Service Information Grupo 28 'Engine Control Module (ECM) DTC Guide, 2010 Emissions' PV776-89046912, pag. 11 (PDF 15). Aplicacion a Renault DTI 13 inferida: la guia Renault por VIN VF630N358PD000096 identifica el motor con la variante 'ENG-VE13' (https://rt.webbase.cloud/driverguide/getTopicByChassi?chassi=VF630N358PD000096&l=es&topic=43909), el mismo codigo de variante del motor 13 L en la guia Volvo. En Renault los codigos se leen en Visualizador > Vehiculo > C Diagnostico > Fallos."
+ },
+ {
+  "marca": "renault",
+  "aplica": "Renault Trucks C440 DTI 13 (variante 'ENG-VE13' del grupo Volvo) - referencia Volvo D13 EMS; validar con herramienta Renault",
+  "ecu": "Calculador de control del motor (ECM, MID 128)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 94 FMI 7",
+  "codigo_j1587": "MID 128 PID 94",
+  "descripcion": "Presion de alimentacion de combustible: sistema mecanico no responde (caida de presion). Derrateo.",
+  "causas": [
+   "Filtro de combustible obstruido",
+   "Sensor de presion defectuoso",
+   "Fuga en linea o conector de combustible",
+   "Bomba de alimentacion con baja respuesta"
+  ],
+  "comprobaciones": [
+   "Cambiar filtros y purgar (bomba manual 200-300 bombeos hasta sentir resistencia; nunca purgar con el motor de arranque)",
+   "Revisar entrada de aire/fugas en succion",
+   "Verificar sensor de presion"
+  ],
+  "sistema": "combustible",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "http://www.wheelingtruck.com/wp-content/uploads/diag-codes.pdf",
+  "referencia": "Volvo Trucks NA, Service Information Grupo 28 'Engine Control Module (ECM) DTC Guide, 2010 Emissions' PV776-89046912, pag. 11 (PDF 15). Aplicacion a Renault DTI 13 inferida: la guia Renault por VIN VF630N358PD000096 identifica el motor con la variante 'ENG-VE13' (https://rt.webbase.cloud/driverguide/getTopicByChassi?chassi=VF630N358PD000096&l=es&topic=43909), el mismo codigo de variante del motor 13 L en la guia Volvo. En Renault los codigos se leen en Visualizador > Vehiculo > C Diagnostico > Fallos."
+ },
+ {
+  "marca": "renault",
+  "aplica": "Renault Trucks C440 DTI 13 (variante 'ENG-VE13' del grupo Volvo) - referencia Volvo D13 EMS; validar con herramienta Renault",
+  "ecu": "Calculador de control del motor (ECM, MID 128)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 100 FMI 1",
+  "codigo_j1587": "MID 128 PID 100",
+  "descripcion": "Presion de aceite del motor criticamente baja. Lampara roja STOP y derrateo.",
+  "causas": [
+   "Fuga de aceite",
+   "Bomba de aceite danada",
+   "Sistema de lubricacion obstruido"
+  ],
+  "comprobaciones": [
+   "Detener el motor de inmediato",
+   "Verificar nivel real y fugas",
+   "Medir presion con manometro mecanico antes de condenar el sensor"
+  ],
+  "sistema": "motor",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "http://www.wheelingtruck.com/wp-content/uploads/diag-codes.pdf",
+  "referencia": "Volvo Trucks NA, Service Information Grupo 28 'Engine Control Module (ECM) DTC Guide, 2010 Emissions' PV776-89046912, pag. 13 (PDF 17). Aplicacion a Renault DTI 13 inferida: la guia Renault por VIN VF630N358PD000096 identifica el motor con la variante 'ENG-VE13' (https://rt.webbase.cloud/driverguide/getTopicByChassi?chassi=VF630N358PD000096&l=es&topic=43909), el mismo codigo de variante del motor 13 L en la guia Volvo. En Renault los codigos se leen en Visualizador > Vehiculo > C Diagnostico > Fallos."
+ },
+ {
+  "marca": "renault",
+  "aplica": "Renault Trucks C440 DTI 13 (variante 'ENG-VE13' del grupo Volvo) - referencia Volvo D13 EMS; validar con herramienta Renault",
+  "ecu": "Calculador de control del motor (ECM, MID 128)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 102 FMI 14",
+  "codigo_j1587": "MID 128 PID 102",
+  "descripcion": "Presion de admision demasiado baja. Derrateo + MIL.",
+  "causas": [
+   "Fuga de aire en admision",
+   "Sensor de presion",
+   "Arnes"
+  ],
+  "comprobaciones": [
+   "Prueba de fugas de admision/intercooler (mangueras y abrazaderas)",
+   "Revisar sensor y arnes"
+  ],
+  "sistema": "motor",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "http://www.wheelingtruck.com/wp-content/uploads/diag-codes.pdf",
+  "referencia": "Volvo Trucks NA, Service Information Grupo 28 'Engine Control Module (ECM) DTC Guide, 2010 Emissions' PV776-89046912, pag. 14 (PDF 18). Aplicacion a Renault DTI 13 inferida: la guia Renault por VIN VF630N358PD000096 identifica el motor con la variante 'ENG-VE13' (https://rt.webbase.cloud/driverguide/getTopicByChassi?chassi=VF630N358PD000096&l=es&topic=43909), el mismo codigo de variante del motor 13 L en la guia Volvo. En Renault los codigos se leen en Visualizador > Vehiculo > C Diagnostico > Fallos."
+ },
+ {
+  "marca": "renault",
+  "aplica": "Renault Trucks C440 DTI 13 (variante 'ENG-VE13' del grupo Volvo) - referencia Volvo D13 EMS; validar con herramienta Renault",
+  "ecu": "Calculador de control del motor (ECM, MID 128)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 110 FMI 0",
+  "codigo_j1587": "MID 128 PID 110",
+  "descripcion": "Temperatura de refrigerante en limite critico. Derrateo y lampara roja STOP.",
+  "causas": [
+   "Condicion de manejo extrema",
+   "Termostato defectuoso",
+   "Ventilador con falla",
+   "Radiador obstruido"
+  ],
+  "comprobaciones": [
+   "Revisar nivel de refrigerante y fugas",
+   "Limpiar panal del radiador",
+   "Verificar embrague del ventilador y termostato"
+  ],
+  "sistema": "motor",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "http://www.wheelingtruck.com/wp-content/uploads/diag-codes.pdf",
+  "referencia": "Volvo Trucks NA, Service Information Grupo 28 'Engine Control Module (ECM) DTC Guide, 2010 Emissions' PV776-89046912, pag. 17 (PDF 21). Aplicacion a Renault DTI 13 inferida: la guia Renault por VIN VF630N358PD000096 identifica el motor con la variante 'ENG-VE13' (https://rt.webbase.cloud/driverguide/getTopicByChassi?chassi=VF630N358PD000096&l=es&topic=43909), el mismo codigo de variante del motor 13 L en la guia Volvo. En Renault los codigos se leen en Visualizador > Vehiculo > C Diagnostico > Fallos."
+ },
+ {
+  "marca": "renault",
+  "aplica": "Renault Trucks C440 DTI 13 (variante 'ENG-VE13' del grupo Volvo) - referencia Volvo D13 EMS; validar con herramienta Renault",
+  "ecu": "Calculador de control del motor (ECM, MID 128)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 111 FMI 1",
+  "codigo_j1587": "MID 128 PID 111",
+  "descripcion": "Nivel de refrigerante criticamente bajo. Derrateo, lampara roja STOP.",
+  "causas": [
+   "Nivel de refrigerante bajo rango",
+   "Arnes defectuoso"
+  ],
+  "comprobaciones": [
+   "Verificar nivel con motor frio y buscar fugas",
+   "Revisar sensor de nivel y su conector"
+  ],
+  "sistema": "motor",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "http://www.wheelingtruck.com/wp-content/uploads/diag-codes.pdf",
+  "referencia": "Volvo Trucks NA, Service Information Grupo 28 'Engine Control Module (ECM) DTC Guide, 2010 Emissions' PV776-89046912, pag. 18 (PDF 22). Aplicacion a Renault DTI 13 inferida: la guia Renault por VIN VF630N358PD000096 identifica el motor con la variante 'ENG-VE13' (https://rt.webbase.cloud/driverguide/getTopicByChassi?chassi=VF630N358PD000096&l=es&topic=43909), el mismo codigo de variante del motor 13 L en la guia Volvo. En Renault los codigos se leen en Visualizador > Vehiculo > C Diagnostico > Fallos."
+ },
+ {
+  "marca": "renault",
+  "aplica": "Renault Trucks C440 DTI 13 (variante 'ENG-VE13' del grupo Volvo) - referencia Volvo D13 EMS; validar con herramienta Renault",
+  "ecu": "Calculador de control del motor (ECM, MID 128)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 158 FMI 1",
+  "codigo_j1587": "MID 128 PID 158 / PSID 124",
+  "descripcion": "Voltaje de bateria (llave) en ECM bajo rango. El motor de arranque puede no girar.",
+  "causas": [
+   "Falla del sistema de carga",
+   "Bateria",
+   "Conexion a masa"
+  ],
+  "comprobaciones": [
+   "Medir tension de baterias (24 V) y caidas en masas",
+   "Revisar alternador y bornes"
+  ],
+  "sistema": "electrico",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "http://www.wheelingtruck.com/wp-content/uploads/diag-codes.pdf",
+  "referencia": "Volvo Trucks NA, Service Information Grupo 28 'Engine Control Module (ECM) DTC Guide, 2010 Emissions' PV776-89046912, pag. 20 (PDF 24). Aplicacion a Renault DTI 13 inferida: la guia Renault por VIN VF630N358PD000096 identifica el motor con la variante 'ENG-VE13' (https://rt.webbase.cloud/driverguide/getTopicByChassi?chassi=VF630N358PD000096&l=es&topic=43909), el mismo codigo de variante del motor 13 L en la guia Volvo. En Renault los codigos se leen en Visualizador > Vehiculo > C Diagnostico > Fallos."
+ },
+ {
+  "marca": "renault",
+  "aplica": "Renault Trucks C440 DTI 13 (variante 'ENG-VE13' del grupo Volvo) - referencia Volvo D13 EMS; validar con herramienta Renault",
+  "ecu": "Calculador de control del motor (ECM, MID 128)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 639 FMI 2",
+  "codigo_j1587": "MID 128 SID 231",
+  "descripcion": "Enlace de datos SAE J1939 (bus 1) erratico: CAN alto o bajo en corto a +, a - o abierto. MIL.",
+  "causas": [
+   "Arnes o conector defectuoso"
+  ],
+  "comprobaciones": [
+   "Con llave OFF medir resistencia CAN_H-CAN_L en el conector de diagnostico: 50-70 ohm (dos resistencias terminales)",
+   "Buscar conectores con humedad/corrosion o equipos agregados al bus"
+  ],
+  "sistema": "electrico",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "http://www.wheelingtruck.com/wp-content/uploads/diag-codes.pdf",
+  "referencia": "Volvo Trucks NA, Service Information Grupo 28 'Engine Control Module (ECM) DTC Guide, 2010 Emissions' PV776-89046912, pag. 35 (PDF 39). Aplicacion a Renault DTI 13 inferida: la guia Renault por VIN VF630N358PD000096 identifica el motor con la variante 'ENG-VE13' (https://rt.webbase.cloud/driverguide/getTopicByChassi?chassi=VF630N358PD000096&l=es&topic=43909), el mismo codigo de variante del motor 13 L en la guia Volvo. En Renault los codigos se leen en Visualizador > Vehiculo > C Diagnostico > Fallos."
+ },
+ {
+  "marca": "renault",
+  "aplica": "Renault Trucks C440 DTI 13 (variante 'ENG-VE13' del grupo Volvo) - referencia Volvo D13 EMS; validar con herramienta Renault",
+  "ecu": "Calculador de control del motor (ECM, MID 128)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 1231 FMI 9",
+  "codigo_j1587": "MID 128 PSID 229",
+  "descripcion": "Enlace J1939 bus 2 (CAN2): falta senal del modulo de postratamiento. MIL + CHECK, sin dosificacion AdBlue.",
+  "causas": [
+   "Enlace J1939",
+   "Arnes o conectores",
+   "Bomba DEF",
+   "Modulo de control DEF"
+  ],
+  "comprobaciones": [
+   "Revisar alimentacion/fusible del ACM (FMX: fusible principal ACM 23 A en caja de bateria)",
+   "Revisar arnes CAN2"
+  ],
+  "sistema": "electrico",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "http://www.wheelingtruck.com/wp-content/uploads/diag-codes.pdf",
+  "referencia": "Volvo Trucks NA, Service Information Grupo 28 'Engine Control Module (ECM) DTC Guide, 2010 Emissions' PV776-89046912, pag. 47 (PDF 51). Aplicacion a Renault DTI 13 inferida: la guia Renault por VIN VF630N358PD000096 identifica el motor con la variante 'ENG-VE13' (https://rt.webbase.cloud/driverguide/getTopicByChassi?chassi=VF630N358PD000096&l=es&topic=43909), el mismo codigo de variante del motor 13 L en la guia Volvo. En Renault los codigos se leen en Visualizador > Vehiculo > C Diagnostico > Fallos."
+ },
+ {
+  "marca": "renault",
+  "aplica": "Renault Trucks C440 DTI 13 (variante 'ENG-VE13' del grupo Volvo) - referencia Volvo D13 EMS; validar con herramienta Renault",
+  "ecu": "Calculador de control del motor (ECM, MID 128)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 2029 FMI 8",
+  "codigo_j1587": "MID 128 PSID 201",
+  "descripcion": "Sin contacto con la VECU. CHECK amarilla; PTO, freno motor y control crucero no funcionan.",
+  "causas": [
+   "Arnes defectuoso"
+  ],
+  "comprobaciones": [
+   "Revisar alimentacion/fusibles de la unidad de vehiculo (FMX nueva gen: VMCU F27 10 A, F28 20 A, F68 15 A)",
+   "Revisar enlace J1939 ECM-VECU"
+  ],
+  "sistema": "electrico",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "http://www.wheelingtruck.com/wp-content/uploads/diag-codes.pdf",
+  "referencia": "Volvo Trucks NA, Service Information Grupo 28 'Engine Control Module (ECM) DTC Guide, 2010 Emissions' PV776-89046912, pag. 50 (PDF 54). Aplicacion a Renault DTI 13 inferida: la guia Renault por VIN VF630N358PD000096 identifica el motor con la variante 'ENG-VE13' (https://rt.webbase.cloud/driverguide/getTopicByChassi?chassi=VF630N358PD000096&l=es&topic=43909), el mismo codigo de variante del motor 13 L en la guia Volvo. En Renault los codigos se leen en Visualizador > Vehiculo > C Diagnostico > Fallos."
+ },
+ {
+  "marca": "renault",
+  "aplica": "Renault Trucks C440 DTI 13 (variante 'ENG-VE13' del grupo Volvo) - referencia Volvo D13 EMS; validar con herramienta Renault",
+  "ecu": "Calculador de control del motor (ECM, MID 128)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 1761 FMI 18",
+  "codigo_j1587": "PPID 278",
+  "descripcion": "Nivel de AdBlue (DEF) casi vacio. Lampara de bajo DEF; sin dosificacion.",
+  "causas": [
+   "Estanque de AdBlue vacio"
+  ],
+  "comprobaciones": [
+   "Rellenar AdBlue ISO 22241",
+   "Ver ficha de derrateo/induccion"
+  ],
+  "sistema": "postratamiento",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "http://www.wheelingtruck.com/wp-content/uploads/diag-codes.pdf",
+  "referencia": "Volvo Trucks NA, Service Information Grupo 28 'Engine Control Module (ECM) DTC Guide, 2010 Emissions' PV776-89046912, pag. 49 (PDF 53). Aplicacion a Renault DTI 13 inferida: la guia Renault por VIN VF630N358PD000096 identifica el motor con la variante 'ENG-VE13' (https://rt.webbase.cloud/driverguide/getTopicByChassi?chassi=VF630N358PD000096&l=es&topic=43909), el mismo codigo de variante del motor 13 L en la guia Volvo. En Renault los codigos se leen en Visualizador > Vehiculo > C Diagnostico > Fallos."
+ },
+ {
+  "marca": "renault",
+  "aplica": "Renault Trucks C440 DTI 13 (variante 'ENG-VE13' del grupo Volvo) - referencia Volvo D13 EMS; validar con herramienta Renault",
+  "ecu": "Calculador de control del motor (ECM, MID 128)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 3226 FMI 2",
+  "codigo_j1587": "MID 128 PPID 270 / PSID 90",
+  "descripcion": "Sensor NOx de salida: error de plausibilidad / discrepancia entre sensores. MIL.",
+  "causas": [
+   "Sensor NOx defectuoso",
+   "Calidad del AdBlue"
+  ],
+  "comprobaciones": [
+   "Verificar calidad/concentracion del AdBlue (32,5 %)",
+   "Comparar lecturas NOx entrada/salida",
+   "Reemplazar sensor si se confirma"
+  ],
+  "sistema": "postratamiento",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "http://www.wheelingtruck.com/wp-content/uploads/diag-codes.pdf",
+  "referencia": "Volvo Trucks NA, Service Information Grupo 28 'Engine Control Module (ECM) DTC Guide, 2010 Emissions' PV776-89046912, pag. 54 (PDF 58). Aplicacion a Renault DTI 13 inferida: la guia Renault por VIN VF630N358PD000096 identifica el motor con la variante 'ENG-VE13' (https://rt.webbase.cloud/driverguide/getTopicByChassi?chassi=VF630N358PD000096&l=es&topic=43909), el mismo codigo de variante del motor 13 L en la guia Volvo. En Renault los codigos se leen en Visualizador > Vehiculo > C Diagnostico > Fallos."
+ },
+ {
+  "marca": "renault",
+  "aplica": "Renault Trucks C440 DTI 13 (variante 'ENG-VE13' del grupo Volvo) - referencia Volvo D13 EMS; validar con herramienta Renault",
+  "ecu": "Calculador de control del motor (ECM, MID 128)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 3251 FMI 0",
+  "codigo_j1587": "MID 128 PID 81",
+  "descripcion": "Presion diferencial del DPF criticamente alta. Derrateo y lampara roja STOP.",
+  "causas": [
+   "Sensor de presion diferencial DPF defectuoso"
+  ],
+  "comprobaciones": [
+   "Revisar mangueras del sensor diferencial",
+   "Evaluar nivel de hollin; regeneracion estacionaria si corresponde",
+   "Evitar ralenti prolongado"
+  ],
+  "sistema": "postratamiento",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "http://www.wheelingtruck.com/wp-content/uploads/diag-codes.pdf",
+  "referencia": "Volvo Trucks NA, Service Information Grupo 28 'Engine Control Module (ECM) DTC Guide, 2010 Emissions' PV776-89046912, pag. 57 (PDF 61). Aplicacion a Renault DTI 13 inferida: la guia Renault por VIN VF630N358PD000096 identifica el motor con la variante 'ENG-VE13' (https://rt.webbase.cloud/driverguide/getTopicByChassi?chassi=VF630N358PD000096&l=es&topic=43909), el mismo codigo de variante del motor 13 L en la guia Volvo. En Renault los codigos se leen en Visualizador > Vehiculo > C Diagnostico > Fallos."
+ },
+ {
+  "marca": "renault",
+  "aplica": "Renault Trucks C440 DTI 13 (variante 'ENG-VE13' del grupo Volvo) - referencia Volvo D13 EMS; validar con herramienta Renault",
+  "ecu": "Calculador de control del motor (ECM, MID 128)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 3720 FMI 0",
+  "codigo_j1587": "MID 128 PPID 337",
+  "descripcion": "Nivel de ceniza del DPF demasiado alto. CHECK amarilla; requiere servicio.",
+  "causas": [
+   "Acumulacion de ceniza"
+  ],
+  "comprobaciones": [
+   "Servicio/limpieza del DPF",
+   "Usar aceite VDS-4.5 (recomendado por la guia del conductor)"
+  ],
+  "sistema": "postratamiento",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "http://www.wheelingtruck.com/wp-content/uploads/diag-codes.pdf",
+  "referencia": "Volvo Trucks NA, Service Information Grupo 28 'Engine Control Module (ECM) DTC Guide, 2010 Emissions' PV776-89046912, pag. 66 (PDF 70). Aplicacion a Renault DTI 13 inferida: la guia Renault por VIN VF630N358PD000096 identifica el motor con la variante 'ENG-VE13' (https://rt.webbase.cloud/driverguide/getTopicByChassi?chassi=VF630N358PD000096&l=es&topic=43909), el mismo codigo de variante del motor 13 L en la guia Volvo. En Renault los codigos se leen en Visualizador > Vehiculo > C Diagnostico > Fallos."
+ },
+ {
+  "marca": "renault",
+  "aplica": "Renault Trucks C440 DTI 13 (variante 'ENG-VE13' del grupo Volvo) - referencia Volvo D13 EMS; validar con herramienta Renault",
+  "ecu": "Calculador de control del motor (ECM, MID 128)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 4094 FMI 18",
+  "codigo_j1587": "MID 128 PSID 90",
+  "descripcion": "NOx excedido por calidad insuficiente de AdBlue (dosificacion muy baja). CHECK + derrateo.",
+  "causas": [
+   "Calidad del AdBlue",
+   "Linea AdBlue obstruida",
+   "Dosificador AdBlue",
+   "Falla del modulo de postratamiento"
+  ],
+  "comprobaciones": [
+   "Medir concentracion del AdBlue; drenar y limpiar estanque si esta contaminado",
+   "Revisar linea y dosificador"
+  ],
+  "sistema": "postratamiento",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "http://www.wheelingtruck.com/wp-content/uploads/diag-codes.pdf",
+  "referencia": "Volvo Trucks NA, Service Information Grupo 28 'Engine Control Module (ECM) DTC Guide, 2010 Emissions' PV776-89046912, pag. 66 (PDF 70). Aplicacion a Renault DTI 13 inferida: la guia Renault por VIN VF630N358PD000096 identifica el motor con la variante 'ENG-VE13' (https://rt.webbase.cloud/driverguide/getTopicByChassi?chassi=VF630N358PD000096&l=es&topic=43909), el mismo codigo de variante del motor 13 L en la guia Volvo. En Renault los codigos se leen en Visualizador > Vehiculo > C Diagnostico > Fallos."
+ },
+ {
+  "marca": "renault",
+  "aplica": "Renault Trucks C440 DTI 13 (variante 'ENG-VE13' del grupo Volvo) - referencia Volvo D13 EMS; validar con herramienta Renault",
+  "ecu": "Calculador de control del motor (ECM, MID 128)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 4095 FMI 7",
+  "codigo_j1587": "MID 128 PSID 90",
+  "descripcion": "NOx excedido por dosificacion de AdBlue interrumpida. MIL.",
+  "causas": [
+   "Nivel de AdBlue",
+   "Bomba AdBlue defectuosa",
+   "Fuga en manguera AdBlue"
+  ],
+  "comprobaciones": [
+   "Revisar nivel y fugas",
+   "Probar bomba AdBlue"
+  ],
+  "sistema": "postratamiento",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "http://www.wheelingtruck.com/wp-content/uploads/diag-codes.pdf",
+  "referencia": "Volvo Trucks NA, Service Information Grupo 28 'Engine Control Module (ECM) DTC Guide, 2010 Emissions' PV776-89046912, pag. 67 (PDF 71). Aplicacion a Renault DTI 13 inferida: la guia Renault por VIN VF630N358PD000096 identifica el motor con la variante 'ENG-VE13' (https://rt.webbase.cloud/driverguide/getTopicByChassi?chassi=VF630N358PD000096&l=es&topic=43909), el mismo codigo de variante del motor 13 L en la guia Volvo. En Renault los codigos se leen en Visualizador > Vehiculo > C Diagnostico > Fallos."
+ },
+ {
+  "marca": "renault",
+  "aplica": "Renault Trucks C440 DTI 13 (variante 'ENG-VE13' del grupo Volvo) - referencia Volvo D13 EMS; validar con herramienta Renault",
+  "ecu": "Calculador de control del motor (ECM, MID 128)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 4334 FMI 1",
+  "codigo_j1587": "MID 128 PPID 273",
+  "descripcion": "Presion de dosificacion AdBlue baja: fuga detectada. Sin dosificacion.",
+  "causas": [
+   "Bomba AdBlue",
+   "Manguera AdBlue",
+   "Dosificador (inyector) AdBlue"
+  ],
+  "comprobaciones": [
+   "Inspeccionar fugas/cristales en mangueras y dosificador",
+   "Prueba de la bomba"
+  ],
+  "sistema": "postratamiento",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "http://www.wheelingtruck.com/wp-content/uploads/diag-codes.pdf",
+  "referencia": "Volvo Trucks NA, Service Information Grupo 28 'Engine Control Module (ECM) DTC Guide, 2010 Emissions' PV776-89046912, pag. 67 (PDF 71). Aplicacion a Renault DTI 13 inferida: la guia Renault por VIN VF630N358PD000096 identifica el motor con la variante 'ENG-VE13' (https://rt.webbase.cloud/driverguide/getTopicByChassi?chassi=VF630N358PD000096&l=es&topic=43909), el mismo codigo de variante del motor 13 L en la guia Volvo. En Renault los codigos se leen en Visualizador > Vehiculo > C Diagnostico > Fallos."
+ },
+ {
+  "marca": "renault",
+  "aplica": "Renault Trucks C440 DTI 13 (variante 'ENG-VE13' del grupo Volvo) - referencia Volvo D13 EMS; validar con herramienta Renault",
+  "ecu": "Calculador de control del motor (ECM, MID 128)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 5246 FMI 0",
+  "codigo_j1587": "MID 128 PSID 46",
+  "descripcion": "Induccion al operador SCR, severidad maxima. Derrateo severo.",
+  "causas": [
+   "Falla SCR severa detectada"
+  ],
+  "comprobaciones": [
+   "Leer los demas codigos de postratamiento y corregir la causa raiz"
+  ],
+  "sistema": "postratamiento",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "http://www.wheelingtruck.com/wp-content/uploads/diag-codes.pdf",
+  "referencia": "Volvo Trucks NA, Service Information Grupo 28 'Engine Control Module (ECM) DTC Guide, 2010 Emissions' PV776-89046912, pag. 73 (PDF 77). Aplicacion a Renault DTI 13 inferida: la guia Renault por VIN VF630N358PD000096 identifica el motor con la variante 'ENG-VE13' (https://rt.webbase.cloud/driverguide/getTopicByChassi?chassi=VF630N358PD000096&l=es&topic=43909), el mismo codigo de variante del motor 13 L en la guia Volvo. En Renault los codigos se leen en Visualizador > Vehiculo > C Diagnostico > Fallos."
+ },
+ {
+  "marca": "renault",
+  "aplica": "Renault Trucks C440 DTI 13 (variante 'ENG-VE13' del grupo Volvo) - referencia Volvo D13 EMS; validar con herramienta Renault",
+  "ecu": "Calculador de control del motor (ECM, MID 128)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 5392 FMI 31",
+  "codigo_j1587": "MID 128 PSID 121",
+  "descripcion": "Perdida de cebado del dosificador: falla al generar presion de AdBlue. MIL + CHECK, sin dosificacion.",
+  "causas": [
+   "Estanque AdBlue vacio",
+   "Filtro AdBlue obstruido",
+   "Fuga u obstruccion en tubo de entrada",
+   "Conjunto bomba AdBlue"
+  ],
+  "comprobaciones": [
+   "Rellenar AdBlue",
+   "Cambiar filtro de la bomba AdBlue",
+   "Revisar tubo de succion"
+  ],
+  "sistema": "postratamiento",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "http://www.wheelingtruck.com/wp-content/uploads/diag-codes.pdf",
+  "referencia": "Volvo Trucks NA, Service Information Grupo 28 'Engine Control Module (ECM) DTC Guide, 2010 Emissions' PV776-89046912, pag. 74 (PDF 78). Aplicacion a Renault DTI 13 inferida: la guia Renault por VIN VF630N358PD000096 identifica el motor con la variante 'ENG-VE13' (https://rt.webbase.cloud/driverguide/getTopicByChassi?chassi=VF630N358PD000096&l=es&topic=43909), el mismo codigo de variante del motor 13 L en la guia Volvo. En Renault los codigos se leen en Visualizador > Vehiculo > C Diagnostico > Fallos."
+ },
+ {
+  "marca": "renault",
+  "aplica": "Renault Trucks C440 DTI 13 (variante 'ENG-VE13' del grupo Volvo) - referencia Volvo D13 EMS; validar con herramienta Renault",
+  "ecu": "Calculador de control del motor (ECM, MID 128)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 5394 FMI 14",
+  "codigo_j1587": "MID 128 PSID 89",
+  "descripcion": "Dosificador AdBlue o manguera obstruidos. MIL + CHECK.",
+  "causas": [
+   "Dosificador AdBlue obstruido",
+   "Manguera obstruida"
+  ],
+  "comprobaciones": [
+   "Desmontar e inspeccionar dosificador y manguera"
+  ],
+  "sistema": "postratamiento",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "http://www.wheelingtruck.com/wp-content/uploads/diag-codes.pdf",
+  "referencia": "Volvo Trucks NA, Service Information Grupo 28 'Engine Control Module (ECM) DTC Guide, 2010 Emissions' PV776-89046912, pag. 75 (PDF 79). Aplicacion a Renault DTI 13 inferida: la guia Renault por VIN VF630N358PD000096 identifica el motor con la variante 'ENG-VE13' (https://rt.webbase.cloud/driverguide/getTopicByChassi?chassi=VF630N358PD000096&l=es&topic=43909), el mismo codigo de variante del motor 13 L en la guia Volvo. En Renault los codigos se leen en Visualizador > Vehiculo > C Diagnostico > Fallos."
+ }
+]

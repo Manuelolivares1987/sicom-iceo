@@ -1,0 +1,405 @@
+[
+ {
+  "marca": "bendix",
+  "aplica": "Bendix EC-60 ABS/ATC/ESP (12 V; camiones de norma NA, verificar ECU)",
+  "ecu": "Bendix EC-60",
+  "formato": "blink",
+  "codigo": "2-1",
+  "descripcion": "Sensor de rueda dirección izquierdo: Entrehierro excesivo",
+  "causas": [
+   "Sensor",
+   "Rueda dentada",
+   "Arnés"
+  ],
+  "comprobaciones": [
+   "Ajustar el sensor contra la rueda dentada",
+   "Verificar >=0,25 V AC a ~0,5 rev/s"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://n0c357rmy1njbuit2friqwu.blob.core.windows.net/documents/VcCA4sr2I0EBhB_SD-13-4869_US_004.pdf"
+ },
+ {
+  "marca": "bendix",
+  "aplica": "Bendix EC-60 ABS/ATC/ESP (12 V; camiones de norma NA, verificar ECU)",
+  "ecu": "Bendix EC-60",
+  "formato": "blink",
+  "codigo": "2-2",
+  "descripcion": "Sensor de rueda dirección izquierdo: Salida baja al partir",
+  "causas": [
+   "Sensor",
+   "Rueda dentada",
+   "Arnés"
+  ],
+  "comprobaciones": [
+   "Ajustar el sensor",
+   "Verificar >=0,25 V AC",
+   "Revisar la rueda dentada y el juego del rodamiento"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://n0c357rmy1njbuit2friqwu.blob.core.windows.net/documents/VcCA4sr2I0EBhB_SD-13-4869_US_004.pdf"
+ },
+ {
+  "marca": "bendix",
+  "aplica": "Bendix EC-60 ABS/ATC/ESP (12 V; camiones de norma NA, verificar ECU)",
+  "ecu": "Bendix EC-60",
+  "formato": "blink",
+  "codigo": "2-3",
+  "descripcion": "Sensor de rueda dirección izquierdo: Sensor abierto o en corto",
+  "causas": [
+   "Sensor",
+   "Rueda dentada",
+   "Arnés"
+  ],
+  "comprobaciones": [
+   "Medir 1500-2500 ohm entre los cables del sensor",
+   "Verificar que no haya continuidad a masa ni a voltaje"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://n0c357rmy1njbuit2friqwu.blob.core.windows.net/documents/VcCA4sr2I0EBhB_SD-13-4869_US_004.pdf"
+ },
+ {
+  "marca": "bendix",
+  "aplica": "Bendix EC-60 ABS/ATC/ESP (12 V; camiones de norma NA, verificar ECU)",
+  "ecu": "Bendix EC-60",
+  "formato": "blink",
+  "codigo": "2-4",
+  "descripcion": "Sensor de rueda dirección izquierdo: Pérdida de señal del sensor",
+  "causas": [
+   "Sensor",
+   "Rueda dentada",
+   "Arnés"
+  ],
+  "comprobaciones": [
+   "Ajustar el sensor",
+   "Revisar el clip y el ruteo del cable",
+   "Revisar el arnés"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://n0c357rmy1njbuit2friqwu.blob.core.windows.net/documents/VcCA4sr2I0EBhB_SD-13-4869_US_004.pdf"
+ },
+ {
+  "marca": "bendix",
+  "aplica": "Bendix EC-60 ABS/ATC/ESP (12 V; camiones de norma NA, verificar ECU)",
+  "ecu": "Bendix EC-60",
+  "formato": "blink",
+  "codigo": "3-1",
+  "descripcion": "Sensor de rueda dirección derecho: Entrehierro excesivo",
+  "causas": [
+   "Sensor",
+   "Rueda dentada",
+   "Arnés"
+  ],
+  "comprobaciones": [
+   "Ajustar el sensor contra la rueda dentada",
+   "Verificar >=0,25 V AC a ~0,5 rev/s"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://n0c357rmy1njbuit2friqwu.blob.core.windows.net/documents/VcCA4sr2I0EBhB_SD-13-4869_US_004.pdf"
+ },
+ {
+  "marca": "bendix",
+  "aplica": "Bendix EC-60 ABS/ATC/ESP (12 V; camiones de norma NA, verificar ECU)",
+  "ecu": "Bendix EC-60",
+  "formato": "blink",
+  "codigo": "3-2",
+  "descripcion": "Sensor de rueda dirección derecho: Salida baja al partir",
+  "causas": [
+   "Sensor",
+   "Rueda dentada",
+   "Arnés"
+  ],
+  "comprobaciones": [
+   "Ajustar el sensor",
+   "Verificar >=0,25 V AC",
+   "Revisar la rueda dentada y el juego del rodamiento"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://n0c357rmy1njbuit2friqwu.blob.core.windows.net/documents/VcCA4sr2I0EBhB_SD-13-4869_US_004.pdf"
+ },
+ {
+  "marca": "bendix",
+  "aplica": "Bendix EC-60 ABS/ATC/ESP (12 V; camiones de norma NA, verificar ECU)",
+  "ecu": "Bendix EC-60",
+  "formato": "blink",
+  "codigo": "3-3",
+  "descripcion": "Sensor de rueda dirección derecho: Sensor abierto o en corto",
+  "causas": [
+   "Sensor",
+   "Rueda dentada",
+   "Arnés"
+  ],
+  "comprobaciones": [
+   "Medir 1500-2500 ohm entre los cables del sensor",
+   "Verificar que no haya continuidad a masa ni a voltaje"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://n0c357rmy1njbuit2friqwu.blob.core.windows.net/documents/VcCA4sr2I0EBhB_SD-13-4869_US_004.pdf"
+ },
+ {
+  "marca": "bendix",
+  "aplica": "Bendix EC-60 ABS/ATC/ESP (12 V; camiones de norma NA, verificar ECU)",
+  "ecu": "Bendix EC-60",
+  "formato": "blink",
+  "codigo": "3-4",
+  "descripcion": "Sensor de rueda dirección derecho: Pérdida de señal del sensor",
+  "causas": [
+   "Sensor",
+   "Rueda dentada",
+   "Arnés"
+  ],
+  "comprobaciones": [
+   "Ajustar el sensor",
+   "Revisar el clip y el ruteo del cable",
+   "Revisar el arnés"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://n0c357rmy1njbuit2friqwu.blob.core.windows.net/documents/VcCA4sr2I0EBhB_SD-13-4869_US_004.pdf"
+ },
+ {
+  "marca": "bendix",
+  "aplica": "Bendix EC-60 ABS/ATC/ESP (12 V; camiones de norma NA, verificar ECU)",
+  "ecu": "Bendix EC-60",
+  "formato": "blink",
+  "codigo": "4-1",
+  "descripcion": "Sensor de rueda motriz izquierdo: Entrehierro excesivo",
+  "causas": [
+   "Sensor",
+   "Rueda dentada",
+   "Arnés"
+  ],
+  "comprobaciones": [
+   "Ajustar el sensor contra la rueda dentada",
+   "Verificar >=0,25 V AC a ~0,5 rev/s"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://n0c357rmy1njbuit2friqwu.blob.core.windows.net/documents/VcCA4sr2I0EBhB_SD-13-4869_US_004.pdf"
+ },
+ {
+  "marca": "bendix",
+  "aplica": "Bendix EC-60 ABS/ATC/ESP (12 V; camiones de norma NA, verificar ECU)",
+  "ecu": "Bendix EC-60",
+  "formato": "blink",
+  "codigo": "4-2",
+  "descripcion": "Sensor de rueda motriz izquierdo: Salida baja al partir",
+  "causas": [
+   "Sensor",
+   "Rueda dentada",
+   "Arnés"
+  ],
+  "comprobaciones": [
+   "Ajustar el sensor",
+   "Verificar >=0,25 V AC",
+   "Revisar la rueda dentada y el juego del rodamiento"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://n0c357rmy1njbuit2friqwu.blob.core.windows.net/documents/VcCA4sr2I0EBhB_SD-13-4869_US_004.pdf"
+ },
+ {
+  "marca": "bendix",
+  "aplica": "Bendix EC-60 ABS/ATC/ESP (12 V; camiones de norma NA, verificar ECU)",
+  "ecu": "Bendix EC-60",
+  "formato": "blink",
+  "codigo": "4-3",
+  "descripcion": "Sensor de rueda motriz izquierdo: Sensor abierto o en corto",
+  "causas": [
+   "Sensor",
+   "Rueda dentada",
+   "Arnés"
+  ],
+  "comprobaciones": [
+   "Medir 1500-2500 ohm entre los cables del sensor",
+   "Verificar que no haya continuidad a masa ni a voltaje"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://n0c357rmy1njbuit2friqwu.blob.core.windows.net/documents/VcCA4sr2I0EBhB_SD-13-4869_US_004.pdf"
+ },
+ {
+  "marca": "bendix",
+  "aplica": "Bendix EC-60 ABS/ATC/ESP (12 V; camiones de norma NA, verificar ECU)",
+  "ecu": "Bendix EC-60",
+  "formato": "blink",
+  "codigo": "4-4",
+  "descripcion": "Sensor de rueda motriz izquierdo: Pérdida de señal del sensor",
+  "causas": [
+   "Sensor",
+   "Rueda dentada",
+   "Arnés"
+  ],
+  "comprobaciones": [
+   "Ajustar el sensor",
+   "Revisar el clip y el ruteo del cable",
+   "Revisar el arnés"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://n0c357rmy1njbuit2friqwu.blob.core.windows.net/documents/VcCA4sr2I0EBhB_SD-13-4869_US_004.pdf"
+ },
+ {
+  "marca": "bendix",
+  "aplica": "Bendix EC-60 ABS/ATC/ESP (12 V; camiones de norma NA, verificar ECU)",
+  "ecu": "Bendix EC-60",
+  "formato": "blink",
+  "codigo": "5-1",
+  "descripcion": "Sensor de rueda motriz derecho: Entrehierro excesivo",
+  "causas": [
+   "Sensor",
+   "Rueda dentada",
+   "Arnés"
+  ],
+  "comprobaciones": [
+   "Ajustar el sensor contra la rueda dentada",
+   "Verificar >=0,25 V AC a ~0,5 rev/s"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://n0c357rmy1njbuit2friqwu.blob.core.windows.net/documents/VcCA4sr2I0EBhB_SD-13-4869_US_004.pdf"
+ },
+ {
+  "marca": "bendix",
+  "aplica": "Bendix EC-60 ABS/ATC/ESP (12 V; camiones de norma NA, verificar ECU)",
+  "ecu": "Bendix EC-60",
+  "formato": "blink",
+  "codigo": "5-2",
+  "descripcion": "Sensor de rueda motriz derecho: Salida baja al partir",
+  "causas": [
+   "Sensor",
+   "Rueda dentada",
+   "Arnés"
+  ],
+  "comprobaciones": [
+   "Ajustar el sensor",
+   "Verificar >=0,25 V AC",
+   "Revisar la rueda dentada y el juego del rodamiento"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://n0c357rmy1njbuit2friqwu.blob.core.windows.net/documents/VcCA4sr2I0EBhB_SD-13-4869_US_004.pdf"
+ },
+ {
+  "marca": "bendix",
+  "aplica": "Bendix EC-60 ABS/ATC/ESP (12 V; camiones de norma NA, verificar ECU)",
+  "ecu": "Bendix EC-60",
+  "formato": "blink",
+  "codigo": "5-3",
+  "descripcion": "Sensor de rueda motriz derecho: Sensor abierto o en corto",
+  "causas": [
+   "Sensor",
+   "Rueda dentada",
+   "Arnés"
+  ],
+  "comprobaciones": [
+   "Medir 1500-2500 ohm entre los cables del sensor",
+   "Verificar que no haya continuidad a masa ni a voltaje"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://n0c357rmy1njbuit2friqwu.blob.core.windows.net/documents/VcCA4sr2I0EBhB_SD-13-4869_US_004.pdf"
+ },
+ {
+  "marca": "bendix",
+  "aplica": "Bendix EC-60 ABS/ATC/ESP (12 V; camiones de norma NA, verificar ECU)",
+  "ecu": "Bendix EC-60",
+  "formato": "blink",
+  "codigo": "5-4",
+  "descripcion": "Sensor de rueda motriz derecho: Pérdida de señal del sensor",
+  "causas": [
+   "Sensor",
+   "Rueda dentada",
+   "Arnés"
+  ],
+  "comprobaciones": [
+   "Ajustar el sensor",
+   "Revisar el clip y el ruteo del cable",
+   "Revisar el arnés"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://n0c357rmy1njbuit2friqwu.blob.core.windows.net/documents/VcCA4sr2I0EBhB_SD-13-4869_US_004.pdf"
+ },
+ {
+  "marca": "bendix",
+  "aplica": "Bendix EC-60 ABS/ATC/ESP (12 V; camiones de norma NA, verificar ECU)",
+  "ecu": "Bendix EC-60",
+  "formato": "blink",
+  "codigo": "6-x",
+  "descripcion": "Alimentación eléctrica: voltaje de batería o de ignición alto, bajo, abierto o con ruido",
+  "causas": [
+   "Batería",
+   "Alternador",
+   "Fusible",
+   "Cableado o masa"
+  ],
+  "comprobaciones": [
+   "Con carga (ampolleta 1157), medir ignición a masa y batería a masa en el conector de la ECU: 9-17 V DC",
+   "Revisar el ruido del alternador"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://n0c357rmy1njbuit2friqwu.blob.core.windows.net/documents/VcCA4sr2I0EBhB_SD-13-4869_US_004.pdf"
+ },
+ {
+  "marca": "bendix",
+  "aplica": "Bendix EC-60 ABS/ATC/ESP (12 V; camiones de norma NA, verificar ECU)",
+  "ecu": "Bendix EC-60",
+  "formato": "blink",
+  "codigo": "7-x a 10-x",
+  "descripcion": "Modulador PMV (7 dirección izq., 8 dirección der., 9 motriz izq., 10 motriz der.)",
+  "causas": [
+   "Solenoide REL o HLD",
+   "Arnés"
+  ],
+  "comprobaciones": [
+   "REL-CMN y HLD-CMN: 4,9-5,5 ohm; REL-HLD: 9,8-11 ohm",
+   "Sin continuidad a masa ni a voltaje"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://n0c357rmy1njbuit2friqwu.blob.core.windows.net/documents/VcCA4sr2I0EBhB_SD-13-4869_US_004.pdf"
+ },
+ {
+  "marca": "bendix",
+  "aplica": "Bendix EC-60 ABS/ATC/ESP (12 V; camiones de norma NA, verificar ECU)",
+  "ecu": "Bendix EC-60",
+  "formato": "blink",
+  "codigo": "11-x",
+  "descripcion": "Falla de la red J1939",
+  "causas": [
+   "Cableado CAN",
+   "Otra ECU"
+  ],
+  "comprobaciones": [
+   "Revisar el backbone J1939 y las resistencias terminales"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://n0c357rmy1njbuit2friqwu.blob.core.windows.net/documents/VcCA4sr2I0EBhB_SD-13-4869_US_004.pdf"
+ },
+ {
+  "marca": "bendix",
+  "aplica": "Bendix EC-60 ABS/ATC/ESP (12 V; camiones de norma NA, verificar ECU)",
+  "ecu": "Bendix EC-60",
+  "formato": "blink",
+  "codigo": "13-x",
+  "descripcion": "Falla de la ECU",
+  "causas": [
+   "ECU"
+  ],
+  "comprobaciones": [
+   "Seguir las págs. 36 y siguientes del SD-13-4869"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://n0c357rmy1njbuit2friqwu.blob.core.windows.net/documents/VcCA4sr2I0EBhB_SD-13-4869_US_004.pdf"
+ }
+]

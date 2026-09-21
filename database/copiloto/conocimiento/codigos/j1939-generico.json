@@ -1,0 +1,3182 @@
+[
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 91 FMI 3",
+  "descripcion": "Sensor posición pedal acelerador 1: voltaje sobre lo normal o corto a fuente alta (Cummins: Accelerator Pedal or Lever Position Sensor 1 Circuit)",
+  "causas": [
+   "Circuito de señal en corto a la referencia +5 V o a positivo de batería (24 V)",
+   "Circuito de retorno/masa del sensor abierto (la señal queda 'flotando' alta en ECUs con pull-up)",
+   "Conector con humedad/corrosión entre pines (fuga de corriente)",
+   "Sensor defectuoso"
+  ],
+  "comprobaciones": [
+   "Llave ON motor apagado: medir en conector del sensor referencia vs retorno (debe estar cerca de 5 V) y señal vs retorno",
+   "Desconectar el sensor: si el FMI no cambia, el problema está en el arnés o ECU; si cambia a FMI 4, sospechar el sensor",
+   "Revisar pines del conector (Deutsch/AMP) por verde de corrosión, pines abiertos o sello dañado",
+   "Medir aislamiento del cable de señal a +24 V con batería desconectada y ambos extremos sueltos"
+  ],
+  "sistema": "motor",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.alliedsystems.com/pdf/Wagner/Forms/80/80-1235.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 91 FMI 4",
+  "descripcion": "Sensor posición pedal acelerador 1: voltaje bajo lo normal o corto a masa",
+  "causas": [
+   "Cable de señal en corto a masa (roce contra chasis, arnés aplastado)",
+   "Referencia +5 V caída: otro sensor que comparte la misma línea de referencia está en corto y la arrastra",
+   "Circuito de referencia abierto",
+   "Sensor defectuoso"
+  ],
+  "comprobaciones": [
+   "Llave ON: medir referencia 5 V en el conector; si está baja, desconectar uno a uno los sensores de esa misma referencia hasta que se recupere",
+   "Revisar si hay otros códigos 'Sensor Supply' (SPN 3509-3514) activos a la vez: indica referencia compartida afectada",
+   "Medir continuidad señal-masa con batería desconectada (debe estar abierto)",
+   "Inspeccionar arnés en zonas de roce, abrazaderas y pasos por chasis"
+  ],
+  "sistema": "motor",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.alliedsystems.com/pdf/Wagner/Forms/80/80-1235.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 94 FMI 1",
+  "descripcion": "Presión de combustible en circuito de baja demasiado baja (DD15: Fuel Pressure in Low Pressure Circuit Too Low)",
+  "causas": [
+   "Filtros de combustible (prefiltro/separador y principal) saturados — crítico con diésel contaminado/polvo",
+   "Restricción en succión: estanque, rejilla del pickup, manguera colapsada",
+   "Entrada de aire en la succión (abrazaderas, sellos de prefiltro)",
+   "Bomba de transferencia desgastada",
+   "Sensor de presión de combustible defectuoso"
+  ],
+  "comprobaciones": [
+   "Verificar nivel real de estanque y que la toma no esté obstruida",
+   "Cambiar/inspeccionar filtros y purgar el sistema",
+   "Medir restricción de succión y presión de baja con manómetro/vacuómetro según manual OEM",
+   "Buscar burbujas en manguera transparente de prueba en la succión"
+  ],
+  "sistema": "combustible",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "https://repair.diesellaptops.com/detroit-diesel-dd15-2014-2016-fault-codes-list/"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 94 FMI 4",
+  "descripcion": "Sensor de presión de combustible de baja: circuito falla bajo (DD15)",
+  "causas": [
+   "Cable de señal en corto a masa (roce contra chasis, arnés aplastado)",
+   "Referencia +5 V caída: otro sensor que comparte la misma línea de referencia está en corto y la arrastra",
+   "Circuito de referencia abierto",
+   "Sensor defectuoso"
+  ],
+  "comprobaciones": [
+   "Llave ON: medir referencia 5 V en el conector; si está baja, desconectar uno a uno los sensores de esa misma referencia hasta que se recupere",
+   "Revisar si hay otros códigos 'Sensor Supply' (SPN 3509-3514) activos a la vez: indica referencia compartida afectada",
+   "Medir continuidad señal-masa con batería desconectada (debe estar abierto)",
+   "Inspeccionar arnés en zonas de roce, abrazaderas y pasos por chasis"
+  ],
+  "sistema": "combustible",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "https://repair.diesellaptops.com/detroit-diesel-dd15-2014-2016-fault-codes-list/"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 94 FMI 15",
+  "descripcion": "Aviso de servicio de filtro de combustible (DD15: Fuel Filter Service Warning)",
+  "causas": [
+   "Filtro de combustible con restricción creciente",
+   "Combustible contaminado (agua/partículas)"
+  ],
+  "comprobaciones": [
+   "Programar cambio de filtros; revisar calidad del combustible y drenar separador de agua"
+  ],
+  "sistema": "combustible",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "https://repair.diesellaptops.com/detroit-diesel-dd15-2014-2016-fault-codes-list/"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 94 FMI 16",
+  "descripcion": "Reemplazo de filtro de combustible requerido (DD15: Fuel Filter Replacement Required)",
+  "causas": [
+   "Filtro saturado: restricción sobre límite"
+  ],
+  "comprobaciones": [
+   "Cambiar filtro(s), purgar, borrar código y confirmar presión de baja en datos en vivo"
+  ],
+  "sistema": "combustible",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "https://repair.diesellaptops.com/detroit-diesel-dd15-2014-2016-fault-codes-list/"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 97 FMI 3",
+  "descripcion": "Sensor de agua en combustible (WIF): voltaje sobre lo normal o corto a fuente alta",
+  "causas": [
+   "Circuito de señal en corto a la referencia +5 V o a positivo de batería (24 V)",
+   "Circuito de retorno/masa del sensor abierto (la señal queda 'flotando' alta en ECUs con pull-up)",
+   "Conector con humedad/corrosión entre pines (fuga de corriente)",
+   "Sensor defectuoso"
+  ],
+  "comprobaciones": [
+   "Llave ON motor apagado: medir en conector del sensor referencia vs retorno (debe estar cerca de 5 V) y señal vs retorno",
+   "Desconectar el sensor: si el FMI no cambia, el problema está en el arnés o ECU; si cambia a FMI 4, sospechar el sensor",
+   "Revisar pines del conector (Deutsch/AMP) por verde de corrosión, pines abiertos o sello dañado",
+   "Medir aislamiento del cable de señal a +24 V con batería desconectada y ambos extremos sueltos"
+  ],
+  "sistema": "combustible",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.alliedsystems.com/pdf/Wagner/Forms/80/80-1235.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 97 FMI 4",
+  "descripcion": "Sensor de agua en combustible (WIF): voltaje bajo lo normal o corto a masa",
+  "causas": [
+   "Cable de señal en corto a masa (roce contra chasis, arnés aplastado)",
+   "Referencia +5 V caída: otro sensor que comparte la misma línea de referencia está en corto y la arrastra",
+   "Circuito de referencia abierto",
+   "Sensor defectuoso"
+  ],
+  "comprobaciones": [
+   "Llave ON: medir referencia 5 V en el conector; si está baja, desconectar uno a uno los sensores de esa misma referencia hasta que se recupere",
+   "Revisar si hay otros códigos 'Sensor Supply' (SPN 3509-3514) activos a la vez: indica referencia compartida afectada",
+   "Medir continuidad señal-masa con batería desconectada (debe estar abierto)",
+   "Inspeccionar arnés en zonas de roce, abrazaderas y pasos por chasis"
+  ],
+  "sistema": "combustible",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.alliedsystems.com/pdf/Wagner/Forms/80/80-1235.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 97 FMI 16",
+  "descripcion": "Agua en combustible: dato válido sobre lo normal (hay agua en el separador)",
+  "causas": [
+   "Agua acumulada en el separador/prefiltro",
+   "Combustible contaminado en estanque o en el aljibe/proveedor"
+  ],
+  "comprobaciones": [
+   "Drenar separador y observar cantidad de agua",
+   "Tomar muestra de combustible del estanque (fondo)",
+   "Si reincide, revisar estanque de faena y filtros del surtidor"
+  ],
+  "sistema": "combustible",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.alliedsystems.com/pdf/Wagner/Forms/80/80-1235.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 100 FMI 1",
+  "descripcion": "Presión de aceite de motor baja (DD15: Low Engine Oil Pressure) — condición real grave",
+  "causas": [
+   "Nivel de aceite bajo o dilución por combustible",
+   "Viscosidad incorrecta / aceite degradado por temperatura",
+   "Bomba de aceite, válvula de alivio o chupador obstruido",
+   "Desgaste de metales (cojinetes)",
+   "Sensor o circuito defectuoso (descartar comparando con manómetro mecánico)"
+  ],
+  "comprobaciones": [
+   "DETENER el motor si la presión real es baja",
+   "Verificar nivel y estado del aceite (olor a diésel = dilución)",
+   "Instalar manómetro mecánico en la galería y comparar con el valor del ECU en ralentí y a régimen",
+   "Revisar filtro de aceite y análisis de aceite reciente"
+  ],
+  "sistema": "motor",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "https://repair.diesellaptops.com/detroit-diesel-dd15-2014-2016-fault-codes-list/"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 100 FMI 3",
+  "descripcion": "Sensor de presión de aceite (galería): voltaje sobre lo normal o corto a fuente alta",
+  "causas": [
+   "Circuito de señal en corto a la referencia +5 V o a positivo de batería (24 V)",
+   "Circuito de retorno/masa del sensor abierto (la señal queda 'flotando' alta en ECUs con pull-up)",
+   "Conector con humedad/corrosión entre pines (fuga de corriente)",
+   "Sensor defectuoso"
+  ],
+  "comprobaciones": [
+   "Llave ON motor apagado: medir en conector del sensor referencia vs retorno (debe estar cerca de 5 V) y señal vs retorno",
+   "Desconectar el sensor: si el FMI no cambia, el problema está en el arnés o ECU; si cambia a FMI 4, sospechar el sensor",
+   "Revisar pines del conector (Deutsch/AMP) por verde de corrosión, pines abiertos o sello dañado",
+   "Medir aislamiento del cable de señal a +24 V con batería desconectada y ambos extremos sueltos"
+  ],
+  "sistema": "motor",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.alliedsystems.com/pdf/Wagner/Forms/80/80-1235.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 100 FMI 4",
+  "descripcion": "Sensor de presión de aceite (galería): voltaje bajo lo normal o corto a masa",
+  "causas": [
+   "Cable de señal en corto a masa (roce contra chasis, arnés aplastado)",
+   "Referencia +5 V caída: otro sensor que comparte la misma línea de referencia está en corto y la arrastra",
+   "Circuito de referencia abierto",
+   "Sensor defectuoso"
+  ],
+  "comprobaciones": [
+   "Llave ON: medir referencia 5 V en el conector; si está baja, desconectar uno a uno los sensores de esa misma referencia hasta que se recupere",
+   "Revisar si hay otros códigos 'Sensor Supply' (SPN 3509-3514) activos a la vez: indica referencia compartida afectada",
+   "Medir continuidad señal-masa con batería desconectada (debe estar abierto)",
+   "Inspeccionar arnés en zonas de roce, abrazaderas y pasos por chasis"
+  ],
+  "sistema": "motor",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.alliedsystems.com/pdf/Wagner/Forms/80/80-1235.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 100 FMI 18",
+  "descripcion": "Presión de aceite: dato válido bajo lo normal, nivel moderadamente severo",
+  "causas": [
+   "Presión real baja (ver SPN 100 FMI 1)",
+   "Sensor desplazado"
+  ],
+  "comprobaciones": [
+   "Confirmar con manómetro mecánico antes de intervenir el motor"
+  ],
+  "sistema": "motor",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.alliedsystems.com/pdf/Wagner/Forms/80/80-1235.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 102 FMI 3",
+  "descripcion": "Sensor de presión de múltiple de admisión (boost): voltaje sobre lo normal o corto a fuente alta",
+  "causas": [
+   "Circuito de señal en corto a la referencia +5 V o a positivo de batería (24 V)",
+   "Circuito de retorno/masa del sensor abierto (la señal queda 'flotando' alta en ECUs con pull-up)",
+   "Conector con humedad/corrosión entre pines (fuga de corriente)",
+   "Sensor defectuoso"
+  ],
+  "comprobaciones": [
+   "Llave ON motor apagado: medir en conector del sensor referencia vs retorno (debe estar cerca de 5 V) y señal vs retorno",
+   "Desconectar el sensor: si el FMI no cambia, el problema está en el arnés o ECU; si cambia a FMI 4, sospechar el sensor",
+   "Revisar pines del conector (Deutsch/AMP) por verde de corrosión, pines abiertos o sello dañado",
+   "Medir aislamiento del cable de señal a +24 V con batería desconectada y ambos extremos sueltos"
+  ],
+  "sistema": "motor",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.alliedsystems.com/pdf/Wagner/Forms/80/80-1235.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 102 FMI 4",
+  "descripcion": "Sensor de presión de múltiple de admisión (boost): voltaje bajo lo normal o corto a masa",
+  "causas": [
+   "Cable de señal en corto a masa (roce contra chasis, arnés aplastado)",
+   "Referencia +5 V caída: otro sensor que comparte la misma línea de referencia está en corto y la arrastra",
+   "Circuito de referencia abierto",
+   "Sensor defectuoso"
+  ],
+  "comprobaciones": [
+   "Llave ON: medir referencia 5 V en el conector; si está baja, desconectar uno a uno los sensores de esa misma referencia hasta que se recupere",
+   "Revisar si hay otros códigos 'Sensor Supply' (SPN 3509-3514) activos a la vez: indica referencia compartida afectada",
+   "Medir continuidad señal-masa con batería desconectada (debe estar abierto)",
+   "Inspeccionar arnés en zonas de roce, abrazaderas y pasos por chasis"
+  ],
+  "sistema": "motor",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.alliedsystems.com/pdf/Wagner/Forms/80/80-1235.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 102 FMI 16",
+  "descripcion": "Presión de múltiple de admisión: dato válido sobre lo normal, moderadamente severo (sobrepresión)",
+  "causas": [
+   "VGT/wastegate pegado cerrado o actuador fallando",
+   "Sensor de presión desplazado",
+   "Calibración inadecuada para la altura"
+  ],
+  "comprobaciones": [
+   "Comparar presión boost vs. presión barométrica con motor detenido (deben ser similares)",
+   "Probar actuador VGT/wastegate con el escáner",
+   "Revisar SPN 641 / 1127 asociados"
+  ],
+  "sistema": "motor",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.alliedsystems.com/pdf/Wagner/Forms/80/80-1235.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 102 FMI 18",
+  "descripcion": "Presión de múltiple de admisión: dato válido bajo lo normal, moderadamente severo (falta de boost)",
+  "causas": [
+   "Fuga en mangueras/abrazaderas del sistema de aire de carga o intercooler roto",
+   "Filtro de aire restringido",
+   "Turbo dañado o VGT pegado abierto",
+   "Fuga de escape antes del turbo"
+  ],
+  "comprobaciones": [
+   "Prueba de fugas del sistema de aire de carga (presurizar según manual OEM)",
+   "Revisar indicador de restricción del filtro de aire",
+   "Inspeccionar juego axial/radial del eje del turbo y álabes"
+  ],
+  "sistema": "motor",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.alliedsystems.com/pdf/Wagner/Forms/80/80-1235.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 103 FMI 16",
+  "descripcion": "Velocidad del turbocompresor 1 sobre lo normal, moderadamente severo — relevante en altura",
+  "causas": [
+   "Operación en altura (menor densidad del aire obliga al turbo a girar más para lograr el boost)",
+   "Restricción de admisión elevada (filtro sucio)",
+   "VGT fuera de control"
+  ],
+  "comprobaciones": [
+   "Revisar restricción de admisión con indicador/manómetro",
+   "Verificar presión barométrica leída por el ECU (SPN 108) vs. altura real",
+   "Revisar historial: si ocurre sólo en subidas cargadas en altura, evaluar calibración de altura con el OEM"
+  ],
+  "sistema": "motor",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.alliedsystems.com/pdf/Wagner/Forms/80/80-1235.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 103 FMI 15",
+  "descripcion": "Velocidad del turbocompresor 1 sobre lo normal, nivel menos severo",
+  "causas": [
+   "Ídem SPN 103 FMI 16 en etapa temprana"
+  ],
+  "comprobaciones": [
+   "Ídem SPN 103 FMI 16"
+  ],
+  "sistema": "motor",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.alliedsystems.com/pdf/Wagner/Forms/80/80-1235.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 105 FMI 0",
+  "descripcion": "Temperatura del múltiple de admisión: dato válido sobre lo normal, más severo",
+  "causas": [
+   "Intercooler obstruido externamente (polvo, barro, insectos)",
+   "Ventilador/embrague viscoso sin enganchar",
+   "Temperatura ambiente alta + altura",
+   "Fuga de EGR caliente (motores con EGR)"
+  ],
+  "comprobaciones": [
+   "Limpiar panal de intercooler y radiador (desde el lado del motor hacia afuera)",
+   "Verificar funcionamiento del embrague de ventilador",
+   "Comparar temperatura de admisión vs. ambiente en datos en vivo"
+  ],
+  "sistema": "motor",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.alliedsystems.com/pdf/Wagner/Forms/80/80-1235.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 105 FMI 3",
+  "descripcion": "Sensor de temperatura de múltiple de admisión: voltaje sobre lo normal o corto a fuente alta",
+  "causas": [
+   "Circuito de señal en corto a la referencia +5 V o a positivo de batería (24 V)",
+   "Circuito de retorno/masa del sensor abierto (la señal queda 'flotando' alta en ECUs con pull-up)",
+   "Conector con humedad/corrosión entre pines (fuga de corriente)",
+   "Sensor defectuoso"
+  ],
+  "comprobaciones": [
+   "Llave ON motor apagado: medir en conector del sensor referencia vs retorno (debe estar cerca de 5 V) y señal vs retorno",
+   "Desconectar el sensor: si el FMI no cambia, el problema está en el arnés o ECU; si cambia a FMI 4, sospechar el sensor",
+   "Revisar pines del conector (Deutsch/AMP) por verde de corrosión, pines abiertos o sello dañado",
+   "Medir aislamiento del cable de señal a +24 V con batería desconectada y ambos extremos sueltos"
+  ],
+  "sistema": "motor",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.alliedsystems.com/pdf/Wagner/Forms/80/80-1235.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 105 FMI 4",
+  "descripcion": "Sensor de temperatura de múltiple de admisión: voltaje bajo lo normal o corto a masa",
+  "causas": [
+   "Cable de señal en corto a masa (roce contra chasis, arnés aplastado)",
+   "Referencia +5 V caída: otro sensor que comparte la misma línea de referencia está en corto y la arrastra",
+   "Circuito de referencia abierto",
+   "Sensor defectuoso"
+  ],
+  "comprobaciones": [
+   "Llave ON: medir referencia 5 V en el conector; si está baja, desconectar uno a uno los sensores de esa misma referencia hasta que se recupere",
+   "Revisar si hay otros códigos 'Sensor Supply' (SPN 3509-3514) activos a la vez: indica referencia compartida afectada",
+   "Medir continuidad señal-masa con batería desconectada (debe estar abierto)",
+   "Inspeccionar arnés en zonas de roce, abrazaderas y pasos por chasis"
+  ],
+  "sistema": "motor",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.alliedsystems.com/pdf/Wagner/Forms/80/80-1235.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 108 FMI 3",
+  "descripcion": "Sensor de presión barométrica: voltaje sobre lo normal o corto a fuente alta",
+  "causas": [
+   "Circuito de señal en corto a la referencia +5 V o a positivo de batería (24 V)",
+   "Circuito de retorno/masa del sensor abierto (la señal queda 'flotando' alta en ECUs con pull-up)",
+   "Conector con humedad/corrosión entre pines (fuga de corriente)",
+   "Sensor defectuoso"
+  ],
+  "comprobaciones": [
+   "Llave ON motor apagado: medir en conector del sensor referencia vs retorno (debe estar cerca de 5 V) y señal vs retorno",
+   "Desconectar el sensor: si el FMI no cambia, el problema está en el arnés o ECU; si cambia a FMI 4, sospechar el sensor",
+   "Revisar pines del conector (Deutsch/AMP) por verde de corrosión, pines abiertos o sello dañado",
+   "Medir aislamiento del cable de señal a +24 V con batería desconectada y ambos extremos sueltos"
+  ],
+  "sistema": "motor",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.alliedsystems.com/pdf/Wagner/Forms/80/80-1235.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 108 FMI 4",
+  "descripcion": "Sensor de presión barométrica: voltaje bajo lo normal o corto a masa",
+  "causas": [
+   "Cable de señal en corto a masa (roce contra chasis, arnés aplastado)",
+   "Referencia +5 V caída: otro sensor que comparte la misma línea de referencia está en corto y la arrastra",
+   "Circuito de referencia abierto",
+   "Sensor defectuoso"
+  ],
+  "comprobaciones": [
+   "Llave ON: medir referencia 5 V en el conector; si está baja, desconectar uno a uno los sensores de esa misma referencia hasta que se recupere",
+   "Revisar si hay otros códigos 'Sensor Supply' (SPN 3509-3514) activos a la vez: indica referencia compartida afectada",
+   "Medir continuidad señal-masa con batería desconectada (debe estar abierto)",
+   "Inspeccionar arnés en zonas de roce, abrazaderas y pasos por chasis"
+  ],
+  "sistema": "motor",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.alliedsystems.com/pdf/Wagner/Forms/80/80-1235.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 1127 FMI 7",
+  "descripcion": "Presión de boost del turbo 1: sistema mecánico no responde o fuera de ajuste",
+  "causas": [
+   "Actuador VGT/wastegate trabado (hollín, corrosión)",
+   "Fuga de aire de carga",
+   "Turbo dañado"
+  ],
+  "comprobaciones": [
+   "Prueba de actuador VGT con escáner",
+   "Prueba de fugas del circuito de aire de carga",
+   "Inspección física del turbo"
+  ],
+  "sistema": "motor",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.alliedsystems.com/pdf/Wagner/Forms/80/80-1235.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 1127 FMI 10",
+  "descripcion": "Respuesta de boost lenta (DD15: Slow Boost Response)",
+  "causas": [
+   "Fugas de aire de carga",
+   "VGT lento",
+   "Filtro de aire restringido"
+  ],
+  "comprobaciones": [
+   "Ídem SPN 1127 FMI 7"
+  ],
+  "sistema": "motor",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "https://repair.diesellaptops.com/detroit-diesel-dd15-2014-2016-fault-codes-list/"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 641 FMI 7",
+  "descripcion": "Actuador del turbo de geometría variable (VGT): sistema mecánico no responde",
+  "causas": [
+   "Mecanismo de álabes del VGT agarrotado por hollín (ralentí prolongado)",
+   "Actuador eléctrico/neumático defectuoso",
+   "Varillaje dañado"
+  ],
+  "comprobaciones": [
+   "Ejecutar prueba/aprendizaje del VGT con el software OEM",
+   "Revisar movimiento libre del varillaje con motor detenido"
+  ],
+  "sistema": "motor",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.alliedsystems.com/pdf/Wagner/Forms/80/80-1235.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 641 FMI 13",
+  "descripcion": "Controlador del actuador VGT fuera de calibración",
+  "causas": [
+   "Actuador reemplazado sin calibrar",
+   "Pérdida de aprendizaje"
+  ],
+  "comprobaciones": [
+   "Ejecutar calibración/aprendizaje del actuador VGT con herramienta OEM"
+  ],
+  "sistema": "motor",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.alliedsystems.com/pdf/Wagner/Forms/80/80-1235.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 641 FMI 5",
+  "descripcion": "Circuito de control del turbo abierto (DD15: Turbocharger Control Circuit Failed Open)",
+  "causas": [
+   "Circuito abierto (cable cortado, pin retraído, conector suelto)",
+   "Bobina/actuador con resistencia alta o abierta",
+   "Corrosión en conector que eleva la resistencia"
+  ],
+  "comprobaciones": [
+   "Medir resistencia de la bobina/actuador en su conector y comparar con valor de manual OEM",
+   "Medir continuidad de ambos cables entre ECU y componente (prueba de caída de tensión con carga si es posible)",
+   "Mover el arnés (wiggle test) con el motor en ralentí observando si el código se activa/desactiva"
+  ],
+  "sistema": "motor",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "https://repair.diesellaptops.com/detroit-diesel-dd15-2014-2016-fault-codes-list/"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 110 FMI 0",
+  "descripcion": "Temperatura de refrigerante del motor: dato válido sobre lo normal, más severo (sobrecalentamiento)",
+  "causas": [
+   "Radiador/intercooler obstruido externamente (polvo)",
+   "Nivel de refrigerante bajo o fugas",
+   "Termostato pegado cerrado",
+   "Embrague de ventilador sin enganchar",
+   "Bomba de agua o correa",
+   "Tapa de presión defectuosa (en altura el punto de ebullición baja)",
+   "Carga alta en subida con ambiente caluroso"
+  ],
+  "comprobaciones": [
+   "Reducir carga y dejar en ralentí (no apagar en caliente bruscamente)",
+   "Verificar nivel con motor frío",
+   "Limpiar panales",
+   "Verificar enganche del ventilador y correa",
+   "Probar tapa de presión y termostato",
+   "Comparar temperatura del ECU con termómetro infrarrojo en salida del motor"
+  ],
+  "sistema": "motor",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.alliedsystems.com/pdf/Wagner/Forms/80/80-1235.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 110 FMI 3",
+  "descripcion": "Sensor de temperatura de refrigerante: voltaje sobre lo normal o corto a fuente alta",
+  "causas": [
+   "Circuito de señal en corto a la referencia +5 V o a positivo de batería (24 V)",
+   "Circuito de retorno/masa del sensor abierto (la señal queda 'flotando' alta en ECUs con pull-up)",
+   "Conector con humedad/corrosión entre pines (fuga de corriente)",
+   "Sensor defectuoso"
+  ],
+  "comprobaciones": [
+   "Llave ON motor apagado: medir en conector del sensor referencia vs retorno (debe estar cerca de 5 V) y señal vs retorno",
+   "Desconectar el sensor: si el FMI no cambia, el problema está en el arnés o ECU; si cambia a FMI 4, sospechar el sensor",
+   "Revisar pines del conector (Deutsch/AMP) por verde de corrosión, pines abiertos o sello dañado",
+   "Medir aislamiento del cable de señal a +24 V con batería desconectada y ambos extremos sueltos"
+  ],
+  "sistema": "motor",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.alliedsystems.com/pdf/Wagner/Forms/80/80-1235.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 110 FMI 4",
+  "descripcion": "Sensor de temperatura de refrigerante: voltaje bajo lo normal o corto a masa",
+  "causas": [
+   "Cable de señal en corto a masa (roce contra chasis, arnés aplastado)",
+   "Referencia +5 V caída: otro sensor que comparte la misma línea de referencia está en corto y la arrastra",
+   "Circuito de referencia abierto",
+   "Sensor defectuoso"
+  ],
+  "comprobaciones": [
+   "Llave ON: medir referencia 5 V en el conector; si está baja, desconectar uno a uno los sensores de esa misma referencia hasta que se recupere",
+   "Revisar si hay otros códigos 'Sensor Supply' (SPN 3509-3514) activos a la vez: indica referencia compartida afectada",
+   "Medir continuidad señal-masa con batería desconectada (debe estar abierto)",
+   "Inspeccionar arnés en zonas de roce, abrazaderas y pasos por chasis"
+  ],
+  "sistema": "motor",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.alliedsystems.com/pdf/Wagner/Forms/80/80-1235.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 110 FMI 16",
+  "descripcion": "Temperatura de refrigerante: dato válido sobre lo normal, moderadamente severo",
+  "causas": [
+   "Ídem SPN 110 FMI 0 en etapa previa"
+  ],
+  "comprobaciones": [
+   "Ídem SPN 110 FMI 0"
+  ],
+  "sistema": "motor",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.alliedsystems.com/pdf/Wagner/Forms/80/80-1235.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 110 FMI 18",
+  "descripcion": "Falla de termostato de refrigerante (DD15: Failed Coolant Thermostat)",
+  "causas": [
+   "Termostato pegado abierto: el motor no alcanza temperatura (común con ralentí prolongado y ambiente frío)"
+  ],
+  "comprobaciones": [
+   "Monitorear curva de calentamiento del motor",
+   "Reemplazar termostato si no regula"
+  ],
+  "sistema": "motor",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "https://repair.diesellaptops.com/detroit-diesel-dd15-2014-2016-fault-codes-list/"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 111 FMI 1",
+  "descripcion": "Nivel de refrigerante muy bajo (DD15: Coolant Level Very Low)",
+  "causas": [
+   "Fuga externa (mangueras, radiador, bomba)",
+   "Fuga interna (junta de culata, enfriador de aceite/EGR)",
+   "Sensor de nivel sucio (falsa lectura)"
+  ],
+  "comprobaciones": [
+   "Inspeccionar fugas con sistema presurizado",
+   "Buscar refrigerante en aceite o gases en el depósito de expansión",
+   "Limpiar sensor de nivel"
+  ],
+  "sistema": "motor",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "https://repair.diesellaptops.com/detroit-diesel-dd15-2014-2016-fault-codes-list/"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 111 FMI 18",
+  "descripcion": "Nivel de refrigerante bajo (DD15: Coolant Level Low)",
+  "causas": [
+   "Ídem SPN 111 FMI 1"
+  ],
+  "comprobaciones": [
+   "Ídem SPN 111 FMI 1"
+  ],
+  "sistema": "motor",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "https://repair.diesellaptops.com/detroit-diesel-dd15-2014-2016-fault-codes-list/"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 157 FMI 3",
+  "descripcion": "Sensor de presión del riel de inyección 1: voltaje sobre lo normal o corto a fuente alta",
+  "causas": [
+   "Circuito de señal en corto a la referencia +5 V o a positivo de batería (24 V)",
+   "Circuito de retorno/masa del sensor abierto (la señal queda 'flotando' alta en ECUs con pull-up)",
+   "Conector con humedad/corrosión entre pines (fuga de corriente)",
+   "Sensor defectuoso"
+  ],
+  "comprobaciones": [
+   "Llave ON motor apagado: medir en conector del sensor referencia vs retorno (debe estar cerca de 5 V) y señal vs retorno",
+   "Desconectar el sensor: si el FMI no cambia, el problema está en el arnés o ECU; si cambia a FMI 4, sospechar el sensor",
+   "Revisar pines del conector (Deutsch/AMP) por verde de corrosión, pines abiertos o sello dañado",
+   "Medir aislamiento del cable de señal a +24 V con batería desconectada y ambos extremos sueltos"
+  ],
+  "sistema": "combustible",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.alliedsystems.com/pdf/Wagner/Forms/80/80-1235.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 157 FMI 4",
+  "descripcion": "Sensor de presión del riel de inyección 1: voltaje bajo lo normal o corto a masa",
+  "causas": [
+   "Cable de señal en corto a masa (roce contra chasis, arnés aplastado)",
+   "Referencia +5 V caída: otro sensor que comparte la misma línea de referencia está en corto y la arrastra",
+   "Circuito de referencia abierto",
+   "Sensor defectuoso"
+  ],
+  "comprobaciones": [
+   "Llave ON: medir referencia 5 V en el conector; si está baja, desconectar uno a uno los sensores de esa misma referencia hasta que se recupere",
+   "Revisar si hay otros códigos 'Sensor Supply' (SPN 3509-3514) activos a la vez: indica referencia compartida afectada",
+   "Medir continuidad señal-masa con batería desconectada (debe estar abierto)",
+   "Inspeccionar arnés en zonas de roce, abrazaderas y pasos por chasis"
+  ],
+  "sistema": "combustible",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.alliedsystems.com/pdf/Wagner/Forms/80/80-1235.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 157 FMI 18",
+  "descripcion": "Presión del riel de inyección 1: dato válido bajo lo normal, moderadamente severo",
+  "causas": [
+   "Filtros de combustible restringidos / aire en el combustible",
+   "Válvula de control de la bomba de alta (IMV/MPROP) defectuosa",
+   "Fuga interna: retorno excesivo de inyectores o válvula limitadora de presión (PRV) abierta",
+   "Bomba de alta desgastada"
+  ],
+  "comprobaciones": [
+   "Revisar presión de baja (SPN 94) primero",
+   "Medir caudal de retorno de inyectores según procedimiento OEM",
+   "Comparar presión deseada vs. real en datos en vivo"
+  ],
+  "sistema": "combustible",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.alliedsystems.com/pdf/Wagner/Forms/80/80-1235.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 157 FMI 16",
+  "descripcion": "Presión del riel de inyección 1: dato válido sobre lo normal, moderadamente severo",
+  "causas": [
+   "Válvula de control de la bomba de alta pegada",
+   "Sensor de presión de riel desplazado"
+  ],
+  "comprobaciones": [
+   "Comparar deseado vs. real; probar actuador de caudal"
+  ],
+  "sistema": "combustible",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.alliedsystems.com/pdf/Wagner/Forms/80/80-1235.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 157 FMI 7",
+  "descripcion": "Presión del riel de inyección 1: sistema mecánico no responde o fuera de ajuste",
+  "causas": [
+   "Bomba de alta sin respuesta",
+   "Aire en combustible",
+   "Fugas internas altas"
+  ],
+  "comprobaciones": [
+   "Ídem SPN 157 FMI 18"
+  ],
+  "sistema": "combustible",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.alliedsystems.com/pdf/Wagner/Forms/80/80-1235.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 157 FMI 17",
+  "descripcion": "Presión mínima del riel no alcanzada durante el arranque (DD15: Minimum Rail Pressure Not Achieved While Engine Cranking)",
+  "causas": [
+   "Aire en el sistema tras cambio de filtros o quedarse sin combustible",
+   "Velocidad de arranque baja (baterías/motor de partida)",
+   "Filtros saturados",
+   "Fuga interna de inyectores/PRV"
+  ],
+  "comprobaciones": [
+   "Purgar sistema de combustible",
+   "Verificar RPM de arranque y voltaje en el motor de partida durante el giro",
+   "Revisar presión de baja"
+  ],
+  "sistema": "combustible",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "https://repair.diesellaptops.com/detroit-diesel-dd15-2014-2016-fault-codes-list/"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 5585 FMI 18",
+  "descripcion": "Presión del riel de inyección 1 durante arranque: dato válido bajo lo normal",
+  "causas": [
+   "Ídem SPN 157 FMI 17"
+  ],
+  "comprobaciones": [
+   "Ídem SPN 157 FMI 17"
+  ],
+  "sistema": "combustible",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.alliedsystems.com/pdf/Wagner/Forms/80/80-1235.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 158 FMI 2",
+  "descripcion": "Estado del interruptor de encendido no plausible (DD15: Ignition Switch Not Plausible)",
+  "causas": [
+   "Contacto de llave intermitente",
+   "Relé/fusible de encendido con falso contacto",
+   "Masa deficiente del ECU"
+  ],
+  "comprobaciones": [
+   "Medir tensión en pin de llave (keyswitch) del ECU con llave ON, con carga",
+   "Revisar fusible y relé de encendido"
+  ],
+  "sistema": "electrico",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "https://repair.diesellaptops.com/detroit-diesel-dd15-2014-2016-fault-codes-list/"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 168 FMI 1",
+  "descripcion": "Voltaje de batería bajo (DD15: Battery Voltage Low)",
+  "causas": [
+   "Alternador no carga o correa patinando",
+   "Baterías sulfatadas/descargadas (ralentí largo con consumos)",
+   "Caída de tensión en cables/masas al ECU"
+  ],
+  "comprobaciones": [
+   "Medir tensión en bornes con motor en marcha",
+   "Prueba de caída de tensión del circuito de carga (máx. 1,0 V en sistemas de 24 V según Delco Remy Diagnostic Procedures Manual, https://www.delcoremy.com/getmedia/30ff0e99-7084-451b-8f2a-6745dd18a3b5/DelcoRemy_DiagnosticManual_Updated_Digital.pdf.aspx)",
+   "Prueba de carga de baterías"
+  ],
+  "sistema": "electrico",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "https://repair.diesellaptops.com/detroit-diesel-dd15-2014-2016-fault-codes-list/"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 168 FMI 18",
+  "descripcion": "Voltaje de batería 1: dato válido bajo lo normal, moderadamente severo",
+  "causas": [
+   "Ídem SPN 168 FMI 1"
+  ],
+  "comprobaciones": [
+   "Ídem SPN 168 FMI 1"
+  ],
+  "sistema": "electrico",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.alliedsystems.com/pdf/Wagner/Forms/80/80-1235.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 168 FMI 16",
+  "descripcion": "Voltaje de batería 1: dato válido sobre lo normal, moderadamente severo (sobrecarga)",
+  "causas": [
+   "Regulador del alternador defectuoso",
+   "Arranque con cargador/booster de tensión mayor"
+  ],
+  "comprobaciones": [
+   "Medir tensión de carga en alternador (Delco Remy: no debe superar 31 V en sistemas de 24 V, https://www.delcoremy.com/getmedia/30ff0e99-7084-451b-8f2a-6745dd18a3b5/DelcoRemy_DiagnosticManual_Updated_Digital.pdf.aspx)"
+  ],
+  "sistema": "electrico",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.alliedsystems.com/pdf/Wagner/Forms/80/80-1235.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 3510 FMI 3",
+  "descripcion": "Alimentación de sensores 2 (referencia 5 V): voltaje sobre lo normal o corto a fuente alta",
+  "causas": [
+   "Referencia en corto a +24 V",
+   "ECU defectuoso"
+  ],
+  "comprobaciones": [
+   "Medir referencia con sensores desconectados",
+   "Inspeccionar arnés"
+  ],
+  "sistema": "electrico",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.alliedsystems.com/pdf/Wagner/Forms/80/80-1235.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 3510 FMI 4",
+  "descripcion": "Alimentación de sensores 2 (referencia 5 V): voltaje bajo lo normal o corto a masa",
+  "causas": [
+   "Un sensor alimentado por esa referencia está en corto interno",
+   "Cable de referencia en corto a masa"
+  ],
+  "comprobaciones": [
+   "Desconectar uno a uno los sensores de esa referencia observando si la tensión vuelve a ~5 V",
+   "Revisar arnés en puntos de roce"
+  ],
+  "sistema": "electrico",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.alliedsystems.com/pdf/Wagner/Forms/80/80-1235.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 1675 FMI 31",
+  "descripcion": "Protección por sobre-arranque del motor de partida activa (Overcrank Protection)",
+  "causas": [
+   "Intentos de arranque prolongados/repetidos (motor que no parte)",
+   "Botón/llave de partida pegado"
+  ],
+  "comprobaciones": [
+   "Dejar enfriar el motor de partida",
+   "Diagnosticar por qué no arranca (ver árbol 'gira pero no parte')"
+  ],
+  "sistema": "electrico",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.alliedsystems.com/pdf/Wagner/Forms/80/80-1235.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 629 FMI 12",
+  "descripcion": "Módulo de control del motor: falla interna crítica (dispositivo inteligente defectuoso)",
+  "causas": [
+   "Falla interna del ECM",
+   "Alimentación/masa inestable que provoca reinicios",
+   "Programación corrupta"
+  ],
+  "comprobaciones": [
+   "Verificar alimentación y masas del ECM con carga (caída de tensión)",
+   "Reprogramar con herramienta OEM antes de reemplazar"
+  ],
+  "sistema": "electrico",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.alliedsystems.com/pdf/Wagner/Forms/80/80-1235.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 639 FMI 14",
+  "descripcion": "Falla del enlace de datos J1939 (DD15: J1939 Data Link Failure)",
+  "causas": [
+   "Mensaje J1939 del módulo emisor no llega (módulo sin alimentación, apagado o fuera de la red)",
+   "Problema físico de red CAN (terminación, corto, cable abierto)",
+   "Módulo emisor defectuoso o con software incompatible"
+  ],
+  "comprobaciones": [
+   "Identificar con el escáner qué dirección de origen (SA) deja de transmitir",
+   "Medir resistencia CAN-H/CAN-L en conector de diagnóstico con batería desconectada (≈60 Ω)",
+   "Verificar alimentación y masa del módulo emisor"
+  ],
+  "sistema": "electrico",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "https://repair.diesellaptops.com/detroit-diesel-dd15-2014-2016-fault-codes-list/"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 171 FMI 3",
+  "descripcion": "Sensor de temperatura ambiente: circuito falla alto (DD15)",
+  "causas": [
+   "Circuito de señal en corto a la referencia +5 V o a positivo de batería (24 V)",
+   "Circuito de retorno/masa del sensor abierto (la señal queda 'flotando' alta en ECUs con pull-up)",
+   "Conector con humedad/corrosión entre pines (fuga de corriente)",
+   "Sensor defectuoso"
+  ],
+  "comprobaciones": [
+   "Llave ON motor apagado: medir en conector del sensor referencia vs retorno (debe estar cerca de 5 V) y señal vs retorno",
+   "Desconectar el sensor: si el FMI no cambia, el problema está en el arnés o ECU; si cambia a FMI 4, sospechar el sensor",
+   "Revisar pines del conector (Deutsch/AMP) por verde de corrosión, pines abiertos o sello dañado",
+   "Medir aislamiento del cable de señal a +24 V con batería desconectada y ambos extremos sueltos"
+  ],
+  "sistema": "motor",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "https://repair.diesellaptops.com/detroit-diesel-dd15-2014-2016-fault-codes-list/"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 171 FMI 4",
+  "descripcion": "Sensor de temperatura ambiente: circuito falla bajo (DD15)",
+  "causas": [
+   "Cable de señal en corto a masa (roce contra chasis, arnés aplastado)",
+   "Referencia +5 V caída: otro sensor que comparte la misma línea de referencia está en corto y la arrastra",
+   "Circuito de referencia abierto",
+   "Sensor defectuoso"
+  ],
+  "comprobaciones": [
+   "Llave ON: medir referencia 5 V en el conector; si está baja, desconectar uno a uno los sensores de esa misma referencia hasta que se recupere",
+   "Revisar si hay otros códigos 'Sensor Supply' (SPN 3509-3514) activos a la vez: indica referencia compartida afectada",
+   "Medir continuidad señal-masa con batería desconectada (debe estar abierto)",
+   "Inspeccionar arnés en zonas de roce, abrazaderas y pasos por chasis"
+  ],
+  "sistema": "motor",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "https://repair.diesellaptops.com/detroit-diesel-dd15-2014-2016-fault-codes-list/"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 174 FMI 0",
+  "descripcion": "Temperatura de combustible de suministro demasiado alta (DD15)",
+  "causas": [
+   "Nivel bajo de combustible en estanque (el retorno caliente recircula)",
+   "Enfriador de combustible obstruido",
+   "Ambiente muy caluroso"
+  ],
+  "comprobaciones": [
+   "Mantener nivel de estanque",
+   "Limpiar enfriador de combustible si existe"
+  ],
+  "sistema": "combustible",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "https://repair.diesellaptops.com/detroit-diesel-dd15-2014-2016-fault-codes-list/"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 175 FMI 0",
+  "descripcion": "Temperatura de aceite alta — aviso (DD15: Oil Temperature High Warning)",
+  "causas": [
+   "Enfriador de aceite obstruido",
+   "Sobrecarga/sobrecalentamiento general",
+   "Nivel de aceite incorrecto"
+  ],
+  "comprobaciones": [
+   "Revisar sistema de enfriamiento y enfriador de aceite"
+  ],
+  "sistema": "motor",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "https://repair.diesellaptops.com/detroit-diesel-dd15-2014-2016-fault-codes-list/"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 190 FMI 0",
+  "descripcion": "Velocidad del motor: dato válido sobre lo normal, más severo (sobrevelocidad)",
+  "causas": [
+   "Bajada con marcha baja/cambio forzado sin freno motor",
+   "Embalamiento por aceite (turbo/respiradero) — emergencia",
+   "Sensor de velocidad con ruido"
+  ],
+  "comprobaciones": [
+   "Revisar historial de sobrevelocidad y condiciones de operación",
+   "Si hay embalamiento: cortar aire de admisión, no sólo la llave"
+  ],
+  "sistema": "motor",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.alliedsystems.com/pdf/Wagner/Forms/80/80-1235.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 190 FMI 2",
+  "descripcion": "Velocidad/posición del cigüeñal: dato errático, intermitente o incorrecto",
+  "causas": [
+   "Sensor de cigüeñal con holgura o suciedad metálica",
+   "Rueda fónica dañada",
+   "Arnés con interferencia o blindaje dañado"
+  ],
+  "comprobaciones": [
+   "Inspeccionar sensor y su entrehierro",
+   "Revisar forma de onda con osciloscopio",
+   "Revisar arnés y conector"
+  ],
+  "sistema": "motor",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.alliedsystems.com/pdf/Wagner/Forms/80/80-1235.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 636 FMI 2",
+  "descripcion": "Sin coincidencia entre señales de árbol de levas y cigüeñal (DD15)",
+  "causas": [
+   "Sensor de levas o cigüeñal defectuoso",
+   "Distribución desfasada (tras reparación)",
+   "Rueda fónica dañada"
+  ],
+  "comprobaciones": [
+   "Comparar ambas señales con osciloscopio",
+   "Verificar puesta a punto si hubo intervención"
+  ],
+  "sistema": "motor",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "https://repair.diesellaptops.com/detroit-diesel-dd15-2014-2016-fault-codes-list/"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 636 FMI 8",
+  "descripcion": "Sensor de posición de cigüeñal: tiempo agotado (DD15: Crankshaft Position Sensor Time Out)",
+  "causas": [
+   "Sensor sin señal (abierto, entrehierro excesivo)"
+  ],
+  "comprobaciones": [
+   "Medir resistencia/forma de onda del sensor; revisar conector"
+  ],
+  "sistema": "motor",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "https://repair.diesellaptops.com/detroit-diesel-dd15-2014-2016-fault-codes-list/"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 411 FMI 3",
+  "descripcion": "Sensor de presión diferencial EGR: circuito falla alto (DD15)",
+  "causas": [
+   "Circuito de señal en corto a la referencia +5 V o a positivo de batería (24 V)",
+   "Circuito de retorno/masa del sensor abierto (la señal queda 'flotando' alta en ECUs con pull-up)",
+   "Conector con humedad/corrosión entre pines (fuga de corriente)",
+   "Sensor defectuoso"
+  ],
+  "comprobaciones": [
+   "Llave ON motor apagado: medir en conector del sensor referencia vs retorno (debe estar cerca de 5 V) y señal vs retorno",
+   "Desconectar el sensor: si el FMI no cambia, el problema está en el arnés o ECU; si cambia a FMI 4, sospechar el sensor",
+   "Revisar pines del conector (Deutsch/AMP) por verde de corrosión, pines abiertos o sello dañado",
+   "Medir aislamiento del cable de señal a +24 V con batería desconectada y ambos extremos sueltos"
+  ],
+  "sistema": "motor",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "https://repair.diesellaptops.com/detroit-diesel-dd15-2014-2016-fault-codes-list/"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 411 FMI 4",
+  "descripcion": "Sensor de presión diferencial EGR: circuito falla bajo (DD15)",
+  "causas": [
+   "Cable de señal en corto a masa (roce contra chasis, arnés aplastado)",
+   "Referencia +5 V caída: otro sensor que comparte la misma línea de referencia está en corto y la arrastra",
+   "Circuito de referencia abierto",
+   "Sensor defectuoso"
+  ],
+  "comprobaciones": [
+   "Llave ON: medir referencia 5 V en el conector; si está baja, desconectar uno a uno los sensores de esa misma referencia hasta que se recupere",
+   "Revisar si hay otros códigos 'Sensor Supply' (SPN 3509-3514) activos a la vez: indica referencia compartida afectada",
+   "Medir continuidad señal-masa con batería desconectada (debe estar abierto)",
+   "Inspeccionar arnés en zonas de roce, abrazaderas y pasos por chasis"
+  ],
+  "sistema": "motor",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "https://repair.diesellaptops.com/detroit-diesel-dd15-2014-2016-fault-codes-list/"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 411 FMI 0",
+  "descripcion": "Presión diferencial EGR demasiado alta (DD15)",
+  "causas": [
+   "Venturi/tubos de EGR con hollín",
+   "Enfriador de EGR obstruido",
+   "Mangueras del sensor tapadas"
+  ],
+  "comprobaciones": [
+   "Limpiar tomas del sensor; inspeccionar enfriador EGR"
+  ],
+  "sistema": "motor",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "https://repair.diesellaptops.com/detroit-diesel-dd15-2014-2016-fault-codes-list/"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 412 FMI 16",
+  "descripcion": "Temperatura de EGR: dato válido sobre lo normal, moderadamente severo",
+  "causas": [
+   "Enfriador de EGR obstruido o con fuga interna",
+   "Refrigerante bajo"
+  ],
+  "comprobaciones": [
+   "Revisar enfriador EGR y nivel de refrigerante"
+  ],
+  "sistema": "motor",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.alliedsystems.com/pdf/Wagner/Forms/80/80-1235.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 2791 FMI 7",
+  "descripcion": "Válvula EGR: circuito de control, sistema mecánico no responde",
+  "causas": [
+   "Válvula EGR trabada por carbón (ralentí prolongado)",
+   "Actuador defectuoso"
+  ],
+  "comprobaciones": [
+   "Prueba de actuador con escáner; limpieza/reemplazo de válvula"
+  ],
+  "sistema": "motor",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.alliedsystems.com/pdf/Wagner/Forms/80/80-1235.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 2791 FMI 5",
+  "descripcion": "Válvula EGR: circuito de control con corriente baja o abierto",
+  "causas": [
+   "Circuito abierto (cable cortado, pin retraído, conector suelto)",
+   "Bobina/actuador con resistencia alta o abierta",
+   "Corrosión en conector que eleva la resistencia"
+  ],
+  "comprobaciones": [
+   "Medir resistencia de la bobina/actuador en su conector y comparar con valor de manual OEM",
+   "Medir continuidad de ambos cables entre ECU y componente (prueba de caída de tensión con carga si es posible)",
+   "Mover el arnés (wiggle test) con el motor en ralentí observando si el código se activa/desactiva"
+  ],
+  "sistema": "motor",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.alliedsystems.com/pdf/Wagner/Forms/80/80-1235.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 651 FMI 5",
+  "descripcion": "Inyector cilindro 1: circuito abierto (DD15: Injector Needle Control Valve Cyl 1 Circuit Open)",
+  "causas": [
+   "Cable/pin del inyector abierto (arnés bajo tapa de válvulas)",
+   "Bobina del inyector abierta",
+   "Conector suelto por vibración"
+  ],
+  "comprobaciones": [
+   "Medir resistencia de la bobina del inyector y del arnés desde el ECU",
+   "Revisar pasamuros del arnés en culata",
+   "Balance de cilindros / prueba de corte de cilindro con escáner"
+  ],
+  "sistema": "combustible",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "https://repair.diesellaptops.com/detroit-diesel-dd15-2014-2016-fault-codes-list/"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 651 FMI 7",
+  "descripcion": "Inyector cilindro 1: sistema mecánico no responde o fuera de ajuste (Cummins: Injector Solenoid Driver Cylinder 1 - Mechanical system not responding)",
+  "causas": [
+   "Inyector pegado o con desgaste (combustible contaminado)",
+   "Compresión baja en el cilindro",
+   "Fuga interna del inyector"
+  ],
+  "comprobaciones": [
+   "Prueba de contribución/balance de cilindros con escáner",
+   "Prueba de compresión relativa",
+   "Revisar calidad del combustible y filtros"
+  ],
+  "sistema": "combustible",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.alliedsystems.com/pdf/Wagner/Forms/80/80-1235.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 652 FMI 5",
+  "descripcion": "Inyector cilindro 2: circuito abierto (DD15: Injector Needle Control Valve Cyl 2 Circuit Open)",
+  "causas": [
+   "Cable/pin del inyector abierto (arnés bajo tapa de válvulas)",
+   "Bobina del inyector abierta",
+   "Conector suelto por vibración"
+  ],
+  "comprobaciones": [
+   "Medir resistencia de la bobina del inyector y del arnés desde el ECU",
+   "Revisar pasamuros del arnés en culata",
+   "Balance de cilindros / prueba de corte de cilindro con escáner"
+  ],
+  "sistema": "combustible",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "https://repair.diesellaptops.com/detroit-diesel-dd15-2014-2016-fault-codes-list/"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 652 FMI 7",
+  "descripcion": "Inyector cilindro 2: sistema mecánico no responde o fuera de ajuste (Cummins: Injector Solenoid Driver Cylinder 2 - Mechanical system not responding)",
+  "causas": [
+   "Inyector pegado o con desgaste (combustible contaminado)",
+   "Compresión baja en el cilindro",
+   "Fuga interna del inyector"
+  ],
+  "comprobaciones": [
+   "Prueba de contribución/balance de cilindros con escáner",
+   "Prueba de compresión relativa",
+   "Revisar calidad del combustible y filtros"
+  ],
+  "sistema": "combustible",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.alliedsystems.com/pdf/Wagner/Forms/80/80-1235.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 653 FMI 5",
+  "descripcion": "Inyector cilindro 3: circuito abierto (DD15: Injector Needle Control Valve Cyl 3 Circuit Open)",
+  "causas": [
+   "Cable/pin del inyector abierto (arnés bajo tapa de válvulas)",
+   "Bobina del inyector abierta",
+   "Conector suelto por vibración"
+  ],
+  "comprobaciones": [
+   "Medir resistencia de la bobina del inyector y del arnés desde el ECU",
+   "Revisar pasamuros del arnés en culata",
+   "Balance de cilindros / prueba de corte de cilindro con escáner"
+  ],
+  "sistema": "combustible",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "https://repair.diesellaptops.com/detroit-diesel-dd15-2014-2016-fault-codes-list/"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 653 FMI 7",
+  "descripcion": "Inyector cilindro 3: sistema mecánico no responde o fuera de ajuste (Cummins: Injector Solenoid Driver Cylinder 3 - Mechanical system not responding)",
+  "causas": [
+   "Inyector pegado o con desgaste (combustible contaminado)",
+   "Compresión baja en el cilindro",
+   "Fuga interna del inyector"
+  ],
+  "comprobaciones": [
+   "Prueba de contribución/balance de cilindros con escáner",
+   "Prueba de compresión relativa",
+   "Revisar calidad del combustible y filtros"
+  ],
+  "sistema": "combustible",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.alliedsystems.com/pdf/Wagner/Forms/80/80-1235.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 654 FMI 5",
+  "descripcion": "Inyector cilindro 4: circuito abierto (DD15: Injector Needle Control Valve Cyl 4 Circuit Open)",
+  "causas": [
+   "Cable/pin del inyector abierto (arnés bajo tapa de válvulas)",
+   "Bobina del inyector abierta",
+   "Conector suelto por vibración"
+  ],
+  "comprobaciones": [
+   "Medir resistencia de la bobina del inyector y del arnés desde el ECU",
+   "Revisar pasamuros del arnés en culata",
+   "Balance de cilindros / prueba de corte de cilindro con escáner"
+  ],
+  "sistema": "combustible",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "https://repair.diesellaptops.com/detroit-diesel-dd15-2014-2016-fault-codes-list/"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 654 FMI 7",
+  "descripcion": "Inyector cilindro 4: sistema mecánico no responde o fuera de ajuste (Cummins: Injector Solenoid Driver Cylinder 4 - Mechanical system not responding)",
+  "causas": [
+   "Inyector pegado o con desgaste (combustible contaminado)",
+   "Compresión baja en el cilindro",
+   "Fuga interna del inyector"
+  ],
+  "comprobaciones": [
+   "Prueba de contribución/balance de cilindros con escáner",
+   "Prueba de compresión relativa",
+   "Revisar calidad del combustible y filtros"
+  ],
+  "sistema": "combustible",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.alliedsystems.com/pdf/Wagner/Forms/80/80-1235.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 655 FMI 5",
+  "descripcion": "Inyector cilindro 5: circuito abierto (DD15: Injector Needle Control Valve Cyl 5 Circuit Open)",
+  "causas": [
+   "Cable/pin del inyector abierto (arnés bajo tapa de válvulas)",
+   "Bobina del inyector abierta",
+   "Conector suelto por vibración"
+  ],
+  "comprobaciones": [
+   "Medir resistencia de la bobina del inyector y del arnés desde el ECU",
+   "Revisar pasamuros del arnés en culata",
+   "Balance de cilindros / prueba de corte de cilindro con escáner"
+  ],
+  "sistema": "combustible",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "https://repair.diesellaptops.com/detroit-diesel-dd15-2014-2016-fault-codes-list/"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 655 FMI 7",
+  "descripcion": "Inyector cilindro 5: sistema mecánico no responde o fuera de ajuste (Cummins: Injector Solenoid Driver Cylinder 5 - Mechanical system not responding)",
+  "causas": [
+   "Inyector pegado o con desgaste (combustible contaminado)",
+   "Compresión baja en el cilindro",
+   "Fuga interna del inyector"
+  ],
+  "comprobaciones": [
+   "Prueba de contribución/balance de cilindros con escáner",
+   "Prueba de compresión relativa",
+   "Revisar calidad del combustible y filtros"
+  ],
+  "sistema": "combustible",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.alliedsystems.com/pdf/Wagner/Forms/80/80-1235.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 656 FMI 5",
+  "descripcion": "Inyector cilindro 6: circuito abierto (DD15: Injector Needle Control Valve Cyl 6 Circuit Open)",
+  "causas": [
+   "Cable/pin del inyector abierto (arnés bajo tapa de válvulas)",
+   "Bobina del inyector abierta",
+   "Conector suelto por vibración"
+  ],
+  "comprobaciones": [
+   "Medir resistencia de la bobina del inyector y del arnés desde el ECU",
+   "Revisar pasamuros del arnés en culata",
+   "Balance de cilindros / prueba de corte de cilindro con escáner"
+  ],
+  "sistema": "combustible",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "https://repair.diesellaptops.com/detroit-diesel-dd15-2014-2016-fault-codes-list/"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 656 FMI 7",
+  "descripcion": "Inyector cilindro 6: sistema mecánico no responde o fuera de ajuste (Cummins: Injector Solenoid Driver Cylinder 6 - Mechanical system not responding)",
+  "causas": [
+   "Inyector pegado o con desgaste (combustible contaminado)",
+   "Compresión baja en el cilindro",
+   "Fuga interna del inyector"
+  ],
+  "comprobaciones": [
+   "Prueba de contribución/balance de cilindros con escáner",
+   "Prueba de compresión relativa",
+   "Revisar calidad del combustible y filtros"
+  ],
+  "sistema": "combustible",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.alliedsystems.com/pdf/Wagner/Forms/80/80-1235.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 1569 FMI 31",
+  "descripcion": "Reducción de torque por protección del motor activa (Engine Protection Torque Derate)",
+  "causas": [
+   "Derate originado por otra condición: temperatura, presión de aceite, SCR/DEF, DPF, nivel de refrigerante, altura",
+   "Es un código 'consecuencia'"
+  ],
+  "comprobaciones": [
+   "Buscar el código causa activo junto a éste",
+   "Revisar temperaturas y presiones en datos en vivo"
+  ],
+  "sistema": "motor",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.alliedsystems.com/pdf/Wagner/Forms/80/80-1235.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor / CPC",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 597 FMI 2",
+  "descripcion": "Estado del interruptor de freno de servicio no plausible (DD15)",
+  "causas": [
+   "Interruptor de freno desajustado o defectuoso",
+   "Arnés intermitente"
+  ],
+  "comprobaciones": [
+   "Comparar estado del interruptor con pedal en datos en vivo"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "https://repair.diesellaptops.com/detroit-diesel-dd15-2014-2016-fault-codes-list/"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor / CPC",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 598 FMI 2",
+  "descripcion": "Interruptor de embrague no plausible (DD15)",
+  "causas": [
+   "Interruptor de embrague desajustado"
+  ],
+  "comprobaciones": [
+   "Verificar cambio de estado con el pedal en datos en vivo"
+  ],
+  "sistema": "transmision",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "https://repair.diesellaptops.com/detroit-diesel-dd15-2014-2016-fault-codes-list/"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor / CPC",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 523 FMI 13",
+  "descripcion": "Señal de marcha actual de la transmisión ausente (DD15: Transmission Current Gear Signal Missing)",
+  "causas": [
+   "Mensaje J1939 del módulo emisor no llega (módulo sin alimentación, apagado o fuera de la red)",
+   "Problema físico de red CAN (terminación, corto, cable abierto)",
+   "Módulo emisor defectuoso o con software incompatible"
+  ],
+  "comprobaciones": [
+   "Identificar con el escáner qué dirección de origen (SA) deja de transmitir",
+   "Medir resistencia CAN-H/CAN-L en conector de diagnóstico con batería desconectada (≈60 Ω)",
+   "Verificar alimentación y masa del módulo emisor"
+  ],
+  "sistema": "transmision",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "https://repair.diesellaptops.com/detroit-diesel-dd15-2014-2016-fault-codes-list/"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 1761 FMI 1",
+  "descripcion": "Nivel de DEF/AdBlue en condición 0 — velocidad limitada (DD15: Tank Level 0 Condition - Speed Limited)",
+  "causas": [
+   "Estanque de AdBlue vacío",
+   "Sensor de nivel defectuoso o con cristales de urea"
+  ],
+  "comprobaciones": [
+   "Rellenar con AdBlue ISO 22241; verificar lectura de nivel",
+   "Si persiste con estanque lleno, revisar sensor de nivel/calidad"
+  ],
+  "sistema": "postratamiento",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "https://repair.diesellaptops.com/detroit-diesel-dd15-2014-2016-fault-codes-list/"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 1761 FMI 18",
+  "descripcion": "Nivel de DEF: condición 1 — estanque vacío (DD15)",
+  "causas": [
+   "Estanque DEF bajo"
+  ],
+  "comprobaciones": [
+   "Rellenar DEF"
+  ],
+  "sistema": "postratamiento",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "https://repair.diesellaptops.com/detroit-diesel-dd15-2014-2016-fault-codes-list/"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 1761 FMI 3",
+  "descripcion": "Sensor de nivel del estanque DEF: voltaje sobre lo normal o corto a fuente alta",
+  "causas": [
+   "Circuito de señal en corto a la referencia +5 V o a positivo de batería (24 V)",
+   "Circuito de retorno/masa del sensor abierto (la señal queda 'flotando' alta en ECUs con pull-up)",
+   "Conector con humedad/corrosión entre pines (fuga de corriente)",
+   "Sensor defectuoso"
+  ],
+  "comprobaciones": [
+   "Llave ON motor apagado: medir en conector del sensor referencia vs retorno (debe estar cerca de 5 V) y señal vs retorno",
+   "Desconectar el sensor: si el FMI no cambia, el problema está en el arnés o ECU; si cambia a FMI 4, sospechar el sensor",
+   "Revisar pines del conector (Deutsch/AMP) por verde de corrosión, pines abiertos o sello dañado",
+   "Medir aislamiento del cable de señal a +24 V con batería desconectada y ambos extremos sueltos"
+  ],
+  "sistema": "postratamiento",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.alliedsystems.com/pdf/Wagner/Forms/80/80-1235.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 1761 FMI 4",
+  "descripcion": "Sensor de nivel del estanque DEF: voltaje bajo lo normal o corto a masa",
+  "causas": [
+   "Cable de señal en corto a masa (roce contra chasis, arnés aplastado)",
+   "Referencia +5 V caída: otro sensor que comparte la misma línea de referencia está en corto y la arrastra",
+   "Circuito de referencia abierto",
+   "Sensor defectuoso"
+  ],
+  "comprobaciones": [
+   "Llave ON: medir referencia 5 V en el conector; si está baja, desconectar uno a uno los sensores de esa misma referencia hasta que se recupere",
+   "Revisar si hay otros códigos 'Sensor Supply' (SPN 3509-3514) activos a la vez: indica referencia compartida afectada",
+   "Medir continuidad señal-masa con batería desconectada (debe estar abierto)",
+   "Inspeccionar arnés en zonas de roce, abrazaderas y pasos por chasis"
+  ],
+  "sistema": "postratamiento",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.alliedsystems.com/pdf/Wagner/Forms/80/80-1235.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 3031 FMI 3",
+  "descripcion": "Sensor de temperatura del estanque DEF: voltaje sobre lo normal o corto a fuente alta",
+  "causas": [
+   "Circuito de señal en corto a la referencia +5 V o a positivo de batería (24 V)",
+   "Circuito de retorno/masa del sensor abierto (la señal queda 'flotando' alta en ECUs con pull-up)",
+   "Conector con humedad/corrosión entre pines (fuga de corriente)",
+   "Sensor defectuoso"
+  ],
+  "comprobaciones": [
+   "Llave ON motor apagado: medir en conector del sensor referencia vs retorno (debe estar cerca de 5 V) y señal vs retorno",
+   "Desconectar el sensor: si el FMI no cambia, el problema está en el arnés o ECU; si cambia a FMI 4, sospechar el sensor",
+   "Revisar pines del conector (Deutsch/AMP) por verde de corrosión, pines abiertos o sello dañado",
+   "Medir aislamiento del cable de señal a +24 V con batería desconectada y ambos extremos sueltos"
+  ],
+  "sistema": "postratamiento",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.alliedsystems.com/pdf/Wagner/Forms/80/80-1235.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 3031 FMI 4",
+  "descripcion": "Sensor de temperatura del estanque DEF: voltaje bajo lo normal o corto a masa",
+  "causas": [
+   "Cable de señal en corto a masa (roce contra chasis, arnés aplastado)",
+   "Referencia +5 V caída: otro sensor que comparte la misma línea de referencia está en corto y la arrastra",
+   "Circuito de referencia abierto",
+   "Sensor defectuoso"
+  ],
+  "comprobaciones": [
+   "Llave ON: medir referencia 5 V en el conector; si está baja, desconectar uno a uno los sensores de esa misma referencia hasta que se recupere",
+   "Revisar si hay otros códigos 'Sensor Supply' (SPN 3509-3514) activos a la vez: indica referencia compartida afectada",
+   "Medir continuidad señal-masa con batería desconectada (debe estar abierto)",
+   "Inspeccionar arnés en zonas de roce, abrazaderas y pasos por chasis"
+  ],
+  "sistema": "postratamiento",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.alliedsystems.com/pdf/Wagner/Forms/80/80-1235.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 3364 FMI 2",
+  "descripcion": "Calidad de DEF inadecuada (DD15: Improper DEF Quality)",
+  "causas": [
+   "AdBlue diluido con agua o contaminado (bidones abiertos, polvo)",
+   "Combustible o refrigerante en estanque DEF",
+   "AdBlue degradado por calor (almacenamiento al sol en faena)",
+   "Sensor de calidad defectuoso"
+  ],
+  "comprobaciones": [
+   "Medir concentración de urea con refractómetro (AdBlue ISO 22241 = 32,5 %)",
+   "Si está fuera de especificación: vaciar, lavar estanque y rellenar",
+   "Revisar condición de almacenamiento del AdBlue en faena"
+  ],
+  "sistema": "postratamiento",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "https://repair.diesellaptops.com/detroit-diesel-dd15-2014-2016-fault-codes-list/"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 3364 FMI 1",
+  "descripcion": "Calidad de DEF inadecuada — advertencia final (DD15)",
+  "causas": [
+   "Ídem SPN 3364 FMI 2 sin corregir"
+  ],
+  "comprobaciones": [
+   "Ídem SPN 3364 FMI 2 (riesgo de limitación de velocidad/torque)"
+  ],
+  "sistema": "postratamiento",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "https://repair.diesellaptops.com/detroit-diesel-dd15-2014-2016-fault-codes-list/"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 3364 FMI 18",
+  "descripcion": "Calidad de DEF: dato válido bajo lo normal, moderadamente severo",
+  "causas": [
+   "Ídem SPN 3364 FMI 2"
+  ],
+  "comprobaciones": [
+   "Ídem SPN 3364 FMI 2"
+  ],
+  "sistema": "postratamiento",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.alliedsystems.com/pdf/Wagner/Forms/80/80-1235.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 3364 FMI 13",
+  "descripcion": "Calidad de DEF: fuera de calibración",
+  "causas": [
+   "Sensor de calidad fuera de calibración",
+   "DEF fuera de especificación"
+  ],
+  "comprobaciones": [
+   "Verificar DEF con refractómetro; revisar sensor"
+  ],
+  "sistema": "postratamiento",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.alliedsystems.com/pdf/Wagner/Forms/80/80-1235.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 3361 FMI 31",
+  "descripcion": "Error de la unidad dosificadora de DEF (DD15: DEF Dosing Unit Error)",
+  "causas": [
+   "Cristalización de urea en inyector/dosificador",
+   "Filtro de la bomba DEF obstruido",
+   "Líneas DEF congeladas o dañadas"
+  ],
+  "comprobaciones": [
+   "Inspeccionar inyector DEF por cristales",
+   "Prueba de dosificación con escáner (volumen dosificado vs. comandado)",
+   "Cambiar filtro de bomba DEF"
+  ],
+  "sistema": "postratamiento",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "https://repair.diesellaptops.com/detroit-diesel-dd15-2014-2016-fault-codes-list/"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 3362 FMI 31",
+  "descripcion": "Líneas de entrada de la unidad dosificadora DEF: condición existe (Cummins)",
+  "causas": [
+   "Línea de succión DEF obstruida, doblada o con aire",
+   "Estanque DEF vacío o filtro de succión tapado"
+  ],
+  "comprobaciones": [
+   "Revisar líneas y filtro de succión; purgar/cebar la bomba DEF con escáner"
+  ],
+  "sistema": "postratamiento",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.alliedsystems.com/pdf/Wagner/Forms/80/80-1235.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 4334 FMI 3",
+  "descripcion": "Sensor de presión de DEF: circuito falla alto (DD15)",
+  "causas": [
+   "Circuito de señal en corto a la referencia +5 V o a positivo de batería (24 V)",
+   "Circuito de retorno/masa del sensor abierto (la señal queda 'flotando' alta en ECUs con pull-up)",
+   "Conector con humedad/corrosión entre pines (fuga de corriente)",
+   "Sensor defectuoso"
+  ],
+  "comprobaciones": [
+   "Llave ON motor apagado: medir en conector del sensor referencia vs retorno (debe estar cerca de 5 V) y señal vs retorno",
+   "Desconectar el sensor: si el FMI no cambia, el problema está en el arnés o ECU; si cambia a FMI 4, sospechar el sensor",
+   "Revisar pines del conector (Deutsch/AMP) por verde de corrosión, pines abiertos o sello dañado",
+   "Medir aislamiento del cable de señal a +24 V con batería desconectada y ambos extremos sueltos"
+  ],
+  "sistema": "postratamiento",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "https://repair.diesellaptops.com/detroit-diesel-dd15-2014-2016-fault-codes-list/"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 4334 FMI 4",
+  "descripcion": "Sensor de presión de DEF: circuito falla bajo (DD15)",
+  "causas": [
+   "Cable de señal en corto a masa (roce contra chasis, arnés aplastado)",
+   "Referencia +5 V caída: otro sensor que comparte la misma línea de referencia está en corto y la arrastra",
+   "Circuito de referencia abierto",
+   "Sensor defectuoso"
+  ],
+  "comprobaciones": [
+   "Llave ON: medir referencia 5 V en el conector; si está baja, desconectar uno a uno los sensores de esa misma referencia hasta que se recupere",
+   "Revisar si hay otros códigos 'Sensor Supply' (SPN 3509-3514) activos a la vez: indica referencia compartida afectada",
+   "Medir continuidad señal-masa con batería desconectada (debe estar abierto)",
+   "Inspeccionar arnés en zonas de roce, abrazaderas y pasos por chasis"
+  ],
+  "sistema": "postratamiento",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "https://repair.diesellaptops.com/detroit-diesel-dd15-2014-2016-fault-codes-list/"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 5394 FMI 5",
+  "descripcion": "Válvula dosificadora de DEF: corriente bajo lo normal o circuito abierto",
+  "causas": [
+   "Circuito abierto (cable cortado, pin retraído, conector suelto)",
+   "Bobina/actuador con resistencia alta o abierta",
+   "Corrosión en conector que eleva la resistencia"
+  ],
+  "comprobaciones": [
+   "Medir resistencia de la bobina/actuador en su conector y comparar con valor de manual OEM",
+   "Medir continuidad de ambos cables entre ECU y componente (prueba de caída de tensión con carga si es posible)",
+   "Mover el arnés (wiggle test) con el motor en ralentí observando si el código se activa/desactiva"
+  ],
+  "sistema": "postratamiento",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.alliedsystems.com/pdf/Wagner/Forms/80/80-1235.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 5394 FMI 7",
+  "descripcion": "Válvula dosificadora de DEF: sistema mecánico no responde",
+  "causas": [
+   "Inyector DEF obstruido por cristales de urea",
+   "Válvula pegada"
+  ],
+  "comprobaciones": [
+   "Retirar e inspeccionar inyector DEF; prueba de dosificación"
+  ],
+  "sistema": "postratamiento",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.alliedsystems.com/pdf/Wagner/Forms/80/80-1235.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 3216 FMI 2",
+  "descripcion": "Sensor NOx de entrada (antes del SCR): dato errático/intermitente",
+  "causas": [
+   "Sensor NOx degradado (contaminación por aceite/combustible)",
+   "Fuga de escape cerca del sensor",
+   "Alimentación del sensor NOx deficiente"
+  ],
+  "comprobaciones": [
+   "Revisar fugas de escape",
+   "Verificar alimentación y comunicación CAN del sensor NOx",
+   "Revisar SPN 3218 (alimentación)"
+  ],
+  "sistema": "postratamiento",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.alliedsystems.com/pdf/Wagner/Forms/80/80-1235.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 3216 FMI 13",
+  "descripcion": "Sensor NOx de entrada: fuera de calibración",
+  "causas": [
+   "Sensor NOx fuera de calibración o degradado"
+  ],
+  "comprobaciones": [
+   "Prueba de plausibilidad NOx con escáner OEM"
+  ],
+  "sistema": "postratamiento",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.alliedsystems.com/pdf/Wagner/Forms/80/80-1235.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 3226 FMI 2",
+  "descripcion": "Sensor NOx de salida (después del SCR): dato errático/intermitente",
+  "causas": [
+   "Sensor NOx degradado",
+   "Fuga de escape",
+   "Alimentación/CAN del sensor"
+  ],
+  "comprobaciones": [
+   "Ídem SPN 3216 FMI 2"
+  ],
+  "sistema": "postratamiento",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.alliedsystems.com/pdf/Wagner/Forms/80/80-1235.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 3226 FMI 13",
+  "descripcion": "Sensor NOx de salida: fuera de calibración",
+  "causas": [
+   "Sensor degradado"
+  ],
+  "comprobaciones": [
+   "Prueba de plausibilidad NOx con escáner OEM"
+  ],
+  "sistema": "postratamiento",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.alliedsystems.com/pdf/Wagner/Forms/80/80-1235.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 4364 FMI 18",
+  "descripcion": "Eficiencia de conversión del catalizador SCR: dato válido bajo lo normal, moderadamente severo",
+  "causas": [
+   "DEF de mala calidad o diluido",
+   "Dosificación insuficiente (inyector DEF tapado, bomba débil)",
+   "Catalizador SCR contaminado/envejecido o con depósitos de urea",
+   "Sensor NOx de salida desplazado",
+   "Temperatura de escape baja (ralentí prolongado)"
+  ],
+  "comprobaciones": [
+   "Verificar DEF con refractómetro",
+   "Prueba de dosificación (cantidad)",
+   "Prueba de desempeño SCR con escáner OEM",
+   "Revisar SPN 3226/3216"
+  ],
+  "sistema": "postratamiento",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.alliedsystems.com/pdf/Wagner/Forms/80/80-1235.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 4364 FMI 1",
+  "descripcion": "Eficiencia de conversión SCR muy baja (DD15: SCR NOx Conversion Efficiency Very Low)",
+  "causas": [
+   "Ídem SPN 4364 FMI 18 en etapa avanzada"
+  ],
+  "comprobaciones": [
+   "Ídem SPN 4364 FMI 18"
+  ],
+  "sistema": "postratamiento",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "https://repair.diesellaptops.com/detroit-diesel-dd15-2014-2016-fault-codes-list/"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 4094 FMI 31",
+  "descripcion": "Límites de NOx excedidos por calidad insuficiente de reactivo (DEF)",
+  "causas": [
+   "DEF diluido/contaminado"
+  ],
+  "comprobaciones": [
+   "Refractómetro; vaciar y rellenar con DEF ISO 22241"
+  ],
+  "sistema": "postratamiento",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.alliedsystems.com/pdf/Wagner/Forms/80/80-1235.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 5246 FMI 0",
+  "descripcion": "Inducción al operador SCR: dato válido sobre lo normal, más severo (acción final — limitación)",
+  "causas": [
+   "Falla de emisiones (DEF, dosificación, NOx, SCR) no corregida en el plazo permitido"
+  ],
+  "comprobaciones": [
+   "Identificar y reparar el código de emisiones de origen",
+   "Tras reparar, seguir procedimiento OEM para salir de la inducción (puede requerir herramienta)"
+  ],
+  "sistema": "postratamiento",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.alliedsystems.com/pdf/Wagner/Forms/80/80-1235.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 5246 FMI 15",
+  "descripcion": "Falla regulatoria ignorada — derate activo (DD15: Regulatory Fault Ignored - Derate On)",
+  "causas": [
+   "Ídem SPN 5246 FMI 0 en etapa previa"
+  ],
+  "comprobaciones": [
+   "Ídem SPN 5246 FMI 0"
+  ],
+  "sistema": "postratamiento",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "https://repair.diesellaptops.com/detroit-diesel-dd15-2014-2016-fault-codes-list/"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 5246 FMI 16",
+  "descripcion": "Falla regulatoria ignorada — acción final pendiente (DD15)",
+  "causas": [
+   "Ídem SPN 5246 FMI 0"
+  ],
+  "comprobaciones": [
+   "Ídem SPN 5246 FMI 0; priorizar reparación antes de la limitación de velocidad"
+  ],
+  "sistema": "postratamiento",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "https://repair.diesellaptops.com/detroit-diesel-dd15-2014-2016-fault-codes-list/"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 3251 FMI 0",
+  "descripcion": "Presión diferencial del DPF muy alta (DD15: DPF Pressure Out of Range Very High)",
+  "causas": [
+   "DPF saturado de hollín (regeneraciones incompletas por ralentí/PTO prolongado)",
+   "DPF con ceniza (fin de vida de servicio)",
+   "Mangueras del sensor diferencial tapadas o invertidas"
+  ],
+  "comprobaciones": [
+   "Revisar mangueras/tomas del sensor ΔP",
+   "Verificar % de hollín (SPN 3719) y ceniza (SPN 3720) en datos en vivo",
+   "Regeneración estacionaria si el OEM lo permite; si no, retiro y limpieza del DPF"
+  ],
+  "sistema": "postratamiento",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "https://repair.diesellaptops.com/detroit-diesel-dd15-2014-2016-fault-codes-list/"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 3251 FMI 16",
+  "descripcion": "Presión diferencial del DPF alta (DD15)",
+  "causas": [
+   "Ídem SPN 3251 FMI 0 en etapa temprana"
+  ],
+  "comprobaciones": [
+   "Ídem SPN 3251 FMI 0"
+  ],
+  "sistema": "postratamiento",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "https://repair.diesellaptops.com/detroit-diesel-dd15-2014-2016-fault-codes-list/"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 3251 FMI 2",
+  "descripcion": "Presión diferencial del DPF: dato errático/intermitente",
+  "causas": [
+   "Manguera del sensor ΔP rota, suelta o con condensado congelado",
+   "Sensor ΔP defectuoso"
+  ],
+  "comprobaciones": [
+   "Inspeccionar y soplar las tomas",
+   "Comparar ΔP con motor detenido (debe ser ~0)"
+  ],
+  "sistema": "postratamiento",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.alliedsystems.com/pdf/Wagner/Forms/80/80-1235.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 3251 FMI 3",
+  "descripcion": "Sensor de presión diferencial del DPF: voltaje sobre lo normal o corto a fuente alta",
+  "causas": [
+   "Circuito de señal en corto a la referencia +5 V o a positivo de batería (24 V)",
+   "Circuito de retorno/masa del sensor abierto (la señal queda 'flotando' alta en ECUs con pull-up)",
+   "Conector con humedad/corrosión entre pines (fuga de corriente)",
+   "Sensor defectuoso"
+  ],
+  "comprobaciones": [
+   "Llave ON motor apagado: medir en conector del sensor referencia vs retorno (debe estar cerca de 5 V) y señal vs retorno",
+   "Desconectar el sensor: si el FMI no cambia, el problema está en el arnés o ECU; si cambia a FMI 4, sospechar el sensor",
+   "Revisar pines del conector (Deutsch/AMP) por verde de corrosión, pines abiertos o sello dañado",
+   "Medir aislamiento del cable de señal a +24 V con batería desconectada y ambos extremos sueltos"
+  ],
+  "sistema": "postratamiento",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.alliedsystems.com/pdf/Wagner/Forms/80/80-1235.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 3251 FMI 4",
+  "descripcion": "Sensor de presión diferencial del DPF: voltaje bajo lo normal o corto a masa",
+  "causas": [
+   "Cable de señal en corto a masa (roce contra chasis, arnés aplastado)",
+   "Referencia +5 V caída: otro sensor que comparte la misma línea de referencia está en corto y la arrastra",
+   "Circuito de referencia abierto",
+   "Sensor defectuoso"
+  ],
+  "comprobaciones": [
+   "Llave ON: medir referencia 5 V en el conector; si está baja, desconectar uno a uno los sensores de esa misma referencia hasta que se recupere",
+   "Revisar si hay otros códigos 'Sensor Supply' (SPN 3509-3514) activos a la vez: indica referencia compartida afectada",
+   "Medir continuidad señal-masa con batería desconectada (debe estar abierto)",
+   "Inspeccionar arnés en zonas de roce, abrazaderas y pasos por chasis"
+  ],
+  "sistema": "postratamiento",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.alliedsystems.com/pdf/Wagner/Forms/80/80-1235.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 3719 FMI 0",
+  "descripcion": "Nivel de hollín del DPF muy alto (DD15: Soot Level Very High)",
+  "causas": [
+   "Uso con mucho ralentí/PTO y poca carga: temperatura de escape insuficiente para regeneración pasiva",
+   "Regeneraciones interrumpidas por el operador",
+   "Problema de combustión que genera hollín (inyectores, EGR, fugas de aire)"
+  ],
+  "comprobaciones": [
+   "Verificar que no haya códigos de motor que generen hollín",
+   "Regeneración estacionaria forzada con escáner (según límites OEM)",
+   "Revisar hábitos de operación: interrupciones de regeneración"
+  ],
+  "sistema": "postratamiento",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "https://repair.diesellaptops.com/detroit-diesel-dd15-2014-2016-fault-codes-list/"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 3719 FMI 16",
+  "descripcion": "Nivel de hollín del DPF alto (DD15: Soot Level High)",
+  "causas": [
+   "Ídem SPN 3719 FMI 0 en etapa temprana"
+  ],
+  "comprobaciones": [
+   "Permitir o solicitar regeneración (estacionaria) cuanto antes"
+  ],
+  "sistema": "postratamiento",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "https://repair.diesellaptops.com/detroit-diesel-dd15-2014-2016-fault-codes-list/"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 3720 FMI 16",
+  "descripcion": "DPF ha alcanzado el fin de su vida de servicio — ceniza (DD15)",
+  "causas": [
+   "Acumulación de ceniza (no se quema en regeneración)",
+   "Consumo de aceite elevado acelera la ceniza"
+  ],
+  "comprobaciones": [
+   "Retirar DPF para limpieza de ceniza o reemplazo",
+   "Tras servicio, ejecutar reset de ceniza con herramienta OEM",
+   "Revisar consumo de aceite"
+  ],
+  "sistema": "postratamiento",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "https://repair.diesellaptops.com/detroit-diesel-dd15-2014-2016-fault-codes-list/"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 5319 FMI 31",
+  "descripcion": "Regeneración del DPF incompleta",
+  "causas": [
+   "Regeneración interrumpida (apagado, PTO, movimiento)",
+   "Temperatura de DOC insuficiente: DOC tapado en la cara de entrada, dosificador HC (7° inyector) obstruido",
+   "Sensores de temperatura de escape defectuosos"
+  ],
+  "comprobaciones": [
+   "Revisar temperaturas de entrada/salida DOC durante una regeneración estacionaria",
+   "Inspeccionar dosificador de hidrocarburo y su línea",
+   "Ver ficha 'Regeneración DPF que no termina'"
+  ],
+  "sistema": "postratamiento",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.alliedsystems.com/pdf/Wagner/Forms/80/80-1235.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 5397 FMI 31",
+  "descripcion": "Regeneración del DPF demasiado frecuente",
+  "causas": [
+   "Generación excesiva de hollín (inyectores, EGR, fugas de aire de carga, filtro de aire restringido)",
+   "Sensor ΔP con lectura alta (tomas tapadas)",
+   "Ceniza elevada"
+  ],
+  "comprobaciones": [
+   "Revisar sistema de aire y combustión",
+   "Verificar sensor ΔP y tomas",
+   "Ver % de ceniza"
+  ],
+  "sistema": "postratamiento",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.alliedsystems.com/pdf/Wagner/Forms/80/80-1235.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 3246 FMI 0",
+  "descripcion": "Temperatura de salida del DPF muy alta (DD15)",
+  "causas": [
+   "Regeneración descontrolada (exceso de hollín quemándose)",
+   "Dosificador de HC con fuga (goteo)"
+  ],
+  "comprobaciones": [
+   "Detener y dejar enfriar en ralentí en zona segura",
+   "Revisar dosificador de HC por goteo"
+  ],
+  "sistema": "postratamiento",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "https://repair.diesellaptops.com/detroit-diesel-dd15-2014-2016-fault-codes-list/"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 3242 FMI 3",
+  "descripcion": "Sensor de temperatura de entrada DOC: circuito falla alto (DD15)",
+  "causas": [
+   "Circuito de señal en corto a la referencia +5 V o a positivo de batería (24 V)",
+   "Circuito de retorno/masa del sensor abierto (la señal queda 'flotando' alta en ECUs con pull-up)",
+   "Conector con humedad/corrosión entre pines (fuga de corriente)",
+   "Sensor defectuoso"
+  ],
+  "comprobaciones": [
+   "Llave ON motor apagado: medir en conector del sensor referencia vs retorno (debe estar cerca de 5 V) y señal vs retorno",
+   "Desconectar el sensor: si el FMI no cambia, el problema está en el arnés o ECU; si cambia a FMI 4, sospechar el sensor",
+   "Revisar pines del conector (Deutsch/AMP) por verde de corrosión, pines abiertos o sello dañado",
+   "Medir aislamiento del cable de señal a +24 V con batería desconectada y ambos extremos sueltos"
+  ],
+  "sistema": "postratamiento",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "https://repair.diesellaptops.com/detroit-diesel-dd15-2014-2016-fault-codes-list/"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 3242 FMI 7",
+  "descripcion": "Temperatura de entrada DOC — señal no responde (DD15)",
+  "causas": [
+   "Sensor de temperatura de escape (termocupla/RTD) degradado"
+  ],
+  "comprobaciones": [
+   "Comparar lecturas de todos los sensores de escape con motor frío (deben ser similares)"
+  ],
+  "sistema": "postratamiento",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "https://repair.diesellaptops.com/detroit-diesel-dd15-2014-2016-fault-codes-list/"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 3556 FMI 18",
+  "descripcion": "Temperatura de salida DOC baja (regeneración a baja temperatura) (DD15)",
+  "causas": [
+   "DOC con cara tapada o envenenado",
+   "Dosificador HC sin inyectar",
+   "Fuga de escape"
+  ],
+  "comprobaciones": [
+   "Prueba de dosificador HC; inspección del DOC"
+  ],
+  "sistema": "postratamiento",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "https://repair.diesellaptops.com/detroit-diesel-dd15-2014-2016-fault-codes-list/"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 3480 FMI 1",
+  "descripcion": "Presión de suministro de combustible del dosificador de HC anormal (DD15)",
+  "causas": [
+   "Filtro/línea de combustible del dosificador obstruido",
+   "Válvula de corte defectuosa"
+  ],
+  "comprobaciones": [
+   "Revisar línea y presión según procedimiento OEM"
+  ],
+  "sistema": "postratamiento",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "https://repair.diesellaptops.com/detroit-diesel-dd15-2014-2016-fault-codes-list/"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 3482 FMI 7",
+  "descripcion": "Válvula de corte de combustible del dosificador de HC falló autotest (DD15)",
+  "causas": [
+   "Válvula de corte pegada",
+   "Contaminación del combustible"
+  ],
+  "comprobaciones": [
+   "Prueba de válvula con escáner; inspección"
+  ],
+  "sistema": "postratamiento",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "https://repair.diesellaptops.com/detroit-diesel-dd15-2014-2016-fault-codes-list/"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 4765 FMI 0",
+  "descripcion": "Temperatura de escape alta (DD15: Exhaust Temperature High)",
+  "causas": [
+   "Sobrecarga en altura/calor",
+   "Regeneración en curso con exceso de hollín",
+   "Restricción de admisión"
+  ],
+  "comprobaciones": [
+   "Revisar restricción de aire y condiciones de carga"
+  ],
+  "sistema": "postratamiento",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "https://repair.diesellaptops.com/detroit-diesel-dd15-2014-2016-fault-codes-list/"
+ },
+ {
+  "marca": "generico",
+  "aplica": "ABS Bendix EC-60 (SPN/FMI según Bendix SD-13-4869). Los SPN 789-798 son SAE y también los usan WABCO/Knorr, pero el significado del FMI es propio de cada fabricante: confirmar.",
+  "ecu": "ABS",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 789 FMI 1",
+  "descripcion": "Sensor de velocidad de rueda eje direccional izquierdo: entrehierro excesivo (Excessive Air Gap)",
+  "causas": [
+   "Sensor empujado hacia atrás por juego de rodamiento o golpe",
+   "Buje de retención (clamping sleeve) gastado",
+   "Rueda fónica dañada o suelta"
+  ],
+  "comprobaciones": [
+   "Empujar el sensor hasta tocar la rueda fónica",
+   "Girar la rueda a ~0,5 rps y verificar salida mínima de 0,25 VAC (Bendix)",
+   "Verificar juego axial del rodamiento"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://n0c357rmy1njbuit2friqwu.blob.core.windows.net/documents/VcCA4sr2I0EBhB_SD-13-4869_US_004.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "ABS Bendix EC-60 (SPN/FMI según Bendix SD-13-4869). Los SPN 789-798 son SAE y también los usan WABCO/Knorr, pero el significado del FMI es propio de cada fabricante: confirmar.",
+  "ecu": "ABS",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 790 FMI 1",
+  "descripcion": "Sensor de velocidad de rueda eje direccional derecho: entrehierro excesivo",
+  "causas": [
+   "Ídem SPN 789 FMI 1"
+  ],
+  "comprobaciones": [
+   "Ídem SPN 789 FMI 1"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://n0c357rmy1njbuit2friqwu.blob.core.windows.net/documents/VcCA4sr2I0EBhB_SD-13-4869_US_004.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "ABS Bendix EC-60 (SPN/FMI según Bendix SD-13-4869). Los SPN 789-798 son SAE y también los usan WABCO/Knorr, pero el significado del FMI es propio de cada fabricante: confirmar.",
+  "ecu": "ABS",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 791 FMI 1",
+  "descripcion": "Sensor de velocidad de rueda eje motriz izquierdo: entrehierro excesivo",
+  "causas": [
+   "Ídem SPN 789 FMI 1 (eje motriz: barro/polvo y golpes frecuentes en minería)"
+  ],
+  "comprobaciones": [
+   "Ídem SPN 789 FMI 1"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://n0c357rmy1njbuit2friqwu.blob.core.windows.net/documents/VcCA4sr2I0EBhB_SD-13-4869_US_004.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "ABS Bendix EC-60 (SPN/FMI según Bendix SD-13-4869). Los SPN 789-798 son SAE y también los usan WABCO/Knorr, pero el significado del FMI es propio de cada fabricante: confirmar.",
+  "ecu": "ABS",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 792 FMI 1",
+  "descripcion": "Sensor de velocidad de rueda eje motriz derecho: entrehierro excesivo",
+  "causas": [
+   "Ídem SPN 791 FMI 1"
+  ],
+  "comprobaciones": [
+   "Ídem SPN 789 FMI 1"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://n0c357rmy1njbuit2friqwu.blob.core.windows.net/documents/VcCA4sr2I0EBhB_SD-13-4869_US_004.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "ABS Bendix EC-60 (SPN/FMI según Bendix SD-13-4869). Los SPN 789-798 son SAE y también los usan WABCO/Knorr, pero el significado del FMI es propio de cada fabricante: confirmar.",
+  "ecu": "ABS",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 789 FMI 2",
+  "descripcion": "Sensor de velocidad de rueda eje direccional izquierdo: abierto o en corto",
+  "causas": [
+   "Cable del sensor cortado/aplastado",
+   "Conector con agua/corrosión",
+   "Sensor abierto"
+  ],
+  "comprobaciones": [
+   "Medir en conector del ECU: 1500-2500 Ω en el sensor (Bendix)",
+   "Verificar que no haya continuidad del sensor a masa ni a voltaje",
+   "Revisar arnés entre ECU y rueda"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://n0c357rmy1njbuit2friqwu.blob.core.windows.net/documents/VcCA4sr2I0EBhB_SD-13-4869_US_004.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "ABS Bendix EC-60 (SPN/FMI según Bendix SD-13-4869). Los SPN 789-798 son SAE y también los usan WABCO/Knorr, pero el significado del FMI es propio de cada fabricante: confirmar.",
+  "ecu": "ABS",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 789 FMI 14",
+  "descripcion": "Sensor de velocidad de rueda eje direccional izquierdo: salida baja al iniciar marcha",
+  "causas": [
+   "Entrehierro grande",
+   "Rueda fónica dañada"
+  ],
+  "comprobaciones": [
+   "Ajustar sensor contra rueda fónica y verificar 0,25 VAC a ~0,5 rps"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://n0c357rmy1njbuit2friqwu.blob.core.windows.net/documents/VcCA4sr2I0EBhB_SD-13-4869_US_004.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "ABS Bendix EC-60 (SPN/FMI según Bendix SD-13-4869). Los SPN 789-798 son SAE y también los usan WABCO/Knorr, pero el significado del FMI es propio de cada fabricante: confirmar.",
+  "ecu": "ABS",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 789 FMI 10",
+  "descripcion": "Sensor de velocidad de rueda eje direccional izquierdo: pérdida de señal",
+  "causas": [
+   "Sensor retirado de su posición",
+   "Cable cortado intermitente"
+  ],
+  "comprobaciones": [
+   "Ídem SPN 789 FMI 1 y FMI 2"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://n0c357rmy1njbuit2friqwu.blob.core.windows.net/documents/VcCA4sr2I0EBhB_SD-13-4869_US_004.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "ABS Bendix EC-60 (SPN/FMI según Bendix SD-13-4869). Los SPN 789-798 son SAE y también los usan WABCO/Knorr, pero el significado del FMI es propio de cada fabricante: confirmar.",
+  "ecu": "ABS",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 789 FMI 8",
+  "descripcion": "Sensor de velocidad de rueda eje direccional izquierdo: señal errática",
+  "causas": [
+   "Dientes de la rueda fónica dañados",
+   "Juego de rodamiento excesivo",
+   "Cable del sensor mal sujeto"
+  ],
+  "comprobaciones": [
+   "Inspeccionar rueda fónica, rodamiento y ruteo del cable"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://n0c357rmy1njbuit2friqwu.blob.core.windows.net/documents/VcCA4sr2I0EBhB_SD-13-4869_US_004.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "ABS Bendix EC-60 (SPN/FMI según Bendix SD-13-4869). Los SPN 789-798 son SAE y también los usan WABCO/Knorr, pero el significado del FMI es propio de cada fabricante: confirmar.",
+  "ecu": "ABS",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 795 FMI 5",
+  "descripcion": "Válvula moduladora (PMV) eje direccional izquierdo: solenoide HOLD circuito abierto",
+  "causas": [
+   "Conector de la moduladora suelto/corroído",
+   "Cable cortado",
+   "Bobina abierta"
+  ],
+  "comprobaciones": [
+   "Medir en la moduladora: 4,9-5,5 Ω REL-CMN y HLD-CMN; 9,8-11,0 Ω REL-HLD (Bendix)",
+   "Verificar sin continuidad a masa"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://n0c357rmy1njbuit2friqwu.blob.core.windows.net/documents/VcCA4sr2I0EBhB_SD-13-4869_US_004.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "ABS Bendix EC-60 (SPN/FMI según Bendix SD-13-4869). Los SPN 789-798 son SAE y también los usan WABCO/Knorr, pero el significado del FMI es propio de cada fabricante: confirmar.",
+  "ecu": "ABS",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 795 FMI 4",
+  "descripcion": "Válvula moduladora (PMV) eje direccional izquierdo: solenoide HOLD en corto a masa",
+  "causas": [
+   "Cortocircuito a masa del circuito de salida",
+   "Bobina en corto (resistencia bajo especificación)",
+   "Arnés dañado por calor/roce"
+  ],
+  "comprobaciones": [
+   "Medir resistencias de la moduladora (4,9-5,5 Ω / 9,8-11,0 Ω, Bendix) y aislamiento a masa"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://n0c357rmy1njbuit2friqwu.blob.core.windows.net/documents/VcCA4sr2I0EBhB_SD-13-4869_US_004.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 1322 FMI 31",
+  "descripcion": "Falla de encendido (misfire) en múltiples cilindros: condición existe",
+  "causas": [
+   "Combustible contaminado/aire en combustible",
+   "Inyectores defectuosos",
+   "Compresión baja",
+   "Presión de riel inestable"
+  ],
+  "comprobaciones": [
+   "Prueba de contribución de cilindros con escáner",
+   "Revisar presión de baja y de riel",
+   "Prueba de compresión relativa"
+  ],
+  "sistema": "motor",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.alliedsystems.com/pdf/Wagner/Forms/80/80-1235.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 1323 FMI 31",
+  "descripcion": "Falla de encendido (misfire) cilindro 1: condición existe",
+  "causas": [
+   "Inyector del cilindro defectuoso o con arnés intermitente",
+   "Compresión baja (válvulas, anillos)",
+   "Ajuste de válvulas/puente de válvulas"
+  ],
+  "comprobaciones": [
+   "Prueba de corte/contribución del cilindro",
+   "Revisar códigos SPN 651 del inyector",
+   "Compresión relativa / fuga de cilindro"
+  ],
+  "sistema": "motor",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.alliedsystems.com/pdf/Wagner/Forms/80/80-1235.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 1324 FMI 31",
+  "descripcion": "Falla de encendido (misfire) cilindro 2: condición existe",
+  "causas": [
+   "Inyector del cilindro defectuoso o con arnés intermitente",
+   "Compresión baja (válvulas, anillos)",
+   "Ajuste de válvulas/puente de válvulas"
+  ],
+  "comprobaciones": [
+   "Prueba de corte/contribución del cilindro",
+   "Revisar códigos SPN 652 del inyector",
+   "Compresión relativa / fuga de cilindro"
+  ],
+  "sistema": "motor",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.alliedsystems.com/pdf/Wagner/Forms/80/80-1235.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 1325 FMI 31",
+  "descripcion": "Falla de encendido (misfire) cilindro 3: condición existe",
+  "causas": [
+   "Inyector del cilindro defectuoso o con arnés intermitente",
+   "Compresión baja (válvulas, anillos)",
+   "Ajuste de válvulas/puente de válvulas"
+  ],
+  "comprobaciones": [
+   "Prueba de corte/contribución del cilindro",
+   "Revisar códigos SPN 653 del inyector",
+   "Compresión relativa / fuga de cilindro"
+  ],
+  "sistema": "motor",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.alliedsystems.com/pdf/Wagner/Forms/80/80-1235.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 1326 FMI 31",
+  "descripcion": "Falla de encendido (misfire) cilindro 4: condición existe",
+  "causas": [
+   "Inyector del cilindro defectuoso o con arnés intermitente",
+   "Compresión baja (válvulas, anillos)",
+   "Ajuste de válvulas/puente de válvulas"
+  ],
+  "comprobaciones": [
+   "Prueba de corte/contribución del cilindro",
+   "Revisar códigos SPN 654 del inyector",
+   "Compresión relativa / fuga de cilindro"
+  ],
+  "sistema": "motor",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.alliedsystems.com/pdf/Wagner/Forms/80/80-1235.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 1327 FMI 31",
+  "descripcion": "Falla de encendido (misfire) cilindro 5: condición existe",
+  "causas": [
+   "Inyector del cilindro defectuoso o con arnés intermitente",
+   "Compresión baja (válvulas, anillos)",
+   "Ajuste de válvulas/puente de válvulas"
+  ],
+  "comprobaciones": [
+   "Prueba de corte/contribución del cilindro",
+   "Revisar códigos SPN 655 del inyector",
+   "Compresión relativa / fuga de cilindro"
+  ],
+  "sistema": "motor",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.alliedsystems.com/pdf/Wagner/Forms/80/80-1235.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 1328 FMI 31",
+  "descripcion": "Falla de encendido (misfire) cilindro 6: condición existe",
+  "causas": [
+   "Inyector del cilindro defectuoso o con arnés intermitente",
+   "Compresión baja (válvulas, anillos)",
+   "Ajuste de válvulas/puente de válvulas"
+  ],
+  "comprobaciones": [
+   "Prueba de corte/contribución del cilindro",
+   "Revisar códigos SPN 656 del inyector",
+   "Compresión relativa / fuga de cilindro"
+  ],
+  "sistema": "motor",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.alliedsystems.com/pdf/Wagner/Forms/80/80-1235.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 1176 FMI 3",
+  "descripcion": "Sensor de presión de entrada al compresor del turbo 1: voltaje sobre lo normal o corto a fuente alta",
+  "causas": [
+   "Circuito de señal en corto a la referencia +5 V o a positivo de batería (24 V)",
+   "Circuito de retorno/masa del sensor abierto (la señal queda 'flotando' alta en ECUs con pull-up)",
+   "Conector con humedad/corrosión entre pines (fuga de corriente)",
+   "Sensor defectuoso"
+  ],
+  "comprobaciones": [
+   "Llave ON motor apagado: medir en conector del sensor referencia vs retorno (debe estar cerca de 5 V) y señal vs retorno",
+   "Desconectar el sensor: si el FMI no cambia, el problema está en el arnés o ECU; si cambia a FMI 4, sospechar el sensor",
+   "Revisar pines del conector (Deutsch/AMP) por verde de corrosión, pines abiertos o sello dañado",
+   "Medir aislamiento del cable de señal a +24 V con batería desconectada y ambos extremos sueltos"
+  ],
+  "sistema": "motor",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.alliedsystems.com/pdf/Wagner/Forms/80/80-1235.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 1176 FMI 4",
+  "descripcion": "Sensor de presión de entrada al compresor del turbo 1: voltaje bajo lo normal o corto a masa",
+  "causas": [
+   "Cable de señal en corto a masa (roce contra chasis, arnés aplastado)",
+   "Referencia +5 V caída: otro sensor que comparte la misma línea de referencia está en corto y la arrastra",
+   "Circuito de referencia abierto",
+   "Sensor defectuoso"
+  ],
+  "comprobaciones": [
+   "Llave ON: medir referencia 5 V en el conector; si está baja, desconectar uno a uno los sensores de esa misma referencia hasta que se recupere",
+   "Revisar si hay otros códigos 'Sensor Supply' (SPN 3509-3514) activos a la vez: indica referencia compartida afectada",
+   "Medir continuidad señal-masa con batería desconectada (debe estar abierto)",
+   "Inspeccionar arnés en zonas de roce, abrazaderas y pasos por chasis"
+  ],
+  "sistema": "motor",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.alliedsystems.com/pdf/Wagner/Forms/80/80-1235.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 3511 FMI 4",
+  "descripcion": "Alimentación de sensores 3 (referencia 5 V): voltaje bajo lo normal o corto a masa",
+  "causas": [
+   "Sensor en corto que arrastra la referencia",
+   "Cable de referencia a masa"
+  ],
+  "comprobaciones": [
+   "Desconectar uno a uno los sensores de esa referencia"
+  ],
+  "sistema": "electrico",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.alliedsystems.com/pdf/Wagner/Forms/80/80-1235.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 3512 FMI 3",
+  "descripcion": "Alimentación de sensores 4 (referencia 5 V): voltaje sobre lo normal o corto a fuente alta",
+  "causas": [
+   "Referencia en corto a tensión"
+  ],
+  "comprobaciones": [
+   "Medir referencia con sensores desconectados; inspeccionar arnés"
+  ],
+  "sistema": "electrico",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.alliedsystems.com/pdf/Wagner/Forms/80/80-1235.pdf"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 2659 FMI 18",
+  "descripcion": "Error de objetivo de flujo EGR — flujo bajo (DD15: EGR Flow Target Error - Low Flow)",
+  "causas": [
+   "Válvula EGR trabada/cerrada",
+   "Enfriador EGR obstruido",
+   "Sensor ΔP EGR con tomas tapadas"
+  ],
+  "comprobaciones": [
+   "Prueba de válvula EGR; limpieza de tomas; inspección de enfriador"
+  ],
+  "sistema": "motor",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "https://repair.diesellaptops.com/detroit-diesel-dd15-2014-2016-fault-codes-list/"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 2659 FMI 0",
+  "descripcion": "Error de objetivo de flujo EGR — flujo alto (DD15)",
+  "causas": [
+   "Válvula EGR pegada abierta",
+   "Sensor ΔP EGR desplazado"
+  ],
+  "comprobaciones": [
+   "Prueba de válvula EGR y comparación de sensor"
+  ],
+  "sistema": "motor",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "https://repair.diesellaptops.com/detroit-diesel-dd15-2014-2016-fault-codes-list/"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 3464 FMI 18",
+  "descripcion": "Presión de múltiple de admisión demasiado baja — mariposa de admisión restringida (DD15)",
+  "causas": [
+   "Mariposa de admisión trabada por hollín/aceite",
+   "Actuador de mariposa defectuoso"
+  ],
+  "comprobaciones": [
+   "Inspeccionar y limpiar mariposa; prueba de actuador"
+  ],
+  "sistema": "motor",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "https://repair.diesellaptops.com/detroit-diesel-dd15-2014-2016-fault-codes-list/"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 3464 FMI 5",
+  "descripcion": "Circuito H-Bridge 1 de la mariposa de admisión abierto (DD15)",
+  "causas": [
+   "Circuito abierto (cable cortado, pin retraído, conector suelto)",
+   "Bobina/actuador con resistencia alta o abierta",
+   "Corrosión en conector que eleva la resistencia"
+  ],
+  "comprobaciones": [
+   "Medir resistencia de la bobina/actuador en su conector y comparar con valor de manual OEM",
+   "Medir continuidad de ambos cables entre ECU y componente (prueba de caída de tensión con carga si es posible)",
+   "Mover el arnés (wiggle test) con el motor en ralentí observando si el código se activa/desactiva"
+  ],
+  "sistema": "motor",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "https://repair.diesellaptops.com/detroit-diesel-dd15-2014-2016-fault-codes-list/"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 3609 FMI 3",
+  "descripcion": "Sensor de presión de entrada DOC: circuito falla alto (DD15)",
+  "causas": [
+   "Circuito de señal en corto a la referencia +5 V o a positivo de batería (24 V)",
+   "Circuito de retorno/masa del sensor abierto (la señal queda 'flotando' alta en ECUs con pull-up)",
+   "Conector con humedad/corrosión entre pines (fuga de corriente)",
+   "Sensor defectuoso"
+  ],
+  "comprobaciones": [
+   "Llave ON motor apagado: medir en conector del sensor referencia vs retorno (debe estar cerca de 5 V) y señal vs retorno",
+   "Desconectar el sensor: si el FMI no cambia, el problema está en el arnés o ECU; si cambia a FMI 4, sospechar el sensor",
+   "Revisar pines del conector (Deutsch/AMP) por verde de corrosión, pines abiertos o sello dañado",
+   "Medir aislamiento del cable de señal a +24 V con batería desconectada y ambos extremos sueltos"
+  ],
+  "sistema": "postratamiento",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "https://repair.diesellaptops.com/detroit-diesel-dd15-2014-2016-fault-codes-list/"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 3609 FMI 4",
+  "descripcion": "Sensor de presión de entrada DOC: circuito falla bajo (DD15)",
+  "causas": [
+   "Cable de señal en corto a masa (roce contra chasis, arnés aplastado)",
+   "Referencia +5 V caída: otro sensor que comparte la misma línea de referencia está en corto y la arrastra",
+   "Circuito de referencia abierto",
+   "Sensor defectuoso"
+  ],
+  "comprobaciones": [
+   "Llave ON: medir referencia 5 V en el conector; si está baja, desconectar uno a uno los sensores de esa misma referencia hasta que se recupere",
+   "Revisar si hay otros códigos 'Sensor Supply' (SPN 3509-3514) activos a la vez: indica referencia compartida afectada",
+   "Medir continuidad señal-masa con batería desconectada (debe estar abierto)",
+   "Inspeccionar arnés en zonas de roce, abrazaderas y pasos por chasis"
+  ],
+  "sistema": "postratamiento",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "https://repair.diesellaptops.com/detroit-diesel-dd15-2014-2016-fault-codes-list/"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 3610 FMI 2",
+  "descripcion": "Sensor de presión de salida DPF no plausible (DD15)",
+  "causas": [
+   "Manguera/toma del sensor tapada o rota",
+   "Sensor defectuoso"
+  ],
+  "comprobaciones": [
+   "Soplar/inspeccionar tomas; comparar con motor detenido"
+  ],
+  "sistema": "postratamiento",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "https://repair.diesellaptops.com/detroit-diesel-dd15-2014-2016-fault-codes-list/"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 3363 FMI 3",
+  "descripcion": "Válvula de refrigerante del calefactor DEF: circuito falla alto (DD15)",
+  "causas": [
+   "Circuito de señal en corto a la referencia +5 V o a positivo de batería (24 V)",
+   "Circuito de retorno/masa del sensor abierto (la señal queda 'flotando' alta en ECUs con pull-up)",
+   "Conector con humedad/corrosión entre pines (fuga de corriente)",
+   "Sensor defectuoso"
+  ],
+  "comprobaciones": [
+   "Llave ON motor apagado: medir en conector del sensor referencia vs retorno (debe estar cerca de 5 V) y señal vs retorno",
+   "Desconectar el sensor: si el FMI no cambia, el problema está en el arnés o ECU; si cambia a FMI 4, sospechar el sensor",
+   "Revisar pines del conector (Deutsch/AMP) por verde de corrosión, pines abiertos o sello dañado",
+   "Medir aislamiento del cable de señal a +24 V con batería desconectada y ambos extremos sueltos"
+  ],
+  "sistema": "postratamiento",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "https://repair.diesellaptops.com/detroit-diesel-dd15-2014-2016-fault-codes-list/"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 3363 FMI 5",
+  "descripcion": "Válvula de refrigerante del calefactor DEF: circuito abierto (DD15)",
+  "causas": [
+   "Circuito abierto (cable cortado, pin retraído, conector suelto)",
+   "Bobina/actuador con resistencia alta o abierta",
+   "Corrosión en conector que eleva la resistencia"
+  ],
+  "comprobaciones": [
+   "Medir resistencia de la bobina/actuador en su conector y comparar con valor de manual OEM",
+   "Medir continuidad de ambos cables entre ECU y componente (prueba de caída de tensión con carga si es posible)",
+   "Mover el arnés (wiggle test) con el motor en ralentí observando si el código se activa/desactiva"
+  ],
+  "sistema": "postratamiento",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "https://repair.diesellaptops.com/detroit-diesel-dd15-2014-2016-fault-codes-list/"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 5298 FMI 14",
+  "descripcion": "Aumento anormal de temperatura del catalizador SCR (DD15)",
+  "causas": [
+   "Hidrocarburos/combustible no quemado llegando al SCR",
+   "Regeneración anómala"
+  ],
+  "comprobaciones": [
+   "Revisar dosificador HC y DOC; revisar temperaturas de escape"
+  ],
+  "sistema": "postratamiento",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "https://repair.diesellaptops.com/detroit-diesel-dd15-2014-2016-fault-codes-list/"
+ },
+ {
+  "marca": "generico",
+  "aplica": "Genérico SAE J1939 camiones pesados diésel (Mercedes, Mack, Volvo, Renault, Scania informan DM1 en J1939). La definición exacta del FMI puede variar por OEM: confirmar con manual del fabricante.",
+  "ecu": "ECM motor (Source Address 0)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 3720 FMI 15",
+  "descripcion": "DPF ha alcanzado el fin de su vida de servicio — ceniza, nivel previo (DD15)",
+  "causas": [
+   "Acumulación de ceniza"
+  ],
+  "comprobaciones": [
+   "Programar limpieza/reemplazo del DPF; reset de ceniza tras servicio"
+  ],
+  "sistema": "postratamiento",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "https://repair.diesellaptops.com/detroit-diesel-dd15-2014-2016-fault-codes-list/"
+ }
+]

@@ -76,6 +76,8 @@ function clasificar(ruta, nombre) {
   else if (n.includes('axor')) { marca = 'mercedes-benz'; modelo = 'axor' }
   else if (n.includes('canter')) { marca = 'mitsubishi'; modelo = 'canter' }
   else if (n.includes('np300') || n.includes('nissan')) { marca = 'nissan'; modelo = 'np300' }
+  // Descargas 2026-09-19: "Mercedes-Benz <doc general>" sin modelo en el nombre
+  else if (/mercedes|benz/.test(n) || /mercedes/.test(r)) { marca = 'mercedes-benz' }
 
   let sistema = null
   if (/caja|embrague|transmis|telligent|powershift|retardador|selectora/.test(n)) sistema = 'transmision'

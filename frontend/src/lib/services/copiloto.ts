@@ -48,6 +48,8 @@ export const SISTEMAS = [
   { value: 'direccion', label: 'Dirección' },
   { value: 'tren_rodaje', label: 'Ejes / suspensión / neumáticos' },
   { value: 'combustible', label: 'Combustible' },
+  { value: 'postratamiento', label: 'Postratamiento (AdBlue/DPF/EGR)' },
+  { value: 'implemento', label: 'Implemento (bomba, grúa, polibrazo)' },
   { value: 'otro', label: 'Otro' },
 ]
 

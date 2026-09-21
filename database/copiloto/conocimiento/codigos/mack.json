@@ -1,0 +1,925 @@
+[
+ {
+  "marca": "mack",
+  "aplica": "MP7/MP8 US10-US17 con VGT (GU/GR); guía aplicable a MP8 export con EGR+VGT",
+  "ecu": "EECU (MID 128)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 412 FMI 15",
+  "descripcion": "SPN 412 (SAE J1939: temperatura EGR) FMI 15 – listado por Mack entre los códigos del procedimiento de flujo EGR",
+  "causas": [
+   "Enfriador EGR tapado",
+   "Válvula EGR pegada",
+   "Sensor ΔP EGR o tubo venturi",
+   "Sensor de temperatura EGR",
+   "Según Mack, rara vez es causa eléctrica o falla de la válvula"
+  ],
+  "comprobaciones": [
+   "PTT operación 2939-08-03-01 EGR Function a 780-840 rpm con VGT 6-14 %",
+   "EGR 0 %: turbo > 35 000 rpm (< 30 000 posible EGR pegada; < 20 000 EGR pegada muy probable)",
+   "EGR 95 %: turbo debe bajar de 15 000 rpm en 10 s; si baja pero queda > 20 000 rpm = enfriador EGR tapado",
+   "ΔP EGR ≤ 0,2 psi (1,4 kPa) con válvula abierta: sensor ΔP o tubo venturi; T EGR < T refrigerante o > T escape: sensor de temperatura EGR"
+  ],
+  "sistema": "motor",
+  "confiabilidad": "oficial",
+  "fuente": "https://static.nhtsa.gov/odi/tsbs/2019/MC-10161908-9999.pdf"
+ },
+ {
+  "marca": "mack",
+  "aplica": "MP7/MP8 US10-US17 con VGT (GU/GR); guía aplicable a MP8 export con EGR+VGT",
+  "ecu": "EECU (MID 128)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 412 FMI 0",
+  "descripcion": "SPN 412 (SAE J1939: temperatura EGR) FMI 0 – listado en el procedimiento de flujo EGR",
+  "causas": [
+   "Enfriador EGR tapado",
+   "Válvula EGR pegada",
+   "Sensor ΔP EGR o tubo venturi",
+   "Sensor de temperatura EGR",
+   "Según Mack, rara vez es causa eléctrica o falla de la válvula"
+  ],
+  "comprobaciones": [
+   "PTT operación 2939-08-03-01 EGR Function a 780-840 rpm con VGT 6-14 %",
+   "EGR 0 %: turbo > 35 000 rpm (< 30 000 posible EGR pegada; < 20 000 EGR pegada muy probable)",
+   "EGR 95 %: turbo debe bajar de 15 000 rpm en 10 s; si baja pero queda > 20 000 rpm = enfriador EGR tapado",
+   "ΔP EGR ≤ 0,2 psi (1,4 kPa) con válvula abierta: sensor ΔP o tubo venturi; T EGR < T refrigerante o > T escape: sensor de temperatura EGR"
+  ],
+  "sistema": "motor",
+  "confiabilidad": "oficial",
+  "fuente": "https://static.nhtsa.gov/odi/tsbs/2019/MC-10161908-9999.pdf"
+ },
+ {
+  "marca": "mack",
+  "aplica": "MP7/MP8 US10-US17 con VGT (GU/GR); guía aplicable a MP8 export con EGR+VGT",
+  "ecu": "EECU (MID 128)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 2659 FMI 18",
+  "descripcion": "SPN 2659 (SAE J1939: flujo másico EGR) FMI 18 – listado en el procedimiento de flujo EGR",
+  "causas": [
+   "Enfriador EGR tapado",
+   "Válvula EGR pegada",
+   "Sensor ΔP EGR o tubo venturi",
+   "Sensor de temperatura EGR",
+   "Según Mack, rara vez es causa eléctrica o falla de la válvula"
+  ],
+  "comprobaciones": [
+   "PTT operación 2939-08-03-01 EGR Function a 780-840 rpm con VGT 6-14 %",
+   "EGR 0 %: turbo > 35 000 rpm (< 30 000 posible EGR pegada; < 20 000 EGR pegada muy probable)",
+   "EGR 95 %: turbo debe bajar de 15 000 rpm en 10 s; si baja pero queda > 20 000 rpm = enfriador EGR tapado",
+   "ΔP EGR ≤ 0,2 psi (1,4 kPa) con válvula abierta: sensor ΔP o tubo venturi; T EGR < T refrigerante o > T escape: sensor de temperatura EGR"
+  ],
+  "sistema": "motor",
+  "confiabilidad": "oficial",
+  "fuente": "https://static.nhtsa.gov/odi/tsbs/2019/MC-10161908-9999.pdf"
+ },
+ {
+  "marca": "mack",
+  "aplica": "MP7/MP8 US10-US17 con VGT (GU/GR); guía aplicable a MP8 export con EGR+VGT",
+  "ecu": "EECU (MID 128)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 2659 FMI 16",
+  "descripcion": "SPN 2659 (SAE J1939: flujo másico EGR) FMI 16 – listado en el procedimiento de flujo EGR",
+  "causas": [
+   "Enfriador EGR tapado",
+   "Válvula EGR pegada",
+   "Sensor ΔP EGR o tubo venturi",
+   "Sensor de temperatura EGR",
+   "Según Mack, rara vez es causa eléctrica o falla de la válvula"
+  ],
+  "comprobaciones": [
+   "PTT operación 2939-08-03-01 EGR Function a 780-840 rpm con VGT 6-14 %",
+   "EGR 0 %: turbo > 35 000 rpm (< 30 000 posible EGR pegada; < 20 000 EGR pegada muy probable)",
+   "EGR 95 %: turbo debe bajar de 15 000 rpm en 10 s; si baja pero queda > 20 000 rpm = enfriador EGR tapado",
+   "ΔP EGR ≤ 0,2 psi (1,4 kPa) con válvula abierta: sensor ΔP o tubo venturi; T EGR < T refrigerante o > T escape: sensor de temperatura EGR"
+  ],
+  "sistema": "motor",
+  "confiabilidad": "oficial",
+  "fuente": "https://static.nhtsa.gov/odi/tsbs/2019/MC-10161908-9999.pdf"
+ },
+ {
+  "marca": "mack",
+  "aplica": "MP7/MP8 US10-US17 con VGT (GU/GR); guía aplicable a MP8 export con EGR+VGT",
+  "ecu": "EECU (MID 128)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 4752 FMI 7",
+  "descripcion": "SPN 4752 (SAE J1939: eficiencia enfriador EGR) FMI 7 – listado en el procedimiento de flujo EGR",
+  "causas": [
+   "Enfriador EGR tapado",
+   "Válvula EGR pegada",
+   "Sensor ΔP EGR o tubo venturi",
+   "Sensor de temperatura EGR",
+   "Según Mack, rara vez es causa eléctrica o falla de la válvula"
+  ],
+  "comprobaciones": [
+   "PTT operación 2939-08-03-01 EGR Function a 780-840 rpm con VGT 6-14 %",
+   "EGR 0 %: turbo > 35 000 rpm (< 30 000 posible EGR pegada; < 20 000 EGR pegada muy probable)",
+   "EGR 95 %: turbo debe bajar de 15 000 rpm en 10 s; si baja pero queda > 20 000 rpm = enfriador EGR tapado",
+   "ΔP EGR ≤ 0,2 psi (1,4 kPa) con válvula abierta: sensor ΔP o tubo venturi; T EGR < T refrigerante o > T escape: sensor de temperatura EGR"
+  ],
+  "sistema": "motor",
+  "confiabilidad": "oficial",
+  "fuente": "https://static.nhtsa.gov/odi/tsbs/2019/MC-10161908-9999.pdf"
+ },
+ {
+  "marca": "mack",
+  "aplica": "MP8 US2013+ OBD13 (GU 2014-2016 US)",
+  "ecu": "ECM",
+  "formato": "DTC-OEM",
+  "codigo": "P0401",
+  "descripcion": "Sistema EGR flujo bajo: flujo medido/modelado < 0,55 durante 4 s; MIL a los 2 ciclos",
+  "causas": [
+   "Enfriador EGR tapado",
+   "Válvula EGR pegada",
+   "Sensor ΔP EGR o tubo venturi",
+   "Sensor de temperatura EGR",
+   "Según Mack, rara vez es causa eléctrica o falla de la válvula"
+  ],
+  "comprobaciones": [
+   "PTT operación 2939-08-03-01 EGR Function a 780-840 rpm con VGT 6-14 %",
+   "EGR 0 %: turbo > 35 000 rpm (< 30 000 posible EGR pegada; < 20 000 EGR pegada muy probable)",
+   "EGR 95 %: turbo debe bajar de 15 000 rpm en 10 s; si baja pero queda > 20 000 rpm = enfriador EGR tapado",
+   "ΔP EGR ≤ 0,2 psi (1,4 kPa) con válvula abierta: sensor ΔP o tubo venturi; T EGR < T refrigerante o > T escape: sensor de temperatura EGR"
+  ],
+  "sistema": "motor",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.auroramack.com/sites/default/files/2024-09/Fault%20Codes%20MACK%202014-2017.pdf ; https://static.nhtsa.gov/odi/tsbs/2019/MC-10161908-9999.pdf"
+ },
+ {
+  "marca": "mack",
+  "aplica": "MP8 US2013+ OBD13",
+  "ecu": "ECM",
+  "formato": "DTC-OEM",
+  "codigo": "P0402",
+  "descripcion": "Sistema EGR flujo alto: flujo medido/modelado > 4,0 durante 5 s; MIL a los 2 ciclos",
+  "causas": [
+   "Enfriador EGR tapado",
+   "Válvula EGR pegada",
+   "Sensor ΔP EGR o tubo venturi",
+   "Sensor de temperatura EGR",
+   "Según Mack, rara vez es causa eléctrica o falla de la válvula"
+  ],
+  "comprobaciones": [
+   "PTT operación 2939-08-03-01 EGR Function a 780-840 rpm con VGT 6-14 %",
+   "EGR 0 %: turbo > 35 000 rpm (< 30 000 posible EGR pegada; < 20 000 EGR pegada muy probable)",
+   "EGR 95 %: turbo debe bajar de 15 000 rpm en 10 s; si baja pero queda > 20 000 rpm = enfriador EGR tapado",
+   "ΔP EGR ≤ 0,2 psi (1,4 kPa) con válvula abierta: sensor ΔP o tubo venturi; T EGR < T refrigerante o > T escape: sensor de temperatura EGR"
+  ],
+  "sistema": "motor",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.auroramack.com/sites/default/files/2024-09/Fault%20Codes%20MACK%202014-2017.pdf ; https://static.nhtsa.gov/odi/tsbs/2019/MC-10161908-9999.pdf"
+ },
+ {
+  "marca": "mack",
+  "aplica": "MP8 US2013+ OBD13",
+  "ecu": "ECM",
+  "formato": "DTC-OEM",
+  "codigo": "P240F",
+  "descripcion": "EGR respuesta lenta: el flujo EGR no logra el cambio demandado dentro de la ventana de evaluación",
+  "causas": [
+   "Enfriador EGR tapado",
+   "Válvula EGR pegada",
+   "Sensor ΔP EGR o tubo venturi",
+   "Sensor de temperatura EGR",
+   "Según Mack, rara vez es causa eléctrica o falla de la válvula"
+  ],
+  "comprobaciones": [
+   "PTT operación 2939-08-03-01 EGR Function a 780-840 rpm con VGT 6-14 %",
+   "EGR 0 %: turbo > 35 000 rpm (< 30 000 posible EGR pegada; < 20 000 EGR pegada muy probable)",
+   "EGR 95 %: turbo debe bajar de 15 000 rpm en 10 s; si baja pero queda > 20 000 rpm = enfriador EGR tapado",
+   "ΔP EGR ≤ 0,2 psi (1,4 kPa) con válvula abierta: sensor ΔP o tubo venturi; T EGR < T refrigerante o > T escape: sensor de temperatura EGR"
+  ],
+  "sistema": "motor",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.auroramack.com/sites/default/files/2024-09/Fault%20Codes%20MACK%202014-2017.pdf"
+ },
+ {
+  "marca": "mack",
+  "aplica": "MP8 US2013+ OBD13",
+  "ecu": "ECM",
+  "formato": "DTC-OEM",
+  "codigo": "P046C",
+  "descripcion": "Sensor ΔP EGR – racionalidad: ΔP real vs estimado fuera de ±20 kPa (plausibilidad) o fuera de −2/+3 kPa con EGR cerrada",
+  "causas": [
+   "Sensor ΔP EGR",
+   "Tubo venturi/tomas del sensor",
+   "Conector con fretting (FSB 293-007)"
+  ],
+  "comprobaciones": [
+   "Con EGR cerrada y motor detenido el ΔP debe ser ≈ 0",
+   "Inspeccionar pines del conector"
+  ],
+  "sistema": "motor",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.auroramack.com/sites/default/files/2024-09/Fault%20Codes%20MACK%202014-2017.pdf ; https://static.nhtsa.gov/odi/tsbs/2012/SB-10044962-1193.pdf"
+ },
+ {
+  "marca": "mack",
+  "aplica": "MP8 US2013+ OBD13",
+  "ecu": "ECM",
+  "formato": "DTC-OEM",
+  "codigo": "P0489",
+  "descripcion": "Actuador válvula EGR – cortocircuito bajo: corriente de válvula > 2,7 A (5 s)",
+  "causas": [
+   "Corto a masa en arnés de válvula EGR",
+   "Válvula EGR en corto interno"
+  ],
+  "comprobaciones": [
+   "Aislamiento del arnés a masa",
+   "Válvula EGR (kit MP7/MP8 85133799)"
+  ],
+  "sistema": "motor",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.auroramack.com/sites/default/files/2024-09/Fault%20Codes%20MACK%202014-2017.pdf ; https://static.nhtsa.gov/odi/tsbs/2012/SB-10048459-3000.pdf"
+ },
+ {
+  "marca": "mack",
+  "aplica": "MP8 EPA2007 (CHU/CXU/GU/MRU)",
+  "ecu": "EECU (MID 128)",
+  "formato": "MID-PID-FMI",
+  "codigo": "MID 128 PID 411 FMI 3",
+  "descripcion": "Sensor presión diferencial EGR – voltaje/señal alta (FMI según SAE J1587); Mack lo asocia a señal no confiable por fretting",
+  "causas": [
+   "Fretting de pines del conector del sensor ΔP EGR",
+   "Sensor defectuoso"
+  ],
+  "comprobaciones": [
+   "Inspeccionar pines por desgaste",
+   "Reemplazar sensor 21442662 por 21713917 + kit de arnés 21560217 (conector DIN 4 pines)"
+  ],
+  "sistema": "motor",
+  "confiabilidad": "oficial",
+  "fuente": "https://static.nhtsa.gov/odi/tsbs/2012/SB-10044962-1193.pdf"
+ },
+ {
+  "marca": "mack",
+  "aplica": "MP8 EPA2007 (CHU/CXU/GU/MRU)",
+  "ecu": "EECU (MID 128)",
+  "formato": "MID-PID-FMI",
+  "codigo": "MID 128 PID 411 FMI 5",
+  "descripcion": "Sensor presión diferencial EGR – corriente baja / circuito abierto (FMI según SAE J1587); Mack lo asocia a señal no confiable por fretting",
+  "causas": [
+   "Fretting de pines del conector del sensor ΔP EGR",
+   "Sensor defectuoso"
+  ],
+  "comprobaciones": [
+   "Inspeccionar pines por desgaste",
+   "Reemplazar sensor 21442662 por 21713917 + kit de arnés 21560217 (conector DIN 4 pines)"
+  ],
+  "sistema": "motor",
+  "confiabilidad": "oficial",
+  "fuente": "https://static.nhtsa.gov/odi/tsbs/2012/SB-10044962-1193.pdf"
+ },
+ {
+  "marca": "mack",
+  "aplica": "MP8 EPA2007 (CHU/CXU/GU/MRU)",
+  "ecu": "EECU (MID 128)",
+  "formato": "MID-PID-FMI",
+  "codigo": "MID 128 PID 411 FMI 12",
+  "descripcion": "Sensor presión diferencial EGR – dispositivo defectuoso (FMI según SAE J1587); Mack lo asocia a señal no confiable por fretting",
+  "causas": [
+   "Fretting de pines del conector del sensor ΔP EGR",
+   "Sensor defectuoso"
+  ],
+  "comprobaciones": [
+   "Inspeccionar pines por desgaste",
+   "Reemplazar sensor 21442662 por 21713917 + kit de arnés 21560217 (conector DIN 4 pines)"
+  ],
+  "sistema": "motor",
+  "confiabilidad": "oficial",
+  "fuente": "https://static.nhtsa.gov/odi/tsbs/2012/SB-10044962-1193.pdf"
+ },
+ {
+  "marca": "mack",
+  "aplica": "MP7/MP8 con VGT (SRA)",
+  "ecu": "EECU (MID 128)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 641 FMI 9",
+  "descripcion": "Actuador VGT – comunicación anormal (Mack: equivale a SID 27 FMI 9 y a U010C)",
+  "causas": [
+   "Refrigerante en el actuador VGT por fuga en tapones (cup plugs) del cuerpo del turbo",
+   "Fretting de pines del conector del actuador VGT / TSS"
+  ],
+  "comprobaciones": [
+   "Revisar fusible del actuador del turbo (quemado = síntoma típico)",
+   "Buscar refrigerante o residuo en actuador, conector y tapones del turbo: si hay, reemplazar turbo completo",
+   "Inspeccionar pines del conector (FSB 255-023: pin 984945, socket 3963409)"
+  ],
+  "sistema": "motor",
+  "confiabilidad": "oficial",
+  "fuente": "https://static.nhtsa.gov/odi/tsbs/2021/MC-10204019-0001.pdf ; https://static.nhtsa.gov/odi/tsbs/2012/SB-10044247-9335.pdf"
+ },
+ {
+  "marca": "mack",
+  "aplica": "MP7/MP8 con VGT (SRA)",
+  "ecu": "EECU (MID 128)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 641 FMI 7",
+  "descripcion": "Actuador VGT – respuesta mecánica incorrecta (Mack: equivale a SID 27 FMI 7 y a P0046)",
+  "causas": [
+   "Refrigerante en el actuador VGT por fuga en tapones (cup plugs) del cuerpo del turbo",
+   "Fretting de pines del conector del actuador VGT / TSS",
+   "VGT agarrotado"
+  ],
+  "comprobaciones": [
+   "Revisar fusible del actuador del turbo (quemado = síntoma típico)",
+   "Buscar refrigerante o residuo en actuador, conector y tapones del turbo: si hay, reemplazar turbo completo",
+   "Inspeccionar pines del conector (FSB 255-023: pin 984945, socket 3963409)"
+  ],
+  "sistema": "motor",
+  "confiabilidad": "oficial",
+  "fuente": "https://static.nhtsa.gov/odi/tsbs/2021/MC-10204019-0001.pdf"
+ },
+ {
+  "marca": "mack",
+  "aplica": "MP7/MP8 EPA07/US10/export (J1587)",
+  "ecu": "EECU (MID 128)",
+  "formato": "MID-SID-FMI",
+  "codigo": "MID 128 SID 27 FMI 9",
+  "descripcion": "Actuador VGT – comunicación (equivale a SPN 641 FMI 9)",
+  "causas": [
+   "Refrigerante en el actuador VGT por fuga en tapones (cup plugs) del cuerpo del turbo",
+   "Fretting de pines del conector del actuador VGT / TSS"
+  ],
+  "comprobaciones": [
+   "Revisar fusible del actuador del turbo (quemado = síntoma típico)",
+   "Buscar refrigerante o residuo en actuador, conector y tapones del turbo: si hay, reemplazar turbo completo",
+   "Inspeccionar pines del conector (FSB 255-023: pin 984945, socket 3963409)"
+  ],
+  "sistema": "motor",
+  "confiabilidad": "oficial",
+  "fuente": "https://static.nhtsa.gov/odi/tsbs/2021/MC-10204019-0001.pdf"
+ },
+ {
+  "marca": "mack",
+  "aplica": "MP7/MP8 EPA07/US10/export (J1587)",
+  "ecu": "EECU (MID 128)",
+  "formato": "MID-SID-FMI",
+  "codigo": "MID 128 SID 27 FMI 7",
+  "descripcion": "Actuador VGT – respuesta mecánica (equivale a SPN 641 FMI 7)",
+  "causas": [
+   "Refrigerante en el actuador VGT por fuga en tapones (cup plugs) del cuerpo del turbo",
+   "Fretting de pines del conector del actuador VGT / TSS"
+  ],
+  "comprobaciones": [
+   "Revisar fusible del actuador del turbo (quemado = síntoma típico)",
+   "Buscar refrigerante o residuo en actuador, conector y tapones del turbo: si hay, reemplazar turbo completo",
+   "Inspeccionar pines del conector (FSB 255-023: pin 984945, socket 3963409)"
+  ],
+  "sistema": "motor",
+  "confiabilidad": "oficial",
+  "fuente": "https://static.nhtsa.gov/odi/tsbs/2021/MC-10204019-0001.pdf"
+ },
+ {
+  "marca": "mack",
+  "aplica": "MP8 US2013+ OBD13",
+  "ecu": "ECM",
+  "formato": "DTC-OEM",
+  "codigo": "U010C",
+  "descripcion": "Actuador VGT (SRA) – falta de comunicación (2 s; batería > 8 V)",
+  "causas": [
+   "Refrigerante en el actuador VGT por fuga en tapones (cup plugs) del cuerpo del turbo",
+   "Fretting de pines del conector del actuador VGT / TSS",
+   "Red J1939-7"
+  ],
+  "comprobaciones": [
+   "Revisar fusible del actuador del turbo (quemado = síntoma típico)",
+   "Buscar refrigerante o residuo en actuador, conector y tapones del turbo: si hay, reemplazar turbo completo",
+   "Inspeccionar pines del conector (FSB 255-023: pin 984945, socket 3963409)",
+   "Verificar red J1939-7 = 60 Ω"
+  ],
+  "sistema": "motor",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.auroramack.com/sites/default/files/2024-09/Fault%20Codes%20MACK%202014-2017.pdf ; https://static.nhtsa.gov/odi/tsbs/2021/MC-10204019-0001.pdf"
+ },
+ {
+  "marca": "mack",
+  "aplica": "MP8 US2013+ OBD13",
+  "ecu": "ECM",
+  "formato": "DTC-OEM",
+  "codigo": "P0046",
+  "descripcion": "Actuador VGT – falla mecánica determinada por el propio actuador SRA",
+  "causas": [
+   "Refrigerante en el actuador VGT por fuga en tapones (cup plugs) del cuerpo del turbo",
+   "Fretting de pines del conector del actuador VGT / TSS",
+   "VGT agarrotado"
+  ],
+  "comprobaciones": [
+   "Revisar fusible del actuador del turbo (quemado = síntoma típico)",
+   "Buscar refrigerante o residuo en actuador, conector y tapones del turbo: si hay, reemplazar turbo completo",
+   "Inspeccionar pines del conector (FSB 255-023: pin 984945, socket 3963409)"
+  ],
+  "sistema": "motor",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.auroramack.com/sites/default/files/2024-09/Fault%20Codes%20MACK%202014-2017.pdf ; https://static.nhtsa.gov/odi/tsbs/2021/MC-10204019-0001.pdf"
+ },
+ {
+  "marca": "mack",
+  "aplica": "MP8 US2013+ OBD13",
+  "ecu": "ECM",
+  "formato": "DTC-OEM",
+  "codigo": "P0299",
+  "descripcion": "Subalimentación: presión real − modelada < −50 kPa (1350-1700 rpm, EGR 10-96 %, VGT 5-90 %, refrigerante > 65 °C, baro 75-105 kPa)",
+  "causas": [
+   "Fuga en circuito de carga/intercooler",
+   "Turbo/actuador VGT",
+   "EGR abierta",
+   "Filtro de aire restringido"
+  ],
+  "comprobaciones": [
+   "Prueba de fugas del circuito de carga",
+   "Estado del filtro de aire",
+   "Funciones VGT y EGR con PTT"
+  ],
+  "sistema": "motor",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.auroramack.com/sites/default/files/2024-09/Fault%20Codes%20MACK%202014-2017.pdf"
+ },
+ {
+  "marca": "mack",
+  "aplica": "MP8 US2013+ OBD13",
+  "ecu": "ECM",
+  "formato": "DTC-OEM",
+  "codigo": "P0234",
+  "descripcion": "Sobrealimentación: presión real − modelada > 120 kPa (1350-1700 rpm)",
+  "causas": [
+   "VGT pegado / actuador",
+   "Sensor de presión de admisión"
+  ],
+  "comprobaciones": [
+   "Función VGT con PTT",
+   "Comparar sensor de admisión con presión barométrica con motor detenido"
+  ],
+  "sistema": "motor",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.auroramack.com/sites/default/files/2024-09/Fault%20Codes%20MACK%202014-2017.pdf"
+ },
+ {
+  "marca": "mack",
+  "aplica": "MP8 US2013+ OBD13",
+  "ecu": "ECM",
+  "formato": "DTC-OEM",
+  "codigo": "P0128",
+  "descripcion": "Termostato abierto o con fuga: refrigerante no alcanza 72 °C (1000-1600 rpm, 550-1200 Nm, > 40 km/h)",
+  "causas": [
+   "Termostato pegado abierto",
+   "Sensor ECT"
+  ],
+  "comprobaciones": [
+   "Verificar calentamiento con termómetro",
+   "Reemplazar termostato"
+  ],
+  "sistema": "motor",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.auroramack.com/sites/default/files/2024-09/Fault%20Codes%20MACK%202014-2017.pdf"
+ },
+ {
+  "marca": "mack",
+  "aplica": "MP8 US2013+ OBD13",
+  "ecu": "ECM",
+  "formato": "DTC-OEM",
+  "codigo": "P0117",
+  "descripcion": "Sensor temperatura refrigerante – corto bajo: voltaje < 0,2767 V (≈ 140 °C)",
+  "causas": [
+   "Corto a masa en señal ECT",
+   "Sensor ECT"
+  ],
+  "comprobaciones": [
+   "Medir señal y referencia del sensor",
+   "Aislamiento del arnés a masa"
+  ],
+  "sistema": "motor",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.auroramack.com/sites/default/files/2024-09/Fault%20Codes%20MACK%202014-2017.pdf"
+ },
+ {
+  "marca": "mack",
+  "aplica": "MP8 US2013+ OBD13",
+  "ecu": "ECM",
+  "formato": "DTC-OEM",
+  "codigo": "P0335",
+  "descripcion": "Sensor posición cigüeñal – sin señal por más de 3 revoluciones (motor > 50 rpm)",
+  "causas": [
+   "Sensor o conector",
+   "Arnés abierto"
+  ],
+  "comprobaciones": [
+   "Continuidad del arnés",
+   "Estado y limpieza del sensor"
+  ],
+  "sistema": "motor",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.auroramack.com/sites/default/files/2024-09/Fault%20Codes%20MACK%202014-2017.pdf"
+ },
+ {
+  "marca": "mack",
+  "aplica": "MP8 US2013+ OBD13",
+  "ecu": "ECM",
+  "formato": "DTC-OEM",
+  "codigo": "P0340",
+  "descripcion": "Sensor posición árbol de levas – sin señal por más de 3 revoluciones",
+  "causas": [
+   "Sensor o conector",
+   "Arnés abierto"
+  ],
+  "comprobaciones": [
+   "Continuidad del arnés",
+   "Estado del sensor"
+  ],
+  "sistema": "motor",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.auroramack.com/sites/default/files/2024-09/Fault%20Codes%20MACK%202014-2017.pdf"
+ },
+ {
+  "marca": "mack",
+  "aplica": "MP8 US2013+ OBD13",
+  "ecu": "ECM",
+  "formato": "DTC-OEM",
+  "codigo": "U0141",
+  "descripcion": "Falta de señal de la VECU en CAN > 9 s",
+  "causas": [
+   "Red J1939 backbone abierta o en corto",
+   "VECU sin alimentación (F16 10 A, pines A13/A12)",
+   "Resistencias de terminación"
+  ],
+  "comprobaciones": [
+   "50-70 Ω entre pines 3 y 11 del conector de 16 pines (llave OFF)",
+   "F16 y masa VECU A12; relés EMS"
+  ],
+  "sistema": "electrico",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.auroramack.com/sites/default/files/2024-09/Fault%20Codes%20MACK%202014-2017.pdf ; https://www.macktrucks.com/media/files/body-builder/wiring-diagrams/mack-conventional-12volt-includes-us17-version-9-21628497-09-1.pdf"
+ },
+ {
+  "marca": "mack",
+  "aplica": "MP8 US2013+ OBD13 con ACM",
+  "ecu": "ECM",
+  "formato": "DTC-OEM",
+  "codigo": "U116F",
+  "descripcion": "Falta el ACM en la subred del motor (J1939-7) > 9 s",
+  "causas": [
+   "Alimentación/fusible en línea del ACM",
+   "Masa del ACM",
+   "Red J1939-7"
+  ],
+  "comprobaciones": [
+   "60 Ω en J1939-7",
+   "Terminales de batería y masa del ACM",
+   "Contaminación con DEF en conectores"
+  ],
+  "sistema": "electrico",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.auroramack.com/sites/default/files/2024-09/Fault%20Codes%20MACK%202014-2017.pdf ; https://static.nhtsa.gov/odi/tsbs/2021/MC-10204023-0001.pdf"
+ },
+ {
+  "marca": "mack",
+  "aplica": "MP7/MP8/MP10 US10 con ACM",
+  "ecu": "EECU (MID 128)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 1231 FMI 9",
+  "descripcion": "Perturbación en la red J1939-7 (EMS MID 128, ACM MID 233, NOx, SRA, TECU MID 130)",
+  "causas": [
+   "Software EMS (inactivo en múltiplos de 3, camiones 2010-2012)",
+   "Masas en bastidor",
+   "Alimentación/fusible del ACM",
+   "Resistencia de terminación faltante",
+   "Cables H-L en corto",
+   "DEF en conectores"
+  ],
+  "comprobaciones": [
+   "Resistencia H-L = 60 Ω (≈ 0,5 Ω = corto; alta = falta resistencia/módulo)",
+   "Desconectar componentes de a uno",
+   "Prueba de carga de baterías"
+  ],
+  "sistema": "electrico",
+  "confiabilidad": "oficial",
+  "fuente": "https://static.nhtsa.gov/odi/tsbs/2021/MC-10204023-0001.pdf"
+ },
+ {
+  "marca": "mack",
+  "aplica": "MP7 EPA2010 LEU/MRU con carga en ralentí (referencia para MP8 con PTO en ralentí)",
+  "ecu": "EECU (MID 128)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 4094 FMI 18",
+  "descripcion": "Se registra en aplicaciones que cargan el motor en ralentí",
+  "causas": [
+   "Software ECM (dataset < 22089367)"
+  ],
+  "comprobaciones": [
+   "Si no hay otros códigos: reprogramar MID 128",
+   "Con software ≥ 22089367: diagnóstico guiado"
+  ],
+  "sistema": "postratamiento",
+  "confiabilidad": "oficial",
+  "fuente": "https://static.nhtsa.gov/odi/tsbs/2013/SB-10054292-5095.pdf"
+ },
+ {
+  "marca": "mack",
+  "aplica": "MP7 EPA2010 LEU/MRU con carga en ralentí (referencia)",
+  "ecu": "EECU (MID 128)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 5246 FMI 0",
+  "descripcion": "Se registra junto a SPN 4094 FMI 18 en aplicaciones que cargan el motor en ralentí",
+  "causas": [
+   "Software ECM"
+  ],
+  "comprobaciones": [
+   "Reprogramar MID 128 si no hay otros códigos"
+  ],
+  "sistema": "postratamiento",
+  "confiabilidad": "oficial",
+  "fuente": "https://static.nhtsa.gov/odi/tsbs/2013/SB-10054292-5095.pdf"
+ },
+ {
+  "marca": "mack",
+  "aplica": "MP7/MP8 fabricados 14-11-2016 a 31-12-2018 (riel común)",
+  "ecu": "ECM",
+  "formato": "DTC-OEM",
+  "codigo": "P009B-13",
+  "descripcion": "Control de alivio de presión de combustible (ePRV) – circuito abierto",
+  "causas": [
+   "Falla eléctrica o fuga interna de la ePRV del riel común"
+  ],
+  "comprobaciones": [
+   "Aplicar FSB 237-021: kit de eliminación ePRV 85156544 + software 85156014"
+  ],
+  "sistema": "combustible",
+  "confiabilidad": "oficial",
+  "fuente": "https://static.nhtsa.gov/odi/tsbs/2021/MC-10189885-0001.pdf"
+ },
+ {
+  "marca": "mack",
+  "aplica": "MP7/MP8 US17+OBD16/OBD18 (2018-2019)",
+  "ecu": "ECM",
+  "formato": "DTC-OEM",
+  "codigo": "P0087-00",
+  "descripcion": "Presión del riel demasiado baja: < ≈ 260 bar por > 4 s → derrateo + MIL o STOP",
+  "causas": [
+   "Filtros de combustible restringidos (más probable)",
+   "Sistema de baja presión (P008A)",
+   "Software EMS < 23033425.P01"
+  ],
+  "comprobaciones": [
+   "Medir presión de alimentación con herramental (estático y en ruta con carga)",
+   "Si existe P008A, diagnosticarlo primero",
+   "Verificar campaña PI0883"
+  ],
+  "sistema": "combustible",
+  "confiabilidad": "oficial",
+  "fuente": "https://static.nhtsa.gov/odi/tsbs/2018/MC-10143801-9999.pdf"
+ },
+ {
+  "marca": "mack",
+  "aplica": "MP7/MP8/MP10 US07-US17",
+  "ecu": "ECM",
+  "formato": "DTC-OEM",
+  "codigo": "P020113",
+  "descripcion": "Inyector A cilindro 1 circuito abierto; si aparecen P020113…P020613 (cil. 1-6) juntos",
+  "causas": [
+   "Alimentación o masa del ECM (no los inyectores)"
+  ],
+  "comprobaciones": [
+   "Prueba de alimentación y masa del ECM: F38, X11 pines 13/15, masas 31/39, relés EMS RLY01/RLY02"
+  ],
+  "sistema": "combustible",
+  "confiabilidad": "oficial",
+  "fuente": "https://static.nhtsa.gov/odi/tsbs/2019/MC-10165482-9999.pdf ; https://www.macktrucks.com/media/files/body-builder/wiring-diagrams/mack-conventional-12volt-includes-us17-version-9-21628497-09-1.pdf"
+ },
+ {
+  "marca": "mack",
+  "aplica": "MP8 US2013+ OBD13 con DPF",
+  "ecu": "ECM/ACM",
+  "formato": "DTC-OEM",
+  "codigo": "P2002",
+  "descripcion": "Eficiencia del DPF: hollín por ΔP vs referencia fuera de límite, o T post-DPF > 725 °C",
+  "causas": [
+   "DPF dañado o sin sustrato",
+   "Sensor ΔP DPF o sus mangueras"
+  ],
+  "comprobaciones": [
+   "Revisar mangueras del sensor ΔP",
+   "Inspección del DPF"
+  ],
+  "sistema": "postratamiento",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.auroramack.com/sites/default/files/2024-09/Fault%20Codes%20MACK%202014-2017.pdf"
+ },
+ {
+  "marca": "mack",
+  "aplica": "MP8 US2013+ OBD13 con DPF",
+  "ecu": "ACM",
+  "formato": "DTC-OEM",
+  "codigo": "P2453",
+  "descripcion": "Sensor presión diferencial DPF – plausibilidad (ΔP > 1,5 kPa en condición baja o < 2,5 kPa en condición alta)",
+  "causas": [
+   "Mangueras del sensor tapadas, invertidas o sueltas",
+   "Sensor ΔP"
+  ],
+  "comprobaciones": [
+   "Revisar mangueras y conexión",
+   "Comparar lectura en ralentí vs carga"
+  ],
+  "sistema": "postratamiento",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.auroramack.com/sites/default/files/2024-09/Fault%20Codes%20MACK%202014-2017.pdf"
+ },
+ {
+  "marca": "mack",
+  "aplica": "MP8 US2013+ OBD13 con DPF",
+  "ecu": "ACM",
+  "formato": "DTC-OEM",
+  "codigo": "P0544",
+  "descripcion": "Sensor temperatura pre-DOC – circuito abierto: voltaje > 2,3 V",
+  "causas": [
+   "Sensor abierto",
+   "Arnés/conector dañado por calor"
+  ],
+  "comprobaciones": [
+   "Continuidad del arnés",
+   "Ruteo a ≥ 130 mm del escape"
+  ],
+  "sistema": "postratamiento",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.auroramack.com/sites/default/files/2024-09/Fault%20Codes%20MACK%202014-2017.pdf"
+ },
+ {
+  "marca": "mack",
+  "aplica": "MP8 US2013+ OBD13 con DPF",
+  "ecu": "ACM",
+  "formato": "DTC-OEM",
+  "codigo": "P2080",
+  "descripcion": "Racionalidad sensor temperatura pre-DOC: desviación promedio > 70 °C",
+  "causas": [
+   "Sensor pre-DOC",
+   "Fuga de escape"
+  ],
+  "comprobaciones": [
+   "Comparar temperaturas DOC/DPF con motor caliente"
+  ],
+  "sistema": "postratamiento",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.auroramack.com/sites/default/files/2024-09/Fault%20Codes%20MACK%202014-2017.pdf"
+ },
+ {
+  "marca": "mack",
+  "aplica": "MP7/MP8 US07/US10 con DPF catalizado e inyector AHI",
+  "ecu": "ACM",
+  "formato": "DTC-OEM",
+  "codigo": "P20DD",
+  "descripcion": "Sensor de presión de combustible del dosificador de HC – circuito abierto: voltaje < 0,2 V",
+  "causas": [
+   "Sensor o arnés del AHI"
+  ],
+  "comprobaciones": [
+   "Voltaje de referencia y señal del sensor"
+  ],
+  "sistema": "postratamiento",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.auroramack.com/sites/default/files/2024-09/Fault%20Codes%20MACK%202014-2017.pdf"
+ },
+ {
+  "marca": "mack",
+  "aplica": "MP7/MP8 US07/US10 con DPF catalizado e inyector AHI",
+  "ecu": "ACM",
+  "formato": "DTC-OEM",
+  "codigo": "P2698",
+  "descripcion": "Válvula dosificadora de HC (AHI) – funcional: relación energía entregada/liberada > 0,75 (600 s)",
+  "causas": [
+   "Inyector AHI tapado/coquizado",
+   "Sistema de purga de aire del AHI"
+  ],
+  "comprobaciones": [
+   "Revisar purga continua de aire del AHI (boletín Mack M-258-002)",
+   "Inspeccionar inyector AHI"
+  ],
+  "sistema": "postratamiento",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.auroramack.com/sites/default/files/2024-09/Fault%20Codes%20MACK%202014-2017.pdf ; https://static.nhtsa.gov/odi/tsbs/2022/MC-10219067-0001.pdf"
+ },
+ {
+  "marca": "mack",
+  "aplica": "MP8 US2013+ OBD13",
+  "ecu": "ECM",
+  "formato": "DTC-OEM",
+  "codigo": "P215A",
+  "descripcion": "Velocidad del vehículo: diferencia VSS vs ABS > 12 km/h",
+  "causas": [
+   "Sensor VSS (VECU PB-6/PB-20)",
+   "Sensores de rueda ABS",
+   "Parámetros de eje/neumáticos"
+  ],
+  "comprobaciones": [
+   "Comparar velocidad VSS vs ABS con PTT",
+   "Revisar sensores y parámetros"
+  ],
+  "sistema": "electrico",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.auroramack.com/sites/default/files/2024-09/Fault%20Codes%20MACK%202014-2017.pdf ; https://www.macktrucks.com/media/files/body-builder/2024/mack-section3-vecu4-pdf-final-1106.pdf"
+ },
+ {
+  "marca": "mack",
+  "aplica": "Mack US10+OBD13 y posteriores CON SCR (no aplica a MP8 exportación sin SCR)",
+  "ecu": "ECM/ACM",
+  "formato": "DTC-OEM",
+  "codigo": "P22FB-92",
+  "descripcion": "Sensor NOx de entrada (NOx 1) – elemento sensor, rendimiento incorrecto",
+  "causas": [
+   "Ver guía Mack de sensores NOx"
+  ],
+  "comprobaciones": [
+   "Reemplazar el sensor si está activo o confirmado (no por inactivo)",
+   "Los sensores NOx tienen ID CAN único (no intercambiables) y no operan hasta que el escape está caliente y seco"
+  ],
+  "sistema": "postratamiento",
+  "confiabilidad": "oficial",
+  "fuente": "https://static.nhtsa.gov/odi/tsbs/2022/MC-10217013-0001.pdf"
+ },
+ {
+  "marca": "mack",
+  "aplica": "Mack US10+OBD13 y posteriores CON SCR (no aplica a MP8 exportación sin SCR)",
+  "ecu": "ECM/ACM",
+  "formato": "DTC-OEM",
+  "codigo": "P2200-13",
+  "descripcion": "Sensor NOx 1 – circuito abierto",
+  "causas": [
+   "Ver guía Mack de sensores NOx"
+  ],
+  "comprobaciones": [
+   "Reemplazar el sensor si está activo o confirmado",
+   "Los sensores NOx tienen ID CAN único (no intercambiables) y no operan hasta que el escape está caliente y seco"
+  ],
+  "sistema": "postratamiento",
+  "confiabilidad": "oficial",
+  "fuente": "https://static.nhtsa.gov/odi/tsbs/2022/MC-10217013-0001.pdf"
+ },
+ {
+  "marca": "mack",
+  "aplica": "Mack US10+OBD13 y posteriores CON SCR (no aplica a MP8 exportación sin SCR)",
+  "ecu": "ECM/ACM",
+  "formato": "DTC-OEM",
+  "codigo": "P229E-13",
+  "descripcion": "Sensor NOx de salida (NOx 2) – circuito abierto",
+  "causas": [
+   "Ver guía Mack de sensores NOx"
+  ],
+  "comprobaciones": [
+   "Reemplazar el sensor si está activo o confirmado",
+   "Los sensores NOx tienen ID CAN único (no intercambiables) y no operan hasta que el escape está caliente y seco"
+  ],
+  "sistema": "postratamiento",
+  "confiabilidad": "oficial",
+  "fuente": "https://static.nhtsa.gov/odi/tsbs/2022/MC-10217013-0001.pdf"
+ },
+ {
+  "marca": "mack",
+  "aplica": "Mack US10+OBD13 y posteriores CON SCR (no aplica a MP8 exportación sin SCR)",
+  "ecu": "ECM/ACM",
+  "formato": "DTC-OEM",
+  "codigo": "P220A-1C",
+  "descripcion": "Sensor NOx 1 – tensión de alimentación fuera de rango",
+  "causas": [
+   "Ver guía Mack de sensores NOx"
+  ],
+  "comprobaciones": [
+   "NO reemplazar el sensor: diagnosticar alimentación",
+   "Los sensores NOx tienen ID CAN único (no intercambiables) y no operan hasta que el escape está caliente y seco"
+  ],
+  "sistema": "postratamiento",
+  "confiabilidad": "oficial",
+  "fuente": "https://static.nhtsa.gov/odi/tsbs/2022/MC-10217013-0001.pdf"
+ },
+ {
+  "marca": "mack",
+  "aplica": "Mack US10+OBD13 y posteriores CON SCR (no aplica a MP8 exportación sin SCR)",
+  "ecu": "ECM/ACM",
+  "formato": "DTC-OEM",
+  "codigo": "U029D-00",
+  "descripcion": "Pérdida de comunicación con sensor NOx A",
+  "causas": [
+   "Ver guía Mack de sensores NOx"
+  ],
+  "comprobaciones": [
+   "NO reemplazar el sensor: causa más probable arnés",
+   "Los sensores NOx tienen ID CAN único (no intercambiables) y no operan hasta que el escape está caliente y seco"
+  ],
+  "sistema": "postratamiento",
+  "confiabilidad": "oficial",
+  "fuente": "https://static.nhtsa.gov/odi/tsbs/2022/MC-10217013-0001.pdf"
+ },
+ {
+  "marca": "mack",
+  "aplica": "Mack US10+OBD13 y posteriores CON SCR (no aplica a MP8 exportación sin SCR)",
+  "ecu": "ECM/ACM",
+  "formato": "DTC-OEM",
+  "codigo": "P225D-00",
+  "descripcion": "Sensor NOx 1 – señal pegada baja",
+  "causas": [
+   "Ver guía Mack de sensores NOx"
+  ],
+  "comprobaciones": [
+   "NO reemplazar: el sensor lee aire fresco → buscar fuga de escape",
+   "Los sensores NOx tienen ID CAN único (no intercambiables) y no operan hasta que el escape está caliente y seco"
+  ],
+  "sistema": "postratamiento",
+  "confiabilidad": "oficial",
+  "fuente": "https://static.nhtsa.gov/odi/tsbs/2022/MC-10217013-0001.pdf"
+ }
+]

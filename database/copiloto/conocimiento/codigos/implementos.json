@@ -1,0 +1,476 @@
+[
+ {
+  "marca": "scanreco",
+  "aplica": "Radio control Scanreco G2 con RCL 5300 (grúas pluma; verificar la marca de radio en cada grúa)",
+  "ecu": "RCL 5300 / Scanreco G2",
+  "formato": "DTC-OEM",
+  "codigo": "170",
+  "descripcion": "Falla interna del radio controlador",
+  "causas": [
+   "Radio controlador"
+  ],
+  "comprobaciones": [
+   "Reiniciar el RCL y el radio control",
+   "Si persiste, servicio técnico"
+  ],
+  "sistema": "implemento",
+  "confiabilidad": "oficial",
+  "fuente": "http://www.hmf-tech.com/admin/pdf/file/Scanreco%20G2%20radio%20remote%20control%20system,%2020-13.pdf"
+ },
+ {
+  "marca": "scanreco",
+  "aplica": "Radio control Scanreco G2 con RCL 5300 (grúas pluma; verificar la marca de radio en cada grúa)",
+  "ecu": "RCL 5300 / Scanreco G2",
+  "formato": "DTC-OEM",
+  "codigo": "171",
+  "descripcion": "Error en los terminales de salida del radio controlador",
+  "causas": [
+   "Salida en corto o sobrecarga"
+  ],
+  "comprobaciones": [
+   "Leer el código Er en el LED interno",
+   "Revisar las salidas, cables y enchufes"
+  ],
+  "sistema": "implemento",
+  "confiabilidad": "oficial",
+  "fuente": "http://www.hmf-tech.com/admin/pdf/file/Scanreco%20G2%20radio%20remote%20control%20system,%2020-13.pdf"
+ },
+ {
+  "marca": "scanreco",
+  "aplica": "Radio control Scanreco G2 con RCL 5300 (grúas pluma; verificar la marca de radio en cada grúa)",
+  "ecu": "RCL 5300 / Scanreco G2",
+  "formato": "DTC-OEM",
+  "codigo": "172",
+  "descripcion": "Falla del botón de paro de la caja de control remoto",
+  "causas": [
+   "Botón de paro"
+  ],
+  "comprobaciones": [
+   "Servicio técnico"
+  ],
+  "sistema": "implemento",
+  "confiabilidad": "oficial",
+  "fuente": "http://www.hmf-tech.com/admin/pdf/file/Scanreco%20G2%20radio%20remote%20control%20system,%2020-13.pdf"
+ },
+ {
+  "marca": "scanreco",
+  "aplica": "Radio control Scanreco G2 con RCL 5300 (grúas pluma; verificar la marca de radio en cada grúa)",
+  "ecu": "RCL 5300 / Scanreco G2",
+  "formato": "DTC-OEM",
+  "codigo": "173",
+  "descripcion": "Palanca de control activada al encender",
+  "causas": [
+   "Palanca fuera de neutro"
+  ],
+  "comprobaciones": [
+   "Dejar todas las palancas en neutro y reiniciar la caja remota"
+  ],
+  "sistema": "implemento",
+  "confiabilidad": "oficial",
+  "fuente": "http://www.hmf-tech.com/admin/pdf/file/Scanreco%20G2%20radio%20remote%20control%20system,%2020-13.pdf"
+ },
+ {
+  "marca": "scanreco",
+  "aplica": "Radio control Scanreco G2 con RCL 5300 (grúas pluma; verificar la marca de radio en cada grúa)",
+  "ecu": "RCL 5300 / Scanreco G2",
+  "formato": "DTC-OEM",
+  "codigo": "174",
+  "descripcion": "Error en la señal de una palanca",
+  "causas": [
+   "Palanca o potenciómetro"
+  ],
+  "comprobaciones": [
+   "Servicio técnico"
+  ],
+  "sistema": "implemento",
+  "confiabilidad": "oficial",
+  "fuente": "http://www.hmf-tech.com/admin/pdf/file/Scanreco%20G2%20radio%20remote%20control%20system,%2020-13.pdf"
+ },
+ {
+  "marca": "scanreco",
+  "aplica": "Radio control Scanreco G2 con RCL 5300 (grúas pluma; verificar la marca de radio en cada grúa)",
+  "ecu": "RCL 5300 / Scanreco G2",
+  "formato": "DTC-OEM",
+  "codigo": "175",
+  "descripcion": "Falta la codificación de ID entre el radio controlador y la caja remota",
+  "causas": [
+   "Emparejamiento"
+  ],
+  "comprobaciones": [
+   "Reiniciar el RCL y el radio control",
+   "Servicio técnico"
+  ],
+  "sistema": "implemento",
+  "confiabilidad": "oficial",
+  "fuente": "http://www.hmf-tech.com/admin/pdf/file/Scanreco%20G2%20radio%20remote%20control%20system,%2020-13.pdf"
+ },
+ {
+  "marca": "scanreco",
+  "aplica": "Radio control Scanreco G2 con RCL 5300 (grúas pluma; verificar la marca de radio en cada grúa)",
+  "ecu": "RCL 5300 / Scanreco G2",
+  "formato": "DTC-OEM",
+  "codigo": "176",
+  "descripcion": "Alimentación del radio controlador demasiado baja",
+  "causas": [
+   "Voltaje bajo",
+   "Masa"
+  ],
+  "comprobaciones": [
+   "Revisar la alimentación"
+  ],
+  "sistema": "implemento",
+  "confiabilidad": "oficial",
+  "fuente": "http://www.hmf-tech.com/admin/pdf/file/Scanreco%20G2%20radio%20remote%20control%20system,%2020-13.pdf"
+ },
+ {
+  "marca": "scanreco",
+  "aplica": "Radio control Scanreco G2 con RCL 5300 (grúas pluma; verificar la marca de radio en cada grúa)",
+  "ecu": "RCL 5300 / Scanreco G2",
+  "formato": "DTC-OEM",
+  "codigo": "177",
+  "descripcion": "Alimentación del radio controlador demasiado alta",
+  "causas": [
+   "Voltaje alto"
+  ],
+  "comprobaciones": [
+   "Revisar la alimentación"
+  ],
+  "sistema": "implemento",
+  "confiabilidad": "oficial",
+  "fuente": "http://www.hmf-tech.com/admin/pdf/file/Scanreco%20G2%20radio%20remote%20control%20system,%2020-13.pdf"
+ },
+ {
+  "marca": "scanreco",
+  "aplica": "Radio control Scanreco G2 con RCL 5300 (grúas pluma; verificar la marca de radio en cada grúa)",
+  "ecu": "RCL 5300 / Scanreco G2",
+  "formato": "DTC-OEM",
+  "codigo": "180",
+  "descripcion": "Sin enlace de radio entre el radio controlador y la caja remota",
+  "causas": [
+   "Batería de la caja remota",
+   "Interferencia",
+   "Distancia"
+  ],
+  "comprobaciones": [
+   "Reiniciar la caja remota",
+   "Revisar la batería"
+  ],
+  "sistema": "implemento",
+  "confiabilidad": "oficial",
+  "fuente": "http://www.hmf-tech.com/admin/pdf/file/Scanreco%20G2%20radio%20remote%20control%20system,%2020-13.pdf"
+ },
+ {
+  "marca": "scanreco",
+  "aplica": "Radio control Scanreco G2 con RCL 5300 (grúas pluma; verificar la marca de radio en cada grúa)",
+  "ecu": "RCL 5300 / Scanreco G2",
+  "formato": "DTC-OEM",
+  "codigo": "184",
+  "descripcion": "El RCL 5300 no recibe la señal de seguridad por cable (DV)",
+  "causas": [
+   "Cable DV interrumpido"
+  ],
+  "comprobaciones": [
+   "Servicio técnico",
+   "Revisar el cable entre el RCL y el radio controlador"
+  ],
+  "sistema": "implemento",
+  "confiabilidad": "oficial",
+  "fuente": "http://www.hmf-tech.com/admin/pdf/file/Scanreco%20G2%20radio%20remote%20control%20system,%2020-13.pdf"
+ },
+ {
+  "marca": "scanreco",
+  "aplica": "Radio control Scanreco G2 con RCL 5300 (grúas pluma; verificar la marca de radio en cada grúa)",
+  "ecu": "RCL 5300 / Scanreco G2",
+  "formato": "DTC-OEM",
+  "codigo": "185",
+  "descripcion": "Error en la señal DV del radio controlador (DV en corto)",
+  "causas": [
+   "Salida DV en corto"
+  ],
+  "comprobaciones": [
+   "Revisar la salida DV, el cable y el enchufe, y reiniciar"
+  ],
+  "sistema": "implemento",
+  "confiabilidad": "oficial",
+  "fuente": "http://www.hmf-tech.com/admin/pdf/file/Scanreco%20G2%20radio%20remote%20control%20system,%2020-13.pdf"
+ },
+ {
+  "marca": "scanreco",
+  "aplica": "Radio control Scanreco G2 con RCL 5300 (grúas pluma; verificar la marca de radio en cada grúa)",
+  "ecu": "RCL 5300 / Scanreco G2",
+  "formato": "DTC-OEM",
+  "codigo": "186",
+  "descripcion": "Selector del radio controlador en posición Manual",
+  "causas": [
+   "Selector en Manual"
+  ],
+  "comprobaciones": [
+   "Poner el selector en Remote"
+  ],
+  "sistema": "implemento",
+  "confiabilidad": "oficial",
+  "fuente": "http://www.hmf-tech.com/admin/pdf/file/Scanreco%20G2%20radio%20remote%20control%20system,%2020-13.pdf"
+ },
+ {
+  "marca": "scanreco",
+  "aplica": "Radio control Scanreco G2 con RCL 5300 (grúas pluma; verificar la marca de radio en cada grúa)",
+  "ecu": "RCL 5300 / Scanreco G2",
+  "formato": "DTC-OEM",
+  "codigo": "192",
+  "descripcion": "El RCL 5300 no se comunica con el radio controlador en la red",
+  "causas": [
+   "CAN entre el RCL y el radio"
+  ],
+  "comprobaciones": [
+   "Revisar las conexiones CAN y reiniciar"
+  ],
+  "sistema": "implemento",
+  "confiabilidad": "oficial",
+  "fuente": "http://www.hmf-tech.com/admin/pdf/file/Scanreco%20G2%20radio%20remote%20control%20system,%2020-13.pdf"
+ },
+ {
+  "marca": "scanreco",
+  "aplica": "Receptor (radio controlador) Scanreco G2, display LED interno",
+  "ecu": "Scanreco G2",
+  "formato": "DTC-OEM",
+  "codigo": "Er 01.01-01.07",
+  "descripcion": "Error de checksum (EEPROM/FLASH) o inestabilidad de software o hardware",
+  "causas": [
+   "Error de checksum (EEPROM/FLASH) o inestabilidad de software o hardware"
+  ],
+  "comprobaciones": [
+   "Reiniciar; si persiste, servicio técnico"
+  ],
+  "sistema": "implemento",
+  "confiabilidad": "oficial",
+  "fuente": "http://www.hmf-tech.com/admin/pdf/file/Scanreco%20G2%20radio%20remote%20control%20system,%2020-13.pdf"
+ },
+ {
+  "marca": "scanreco",
+  "aplica": "Receptor (radio controlador) Scanreco G2, display LED interno",
+  "ecu": "Scanreco G2",
+  "formato": "DTC-OEM",
+  "codigo": "Er 02.02",
+  "descripcion": "Cortocircuito en la salida DV",
+  "causas": [
+   "Cortocircuito en la salida DV"
+  ],
+  "comprobaciones": [
+   "Revisar la salida DV, el cable y el enchufe; desconectar el enchufe y reiniciar"
+  ],
+  "sistema": "implemento",
+  "confiabilidad": "oficial",
+  "fuente": "http://www.hmf-tech.com/admin/pdf/file/Scanreco%20G2%20radio%20remote%20control%20system,%2020-13.pdf"
+ },
+ {
+  "marca": "scanreco",
+  "aplica": "Receptor (radio controlador) Scanreco G2, display LED interno",
+  "ecu": "Scanreco G2",
+  "formato": "DTC-OEM",
+  "codigo": "Er 04.01-04.14",
+  "descripcion": "Cortocircuito en una salida digital (1-14)",
+  "causas": [
+   "Cortocircuito en una salida digital (1-14)"
+  ],
+  "comprobaciones": [
+   "Revisar los terminales de salida digitales; desconectar el enchufe y reiniciar"
+  ],
+  "sistema": "implemento",
+  "confiabilidad": "oficial",
+  "fuente": "http://www.hmf-tech.com/admin/pdf/file/Scanreco%20G2%20radio%20remote%20control%20system,%2020-13.pdf"
+ },
+ {
+  "marca": "scanreco",
+  "aplica": "Receptor (radio controlador) Scanreco G2, display LED interno",
+  "ecu": "Scanreco G2",
+  "formato": "DTC-OEM",
+  "codigo": "Er 07.xx",
+  "descripcion": "Error en una salida analógica",
+  "causas": [
+   "Error en una salida analógica"
+  ],
+  "comprobaciones": [
+   "Revisar las salidas analógicas"
+  ],
+  "sistema": "implemento",
+  "confiabilidad": "oficial",
+  "fuente": "http://www.hmf-tech.com/admin/pdf/file/Scanreco%20G2%20radio%20remote%20control%20system,%2020-13.pdf"
+ },
+ {
+  "marca": "scanreco",
+  "aplica": "Receptor (radio controlador) Scanreco G2, display LED interno",
+  "ecu": "Scanreco G2",
+  "formato": "DTC-OEM",
+  "codigo": "Er 15.xx",
+  "descripcion": "Cortocircuito en una salida analógica",
+  "causas": [
+   "Cortocircuito en una salida analógica"
+  ],
+  "comprobaciones": [
+   "Revisar la salida, el cable y el enchufe"
+  ],
+  "sistema": "implemento",
+  "confiabilidad": "oficial",
+  "fuente": "http://www.hmf-tech.com/admin/pdf/file/Scanreco%20G2%20radio%20remote%20control%20system,%2020-13.pdf"
+ },
+ {
+  "marca": "scanreco",
+  "aplica": "Receptor (radio controlador) Scanreco G2, display LED interno",
+  "ecu": "Scanreco G2",
+  "formato": "DTC-OEM",
+  "codigo": "Er 16.xx",
+  "descripcion": "Conexión interrumpida en una salida analógica",
+  "causas": [
+   "Conexión interrumpida en una salida analógica"
+  ],
+  "comprobaciones": [
+   "Revisar el cable y el enchufe de la salida"
+  ],
+  "sistema": "implemento",
+  "confiabilidad": "oficial",
+  "fuente": "http://www.hmf-tech.com/admin/pdf/file/Scanreco%20G2%20radio%20remote%20control%20system,%2020-13.pdf"
+ },
+ {
+  "marca": "scanreco",
+  "aplica": "Receptor (radio controlador) Scanreco G2, display LED interno",
+  "ecu": "Scanreco G2",
+  "formato": "DTC-OEM",
+  "codigo": "Er 17.01",
+  "descripcion": "Alimentación demasiado baja",
+  "causas": [
+   "Alimentación demasiado baja"
+  ],
+  "comprobaciones": [
+   "Revisar la alimentación"
+  ],
+  "sistema": "implemento",
+  "confiabilidad": "oficial",
+  "fuente": "http://www.hmf-tech.com/admin/pdf/file/Scanreco%20G2%20radio%20remote%20control%20system,%2020-13.pdf"
+ },
+ {
+  "marca": "scanreco",
+  "aplica": "Receptor (radio controlador) Scanreco G2, display LED interno",
+  "ecu": "Scanreco G2",
+  "formato": "DTC-OEM",
+  "codigo": "Er 17.02",
+  "descripcion": "Alimentación demasiado alta",
+  "causas": [
+   "Alimentación demasiado alta"
+  ],
+  "comprobaciones": [
+   "Revisar la alimentación"
+  ],
+  "sistema": "implemento",
+  "confiabilidad": "oficial",
+  "fuente": "http://www.hmf-tech.com/admin/pdf/file/Scanreco%20G2%20radio%20remote%20control%20system,%2020-13.pdf"
+ },
+ {
+  "marca": "civacon",
+  "aplica": "Tester de camión Civacon 1376TT (sobrellenado óptico y de termistor API)",
+  "ecu": "1376TT",
+  "formato": "DTC-OEM",
+  "codigo": "g roja",
+  "descripcion": "Falla de verificación de masa (GV): el tester no ve la conexión a tierra correcta",
+  "causas": [
+   "Perno de masa o pin 10 del enchufe API",
+   "Cable de masa al chasis"
+  ],
+  "comprobaciones": [
+   "Revisar la continuidad del pin 10 y del perno inteligente al chasis"
+  ],
+  "sistema": "combustible",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.opwglobal.com/docs/libraries/civacon/iom/1376tt-truck-tester.pdf?sfvrsn=616588c4_2"
+ },
+ {
+  "marca": "civacon",
+  "aplica": "Tester de camión Civacon 1376TT",
+  "ecu": "1376TT",
+  "formato": "DTC-OEM",
+  "codigo": "número rojo (1-12)",
+  "descripcion": "El compartimento indicado tiene una falla o el sensor está mojado (en óptico, un solo canal según la impedancia del hilo verde de diagnóstico)",
+  "causas": [
+   "Producto sobre el sensor",
+   "Sensor dañado",
+   "Cableado del sensor al enchufe"
+  ],
+  "comprobaciones": [
+   "Bajar el nivel",
+   "Revisar la continuidad de cada hilo del sensor hasta el enchufe API",
+   "Cambiar el sensor (sellado, no se repara)"
+  ],
+  "sistema": "combustible",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.opwglobal.com/docs/libraries/civacon/iom/1376tt-truck-tester.pdf?sfvrsn=616588c4_2"
+ },
+ {
+  "marca": "civacon",
+  "aplica": "Tester de camión Civacon 1376TT",
+  "ecu": "1376TT",
+  "formato": "DTC-OEM",
+  "codigo": "banco verde completo",
+  "descripcion": "Permiso: masa y sobrellenado detectados correctamente",
+  "causas": [
+   "Sistema OK"
+  ],
+  "comprobaciones": [
+   "Ninguna"
+  ],
+  "sistema": "combustible",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.opwglobal.com/docs/libraries/civacon/iom/1376tt-truck-tester.pdf?sfvrsn=616588c4_2"
+ },
+ {
+  "marca": "civacon",
+  "aplica": "Monitor de isla Civacon 8130 (óptico)",
+  "ecu": "8130",
+  "formato": "DTC-OEM",
+  "codigo": "ROJO parpadeando",
+  "descripcion": "Sin verificación de masa (Ground Verify)",
+  "causas": [
+   "Masa del camión (pin 10 del enchufe, acoples, pinza de tierra)"
+  ],
+  "comprobaciones": [
+   "Revisar la masa del camión y del enchufe API"
+  ],
+  "sistema": "combustible",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.opwglobal.com/docs/libraries/opw-engineered-systems/manuals/h52496pa-iom.pdf?sfvrsn=f952dec4_8"
+ },
+ {
+  "marca": "civacon",
+  "aplica": "Monitor de isla Civacon 8130 (óptico)",
+  "ecu": "8130",
+  "formato": "DTC-OEM",
+  "codigo": "ROJO fijo",
+  "descripcion": "No permisivo: sensor mojado o falla en sensor, cable o enchufe",
+  "causas": [
+   "Sensor mojado",
+   "Sensor o cable dañado"
+  ],
+  "comprobaciones": [
+   "Probar el camión con un tester 1376TT",
+   "Revisar compartimento por compartimento"
+  ],
+  "sistema": "combustible",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.opwglobal.com/docs/libraries/opw-engineered-systems/manuals/h52496pa-iom.pdf?sfvrsn=f952dec4_8"
+ },
+ {
+  "marca": "civacon",
+  "aplica": "Monitor de isla Civacon 8130 (óptico)",
+  "ecu": "8130",
+  "formato": "DTC-OEM",
+  "codigo": "ROJO + VERDE",
+  "descripcion": "Bypass activo (BCU-2)",
+  "causas": [
+   "Llave de bypass conectada"
+  ],
+  "comprobaciones": [
+   "Retirar el bypass al terminar la prueba"
+  ],
+  "sistema": "combustible",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.opwglobal.com/docs/libraries/opw-engineered-systems/manuals/h52496pa-iom.pdf?sfvrsn=f952dec4_8"
+ }
+]
