@@ -1,0 +1,420 @@
+[
+ {
+  "marca": "mercedes-benz",
+  "aplica": "Actros 3336K (932) / Actros 3341 con Telligent o Mercedes PowerShift; Axor/Atego con PowerShift",
+  "ecu": "GS (control de caja)",
+  "formato": "FR/MR/GS (Mercedes)",
+  "codigo": "GS 01",
+  "descripcion": "Durante la sincronización el interruptor de cambio de emergencia no estaba en posición básica",
+  "causas": [
+   "Interruptor de emergencia de la caja fuera de posición básica"
+  ],
+  "comprobaciones": [
+   "Poner el interruptor de emergencia en posición básica y repetir la sincronización",
+   "Código de sincronización: NO se memoriza; anotarlo para el taller."
+  ],
+  "sistema": "transmision",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.mercedes-benz-trucks.com.br/caminhoes/manuais (Manual de Operación Axor Euro 5, ES, ed. V, 'Códigos de fallas de sincronización', pág. 332-333) ; https://www.mercedes-benz-trucks.com.br/caminhoes/manuais (Manual de Operação Actros fora de estrada 932/934/936, PT, 09/2017, pág. 190-191)"
+ },
+ {
+  "marca": "mercedes-benz",
+  "aplica": "Actros 3336K (932) / Actros 3341 con Telligent o Mercedes PowerShift; Axor/Atego con PowerShift",
+  "ecu": "GS (control de caja)",
+  "formato": "FR/MR/GS (Mercedes)",
+  "codigo": "GS 02",
+  "descripcion": "Acople de marcha de emergencia activado",
+  "causas": [
+   "Modo de marcha de emergencia activo durante la sincronización"
+  ],
+  "comprobaciones": [
+   "Volver el interruptor de emergencia a posición básica",
+   "Repetir la sincronización"
+  ],
+  "sistema": "transmision",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.mercedes-benz-trucks.com.br/caminhoes/manuais (Manual de Operación Axor Euro 5, ES, ed. V, 'Códigos de fallas de sincronización', pág. 332-333) ; https://www.mercedes-benz-trucks.com.br/caminhoes/manuais (Manual de Operação Actros fora de estrada 932/934/936, PT, 09/2017, pág. 190-191)"
+ },
+ {
+  "marca": "mercedes-benz",
+  "aplica": "Actros 3336K (932) / Actros 3341 con Telligent o Mercedes PowerShift; Axor/Atego con PowerShift",
+  "ecu": "GS (control de caja)",
+  "formato": "FR/MR/GS (Mercedes)",
+  "codigo": "GS 06 a GS 18, GS 27, GS 29, GS 32",
+  "descripcion": "Falla del proceso de adaptación/sincronización",
+  "causas": [
+   "Adaptación de la caja no completada (sensores, actuadores o presión de aire)"
+  ],
+  "comprobaciones": [
+   "Repetir el proceso de sincronización",
+   "Si el código vuelve a aparecer: taller (diagnóstico GS con XENTRY – licencia)",
+   "Verificar presión de reserva de aire del circuito caja/embrague",
+   "Código de sincronización: NO se memoriza; anotarlo para el taller."
+  ],
+  "sistema": "transmision",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.mercedes-benz-trucks.com.br/caminhoes/manuais (Manual de Operación Axor Euro 5, ES, ed. V, 'Códigos de fallas de sincronización', pág. 332-333) ; https://www.mercedes-benz-trucks.com.br/caminhoes/manuais (Manual de Operação Actros fora de estrada 932/934/936, PT, 09/2017, pág. 190-191)"
+ },
+ {
+  "marca": "mercedes-benz",
+  "aplica": "Actros 3336K (932) / Actros 3341 con Telligent o Mercedes PowerShift; Axor/Atego con PowerShift",
+  "ecu": "GS (control de caja)",
+  "formato": "FR/MR/GS (Mercedes)",
+  "codigo": "GS 19",
+  "descripcion": "El vehículo se desplaza durante la sincronización",
+  "causas": [
+   "Freno de estacionamiento no aplicado / vehículo en movimiento"
+  ],
+  "comprobaciones": [
+   "Aplicar freno de estacionamiento y repetir"
+  ],
+  "sistema": "transmision",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.mercedes-benz-trucks.com.br/caminhoes/manuais (Manual de Operación Axor Euro 5, ES, ed. V, 'Códigos de fallas de sincronización', pág. 332-333) ; https://www.mercedes-benz-trucks.com.br/caminhoes/manuais (Manual de Operação Actros fora de estrada 932/934/936, PT, 09/2017, pág. 190-191)"
+ },
+ {
+  "marca": "mercedes-benz",
+  "aplica": "Actros 3336K (932) / Actros 3341 con Telligent o Mercedes PowerShift; Axor/Atego con PowerShift",
+  "ecu": "GS (control de caja)",
+  "formato": "FR/MR/GS (Mercedes)",
+  "codigo": "GS 20",
+  "descripcion": "El monitor muestra 'U <<<<' (subtensión)",
+  "causas": [
+   "Tensión de baterías baja",
+   "Mala conexión de bornes o masa",
+   "Alternador sin carga"
+  ],
+  "comprobaciones": [
+   "Cargar o reemplazar baterías (indicación oficial)",
+   "Medir tensión en bornes durante arranque",
+   "Revisar fusibles de caja (Actros 932: F4, F12, F20) y masa"
+  ],
+  "sistema": "transmision",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.mercedes-benz-trucks.com.br/caminhoes/manuais (Manual de Operación Axor Euro 5, ES, ed. V, 'Códigos de fallas de sincronización', pág. 332-333) ; https://www.mercedes-benz-trucks.com.br/caminhoes/manuais (Manual de Operação Actros fora de estrada 932/934/936, PT, 09/2017, pág. 190-191)"
+ },
+ {
+  "marca": "mercedes-benz",
+  "aplica": "Actros 3336K (932) / Actros 3341 con Telligent o Mercedes PowerShift; Axor/Atego con PowerShift",
+  "ecu": "GS (control de caja)",
+  "formato": "FR/MR/GS (Mercedes)",
+  "codigo": "GS 21",
+  "descripcion": "Pedal de embrague soltado muy temprano o muy tarde durante la sincronización",
+  "causas": [
+   "Secuencia de embrague fuera del tiempo (ventanas de 3 s)"
+  ],
+  "comprobaciones": [
+   "Accionar el embrague en el tiempo correcto respetando la señal acústica",
+   "Repetir sincronización"
+  ],
+  "sistema": "transmision",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.mercedes-benz-trucks.com.br/caminhoes/manuais (Manual de Operación Axor Euro 5, ES, ed. V, 'Códigos de fallas de sincronización', pág. 332-333) ; https://www.mercedes-benz-trucks.com.br/caminhoes/manuais (Manual de Operação Actros fora de estrada 932/934/936, PT, 09/2017, pág. 190-191)"
+ },
+ {
+  "marca": "mercedes-benz",
+  "aplica": "Actros 3336K (932) / Actros 3341 con Telligent o Mercedes PowerShift; Axor/Atego con PowerShift",
+  "ecu": "GS (control de caja)",
+  "formato": "FR/MR/GS (Mercedes)",
+  "codigo": "GS 22",
+  "descripcion": "Se soltó la tecla de punto muerto durante la sincronización",
+  "causas": [
+   "Tecla N soltada antes de terminar"
+  ],
+  "comprobaciones": [
+   "Mantener apretada la tecla N hasta que aparezca N (grande)"
+  ],
+  "sistema": "transmision",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.mercedes-benz-trucks.com.br/caminhoes/manuais (Manual de Operación Axor Euro 5, ES, ed. V, 'Códigos de fallas de sincronización', pág. 332-333) ; https://www.mercedes-benz-trucks.com.br/caminhoes/manuais (Manual de Operação Actros fora de estrada 932/934/936, PT, 09/2017, pág. 190-191)"
+ },
+ {
+  "marca": "mercedes-benz",
+  "aplica": "Actros 3336K (932) / Actros 3341 con Telligent o Mercedes PowerShift; Axor/Atego con PowerShift",
+  "ecu": "GS (control de caja)",
+  "formato": "FR/MR/GS (Mercedes)",
+  "codigo": "GS 23",
+  "descripcion": "Falla del proceso de sincronización",
+  "causas": [
+   "Sincronización pequeña insuficiente"
+  ],
+  "comprobaciones": [
+   "Ejecutar el proceso de sincronización GRANDE"
+  ],
+  "sistema": "transmision",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.mercedes-benz-trucks.com.br/caminhoes/manuais (Manual de Operación Axor Euro 5, ES, ed. V, 'Códigos de fallas de sincronización', pág. 332-333) ; https://www.mercedes-benz-trucks.com.br/caminhoes/manuais (Manual de Operação Actros fora de estrada 932/934/936, PT, 09/2017, pág. 190-191)"
+ },
+ {
+  "marca": "mercedes-benz",
+  "aplica": "Actros 3336K (932) / Actros 3341 con Telligent o Mercedes PowerShift; Axor/Atego con PowerShift",
+  "ecu": "GS (control de caja)",
+  "formato": "FR/MR/GS (Mercedes)",
+  "codigo": "GS 24",
+  "descripcion": "Freno de estacionamiento no activado durante la sincronización",
+  "causas": [
+   "Freno de estacionamiento suelto",
+   "Señal del freno de estacionamiento no llega a la GS"
+  ],
+  "comprobaciones": [
+   "Aplicar freno de estacionamiento",
+   "Si estaba aplicado: revisar señal del freno de estacionamiento (taller)"
+  ],
+  "sistema": "transmision",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.mercedes-benz-trucks.com.br/caminhoes/manuais (Manual de Operación Axor Euro 5, ES, ed. V, 'Códigos de fallas de sincronización', pág. 332-333) ; https://www.mercedes-benz-trucks.com.br/caminhoes/manuais (Manual de Operação Actros fora de estrada 932/934/936, PT, 09/2017, pág. 190-191)"
+ },
+ {
+  "marca": "mercedes-benz",
+  "aplica": "Actros 3336K (932) / Actros 3341 con Telligent o Mercedes PowerShift; Axor/Atego con PowerShift",
+  "ecu": "GS (control de caja)",
+  "formato": "FR/MR/GS (Mercedes)",
+  "codigo": "GS 25",
+  "descripcion": "Acople de marcha de emergencia activado durante la sincronización",
+  "causas": [
+   "Accionamiento de marcha de emergencia durante el proceso"
+  ],
+  "comprobaciones": [
+   "No activar la marcha de emergencia; repetir"
+  ],
+  "sistema": "transmision",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.mercedes-benz-trucks.com.br/caminhoes/manuais (Manual de Operación Axor Euro 5, ES, ed. V, 'Códigos de fallas de sincronización', pág. 332-333) ; https://www.mercedes-benz-trucks.com.br/caminhoes/manuais (Manual de Operação Actros fora de estrada 932/934/936, PT, 09/2017, pág. 190-191)"
+ },
+ {
+  "marca": "mercedes-benz",
+  "aplica": "Actros 3336K (932) / Actros 3341 con Telligent o Mercedes PowerShift; Axor/Atego con PowerShift",
+  "ecu": "GS (control de caja)",
+  "formato": "FR/MR/GS (Mercedes)",
+  "codigo": "GS 26",
+  "descripcion": "El motor está funcionando",
+  "causas": [
+   "Motor en marcha cuando el proceso requería motor detenido"
+  ],
+  "comprobaciones": [
+   "Sincronización pequeña: detener el motor",
+   "Sincronización grande: arrancar el motor solo cuando aparezca N en el monitor"
+  ],
+  "sistema": "transmision",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.mercedes-benz-trucks.com.br/caminhoes/manuais (Manual de Operación Axor Euro 5, ES, ed. V, 'Códigos de fallas de sincronización', pág. 332-333) ; https://www.mercedes-benz-trucks.com.br/caminhoes/manuais (Manual de Operação Actros fora de estrada 932/934/936, PT, 09/2017, pág. 190-191)"
+ },
+ {
+  "marca": "mercedes-benz",
+  "aplica": "Actros 3336K (932) / Actros 3341 con Telligent o Mercedes PowerShift; Axor/Atego con PowerShift",
+  "ecu": "GS (control de caja)",
+  "formato": "FR/MR/GS (Mercedes)",
+  "codigo": "GS 28",
+  "descripcion": "El motor no funcionó",
+  "causas": [
+   "No se arrancó el motor cuando se indicó N"
+  ],
+  "comprobaciones": [
+   "Arrancar el motor cuando aparezca N en el monitor"
+  ],
+  "sistema": "transmision",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.mercedes-benz-trucks.com.br/caminhoes/manuais (Manual de Operación Axor Euro 5, ES, ed. V, 'Códigos de fallas de sincronización', pág. 332-333) ; https://www.mercedes-benz-trucks.com.br/caminhoes/manuais (Manual de Operação Actros fora de estrada 932/934/936, PT, 09/2017, pág. 190-191)"
+ },
+ {
+  "marca": "mercedes-benz",
+  "aplica": "Actros 3336K (932) / Actros 3341 con Telligent o Mercedes PowerShift; Axor/Atego con PowerShift",
+  "ecu": "GS (control de caja)",
+  "formato": "FR/MR/GS (Mercedes)",
+  "codigo": "GS 30",
+  "descripcion": "Pedal del acelerador accionado durante la sincronización",
+  "causas": [
+   "Acelerador pisado",
+   "Sensor de pedal acelerador con señal falsa (si no se pisó)"
+  ],
+  "comprobaciones": [
+   "No pisar el acelerador; repetir",
+   "Si persiste sin pisar: revisar sensor de pedal (taller)"
+  ],
+  "sistema": "transmision",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.mercedes-benz-trucks.com.br/caminhoes/manuais (Manual de Operación Axor Euro 5, ES, ed. V, 'Códigos de fallas de sincronización', pág. 332-333) ; https://www.mercedes-benz-trucks.com.br/caminhoes/manuais (Manual de Operação Actros fora de estrada 932/934/936, PT, 09/2017, pág. 190-191)"
+ },
+ {
+  "marca": "mercedes-benz",
+  "aplica": "Actros 3336K (932) / Actros 3341 con Telligent o Mercedes PowerShift; Axor/Atego con PowerShift",
+  "ecu": "GS (control de caja)",
+  "formato": "FR/MR/GS (Mercedes)",
+  "codigo": "GS 31",
+  "descripcion": "Pedal del embrague no totalmente accionado durante la sincronización",
+  "causas": [
+   "Embrague no pisado a fondo",
+   "Recorrido/sensor de pedal de embrague desajustado"
+  ],
+  "comprobaciones": [
+   "Pisar a fondo y repetir la sincronización"
+  ],
+  "sistema": "transmision",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.mercedes-benz-trucks.com.br/caminhoes/manuais (Manual de Operación Axor Euro 5, ES, ed. V, 'Códigos de fallas de sincronización', pág. 332-333) ; https://www.mercedes-benz-trucks.com.br/caminhoes/manuais (Manual de Operação Actros fora de estrada 932/934/936, PT, 09/2017, pág. 190-191)"
+ },
+ {
+  "marca": "mercedes-benz",
+  "aplica": "Actros 3336K (932) / Actros 3341 con Telligent o Mercedes PowerShift; Axor/Atego con PowerShift",
+  "ecu": "GS (control de caja)",
+  "formato": "FR/MR/GS (Mercedes)",
+  "codigo": "2 1011",
+  "descripcion": "Código de falla del sistema de cambio que exige proceso de sincronización GRANDE",
+  "causas": [
+   "Datos de adaptación de la caja no válidos (p.ej. tras cambio de GS o de motor)"
+  ],
+  "comprobaciones": [
+   "Girar llave a OFF, esperar ~5 s, llave a marcha",
+   "Ejecutar sincronización grande",
+   "Si reaparece: activar servicio de reserva (modo emergencia) y taller"
+  ],
+  "sistema": "transmision",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.mercedes-benz-trucks.com.br/caminhoes/manuais (Manual de Operación Axor Euro 5, ES, ed. V, 'Proceso de sincronización grande', pág. 331) ; https://www.mercedes-benz-trucks.com.br/caminhoes/manuais (Manual de Operação Actros fora de estrada 932/934/936, PT, 09/2017, 'Processo de sincronização', pág. 188)"
+ },
+ {
+  "marca": "mercedes-benz",
+  "aplica": "Actros 3336K (932) / Actros 3341 con Telligent o Mercedes PowerShift; Axor/Atego con PowerShift",
+  "ecu": "GS (control de caja)",
+  "formato": "FR/MR/GS (Mercedes)",
+  "codigo": "2 8093",
+  "descripcion": "Código de falla del sistema de cambio que exige proceso de sincronización GRANDE",
+  "causas": [
+   "Adaptación de la caja perdida/incompleta"
+  ],
+  "comprobaciones": [
+   "Ejecutar sincronización grande",
+   "Si reaparece tras la sincronización: activar servicio de reserva y taller"
+  ],
+  "sistema": "transmision",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.mercedes-benz-trucks.com.br/caminhoes/manuais (Manual de Operación Axor Euro 5, ES, ed. V, 'Proceso de sincronización grande', pág. 331) ; https://www.mercedes-benz-trucks.com.br/caminhoes/manuais (Manual de Operação Actros fora de estrada 932/934/936, PT, 09/2017, 'Processo de sincronização', pág. 188)"
+ },
+ {
+  "marca": "mercedes-benz",
+  "aplica": "Accelo 1016 Euro 5 (INS2014); plataforma Atego/Axor INS2014",
+  "ecu": "INS / inmovilizador (MR)",
+  "formato": "DTC-OEM",
+  "codigo": "CODE / MR (en monitor al arrancar)",
+  "descripcion": "Arranque bloqueado por inmovilizador: llave no válida o no se respetó el tiempo de espera",
+  "causas": [
+   "Llave no válida/no programada",
+   "No se esperaron 2 s tras poner contacto",
+   "Transponder o electrónica de lectura del inmovilizador (A42) con falla"
+  ],
+  "comprobaciones": [
+   "Llave a OFF y nuevamente a marcha; esperar 2 s o a que termine la chicharra",
+   "Tras 5 intentos con llave no válida el segmento pasa a rojo y la espera aumenta 1 min por intento: mantener llave en marcha",
+   "Probar con llave de repuesto",
+   "Llave nueva: solo concesionario"
+  ],
+  "sistema": "electrico",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.mercedes-benz-trucks.com.br/caminhoes/manuais (Manual de Operación Accelo Euro 5, ES, ed. S, pág. 171-172)"
+ },
+ {
+  "marca": "mercedes-benz",
+  "aplica": "Axor / Atego / Accelo Euro 5 con caja automática y selector por teclas",
+  "ecu": "Caja automática (TCU)",
+  "formato": "DTC-OEM",
+  "codigo": "Código de 5 dígitos (selector por teclas)",
+  "descripcion": "Falla de la caja automática; el selector muestra hasta 5 códigos de 5 dígitos",
+  "causas": [
+   "Falla eléctrica o hidráulica de la caja (significado según tabla del fabricante de la caja)"
+  ],
+  "comprobaciones": [
+   "Leer: pulsar dos veces simultáneamente & y * en el selector; MODE = siguiente; salir con & y * o neutro",
+   "Anotar códigos y consultar tabla del fabricante de la caja / taller",
+   "Revisar fusibles de caja en regleta A1 (Axor: F3-F5 PowerShift, F7-F8 Allison)"
+  ],
+  "sistema": "transmision",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.mercedes-benz-trucks.com.br/caminhoes/manuais (Manual de Operación Axor Euro 5, ES, 'Sistema de engrane averiado', pág. 137)"
+ },
+ {
+  "marca": "mercedes-benz",
+  "aplica": "Referencia J1939 para BlueTec 5 (SCR/AdBlue) de Axor/Atego/Accelo/Actros Euro 5 leídos con escáner DM1. Significado SPN/FMI estándar; el procedimiento y los pines del documento fuente son de Detroit GHG17 (ACM), NO de Mercedes",
+  "ecu": "SCR / MR (DM1)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 1761 FMI 3",
+  "descripcion": "Sensor de nivel del estanque de DEF/AdBlue: circuito falla alta",
+  "causas": [
+   "Corto a positivo del cable de señal",
+   "Conector del sensor nivel/temperatura (B117 en Mercedes) con pines corroídos/abiertos",
+   "Sensor defectuoso"
+  ],
+  "comprobaciones": [
+   "Inspeccionar conector del sensor nivel/temperatura del estanque (pines doblados, corrosión, agua)",
+   "Con llave ON verificar que no haya tensión indebida en el cable de señal",
+   "Medir continuidad sensor-módulo (< 5 Ω)",
+   "Sin señal del sensor el sistema entra en reducción por bajo nivel de AdBlue",
+   "Reacción en la fuente Detroit: motor a ralentí 1 min, MIL (en Mercedes BlueTec 5 la reacción puede diferir; ver reducción de potencia en manual de operación)"
+  ],
+  "sistema": "postratamiento",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "https://static.nhtsa.gov/odi/tsbs/2016/SB-10083204-2280.pdf (Detroit Diesel bulletin 09 11-16 'SPN 1761 / SPN 3031 (ACM)', publicado en NHTSA)"
+ },
+ {
+  "marca": "mercedes-benz",
+  "aplica": "Referencia J1939 para BlueTec 5 (SCR/AdBlue) de Axor/Atego/Accelo/Actros Euro 5 leídos con escáner DM1. Significado SPN/FMI estándar; el procedimiento y los pines del documento fuente son de Detroit GHG17 (ACM), NO de Mercedes",
+  "ecu": "SCR / MR (DM1)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 1761 FMI 4",
+  "descripcion": "Sensor de nivel del estanque de DEF/AdBlue: circuito falla baja",
+  "causas": [
+   "Corto a masa del cable de señal",
+   "Agua/corrosión en el conector",
+   "Sensor defectuoso"
+  ],
+  "comprobaciones": [
+   "Llave OFF, desconectar e inspeccionar conector (daño, corrosión, agua)",
+   "Medir resistencia del cable de señal a masa: si < 10 kΩ hay corto a masa en el arnés",
+   "Si el arnés está bien: sensor o módulo",
+   "Reacción en la fuente Detroit: motor a ralentí 1 min, MIL (en Mercedes BlueTec 5 la reacción puede diferir; ver reducción de potencia en manual de operación)"
+  ],
+  "sistema": "postratamiento",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "https://static.nhtsa.gov/odi/tsbs/2016/SB-10083204-2280.pdf (Detroit Diesel bulletin 09 11-16 'SPN 1761 / SPN 3031 (ACM)', publicado en NHTSA)"
+ },
+ {
+  "marca": "mercedes-benz",
+  "aplica": "Referencia J1939 para BlueTec 5 (SCR/AdBlue) de Axor/Atego/Accelo/Actros Euro 5 leídos con escáner DM1. Significado SPN/FMI estándar; el procedimiento y los pines del documento fuente son de Detroit GHG17 (ACM), NO de Mercedes",
+  "ecu": "SCR / MR (DM1)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 3031 FMI 3",
+  "descripcion": "Sensor de temperatura del estanque de DEF/AdBlue: circuito falla alta",
+  "causas": [
+   "Circuito abierto o corto a positivo del sensor de temperatura (integrado con el de nivel)",
+   "Conector corroído"
+  ],
+  "comprobaciones": [
+   "Inspeccionar conector del sensor nivel/temperatura",
+   "Verificar continuidad y aislamiento del arnés",
+   "Sin señal del sensor: reducción por bajo nivel de AdBlue",
+   "Reacción en la fuente Detroit: ciclo de llave (en Mercedes BlueTec 5 la reacción puede diferir; ver reducción de potencia en manual de operación)"
+  ],
+  "sistema": "postratamiento",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "https://static.nhtsa.gov/odi/tsbs/2016/SB-10083204-2280.pdf (Detroit Diesel bulletin 09 11-16 'SPN 1761 / SPN 3031 (ACM)', publicado en NHTSA)"
+ },
+ {
+  "marca": "mercedes-benz",
+  "aplica": "Referencia J1939 para BlueTec 5 (SCR/AdBlue) de Axor/Atego/Accelo/Actros Euro 5 leídos con escáner DM1. Significado SPN/FMI estándar; el procedimiento y los pines del documento fuente son de Detroit GHG17 (ACM), NO de Mercedes",
+  "ecu": "SCR / MR (DM1)",
+  "formato": "SPN-FMI",
+  "codigo": "SPN 3031 FMI 4",
+  "descripcion": "Sensor de temperatura del estanque de DEF/AdBlue: circuito falla baja",
+  "causas": [
+   "Corto a masa del cable de señal",
+   "Agua en el conector"
+  ],
+  "comprobaciones": [
+   "Inspeccionar conector y arnés; medir aislamiento a masa",
+   "Reemplazar sensor si el arnés está correcto",
+   "Reacción en la fuente Detroit: ciclo de llave (en Mercedes BlueTec 5 la reacción puede diferir; ver reducción de potencia en manual de operación)"
+  ],
+  "sistema": "postratamiento",
+  "confiabilidad": "tecnica_terceros",
+  "fuente": "https://static.nhtsa.gov/odi/tsbs/2016/SB-10083204-2280.pdf (Detroit Diesel bulletin 09 11-16 'SPN 1761 / SPN 3031 (ACM)', publicado en NHTSA)"
+ }
+]

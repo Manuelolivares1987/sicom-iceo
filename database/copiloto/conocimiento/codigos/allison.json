@@ -1,0 +1,1647 @@
+[
+ {
+  "marca": "allison",
+  "aplica": "Allison 3000/4000 (4500 RDS) controles 5ª/6ª Gen; pines Mack GU 2013BP",
+  "ecu": "TCM",
+  "formato": "Allison-DTC",
+  "codigo": "P0561",
+  "descripcion": "Rendimiento del voltaje del sistema",
+  "causas": [
+   "Baterías débiles o alternador",
+   "Fusible/alimentación del TCM",
+   "Masas del TCM (9/69) con resistencia",
+   "Conector del TCM"
+  ],
+  "comprobaciones": [
+   "Medir B+ en TCM pines 10 y 70 respecto a masa 9 y 69 con carga (ej. motor arrancando)",
+   "Fusible F71 'Trans (BATT)' 30/10 A y F31 'Trans spare' 10 A (IGN, pin 63)",
+   "Relés EMS RLY01/RLY02 y salidas VECU B1/B2/B15",
+   "Baterías, bornes y masas de chasis"
+  ],
+  "sistema": "electrico",
+  "confiabilidad": "oficial",
+  "fuente": "https://rtsallison.com/Allison%205th_6th%20Gen%20Shift%20Selector%20Booklet_Digital.pdf ; https://www.macktrucks.com/media/files/body-builder/wiring-diagrams/mack-conventional-12volt-includes-us17-version-9-21628497-09-1.pdf"
+ },
+ {
+  "marca": "allison",
+  "aplica": "Allison 3000/4000 (4500 RDS) controles 5ª/6ª Gen; pines Mack GU 2013BP",
+  "ecu": "TCM",
+  "formato": "Allison-DTC",
+  "codigo": "P0562",
+  "descripcion": "Voltaje del sistema BAJO",
+  "causas": [
+   "Baterías débiles o alternador",
+   "Fusible/alimentación del TCM",
+   "Masas del TCM (9/69) con resistencia",
+   "Conector del TCM"
+  ],
+  "comprobaciones": [
+   "Medir B+ en TCM pines 10 y 70 respecto a masa 9 y 69 con carga (ej. motor arrancando)",
+   "Fusible F71 'Trans (BATT)' 30/10 A y F31 'Trans spare' 10 A (IGN, pin 63)",
+   "Relés EMS RLY01/RLY02 y salidas VECU B1/B2/B15",
+   "Baterías, bornes y masas de chasis"
+  ],
+  "sistema": "electrico",
+  "confiabilidad": "oficial",
+  "fuente": "https://rtsallison.com/Allison%205th_6th%20Gen%20Shift%20Selector%20Booklet_Digital.pdf ; https://www.macktrucks.com/media/files/body-builder/wiring-diagrams/mack-conventional-12volt-includes-us17-version-9-21628497-09-1.pdf"
+ },
+ {
+  "marca": "allison",
+  "aplica": "Allison 3000/4000 (4500 RDS) controles 5ª/6ª Gen; pines Mack GU 2013BP",
+  "ecu": "TCM",
+  "formato": "Allison-DTC",
+  "codigo": "P0563",
+  "descripcion": "Voltaje del sistema ALTO",
+  "causas": [
+   "Regulador del alternador",
+   "Arranque con cargador/booster de mayor voltaje"
+  ],
+  "comprobaciones": [
+   "Medir voltaje de carga en bornes de batería",
+   "Revisar regulador del alternador"
+  ],
+  "sistema": "electrico",
+  "confiabilidad": "oficial",
+  "fuente": "https://rtsallison.com/Allison%205th_6th%20Gen%20Shift%20Selector%20Booklet_Digital.pdf"
+ },
+ {
+  "marca": "allison",
+  "aplica": "Allison 3000/4000 (4500 RDS) controles 5ª/6ª Gen; pines Mack GU 2013BP",
+  "ecu": "TCM",
+  "formato": "Allison-DTC",
+  "codigo": "P0880",
+  "descripcion": "Señal de entrada de alimentación del TCM",
+  "causas": [
+   "Baterías débiles o alternador",
+   "Fusible/alimentación del TCM",
+   "Masas del TCM (9/69) con resistencia",
+   "Conector del TCM"
+  ],
+  "comprobaciones": [
+   "Medir B+ en TCM pines 10 y 70 respecto a masa 9 y 69 con carga (ej. motor arrancando)",
+   "Fusible F71 'Trans (BATT)' 30/10 A y F31 'Trans spare' 10 A (IGN, pin 63)",
+   "Relés EMS RLY01/RLY02 y salidas VECU B1/B2/B15",
+   "Baterías, bornes y masas de chasis"
+  ],
+  "sistema": "electrico",
+  "confiabilidad": "oficial",
+  "fuente": "https://rtsallison.com/Allison%205th_6th%20Gen%20Shift%20Selector%20Booklet_Digital.pdf ; https://www.macktrucks.com/media/files/body-builder/wiring-diagrams/mack-conventional-12volt-includes-us17-version-9-21628497-09-1.pdf"
+ },
+ {
+  "marca": "allison",
+  "aplica": "Allison 3000/4000 (4500 RDS) controles 5ª/6ª Gen; pines Mack GU 2013BP",
+  "ecu": "TCM",
+  "formato": "Allison-DTC",
+  "codigo": "P0881",
+  "descripcion": "Rendimiento de la señal de alimentación del TCM",
+  "causas": [
+   "Baterías débiles o alternador",
+   "Fusible/alimentación del TCM",
+   "Masas del TCM (9/69) con resistencia",
+   "Conector del TCM"
+  ],
+  "comprobaciones": [
+   "Medir B+ en TCM pines 10 y 70 respecto a masa 9 y 69 con carga (ej. motor arrancando)",
+   "Fusible F71 'Trans (BATT)' 30/10 A y F31 'Trans spare' 10 A (IGN, pin 63)",
+   "Relés EMS RLY01/RLY02 y salidas VECU B1/B2/B15",
+   "Baterías, bornes y masas de chasis"
+  ],
+  "sistema": "electrico",
+  "confiabilidad": "oficial",
+  "fuente": "https://rtsallison.com/Allison%205th_6th%20Gen%20Shift%20Selector%20Booklet_Digital.pdf ; https://www.macktrucks.com/media/files/body-builder/wiring-diagrams/mack-conventional-12volt-includes-us17-version-9-21628497-09-1.pdf"
+ },
+ {
+  "marca": "allison",
+  "aplica": "Allison 3000/4000 (4500 RDS) controles 5ª/6ª Gen; pines Mack GU 2013BP",
+  "ecu": "TCM",
+  "formato": "Allison-DTC",
+  "codigo": "P0882",
+  "descripcion": "Señal de alimentación del TCM BAJA",
+  "causas": [
+   "Baterías débiles o alternador",
+   "Fusible/alimentación del TCM",
+   "Masas del TCM (9/69) con resistencia",
+   "Conector del TCM"
+  ],
+  "comprobaciones": [
+   "Medir B+ en TCM pines 10 y 70 respecto a masa 9 y 69 con carga (ej. motor arrancando)",
+   "Fusible F71 'Trans (BATT)' 30/10 A y F31 'Trans spare' 10 A (IGN, pin 63)",
+   "Relés EMS RLY01/RLY02 y salidas VECU B1/B2/B15",
+   "Baterías, bornes y masas de chasis"
+  ],
+  "sistema": "electrico",
+  "confiabilidad": "oficial",
+  "fuente": "https://rtsallison.com/Allison%205th_6th%20Gen%20Shift%20Selector%20Booklet_Digital.pdf ; https://www.macktrucks.com/media/files/body-builder/wiring-diagrams/mack-conventional-12volt-includes-us17-version-9-21628497-09-1.pdf"
+ },
+ {
+  "marca": "allison",
+  "aplica": "Allison 3000/4000 (4500 RDS) controles 5ª/6ª Gen; pines Mack GU 2013BP",
+  "ecu": "TCM",
+  "formato": "Allison-DTC",
+  "codigo": "P0883",
+  "descripcion": "Señal de alimentación del TCM ALTA",
+  "causas": [
+   "Voltaje de carga excesivo"
+  ],
+  "comprobaciones": [
+   "Voltaje de carga en batería"
+  ],
+  "sistema": "electrico",
+  "confiabilidad": "oficial",
+  "fuente": "https://rtsallison.com/Allison%205th_6th%20Gen%20Shift%20Selector%20Booklet_Digital.pdf"
+ },
+ {
+  "marca": "allison",
+  "aplica": "Allison 3000/4000 (4500 RDS) controles 5ª/6ª Gen; pines Mack GU 2013BP",
+  "ecu": "TCM",
+  "formato": "Allison-DTC",
+  "codigo": "P2534",
+  "descripcion": "Circuito interruptor de encendido RUN/START BAJO",
+  "causas": [
+   "Alimentación IGN del TCM (pin 63) abierta",
+   "Fusible F31 10 A"
+  ],
+  "comprobaciones": [
+   "Medir 12 V en TCM pin 63 con contacto",
+   "F31 y relés EMS"
+  ],
+  "sistema": "electrico",
+  "confiabilidad": "oficial",
+  "fuente": "https://rtsallison.com/Allison%205th_6th%20Gen%20Shift%20Selector%20Booklet_Digital.pdf ; https://www.macktrucks.com/media/files/body-builder/wiring-diagrams/mack-conventional-12volt-includes-us17-version-9-21628497-09-1.pdf"
+ },
+ {
+  "marca": "allison",
+  "aplica": "Allison 3000/4000 (4500 RDS) controles 5ª/6ª Gen; pines Mack GU 2013BP",
+  "ecu": "TCM",
+  "formato": "Allison-DTC",
+  "codigo": "P2535",
+  "descripcion": "Circuito interruptor de encendido RUN/START ALTO",
+  "causas": [
+   "Cable IGN del TCM (pin 63) con tensión sin contacto (retroalimentación)"
+  ],
+  "comprobaciones": [
+   "Medir pin 63 con llave OFF (debe ser 0 V)"
+  ],
+  "sistema": "electrico",
+  "confiabilidad": "oficial",
+  "fuente": "https://rtsallison.com/Allison%205th_6th%20Gen%20Shift%20Selector%20Booklet_Digital.pdf ; https://www.macktrucks.com/media/files/body-builder/wiring-diagrams/mack-conventional-12volt-includes-us17-version-9-21628497-09-1.pdf"
+ },
+ {
+  "marca": "allison",
+  "aplica": "Allison 3000/4000 (4500 RDS) controles 5ª/6ª Gen; pines Mack GU 2013BP",
+  "ecu": "TCM",
+  "formato": "Allison-DTC",
+  "codigo": "P0602",
+  "descripcion": "TCM no programado",
+  "causas": [
+   "TCM nuevo/sin calibración"
+  ],
+  "comprobaciones": [
+   "Programar con Allison DOC® / distribuidor (requiere licencia)"
+  ],
+  "sistema": "electrico",
+  "confiabilidad": "oficial",
+  "fuente": "https://rtsallison.com/Allison%205th_6th%20Gen%20Shift%20Selector%20Booklet_Digital.pdf"
+ },
+ {
+  "marca": "allison",
+  "aplica": "Allison 3000/4000 (4500 RDS) controles 5ª/6ª Gen; pines Mack GU 2013BP",
+  "ecu": "TCM",
+  "formato": "Allison-DTC",
+  "codigo": "P0610",
+  "descripcion": "TransID incompatible",
+  "causas": [
+   "Calibración del TCM no corresponde a la transmisión",
+   "Circuito TRANS ID (TCM 76 ↔ caja A58-20)"
+  ],
+  "comprobaciones": [
+   "Revisar circuito TRANS ID",
+   "Verificar calibración con distribuidor"
+  ],
+  "sistema": "electrico",
+  "confiabilidad": "oficial",
+  "fuente": "https://rtsallison.com/Allison%205th_6th%20Gen%20Shift%20Selector%20Booklet_Digital.pdf ; https://www.macktrucks.com/media/files/body-builder/wiring-diagrams/mack-conventional-12volt-includes-us17-version-9-21628497-09-1.pdf"
+ },
+ {
+  "marca": "allison",
+  "aplica": "Allison 3000/4000 (4500 RDS) controles 5ª/6ª Gen; pines Mack GU 2013BP",
+  "ecu": "TCM",
+  "formato": "Allison-DTC",
+  "codigo": "P0614",
+  "descripcion": "Discrepancia de datos de control de torque ECM/TCM",
+  "causas": [
+   "Calibraciones de motor y transmisión no compatibles",
+   "Reemplazo de ECM o TCM"
+  ],
+  "comprobaciones": [
+   "Verificar calibraciones con el concesionario/distribuidor"
+  ],
+  "sistema": "electrico",
+  "confiabilidad": "oficial",
+  "fuente": "https://rtsallison.com/Allison%205th_6th%20Gen%20Shift%20Selector%20Booklet_Digital.pdf"
+ },
+ {
+  "marca": "allison",
+  "aplica": "Allison 3000/4000 (4500 RDS) controles 5ª/6ª Gen; pines Mack GU 2013BP",
+  "ecu": "TCM",
+  "formato": "Allison-DTC",
+  "codigo": "P0634",
+  "descripcion": "Temperatura interna del TCM demasiado alta",
+  "causas": [
+   "Temperatura interna del TCM excesiva"
+  ],
+  "comprobaciones": [
+   "Revisar ubicación del TCM respecto de fuentes de calor (escape)"
+  ],
+  "sistema": "electrico",
+  "confiabilidad": "oficial",
+  "fuente": "https://rtsallison.com/Allison%205th_6th%20Gen%20Shift%20Selector%20Booklet_Digital.pdf"
+ },
+ {
+  "marca": "allison",
+  "aplica": "Allison 3000/4000 (4500 RDS) controles 5ª/6ª Gen; pines Mack GU 2013BP",
+  "ecu": "TCM",
+  "formato": "Allison-DTC",
+  "codigo": "P0642",
+  "descripcion": "Falla de circuito de voltaje de referencia de sensores 'A'",
+  "causas": [
+   "Corto a masa en alimentación de sensores (TCM pin 12 'sensor supply')",
+   "Sensor en corto"
+  ],
+  "comprobaciones": [
+   "Desconectar sensores de a uno y ver si vuelve la referencia"
+  ],
+  "sistema": "electrico",
+  "confiabilidad": "oficial",
+  "fuente": "https://rtsallison.com/Allison%205th_6th%20Gen%20Shift%20Selector%20Booklet_Digital.pdf ; https://www.macktrucks.com/media/files/body-builder/wiring-diagrams/mack-conventional-12volt-includes-us17-version-9-21628497-09-1.pdf"
+ },
+ {
+  "marca": "allison",
+  "aplica": "Allison 3000/4000 (4500 RDS) controles 5ª/6ª Gen; pines Mack GU 2013BP",
+  "ecu": "TCM",
+  "formato": "Allison-DTC",
+  "codigo": "P0657",
+  "descripcion": "Voltaje de alimentación de actuadores 1 (HSD1) ABIERTO",
+  "causas": [
+   "Circuito HSD1: TCM 11 ↔ caja A58-1"
+  ],
+  "comprobaciones": [
+   "Continuidad del cable TCM 11 → A58-1"
+  ],
+  "sistema": "electrico",
+  "confiabilidad": "oficial",
+  "fuente": "https://rtsallison.com/Allison%205th_6th%20Gen%20Shift%20Selector%20Booklet_Digital.pdf ; https://www.macktrucks.com/media/files/body-builder/wiring-diagrams/mack-conventional-12volt-includes-us17-version-9-21628497-09-1.pdf"
+ },
+ {
+  "marca": "allison",
+  "aplica": "Allison 3000/4000 (4500 RDS) controles 5ª/6ª Gen; pines Mack GU 2013BP",
+  "ecu": "TCM",
+  "formato": "Allison-DTC",
+  "codigo": "P0658",
+  "descripcion": "Voltaje de alimentación de actuadores 1 (HSD1) BAJO",
+  "causas": [
+   "Corto a masa en HSD1 o en un solenoide alimentado por HSD1"
+  ],
+  "comprobaciones": [
+   "Aislamiento a masa del circuito TCM 11 / A58-1",
+   "Resistencia de solenoides"
+  ],
+  "sistema": "electrico",
+  "confiabilidad": "oficial",
+  "fuente": "https://rtsallison.com/Allison%205th_6th%20Gen%20Shift%20Selector%20Booklet_Digital.pdf ; https://www.macktrucks.com/media/files/body-builder/wiring-diagrams/mack-conventional-12volt-includes-us17-version-9-21628497-09-1.pdf"
+ },
+ {
+  "marca": "allison",
+  "aplica": "Allison 3000/4000 (4500 RDS) controles 5ª/6ª Gen; pines Mack GU 2013BP",
+  "ecu": "TCM",
+  "formato": "Allison-DTC",
+  "codigo": "P0659",
+  "descripcion": "Voltaje de alimentación de actuadores 1 (HSD1) ALTO",
+  "causas": [
+   "Corto a voltaje en HSD1"
+  ],
+  "comprobaciones": [
+   "Revisar roce del arnés de transmisión con otros circuitos"
+  ],
+  "sistema": "electrico",
+  "confiabilidad": "oficial",
+  "fuente": "https://rtsallison.com/Allison%205th_6th%20Gen%20Shift%20Selector%20Booklet_Digital.pdf ; https://www.macktrucks.com/media/files/body-builder/wiring-diagrams/mack-conventional-12volt-includes-us17-version-9-21628497-09-1.pdf"
+ },
+ {
+  "marca": "allison",
+  "aplica": "Allison 3000/4000 (4500 RDS) controles 5ª/6ª Gen; pines Mack GU 2013BP",
+  "ecu": "TCM",
+  "formato": "Allison-DTC",
+  "codigo": "P2670",
+  "descripcion": "Voltaje de alimentación de actuadores 2 (HSD2) BAJO",
+  "causas": [
+   "Corto a masa en HSD2 (TCM 71 ↔ A58-6)"
+  ],
+  "comprobaciones": [
+   "Aislamiento a masa del circuito HSD2"
+  ],
+  "sistema": "electrico",
+  "confiabilidad": "oficial",
+  "fuente": "https://rtsallison.com/Allison%205th_6th%20Gen%20Shift%20Selector%20Booklet_Digital.pdf ; https://www.macktrucks.com/media/files/body-builder/wiring-diagrams/mack-conventional-12volt-includes-us17-version-9-21628497-09-1.pdf"
+ },
+ {
+  "marca": "allison",
+  "aplica": "Allison 3000/4000 (4500 RDS) controles 5ª/6ª Gen; pines Mack GU 2013BP",
+  "ecu": "TCM",
+  "formato": "Allison-DTC",
+  "codigo": "P0218",
+  "descripcion": "Condición de sobretemperatura del fluido de transmisión",
+  "causas": [
+   "Nivel de aceite bajo o sobrellenado",
+   "Enfriador/sistema de enfriamiento del motor",
+   "Operación en stall > 10 s a plena carga",
+   "Uso intenso del retardador"
+  ],
+  "comprobaciones": [
+   "Verificar nivel (OLS o varilla HOT 71-93 °C)",
+   "Revisar enfriamiento; 1200-1500 rpm en N 2-3 min",
+   "Umbrales: cárter 121 °C, hacia enfriador 149 °C, salida retardador 165 °C"
+  ],
+  "sistema": "transmision",
+  "confiabilidad": "oficial",
+  "fuente": "https://rtsallison.com/Allison%205th_6th%20Gen%20Shift%20Selector%20Booklet_Digital.pdf ; https://www.kalmarottawa.com/49bee8/globalassets/media/279607/279607_OM8491EN_202109.pdf.pdf"
+ },
+ {
+  "marca": "allison",
+  "aplica": "Allison 3000/4000 (4500 RDS) controles 5ª/6ª Gen; pines Mack GU 2013BP",
+  "ecu": "TCM",
+  "formato": "Allison-DTC",
+  "codigo": "P273F",
+  "descripcion": "Sensor de temperatura de aceite del retardador: condición de sobretemperatura (> 166 °C por 10 s)",
+  "causas": [
+   "Uso prolongado del retardador en bajada",
+   "Enfriador/radiador sucio (polvo)",
+   "Nivel de aceite incorrecto"
+  ],
+  "comprobaciones": [
+   "Limpiar radiador/enfriador",
+   "Verificar nivel",
+   "Sobre 143 °C el TCM adelanta rebajes; sobre 149 °C reduce capacidad"
+  ],
+  "sistema": "transmision",
+  "confiabilidad": "oficial",
+  "fuente": "https://rtsallison.com/Allison%205th_6th%20Gen%20Shift%20Selector%20Booklet_Digital.pdf ; https://www.kalmarottawa.com/49bee8/globalassets/media/279607/279607_OM8491EN_202109.pdf.pdf"
+ },
+ {
+  "marca": "allison",
+  "aplica": "Allison 3000/4000 (4500 RDS) controles 5ª/6ª Gen; pines Mack GU 2013BP",
+  "ecu": "TCM",
+  "formato": "Allison-DTC",
+  "codigo": "P2742",
+  "descripcion": "Sensor de temperatura de aceite del retardador – circuito BAJO",
+  "causas": [
+   "Corto a masa en sensor de temperatura del retardador (TCM 75)"
+  ],
+  "comprobaciones": [
+   "Sensor B105 y cable a TCM 75; retorno analógico TCM 58"
+  ],
+  "sistema": "transmision",
+  "confiabilidad": "oficial",
+  "fuente": "https://rtsallison.com/Allison%205th_6th%20Gen%20Shift%20Selector%20Booklet_Digital.pdf ; https://www.macktrucks.com/media/files/body-builder/wiring-diagrams/mack-conventional-12volt-includes-us17-version-9-21628497-09-1.pdf"
+ },
+ {
+  "marca": "allison",
+  "aplica": "Allison 3000/4000 (4500 RDS) controles 5ª/6ª Gen; pines Mack GU 2013BP",
+  "ecu": "TCM",
+  "formato": "Allison-DTC",
+  "codigo": "P2743",
+  "descripcion": "Sensor de temperatura de aceite del retardador – circuito ALTO",
+  "causas": [
+   "Sensor abierto o cable cortado (TCM 75)"
+  ],
+  "comprobaciones": [
+   "Continuidad B105 ↔ TCM 75 y 58"
+  ],
+  "sistema": "transmision",
+  "confiabilidad": "oficial",
+  "fuente": "https://rtsallison.com/Allison%205th_6th%20Gen%20Shift%20Selector%20Booklet_Digital.pdf ; https://www.macktrucks.com/media/files/body-builder/wiring-diagrams/mack-conventional-12volt-includes-us17-version-9-21628497-09-1.pdf"
+ },
+ {
+  "marca": "allison",
+  "aplica": "Allison 3000/4000 (4500 RDS) controles 5ª/6ª Gen; pines Mack GU 2013BP",
+  "ecu": "TCM",
+  "formato": "Allison-DTC",
+  "codigo": "P0989",
+  "descripcion": "Circuito de presión del retardador BAJO",
+  "causas": [
+   "Sensor de presión del retardador o su circuito"
+  ],
+  "comprobaciones": [
+   "Revisar conector y arnés del retardador (roce, humedad)",
+   "Diagnóstico detallado: manual de troubleshooting Allison (licencia)"
+  ],
+  "sistema": "transmision",
+  "confiabilidad": "oficial",
+  "fuente": "https://rtsallison.com/Allison%205th_6th%20Gen%20Shift%20Selector%20Booklet_Digital.pdf"
+ },
+ {
+  "marca": "allison",
+  "aplica": "Allison 3000/4000 (4500 RDS) controles 5ª/6ª Gen; pines Mack GU 2013BP",
+  "ecu": "TCM",
+  "formato": "Allison-DTC",
+  "codigo": "P0990",
+  "descripcion": "Circuito de presión del retardador ALTO",
+  "causas": [
+   "Sensor de presión del retardador o su circuito"
+  ],
+  "comprobaciones": [
+   "Revisar conector y arnés del retardador",
+   "Diagnóstico detallado: manual de troubleshooting Allison (licencia)"
+  ],
+  "sistema": "transmision",
+  "confiabilidad": "oficial",
+  "fuente": "https://rtsallison.com/Allison%205th_6th%20Gen%20Shift%20Selector%20Booklet_Digital.pdf"
+ },
+ {
+  "marca": "allison",
+  "aplica": "Allison 3000/4000 (4500 RDS) controles 5ª/6ª Gen; pines Mack GU 2013BP",
+  "ecu": "TCM",
+  "formato": "Allison-DTC",
+  "codigo": "C1312",
+  "descripcion": "Circuito del sensor de solicitud del retardador BAJO",
+  "causas": [
+   "Corto a masa en el mando de retardador"
+  ],
+  "comprobaciones": [
+   "Revisar interruptor/mando del retardador y su arnés"
+  ],
+  "sistema": "transmision",
+  "confiabilidad": "oficial",
+  "fuente": "https://rtsallison.com/Allison%205th_6th%20Gen%20Shift%20Selector%20Booklet_Digital.pdf"
+ },
+ {
+  "marca": "allison",
+  "aplica": "Allison 3000/4000 (4500 RDS) controles 5ª/6ª Gen; pines Mack GU 2013BP",
+  "ecu": "TCM",
+  "formato": "Allison-DTC",
+  "codigo": "C1313",
+  "descripcion": "Circuito del sensor de solicitud del retardador ALTO",
+  "causas": [
+   "Circuito abierto o corto a voltaje en el mando del retardador"
+  ],
+  "comprobaciones": [
+   "Revisar interruptor/mando del retardador y su arnés"
+  ],
+  "sistema": "transmision",
+  "confiabilidad": "oficial",
+  "fuente": "https://rtsallison.com/Allison%205th_6th%20Gen%20Shift%20Selector%20Booklet_Digital.pdf"
+ },
+ {
+  "marca": "allison",
+  "aplica": "Allison 3000/4000 (4500 RDS) controles 5ª/6ª Gen; pines Mack GU 2013BP",
+  "ecu": "TCM",
+  "formato": "Allison-DTC",
+  "codigo": "P0711",
+  "descripcion": "Rendimiento del sensor de temperatura del fluido (cárter)",
+  "causas": [
+   "Sensor de temperatura del cárter",
+   "Circuito TCM 54 ↔ caja A58-18"
+  ],
+  "comprobaciones": [
+   "Comparar lectura con temperatura real",
+   "Continuidad del circuito"
+  ],
+  "sistema": "transmision",
+  "confiabilidad": "oficial",
+  "fuente": "https://rtsallison.com/Allison%205th_6th%20Gen%20Shift%20Selector%20Booklet_Digital.pdf ; https://www.macktrucks.com/media/files/body-builder/wiring-diagrams/mack-conventional-12volt-includes-us17-version-9-21628497-09-1.pdf"
+ },
+ {
+  "marca": "allison",
+  "aplica": "Allison 3000/4000 (4500 RDS) controles 5ª/6ª Gen; pines Mack GU 2013BP",
+  "ecu": "TCM",
+  "formato": "Allison-DTC",
+  "codigo": "P0712",
+  "descripcion": "Sensor de temperatura del fluido – circuito BAJO",
+  "causas": [
+   "Corto a masa en TCM 54 / A58-18"
+  ],
+  "comprobaciones": [
+   "Aislamiento a masa del circuito"
+  ],
+  "sistema": "transmision",
+  "confiabilidad": "oficial",
+  "fuente": "https://rtsallison.com/Allison%205th_6th%20Gen%20Shift%20Selector%20Booklet_Digital.pdf ; https://www.macktrucks.com/media/files/body-builder/wiring-diagrams/mack-conventional-12volt-includes-us17-version-9-21628497-09-1.pdf"
+ },
+ {
+  "marca": "allison",
+  "aplica": "Allison 3000/4000 (4500 RDS) controles 5ª/6ª Gen; pines Mack GU 2013BP",
+  "ecu": "TCM",
+  "formato": "Allison-DTC",
+  "codigo": "P0713",
+  "descripcion": "Sensor de temperatura del fluido – circuito ALTO",
+  "causas": [
+   "Circuito abierto TCM 54 / A58-18"
+  ],
+  "comprobaciones": [
+   "Continuidad y conector de la caja"
+  ],
+  "sistema": "transmision",
+  "confiabilidad": "oficial",
+  "fuente": "https://rtsallison.com/Allison%205th_6th%20Gen%20Shift%20Selector%20Booklet_Digital.pdf ; https://www.macktrucks.com/media/files/body-builder/wiring-diagrams/mack-conventional-12volt-includes-us17-version-9-21628497-09-1.pdf"
+ },
+ {
+  "marca": "allison",
+  "aplica": "Allison 3000/4000 (4500 RDS) controles 5ª/6ª Gen; pines Mack GU 2013BP",
+  "ecu": "TCM",
+  "formato": "Allison-DTC",
+  "codigo": "P070C",
+  "descripcion": "Sensor de nivel de fluido (OLS) – circuito BAJO",
+  "causas": [
+   "Sensor OLS o su circuito"
+  ],
+  "comprobaciones": [
+   "Usar varilla para el nivel mientras tanto (el selector mostrará SENSOR FAILED)"
+  ],
+  "sistema": "transmision",
+  "confiabilidad": "oficial",
+  "fuente": "https://rtsallison.com/Allison%205th_6th%20Gen%20Shift%20Selector%20Booklet_Digital.pdf ; https://www.kalmarottawa.com/49bee8/globalassets/media/279607/279607_OM8491EN_202109.pdf.pdf"
+ },
+ {
+  "marca": "allison",
+  "aplica": "Allison 3000/4000 (4500 RDS) controles 5ª/6ª Gen; pines Mack GU 2013BP",
+  "ecu": "TCM",
+  "formato": "Allison-DTC",
+  "codigo": "P070D",
+  "descripcion": "Sensor de nivel de fluido (OLS) – circuito ALTO",
+  "causas": [
+   "Sensor OLS o su circuito"
+  ],
+  "comprobaciones": [
+   "Usar varilla para el nivel mientras tanto"
+  ],
+  "sistema": "transmision",
+  "confiabilidad": "oficial",
+  "fuente": "https://rtsallison.com/Allison%205th_6th%20Gen%20Shift%20Selector%20Booklet_Digital.pdf ; https://www.kalmarottawa.com/49bee8/globalassets/media/279607/279607_OM8491EN_202109.pdf.pdf"
+ },
+ {
+  "marca": "allison",
+  "aplica": "Allison 3000/4000 (4500 RDS) controles 5ª/6ª Gen; pines Mack GU 2013BP",
+  "ecu": "TCM",
+  "formato": "Allison-DTC",
+  "codigo": "P0715",
+  "descripcion": "Circuito del sensor de velocidad de turbina",
+  "causas": [
+   "Sensor de turbina",
+   "Arnés/conector"
+  ],
+  "comprobaciones": [
+   "Circuito del sensor de velocidad de turbina: TCM 20(−)/80(+) ↔ conector de caja TB/TA (4000)",
+   "Continuidad, aislamiento a masa y entre cables del par trenzado",
+   "Conector del sensor y del TCM (corrosión, pines sueltos)"
+  ],
+  "sistema": "transmision",
+  "confiabilidad": "oficial",
+  "fuente": "https://rtsallison.com/Allison%205th_6th%20Gen%20Shift%20Selector%20Booklet_Digital.pdf ; https://www.macktrucks.com/media/files/body-builder/wiring-diagrams/mack-conventional-12volt-includes-us17-version-9-21628497-09-1.pdf"
+ },
+ {
+  "marca": "allison",
+  "aplica": "Allison 3000/4000 (4500 RDS) controles 5ª/6ª Gen; pines Mack GU 2013BP",
+  "ecu": "TCM",
+  "formato": "Allison-DTC",
+  "codigo": "P0716",
+  "descripcion": "Rendimiento del sensor de velocidad de turbina",
+  "causas": [
+   "Sensor de turbina",
+   "Arnés/conector",
+   "Interferencia"
+  ],
+  "comprobaciones": [
+   "Circuito del sensor de velocidad de turbina: TCM 20(−)/80(+) ↔ conector de caja TB/TA (4000)",
+   "Continuidad, aislamiento a masa y entre cables del par trenzado",
+   "Conector del sensor y del TCM (corrosión, pines sueltos)"
+  ],
+  "sistema": "transmision",
+  "confiabilidad": "oficial",
+  "fuente": "https://rtsallison.com/Allison%205th_6th%20Gen%20Shift%20Selector%20Booklet_Digital.pdf ; https://www.macktrucks.com/media/files/body-builder/wiring-diagrams/mack-conventional-12volt-includes-us17-version-9-21628497-09-1.pdf"
+ },
+ {
+  "marca": "allison",
+  "aplica": "Allison 3000/4000 (4500 RDS) controles 5ª/6ª Gen; pines Mack GU 2013BP",
+  "ecu": "TCM",
+  "formato": "Allison-DTC",
+  "codigo": "P0717",
+  "descripcion": "Sensor de velocidad de turbina sin actividad",
+  "causas": [
+   "Sensor de turbina abierto",
+   "Arnés cortado"
+  ],
+  "comprobaciones": [
+   "Circuito del sensor de velocidad de turbina: TCM 20(−)/80(+) ↔ conector de caja TB/TA (4000)",
+   "Continuidad, aislamiento a masa y entre cables del par trenzado",
+   "Conector del sensor y del TCM (corrosión, pines sueltos)"
+  ],
+  "sistema": "transmision",
+  "confiabilidad": "oficial",
+  "fuente": "https://rtsallison.com/Allison%205th_6th%20Gen%20Shift%20Selector%20Booklet_Digital.pdf ; https://www.macktrucks.com/media/files/body-builder/wiring-diagrams/mack-conventional-12volt-includes-us17-version-9-21628497-09-1.pdf"
+ },
+ {
+  "marca": "allison",
+  "aplica": "Allison 3000/4000 (4500 RDS) controles 5ª/6ª Gen; pines Mack GU 2013BP",
+  "ecu": "TCM",
+  "formato": "Allison-DTC",
+  "codigo": "P0720",
+  "descripcion": "Circuito del sensor de velocidad de salida",
+  "causas": [
+   "Sensor de salida",
+   "Arnés/conector"
+  ],
+  "comprobaciones": [
+   "Circuito del sensor de velocidad de salida: TCM 40(−)/60(+) ↔ conector de caja OB/OA",
+   "Continuidad, aislamiento a masa y entre cables del par trenzado",
+   "Conector del sensor y del TCM (corrosión, pines sueltos)"
+  ],
+  "sistema": "transmision",
+  "confiabilidad": "oficial",
+  "fuente": "https://rtsallison.com/Allison%205th_6th%20Gen%20Shift%20Selector%20Booklet_Digital.pdf ; https://www.macktrucks.com/media/files/body-builder/wiring-diagrams/mack-conventional-12volt-includes-us17-version-9-21628497-09-1.pdf"
+ },
+ {
+  "marca": "allison",
+  "aplica": "Allison 3000/4000 (4500 RDS) controles 5ª/6ª Gen; pines Mack GU 2013BP",
+  "ecu": "TCM",
+  "formato": "Allison-DTC",
+  "codigo": "P0721",
+  "descripcion": "Rendimiento del sensor de velocidad de salida",
+  "causas": [
+   "Sensor de salida",
+   "Arnés/conector",
+   "Interferencia"
+  ],
+  "comprobaciones": [
+   "Circuito del sensor de velocidad de salida: TCM 40(−)/60(+) ↔ conector de caja OB/OA",
+   "Continuidad, aislamiento a masa y entre cables del par trenzado",
+   "Conector del sensor y del TCM (corrosión, pines sueltos)"
+  ],
+  "sistema": "transmision",
+  "confiabilidad": "oficial",
+  "fuente": "https://rtsallison.com/Allison%205th_6th%20Gen%20Shift%20Selector%20Booklet_Digital.pdf ; https://www.macktrucks.com/media/files/body-builder/wiring-diagrams/mack-conventional-12volt-includes-us17-version-9-21628497-09-1.pdf"
+ },
+ {
+  "marca": "allison",
+  "aplica": "Allison 3000/4000 (4500 RDS) controles 5ª/6ª Gen; pines Mack GU 2013BP",
+  "ecu": "TCM",
+  "formato": "Allison-DTC",
+  "codigo": "P0722",
+  "descripcion": "Sensor de velocidad de salida sin señal",
+  "causas": [
+   "Sensor de salida abierto",
+   "Arnés cortado"
+  ],
+  "comprobaciones": [
+   "Circuito del sensor de velocidad de salida: TCM 40(−)/60(+) ↔ conector de caja OB/OA",
+   "Continuidad, aislamiento a masa y entre cables del par trenzado",
+   "Conector del sensor y del TCM (corrosión, pines sueltos)"
+  ],
+  "sistema": "transmision",
+  "confiabilidad": "oficial",
+  "fuente": "https://rtsallison.com/Allison%205th_6th%20Gen%20Shift%20Selector%20Booklet_Digital.pdf ; https://www.macktrucks.com/media/files/body-builder/wiring-diagrams/mack-conventional-12volt-includes-us17-version-9-21628497-09-1.pdf"
+ },
+ {
+  "marca": "allison",
+  "aplica": "Allison 3000/4000 (4500 RDS) controles 5ª/6ª Gen; pines Mack GU 2013BP",
+  "ecu": "TCM",
+  "formato": "Allison-DTC",
+  "codigo": "P0725",
+  "descripcion": "Circuito del sensor de velocidad de motor",
+  "causas": [
+   "Sensor de velocidad de motor (en la caja)",
+   "Arnés/conector"
+  ],
+  "comprobaciones": [
+   "Circuito del sensor de velocidad de motor: TCM 39(−)/59(+) ↔ conector de caja EB/EA",
+   "Continuidad, aislamiento a masa y entre cables del par trenzado",
+   "Conector del sensor y del TCM (corrosión, pines sueltos)"
+  ],
+  "sistema": "transmision",
+  "confiabilidad": "oficial",
+  "fuente": "https://rtsallison.com/Allison%205th_6th%20Gen%20Shift%20Selector%20Booklet_Digital.pdf ; https://www.macktrucks.com/media/files/body-builder/wiring-diagrams/mack-conventional-12volt-includes-us17-version-9-21628497-09-1.pdf"
+ },
+ {
+  "marca": "allison",
+  "aplica": "Allison 3000/4000 (4500 RDS) controles 5ª/6ª Gen; pines Mack GU 2013BP",
+  "ecu": "TCM",
+  "formato": "Allison-DTC",
+  "codigo": "P0726",
+  "descripcion": "Rendimiento del sensor de velocidad de motor",
+  "causas": [
+   "Sensor de velocidad de motor",
+   "Arnés/conector"
+  ],
+  "comprobaciones": [
+   "Circuito del sensor de velocidad de motor: TCM 39(−)/59(+) ↔ conector de caja EB/EA",
+   "Continuidad, aislamiento a masa y entre cables del par trenzado",
+   "Conector del sensor y del TCM (corrosión, pines sueltos)"
+  ],
+  "sistema": "transmision",
+  "confiabilidad": "oficial",
+  "fuente": "https://rtsallison.com/Allison%205th_6th%20Gen%20Shift%20Selector%20Booklet_Digital.pdf ; https://www.macktrucks.com/media/files/body-builder/wiring-diagrams/mack-conventional-12volt-includes-us17-version-9-21628497-09-1.pdf"
+ },
+ {
+  "marca": "allison",
+  "aplica": "Allison 3000/4000 (4500 RDS) controles 5ª/6ª Gen; pines Mack GU 2013BP",
+  "ecu": "TCM",
+  "formato": "Allison-DTC",
+  "codigo": "P0727",
+  "descripcion": "Sensor de velocidad de motor sin señal",
+  "causas": [
+   "Sensor abierto",
+   "Arnés cortado"
+  ],
+  "comprobaciones": [
+   "Circuito del sensor de velocidad de motor: TCM 39(−)/59(+) ↔ conector de caja EB/EA",
+   "Continuidad, aislamiento a masa y entre cables del par trenzado",
+   "Conector del sensor y del TCM (corrosión, pines sueltos)"
+  ],
+  "sistema": "transmision",
+  "confiabilidad": "oficial",
+  "fuente": "https://rtsallison.com/Allison%205th_6th%20Gen%20Shift%20Selector%20Booklet_Digital.pdf ; https://www.macktrucks.com/media/files/body-builder/wiring-diagrams/mack-conventional-12volt-includes-us17-version-9-21628497-09-1.pdf"
+ },
+ {
+  "marca": "allison",
+  "aplica": "Allison 3000/4000 (4500 RDS) controles 5ª/6ª Gen; pines Mack GU 2013BP",
+  "ecu": "TCM",
+  "formato": "Allison-DTC",
+  "codigo": "P0731",
+  "descripcion": "Relación de 1ª marcha incorrecta",
+  "causas": [
+   "Deslizamiento de embrague",
+   "Presión/solenoide",
+   "Sensor de velocidad"
+  ],
+  "comprobaciones": [
+   "Leer otros códigos presentes (sensores de velocidad, solenoides)",
+   "Nivel y estado del aceite",
+   "Respuesta TCM posible: RPR/NNC (vuelve al rango anterior o neutro)"
+  ],
+  "sistema": "transmision",
+  "confiabilidad": "oficial",
+  "fuente": "https://rtsallison.com/Allison%205th_6th%20Gen%20Shift%20Selector%20Booklet_Digital.pdf ; https://www.kalmarottawa.com/49bee8/globalassets/media/279607/279607_OM8491EN_202109.pdf.pdf"
+ },
+ {
+  "marca": "allison",
+  "aplica": "Allison 3000/4000 (4500 RDS) controles 5ª/6ª Gen; pines Mack GU 2013BP",
+  "ecu": "TCM",
+  "formato": "Allison-DTC",
+  "codigo": "P0732",
+  "descripcion": "Relación de 2ª marcha incorrecta",
+  "causas": [
+   "Deslizamiento de embrague",
+   "Presión/solenoide",
+   "Sensor de velocidad"
+  ],
+  "comprobaciones": [
+   "Leer otros códigos presentes (sensores de velocidad, solenoides)",
+   "Nivel y estado del aceite",
+   "Respuesta TCM posible: RPR/NNC (vuelve al rango anterior o neutro)"
+  ],
+  "sistema": "transmision",
+  "confiabilidad": "oficial",
+  "fuente": "https://rtsallison.com/Allison%205th_6th%20Gen%20Shift%20Selector%20Booklet_Digital.pdf ; https://www.kalmarottawa.com/49bee8/globalassets/media/279607/279607_OM8491EN_202109.pdf.pdf"
+ },
+ {
+  "marca": "allison",
+  "aplica": "Allison 3000/4000 (4500 RDS) controles 5ª/6ª Gen; pines Mack GU 2013BP",
+  "ecu": "TCM",
+  "formato": "Allison-DTC",
+  "codigo": "P0733",
+  "descripcion": "Relación de 3ª marcha incorrecta",
+  "causas": [
+   "Deslizamiento de embrague",
+   "Presión/solenoide",
+   "Sensor de velocidad"
+  ],
+  "comprobaciones": [
+   "Leer otros códigos presentes (sensores de velocidad, solenoides)",
+   "Nivel y estado del aceite",
+   "Respuesta TCM posible: RPR/NNC (vuelve al rango anterior o neutro)"
+  ],
+  "sistema": "transmision",
+  "confiabilidad": "oficial",
+  "fuente": "https://rtsallison.com/Allison%205th_6th%20Gen%20Shift%20Selector%20Booklet_Digital.pdf ; https://www.kalmarottawa.com/49bee8/globalassets/media/279607/279607_OM8491EN_202109.pdf.pdf"
+ },
+ {
+  "marca": "allison",
+  "aplica": "Allison 3000/4000 (4500 RDS) controles 5ª/6ª Gen; pines Mack GU 2013BP",
+  "ecu": "TCM",
+  "formato": "Allison-DTC",
+  "codigo": "P0734",
+  "descripcion": "Relación de 4ª marcha incorrecta",
+  "causas": [
+   "Deslizamiento de embrague",
+   "Presión/solenoide",
+   "Sensor de velocidad"
+  ],
+  "comprobaciones": [
+   "Leer otros códigos presentes (sensores de velocidad, solenoides)",
+   "Nivel y estado del aceite",
+   "Respuesta TCM posible: RPR/NNC (vuelve al rango anterior o neutro)"
+  ],
+  "sistema": "transmision",
+  "confiabilidad": "oficial",
+  "fuente": "https://rtsallison.com/Allison%205th_6th%20Gen%20Shift%20Selector%20Booklet_Digital.pdf ; https://www.kalmarottawa.com/49bee8/globalassets/media/279607/279607_OM8491EN_202109.pdf.pdf"
+ },
+ {
+  "marca": "allison",
+  "aplica": "Allison 3000/4000 (4500 RDS) controles 5ª/6ª Gen; pines Mack GU 2013BP",
+  "ecu": "TCM",
+  "formato": "Allison-DTC",
+  "codigo": "P0735",
+  "descripcion": "Relación de 5ª marcha incorrecta",
+  "causas": [
+   "Deslizamiento de embrague",
+   "Presión/solenoide",
+   "Sensor de velocidad"
+  ],
+  "comprobaciones": [
+   "Leer otros códigos presentes (sensores de velocidad, solenoides)",
+   "Nivel y estado del aceite",
+   "Respuesta TCM posible: RPR/NNC (vuelve al rango anterior o neutro)"
+  ],
+  "sistema": "transmision",
+  "confiabilidad": "oficial",
+  "fuente": "https://rtsallison.com/Allison%205th_6th%20Gen%20Shift%20Selector%20Booklet_Digital.pdf ; https://www.kalmarottawa.com/49bee8/globalassets/media/279607/279607_OM8491EN_202109.pdf.pdf"
+ },
+ {
+  "marca": "allison",
+  "aplica": "Allison 3000/4000 (4500 RDS) controles 5ª/6ª Gen; pines Mack GU 2013BP",
+  "ecu": "TCM",
+  "formato": "Allison-DTC",
+  "codigo": "P0729",
+  "descripcion": "Relación de 6ª marcha incorrecta",
+  "causas": [
+   "Deslizamiento de embrague",
+   "Presión/solenoide",
+   "Sensor de velocidad"
+  ],
+  "comprobaciones": [
+   "Leer otros códigos presentes (sensores de velocidad, solenoides)",
+   "Nivel y estado del aceite",
+   "Respuesta TCM posible: RPR/NNC (vuelve al rango anterior o neutro)"
+  ],
+  "sistema": "transmision",
+  "confiabilidad": "oficial",
+  "fuente": "https://rtsallison.com/Allison%205th_6th%20Gen%20Shift%20Selector%20Booklet_Digital.pdf ; https://www.kalmarottawa.com/49bee8/globalassets/media/279607/279607_OM8491EN_202109.pdf.pdf"
+ },
+ {
+  "marca": "allison",
+  "aplica": "Allison 3000/4000 (4500 RDS) controles 5ª/6ª Gen; pines Mack GU 2013BP",
+  "ecu": "TCM",
+  "formato": "Allison-DTC",
+  "codigo": "P0736",
+  "descripcion": "Relación de reversa incorrecta",
+  "causas": [
+   "Deslizamiento de embrague de reversa",
+   "Presión/solenoide"
+  ],
+  "comprobaciones": [
+   "Nivel y estado del aceite",
+   "Otros códigos presentes"
+  ],
+  "sistema": "transmision",
+  "confiabilidad": "oficial",
+  "fuente": "https://rtsallison.com/Allison%205th_6th%20Gen%20Shift%20Selector%20Booklet_Digital.pdf"
+ },
+ {
+  "marca": "allison",
+  "aplica": "Allison 3000/4000 (4500 RDS) controles 5ª/6ª Gen; pines Mack GU 2013BP",
+  "ecu": "TCM",
+  "formato": "Allison-DTC",
+  "codigo": "P0741",
+  "descripcion": "Embrague del convertidor (TCC) pegado desaplicado",
+  "causas": [
+   "Solenoide TCC PCS",
+   "Presión",
+   "Embrague lock-up"
+  ],
+  "comprobaciones": [
+   "Revisar circuito del solenoide TCC",
+   "Nivel de aceite"
+  ],
+  "sistema": "transmision",
+  "confiabilidad": "oficial",
+  "fuente": "https://rtsallison.com/Allison%205th_6th%20Gen%20Shift%20Selector%20Booklet_Digital.pdf"
+ },
+ {
+  "marca": "allison",
+  "aplica": "Allison 3000/4000 (4500 RDS) controles 5ª/6ª Gen; pines Mack GU 2013BP",
+  "ecu": "TCM",
+  "formato": "Allison-DTC",
+  "codigo": "P0894",
+  "descripcion": "Desacople mecánico inesperado de marcha",
+  "causas": [
+   "Deslizamiento interno",
+   "Nivel de aceite bajo"
+  ],
+  "comprobaciones": [
+   "Nivel de aceite",
+   "Otros códigos; diagnóstico por distribuidor Allison"
+  ],
+  "sistema": "transmision",
+  "confiabilidad": "oficial",
+  "fuente": "https://rtsallison.com/Allison%205th_6th%20Gen%20Shift%20Selector%20Booklet_Digital.pdf"
+ },
+ {
+  "marca": "allison",
+  "aplica": "Allison 3000/4000 (4500 RDS) controles 5ª/6ª Gen; pines Mack GU 2013BP",
+  "ecu": "TCM",
+  "formato": "Allison-DTC",
+  "codigo": "P0897",
+  "descripcion": "Fluido de transmisión deteriorado",
+  "causas": [
+   "Vida del fluido agotada (pronóstico Oil Life)"
+  ],
+  "comprobaciones": [
+   "Cambiar fluido TES 295/TES 668/TES 389 y resetear Oil Life (N-D-N-D-N-R-N)"
+  ],
+  "sistema": "transmision",
+  "confiabilidad": "oficial",
+  "fuente": "https://rtsallison.com/Allison%205th_6th%20Gen%20Shift%20Selector%20Booklet_Digital.pdf ; https://www.kalmarottawa.com/49bee8/globalassets/media/279607/279607_OM8491EN_202109.pdf.pdf"
+ },
+ {
+  "marca": "allison",
+  "aplica": "Allison 3000/4000 (4500 RDS) controles 5ª/6ª Gen; pines Mack GU 2013BP",
+  "ecu": "TCM",
+  "formato": "Allison-DTC",
+  "codigo": "P088A",
+  "descripcion": "Alerta de mantenimiento del filtro de transmisión",
+  "causas": [
+   "Vida de filtros cumplida (pronóstico Filter Life)"
+  ],
+  "comprobaciones": [
+   "Cambiar filtros Allison de alta capacidad y resetear (N-R-N-R-N-D-N)"
+  ],
+  "sistema": "transmision",
+  "confiabilidad": "oficial",
+  "fuente": "https://rtsallison.com/Allison%205th_6th%20Gen%20Shift%20Selector%20Booklet_Digital.pdf ; https://www.kalmarottawa.com/49bee8/globalassets/media/279607/279607_OM8491EN_202109.pdf.pdf"
+ },
+ {
+  "marca": "allison",
+  "aplica": "Allison 3000/4000 (4500 RDS) controles 5ª/6ª Gen; pines Mack GU 2013BP",
+  "ecu": "TCM",
+  "formato": "Allison-DTC",
+  "codigo": "P088B",
+  "descripcion": "Mantenimiento del filtro de transmisión REQUERIDO",
+  "causas": [
+   "Filtros no cambiados tras la alerta"
+  ],
+  "comprobaciones": [
+   "Cambiar filtros y resetear Filter Life"
+  ],
+  "sistema": "transmision",
+  "confiabilidad": "oficial",
+  "fuente": "https://rtsallison.com/Allison%205th_6th%20Gen%20Shift%20Selector%20Booklet_Digital.pdf ; https://www.kalmarottawa.com/49bee8/globalassets/media/279607/279607_OM8491EN_202109.pdf.pdf"
+ },
+ {
+  "marca": "allison",
+  "aplica": "Allison 3000/4000 (4500 RDS) controles 5ª/6ª Gen; pines Mack GU 2013BP",
+  "ecu": "TCM",
+  "formato": "Allison-DTC",
+  "codigo": "P2789",
+  "descripcion": "Vida de embrague agotada (aprendizaje adaptativo del embrague al límite)",
+  "causas": [
+   "Desgaste de embragues C1-C5 (Trans Health LO)"
+  ],
+  "comprobaciones": [
+   "Diagnóstico/reparación por distribuidor; reset de Trans Health solo con Allison DOC®"
+  ],
+  "sistema": "transmision",
+  "confiabilidad": "oficial",
+  "fuente": "https://rtsallison.com/Allison%205th_6th%20Gen%20Shift%20Selector%20Booklet_Digital.pdf ; https://www.kalmarottawa.com/49bee8/globalassets/media/279607/279607_OM8491EN_202109.pdf.pdf"
+ },
+ {
+  "marca": "allison",
+  "aplica": "Allison 3000/4000 (4500 RDS) controles 5ª/6ª Gen; pines Mack GU 2013BP",
+  "ecu": "TCM",
+  "formato": "Allison-DTC",
+  "codigo": "P0848",
+  "descripcion": "Interruptor de presión de fluido 2 – circuito ALTO",
+  "causas": [
+   "Con pronósticos activos: falta el cable 118 (interruptor de vida de filtro) en el arnés",
+   "Interruptor de presión 2"
+  ],
+  "comprobaciones": [
+   "Verificar cable 118 en el arnés antes de activar pronósticos"
+  ],
+  "sistema": "transmision",
+  "confiabilidad": "oficial",
+  "fuente": "https://rtsallison.com/Allison%205th_6th%20Gen%20Shift%20Selector%20Booklet_Digital.pdf ; https://www.kalmarottawa.com/49bee8/globalassets/media/279607/279607_OM8491EN_202109.pdf.pdf"
+ },
+ {
+  "marca": "allison",
+  "aplica": "Allison 3000/4000 (4500 RDS) controles 5ª/6ª Gen; pines Mack GU 2013BP",
+  "ecu": "TCM",
+  "formato": "Allison-DTC",
+  "codigo": "P0842",
+  "descripcion": "Interruptor de presión de fluido 1 – circuito BAJO",
+  "causas": [
+   "Presostato 1 o su circuito"
+  ],
+  "comprobaciones": [
+   "Continuidad y aislamiento del circuito del presostato; el diagrama Mack muestra el presostato C3PS en TCM 77 ↔ caja A58-3 (confirmar que corresponde a PS1)"
+  ],
+  "sistema": "transmision",
+  "confiabilidad": "oficial",
+  "fuente": "https://rtsallison.com/Allison%205th_6th%20Gen%20Shift%20Selector%20Booklet_Digital.pdf ; https://www.macktrucks.com/media/files/body-builder/wiring-diagrams/mack-conventional-12volt-includes-us17-version-9-21628497-09-1.pdf"
+ },
+ {
+  "marca": "allison",
+  "aplica": "Allison 3000/4000 (4500 RDS) controles 5ª/6ª Gen; pines Mack GU 2013BP",
+  "ecu": "TCM",
+  "formato": "Allison-DTC",
+  "codigo": "P0843",
+  "descripcion": "Interruptor de presión de fluido 1 – circuito ALTO",
+  "causas": [
+   "Presostato 1 o su circuito"
+  ],
+  "comprobaciones": [
+   "Continuidad del circuito del presostato (ver nota de P0842)"
+  ],
+  "sistema": "transmision",
+  "confiabilidad": "oficial",
+  "fuente": "https://rtsallison.com/Allison%205th_6th%20Gen%20Shift%20Selector%20Booklet_Digital.pdf ; https://www.macktrucks.com/media/files/body-builder/wiring-diagrams/mack-conventional-12volt-includes-us17-version-9-21628497-09-1.pdf"
+ },
+ {
+  "marca": "allison",
+  "aplica": "Allison 3000/4000 (4500 RDS) controles 5ª/6ª Gen; pines Mack GU 2013BP",
+  "ecu": "TCM",
+  "formato": "Allison-DTC",
+  "codigo": "P0973",
+  "descripcion": "Solenoide de cambio 1 (SS1) – circuito BAJO",
+  "causas": [
+   "Solenoide en la caja",
+   "Arnés o conector de transmisión (roce, humedad)",
+   "Alimentación HSD"
+  ],
+  "comprobaciones": [
+   "Según diagrama Mack: TCM pin 51 ↔ conector de caja A58 pin 10 (cable N151)",
+   "Continuidad, aislamiento a masa y a voltaje",
+   "Revisar conector de la caja por agua/corrosión"
+  ],
+  "sistema": "transmision",
+  "confiabilidad": "oficial",
+  "fuente": "https://rtsallison.com/Allison%205th_6th%20Gen%20Shift%20Selector%20Booklet_Digital.pdf ; https://www.macktrucks.com/media/files/body-builder/wiring-diagrams/mack-conventional-12volt-includes-us17-version-9-21628497-09-1.pdf"
+ },
+ {
+  "marca": "allison",
+  "aplica": "Allison 3000/4000 (4500 RDS) controles 5ª/6ª Gen; pines Mack GU 2013BP",
+  "ecu": "TCM",
+  "formato": "Allison-DTC",
+  "codigo": "P0974",
+  "descripcion": "Solenoide de cambio 1 (SS1) – circuito ALTO",
+  "causas": [
+   "Solenoide en la caja",
+   "Arnés o conector de transmisión (roce, humedad)",
+   "Alimentación HSD"
+  ],
+  "comprobaciones": [
+   "Según diagrama Mack: TCM pin 51 ↔ conector de caja A58 pin 10 (cable N151)",
+   "Continuidad, aislamiento a masa y a voltaje",
+   "Revisar conector de la caja por agua/corrosión"
+  ],
+  "sistema": "transmision",
+  "confiabilidad": "oficial",
+  "fuente": "https://rtsallison.com/Allison%205th_6th%20Gen%20Shift%20Selector%20Booklet_Digital.pdf ; https://www.macktrucks.com/media/files/body-builder/wiring-diagrams/mack-conventional-12volt-includes-us17-version-9-21628497-09-1.pdf"
+ },
+ {
+  "marca": "allison",
+  "aplica": "Allison 3000/4000 (4500 RDS) controles 5ª/6ª Gen; pines Mack GU 2013BP",
+  "ecu": "TCM",
+  "formato": "Allison-DTC",
+  "codigo": "P097A",
+  "descripcion": "Solenoide de cambio 1 (SS1) – circuito ABIERTO",
+  "causas": [
+   "Solenoide en la caja",
+   "Arnés o conector de transmisión (roce, humedad)",
+   "Alimentación HSD"
+  ],
+  "comprobaciones": [
+   "Según diagrama Mack: TCM pin 51 ↔ conector de caja A58 pin 10 (cable N151)",
+   "Continuidad, aislamiento a masa y a voltaje",
+   "Revisar conector de la caja por agua/corrosión"
+  ],
+  "sistema": "transmision",
+  "confiabilidad": "oficial",
+  "fuente": "https://rtsallison.com/Allison%205th_6th%20Gen%20Shift%20Selector%20Booklet_Digital.pdf ; https://www.macktrucks.com/media/files/body-builder/wiring-diagrams/mack-conventional-12volt-includes-us17-version-9-21628497-09-1.pdf"
+ },
+ {
+  "marca": "allison",
+  "aplica": "Allison 3000/4000 (4500 RDS) controles 5ª/6ª Gen; pines Mack GU 2013BP",
+  "ecu": "TCM",
+  "formato": "Allison-DTC",
+  "codigo": "P2727",
+  "descripcion": "Solenoide PCS1 – circuito ABIERTO",
+  "causas": [
+   "Solenoide en la caja",
+   "Arnés o conector de transmisión (roce, humedad)",
+   "Alimentación HSD"
+  ],
+  "comprobaciones": [
+   "Según diagrama Mack: TCM pin 74 ↔ conector de caja A58 pin 8 (cable N174)",
+   "Continuidad, aislamiento a masa y a voltaje",
+   "Revisar conector de la caja por agua/corrosión"
+  ],
+  "sistema": "transmision",
+  "confiabilidad": "oficial",
+  "fuente": "https://rtsallison.com/Allison%205th_6th%20Gen%20Shift%20Selector%20Booklet_Digital.pdf ; https://www.macktrucks.com/media/files/body-builder/wiring-diagrams/mack-conventional-12volt-includes-us17-version-9-21628497-09-1.pdf"
+ },
+ {
+  "marca": "allison",
+  "aplica": "Allison 3000/4000 (4500 RDS) controles 5ª/6ª Gen; pines Mack GU 2013BP",
+  "ecu": "TCM",
+  "formato": "Allison-DTC",
+  "codigo": "P2729",
+  "descripcion": "Solenoide PCS1 – circuito BAJO",
+  "causas": [
+   "Solenoide en la caja",
+   "Arnés o conector de transmisión (roce, humedad)",
+   "Alimentación HSD"
+  ],
+  "comprobaciones": [
+   "Según diagrama Mack: TCM pin 74 ↔ conector de caja A58 pin 8 (cable N174)",
+   "Continuidad, aislamiento a masa y a voltaje",
+   "Revisar conector de la caja por agua/corrosión"
+  ],
+  "sistema": "transmision",
+  "confiabilidad": "oficial",
+  "fuente": "https://rtsallison.com/Allison%205th_6th%20Gen%20Shift%20Selector%20Booklet_Digital.pdf ; https://www.macktrucks.com/media/files/body-builder/wiring-diagrams/mack-conventional-12volt-includes-us17-version-9-21628497-09-1.pdf"
+ },
+ {
+  "marca": "allison",
+  "aplica": "Allison 3000/4000 (4500 RDS) controles 5ª/6ª Gen; pines Mack GU 2013BP",
+  "ecu": "TCM",
+  "formato": "Allison-DTC",
+  "codigo": "P2730",
+  "descripcion": "Solenoide PCS1 – circuito ALTO",
+  "causas": [
+   "Solenoide en la caja",
+   "Arnés o conector de transmisión (roce, humedad)",
+   "Alimentación HSD"
+  ],
+  "comprobaciones": [
+   "Según diagrama Mack: TCM pin 74 ↔ conector de caja A58 pin 8 (cable N174)",
+   "Continuidad, aislamiento a masa y a voltaje",
+   "Revisar conector de la caja por agua/corrosión"
+  ],
+  "sistema": "transmision",
+  "confiabilidad": "oficial",
+  "fuente": "https://rtsallison.com/Allison%205th_6th%20Gen%20Shift%20Selector%20Booklet_Digital.pdf ; https://www.macktrucks.com/media/files/body-builder/wiring-diagrams/mack-conventional-12volt-includes-us17-version-9-21628497-09-1.pdf"
+ },
+ {
+  "marca": "allison",
+  "aplica": "Allison 3000/4000 (4500 RDS) controles 5ª/6ª Gen; pines Mack GU 2013BP",
+  "ecu": "TCM",
+  "formato": "Allison-DTC",
+  "codigo": "P0964",
+  "descripcion": "Solenoide PCS2 – circuito ABIERTO",
+  "causas": [
+   "Solenoide en la caja",
+   "Arnés o conector de transmisión (roce, humedad)",
+   "Alimentación HSD"
+  ],
+  "comprobaciones": [
+   "Según diagrama Mack: TCM pin 36 ↔ conector de caja A58 pin 4 (cable N136)",
+   "Continuidad, aislamiento a masa y a voltaje",
+   "Revisar conector de la caja por agua/corrosión"
+  ],
+  "sistema": "transmision",
+  "confiabilidad": "oficial",
+  "fuente": "https://rtsallison.com/Allison%205th_6th%20Gen%20Shift%20Selector%20Booklet_Digital.pdf ; https://www.macktrucks.com/media/files/body-builder/wiring-diagrams/mack-conventional-12volt-includes-us17-version-9-21628497-09-1.pdf"
+ },
+ {
+  "marca": "allison",
+  "aplica": "Allison 3000/4000 (4500 RDS) controles 5ª/6ª Gen; pines Mack GU 2013BP",
+  "ecu": "TCM",
+  "formato": "Allison-DTC",
+  "codigo": "P0966",
+  "descripcion": "Solenoide PCS2 – circuito BAJO",
+  "causas": [
+   "Solenoide en la caja",
+   "Arnés o conector de transmisión (roce, humedad)",
+   "Alimentación HSD"
+  ],
+  "comprobaciones": [
+   "Según diagrama Mack: TCM pin 36 ↔ conector de caja A58 pin 4 (cable N136)",
+   "Continuidad, aislamiento a masa y a voltaje",
+   "Revisar conector de la caja por agua/corrosión"
+  ],
+  "sistema": "transmision",
+  "confiabilidad": "oficial",
+  "fuente": "https://rtsallison.com/Allison%205th_6th%20Gen%20Shift%20Selector%20Booklet_Digital.pdf ; https://www.macktrucks.com/media/files/body-builder/wiring-diagrams/mack-conventional-12volt-includes-us17-version-9-21628497-09-1.pdf"
+ },
+ {
+  "marca": "allison",
+  "aplica": "Allison 3000/4000 (4500 RDS) controles 5ª/6ª Gen; pines Mack GU 2013BP",
+  "ecu": "TCM",
+  "formato": "Allison-DTC",
+  "codigo": "P0967",
+  "descripcion": "Solenoide PCS2 – circuito ALTO",
+  "causas": [
+   "Solenoide en la caja",
+   "Arnés o conector de transmisión (roce, humedad)",
+   "Alimentación HSD"
+  ],
+  "comprobaciones": [
+   "Según diagrama Mack: TCM pin 36 ↔ conector de caja A58 pin 4 (cable N136)",
+   "Continuidad, aislamiento a masa y a voltaje",
+   "Revisar conector de la caja por agua/corrosión"
+  ],
+  "sistema": "transmision",
+  "confiabilidad": "oficial",
+  "fuente": "https://rtsallison.com/Allison%205th_6th%20Gen%20Shift%20Selector%20Booklet_Digital.pdf ; https://www.macktrucks.com/media/files/body-builder/wiring-diagrams/mack-conventional-12volt-includes-us17-version-9-21628497-09-1.pdf"
+ },
+ {
+  "marca": "allison",
+  "aplica": "Allison 3000/4000 (4500 RDS) controles 5ª/6ª Gen; pines Mack GU 2013BP",
+  "ecu": "TCM",
+  "formato": "Allison-DTC",
+  "codigo": "P0968",
+  "descripcion": "Solenoide PCS3 – circuito ABIERTO",
+  "causas": [
+   "Solenoide en la caja",
+   "Arnés o conector de transmisión (roce, humedad)",
+   "Alimentación HSD"
+  ],
+  "comprobaciones": [
+   "Según diagrama Mack: TCM pin 52 ↔ conector de caja A58 pin 5 (cable N152)",
+   "Continuidad, aislamiento a masa y a voltaje",
+   "Revisar conector de la caja por agua/corrosión"
+  ],
+  "sistema": "transmision",
+  "confiabilidad": "oficial",
+  "fuente": "https://rtsallison.com/Allison%205th_6th%20Gen%20Shift%20Selector%20Booklet_Digital.pdf ; https://www.macktrucks.com/media/files/body-builder/wiring-diagrams/mack-conventional-12volt-includes-us17-version-9-21628497-09-1.pdf"
+ },
+ {
+  "marca": "allison",
+  "aplica": "Allison 3000/4000 (4500 RDS) controles 5ª/6ª Gen; pines Mack GU 2013BP",
+  "ecu": "TCM",
+  "formato": "Allison-DTC",
+  "codigo": "P0970",
+  "descripcion": "Solenoide PCS3 – circuito BAJO",
+  "causas": [
+   "Solenoide en la caja",
+   "Arnés o conector de transmisión (roce, humedad)",
+   "Alimentación HSD"
+  ],
+  "comprobaciones": [
+   "Según diagrama Mack: TCM pin 52 ↔ conector de caja A58 pin 5 (cable N152)",
+   "Continuidad, aislamiento a masa y a voltaje",
+   "Revisar conector de la caja por agua/corrosión"
+  ],
+  "sistema": "transmision",
+  "confiabilidad": "oficial",
+  "fuente": "https://rtsallison.com/Allison%205th_6th%20Gen%20Shift%20Selector%20Booklet_Digital.pdf ; https://www.macktrucks.com/media/files/body-builder/wiring-diagrams/mack-conventional-12volt-includes-us17-version-9-21628497-09-1.pdf"
+ },
+ {
+  "marca": "allison",
+  "aplica": "Allison 3000/4000 (4500 RDS) controles 5ª/6ª Gen; pines Mack GU 2013BP",
+  "ecu": "TCM",
+  "formato": "Allison-DTC",
+  "codigo": "P0971",
+  "descripcion": "Solenoide PCS3 – circuito ALTO",
+  "causas": [
+   "Solenoide en la caja",
+   "Arnés o conector de transmisión (roce, humedad)",
+   "Alimentación HSD"
+  ],
+  "comprobaciones": [
+   "Según diagrama Mack: TCM pin 52 ↔ conector de caja A58 pin 5 (cable N152)",
+   "Continuidad, aislamiento a masa y a voltaje",
+   "Revisar conector de la caja por agua/corrosión"
+  ],
+  "sistema": "transmision",
+  "confiabilidad": "oficial",
+  "fuente": "https://rtsallison.com/Allison%205th_6th%20Gen%20Shift%20Selector%20Booklet_Digital.pdf ; https://www.macktrucks.com/media/files/body-builder/wiring-diagrams/mack-conventional-12volt-includes-us17-version-9-21628497-09-1.pdf"
+ },
+ {
+  "marca": "allison",
+  "aplica": "Allison 3000/4000 (4500 RDS) controles 5ª/6ª Gen; pines Mack GU 2013BP",
+  "ecu": "TCM",
+  "formato": "Allison-DTC",
+  "codigo": "P2718",
+  "descripcion": "Solenoide PCS4 – circuito ABIERTO",
+  "causas": [
+   "Solenoide en la caja",
+   "Arnés o conector de transmisión (roce, humedad)",
+   "Alimentación HSD"
+  ],
+  "comprobaciones": [
+   "Según diagrama Mack: TCM pin 33 ↔ conector de caja A58 pin 9 (cable N133)",
+   "Continuidad, aislamiento a masa y a voltaje",
+   "Revisar conector de la caja por agua/corrosión"
+  ],
+  "sistema": "transmision",
+  "confiabilidad": "oficial",
+  "fuente": "https://rtsallison.com/Allison%205th_6th%20Gen%20Shift%20Selector%20Booklet_Digital.pdf ; https://www.macktrucks.com/media/files/body-builder/wiring-diagrams/mack-conventional-12volt-includes-us17-version-9-21628497-09-1.pdf"
+ },
+ {
+  "marca": "allison",
+  "aplica": "Allison 3000/4000 (4500 RDS) controles 5ª/6ª Gen; pines Mack GU 2013BP",
+  "ecu": "TCM",
+  "formato": "Allison-DTC",
+  "codigo": "P2720",
+  "descripcion": "Solenoide PCS4 – circuito BAJO",
+  "causas": [
+   "Solenoide en la caja",
+   "Arnés o conector de transmisión (roce, humedad)",
+   "Alimentación HSD"
+  ],
+  "comprobaciones": [
+   "Según diagrama Mack: TCM pin 33 ↔ conector de caja A58 pin 9 (cable N133)",
+   "Continuidad, aislamiento a masa y a voltaje",
+   "Revisar conector de la caja por agua/corrosión"
+  ],
+  "sistema": "transmision",
+  "confiabilidad": "oficial",
+  "fuente": "https://rtsallison.com/Allison%205th_6th%20Gen%20Shift%20Selector%20Booklet_Digital.pdf ; https://www.macktrucks.com/media/files/body-builder/wiring-diagrams/mack-conventional-12volt-includes-us17-version-9-21628497-09-1.pdf"
+ },
+ {
+  "marca": "allison",
+  "aplica": "Allison 3000/4000 (4500 RDS) controles 5ª/6ª Gen; pines Mack GU 2013BP",
+  "ecu": "TCM",
+  "formato": "Allison-DTC",
+  "codigo": "P2721",
+  "descripcion": "Solenoide PCS4 – circuito ALTO",
+  "causas": [
+   "Solenoide en la caja",
+   "Arnés o conector de transmisión (roce, humedad)",
+   "Alimentación HSD"
+  ],
+  "comprobaciones": [
+   "Según diagrama Mack: TCM pin 33 ↔ conector de caja A58 pin 9 (cable N133)",
+   "Continuidad, aislamiento a masa y a voltaje",
+   "Revisar conector de la caja por agua/corrosión"
+  ],
+  "sistema": "transmision",
+  "confiabilidad": "oficial",
+  "fuente": "https://rtsallison.com/Allison%205th_6th%20Gen%20Shift%20Selector%20Booklet_Digital.pdf ; https://www.macktrucks.com/media/files/body-builder/wiring-diagrams/mack-conventional-12volt-includes-us17-version-9-21628497-09-1.pdf"
+ },
+ {
+  "marca": "allison",
+  "aplica": "Allison 3000/4000 (4500 RDS) controles 5ª/6ª Gen; pines Mack GU 2013BP",
+  "ecu": "TCM",
+  "formato": "Allison-DTC",
+  "codigo": "P2736",
+  "descripcion": "Solenoide PCS5 – circuito ABIERTO",
+  "causas": [
+   "Solenoide en la caja",
+   "Arnés o conector de transmisión (roce, humedad)",
+   "Alimentación HSD"
+  ],
+  "comprobaciones": [
+   "Según diagrama Mack: TCM pin 55 ↔ conector de caja A58 pin 2 (cable N155)",
+   "Continuidad, aislamiento a masa y a voltaje",
+   "Revisar conector de la caja por agua/corrosión"
+  ],
+  "sistema": "transmision",
+  "confiabilidad": "oficial",
+  "fuente": "https://rtsallison.com/Allison%205th_6th%20Gen%20Shift%20Selector%20Booklet_Digital.pdf ; https://www.macktrucks.com/media/files/body-builder/wiring-diagrams/mack-conventional-12volt-includes-us17-version-9-21628497-09-1.pdf"
+ },
+ {
+  "marca": "allison",
+  "aplica": "Allison 3000/4000 (4500 RDS) controles 5ª/6ª Gen; pines Mack GU 2013BP",
+  "ecu": "TCM",
+  "formato": "Allison-DTC",
+  "codigo": "P2738",
+  "descripcion": "Solenoide PCS5 – circuito BAJO",
+  "causas": [
+   "Solenoide en la caja",
+   "Arnés o conector de transmisión (roce, humedad)",
+   "Alimentación HSD"
+  ],
+  "comprobaciones": [
+   "Según diagrama Mack: TCM pin 55 ↔ conector de caja A58 pin 2 (cable N155)",
+   "Continuidad, aislamiento a masa y a voltaje",
+   "Revisar conector de la caja por agua/corrosión"
+  ],
+  "sistema": "transmision",
+  "confiabilidad": "oficial",
+  "fuente": "https://rtsallison.com/Allison%205th_6th%20Gen%20Shift%20Selector%20Booklet_Digital.pdf ; https://www.macktrucks.com/media/files/body-builder/wiring-diagrams/mack-conventional-12volt-includes-us17-version-9-21628497-09-1.pdf"
+ },
+ {
+  "marca": "allison",
+  "aplica": "Allison 3000/4000 (4500 RDS) controles 5ª/6ª Gen; pines Mack GU 2013BP",
+  "ecu": "TCM",
+  "formato": "Allison-DTC",
+  "codigo": "P2739",
+  "descripcion": "Solenoide PCS5 – circuito ALTO",
+  "causas": [
+   "Solenoide en la caja",
+   "Arnés o conector de transmisión (roce, humedad)",
+   "Alimentación HSD"
+  ],
+  "comprobaciones": [
+   "Según diagrama Mack: TCM pin 55 ↔ conector de caja A58 pin 2 (cable N155)",
+   "Continuidad, aislamiento a masa y a voltaje",
+   "Revisar conector de la caja por agua/corrosión"
+  ],
+  "sistema": "transmision",
+  "confiabilidad": "oficial",
+  "fuente": "https://rtsallison.com/Allison%205th_6th%20Gen%20Shift%20Selector%20Booklet_Digital.pdf ; https://www.macktrucks.com/media/files/body-builder/wiring-diagrams/mack-conventional-12volt-includes-us17-version-9-21628497-09-1.pdf"
+ },
+ {
+  "marca": "allison",
+  "aplica": "Allison 3000/4000 (4500 RDS) controles 5ª/6ª Gen; pines Mack GU 2013BP",
+  "ecu": "TCM",
+  "formato": "Allison-DTC",
+  "codigo": "P0703",
+  "descripcion": "Circuito del interruptor de freno",
+  "causas": [
+   "Señal de freno de servicio al TCM (pin 62)"
+  ],
+  "comprobaciones": [
+   "Verificar señal en TCM pin 62 al pisar freno (X06D-G)"
+  ],
+  "sistema": "electrico",
+  "confiabilidad": "oficial",
+  "fuente": "https://rtsallison.com/Allison%205th_6th%20Gen%20Shift%20Selector%20Booklet_Digital.pdf ; https://www.macktrucks.com/media/files/body-builder/wiring-diagrams/mack-conventional-12volt-includes-us17-version-9-21628497-09-1.pdf"
+ },
+ {
+  "marca": "allison",
+  "aplica": "Allison 3000/4000 (4500 RDS) controles 5ª/6ª Gen; pines Mack GU 2013BP",
+  "ecu": "TCM",
+  "formato": "Allison-DTC",
+  "codigo": "P0708",
+  "descripcion": "Sensor de rango de transmisión – circuito ALTO",
+  "causas": [
+   "Descripción oficial; causas detalladas solo en manual de troubleshooting Allison (licencia)"
+  ],
+  "comprobaciones": [
+   "Leer datos en vivo con Allison DOC®"
+  ],
+  "sistema": "transmision",
+  "confiabilidad": "oficial",
+  "fuente": "https://rtsallison.com/Allison%205th_6th%20Gen%20Shift%20Selector%20Booklet_Digital.pdf"
+ },
+ {
+  "marca": "allison",
+  "aplica": "Allison 3000/4000 (4500 RDS) controles 5ª/6ª Gen; pines Mack GU 2013BP",
+  "ecu": "TCM",
+  "formato": "Allison-DTC",
+  "codigo": "P071D",
+  "descripcion": "Falla de entrada de propósito general",
+  "causas": [
+   "Entrada digital del TCM activa en condición inválida (interruptores de carrocería/PTO cableados al TCM)"
+  ],
+  "comprobaciones": [
+   "Revisar entradas del conector de carrocero X06D (pines TCM 1, 2, 17, 21, 22, 23, 42, 43, 62)"
+  ],
+  "sistema": "electrico",
+  "confiabilidad": "oficial",
+  "fuente": "https://rtsallison.com/Allison%205th_6th%20Gen%20Shift%20Selector%20Booklet_Digital.pdf ; https://www.macktrucks.com/media/files/body-builder/wiring-diagrams/mack-conventional-12volt-includes-us17-version-9-21628497-09-1.pdf"
+ },
+ {
+  "marca": "allison",
+  "aplica": "Allison 3000/4000 (4500 RDS) controles 5ª/6ª Gen; pines Mack GU 2013BP",
+  "ecu": "TCM",
+  "formato": "Allison-DTC",
+  "codigo": "P071A",
+  "descripcion": "Entrada de neutro en detención falla en ON",
+  "causas": [
+   "Entrada auto-neutro (TCM 17) activa permanentemente"
+  ],
+  "comprobaciones": [
+   "Revisar circuito TCM 17 / X06D-P"
+  ],
+  "sistema": "electrico",
+  "confiabilidad": "oficial",
+  "fuente": "https://rtsallison.com/Allison%205th_6th%20Gen%20Shift%20Selector%20Booklet_Digital.pdf ; https://www.macktrucks.com/media/files/body-builder/wiring-diagrams/mack-conventional-12volt-includes-us17-version-9-21628497-09-1.pdf"
+ },
+ {
+  "marca": "allison",
+  "aplica": "Allison 3000/4000 (4500 RDS) controles 5ª/6ª Gen; pines Mack GU 2013BP",
+  "ecu": "TCM",
+  "formato": "Allison-DTC",
+  "codigo": "P2793",
+  "descripcion": "Circuito de dirección de cambio (selector)",
+  "causas": [
+   "Cable de señal de dirección 134 (selector pin 11)"
+  ],
+  "comprobaciones": [
+   "Continuidad del cable 134 entre selector y TCM"
+  ],
+  "sistema": "electrico",
+  "confiabilidad": "oficial",
+  "fuente": "https://rtsallison.com/Allison%205th_6th%20Gen%20Shift%20Selector%20Booklet_Digital.pdf ; https://www.kalmarottawa.com/49bee8/globalassets/media/279607/279607_OM8491EN_202109.pdf.pdf"
+ },
+ {
+  "marca": "allison",
+  "aplica": "Allison 3000/4000 (4500 RDS) controles 5ª/6ª Gen; pines Mack GU 2013BP",
+  "ecu": "TCM",
+  "formato": "Allison-DTC",
+  "codigo": "U0073",
+  "descripcion": "Bus de comunicación CAN 1 apagado (bus off)",
+  "causas": [
+   "Red CAN1/J1939 en corto o abierta",
+   "Resistencia de terminación faltante/sobrante"
+  ],
+  "comprobaciones": [
+   "Resistencia de la red: 50-70 Ω con llave OFF (J1939 pines 3/11 del conector de diagnóstico)",
+   "Pines CAN del TCM: CAN1 48/8/28 (J1939 backbone); CAN2 66/27/6 (DL2, selector J2284 pines 8/15)",
+   "Selector con doble cat-eye = falla J1939 selector-TCM; aún permite D/N/R por cable 134"
+  ],
+  "sistema": "electrico",
+  "confiabilidad": "oficial",
+  "fuente": "https://rtsallison.com/Allison%205th_6th%20Gen%20Shift%20Selector%20Booklet_Digital.pdf ; https://www.macktrucks.com/media/files/body-builder/wiring-diagrams/mack-conventional-12volt-includes-us17-version-9-21628497-09-1.pdf ; https://www.macktrucks.com/media/files/body-builder/2024/mack-section3-vecu4-pdf-final-1106.pdf"
+ },
+ {
+  "marca": "allison",
+  "aplica": "Allison 3000/4000 (4500 RDS) controles 5ª/6ª Gen; pines Mack GU 2013BP",
+  "ecu": "TCM",
+  "formato": "Allison-DTC",
+  "codigo": "U0074",
+  "descripcion": "Bus de comunicación CAN 2 apagado",
+  "causas": [
+   "Red CAN2/DL2 en corto o abierta"
+  ],
+  "comprobaciones": [
+   "Resistencia de la red: 50-70 Ω con llave OFF (J1939 pines 3/11 del conector de diagnóstico)",
+   "Pines CAN del TCM: CAN1 48/8/28 (J1939 backbone); CAN2 66/27/6 (DL2, selector J2284 pines 8/15)",
+   "Selector con doble cat-eye = falla J1939 selector-TCM; aún permite D/N/R por cable 134"
+  ],
+  "sistema": "electrico",
+  "confiabilidad": "oficial",
+  "fuente": "https://rtsallison.com/Allison%205th_6th%20Gen%20Shift%20Selector%20Booklet_Digital.pdf ; https://www.macktrucks.com/media/files/body-builder/wiring-diagrams/mack-conventional-12volt-includes-us17-version-9-21628497-09-1.pdf"
+ },
+ {
+  "marca": "allison",
+  "aplica": "Allison 3000/4000 (4500 RDS) controles 5ª/6ª Gen; pines Mack GU 2013BP",
+  "ecu": "TCM",
+  "formato": "Allison-DTC",
+  "codigo": "U0100",
+  "descripcion": "Pérdida de comunicación con ECM A",
+  "causas": [
+   "ECM sin alimentación (F38)",
+   "Red J1939"
+  ],
+  "comprobaciones": [
+   "Resistencia de la red: 50-70 Ω con llave OFF (J1939 pines 3/11 del conector de diagnóstico)",
+   "Pines CAN del TCM: CAN1 48/8/28 (J1939 backbone); CAN2 66/27/6 (DL2, selector J2284 pines 8/15)",
+   "Selector con doble cat-eye = falla J1939 selector-TCM; aún permite D/N/R por cable 134",
+   "Alimentación del ECM: F38 y relés EMS"
+  ],
+  "sistema": "electrico",
+  "confiabilidad": "oficial",
+  "fuente": "https://rtsallison.com/Allison%205th_6th%20Gen%20Shift%20Selector%20Booklet_Digital.pdf ; https://www.macktrucks.com/media/files/body-builder/wiring-diagrams/mack-conventional-12volt-includes-us17-version-9-21628497-09-1.pdf"
+ },
+ {
+  "marca": "allison",
+  "aplica": "Allison 3000/4000 (4500 RDS) controles 5ª/6ª Gen; pines Mack GU 2013BP",
+  "ecu": "TCM",
+  "formato": "Allison-DTC",
+  "codigo": "U0103",
+  "descripcion": "Pérdida de comunicación con módulo de cambios 1 (selector)",
+  "causas": [
+   "Selector sin alimentación (pines 13 B+/12 IGN/5 B−)",
+   "Red DL2 (J2284) selector-TCM"
+  ],
+  "comprobaciones": [
+   "Resistencia de la red: 50-70 Ω con llave OFF (J1939 pines 3/11 del conector de diagnóstico)",
+   "Pines CAN del TCM: CAN1 48/8/28 (J1939 backbone); CAN2 66/27/6 (DL2, selector J2284 pines 8/15)",
+   "Selector con doble cat-eye = falla J1939 selector-TCM; aún permite D/N/R por cable 134",
+   "Alimentación del selector A19D"
+  ],
+  "sistema": "electrico",
+  "confiabilidad": "oficial",
+  "fuente": "https://rtsallison.com/Allison%205th_6th%20Gen%20Shift%20Selector%20Booklet_Digital.pdf ; https://www.macktrucks.com/media/files/body-builder/wiring-diagrams/mack-conventional-12volt-includes-us17-version-9-21628497-09-1.pdf ; https://www.kalmarottawa.com/49bee8/globalassets/media/279607/279607_OM8491EN_202109.pdf.pdf"
+ },
+ {
+  "marca": "allison",
+  "aplica": "Allison 3000/4000 (4500 RDS) controles 5ª/6ª Gen; pines Mack GU 2013BP",
+  "ecu": "TCM",
+  "formato": "Allison-DTC",
+  "codigo": "U0304",
+  "descripcion": "Módulo de cambios 1 (selector) incompatible",
+  "causas": [
+   "Selector de otra generación (ver tabla de compatibilidad 5ª/6ª Gen)"
+  ],
+  "comprobaciones": [
+   "Verificar generación de selector y TCM"
+  ],
+  "sistema": "electrico",
+  "confiabilidad": "oficial",
+  "fuente": "https://rtsallison.com/Allison%205th_6th%20Gen%20Shift%20Selector%20Booklet_Digital.pdf"
+ },
+ {
+  "marca": "allison",
+  "aplica": "Allison 3000/4000 (4500 RDS) controles 5ª/6ª Gen; pines Mack GU 2013BP",
+  "ecu": "TCM",
+  "formato": "Allison-DTC",
+  "codigo": "U0404",
+  "descripcion": "Datos inválidos recibidos del módulo de cambios 1",
+  "causas": [
+   "Selector o comunicación"
+  ],
+  "comprobaciones": [
+   "Resistencia de la red: 50-70 Ω con llave OFF (J1939 pines 3/11 del conector de diagnóstico)",
+   "Pines CAN del TCM: CAN1 48/8/28 (J1939 backbone); CAN2 66/27/6 (DL2, selector J2284 pines 8/15)",
+   "Selector con doble cat-eye = falla J1939 selector-TCM; aún permite D/N/R por cable 134"
+  ],
+  "sistema": "electrico",
+  "confiabilidad": "oficial",
+  "fuente": "https://rtsallison.com/Allison%205th_6th%20Gen%20Shift%20Selector%20Booklet_Digital.pdf"
+ }
+]

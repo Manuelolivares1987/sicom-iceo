@@ -1,0 +1,133 @@
+{
+  "_nota": "Datos técnicos por familia de la Biblioteca Maestra (columna 'Familia biblioteca'). Sale de la investigación 2026-09-19 (conocimiento/*.md). Lo marcado 'verificar' es inferencia sin fuente oficial directa: confirmar en la placa del motor / etiqueta de emisiones / herramienta OEM.",
+  "Actros 3341": {
+    "motor": "Mercedes-Benz V6, N° de motor serie 541.9xx (familia OM 501 LA según el código de tipo — verificar en placa)",
+    "transmision": "Caja Telligent / Mercedes PowerShift (GS) — verificar si es automatizada o manual",
+    "emisiones": "Verificar en placa (Actros MP2/MP3 serie 930, 2012-2013)",
+    "ecus": "MR (motor), FR/CPC (vehículo), GS (caja), BS/EBS (frenos Telligent), INS (instrumento), PSM (módulo para carrocero), SCR si es BlueTec. Abreviaturas de falla en el display: MR, FR, GS, BS, SCR, PSM…",
+    "lectura_codigos": "Menú del computador de a bordo con las teclas del volante: Definições/Ajustes → Configuração → 'Validar menu diag.' → Ligar; luego menú Diagnóstico → 'Inform. de controlo'. Franja blanca = info, amarilla = falla leve, roja = grave (+STOP: detener). Los códigos numéricos MR/FR/GS de 4-5 dígitos requieren XENTRY/Star Diagnosis.",
+    "notas": "Recall airbag Takata Actros 2012-2017 (alerta SERNAC): consultar por VIN en el concesionario.",
+    "fuentes": [
+      "https://www.mercedes-benz-trucks.com.br/caminhoes/manuais"
+    ]
+  },
+  "Actros 3336 K": {
+    "motor": "Mercedes-Benz V6, N° de motor serie 541.97x (familia OM 501 LA según el código de tipo — verificar en placa)",
+    "transmision": "Telligent / Mercedes PowerShift (GS) — verificar versión; sincronización pequeña/grande y servicio de reserva en el manual Actros 932",
+    "emisiones": "Euro 5 BlueTec (SCR con AdBlue) probable para serie 932 2017-2019 — verificar en placa",
+    "ecus": "MR, FR/CPC, GS, BS/EBS, INS, PSM, SCR (BlueTec). Menú Diagnóstico lista todas las unidades montadas.",
+    "lectura_codigos": "Habilitar el menú: teclas del volante V/U → Definições → W/X Configuração → &/* 'Validar menu diag.' → W/X Ligar. Consultar: V/U → Diagnóstico → 'Inform. de controlo' (mensajes confirmados) o 'Diagnóstico' (unidades de control). Blanco = info, amarillo = falla leve, rojo = grave; con luz STOP detener. MIL BlueTec: parpadea = AdBlue agotado o falla con posible reducción de potencia; fija = falla de postratamiento. Códigos GS de sincronización (GS 01…) no se memorizan: anotarlos. Códigos numéricos detallados: XENTRY.",
+    "notas": "Recall airbag Takata Actros 2012-2017 (alerta SERNAC): consultar por VIN. Códigos '2 1011' / '2 8093' = hacer sincronización grande de la caja.",
+    "fuentes": [
+      "https://www.mercedes-benz-trucks.com.br/caminhoes/manuais"
+    ]
+  },
+  "Axor 2633 2633-45": {
+    "motor": "Mercedes-Benz OM 926 LA (serie 926.9, confirmado en esquema oficial MB Brasil)",
+    "transmision": "Verificar (manual o automatizada PowerShift)",
+    "emisiones": "Euro 5 BlueTec 5 (SCR con AdBlue/ARLA 32) — verificar en placa",
+    "ecus": "MR (OM 926), FR/CPC (versión Light o MPS: ver N° de pieza en el tablero), INS2014, ABS, PSM, SCR. Red CAN 1 vehículo, CAN 4 motor, CAN 12 SCR.",
+    "lectura_codigos": "Teclas del volante V/U → menú 'Eventos y Diagnóstico' → &/* Eventos → W/X 'Mensajes en el monitor' (primero y último); &/* Diagnóstico = lista de unidades de mando. Amarillo = seguir con restricciones y llevar a taller; rojo = detener. Caja automática con selector por teclas: & y * simultáneas 2 veces → códigos de 5 dígitos (MODE = siguiente, máx. 5). Tabla numérica de códigos: XENTRY / Jaltest / Texa.",
+    "notas": "Toma de diagnóstico X13: 6/14 = CAN H/L, 4-5 = masa, 7 = línea K, 8 = borne 15, 16 = borne 30. Ralentí de bomba: rpm fija 700-1200 con FR MPS (conector X4.1). No cortar baterías justo al apagar (limpieza de cañerías AdBlue).",
+    "fuentes": [
+      "https://www.mercedes-benz-trucks.com.br/caminhoes/manuais",
+      "https://web.archive.org/web/2015/http://mercedes-benz.com.br/resources/files/documentos/caminhoes/axor/manual-de-implementacao/manual-de-implementacao-euro-3-axor-es.pdf"
+    ]
+  },
+  "Atego 1624A 4x4": {
+    "motor": "Mercedes-Benz, N° de motor 902916… — familia no confirmada con fuente pública: verificar en placa",
+    "transmision": "Verificar",
+    "emisiones": "Verificar en placa (Atego 970, 2013)",
+    "ecus": "MR, FR/CPC, INS, ABS, PSM (y SCR si es BlueTec 5). Punto neutro CAN Z1/Z3: CAN 1 vehículo, CAN 4 motor, CAN 9 telemática, CAN 12 SCR.",
+    "lectura_codigos": "Si tiene INS2014: teclas del volante V/U → 'Eventos y Diagnóstico' → Eventos (mensajes) / Diagnóstico (unidades de mando). Amarillo = taller, rojo = detener. Códigos numéricos: XENTRY / Jaltest / Texa.",
+    "notas": "Toma de diagnóstico X13: 6/14 = CAN H/L, 4-5 = masa, 7 = línea K, 8 = borne 15 (F39), 16 = borne 30 (F10) — según manual de implementación Atego Euro 5.",
+    "fuentes": [
+      "https://web.archive.org/web/20140813204945/http://mercedes-benz.com.br/resources/files/documentos/caminhoes/atego/manual-de-implementacao/manual-de-implementacao-euro-5-atego-pt.pdf"
+    ]
+  },
+  "Accelo 1016-44": {
+    "motor": "Mercedes-Benz OM 924 LA (serie 924.9, confirmado en esquema oficial MB Brasil)",
+    "transmision": "Verificar",
+    "emisiones": "Euro 5 BlueTec 5 (SCR con AdBlue/ARLA 32) — verificar en placa",
+    "ecus": "MR (OM 924), FR/CPC, INS2014, ABS, PSM, SCR",
+    "lectura_codigos": "Teclas del volante → 'Eventos y Diagnóstico' → Eventos / Diagnóstico. 'CODE' o 'MR' al arrancar = inmovilizador: llave a OFF, luego a marcha y esperar 2 s; tras 5 intentos con llave no válida la espera aumenta 1 min por intento. Tabla numérica de códigos: XENTRY / Jaltest / Texa.",
+    "notas": "Fusibles F1-F42 y relés K121a/b/c en el manual de operación Accelo Euro 5. Toma de fuerza: conector X1.",
+    "fuentes": [
+      "https://www.mercedes-benz-trucks.com.br/caminhoes/manuais"
+    ]
+  },
+  "GU813": {
+    "motor": "Mack MP8 12,7 L (VIN AX38 / GR3: MP8 335-434 HP), EGR + turbo de geometría variable, especificación de exportación",
+    "transmision": "Allison 4500 RDS con retardador, controles 5ª generación (TCM Gen 5) — en los GR 2019 'autom' podría ser mDRIVE: verificar",
+    "emisiones": "Probable Euro III / Euro 4 SIN SCR ni AdBlue (exportación LatAm) — DPF no confirmado: verificar etiqueta del motor y escape",
+    "ecus": "VECU (detrás del panel D), EECU/ECM motor, TCM Allison, cluster/Co-Pilot, ABS WABCO, BBM (detrás de la tapa del motor). Redes J1939 y J1587 (60 Ω entre CAN-H/L).",
+    "lectura_codigos": "Motor/vehículo: display Co-Pilot con la palanca SELECT/ESCAPE/UP/DOWN; formatos MID-PID/SID-FMI (J1587) o SPN-FMI (J1939). La secuencia exacta del menú no está en fuentes públicas (manual V-MAC IV 21394651). Caja Allison: en el selector de botones ↑ y ↓ simultáneas 5 veces (pronósticos activos) o 2 veces (desactivados) → códigos d1-d5 ACTIVE/INACTIVE, MODE = siguiente; mantener MODE 3 s borra activos, 10 s borra todos. Anotar antes de borrar.",
+    "notas": "Año modelo: 10° carácter del VIN (E=2014, G=2016, K=2019, L=2020). Recalls NHTSA: 14V078000 (agua en módulo de distribución EPDM, riesgo de incendio) y 15V522000 (arnés de chasis). Fusible principal FM3 150 A.",
+    "fuentes": [
+      "https://www.macktrucks.com/media/files/parts-and-service/support/body-builders/manuals/heavy-duty/mack-section-0.pdf",
+      "https://www.mch.cl/granite-el-faenero-de-mack/",
+      "https://www.kalmarottawa.com/49bee8/globalassets/media/279607/279607_OM8491EN_202109.pdf.pdf"
+    ]
+  },
+  "VM 350": {
+    "motor": "Volvo D8K 8 L 6 cilindros 350 CV (fabricado en Curitiba, Brasil)",
+    "transmision": "Volvo I-Shift 12 velocidades (verificar en el camión)",
+    "emisiones": "Euro 5 (VM exportado a Chile, SCR con AdBlue) — confirmar DPF en la placa de emisiones",
+    "ecus": "Arquitectura Volvo: VMCU/VECU, EMS (motor), TECU (I-Shift), CIOM, BBM (carrocero), ABS/EBS, instrumento. Redes J1939.",
+    "lectura_codigos": "Display del instrumento → Mantenimiento → Diagnóstico (unidades de control y sus códigos) si tiene display DID; mensajes rojo = detener y apagar, amarillo = taller, blanco = próxima mantención. Formato SPN-FMI (J1939). Borrar códigos solo con Tech Tool. Guía del conductor exacta: driverguide.volvotrucks.com con los últimos 7 caracteres del VIN.",
+    "notas": "La guía del conductor del VM en el portal Volvo está vacía: NO aplicar las tablas de fusibles del FMX al VM. Fusibles: calcomanía de la central eléctrica o concesionario (Tech Tool). Euro 5: derrateo por AdBlue/SCR con códigos no borrables por 400 días (ver volvo.md).",
+    "fuentes": [
+      "https://elconstructor.com/una-nueva-version-de-camiones-semipesados-mas-eficientes-y-versatiles/",
+      "https://www.volvotrucks.cl/es-cl/trucks/information/handbook-online.html"
+    ]
+  },
+  "FMX 420": {
+    "motor": "Volvo D13C 420 CV (fabricado en Brasil)",
+    "transmision": "Volvo I-Shift (verificar versión)",
+    "emisiones": "Euro 5 / PROCONVE P7 con SCR (ARLA 32/AdBlue), SIN DPF ni regeneración — declarado en la guía del conductor de los chasis reales. Falla NOx/AdBlue: potencia reducida 40 %; códigos no borrables por 400 días",
+    "ecus": "VMCU, EMS, TECU (I-Shift), CIOM, BBM (carrocero), ACM, módulos de chasis, ABS/EBS. Central de fusibles F1-F91 y relés K01-K28.",
+    "lectura_codigos": "Nueva generación: tecla Menu del volante → NOTIFICATIONS (rojo = detener y apagar, reaparece a los 30 s; amarillo = reparar pronto; blanco = info) y MAINTENANCE. Classic/DID: display → Mantenimiento → Diagnóstico (unidades y códigos). Códigos completos SPN-FMI y borrado: Tech Tool por el conector OBD.",
+    "notas": "⚠️ Seguridad: si el interruptor de la toma de fuerza quedó encendido, la PTO SE ACTIVA SOLA al arrancar el motor (bombas, polibrazo, grúa): apagarlo antes de arrancar. Carga de fusibles máx. 70 %, tomas máx. 10 A. Verificar uso de PTO en Mantenimiento → Datos de uso (clave de reseteo de fábrica 0000). Euro 6: derrateo 25 % de par y 20 km/h por falla SCR.",
+    "fuentes": [
+      "https://driverguide.volvotrucks.com",
+      "https://vteu.webbase.cloud/driverguide/getTopicByChassi?chassi=A000FMX&l=en&topic=62361",
+      "https://vteu.webbase.cloud/driverguide/getTopicByChassi?chassi=ACL0FMX&l=en&topic=207874"
+    ]
+  },
+  "FMX 540": {
+    "motor": "Volvo D13C 540 CV (fabricado en Brasil)",
+    "transmision": "Volvo I-Shift (verificar versión)",
+    "emisiones": "Euro 5 / PROCONVE P7 con SCR (ARLA 32/AdBlue), SIN DPF ni regeneración — declarado en la guía del conductor de los chasis reales. Falla NOx/AdBlue: potencia reducida 40 %; códigos no borrables por 400 días",
+    "ecus": "VMCU, EMS, TECU (I-Shift), CIOM, BBM, ACM, módulos de chasis, ABS/EBS",
+    "lectura_codigos": "Igual que FMX 420: menú NOTIFICATIONS / MAINTENANCE (nueva generación) o Mantenimiento → Diagnóstico (DID). Códigos completos y borrado con Tech Tool.",
+    "notas": "⚠️ Seguridad: si el interruptor de la toma de fuerza quedó encendido, la PTO SE ACTIVA SOLA al arrancar el motor (bombas, polibrazo, grúa): apagarlo antes de arrancar. Carga de fusibles máx. 70 %, tomas máx. 10 A. ",
+    "fuentes": [
+      "https://driverguide.volvotrucks.com",
+      "https://vteu.webbase.cloud/driverguide/getTopicByChassi?chassi=A000FMX&l=en&topic=62361"
+    ]
+  },
+  "C440": {
+    "motor": "Renault DTI 13 (13 L, variante ENG-VE13 — plataforma del grupo Volvo)",
+    "transmision": "Optidriver (caja automatizada)",
+    "emisiones": "Probable Euro V con SCR (la guía por VIN incluye la sección 'motores Euro V') — confirmar en placa",
+    "ecus": "Plataforma del grupo Volvo (misma numeración de fusibles F01-F98 en la guía por VIN)",
+    "lectura_codigos": "Visualizador multifunción → Vehículo → C - Diagnóstico → Fallos (lista los códigos presentes); 'Referencias calculadores' = unidades de control y software; 'Antiarranque' = código dinámico para Techline. Formato de motor SPN-FMI (referencia D13 Volvo).",
+    "notas": "Guía del conductor oficial generada con el VIN VF630N358PD000096 (338 págs., español) en la biblioteca.",
+    "fuentes": [
+      "https://rt.webbase.cloud/driverguide/chassiNfo?chassi=VF630N358PD000096",
+      "https://driverguide.renault-trucks.com"
+    ]
+  },
+  "P450B": {
+    "motor": "Scania DC13 143, 450 hp (placa DC13 143 = Euro 5)",
+    "transmision": "Opticruise GRSO905R con retardador R3500; tomas de fuerza ED y EG",
+    "emisiones": "Euro 5 con SCR y SIN DPF (ficha técnica chilena P 450 B6X4HZ XT). Si la placa dice otro código DC13 → Euro 6 con DPF",
+    "ecus": "COO (coordinador, puente entre buses), EMS (motor), TMS/GMS (Opticruise), EBS/BMS, APS (aire), ICL (instrumento), BCI (carrocero). Buses CAN rojo/amarillo/verde; la herramienta se conecta al verde. Unidades 2025 con electrónica Gen 7: diagnóstico solo con SWS + VCI4.",
+    "lectura_codigos": "Vehículo detenido, contacto: botón de menú del volante → Settings/Ajustes → Information/Información → IVD (diagnóstico a bordo). Anotar unidad de control (EMS, TMS, EBS, APS, COO, BCI…), código y si está activo. Rojo = actuar de inmediato; amarillo = corregir pronto; blanco = info. Tabla de significados por ECU: SDP3 / SWS.",
+    "notas": "CAN externo del BCI: C493 pin 3 = CAN-L, pin 4 = CAN-H. Masas de carrocería en G46/G47 (nunca G32). Salidas del BCI máx. 3 A. Recall Australia REC-006566 (cajas G25-G38; probablemente no aplica a GRSO905R): consultar por VIN en Scania Chile.",
+    "fuentes": [
+      "https://fimaj.cl/wp-content/uploads/2025/06/FICHA-TECNICA-CAMION-SCANIA-P450B-6X4-XT.pdf",
+      "https://www.scania.com/content/dam/www/market/uk/about-us/brochures/truck/brochure/brochure-scania-next-gen-quick-guide.pdf"
+    ]
+  }
+}

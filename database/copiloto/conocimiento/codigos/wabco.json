@@ -1,0 +1,1263 @@
+[
+ {
+  "marca": "wabco",
+  "aplica": "Meritor WABCO ABS E-version (12V/24V; NA, p.ej. Mack GU813 si equipado - verificar ECU)",
+  "ecu": "ABS ECU WABCO E",
+  "formato": "ABS/EBS",
+  "codigo": "SID 1 FMI 1 (blink 3-2)",
+  "descripcion": "Sensor de rueda delantero izquierdo (LF): Entrehierro del sensor excesivo (señal baja pero legible)",
+  "causas": [
+   "Sensor alejado de la rueda dentada",
+   "Juego de rodamiento o descentramiento del cubo",
+   "Clip de retención del sensor débil"
+  ],
+  "comprobaciones": [
+   "Empujar el sensor hasta que toque la rueda dentada",
+   "Girar la rueda a 1/2 rev/s y verificar >=0,2 V AC",
+   "Revisar el montaje y los dientes de la rueda dentada, y el clip"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.wabco-customercentre.com/catalog/docs/mm0112_web_en.pdf"
+ },
+ {
+  "marca": "wabco",
+  "aplica": "Meritor WABCO ABS E-version (12V/24V; NA, p.ej. Mack GU813 si equipado - verificar ECU)",
+  "ecu": "ABS ECU WABCO E",
+  "formato": "ABS/EBS",
+  "codigo": "SID 1 FMI 2 (blink 5-2)",
+  "descripcion": "Sensor de rueda delantero izquierdo (LF): Tamaño de neumático incorrecto (diferencia de 10 % +/-2 % entre neumático y número de dientes)",
+  "causas": [
+   "Neumáticos de distinto tamaño",
+   "Número de dientes incorrecto",
+   "ECU programada para otro vehículo"
+  ],
+  "comprobaciones": [
+   "Verificar las medidas de los neumáticos",
+   "Contar los dientes de la rueda dentada",
+   "Verificar la parametrización de la ECU"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.wabco-customercentre.com/catalog/docs/mm0112_web_en.pdf"
+ },
+ {
+  "marca": "wabco",
+  "aplica": "Meritor WABCO ABS E-version (12V/24V; NA, p.ej. Mack GU813 si equipado - verificar ECU)",
+  "ecu": "ABS ECU WABCO E",
+  "formato": "ABS/EBS",
+  "codigo": "SID 1 FMI 4 (blink 4-2)",
+  "descripcion": "Sensor de rueda delantero izquierdo (LF): Sensor en corto a masa",
+  "causas": [
+   "Cable pelado a masa",
+   "Sensores izquierdo y derecho invertidos"
+  ],
+  "comprobaciones": [
+   "Verificar que no haya continuidad del sensor a masa",
+   "Medir 900-2000 ohm",
+   "Verificar que los cables izquierdo y derecho no estén cruzados"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.wabco-customercentre.com/catalog/docs/mm0112_web_en.pdf"
+ },
+ {
+  "marca": "wabco",
+  "aplica": "Meritor WABCO ABS E-version (12V/24V; NA, p.ej. Mack GU813 si equipado - verificar ECU)",
+  "ecu": "ABS ECU WABCO E",
+  "formato": "ABS/EBS",
+  "codigo": "SID 1 FMI 5 (blink 4-2)",
+  "descripcion": "Sensor de rueda delantero izquierdo (LF): Circuito del sensor abierto (sensor desconectado)",
+  "causas": [
+   "Conector suelto o dañado",
+   "Cable cortado"
+  ],
+  "comprobaciones": [
+   "Medir 900-2000 ohm desde la ECU",
+   "Revisar conectores y cable"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.wabco-customercentre.com/catalog/docs/mm0112_web_en.pdf"
+ },
+ {
+  "marca": "wabco",
+  "aplica": "Meritor WABCO ABS E-version (12V/24V; NA, p.ej. Mack GU813 si equipado - verificar ECU)",
+  "ecu": "ABS ECU WABCO E",
+  "formato": "ABS/EBS",
+  "codigo": "SID 1 FMI 7 (blink 6-2)",
+  "descripcion": "Sensor de rueda delantero izquierdo (LF): Rueda dentada defectuosa: la señal se pierde de forma periódica sobre 6 mph",
+  "causas": [
+   "Dientes dañados o faltantes",
+   "Corrosión o suciedad en la rueda dentada"
+  ],
+  "comprobaciones": [
+   "Inspeccionar la rueda dentada completa",
+   "Limpiar o reemplazar"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.wabco-customercentre.com/catalog/docs/mm0112_web_en.pdf"
+ },
+ {
+  "marca": "wabco",
+  "aplica": "Meritor WABCO ABS E-version (12V/24V; NA, p.ej. Mack GU813 si equipado - verificar ECU)",
+  "ecu": "ABS ECU WABCO E",
+  "formato": "ABS/EBS",
+  "codigo": "SID 1 FMI 10 (blink 3-2)",
+  "descripcion": "Sensor de rueda delantero izquierdo (LF): Pérdida temporal de la señal de velocidad (dropout)",
+  "causas": [
+   "Cabeza del sensor dañada",
+   "Clip o retención del sensor",
+   "Ruteo o fijación del cable",
+   "Rodamiento suelto"
+  ],
+  "comprobaciones": [
+   "Revisar el sensor y el clip",
+   "Girar la rueda a 1/2 rev/s y verificar >=0,2 V AC",
+   "Revisar el cable y el conector"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.wabco-customercentre.com/catalog/docs/mm0112_web_en.pdf"
+ },
+ {
+  "marca": "wabco",
+  "aplica": "Meritor WABCO ABS E-version (12V/24V; NA, p.ej. Mack GU813 si equipado - verificar ECU)",
+  "ecu": "ABS ECU WABCO E",
+  "formato": "ABS/EBS",
+  "codigo": "SID 1 FMI 11 (blink 5-2)",
+  "descripcion": "Sensor de rueda delantero izquierdo (LF): Velocidad anormal (chatter): freno arrastrando o vibración que afecta la señal",
+  "causas": [
+   "Contacto intermitente",
+   "Rueda dentada o soporte del sensor flojos",
+   "Vibración"
+  ],
+  "comprobaciones": [
+   "Revisar conectores y cableado",
+   "Revisar el montaje de la rueda dentada y del bloque del sensor",
+   "Verificar >=0,2 V AC"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.wabco-customercentre.com/catalog/docs/mm0112_web_en.pdf"
+ },
+ {
+  "marca": "wabco",
+  "aplica": "Meritor WABCO ABS E-version (12V/24V; NA, p.ej. Mack GU813 si equipado - verificar ECU)",
+  "ecu": "ABS ECU WABCO E",
+  "formato": "ABS/EBS",
+  "codigo": "SID 2 FMI 1 (blink 3-1)",
+  "descripcion": "Sensor de rueda delantero derecho (RF): Entrehierro del sensor excesivo (señal baja pero legible)",
+  "causas": [
+   "Sensor alejado de la rueda dentada",
+   "Juego de rodamiento o descentramiento del cubo",
+   "Clip de retención del sensor débil"
+  ],
+  "comprobaciones": [
+   "Empujar el sensor hasta que toque la rueda dentada",
+   "Girar la rueda a 1/2 rev/s y verificar >=0,2 V AC",
+   "Revisar el montaje y los dientes de la rueda dentada, y el clip"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.wabco-customercentre.com/catalog/docs/mm0112_web_en.pdf"
+ },
+ {
+  "marca": "wabco",
+  "aplica": "Meritor WABCO ABS E-version (12V/24V; NA, p.ej. Mack GU813 si equipado - verificar ECU)",
+  "ecu": "ABS ECU WABCO E",
+  "formato": "ABS/EBS",
+  "codigo": "SID 2 FMI 2 (blink 5-1)",
+  "descripcion": "Sensor de rueda delantero derecho (RF): Tamaño de neumático incorrecto (diferencia de 10 % +/-2 % entre neumático y número de dientes)",
+  "causas": [
+   "Neumáticos de distinto tamaño",
+   "Número de dientes incorrecto",
+   "ECU programada para otro vehículo"
+  ],
+  "comprobaciones": [
+   "Verificar las medidas de los neumáticos",
+   "Contar los dientes de la rueda dentada",
+   "Verificar la parametrización de la ECU"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.wabco-customercentre.com/catalog/docs/mm0112_web_en.pdf"
+ },
+ {
+  "marca": "wabco",
+  "aplica": "Meritor WABCO ABS E-version (12V/24V; NA, p.ej. Mack GU813 si equipado - verificar ECU)",
+  "ecu": "ABS ECU WABCO E",
+  "formato": "ABS/EBS",
+  "codigo": "SID 2 FMI 4 (blink 4-1)",
+  "descripcion": "Sensor de rueda delantero derecho (RF): Sensor en corto a masa",
+  "causas": [
+   "Cable pelado a masa",
+   "Sensores izquierdo y derecho invertidos"
+  ],
+  "comprobaciones": [
+   "Verificar que no haya continuidad del sensor a masa",
+   "Medir 900-2000 ohm",
+   "Verificar que los cables izquierdo y derecho no estén cruzados"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.wabco-customercentre.com/catalog/docs/mm0112_web_en.pdf"
+ },
+ {
+  "marca": "wabco",
+  "aplica": "Meritor WABCO ABS E-version (12V/24V; NA, p.ej. Mack GU813 si equipado - verificar ECU)",
+  "ecu": "ABS ECU WABCO E",
+  "formato": "ABS/EBS",
+  "codigo": "SID 2 FMI 5 (blink 4-1)",
+  "descripcion": "Sensor de rueda delantero derecho (RF): Circuito del sensor abierto (sensor desconectado)",
+  "causas": [
+   "Conector suelto o dañado",
+   "Cable cortado"
+  ],
+  "comprobaciones": [
+   "Medir 900-2000 ohm desde la ECU",
+   "Revisar conectores y cable"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.wabco-customercentre.com/catalog/docs/mm0112_web_en.pdf"
+ },
+ {
+  "marca": "wabco",
+  "aplica": "Meritor WABCO ABS E-version (12V/24V; NA, p.ej. Mack GU813 si equipado - verificar ECU)",
+  "ecu": "ABS ECU WABCO E",
+  "formato": "ABS/EBS",
+  "codigo": "SID 2 FMI 7 (blink 6-1)",
+  "descripcion": "Sensor de rueda delantero derecho (RF): Rueda dentada defectuosa: la señal se pierde de forma periódica sobre 6 mph",
+  "causas": [
+   "Dientes dañados o faltantes",
+   "Corrosión o suciedad en la rueda dentada"
+  ],
+  "comprobaciones": [
+   "Inspeccionar la rueda dentada completa",
+   "Limpiar o reemplazar"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.wabco-customercentre.com/catalog/docs/mm0112_web_en.pdf"
+ },
+ {
+  "marca": "wabco",
+  "aplica": "Meritor WABCO ABS E-version (12V/24V; NA, p.ej. Mack GU813 si equipado - verificar ECU)",
+  "ecu": "ABS ECU WABCO E",
+  "formato": "ABS/EBS",
+  "codigo": "SID 2 FMI 10 (blink 3-1)",
+  "descripcion": "Sensor de rueda delantero derecho (RF): Pérdida temporal de la señal de velocidad (dropout)",
+  "causas": [
+   "Cabeza del sensor dañada",
+   "Clip o retención del sensor",
+   "Ruteo o fijación del cable",
+   "Rodamiento suelto"
+  ],
+  "comprobaciones": [
+   "Revisar el sensor y el clip",
+   "Girar la rueda a 1/2 rev/s y verificar >=0,2 V AC",
+   "Revisar el cable y el conector"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.wabco-customercentre.com/catalog/docs/mm0112_web_en.pdf"
+ },
+ {
+  "marca": "wabco",
+  "aplica": "Meritor WABCO ABS E-version (12V/24V; NA, p.ej. Mack GU813 si equipado - verificar ECU)",
+  "ecu": "ABS ECU WABCO E",
+  "formato": "ABS/EBS",
+  "codigo": "SID 2 FMI 11 (blink 5-1)",
+  "descripcion": "Sensor de rueda delantero derecho (RF): Velocidad anormal (chatter): freno arrastrando o vibración que afecta la señal",
+  "causas": [
+   "Contacto intermitente",
+   "Rueda dentada o soporte del sensor flojos",
+   "Vibración"
+  ],
+  "comprobaciones": [
+   "Revisar conectores y cableado",
+   "Revisar el montaje de la rueda dentada y del bloque del sensor",
+   "Verificar >=0,2 V AC"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.wabco-customercentre.com/catalog/docs/mm0112_web_en.pdf"
+ },
+ {
+  "marca": "wabco",
+  "aplica": "Meritor WABCO ABS E-version (12V/24V; NA, p.ej. Mack GU813 si equipado - verificar ECU)",
+  "ecu": "ABS ECU WABCO E",
+  "formato": "ABS/EBS",
+  "codigo": "SID 3 FMI 1 (blink 3-4)",
+  "descripcion": "Sensor de rueda trasero izq. eje motriz (LR): Entrehierro del sensor excesivo (señal baja pero legible)",
+  "causas": [
+   "Sensor alejado de la rueda dentada",
+   "Juego de rodamiento o descentramiento del cubo",
+   "Clip de retención del sensor débil"
+  ],
+  "comprobaciones": [
+   "Empujar el sensor hasta que toque la rueda dentada",
+   "Girar la rueda a 1/2 rev/s y verificar >=0,2 V AC",
+   "Revisar el montaje y los dientes de la rueda dentada, y el clip"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.wabco-customercentre.com/catalog/docs/mm0112_web_en.pdf"
+ },
+ {
+  "marca": "wabco",
+  "aplica": "Meritor WABCO ABS E-version (12V/24V; NA, p.ej. Mack GU813 si equipado - verificar ECU)",
+  "ecu": "ABS ECU WABCO E",
+  "formato": "ABS/EBS",
+  "codigo": "SID 3 FMI 2 (blink 5-4)",
+  "descripcion": "Sensor de rueda trasero izq. eje motriz (LR): Tamaño de neumático incorrecto (diferencia de 10 % +/-2 % entre neumático y número de dientes)",
+  "causas": [
+   "Neumáticos de distinto tamaño",
+   "Número de dientes incorrecto",
+   "ECU programada para otro vehículo"
+  ],
+  "comprobaciones": [
+   "Verificar las medidas de los neumáticos",
+   "Contar los dientes de la rueda dentada",
+   "Verificar la parametrización de la ECU"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.wabco-customercentre.com/catalog/docs/mm0112_web_en.pdf"
+ },
+ {
+  "marca": "wabco",
+  "aplica": "Meritor WABCO ABS E-version (12V/24V; NA, p.ej. Mack GU813 si equipado - verificar ECU)",
+  "ecu": "ABS ECU WABCO E",
+  "formato": "ABS/EBS",
+  "codigo": "SID 3 FMI 4 (blink 4-4)",
+  "descripcion": "Sensor de rueda trasero izq. eje motriz (LR): Sensor en corto a masa",
+  "causas": [
+   "Cable pelado a masa",
+   "Sensores izquierdo y derecho invertidos"
+  ],
+  "comprobaciones": [
+   "Verificar que no haya continuidad del sensor a masa",
+   "Medir 900-2000 ohm",
+   "Verificar que los cables izquierdo y derecho no estén cruzados"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.wabco-customercentre.com/catalog/docs/mm0112_web_en.pdf"
+ },
+ {
+  "marca": "wabco",
+  "aplica": "Meritor WABCO ABS E-version (12V/24V; NA, p.ej. Mack GU813 si equipado - verificar ECU)",
+  "ecu": "ABS ECU WABCO E",
+  "formato": "ABS/EBS",
+  "codigo": "SID 3 FMI 5 (blink 4-4)",
+  "descripcion": "Sensor de rueda trasero izq. eje motriz (LR): Circuito del sensor abierto (sensor desconectado)",
+  "causas": [
+   "Conector suelto o dañado",
+   "Cable cortado"
+  ],
+  "comprobaciones": [
+   "Medir 900-2000 ohm desde la ECU",
+   "Revisar conectores y cable"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.wabco-customercentre.com/catalog/docs/mm0112_web_en.pdf"
+ },
+ {
+  "marca": "wabco",
+  "aplica": "Meritor WABCO ABS E-version (12V/24V; NA, p.ej. Mack GU813 si equipado - verificar ECU)",
+  "ecu": "ABS ECU WABCO E",
+  "formato": "ABS/EBS",
+  "codigo": "SID 3 FMI 7 (blink 6-4)",
+  "descripcion": "Sensor de rueda trasero izq. eje motriz (LR): Rueda dentada defectuosa: la señal se pierde de forma periódica sobre 6 mph",
+  "causas": [
+   "Dientes dañados o faltantes",
+   "Corrosión o suciedad en la rueda dentada"
+  ],
+  "comprobaciones": [
+   "Inspeccionar la rueda dentada completa",
+   "Limpiar o reemplazar"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.wabco-customercentre.com/catalog/docs/mm0112_web_en.pdf"
+ },
+ {
+  "marca": "wabco",
+  "aplica": "Meritor WABCO ABS E-version (12V/24V; NA, p.ej. Mack GU813 si equipado - verificar ECU)",
+  "ecu": "ABS ECU WABCO E",
+  "formato": "ABS/EBS",
+  "codigo": "SID 3 FMI 10 (blink 3-4)",
+  "descripcion": "Sensor de rueda trasero izq. eje motriz (LR): Pérdida temporal de la señal de velocidad (dropout)",
+  "causas": [
+   "Cabeza del sensor dañada",
+   "Clip o retención del sensor",
+   "Ruteo o fijación del cable",
+   "Rodamiento suelto"
+  ],
+  "comprobaciones": [
+   "Revisar el sensor y el clip",
+   "Girar la rueda a 1/2 rev/s y verificar >=0,2 V AC",
+   "Revisar el cable y el conector"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.wabco-customercentre.com/catalog/docs/mm0112_web_en.pdf"
+ },
+ {
+  "marca": "wabco",
+  "aplica": "Meritor WABCO ABS E-version (12V/24V; NA, p.ej. Mack GU813 si equipado - verificar ECU)",
+  "ecu": "ABS ECU WABCO E",
+  "formato": "ABS/EBS",
+  "codigo": "SID 3 FMI 11 (blink 5-4)",
+  "descripcion": "Sensor de rueda trasero izq. eje motriz (LR): Velocidad anormal (chatter): freno arrastrando o vibración que afecta la señal",
+  "causas": [
+   "Contacto intermitente",
+   "Rueda dentada o soporte del sensor flojos",
+   "Vibración"
+  ],
+  "comprobaciones": [
+   "Revisar conectores y cableado",
+   "Revisar el montaje de la rueda dentada y del bloque del sensor",
+   "Verificar >=0,2 V AC"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.wabco-customercentre.com/catalog/docs/mm0112_web_en.pdf"
+ },
+ {
+  "marca": "wabco",
+  "aplica": "Meritor WABCO ABS E-version (12V/24V; NA, p.ej. Mack GU813 si equipado - verificar ECU)",
+  "ecu": "ABS ECU WABCO E",
+  "formato": "ABS/EBS",
+  "codigo": "SID 4 FMI 1 (blink 3-3)",
+  "descripcion": "Sensor de rueda trasero der. eje motriz (RR): Entrehierro del sensor excesivo (señal baja pero legible)",
+  "causas": [
+   "Sensor alejado de la rueda dentada",
+   "Juego de rodamiento o descentramiento del cubo",
+   "Clip de retención del sensor débil"
+  ],
+  "comprobaciones": [
+   "Empujar el sensor hasta que toque la rueda dentada",
+   "Girar la rueda a 1/2 rev/s y verificar >=0,2 V AC",
+   "Revisar el montaje y los dientes de la rueda dentada, y el clip"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.wabco-customercentre.com/catalog/docs/mm0112_web_en.pdf"
+ },
+ {
+  "marca": "wabco",
+  "aplica": "Meritor WABCO ABS E-version (12V/24V; NA, p.ej. Mack GU813 si equipado - verificar ECU)",
+  "ecu": "ABS ECU WABCO E",
+  "formato": "ABS/EBS",
+  "codigo": "SID 4 FMI 2 (blink 5-3)",
+  "descripcion": "Sensor de rueda trasero der. eje motriz (RR): Tamaño de neumático incorrecto (diferencia de 10 % +/-2 % entre neumático y número de dientes)",
+  "causas": [
+   "Neumáticos de distinto tamaño",
+   "Número de dientes incorrecto",
+   "ECU programada para otro vehículo"
+  ],
+  "comprobaciones": [
+   "Verificar las medidas de los neumáticos",
+   "Contar los dientes de la rueda dentada",
+   "Verificar la parametrización de la ECU"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.wabco-customercentre.com/catalog/docs/mm0112_web_en.pdf"
+ },
+ {
+  "marca": "wabco",
+  "aplica": "Meritor WABCO ABS E-version (12V/24V; NA, p.ej. Mack GU813 si equipado - verificar ECU)",
+  "ecu": "ABS ECU WABCO E",
+  "formato": "ABS/EBS",
+  "codigo": "SID 4 FMI 4 (blink 4-3)",
+  "descripcion": "Sensor de rueda trasero der. eje motriz (RR): Sensor en corto a masa",
+  "causas": [
+   "Cable pelado a masa",
+   "Sensores izquierdo y derecho invertidos"
+  ],
+  "comprobaciones": [
+   "Verificar que no haya continuidad del sensor a masa",
+   "Medir 900-2000 ohm",
+   "Verificar que los cables izquierdo y derecho no estén cruzados"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.wabco-customercentre.com/catalog/docs/mm0112_web_en.pdf"
+ },
+ {
+  "marca": "wabco",
+  "aplica": "Meritor WABCO ABS E-version (12V/24V; NA, p.ej. Mack GU813 si equipado - verificar ECU)",
+  "ecu": "ABS ECU WABCO E",
+  "formato": "ABS/EBS",
+  "codigo": "SID 4 FMI 5 (blink 4-3)",
+  "descripcion": "Sensor de rueda trasero der. eje motriz (RR): Circuito del sensor abierto (sensor desconectado)",
+  "causas": [
+   "Conector suelto o dañado",
+   "Cable cortado"
+  ],
+  "comprobaciones": [
+   "Medir 900-2000 ohm desde la ECU",
+   "Revisar conectores y cable"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.wabco-customercentre.com/catalog/docs/mm0112_web_en.pdf"
+ },
+ {
+  "marca": "wabco",
+  "aplica": "Meritor WABCO ABS E-version (12V/24V; NA, p.ej. Mack GU813 si equipado - verificar ECU)",
+  "ecu": "ABS ECU WABCO E",
+  "formato": "ABS/EBS",
+  "codigo": "SID 4 FMI 7 (blink 6-3)",
+  "descripcion": "Sensor de rueda trasero der. eje motriz (RR): Rueda dentada defectuosa: la señal se pierde de forma periódica sobre 6 mph",
+  "causas": [
+   "Dientes dañados o faltantes",
+   "Corrosión o suciedad en la rueda dentada"
+  ],
+  "comprobaciones": [
+   "Inspeccionar la rueda dentada completa",
+   "Limpiar o reemplazar"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.wabco-customercentre.com/catalog/docs/mm0112_web_en.pdf"
+ },
+ {
+  "marca": "wabco",
+  "aplica": "Meritor WABCO ABS E-version (12V/24V; NA, p.ej. Mack GU813 si equipado - verificar ECU)",
+  "ecu": "ABS ECU WABCO E",
+  "formato": "ABS/EBS",
+  "codigo": "SID 4 FMI 10 (blink 3-3)",
+  "descripcion": "Sensor de rueda trasero der. eje motriz (RR): Pérdida temporal de la señal de velocidad (dropout)",
+  "causas": [
+   "Cabeza del sensor dañada",
+   "Clip o retención del sensor",
+   "Ruteo o fijación del cable",
+   "Rodamiento suelto"
+  ],
+  "comprobaciones": [
+   "Revisar el sensor y el clip",
+   "Girar la rueda a 1/2 rev/s y verificar >=0,2 V AC",
+   "Revisar el cable y el conector"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.wabco-customercentre.com/catalog/docs/mm0112_web_en.pdf"
+ },
+ {
+  "marca": "wabco",
+  "aplica": "Meritor WABCO ABS E-version (12V/24V; NA, p.ej. Mack GU813 si equipado - verificar ECU)",
+  "ecu": "ABS ECU WABCO E",
+  "formato": "ABS/EBS",
+  "codigo": "SID 4 FMI 11 (blink 5-3)",
+  "descripcion": "Sensor de rueda trasero der. eje motriz (RR): Velocidad anormal (chatter): freno arrastrando o vibración que afecta la señal",
+  "causas": [
+   "Contacto intermitente",
+   "Rueda dentada o soporte del sensor flojos",
+   "Vibración"
+  ],
+  "comprobaciones": [
+   "Revisar conectores y cableado",
+   "Revisar el montaje de la rueda dentada y del bloque del sensor",
+   "Verificar >=0,2 V AC"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.wabco-customercentre.com/catalog/docs/mm0112_web_en.pdf"
+ },
+ {
+  "marca": "wabco",
+  "aplica": "Meritor WABCO ABS E-version (12V/24V; NA, p.ej. Mack GU813 si equipado - verificar ECU)",
+  "ecu": "ABS ECU WABCO E",
+  "formato": "ABS/EBS",
+  "codigo": "SID 5 FMI 1 (blink 3-6)",
+  "descripcion": "Sensor de rueda izq. eje adicional: Entrehierro del sensor excesivo (señal baja pero legible)",
+  "causas": [
+   "Sensor alejado de la rueda dentada",
+   "Juego de rodamiento o descentramiento del cubo",
+   "Clip de retención del sensor débil"
+  ],
+  "comprobaciones": [
+   "Empujar el sensor hasta que toque la rueda dentada",
+   "Girar la rueda a 1/2 rev/s y verificar >=0,2 V AC",
+   "Revisar el montaje y los dientes de la rueda dentada, y el clip"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.wabco-customercentre.com/catalog/docs/mm0112_web_en.pdf"
+ },
+ {
+  "marca": "wabco",
+  "aplica": "Meritor WABCO ABS E-version (12V/24V; NA, p.ej. Mack GU813 si equipado - verificar ECU)",
+  "ecu": "ABS ECU WABCO E",
+  "formato": "ABS/EBS",
+  "codigo": "SID 5 FMI 5 (blink 4-6)",
+  "descripcion": "Sensor de rueda izq. eje adicional: Circuito del sensor abierto (sensor desconectado)",
+  "causas": [
+   "Conector suelto o dañado",
+   "Cable cortado"
+  ],
+  "comprobaciones": [
+   "Medir 900-2000 ohm desde la ECU",
+   "Revisar conectores y cable"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.wabco-customercentre.com/catalog/docs/mm0112_web_en.pdf"
+ },
+ {
+  "marca": "wabco",
+  "aplica": "Meritor WABCO ABS E-version (12V/24V; NA, p.ej. Mack GU813 si equipado - verificar ECU)",
+  "ecu": "ABS ECU WABCO E",
+  "formato": "ABS/EBS",
+  "codigo": "SID 6 FMI 1 (blink 3-5)",
+  "descripcion": "Sensor de rueda der. eje adicional: Entrehierro del sensor excesivo (señal baja pero legible)",
+  "causas": [
+   "Sensor alejado de la rueda dentada",
+   "Juego de rodamiento o descentramiento del cubo",
+   "Clip de retención del sensor débil"
+  ],
+  "comprobaciones": [
+   "Empujar el sensor hasta que toque la rueda dentada",
+   "Girar la rueda a 1/2 rev/s y verificar >=0,2 V AC",
+   "Revisar el montaje y los dientes de la rueda dentada, y el clip"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.wabco-customercentre.com/catalog/docs/mm0112_web_en.pdf"
+ },
+ {
+  "marca": "wabco",
+  "aplica": "Meritor WABCO ABS E-version (12V/24V; NA, p.ej. Mack GU813 si equipado - verificar ECU)",
+  "ecu": "ABS ECU WABCO E",
+  "formato": "ABS/EBS",
+  "codigo": "SID 6 FMI 5 (blink 4-5)",
+  "descripcion": "Sensor de rueda der. eje adicional: Circuito del sensor abierto (sensor desconectado)",
+  "causas": [
+   "Conector suelto o dañado",
+   "Cable cortado"
+  ],
+  "comprobaciones": [
+   "Medir 900-2000 ohm desde la ECU",
+   "Revisar conectores y cable"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.wabco-customercentre.com/catalog/docs/mm0112_web_en.pdf"
+ },
+ {
+  "marca": "wabco",
+  "aplica": "Meritor WABCO ABS E-version (12V/24V; NA, p.ej. Mack GU813 si equipado - verificar ECU)",
+  "ecu": "ABS ECU WABCO E",
+  "formato": "ABS/EBS",
+  "codigo": "SID 7 FMI 5 (blink 2-2)",
+  "descripcion": "Modulador ABS delantero izquierdo: circuito abierto",
+  "causas": [
+   "Conector del modulador",
+   "Cable entre la ECU y el modulador",
+   "Bobina de la válvula"
+  ],
+  "comprobaciones": [
+   "Entrada (IV) y salida (OV) a masa: 4,0-9,0 ohm en 12 V y 11,0-21,0 ohm en 24 V",
+   "Mismo valor desde la ECU, con +/-1 ohm",
+   "Arnés sin continuidad a batería ni a masa",
+   "Limpiar los contactos y volver a medir"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.wabco-customercentre.com/catalog/docs/mm0112_web_en.pdf"
+ },
+ {
+  "marca": "wabco",
+  "aplica": "Meritor WABCO ABS E-version (12V/24V; NA, p.ej. Mack GU813 si equipado - verificar ECU)",
+  "ecu": "ABS ECU WABCO E",
+  "formato": "ABS/EBS",
+  "codigo": "SID 7 FMI 6 (blink 2-2)",
+  "descripcion": "Modulador ABS delantero izquierdo: corto a masa",
+  "causas": [
+   "Conector del modulador",
+   "Cable entre la ECU y el modulador",
+   "Bobina de la válvula"
+  ],
+  "comprobaciones": [
+   "Entrada (IV) y salida (OV) a masa: 4,0-9,0 ohm en 12 V y 11,0-21,0 ohm en 24 V",
+   "Mismo valor desde la ECU, con +/-1 ohm",
+   "Arnés sin continuidad a batería ni a masa",
+   "Limpiar los contactos y volver a medir"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.wabco-customercentre.com/catalog/docs/mm0112_web_en.pdf"
+ },
+ {
+  "marca": "wabco",
+  "aplica": "Meritor WABCO ABS E-version (12V/24V; NA, p.ej. Mack GU813 si equipado - verificar ECU)",
+  "ecu": "ABS ECU WABCO E",
+  "formato": "ABS/EBS",
+  "codigo": "SID 8 FMI 3 (blink 2-1)",
+  "descripcion": "Modulador ABS delantero derecho: corto a batería",
+  "causas": [
+   "Conector del modulador",
+   "Cable entre la ECU y el modulador",
+   "Bobina de la válvula"
+  ],
+  "comprobaciones": [
+   "Entrada (IV) y salida (OV) a masa: 4,0-9,0 ohm en 12 V y 11,0-21,0 ohm en 24 V",
+   "Mismo valor desde la ECU, con +/-1 ohm",
+   "Arnés sin continuidad a batería ni a masa",
+   "Limpiar los contactos y volver a medir"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.wabco-customercentre.com/catalog/docs/mm0112_web_en.pdf"
+ },
+ {
+  "marca": "wabco",
+  "aplica": "Meritor WABCO ABS E-version (12V/24V; NA, p.ej. Mack GU813 si equipado - verificar ECU)",
+  "ecu": "ABS ECU WABCO E",
+  "formato": "ABS/EBS",
+  "codigo": "SID 8 FMI 5 (blink 2-1)",
+  "descripcion": "Modulador ABS delantero derecho: circuito abierto",
+  "causas": [
+   "Conector del modulador",
+   "Cable entre la ECU y el modulador",
+   "Bobina de la válvula"
+  ],
+  "comprobaciones": [
+   "Entrada (IV) y salida (OV) a masa: 4,0-9,0 ohm en 12 V y 11,0-21,0 ohm en 24 V",
+   "Mismo valor desde la ECU, con +/-1 ohm",
+   "Arnés sin continuidad a batería ni a masa",
+   "Limpiar los contactos y volver a medir"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.wabco-customercentre.com/catalog/docs/mm0112_web_en.pdf"
+ },
+ {
+  "marca": "wabco",
+  "aplica": "Meritor WABCO ABS E-version (12V/24V; NA, p.ej. Mack GU813 si equipado - verificar ECU)",
+  "ecu": "ABS ECU WABCO E",
+  "formato": "ABS/EBS",
+  "codigo": "SID 9 FMI 5 (blink 2-4)",
+  "descripcion": "Modulador ABS trasero izq. motriz: circuito abierto",
+  "causas": [
+   "Conector del modulador",
+   "Cable entre la ECU y el modulador",
+   "Bobina de la válvula"
+  ],
+  "comprobaciones": [
+   "Entrada (IV) y salida (OV) a masa: 4,0-9,0 ohm en 12 V y 11,0-21,0 ohm en 24 V",
+   "Mismo valor desde la ECU, con +/-1 ohm",
+   "Arnés sin continuidad a batería ni a masa",
+   "Limpiar los contactos y volver a medir"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.wabco-customercentre.com/catalog/docs/mm0112_web_en.pdf"
+ },
+ {
+  "marca": "wabco",
+  "aplica": "Meritor WABCO ABS E-version (12V/24V; NA, p.ej. Mack GU813 si equipado - verificar ECU)",
+  "ecu": "ABS ECU WABCO E",
+  "formato": "ABS/EBS",
+  "codigo": "SID 9 FMI 6 (blink 2-4)",
+  "descripcion": "Modulador ABS trasero izq. motriz: corto a masa",
+  "causas": [
+   "Conector del modulador",
+   "Cable entre la ECU y el modulador",
+   "Bobina de la válvula"
+  ],
+  "comprobaciones": [
+   "Entrada (IV) y salida (OV) a masa: 4,0-9,0 ohm en 12 V y 11,0-21,0 ohm en 24 V",
+   "Mismo valor desde la ECU, con +/-1 ohm",
+   "Arnés sin continuidad a batería ni a masa",
+   "Limpiar los contactos y volver a medir"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.wabco-customercentre.com/catalog/docs/mm0112_web_en.pdf"
+ },
+ {
+  "marca": "wabco",
+  "aplica": "Meritor WABCO ABS E-version (12V/24V; NA, p.ej. Mack GU813 si equipado - verificar ECU)",
+  "ecu": "ABS ECU WABCO E",
+  "formato": "ABS/EBS",
+  "codigo": "SID 10 FMI 3 (blink 2-3)",
+  "descripcion": "Modulador ABS trasero der. motriz: corto a batería",
+  "causas": [
+   "Conector del modulador",
+   "Cable entre la ECU y el modulador",
+   "Bobina de la válvula"
+  ],
+  "comprobaciones": [
+   "Entrada (IV) y salida (OV) a masa: 4,0-9,0 ohm en 12 V y 11,0-21,0 ohm en 24 V",
+   "Mismo valor desde la ECU, con +/-1 ohm",
+   "Arnés sin continuidad a batería ni a masa",
+   "Limpiar los contactos y volver a medir"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.wabco-customercentre.com/catalog/docs/mm0112_web_en.pdf"
+ },
+ {
+  "marca": "wabco",
+  "aplica": "Meritor WABCO ABS E-version (12V/24V; NA, p.ej. Mack GU813 si equipado - verificar ECU)",
+  "ecu": "ABS ECU WABCO E",
+  "formato": "ABS/EBS",
+  "codigo": "SID 10 FMI 5 (blink 2-3)",
+  "descripcion": "Modulador ABS trasero der. motriz: circuito abierto",
+  "causas": [
+   "Conector del modulador",
+   "Cable entre la ECU y el modulador",
+   "Bobina de la válvula"
+  ],
+  "comprobaciones": [
+   "Entrada (IV) y salida (OV) a masa: 4,0-9,0 ohm en 12 V y 11,0-21,0 ohm en 24 V",
+   "Mismo valor desde la ECU, con +/-1 ohm",
+   "Arnés sin continuidad a batería ni a masa",
+   "Limpiar los contactos y volver a medir"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.wabco-customercentre.com/catalog/docs/mm0112_web_en.pdf"
+ },
+ {
+  "marca": "wabco",
+  "aplica": "Meritor WABCO ABS E-version (12V/24V; NA, p.ej. Mack GU813 si equipado - verificar ECU)",
+  "ecu": "ABS ECU WABCO E",
+  "formato": "ABS/EBS",
+  "codigo": "SID 11 FMI 5 (blink 2-6)",
+  "descripcion": "Modulador ABS izq. eje adicional: circuito abierto",
+  "causas": [
+   "Conector del modulador",
+   "Cable entre la ECU y el modulador",
+   "Bobina de la válvula"
+  ],
+  "comprobaciones": [
+   "Entrada (IV) y salida (OV) a masa: 4,0-9,0 ohm en 12 V y 11,0-21,0 ohm en 24 V",
+   "Mismo valor desde la ECU, con +/-1 ohm",
+   "Arnés sin continuidad a batería ni a masa",
+   "Limpiar los contactos y volver a medir"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.wabco-customercentre.com/catalog/docs/mm0112_web_en.pdf"
+ },
+ {
+  "marca": "wabco",
+  "aplica": "Meritor WABCO ABS E-version (12V/24V; NA, p.ej. Mack GU813 si equipado - verificar ECU)",
+  "ecu": "ABS ECU WABCO E",
+  "formato": "ABS/EBS",
+  "codigo": "SID 11 FMI 6 (blink 2-6)",
+  "descripcion": "Modulador ABS izq. eje adicional: corto a masa",
+  "causas": [
+   "Conector del modulador",
+   "Cable entre la ECU y el modulador",
+   "Bobina de la válvula"
+  ],
+  "comprobaciones": [
+   "Entrada (IV) y salida (OV) a masa: 4,0-9,0 ohm en 12 V y 11,0-21,0 ohm en 24 V",
+   "Mismo valor desde la ECU, con +/-1 ohm",
+   "Arnés sin continuidad a batería ni a masa",
+   "Limpiar los contactos y volver a medir"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.wabco-customercentre.com/catalog/docs/mm0112_web_en.pdf"
+ },
+ {
+  "marca": "wabco",
+  "aplica": "Meritor WABCO ABS E-version (12V/24V; NA, p.ej. Mack GU813 si equipado - verificar ECU)",
+  "ecu": "ABS ECU WABCO E",
+  "formato": "ABS/EBS",
+  "codigo": "SID 12 FMI 3 (blink 2-5)",
+  "descripcion": "Modulador ABS der. eje adicional: corto a batería",
+  "causas": [
+   "Conector del modulador",
+   "Cable entre la ECU y el modulador",
+   "Bobina de la válvula"
+  ],
+  "comprobaciones": [
+   "Entrada (IV) y salida (OV) a masa: 4,0-9,0 ohm en 12 V y 11,0-21,0 ohm en 24 V",
+   "Mismo valor desde la ECU, con +/-1 ohm",
+   "Arnés sin continuidad a batería ni a masa",
+   "Limpiar los contactos y volver a medir"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.wabco-customercentre.com/catalog/docs/mm0112_web_en.pdf"
+ },
+ {
+  "marca": "wabco",
+  "aplica": "Meritor WABCO ABS E-version (12V/24V; NA, p.ej. Mack GU813 si equipado - verificar ECU)",
+  "ecu": "ABS ECU WABCO E",
+  "formato": "ABS/EBS",
+  "codigo": "SID 12 FMI 5 (blink 2-5)",
+  "descripcion": "Modulador ABS der. eje adicional: circuito abierto",
+  "causas": [
+   "Conector del modulador",
+   "Cable entre la ECU y el modulador",
+   "Bobina de la válvula"
+  ],
+  "comprobaciones": [
+   "Entrada (IV) y salida (OV) a masa: 4,0-9,0 ohm en 12 V y 11,0-21,0 ohm en 24 V",
+   "Mismo valor desde la ECU, con +/-1 ohm",
+   "Arnés sin continuidad a batería ni a masa",
+   "Limpiar los contactos y volver a medir"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.wabco-customercentre.com/catalog/docs/mm0112_web_en.pdf"
+ },
+ {
+  "marca": "wabco",
+  "aplica": "Meritor WABCO ABS E-version (12V/24V; NA, p.ej. Mack GU813 si equipado - verificar ECU)",
+  "ecu": "ABS ECU WABCO E",
+  "formato": "ABS/EBS",
+  "codigo": "SID 13 FMI 3 (blink 7-3)",
+  "descripcion": "Salida del relé del retardador o del freno motor en corto a batería",
+  "causas": [
+   "Cableado del relé del tercer freno (retardador, freno motor o de escape)"
+  ],
+  "comprobaciones": [
+   "Verificar que no haya continuidad entre la salida del relé y la alimentación"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.wabco-customercentre.com/catalog/docs/mm0112_web_en.pdf"
+ },
+ {
+  "marca": "wabco",
+  "aplica": "Meritor WABCO ABS E-version (12V/24V; NA, p.ej. Mack GU813 si equipado - verificar ECU)",
+  "ecu": "ABS ECU WABCO E",
+  "formato": "ABS/EBS",
+  "codigo": "SID 13 FMI 5 (blink 7-3)",
+  "descripcion": "Salida del relé del retardador en circuito abierto",
+  "causas": [
+   "Cableado del relé del tercer freno (retardador, freno motor o de escape)"
+  ],
+  "comprobaciones": [
+   "Buscar cables o conectores cortados",
+   "Verificar que las conexiones estén bien asentadas"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.wabco-customercentre.com/catalog/docs/mm0112_web_en.pdf"
+ },
+ {
+  "marca": "wabco",
+  "aplica": "Meritor WABCO ABS E-version (12V/24V; NA, p.ej. Mack GU813 si equipado - verificar ECU)",
+  "ecu": "ABS ECU WABCO E",
+  "formato": "ABS/EBS",
+  "codigo": "SID 13 FMI 6 (blink 7-3)",
+  "descripcion": "Salida del relé del retardador en corto a masa",
+  "causas": [
+   "Cableado del relé del tercer freno (retardador, freno motor o de escape)"
+  ],
+  "comprobaciones": [
+   "Verificar que no haya continuidad entre la salida del relé y masa"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.wabco-customercentre.com/catalog/docs/mm0112_web_en.pdf"
+ },
+ {
+  "marca": "wabco",
+  "aplica": "Meritor WABCO ABS E-version (12V/24V; NA, p.ej. Mack GU813 si equipado - verificar ECU)",
+  "ecu": "ABS ECU WABCO E",
+  "formato": "ABS/EBS",
+  "codigo": "SID 18 FMI 6 (blink 7-2)",
+  "descripcion": "Válvula de frenado activo (ABV) del eje motriz, ATC: corto",
+  "causas": [
+   "Solenoide ABV/ATC",
+   "Arnés"
+  ],
+  "comprobaciones": [
+   "Medir 7,0-14,0 ohm entre la alimentación y el común de la ABV en 12 V (26,3-49,0 ohm en 24 V)"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.wabco-customercentre.com/catalog/docs/mm0112_web_en.pdf"
+ },
+ {
+  "marca": "wabco",
+  "aplica": "Meritor WABCO ABS E-version (12V/24V; NA, p.ej. Mack GU813 si equipado - verificar ECU)",
+  "ecu": "ABS ECU WABCO E",
+  "formato": "ABS/EBS",
+  "codigo": "SID 19 FMI 5 (blink 7-6)",
+  "descripcion": "Válvula de frenado activo del eje delantero: circuito abierto",
+  "causas": [
+   "Solenoide ABV",
+   "Arnés"
+  ],
+  "comprobaciones": [
+   "Medir 7,0-14,0 ohm en 12 V o 26,3-49,0 ohm en 24 V"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.wabco-customercentre.com/catalog/docs/mm0112_web_en.pdf"
+ },
+ {
+  "marca": "wabco",
+  "aplica": "Meritor WABCO ABS E-version (12V/24V; NA, p.ej. Mack GU813 si equipado - verificar ECU)",
+  "ecu": "ABS ECU WABCO E",
+  "formato": "ABS/EBS",
+  "codigo": "SID 23 FMI 5 (blink 7-4)",
+  "descripcion": "Lámpara de advertencia ABS: la salida no detecta carga (abierta)",
+  "causas": [
+   "Ampolleta quemada",
+   "Cable de la lámpara cortado"
+  ],
+  "comprobaciones": [
+   "Verificar que la lámpara ABS funcione en el autotest al dar contacto"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.wabco-customercentre.com/catalog/docs/mm0112_web_en.pdf"
+ },
+ {
+  "marca": "wabco",
+  "aplica": "Meritor WABCO ABS E-version (12V/24V; NA, p.ej. Mack GU813 si equipado - verificar ECU)",
+  "ecu": "ABS ECU WABCO E",
+  "formato": "ABS/EBS",
+  "codigo": "SID 55 FMI 3 (blink 7-7)",
+  "descripcion": "Sensor de presión de freno: circuito en corto a voltaje",
+  "causas": [
+   "Sensor de presión de freno",
+   "Interruptor de luz de freno",
+   "Arnés"
+  ],
+  "comprobaciones": [
+   "Revisar el cableado del sensor de presión",
+   "Verificar que no haya una señal de frenado permanente"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.wabco-customercentre.com/catalog/docs/mm0112_web_en.pdf"
+ },
+ {
+  "marca": "wabco",
+  "aplica": "Meritor WABCO ABS E-version (12V/24V; NA, p.ej. Mack GU813 si equipado - verificar ECU)",
+  "ecu": "ABS ECU WABCO E",
+  "formato": "ABS/EBS",
+  "codigo": "SID 55 FMI 5 (blink 7-7)",
+  "descripcion": "Sensor de presión de freno: circuito abierto o en corto a masa",
+  "causas": [
+   "Sensor de presión de freno",
+   "Interruptor de luz de freno",
+   "Arnés"
+  ],
+  "comprobaciones": [
+   "Verificar 8,0-16,0 V entre los pines 1 y 2 del arnés del sensor"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.wabco-customercentre.com/catalog/docs/mm0112_web_en.pdf"
+ },
+ {
+  "marca": "wabco",
+  "aplica": "Meritor WABCO ABS E-version (12V/24V; NA, p.ej. Mack GU813 si equipado - verificar ECU)",
+  "ecu": "ABS ECU WABCO E",
+  "formato": "ABS/EBS",
+  "codigo": "SID 55 FMI 7 (blink 7-7)",
+  "descripcion": "Sensor de presión de freno o interruptor de luz de freno (BLS) no plausible",
+  "causas": [
+   "Sensor de presión de freno",
+   "Interruptor de luz de freno",
+   "Arnés"
+  ],
+  "comprobaciones": [
+   "Revisar la instalación, el cable y el conector del interruptor de luz de freno"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.wabco-customercentre.com/catalog/docs/mm0112_web_en.pdf"
+ },
+ {
+  "marca": "wabco",
+  "aplica": "Meritor WABCO ABS E-version (12V/24V; NA, p.ej. Mack GU813 si equipado - verificar ECU)",
+  "ecu": "ABS ECU WABCO E",
+  "formato": "ABS/EBS",
+  "codigo": "SID 231 FMI 2 (blink 7-1)",
+  "descripcion": "Supervisión de la velocidad del vehículo VSC1 (J1939) no plausible",
+  "causas": [
+   "Neumáticos incorrectos",
+   "ECU de otra aplicación"
+  ],
+  "comprobaciones": [
+   "Verificar el tamaño de neumáticos y que la ECU corresponda al vehículo"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.wabco-customercentre.com/catalog/docs/mm0112_web_en.pdf"
+ },
+ {
+  "marca": "wabco",
+  "aplica": "Meritor WABCO ABS E-version (12V/24V; NA, p.ej. Mack GU813 si equipado - verificar ECU)",
+  "ecu": "ABS ECU WABCO E",
+  "formato": "ABS/EBS",
+  "codigo": "SID 231 FMI 5 (blink 7-1)",
+  "descripcion": "Enlace de datos SAE J1939",
+  "causas": [
+   "Cableado J1939",
+   "Otra ECU sin comunicación"
+  ],
+  "comprobaciones": [
+   "Si la ABS es la única ECU sin comunicación, revisar el cableado J1939 entre la ABS y el backbone"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.wabco-customercentre.com/catalog/docs/mm0112_web_en.pdf"
+ },
+ {
+  "marca": "wabco",
+  "aplica": "Meritor WABCO ABS E-version (12V/24V; NA, p.ej. Mack GU813 si equipado - verificar ECU)",
+  "ecu": "ABS ECU WABCO E",
+  "formato": "ABS/EBS",
+  "codigo": "SID 231 FMI 12 (blink 7-1)",
+  "descripcion": "SAE J1939: falla interna de comunicación",
+  "causas": [
+   "Cableado J1939"
+  ],
+  "comprobaciones": [
+   "Verificar el cableado J1939 entre la ECU ABS y el backbone"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.wabco-customercentre.com/catalog/docs/mm0112_web_en.pdf"
+ },
+ {
+  "marca": "wabco",
+  "aplica": "Meritor WABCO ABS E-version (12V/24V; NA, p.ej. Mack GU813 si equipado - verificar ECU)",
+  "ecu": "ABS ECU WABCO E",
+  "formato": "ABS/EBS",
+  "codigo": "SID 251 FMI 3 (blink 8-2)",
+  "descripcion": "Sobrevoltaje de alimentación medido por más de 5 s",
+  "causas": [
+   "Alternador o regulador",
+   "Batería de 24 V en una ECU de 12 V",
+   "Cableado o masa corroídos"
+  ],
+  "comprobaciones": [
+   "Medir el voltaje de batería e ignición con carga",
+   "Revisar el alternador",
+   "Verificar que el voltaje de la ECU corresponda al del vehículo"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.wabco-customercentre.com/catalog/docs/mm0112_web_en.pdf"
+ },
+ {
+  "marca": "wabco",
+  "aplica": "Meritor WABCO ABS E-version (12V/24V; NA, p.ej. Mack GU813 si equipado - verificar ECU)",
+  "ecu": "ABS ECU WABCO E",
+  "formato": "ABS/EBS",
+  "codigo": "SID 253 FMI 2 (blink 8-2)",
+  "descripcion": "Configuración de la ECU o EEPROM: parámetros de rueda incorrectos o cargas detectadas en salidas que deberían estar abiertas",
+  "causas": [
+   "ECU equivocada para el vehículo",
+   "Parámetros de neumático o de dientes fuera de rango"
+  ],
+  "comprobaciones": [
+   "Verificar el número de sensores y moduladores contra el tipo de ECU",
+   "Verificar que la medida de rueda instalada coincida con el parámetro de la ECU"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.wabco-customercentre.com/catalog/docs/mm0112_web_en.pdf"
+ },
+ {
+  "marca": "wabco",
+  "aplica": "Meritor WABCO ABS E-version (12V/24V; NA, p.ej. Mack GU813 si equipado - verificar ECU)",
+  "ecu": "ABS ECU WABCO E",
+  "formato": "ABS/EBS",
+  "codigo": "SID 253 FMI 13 (blink 8-4)",
+  "descripcion": "Error de configuración del sistema ABS (lo memorizado no coincide con el arnés)",
+  "causas": [
+   "Sensores o moduladores faltantes o sobrantes"
+  ],
+  "comprobaciones": [
+   "Comparar el número de sensores y moduladores y el cableado con el tipo de ECU"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.wabco-customercentre.com/catalog/docs/mm0112_web_en.pdf"
+ },
+ {
+  "marca": "wabco",
+  "aplica": "Meritor WABCO ABS E-version (12V/24V; NA, p.ej. Mack GU813 si equipado - verificar ECU)",
+  "ecu": "ABS ECU WABCO E",
+  "formato": "ABS/EBS",
+  "codigo": "SID 254 FMI 5 (blink 8-4)",
+  "descripcion": "La ECU no detecta cargas (moduladores no conectados)",
+  "causas": [
+   "Moduladores desconectados",
+   "Fusible"
+  ],
+  "comprobaciones": [
+   "Revisar que los moduladores estén conectados",
+   "Revisar fusibles"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.wabco-customercentre.com/catalog/docs/mm0112_web_en.pdf"
+ },
+ {
+  "marca": "wabco",
+  "aplica": "Meritor WABCO ABS E-version (12V/24V; NA, p.ej. Mack GU813 si equipado - verificar ECU)",
+  "ecu": "ABS ECU WABCO E",
+  "formato": "ABS/EBS",
+  "codigo": "SID 254 FMI 8 (blink 7-1)",
+  "descripcion": "Deslizamiento excesivo (p. ej., vehículo en dinamómetro)",
+  "causas": [
+   "Prueba en banco o dinamómetro con ATC activo"
+  ],
+  "comprobaciones": [
+   "Usar el comando de diagnóstico 'Disable ATC' en el dinamómetro"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.wabco-customercentre.com/catalog/docs/mm0112_web_en.pdf"
+ },
+ {
+  "marca": "wabco",
+  "aplica": "Meritor WABCO ABS E-version (12V/24V; NA, p.ej. Mack GU813 si equipado - verificar ECU)",
+  "ecu": "ABS ECU WABCO E",
+  "formato": "ABS/EBS",
+  "codigo": "SID 254 FMI 12 (blink 8-3)",
+  "descripcion": "Error interno de la ECU",
+  "causas": [
+   "Falla interna o transitoria de la ECU"
+  ],
+  "comprobaciones": [
+   "Resetear ciclando la ignición o desde TOOLBOX",
+   "Si persiste, reemplazar la ECU"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.wabco-customercentre.com/catalog/docs/mm0112_web_en.pdf"
+ },
+ {
+  "marca": "wabco",
+  "aplica": "Meritor WABCO ABS E-version (12V/24V; NA, p.ej. Mack GU813 si equipado - verificar ECU)",
+  "ecu": "ABS ECU WABCO E",
+  "formato": "ABS/EBS",
+  "codigo": "SID 254 FMI 13 (blink 8-6)",
+  "descripcion": "Acelerómetro RSC no plausible",
+  "causas": [
+   "ECU mal fijada, desnivelada o en mala ubicación"
+  ],
+  "comprobaciones": [
+   "Verificar el montaje, la nivelación y la ubicación de la ECU"
+  ],
+  "sistema": "frenos",
+  "confiabilidad": "oficial",
+  "fuente": "https://www.wabco-customercentre.com/catalog/docs/mm0112_web_en.pdf"
+ }
+]
