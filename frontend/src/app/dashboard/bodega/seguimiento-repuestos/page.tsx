@@ -46,6 +46,103 @@ function AgingBadge({ dias }: { dias: number }) {
   </span>
 }
 
+// [21-09] Pedido del jefe de taller: «ver en bodega cuánto tiempo están los
+// equipos sin que lleguen los repuestos». La tabla cuenta días por repuesto; acá
+// se junta por EQUIPO: lo que falta llegar (por comprar u OC solicitada) y
+// cuánto lleva esperando lo más antiguo. Lo recibido ya llegó y no cuenta.
+function esperaRepuesto(f: OTRecursoSeguimiento) {
+  return !f.es_insumo_taller && (f.por_comprar || f.estado === 'en_compra')
+}
+
+type EquipoEsperando = {
+  clave: string
+  patente: string | null
+  codigo: string | null
+  nombre: string | null
+  ots: string[]
+  items: number
+  porComprar: number
+  enCompra: number
+  dias: number
+  etaAtrasada: boolean
+}
+
+function EquiposEsperando({ filas, seleccionado, onSel }: {
+  filas: OTRecursoSeguimiento[]
+  seleccionado: string | null
+  onSel: (clave: string | null) => void
+}) {
+  const equipos = useMemo(() => {
+    const m = new Map<string, EquipoEsperando>()
+    const hoy = new Date().toISOString().slice(0, 10)
+    for (const f of filas) {
+      if (!esperaRepuesto(f)) continue
+      const clave = f.activo_codigo ?? f.activo_patente ?? f.ot_folio
+      const e = m.get(clave) ?? {
+        clave, patente: f.activo_patente, codigo: f.activo_codigo, nombre: f.activo_nombre,
+        ots: [], items: 0, porComprar: 0, enCompra: 0, dias: 0, etaAtrasada: false,
+      }
+      if (!e.ots.includes(f.ot_folio)) e.ots.push(f.ot_folio)
+      e.items += 1
+      if (f.estado === 'en_compra') e.enCompra += 1; else e.porComprar += 1
+      e.dias = Math.max(e.dias, f.dias_desde_solicitud)
+      if (f.estado === 'en_compra' && f.oc_fecha_entrega && f.oc_fecha_entrega < hoy) e.etaAtrasada = true
+      m.set(clave, e)
+    }
+    return Array.from(m.values()).sort((a, b) => b.dias - a.dias)
+  }, [filas])
+
+  if (equipos.length === 0) return null
+
+  return (
+    <Card>
+      <CardContent className="p-4">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h2 className="flex items-center gap-2 text-sm font-bold text-gray-900">
+            <Clock className="h-4 w-4 text-red-600" />
+            Equipos esperando repuestos ({equipos.length})
+          </h2>
+          <p className="text-[11px] text-gray-500">
+            Días desde que se pidió el repuesto más antiguo que aún no llega. Toca un equipo para ver sus repuestos.
+          </p>
+        </div>
+        <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          {equipos.map((e) => {
+            const activo = seleccionado === e.clave
+            const cls = e.dias >= 7 ? 'border-red-300 bg-red-50' : e.dias >= 3 ? 'border-amber-300 bg-amber-50' : 'border-gray-200 bg-white'
+            return (
+              <button key={e.clave} onClick={() => onSel(activo ? null : e.clave)}
+                      className={`rounded-lg border p-2.5 text-left transition ${cls} ${activo ? 'ring-2 ring-orange-500' : 'hover:shadow-sm'}`}>
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="font-mono text-sm font-bold text-gray-900">{e.patente ?? e.codigo}</div>
+                    <div className="truncate text-[11px] text-gray-500">
+                      {[e.patente ? e.codigo : null, e.nombre].filter(Boolean).join(' · ')}
+                    </div>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <div className={`text-xl font-bold leading-none ${e.dias >= 7 ? 'text-red-700' : e.dias >= 3 ? 'text-amber-700' : 'text-gray-700'}`}>
+                      {e.dias}
+                    </div>
+                    <div className="text-[10px] text-gray-500">{e.dias === 1 ? 'día' : 'días'}</div>
+                  </div>
+                </div>
+                <div className="mt-1.5 text-[11px] text-gray-600">
+                  {e.items} repuesto{e.items === 1 ? '' : 's'} sin llegar
+                  {e.porComprar > 0 && <> · {e.porComprar} por comprar</>}
+                  {e.enCompra > 0 && <> · {e.enCompra} con OC</>}
+                  {e.etaAtrasada && <span className="ml-1 font-semibold text-red-600">· OC atrasada</span>}
+                </div>
+                <div className="mt-0.5 font-mono text-[10px] text-gray-400">{e.ots.join(' · ')}</div>
+              </button>
+            )
+          })}
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
 // Buscador/creador de producto para pedidos en texto libre.
 function VincularProducto({ recurso, onDone }: { recurso: OTRecursoSeguimiento; onDone: () => void }) {
   const toast = useToast()
@@ -151,6 +248,7 @@ export default function SeguimientoRepuestosPage() {
   })
 
   const [filtro, setFiltro] = useState<Filtro>('por_comprar')
+  const [equipoSel, setEquipoSel] = useState<string | null>(null)
   const [sel, setSel] = useState<Set<string>>(new Set())
   const [vincular, setVincular] = useState<OTRecursoSeguimiento | null>(null)
   // [03-09] Correo a compras con autorización explícita (fase de pruebas).
@@ -196,6 +294,10 @@ export default function SeguimientoRepuestosPage() {
 
   const lista = useMemo(() => {
     const all = (filas ?? []).filter((f) => f.estado !== 'rechazado')
+    if (equipoSel) {
+      return all.filter((f) => esperaRepuesto(f)
+        && (f.activo_codigo ?? f.activo_patente ?? f.ot_folio) === equipoSel)
+    }
     switch (filtro) {
       case 'pedidos':     return all.filter((f) => f.estado === 'solicitado')
       case 'por_comprar': return all.filter((f) => f.por_comprar)
@@ -203,7 +305,7 @@ export default function SeguimientoRepuestosPage() {
       case 'recibido':    return all.filter((f) => f.estado === 'recibido')
       default:            return all
     }
-  }, [filas, filtro])
+  }, [filas, filtro, equipoSel])
 
   const counts = useMemo(() => {
     const all = (filas ?? []).filter((f) => f.estado !== 'rechazado')
@@ -244,14 +346,22 @@ export default function SeguimientoRepuestosPage() {
         </div>
       </div>
 
+      <EquiposEsperando filas={filas ?? []} seleccionado={equipoSel} onSel={setEquipoSel} />
+
       <div className="flex flex-wrap gap-2">
         {FILTROS.map(([k, l]) => (
-          <button key={k} onClick={() => setFiltro(k)}
+          <button key={k} onClick={() => { setFiltro(k); setEquipoSel(null) }}
                   className={`rounded-full border px-3 py-1 text-xs ${
-                    filtro === k ? 'bg-orange-600 text-white border-orange-600' : 'bg-white hover:bg-gray-50'}`}>
+                    filtro === k && !equipoSel ? 'bg-orange-600 text-white border-orange-600' : 'bg-white hover:bg-gray-50'}`}>
             {l} ({counts[k]})
           </button>
         ))}
+        {equipoSel && (
+          <button onClick={() => setEquipoSel(null)}
+                  className="flex items-center gap-1 rounded-full border border-orange-600 bg-orange-600 px-3 py-1 text-xs text-white">
+            Esperando: {equipoSel} <X className="h-3 w-3" />
+          </button>
+        )}
       </div>
 
       {filtro === 'pedidos' && counts.pedidos > 0 && (
