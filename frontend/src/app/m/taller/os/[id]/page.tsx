@@ -13,7 +13,7 @@
 // de repuesto va amarrado al hallazgo y lo evalúa el jefe (ciclo MIG197/497).
 // La nota general va a las notas de la OT, que el jefe puede convertir en NC.
 
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -199,6 +199,12 @@ export default function OsDetallePage() {
   const osId = params?.id as string
   const online = useNetworkStatus()
   const qc = useQueryClient()
+  // [21-09] El jefe la abre desde la OT del panel (?desde=panel): «Volver» lo
+  // devuelve a esa OT y no a la tira del taller.
+  const [desdePanel, setDesdePanel] = useState(false)
+  useEffect(() => {
+    setDesdePanel(new URLSearchParams(window.location.search).get('desde') === 'panel')
+  }, [])
 
   const { data: os, isLoading, error } = useQuery({
     queryKey: ['os-detalle', osId],
@@ -260,8 +266,9 @@ export default function OsDetallePage() {
 
   return (
     <div className="p-3 space-y-3">
-      <Link href="/m/taller" className="inline-flex items-center gap-1 text-sm text-gray-500">
-        <ArrowLeft className="h-4 w-4" /> Taller
+      <Link href={desdePanel ? `/dashboard/ordenes-trabajo/${os.ot_id}` : '/m/taller'}
+            className="inline-flex items-center gap-1 text-sm text-gray-500">
+        <ArrowLeft className="h-4 w-4" /> {desdePanel ? `Volver a la ${os.ot_folio}` : 'Taller'}
       </Link>
 
       {/* Cabecera — la misma lógica de la OT: qué equipo, qué día, cuánto */}

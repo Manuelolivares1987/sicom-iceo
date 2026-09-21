@@ -2929,6 +2929,12 @@ function OrdenesDeServicioPanel({ otId }: { otId: string }) {
                     : 'Sin responsable ni trabajo registrado'}
               </p>
               <div className="mt-1 flex flex-wrap items-center gap-3">
+                {/* [21-09] El jefe la abre desde acá, sin buscarla por el día
+                    en la tira semanal: es la misma página que ejecuta el mecánico. */}
+                <Link href={`/m/taller/os/${os.id}?desde=panel`}
+                      className="rounded bg-blue-600 px-2 py-0.5 text-[11px] font-semibold text-white hover:bg-blue-700">
+                  Abrir la OS
+                </Link>
                 {os.quienes && (
                   <button onClick={() => setVerPersonas(verPersonas === os.id ? null : os.id)}
                           className="text-[11px] font-medium text-blue-600 underline">

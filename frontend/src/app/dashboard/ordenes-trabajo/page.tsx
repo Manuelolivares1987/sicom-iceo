@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { Search, Plus, ChevronDown, Eye } from 'lucide-react'
 import { CrearOTModal } from '@/components/ot/crear-ot-modal'
+import { OSAbiertasCard } from '@/components/ot/os-abiertas-card'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -277,6 +278,10 @@ export default function OrdenesTrabajoPage() {
           Nueva OT
         </Button>
       </div>
+
+      {/* [21-09] Las OS abiertas a la vista, sin buscarlas por el día. El RPC no
+          filtra por faena: quien está acotado a una no la ve. */}
+      {!faenaSolo && <OSAbiertasCard />}
 
       {/* Filters */}
       <Card>
