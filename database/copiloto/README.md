@@ -137,6 +137,25 @@ Opcional en Netlify: `COPILOTO_EFFORT` (`low|medium|high`, default `medium`).
 uso. Si queda INACTIVE, el copiloto responde sin manuales (no se cae).
 Reactivarlo en supabase.com → proyecto → *Restore*.
 
+## Kaufmann Asesor Virtual (2026-09-21)
+
+`asesor.kaufmann.cl` (cuenta Pillado) publica por modelo: información técnica
+(manuales de taller, planos eléctricos, diagnóstico), pautas de mantenimiento
+y garantías. Axor, Atego, Accelo, Fuso Canter, Freightliner M2-106, aljibes y
+Actros Euro IV-V (la carpeta `Mercedes ACTROS` ya había salido de acá: el
+número inicial del archivo es el id de Kaufmann).
+
+- 371 archivos nuevos (+102 PDF dentro de las pautas ZIP/RAR) en
+  `Mantenimiento/Manuales/_Kaufmann Asesor 2026-09/<Modelo>/<pestaña>/`,
+  nombrados `<id>_<Modelo>_<archivo>` para que la ingesta asigne marca/modelo.
+- **No se suben los PDF al storage** (el plan free es 1 GB): los archivos de
+  `/uploads/` de Kaufmann son públicos, así que `copiloto_documentos.url_fuente`
+  apunta al original y la cita abre `…pdf#page=N`. 458 documentos enlazados.
+  Si Kaufmann los pone tras login, el texto sigue en el corpus y la copia
+  local queda en el Desktop.
+- Inventario: la página se recorre desde el navegador con sesión (las fichas
+  por modelo están en `/vehicles/<id>`; los checkbox de cada fila traen el id).
+
 ## Fase 3 (pendiente)
 
 - OCR de los PDF escaneados (con las imágenes de página, Claude ya puede leerlos por visión).

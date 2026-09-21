@@ -63,6 +63,8 @@ function clasificar(ruta, nombre) {
 
   if (r.includes('mercedes actros')) { marca = 'mercedes-benz'; modelo = 'actros' }
   else if (n.includes('accelo')) { marca = 'mercedes-benz'; modelo = 'accelo' }
+  // Kaufmann Asesor 2026-09-21: los archivos llevan «<id>_<Modelo>_» adelante.
+  else if (/freightliner|m2[ -]?106/.test(n)) { marca = 'freightliner'; modelo = 'm2-106' }
   else if (/mack|granite|gu ?813|mdrive|maxitorque|mp8/.test(n) || r.includes('\\mack') || r.includes('/mack')) { marca = 'mack' }
   else if (/scania|p ?450/.test(n) || r.includes('scania')) { marca = 'scania'; modelo = 'p450b' }
   else if (/vm ?350/.test(n)) { marca = 'volvo'; modelo = 'vm-350' }
