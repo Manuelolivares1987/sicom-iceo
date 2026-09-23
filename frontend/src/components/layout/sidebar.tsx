@@ -275,6 +275,9 @@ const navGroups: NavGroup[] = [
       { label: 'Informes Recepción', href: '/dashboard/flota/recepcion', icon: FileText, module: 'flota' },
       { label: 'Jornada', href: '/dashboard/flota/jornada', icon: Timer, module: 'flota' },
       { label: 'Mapa GPS', href: '/dashboard/flota/mapa', icon: Satellite, module: 'flota', badge: 'Nuevo' },
+      // [MIG571] Camiones cuyo GPS se calló. Nace de KVWD-27 (110 días mudo).
+      { label: 'Centinela GPS', href: '/dashboard/flota/centinela', icon: ShieldAlert, module: 'flota', badge: 'NUEVO',
+        tooltip: 'Camiones que dejaron de reportar GPS: crítico, acuse y cierre con motivo' },
       { label: 'Sugerencias estado (GPS)', href: '/dashboard/flota/sugerencias', icon: Satellite, module: 'flota', badge: 'Nuevo' },
       { label: 'Check-List Entrega', href: '/dashboard/flota/checklist-salida', icon: ClipboardCheck, module: 'flota', badge: 'V02' },
       { label: 'Estado Flota', href: '/dashboard/flota/estado-flota', icon: ShieldCheck, module: 'flota', badge: 'Nuevo' },

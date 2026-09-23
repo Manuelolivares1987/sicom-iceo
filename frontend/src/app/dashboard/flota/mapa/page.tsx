@@ -185,6 +185,11 @@ export default function MapaFlotaPage() {
           <CardContent>
             <p className="text-xs text-red-700 mb-3">
               Estos activos están facturados a cliente pero no podemos verificar ubicación. Coordinar con cliente para diagnóstico del tracker.
+              {' '}
+              {/* [MIG571] Acá solo se ven; en el Centinela se toman, se escalan y se cierran con motivo. */}
+              <Link href="/dashboard/flota/centinela" className="font-semibold underline hover:text-red-900">
+                Gestionarlos en Centinela GPS →
+              </Link>
             </p>
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
