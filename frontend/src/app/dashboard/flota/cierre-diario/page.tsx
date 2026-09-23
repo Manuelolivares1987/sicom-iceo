@@ -76,7 +76,11 @@ export default function CierreDiarioPage() {
       contrato_id: edits[r.activo_id]?.contrato_id ?? null,
     }))
     const res = await confirmar.mutateAsync({ fecha, items })
-    setOkMsg(`Día ${fecha} confirmado: ${res.confirmados} equipos. Estado comercial y contratos propagados.`)
+    const omit = res.omitidos_prueba_vida ?? []
+    setOkMsg(`Día ${fecha} confirmado: ${res.confirmados} equipos. Estado comercial y contratos propagados.`
+      + (omit.length
+        ? ` Quedaron SIN confirmar por falta de prueba de vida: ${omit.join(', ')}. Confírmalos con justificación en Sugerencias estado (GPS).`
+        : ''))
   }
 
   return (

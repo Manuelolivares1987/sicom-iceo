@@ -13,8 +13,9 @@ export function useSugerenciasEstado(fecha: string) {
 export function useConfirmarEstado() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ activoId, fecha, estado }: { activoId: string; fecha: string; estado: string }) =>
-      confirmarEstadoDia(activoId, fecha, estado),
+    mutationFn: ({ activoId, fecha, estado, justificacion }:
+      { activoId: string; fecha: string; estado: string; justificacion?: string }) =>
+      confirmarEstadoDia(activoId, fecha, estado, justificacion),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['sugerencias-estado'] })
       qc.invalidateQueries({ queryKey: ['matriz-estados-flota'] })
