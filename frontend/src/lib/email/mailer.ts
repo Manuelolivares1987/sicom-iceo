@@ -9,14 +9,19 @@ import nodemailer from 'nodemailer'
 //    Outlook, masivo + cuenta gratuita + suplantación de la empresa: va a
 //    correo no deseado. Enviado desde un buzón propio del tenant llega como
 //    correo interno, a la bandeja de entrada.
-//    Desde 2026 Microsoft retiró el SMTP con usuario y contraseña (Basic Auth):
-//    por eso Graph con una app registrada (client credentials), no SMTP.
+//    Graph con una app registrada (client credentials), no SMTP con usuario y
+//    contraseña: Microsoft lo deja desactivado por defecto desde el 31-12-2026
+//    y anunciará su retiro final en 2027 (se reactiva a mano, pero es prestado).
 //      MS_TENANT_ID      → Id. de directorio (inquilino) de Entra ID
 //      MS_CLIENT_ID      → Id. de aplicación (cliente) de la app «SICOM Correo»
 //      MS_CLIENT_SECRET  → secreto de cliente de esa app
 //      MS_SENDER         → buzón que envía, ej. sicom@pilladoempresas.cl
-//    La app necesita el permiso de APLICACIÓN Mail.Send con consentimiento de
-//    administrador, restringido a ese buzón (ApplicationAccessPolicy).
+//    El permiso se da en EXCHANGE, no en Entra ID: RBAC for Applications, rol
+//    «Application Mail.Send» con alcance solo a MS_SENDER. Si además se da
+//    Mail.Send en Entra ID, la app puede enviar como CUALQUIER buzón.
+//
+//    Puente mientras tanto (sin código): SMTP_HOST=smtp.office365.com,
+//    SMTP_PORT=587 y un buzón con licencia y SMTP AUTH habilitado.
 //
 // 2) SMTP (Gmail) — respaldo mientras no esté configurado lo anterior.
 //      SMTP_USER / SMTP_PASS (App Password) / SMTP_HOST / SMTP_PORT / MAIL_FROM
