@@ -34,7 +34,11 @@ type Incidente = {
   cliente: string | null
   operacion: string | null
   estado_comercial: string | null
-  regla: 'corte_en_marcha' | 'sin_senal'
+  regla: 'corte_en_marcha' | 'sin_senal' | 'fuera_de_zona' | 'fuera_de_horario'
+  /** [MIG572] Texto de la situación para zona/horario. */
+  detalle: string | null
+  horas_fuera: number | null
+  abierto_en: string
   severidad: 'vigilar' | 'alto' | 'critico'
   estado: 'abierto' | 'acusado' | 'cerrado'
   ultimo_contacto: string | null
@@ -60,6 +64,8 @@ type Payload = {
   recuperados: Incidente[]
   abiertos?: Incidente[]
   sin_geocerca?: { patente: string | null; codigo: string | null; cliente: string | null; contrato: string | null }[]
+  /** [MIG572] Contratos cuya zona falta o no está verificada, y arrendados sin contrato. */
+  zonas_por_verificar?: { contrato: string; cliente: string | null; problema: string; equipos: string | null }[]
 }
 
 const esc = (s: unknown) =>
@@ -83,6 +89,7 @@ const mapa = (lat: number | null, lng: number | null, texto = 'Ver mapa') =>
 
 /** Cómo estaba el camión cuando el tracker se calló: la pista de si es sospechoso. */
 const alCortarse = (i: Incidente) => {
+  if (i.regla === 'fuera_de_zona' || i.regla === 'fuera_de_horario') return esc(i.detalle ?? '')
   const bat = i.bateria_pct != null ? `batería ${Math.round(i.bateria_pct)}%` : null
   if (i.regla === 'corte_en_marcha') {
     const vel = i.velocidad_kmh && i.velocidad_kmh > 0 ? `a ${Math.round(i.velocidad_kmh)} km/h` : 'detenido'
@@ -106,12 +113,16 @@ function tablaIncidentes(xs: Incidente[], conSeveridad = false) {
     return `<tr>
       ${celda(`<b>${esc(equipo)}</b>${conSeveridad ? ` ${chipSev(i.severidad)}` : ''}<br><span style="color:#9ca3af;font-size:11px">${esc(i.nombre ?? '')}</span>`, z)}
       ${celda(`${esc(i.cliente ?? '—')}<br><span style="color:#9ca3af;font-size:11px">${esc(i.estado_comercial ?? '')}${i.operacion ? ` · ${esc(i.operacion)}` : ''}</span>`, z)}
-      ${celda(`<b style="color:${MARCA.rojo}">${fmtSilencio(i.horas_sin_contacto)}</b><br><span style="color:#9ca3af;font-size:11px">desde ${fmtFechaHora(i.ultimo_contacto)}</span>`, z)}
+      ${celda(i.regla === 'fuera_de_zona'
+        ? `<b style="color:${MARCA.rojo}">fuera hace ${fmtSilencio(i.horas_fuera)}</b>`
+        : i.regla === 'fuera_de_horario'
+        ? `<b style="color:${MARCA.ambar}">fuera de horario</b><br><span style="color:#9ca3af;font-size:11px">${fmtFechaHora(i.abierto_en)}</span>`
+        : `<b style="color:${MARCA.rojo}">mudo hace ${fmtSilencio(i.horas_sin_contacto)}</b><br><span style="color:#9ca3af;font-size:11px">desde ${fmtFechaHora(i.ultimo_contacto)}</span>`, z)}
       ${celda(`${alCortarse(i)}${historial}`, z)}
-      ${celda(mapa(i.latitud, i.longitud, 'Último punto'), z, 'text-align:right;white-space:nowrap')}
+      ${celda(mapa(i.latitud, i.longitud, i.regla === 'fuera_de_zona' ? 'Dónde está' : 'Último punto'), z, 'text-align:right;white-space:nowrap')}
     </tr>`
   }
-  return `${tablaAbrir(['Equipo', 'Cliente', 'Mudo hace', 'Al cortarse', ''])}
+  return `${tablaAbrir(['Equipo', 'Cliente', 'Hace cuánto', 'Situación', ''])}
     ${xs.map(fila).join('')}
     ${tablaCerrar}`
 }
@@ -175,7 +186,7 @@ export async function POST(req: Request) {
     const cuerpo = [
       p.ingesta.avisar ? bloqueIngesta : '',
       p.nuevos.length > 0 ? `
-        ${seccionTitulo(`🔴 Dejaron de reportar · ${p.nuevos.length}`, MARCA.rojo, MARCA.rojoFondo)}
+        ${seccionTitulo(`🔴 Críticos nuevos · ${p.nuevos.length}`, MARCA.rojo, MARCA.rojoFondo)}
         ${tablaIncidentes(p.nuevos)}
         ${PROTOCOLO}` : '',
       p.escalar.length > 0 ? `
@@ -183,11 +194,11 @@ export async function POST(req: Request) {
         <p style="margin:10px 0 0;font-size:13px;color:#4b5563">Se avisaron y siguen sin acuse de recibo en SICOM.</p>
         ${tablaIncidentes(p.escalar)}` : '',
       p.recuperados.length > 0 ? `
-        ${seccionTitulo(`✅ Volvieron a reportar · ${p.recuperados.length}`, MARCA.verdeOscuro, MARCA.verdeClaro)}
-        ${tablaAbrir(['Equipo', 'Estuvo mudo', 'Volvió', 'Dónde está ahora'])}
+        ${seccionTitulo(`✅ Se normalizaron · ${p.recuperados.length}`, MARCA.verdeOscuro, MARCA.verdeClaro)}
+        ${tablaAbrir(['Equipo', 'Qué pasó', 'Cuándo', 'Dónde está ahora'])}
         ${p.recuperados.map((i, n) => `<tr>
           ${celda(`<b>${esc([i.patente, i.codigo].filter(Boolean).join(' · '))}</b>`, n % 2 === 1)}
-          ${celda(fmtSilencio(i.horas_sin_contacto), n % 2 === 1)}
+          ${celda(esc(i.detalle_cierre ?? ''), n % 2 === 1)}
           ${celda(fmtFechaHora(i.contacto_actual), n % 2 === 1)}
           ${celda(mapa(i.latitud_actual, i.longitud_actual, 'Ubicación actual'), n % 2 === 1, 'text-align:right')}
         </tr>`).join('')}
@@ -200,17 +211,18 @@ export async function POST(req: Request) {
       chips: [
         ...(p.nuevos.length ? [{ n: p.nuevos.length, label: 'Críticos nuevos', color: MARCA.rojo, fondo: MARCA.rojoFondo }] : []),
         ...(p.escalar.length ? [{ n: p.escalar.length, label: 'Sin respuesta', color: MARCA.ambar, fondo: MARCA.ambarFondo }] : []),
-        ...(p.recuperados.length ? [{ n: p.recuperados.length, label: 'Volvieron', color: MARCA.verdeOscuro, fondo: MARCA.verdeClaro }] : []),
+        ...(p.recuperados.length ? [{ n: p.recuperados.length, label: 'Normalizados', color: MARCA.verdeOscuro, fondo: MARCA.verdeClaro }] : []),
       ],
       cuerpo,
       ...cta,
-      pie: 'Un camión pasa a crítico cuando el GPS se cortó andando y no vuelve en 48 h, o cuando un '
-         + 'equipo en arriendo lleva 7 días sin contacto. Correo automático de SICOM · Pillado Empresas.',
+      pie: 'Un camión pasa a crítico cuando el GPS se cortó andando y no vuelve en 48 h, cuando un '
+         + 'equipo en arriendo lleva 7 días sin contacto, o cuando lleva 12 h fuera de la zona verificada '
+         + 'de su contrato. Correo automático de SICOM · Pillado Empresas.',
     })
     const partes = [
-      p.nuevos.length ? `${p.nuevos.length} camión(es) dejaron de reportar` : '',
+      p.nuevos.length ? `${p.nuevos.length} crítico(s) nuevo(s)` : '',
       p.escalar.length ? `${p.escalar.length} sin respuesta` : '',
-      p.recuperados.length ? `${p.recuperados.length} volvieron` : '',
+      p.recuperados.length ? `${p.recuperados.length} normalizado(s)` : '',
       p.ingesta.avisar ? 'GPS caído' : '',
     ].filter(Boolean).join(' · ')
     asunto = `${p.nuevos.length || p.escalar.length || p.ingesta.avisar ? '🔴' : '✅'} Centinela: ${partes} · PILLADO`
@@ -222,7 +234,7 @@ export async function POST(req: Request) {
     }
   } else {
     const abiertos = p.abiertos ?? []
-    const sinGeo = p.sin_geocerca ?? []
+    const sinGeo = p.zonas_por_verificar ?? []
     if (abiertos.length === 0 && sinGeo.length === 0 && !p.ingesta.caida) {
       return NextResponse.json({ ok: true, enviado: false })
     }
@@ -243,13 +255,15 @@ export async function POST(req: Request) {
         return `${seccionTitulo(`${t} · ${xs.length}`, c, f)}${tablaIncidentes(xs)}`
       }),
       sinGeo.length > 0 ? `
-        ${seccionTitulo(`📍 Arrendados sin zona definida · ${sinGeo.length}`, MARCA.ambar, MARCA.ambarFondo)}
-        <p style="margin:10px 0 0;font-size:13px;color:#4b5563">Su contrato no tiene geocerca: no se puede saber si salieron de su zona de trabajo.</p>
-        ${tablaAbrir(['Equipo', 'Cliente', 'Contrato'])}
+        ${seccionTitulo(`📍 Zonas que faltan o sin verificar · ${sinGeo.length}`, MARCA.ambar, MARCA.ambarFondo)}
+        <p style="margin:10px 0 0;font-size:13px;color:#4b5563">Mientras la zona de un contrato no esté verificada, el Centinela
+        no puede avisar en crítico si sus camiones salen de ella. Se verifica en Centinela → Zonas por contrato.</p>
+        ${tablaAbrir(['Contrato', 'Cliente', 'Problema', 'Equipos'])}
         ${sinGeo.map((g, n) => `<tr>
-          ${celda(`<b>${esc([g.patente, g.codigo].filter(Boolean).join(' · '))}</b>`, n % 2 === 1)}
+          ${celda(`<b>${esc(g.contrato)}</b>`, n % 2 === 1)}
           ${celda(esc(g.cliente ?? '—'), n % 2 === 1)}
-          ${celda(esc(g.contrato ?? '—'), n % 2 === 1)}
+          ${celda(esc(g.problema), n % 2 === 1)}
+          ${celda(esc(g.equipos ?? '—'), n % 2 === 1)}
         </tr>`).join('')}
         ${tablaCerrar}` : '',
     ].join('')

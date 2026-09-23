@@ -15,6 +15,7 @@ import { supabase } from '@/lib/supabase'
 import type { EstadoFlotaCodigo } from '@/lib/estado-flota'
 import { ESTADO_FLOTA_COLOR, ESTADO_FLOTA_LABEL, ESTADO_FLOTA_OPCIONES } from '@/lib/estado-flota'
 import { EstadoFlotaPill } from '@/components/flota/estado-flota-pill'
+import type { SugerenciaEstado } from '@/lib/services/sugerencias-estado'
 
 type EstadoCodigo = EstadoFlotaCodigo
 type ActivoModal = {
@@ -40,6 +41,31 @@ function Pill({ e }: { e: string | null }) {
   return <EstadoFlotaPill codigo={e} />
 }
 
+// [MIG573] Prueba de vida: A/C sobre un equipo sin evidencia de estar
+// operando (7 días, o crítico en el Centinela) exige justificación. Así se
+// cortó el arrastre que tuvo a KVWD-27 «arrendado» 110 días sin GPS.
+const pideJustificacion = (s: SugerenciaEstado, estado: string) =>
+  s.requiere_justificacion && (estado === 'A' || estado === 'C')
+
+function PruebaDeVida({ s }: { s: SugerenciaEstado }) {
+  const rojo = s.requiere_justificacion
+  return (
+    <div className={rojo ? 'font-semibold text-red-700' : 'text-gray-500'}>
+      {s.evidencia_dias == null ? 'Sin evidencia' : s.evidencia_dias === 0 ? 'Hoy' : `Hace ${s.evidencia_dias} d`}
+      {s.evidencia_fuente && (
+        <span className="block max-w-[14rem] truncate text-[10px] font-normal text-gray-500" title={s.evidencia_fuente}>
+          {s.evidencia_fuente}
+        </span>
+      )}
+      {s.centinela === 'critico' && (
+        <Link href="/dashboard/flota/centinela" className="mt-0.5 inline-block rounded bg-red-100 px-1.5 text-[10px] font-bold text-red-800">
+          Centinela: crítico
+        </Link>
+      )}
+    </div>
+  )
+}
+
 export default function SugerenciasEstadoPage() {
   useRequireAuth()
   const toast = useToast()
@@ -48,6 +74,7 @@ export default function SugerenciasEstadoPage() {
   const [filtroPatente, setFiltroPatente] = useState('')
   const [filtroOperacion, setFiltroOperacion] = useState('') // Calama / Coquimbo / ...
   const [elegido, setElegido] = useState<Record<string, string>>({}) // override del planificador
+  const [justif, setJustif] = useState<Record<string, string>>({}) // [MIG573] prueba de vida
 
   // Mapa activo_id -> operación (Calama / Coquimbo) para el filtro por zona
   const [operacionPorActivo, setOperacionPorActivo] = useState<Record<string, string | null>>({})
@@ -92,7 +119,11 @@ export default function SugerenciasEstadoPage() {
 
   const filtradas = useMemo(() => {
     const q = filtroPatente.trim().toUpperCase().replace(/[^A-Z0-9]/g, '')
-    let base = soloCambios ? sugerencias.filter((s) => !s.coincide && s.estado_sugerido) : sugerencias
+    // Los que piden prueba de vida se muestran siempre: son los que hay que mirar.
+    let base = soloCambios
+      ? sugerencias.filter((s) => (!s.coincide && s.estado_sugerido)
+          || pideJustificacion(s, s.estado_guardado ?? s.estado_sugerido ?? ''))
+      : sugerencias
     if (q) {
       base = base.filter((s) =>
         (s.patente ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '').includes(q),
@@ -105,32 +136,48 @@ export default function SugerenciasEstadoPage() {
   }, [sugerencias, soloCambios, filtroPatente, filtroOperacion, operacionPorActivo])
   const cambios = useMemo(() => sugerencias.filter((s) => !s.coincide && s.estado_sugerido), [sugerencias])
 
-  const confirmarUno = (activoId: string, estado: string) => {
-    confirmar.mutate({ activoId, fecha, estado }, {
+  const sinPrueba = useMemo(
+    () => sugerencias.filter((s) => pideJustificacion(s, elegido[s.activo_id] ?? s.estado_guardado ?? s.estado_sugerido ?? '')),
+    [sugerencias, elegido])
+  const justifOk = (id: string) => (justif[id] ?? '').trim().length >= 10
+
+  const confirmarUno = (s: SugerenciaEstado, estado: string) => {
+    if (pideJustificacion(s, estado) && !justifOk(s.activo_id)) {
+      toast.error(`${s.patente}: escribe cómo sabes que está operando (mínimo 10 caracteres)`)
+      return
+    }
+    confirmar.mutate({ activoId: s.activo_id, fecha, estado, justificacion: justif[s.activo_id] }, {
       onSuccess: () => toast.success('Estado confirmado'),
       onError: (e) => toast.error(errorMessage(e, 'No se pudo confirmar')),
     })
   }
-  const confirmarTodas = async () => {
-    for (const s of cambios) {
-      const est = elegido[s.activo_id] ?? s.estado_sugerido!
-      try { await confirmar.mutateAsync({ activoId: s.activo_id, fecha, estado: est }) } catch { /* sigue */ }
+  // Confirma en bloque; los que piden prueba de vida y no la tienen se OMITEN
+  // y se avisan (antes un error quedaba mudo y el aviso decía «todo OK»).
+  const confirmarLote = async (lista: { s: SugerenciaEstado; est: string }[]) => {
+    let ok = 0
+    const omitidos: string[] = []
+    const fallidos: string[] = []
+    for (const { s, est } of lista) {
+      if (pideJustificacion(s, est) && !justifOk(s.activo_id)) { omitidos.push(s.patente); continue }
+      try {
+        await confirmar.mutateAsync({ activoId: s.activo_id, fecha, estado: est, justificacion: justif[s.activo_id] })
+        ok++
+      } catch { fallidos.push(s.patente) }
     }
-    toast.success(`${cambios.length} cambios confirmados`)
+    toast.success(`${ok} equipos confirmados`)
+    if (omitidos.length) toast.error(`Sin confirmar por falta de prueba de vida: ${omitidos.join(', ')}. Escribe la justificación en su fila.`)
+    if (fallidos.length) toast.error(`No se pudieron confirmar: ${fallidos.join(', ')}`)
     refetch()
   }
+  const confirmarTodas = () =>
+    confirmarLote(cambios.map((s) => ({ s, est: elegido[s.activo_id] ?? s.estado_sugerido! })))
   // Cierra TODA la flota para la fecha: escribe los 55 (los que no cambian
   // quedan con su mismo estado del día anterior). Así el informe muestra la
   // flota completa, no solo los que cambiaron.
-  const confirmarDiaCompleto = async () => {
-    for (const s of sugerencias) {
-      const est = elegido[s.activo_id] ?? s.estado_guardado ?? s.estado_sugerido ?? s.estado_actual
-      if (!est) continue
-      try { await confirmar.mutateAsync({ activoId: s.activo_id, fecha, estado: est }) } catch { /* sigue */ }
-    }
-    toast.success(`Día ${fecha} cerrado: ${sugerencias.length} equipos`)
-    refetch()
-  }
+  const confirmarDiaCompleto = () =>
+    confirmarLote(sugerencias
+      .map((s) => ({ s, est: elegido[s.activo_id] ?? s.estado_guardado ?? s.estado_sugerido ?? s.estado_actual ?? '' }))
+      .filter((x) => x.est))
 
   return (
     <div className="space-y-4 p-6">
@@ -156,6 +203,18 @@ export default function SugerenciasEstadoPage() {
           </Button>
         </div>
       </header>
+
+      {sinPrueba.length > 0 && (
+        <div className="rounded-lg border-l-4 border-red-600 bg-red-50 p-3 text-sm text-gray-700">
+          <b className="text-red-800">{sinPrueba.length} equipo(s) figuran arrendados sin evidencia de estar operando:</b>{' '}
+          {sinPrueba.map((s) => s.patente).join(', ')}.
+          <span className="block text-xs text-gray-600">
+            Ni GPS, ni OT, ni checklist en 7 días (o tienen un crítico en el Centinela). Para confirmarlos como A o C escribe
+            en su fila cómo sabes que están con el cliente, por ejemplo «cliente envió foto con horómetro el 23-09». Esa
+            declaración queda con tu nombre y vale 7 días.
+          </span>
+        </div>
+      )}
 
       <Card>
         <CardHeader className="flex flex-col gap-2 pb-2 sm:flex-row sm:items-center sm:justify-between">
@@ -215,6 +274,7 @@ export default function SugerenciasEstadoPage() {
                   <th className="px-2 py-2">Patente</th>
                   <th className="px-2 py-2">Equipo</th>
                   <th className="px-2 py-2">Zona GPS</th>
+                  <th className="px-2 py-2">Prueba de vida</th>
                   <th className="px-2 py-2">Estado actual (día previo)</th>
                   <th className="px-2 py-2">Sugerido</th>
                   <th className="px-2 py-2">Confirmado ese día</th>
@@ -231,6 +291,7 @@ export default function SugerenciasEstadoPage() {
                       <td className="px-2 py-1.5 font-mono font-semibold">{s.patente}</td>
                       <td className="px-2 py-1.5 text-gray-500">{s.equipamiento ?? '—'}</td>
                       <td className="px-2 py-1.5 text-gray-600">{s.zona ?? 'Fuera de zona'}</td>
+                      <td className="px-2 py-1.5"><PruebaDeVida s={s} /></td>
                       <td className="px-2 py-1.5"><Pill e={s.estado_actual} /></td>
                       <td className="px-2 py-1.5"><Pill e={s.estado_sugerido} /></td>
                       <td className="px-2 py-1.5">
@@ -247,11 +308,20 @@ export default function SugerenciasEstadoPage() {
                             <option key={o} value={o}>{o} · {LABEL[o]}</option>
                           ))}
                         </select>
+                        {pideJustificacion(s, sel) && (
+                          <input
+                            type="text"
+                            className={`mt-1 block h-8 w-56 rounded border px-2 text-xs ${justifOk(s.activo_id) ? 'border-gray-300' : 'border-red-400 bg-red-50'}`}
+                            placeholder="¿Cómo sabes que está operando? (obligatorio)"
+                            value={justif[s.activo_id] ?? ''}
+                            onChange={(e) => setJustif((p) => ({ ...p, [s.activo_id]: e.target.value }))}
+                          />
+                        )}
                       </td>
                       <td className="px-2 py-1.5">
                         <div className="flex items-center gap-1.5">
                           <Button size="sm" variant="outline" disabled={confirmar.isPending || !sel}
-                            onClick={() => confirmarUno(s.activo_id, sel)}>
+                            onClick={() => confirmarUno(s, sel)}>
                             <Check className="mr-1 h-4 w-4" /> Confirmar
                           </Button>
                           <Button size="sm" variant="ghost" title="Confirmar y gestionar contrato (mantener / cambiar / asignar)"

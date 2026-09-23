@@ -82,13 +82,14 @@ export async function getContratosActivos(): Promise<ContratoOpcion[]> {
 export async function confirmarCierre(
   fecha: string,
   items: CierreItem[],
-): Promise<{ success: boolean; confirmados: number; fecha: string }> {
+): Promise<{ success: boolean; confirmados: number; fecha: string; omitidos_prueba_vida?: string[] }> {
   const { data, error } = await supabase.rpc('rpc_confirmar_cierre_diario', {
     p_fecha: fecha,
     p_items: items,
   })
   if (error) throw error
-  return data as { success: boolean; confirmados: number; fecha: string }
+  // [MIG573] A/C sin prueba de vida no se confirma en bloque: vuelven aquí.
+  return data as { success: boolean; confirmados: number; fecha: string; omitidos_prueba_vida?: string[] }
 }
 
 // ── Helper: frescura del GPS ───────────────────────────────
