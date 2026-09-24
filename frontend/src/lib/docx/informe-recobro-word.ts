@@ -45,6 +45,32 @@ export type InformeWord = {
   firmante_cargo: string | null
 }
 
+/** [MIG576] Una partida del recobro de una OT, ya costeada por el planificador. */
+export type PartidaWord = {
+  tipo: string
+  descripcion: string
+  cantidad: number
+  unidad: string | null
+  precio_unitario: number
+  total: number
+}
+
+/** [MIG576] Lo que agrega el recobro por OT al formato de devolución. */
+export type ExtraRecobroOT = {
+  titulo: string
+  ot_folio: string | null
+  partidas: PartidaWord[]
+  subtotal: number
+  iva: number
+  total: number
+  emisor_nombre: string | null
+}
+
+const clp = (n: number) => '$' + Math.round(n).toLocaleString('es-CL')
+const TIPO_PARTIDA: Record<string, string> = {
+  repuesto: 'Repuesto', mano_obra: 'Mano de obra', servicio_externo: 'Servicio externo', otro: 'Otro',
+}
+
 const PENDIENTE = 'POR COMPLETAR'
 const v = (x: string | null | undefined) => (x && x.trim() ? x.trim() : PENDIENTE)
 
@@ -119,6 +145,7 @@ function frase(desc: string): string {
 export async function generarInformeRecobroWord(
   informe: InformeWord,
   hallazgos: HallazgoWord[],
+  extra?: ExtraRecobroOT,
 ): Promise<Blob> {
   // Las fotos se bajan en paralelo antes de armar el documento
   const fotosPorHallazgo = await Promise.all(
@@ -145,7 +172,7 @@ export async function generarInformeRecobroWord(
     alignment: AlignmentType.CENTER,
     spacing: { after: 240 },
     children: [new TextRun({
-      text: 'INFORME DE RECEPCIÓN DE EQUIPO – DEVOLUCIÓN POR TÉRMINO DE ARRIENDO',
+      text: extra?.titulo ?? 'INFORME DE RECEPCIÓN DE EQUIPO – DEVOLUCIÓN POR TÉRMINO DE ARRIENDO',
       bold: true, size: 24,
     })],
   }))
@@ -156,6 +183,7 @@ export async function generarInformeRecobroWord(
     width: { size: 100, type: WidthType.PERCENTAGE },
     rows: [
       filaDato('CLIENTE:', v(informe.cliente_nombre)),
+      ...(extra ? [filaDato('INFORME / OT:', [informe.folio, extra.ot_folio].filter(Boolean).join(' · ') || PENDIENTE)] : []),
       filaDato('FECHA DE RECEPCIÓN:', fechaCorta(informe.fecha_recepcion)),
       filaDato('LUGAR DE CHEQUEO:', v(informe.lugar_chequeo)),
       filaDato('TÉCNICO A CARGO:', v(informe.tecnico_cargo)),
@@ -227,6 +255,38 @@ export async function generarInformeRecobroWord(
     }))
   })
 
+  // ── III. Detalle de costos a recobrar (solo recobro por OT) ────────────────
+  if (extra) {
+    hijos.push(new Paragraph({
+      spacing: { before: 360, after: 120 },
+      children: [new TextRun({ text: 'III. DETALLE DE COSTOS A RECOBRAR:', bold: true, size: 22 })],
+    }))
+    const celdaT = (t: string, o: { bold?: boolean; right?: boolean } = {}) => new TableCell({
+      children: [new Paragraph({
+        alignment: o.right ? AlignmentType.RIGHT : AlignmentType.LEFT,
+        children: [new TextRun({ text: t, size: 18, bold: o.bold })],
+      })],
+    })
+    const filas = [
+      new TableRow({ tableHeader: true, children: ['N°', 'Tipo', 'Descripción', 'Cant.', 'P. unitario', 'Total']
+        .map((t, i) => celdaT(t, { bold: true, right: i >= 3 })) }),
+      ...extra.partidas.map((p, i) => new TableRow({ children: [
+        celdaT(String(i + 1)),
+        celdaT(TIPO_PARTIDA[p.tipo] ?? p.tipo),
+        celdaT(p.descripcion),
+        celdaT(`${Number(p.cantidad).toLocaleString('es-CL')}${p.unidad ? ` ${p.unidad}` : ''}`, { right: true }),
+        celdaT(clp(p.precio_unitario), { right: true }),
+        celdaT(clp(p.total), { right: true }),
+      ] })),
+      ...([['Subtotal neto', extra.subtotal], ['IVA 19%', extra.iva], ['TOTAL A RECOBRAR', extra.total]] as const)
+        .map(([l, n], i) => new TableRow({ children: [
+          celdaT(''), celdaT(''), celdaT(''), celdaT(''),
+          celdaT(l, { bold: true, right: true }), celdaT(clp(n), { bold: i === 2, right: true }),
+        ] })),
+    ]
+    hijos.push(new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: filas }))
+  }
+
   // ── Nota final ────────────────────────────────────────────────────────────
   if (informe.nota_final?.trim()) {
     hijos.push(new Paragraph({
@@ -243,6 +303,11 @@ export async function generarInformeRecobroWord(
   hijos.push(new Paragraph({ children: [new TextRun({ text: v(informe.firmante_nombre), bold: true, size: 20 })] }))
   hijos.push(new Paragraph({ children: [new TextRun({ text: informe.firmante_cargo?.trim() || 'Jefe de Mantenimiento', size: 20 })] }))
   hijos.push(new Paragraph({ children: [new TextRun({ text: 'Pillado y Cía. Ltda.', size: 20 })] }))
+  if (extra?.emisor_nombre) {
+    hijos.push(new Paragraph({ spacing: { before: 480 }, children: [new TextRun({ text: '___________________________', size: 20 })] }))
+    hijos.push(new Paragraph({ children: [new TextRun({ text: extra.emisor_nombre, bold: true, size: 20 })] }))
+    hijos.push(new Paragraph({ children: [new TextRun({ text: 'Planificación · revisó costos y emitió', size: 20 })] }))
+  }
 
   const doc = new Document({
     creator: 'SICOM-ICEO · Pillado Empresas',
