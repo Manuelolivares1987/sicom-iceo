@@ -1,9 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { sendMail, parseRecipients, mailerConfigured } from '@/lib/email/mailer'
-import {
-  emailShell, seccionTitulo, chipEstado, tablaAbrir, tablaCerrar, celda, MARCA,
-} from '@/lib/email/plantilla'
+import { correoSimple, type ItemSimple, type SeccionSimple } from '@/lib/email/simple'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -24,6 +22,7 @@ export const dynamic = 'force-dynamic'
 // solo se lee y se avisa. Sin service_role: el secreto habilita solo las dos
 // funciones *_cron (MIG301). Requiere CRON_SECRET, SMTP_*, CENTINELA_EMAIL_TO.
 // ?prueba=1 manda a Manuel con [PRUEBA] y NO marca nada como avisado.
+// Formato simple (lib/email/simple.ts) agrupado por zona, para no caer en no deseado (24-09).
 // ============================================================================
 
 type Incidente = {
@@ -68,9 +67,6 @@ type Payload = {
   zonas_por_verificar?: { contrato: string; cliente: string | null; problema: string; equipos: string | null }[]
 }
 
-const esc = (s: unknown) =>
-  String(s ?? '').replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]!))
-
 const fmtFechaHora = (s: string | null) =>
   s ? new Date(s).toLocaleString('es-CL', {
     timeZone: 'America/Santiago', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit',
@@ -82,61 +78,62 @@ const fmtSilencio = (h: number | null) => {
   return `${Math.round(h / 24)} días`
 }
 
-const mapa = (lat: number | null, lng: number | null, texto = 'Ver mapa') =>
-  lat != null && lng != null
-    ? `<a href="https://maps.google.com/?q=${lat},${lng}" style="color:${MARCA.verdeOscuro};font-weight:700">${texto}</a>`
-    : '—'
+const mapa = (lat: number | null, lng: number | null) =>
+  lat != null && lng != null ? `https://maps.google.com/?q=${lat},${lng}` : undefined
 
 /** Cómo estaba el camión cuando el tracker se calló: la pista de si es sospechoso. */
 const alCortarse = (i: Incidente) => {
-  if (i.regla === 'fuera_de_zona' || i.regla === 'fuera_de_horario') return esc(i.detalle ?? '')
+  if (i.regla === 'fuera_de_zona' || i.regla === 'fuera_de_horario') return i.detalle ?? ''
   const bat = i.bateria_pct != null ? `batería ${Math.round(i.bateria_pct)}%` : null
   if (i.regla === 'corte_en_marcha') {
     const vel = i.velocidad_kmh && i.velocidad_kmh > 0 ? `a ${Math.round(i.velocidad_kmh)} km/h` : 'detenido'
-    return [`<b>se cortó andando</b> ${vel}`, i.ignicion ? 'motor encendido' : null, bat].filter(Boolean).join(', ')
+    return ['Se cortó andando ' + vel, i.ignicion ? 'motor encendido' : null, bat].filter(Boolean).join(', ')
   }
-  return ['detenido', i.ignicion ? 'motor encendido' : 'motor apagado', bat].filter(Boolean).join(', ')
+  return ['Detenido', i.ignicion ? 'motor encendido' : 'motor apagado', bat].filter(Boolean).join(', ')
 }
 
-const chipSev = (s: Incidente['severidad']) =>
-  s === 'critico' ? chipEstado('CRÍTICO', MARCA.rojo, MARCA.rojoFondo)
-  : s === 'alto' ? chipEstado('ALTO', MARCA.ambar, MARCA.ambarFondo)
-  : chipEstado('VIGILAR', MARCA.verdeOscuro, MARCA.verdeClaro)
+const SEV: Record<Incidente['severidad'], string> = { critico: 'CRÍTICO', alto: 'ALTO', vigilar: 'VIGILAR' }
+const ORDEN_ZONA = ['Coquimbo', 'Calama']
+const zonaDe = (i: Incidente) => i.operacion?.trim() || 'Sin zona'
 
-function tablaIncidentes(xs: Incidente[], conSeveridad = false) {
-  const fila = (i: Incidente, n: number) => {
-    const z = n % 2 === 1
-    const equipo = [i.patente, i.codigo].filter(Boolean).join(' · ') || '—'
-    const historial = i.cortes_recuperados_60d > 0
-      ? `<br><span style="color:#6b7280;font-size:11px">Se cortó ${i.cortes_recuperados_60d} vez/veces en 60 días y volvió solo: puede ser zona sin cobertura.</span>`
-      : ''
-    return `<tr>
-      ${celda(`<b>${esc(equipo)}</b>${conSeveridad ? ` ${chipSev(i.severidad)}` : ''}<br><span style="color:#9ca3af;font-size:11px">${esc(i.nombre ?? '')}</span>`, z)}
-      ${celda(`${esc(i.cliente ?? '—')}<br><span style="color:#9ca3af;font-size:11px">${esc(i.estado_comercial ?? '')}${i.operacion ? ` · ${esc(i.operacion)}` : ''}</span>`, z)}
-      ${celda(i.regla === 'fuera_de_zona'
-        ? `<b style="color:${MARCA.rojo}">fuera hace ${fmtSilencio(i.horas_fuera)}</b>`
-        : i.regla === 'fuera_de_horario'
-        ? `<b style="color:${MARCA.ambar}">fuera de horario</b><br><span style="color:#9ca3af;font-size:11px">${fmtFechaHora(i.abierto_en)}</span>`
-        : `<b style="color:${MARCA.rojo}">mudo hace ${fmtSilencio(i.horas_sin_contacto)}</b><br><span style="color:#9ca3af;font-size:11px">desde ${fmtFechaHora(i.ultimo_contacto)}</span>`, z)}
-      ${celda(`${alCortarse(i)}${historial}`, z)}
-      ${celda(mapa(i.latitud, i.longitud, i.regla === 'fuera_de_zona' ? 'Dónde está' : 'Último punto'), z, 'text-align:right;white-space:nowrap')}
-    </tr>`
+function itemIncidente(i: Incidente, conSeveridad = false): ItemSimple {
+  const equipo = [i.patente, i.codigo].filter(Boolean).join(' · ') || 'Sin patente'
+  const hace = i.regla === 'fuera_de_zona'
+    ? `Fuera de su zona hace ${fmtSilencio(i.horas_fuera)}`
+    : i.regla === 'fuera_de_horario'
+    ? `Fuera de horario (${fmtFechaHora(i.abierto_en)})`
+    : `Sin GPS hace ${fmtSilencio(i.horas_sin_contacto)} (desde ${fmtFechaHora(i.ultimo_contacto)})`
+  const lineas: ItemSimple['lineas'] = [
+    { texto: hace, alerta: true },
+    { texto: alCortarse(i), url: mapa(i.latitud, i.longitud) },
+  ]
+  if (i.cortes_recuperados_60d > 0) {
+    lineas.push({ texto: `Se cortó ${i.cortes_recuperados_60d} vez/veces en 60 días y volvió solo: puede ser zona sin cobertura.` })
   }
-  return `${tablaAbrir(['Equipo', 'Cliente', 'Hace cuánto', 'Situación', ''])}
-    ${xs.map(fila).join('')}
-    ${tablaCerrar}`
+  return {
+    titulo: (conSeveridad ? `[${SEV[i.severidad]}] ` : '') + equipo,
+    sub: [i.nombre, i.cliente, i.estado_comercial, zonaDe(i)].filter(Boolean).join(' · '),
+    lineas,
+  }
 }
 
-const PROTOCOLO = `
-  <div style="margin:16px 0 0;padding:12px 16px;border-left:4px solid ${MARCA.rojo};background:#fff7f7;font-size:13px;color:#374151">
-    <b>Qué hacer con cada crítico</b>
-    <ol style="margin:6px 0 0 18px;padding:0">
-      <li>Llamar al cliente o a la faena (portería, administrador del contrato) y pedir <b>foto del camión con el horómetro visible</b>.</li>
-      <li>Pedir a Radicom el historial de eventos del tracker: ¿registró corte de alimentación antes de apagarse?</li>
-      <li><b>Acusar recibo en SICOM</b>: si nadie lo toma en unas horas, el aviso se escala.</li>
-      <li>Si en 24–48 h nadie confirma dónde está el camión: evaluar la denuncia con la patente y el último punto GPS.</li>
-    </ol>
-  </div>`
+/** Una sección por zona (Coquimbo, Calama, resto), manteniendo el orden recibido. */
+function porZona(xs: Incidente[], titulo: (zona: string, n: number) => string,
+                 conSeveridad = false): SeccionSimple[] {
+  const m = new Map<string, Incidente[]>()
+  for (const i of xs) m.set(zonaDe(i), [...(m.get(zonaDe(i)) ?? []), i])
+  return Array.from(m.keys())
+    .sort((a, b) => {
+      const ia = ORDEN_ZONA.indexOf(a), ib = ORDEN_ZONA.indexOf(b)
+      return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib) || a.localeCompare(b)
+    })
+    .map((z) => ({ titulo: titulo(z, m.get(z)!.length), items: m.get(z)!.map((i) => itemIncidente(i, conSeveridad)) }))
+}
+
+const PROTOCOLO = 'Qué hacer con cada crítico: 1) llamar al cliente o a la faena y pedir foto del camión '
+  + 'con el horómetro visible; 2) pedir a Radicom el historial del tracker (¿corte de alimentación antes '
+  + 'de apagarse?); 3) acusar recibo en SICOM, si nadie lo toma en unas horas el aviso se escala; '
+  + '4) si en 24–48 h nadie confirma dónde está, evaluar la denuncia con la patente y el último punto GPS.'
 
 export async function POST(req: Request) {
   const secret = process.env.CRON_SECRET
@@ -166,66 +163,52 @@ export async function POST(req: Request) {
   const p = data as Payload
 
   const base = process.env.NEXT_PUBLIC_SITE_URL || 'https://pilladoiceo.netlify.app'
-  const cta = { ctaUrl: `${base}/dashboard/flota/centinela/`, ctaTexto: 'Abrir Centinela de flota' }
+  const cta = `${base}/dashboard/flota/centinela/`
   const hoy = new Date().toLocaleDateString('es-CL', { timeZone: 'America/Santiago', day: '2-digit', month: 'long' })
 
-  const bloqueIngesta = p.ingesta.caida ? `
-    ${seccionTitulo('⚠️ El GPS de toda la flota dejó de llegar a SICOM', MARCA.rojo, MARCA.rojoFondo)}
-    <p style="margin:10px 0 0;font-size:13px;color:#4b5563">Último poll a Radicom: <b>${fmtFechaHora(p.ingesta.ultimo_poll)}</b>.
-    Mientras no llegue información, el Centinela <b>no puede vigilar</b> ningún camión. Revisar la
-    función <code>gps-radicom-poll</code> y la API de Navixy.</p>` : ''
+  const avisoIngesta = 'ATENCIÓN: el GPS de toda la flota dejó de llegar a SICOM. Último poll a Radicom: '
+    + `${fmtFechaHora(p.ingesta.ultimo_poll)}. Mientras no llegue información, el Centinela no puede vigilar `
+    + 'ningún camión (revisar la función gps-radicom-poll y la API de Navixy).'
 
   let asunto: string
-  let html: string
+  let correo: { html: string; text: string }
   let marcar = { nuevos: [] as string[], escalados: [] as string[], recuperados: [] as string[], ingesta: false }
 
   if (modo === 'inmediato') {
     const hayAlgo = p.nuevos.length + p.escalar.length + p.recuperados.length > 0 || p.ingesta.avisar
     if (!hayAlgo) return NextResponse.json({ ok: true, enviado: false })
 
-    const cuerpo = [
-      p.ingesta.avisar ? bloqueIngesta : '',
-      p.nuevos.length > 0 ? `
-        ${seccionTitulo(`🔴 Críticos nuevos · ${p.nuevos.length}`, MARCA.rojo, MARCA.rojoFondo)}
-        ${tablaIncidentes(p.nuevos)}
-        ${PROTOCOLO}` : '',
-      p.escalar.length > 0 ? `
-        ${seccionTitulo(`⏰ Nadie los ha tomado en ${p.horas_escalar} h · ${p.escalar.length}`, MARCA.ambar, MARCA.ambarFondo)}
-        <p style="margin:10px 0 0;font-size:13px;color:#4b5563">Se avisaron y siguen sin acuse de recibo en SICOM.</p>
-        ${tablaIncidentes(p.escalar)}` : '',
-      p.recuperados.length > 0 ? `
-        ${seccionTitulo(`✅ Se normalizaron · ${p.recuperados.length}`, MARCA.verdeOscuro, MARCA.verdeClaro)}
-        ${tablaAbrir(['Equipo', 'Qué pasó', 'Cuándo', 'Dónde está ahora'])}
-        ${p.recuperados.map((i, n) => `<tr>
-          ${celda(`<b>${esc([i.patente, i.codigo].filter(Boolean).join(' · '))}</b>`, n % 2 === 1)}
-          ${celda(esc(i.detalle_cierre ?? ''), n % 2 === 1)}
-          ${celda(fmtFechaHora(i.contacto_actual), n % 2 === 1)}
-          ${celda(mapa(i.latitud_actual, i.longitud_actual, 'Ubicación actual'), n % 2 === 1, 'text-align:right')}
-        </tr>`).join('')}
-        ${tablaCerrar}` : '',
-    ].join('')
-
-    html = emailShell({
-      titulo: 'Centinela de flota',
-      subtitulo: `Aviso · ${hoy}`,
-      chips: [
-        ...(p.nuevos.length ? [{ n: p.nuevos.length, label: 'Críticos nuevos', color: MARCA.rojo, fondo: MARCA.rojoFondo }] : []),
-        ...(p.escalar.length ? [{ n: p.escalar.length, label: 'Sin respuesta', color: MARCA.ambar, fondo: MARCA.ambarFondo }] : []),
-        ...(p.recuperados.length ? [{ n: p.recuperados.length, label: 'Normalizados', color: MARCA.verdeOscuro, fondo: MARCA.verdeClaro }] : []),
-      ],
-      cuerpo,
-      ...cta,
-      pie: 'Un camión pasa a crítico cuando el GPS se cortó andando y no vuelve en 48 h, cuando un '
-         + 'equipo en arriendo lleva 7 días sin contacto, o cuando lleva 12 h fuera de la zona verificada '
-         + 'de su contrato. Correo automático de SICOM · Pillado Empresas.',
+    const secciones: SeccionSimple[] = [
+      ...porZona(p.nuevos, (z, n) => `Críticos nuevos — ${z} (${n})`),
+      ...porZona(p.escalar, (z, n) => `Nadie los ha tomado en ${p.horas_escalar} h — ${z} (${n})`),
+      {
+        titulo: `Se normalizaron (${p.recuperados.length})`,
+        items: p.recuperados.map((i) => ({
+          titulo: [i.patente, i.codigo].filter(Boolean).join(' · ') || 'Sin patente',
+          sub: zonaDe(i),
+          lineas: [
+            { texto: i.detalle_cierre ?? 'Volvió a reportar' },
+            { texto: `Último contacto: ${fmtFechaHora(i.contacto_actual)}`, url: mapa(i.latitud_actual, i.longitud_actual) },
+          ],
+        })),
+      },
+    ]
+    correo = correoSimple({
+      titulo: `Centinela de flota — aviso ${hoy}`,
+      intro: [...(p.ingesta.avisar ? [avisoIngesta] : []), ...(p.nuevos.length > 0 ? [PROTOCOLO] : [])],
+      secciones,
+      enlace: { url: cta, texto: 'Abrir Centinela de flota en SICOM' },
+      pie: 'Aviso automático de SICOM. Un camión pasa a crítico cuando el GPS se cortó andando y no vuelve '
+         + 'en 48 h, cuando un equipo en arriendo lleva 7 días sin contacto, o cuando lleva 12 h fuera de la '
+         + 'zona verificada de su contrato.',
     })
     const partes = [
       p.nuevos.length ? `${p.nuevos.length} crítico(s) nuevo(s)` : '',
       p.escalar.length ? `${p.escalar.length} sin respuesta` : '',
       p.recuperados.length ? `${p.recuperados.length} normalizado(s)` : '',
       p.ingesta.avisar ? 'GPS caído' : '',
-    ].filter(Boolean).join(' · ')
-    asunto = `${p.nuevos.length || p.escalar.length || p.ingesta.avisar ? '🔴' : '✅'} Centinela: ${partes} · PILLADO`
+    ].filter(Boolean).join(', ')
+    asunto = `Centinela GPS: ${partes}`
     marcar = {
       nuevos: p.nuevos.map((i) => i.id),
       escalados: p.escalar.map((i) => i.id),
@@ -240,55 +223,43 @@ export async function POST(req: Request) {
     }
     const nCrit = abiertos.filter((i) => i.severidad === 'critico').length
     const sinTomar = abiertos.filter((i) => i.severidad === 'critico' && i.estado === 'abierto').length
-    const porSev = (s: Incidente['severidad']) => abiertos.filter((i) => i.severidad === s)
-    const titulos: Record<Incidente['severidad'], [string, string, string]> = {
-      critico: ['🔴 Críticos', MARCA.rojo, MARCA.rojoFondo],
-      alto: ['🟠 Detenidos y mudos más de 3 días', MARCA.ambar, MARCA.ambarFondo],
-      vigilar: ['🟡 Cortes recientes andando (vigilar, todavía sin correo)', MARCA.verdeOscuro, MARCA.verdeClaro],
-    }
-    const cuerpo = [
-      bloqueIngesta,
-      ...(['critico', 'alto', 'vigilar'] as const).map((s) => {
-        const xs = porSev(s)
-        if (xs.length === 0) return ''
-        const [t, c, f] = titulos[s]
-        return `${seccionTitulo(`${t} · ${xs.length}`, c, f)}${tablaIncidentes(xs)}`
-      }),
-      sinGeo.length > 0 ? `
-        ${seccionTitulo(`📍 Zonas que faltan o sin verificar · ${sinGeo.length}`, MARCA.ambar, MARCA.ambarFondo)}
-        <p style="margin:10px 0 0;font-size:13px;color:#4b5563">Mientras la zona de un contrato no esté verificada, el Centinela
-        no puede avisar en crítico si sus camiones salen de ella. Se verifica en Centinela → Zonas por contrato.</p>
-        ${tablaAbrir(['Contrato', 'Cliente', 'Problema', 'Equipos'])}
-        ${sinGeo.map((g, n) => `<tr>
-          ${celda(`<b>${esc(g.contrato)}</b>`, n % 2 === 1)}
-          ${celda(esc(g.cliente ?? '—'), n % 2 === 1)}
-          ${celda(esc(g.problema), n % 2 === 1)}
-          ${celda(esc(g.equipos ?? '—'), n % 2 === 1)}
-        </tr>`).join('')}
-        ${tablaCerrar}` : '',
-    ].join('')
-
-    html = emailShell({
-      titulo: 'Centinela de flota',
-      subtitulo: `Resumen del día · ${hoy}`,
-      chips: [
-        { n: nCrit, label: 'Críticos', color: MARCA.rojo, fondo: MARCA.rojoFondo },
-        { n: sinTomar, label: 'Sin acuse', color: MARCA.ambar, fondo: MARCA.ambarFondo },
-        { n: abiertos.length, label: 'Abiertos', color: MARCA.verdeOscuro, fondo: MARCA.verdeClaro },
+    // Dentro de cada zona: críticos, luego altos, luego vigilar.
+    const rango = { critico: 0, alto: 1, vigilar: 2 } as const
+    const ordenados = [...abiertos].sort((x, y) => rango[x.severidad] - rango[y.severidad])
+    const secciones: SeccionSimple[] = [
+      ...porZona(ordenados, (z, n) => `${z} — ${n} equipo${n === 1 ? '' : 's'} sin reportar o fuera de zona`, true),
+      {
+        titulo: `Zonas de contrato que faltan o sin verificar (${sinGeo.length})`,
+        nota: 'Mientras la zona de un contrato no esté verificada, el Centinela no puede avisar en crítico '
+            + 'si sus camiones salen de ella. Se verifica en Centinela → Zonas por contrato.',
+        items: sinGeo.map((g) => ({
+          titulo: g.contrato,
+          sub: g.cliente ?? undefined,
+          lineas: [{ texto: g.problema }, ...(g.equipos ? [{ texto: `Equipos: ${g.equipos}` }] : [])],
+        })),
+      },
+    ]
+    correo = correoSimple({
+      titulo: `Centinela de flota — resumen ${hoy}`,
+      intro: [
+        ...(p.ingesta.caida ? [avisoIngesta] : []),
+        `${nCrit} crítico(s), ${sinTomar} todavía sin acuse, ${abiertos.length} incidente(s) abierto(s) en total. `
+        + 'CRÍTICO = correo inmediato; ALTO = detenido y mudo más de 3 días; VIGILAR = corte reciente andando, todavía sin correo.',
       ],
-      cuerpo,
-      ...cta,
-      pie: 'Resumen diario de los equipos que no reportan GPS. Un incidente se cierra solo cuando el '
-         + 'tracker vuelve, o en SICOM con el motivo y lo que se verificó. Correo automático de SICOM · Pillado Empresas.',
+      secciones,
+      enlace: { url: cta, texto: 'Abrir Centinela de flota en SICOM' },
+      pie: 'Resumen diario automático de SICOM. Un incidente se cierra solo cuando el tracker vuelve, '
+         + 'o en SICOM con el motivo y lo que se verificó.',
     })
-    asunto = `${nCrit > 0 ? '🔴' : '🟡'} Centinela · resumen: ${nCrit} crítico(s), ${abiertos.length} abierto(s) · PILLADO`
+    asunto = `Centinela GPS, resumen del día: ${nCrit} crítico(s), ${abiertos.length} abierto(s)`
   }
 
   const r = await sendMail({
     to,
     cc: marcar.escalados.length > 0 ? escala : undefined,
     subject: (esPrueba ? '[PRUEBA] ' : '') + asunto,
-    html,
+    html: correo.html,
+    text: correo.text,
   })
   if (!r.ok) return NextResponse.json({ error: r.error ?? 'No se pudo enviar' }, { status: 500 })
 
