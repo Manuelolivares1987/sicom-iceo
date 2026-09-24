@@ -58,6 +58,7 @@ import {
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { RecobroOTSeccion } from '@/components/recobro/recobro-ot-seccion'
 import { Badge } from '@/components/ui/badge'
 import { Spinner } from '@/components/ui/spinner'
 import {
@@ -2024,89 +2025,6 @@ function PlanSemanalBanner({ otId }: { otId: string }) {
   )
 }
 
-// ── Informe de recobro: la CUENTA al cliente ────────────────────────────────
-// [03-09] Manuel: «es clave que estén en un solo lugar». Los dos informes de
-// la visita viven juntos acá en la OT: este (la cuenta — NC valorizadas con
-// materiales + HH, folio para cobrar) y el técnico (el relato). El modal que
-// ARMA el recobro sigue siendo el de la bandeja (trabaja por patente, con
-// todas las NC del equipo): el link lo abre directo con ?recobro=<activoId>.
-function InformeRecobroSeccion({ activoId }: { activoId: string }) {
-  const { data } = useQuery({
-    queryKey: ['recobro-del-activo', activoId],
-    queryFn: async () => {
-      const { data: rows, error } = await supabase
-        .from('v_nc_recepcion')
-        .select('recobro, recobro_informe_id, recobro_informe_folio, recobro_informe_estado')
-        .eq('activo_id', activoId)
-      if (error) throw new Error(error.message)
-      const lista = (rows ?? []) as Array<{
-        recobro: string | null
-        recobro_informe_id: string | null
-        recobro_informe_folio: string | null
-        recobro_informe_estado: string | null
-      }>
-      const pendientes = lista.filter(
-        (r) => (r.recobro === 'cliente' || r.recobro === 'compartido') && !r.recobro_informe_id,
-      ).length
-      const informes = Array.from(
-        new Map(lista.filter((r) => r.recobro_informe_id)
-          .map((r) => [r.recobro_informe_id as string, r])).values(),
-      )
-      return { pendientes, informes }
-    },
-    staleTime: 30_000,
-    retry: false,
-  })
-  const pendientes = data?.pendientes ?? 0
-  const informes = data?.informes ?? []
-
-  return (
-    <Card className="mt-4">
-      <CardContent className="p-4 sm:p-6">
-        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-          <h3 className="text-base font-bold text-gray-900">Informe de recobro</h3>
-          <span className="text-xs text-gray-500">la cuenta al cliente — NC valorizadas con folio</span>
-        </div>
-
-        {informes.length > 0 && (
-          <div className="mb-2 space-y-1.5">
-            {informes.map((inf) => (
-              <Link key={inf.recobro_informe_id}
-                    href={`/dashboard/flota/recepcion/${inf.recobro_informe_id}/emitir`}
-                    className="flex items-center gap-2 rounded-lg border border-violet-200 bg-violet-50/60 px-3 py-2 text-sm hover:bg-violet-100/60">
-                <span className="font-mono text-xs font-bold text-violet-900">{inf.recobro_informe_folio}</span>
-                <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-medium text-violet-700">
-                  {inf.recobro_informe_estado ?? '—'}
-                </span>
-                <span className="ml-auto text-xs text-violet-700 underline">abrir</span>
-              </Link>
-            ))}
-          </div>
-        )}
-
-        {pendientes > 0 ? (
-          <div className="flex flex-wrap items-center gap-3 rounded-lg border border-violet-200 bg-violet-50/50 px-3 py-2.5">
-            <p className="min-w-0 flex-1 text-sm text-violet-900">
-              <b>{pendientes} NC recobrable{pendientes > 1 ? 's' : ''}</b> al cliente todavía sin informe.
-            </p>
-            <Link href={`/dashboard/mantenimiento/no-conformidades?recobro=${activoId}`}>
-              <Button variant="secondary" size="sm" className="border-violet-300 text-violet-700">
-                Armar informe de recobro
-              </Button>
-            </Link>
-          </div>
-        ) : informes.length === 0 ? (
-          <p className="text-sm text-gray-400">
-            Este equipo no tiene NC recobrables pendientes ni informes de recobro armados.
-          </p>
-        ) : (
-          <p className="text-xs text-gray-500">Todas las NC recobrables del equipo ya están en un informe.</p>
-        )}
-      </CardContent>
-    </Card>
-  )
-}
-
 export default function OrdenTrabajoDetailPage() {
   const params = useParams()
   const id = params?.id as string | undefined
@@ -2345,7 +2263,8 @@ export default function OrdenTrabajoDetailPage() {
         {id && <InformeTecnicoSeccion otId={id} activoId={otData.activo_id} otEstado={otData.estado} />}
       </div>
       <div id="informe-recobro" className="scroll-mt-4">
-        {otData.activo_id && <InformeRecobroSeccion activoId={otData.activo_id} />}
+        {/* [MIG576] Recobro por OT: el jefe arma las partidas, el planificador costea y emite. */}
+        {id && <RecobroOTSeccion otId={id} otFolio={otData.folio ?? null} />}
       </div>
 
       {/* Bottom action bar — technician actions */}
