@@ -8,9 +8,9 @@ const withPWA = require('@ducanh2912/next-pwa').default({
   aggressiveFrontEndNavCaching: true,
   // Fallback offline: cuando una navegacion (document) no esta en cache y no
   // hay red, el SW sirve /offline en lugar de mostrar el error nativo de
-  // Chrome "no se puede acceder a este sitio". La pagina /offline detecta la
-  // ruta solicitada y ofrece volver a /m/calama si los datos estan en
-  // IndexedDB.
+  // Chrome "no se puede acceder a este sitio". La pagina /offline ofrece
+  // Reintentar, vuelve a la app de la ruta pedida (Romeral, Calama, taller…)
+  // y muestra un diagnóstico de conexión (24-09-2026).
   fallbacks: {
     document: '/offline/',
   },
