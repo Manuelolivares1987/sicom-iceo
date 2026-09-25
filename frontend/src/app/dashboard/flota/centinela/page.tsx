@@ -59,6 +59,7 @@ type Incidente = {
   bateria_pct: number | null
   acusado_en: string | null
   acusado_por_nombre: string | null
+  nota_acuse: string | null
   cerrado_en: string | null
   cerrado_por_nombre: string | null
   motivo_cierre: string | null
@@ -226,6 +227,15 @@ function IncidentesTab({ onTraslado }: { onTraslado: (a: { activo_id: string; pa
   const abiertos = data.filter((i) => i.estado !== 'cerrado')
   const cerrados = data.filter((i) => i.estado === 'cerrado')
   const criticos = abiertos.filter((i) => i.severidad === 'critico')
+  // [MIG577] El último comentario de cierre A MANO de cada camión (los
+  // automáticos no traen información de una persona). Se muestra en la tarjeta
+  // del incidente abierto: antes quedaba escondido en «Cerrados».
+  const ultimoComentario = new Map<string, Incidente>()
+  for (const c of cerrados) {
+    if (!c.detalle_cierre || ['senal_recuperada', 'normalizado', 'permiso_transito'].includes(c.motivo_cierre ?? '')) continue
+    const prev = ultimoComentario.get(c.activo_id)
+    if (!prev || (c.cerrado_en ?? '') > (prev.cerrado_en ?? '')) ultimoComentario.set(c.activo_id, c)
+  }
   const sinTomar = criticos.filter((i) => i.estado === 'abierto')
 
   return (
@@ -307,6 +317,19 @@ function IncidentesTab({ onTraslado }: { onTraslado: (a: { activo_id: string; pa
                       )}
                       <span className="text-gray-500"> · {situacion(i)}</span>
                     </div>
+                    {i.nota_acuse && (
+                      <div className="mt-1 rounded bg-blue-50 px-2 py-1 text-xs text-blue-900">
+                        💬 <b>{i.acusado_por_nombre ?? 'Quien lo tomó'}:</b> {i.nota_acuse}
+                      </div>
+                    )}
+                    {ultimoComentario.get(i.activo_id) && (() => {
+                      const c = ultimoComentario.get(i.activo_id)!
+                      return (
+                        <div className="mt-1 rounded bg-gray-50 px-2 py-1 text-xs text-gray-700">
+                          💬 Último comentario ({fmtFecha(c.cerrado_en)}{c.cerrado_por_nombre ? ` · ${c.cerrado_por_nombre}` : ''}): {c.detalle_cierre}
+                        </div>
+                      )
+                    })()}
                     {i.cortes_recuperados_60d > 0 && !zona && (
                       <div className="mt-1 text-xs text-gray-500">
                         Se cortó {i.cortes_recuperados_60d} vez/veces en 60 días y volvió solo: puede ser zona sin cobertura.
