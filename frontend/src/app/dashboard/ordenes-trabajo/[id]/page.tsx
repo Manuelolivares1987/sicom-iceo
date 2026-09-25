@@ -55,6 +55,7 @@ import {
   Trash2,
   StickyNote,
   RefreshCw,
+  Receipt,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -102,6 +103,8 @@ const tabs = [
   { id: 'evidencias', label: 'Evidencias', icon: ImageIcon },
   { id: 'materiales', label: 'Materiales', icon: Package },
   { id: 'valorizacion', label: 'Costos', icon: DollarSign },
+  // [MIG578] El recobro al cliente vive como pestaña: al final de la página nadie lo encontraba.
+  { id: 'recobro', label: 'Recobro', icon: Receipt },
   { id: 'historial', label: 'Historial', icon: History },
 ]
 
@@ -2152,7 +2155,10 @@ export default function OrdenTrabajoDetailPage() {
           📄 Informe técnico de intervención
         </button>
         <button type="button"
-                onClick={() => document.getElementById('informe-recobro')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                onClick={() => {
+                  setActiveTab('recobro')
+                  setTimeout(() => document.getElementById('tabs-ot')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50)
+                }}
                 className="flex items-center gap-1.5 rounded-lg border border-violet-300 bg-violet-50 px-3 py-2 text-xs font-semibold text-violet-800 hover:bg-violet-100">
           💰 Informe de recobro
         </button>
@@ -2196,7 +2202,7 @@ export default function OrdenTrabajoDetailPage() {
       )}
 
       {/* Tabs */}
-      <div className="mb-4 flex gap-1 overflow-x-auto rounded-xl bg-gray-100 p-1">
+      <div id="tabs-ot" className="mb-4 flex scroll-mt-4 gap-1 overflow-x-auto rounded-xl bg-gray-100 p-1">
         {tabs.map((tab) => {
           const Icon = tab.icon
           return (
@@ -2248,6 +2254,8 @@ export default function OrdenTrabajoDetailPage() {
           {activeTab === 'materiales' && id && <MaterialesTab otId={id} faenaId={otData.faena_id} activoId={otData.activo_id} disabled={isOTClosed} userId={userId} />}
           {activeTab === 'valorizacion' && id && <ValorizacionTab ot={otData} otId={id} userId={userId} disabled={isOTClosed} />}
           {activeTab === 'historial' && id && <HistorialTab otId={id} />}
+          {/* [MIG576/578] Recobro por OT: el jefe arma las partidas (NC + tareas del checklist), el planificador costea y emite. */}
+          {activeTab === 'recobro' && id && <RecobroOTSeccion otId={id} otFolio={otData.folio ?? null} embebido />}
         </CardContent>
       </Card>
 
@@ -2256,15 +2264,11 @@ export default function OrdenTrabajoDetailPage() {
       <div className="mt-6">
         <h2 className="text-lg font-bold text-gray-900">Informes de la visita</h2>
         <p className="text-xs text-gray-500">
-          El <b>técnico</b> cuenta qué se le hizo al equipo; el de <b>recobro</b> cobra lo que es del cliente.
+          El <b>técnico</b> cuenta qué se le hizo al equipo; el de <b>recobro</b> (lo que es del cliente) está en la pestaña <b>Recobro</b>, arriba.
         </p>
       </div>
       <div id="informe-tecnico" className="scroll-mt-4">
         {id && <InformeTecnicoSeccion otId={id} activoId={otData.activo_id} otEstado={otData.estado} />}
-      </div>
-      <div id="informe-recobro" className="scroll-mt-4">
-        {/* [MIG576] Recobro por OT: el jefe arma las partidas, el planificador costea y emite. */}
-        {id && <RecobroOTSeccion otId={id} otFolio={otData.folio ?? null} />}
       </div>
 
       {/* Bottom action bar — technician actions */}

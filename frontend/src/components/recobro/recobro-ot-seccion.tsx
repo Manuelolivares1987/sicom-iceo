@@ -11,16 +11,17 @@
 // La base valida cada paso (rpc_recobro_*); la pantalla solo esconde lo que no
 // corresponde a tu perfil.
 // ============================================================================
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/contexts/auth-context'
 import {
   getRecobroOT, perfilRecobro, prepararRecobroOT, guardarPartida, eliminarPartida,
-  darOkJefe, devolverAlJefe, emitirRecobro, descargarWordRecobroOT,
+  darOkJefe, devolverAlJefe, emitirRecobro, descargarWordRecobroOT, agregarDesdeChecklist,
   type PartidaRecobro, type TipoPartida,
 } from '@/lib/services/recobro-ot'
+import { getChecklistV3OT, type ChecklistV3Item } from '@/lib/services/taller-plan-semanal'
 
 const TIPOS: { v: TipoPartida; label: string }[] = [
   { v: 'repuesto', label: 'Repuesto' },
@@ -48,7 +49,11 @@ const desde = (p: PartidaRecobro): Borrador => ({
   unidad: p.unidad ?? '', cobrable: p.cobrable_cliente, precio: p.precio_unitario ? String(p.precio_unitario) : '',
 })
 
-export function RecobroOTSeccion({ otId, otFolio }: { otId: string; otFolio: string | null }) {
+export function RecobroOTSeccion({ otId, otFolio, embebido = false }: {
+  otId: string; otFolio: string | null
+  /** Dentro de la pestaña «Recobro» de la OT: sin tarjeta propia. */
+  embebido?: boolean
+}) {
   const qc = useQueryClient()
   const { perfil } = useAuth()
   const quien = perfilRecobro(perfil?.rol)
@@ -57,6 +62,7 @@ export function RecobroOTSeccion({ otId, otFolio }: { otId: string; otFolio: str
   const [msg, setMsg] = useState<{ ok: boolean; texto: string } | null>(null)
   const [notaDevolver, setNotaDevolver] = useState<string | null>(null)
   const [borrando, setBorrando] = useState<string | null>(null)
+  const [eligiendo, setEligiendo] = useState(false)
 
   const { data: r, isLoading } = useQuery({
     queryKey: ['recobro-ot', otId],
@@ -98,12 +104,11 @@ export function RecobroOTSeccion({ otId, otFolio }: { otId: string; otFolio: str
   }
 
   if (isLoading) {
-    return <Card className="mt-4"><CardContent className="p-4 text-sm text-gray-400">Cargando recobro…</CardContent></Card>
+    return <Marco embebido={embebido}><p className="text-sm text-gray-400">Cargando recobro…</p></Marco>
   }
 
   return (
-    <Card className="mt-4">
-      <CardContent className="space-y-3 p-4 sm:p-6">
+    <Marco embebido={embebido}>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h3 className="text-base font-bold text-gray-900">Recobro al cliente</h3>
           {inf && (
@@ -251,6 +256,9 @@ export function RecobroOTSeccion({ otId, otFolio }: { otId: string; otFolio: str
             {puedeEditar && !editando && (
               <Button size="sm" variant="secondary" onClick={() => setEditando(vacia())}>+ Agregar partida</Button>
             )}
+            {puedeEditar && !eligiendo && (
+              <Button size="sm" variant="secondary" onClick={() => setEligiendo(true)}>+ Tareas del checklist</Button>
+            )}
             {puedeEditar && (r?.ncPendientes ?? 0) > 0 && (
               <Button size="sm" variant="secondary" disabled={ocupado}
                       onClick={() => correr(() => prepararRecobroOT(otId), 'NC cobrables agregadas')}>
@@ -310,7 +318,120 @@ export function RecobroOTSeccion({ otId, otFolio }: { otId: string; otFolio: str
         {!quien && inf && abierto && (
           <p className="text-xs text-gray-500">Las partidas las arma el jefe de taller y las costea el planificador.</p>
         )}
-      </CardContent>
-    </Card>
+
+        {eligiendo && inf && (
+          <SelectorChecklist
+            otId={otId}
+            yaEnInforme={new Set(r?.itemsEnInforme ?? [])}
+            ocupado={ocupado}
+            onCerrar={() => setEligiendo(false)}
+            onAgregar={async (ids) => {
+              let texto = ''
+              const ok = await correr(async () => {
+                const res = await agregarDesdeChecklist(inf.id, ids)
+                texto = `${res.agregadas} tarea(s) agregada(s) al recobro${res.ya_estaban ? ` · ${res.ya_estaban} ya estaban` : ''}`
+              })
+              if (ok) { setEligiendo(false); setMsg({ ok: true, texto }) }
+            }}
+          />
+        )}
+    </Marco>
   )
 }
+
+function Marco({ embebido, children }: { embebido: boolean; children: ReactNode }) {
+  return embebido
+    ? <div className="space-y-3">{children}</div>
+    : <Card className="mt-4"><CardContent className="space-y-3 p-4 sm:p-6">{children}</CardContent></Card>
+}
+
+// ── Elegir tareas del checklist de la OT (MIG578) ───────────────────────────
+function SelectorChecklist({ otId, yaEnInforme, ocupado, onCerrar, onAgregar }: {
+  otId: string
+  yaEnInforme: Set<string>
+  ocupado: boolean
+  onCerrar: () => void
+  onAgregar: (ids: string[]) => void
+}) {
+  const { data: items = [], isLoading } = useQuery({
+    queryKey: ['checklist-v3', otId],
+    queryFn: () => getChecklistV3OT(otId),
+  })
+  const [q, setQ] = useState('')
+  const [soloConFoto, setSoloConFoto] = useState(false)
+  const [soloNoOk, setSoloNoOk] = useState(false)
+  const [sel, setSel] = useState<Set<string>>(new Set())
+
+  const norm = (t: string) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+  const fotos = (it: ChecklistV3Item) => (it.foto_urls?.length ?? 0) || (it.foto_url ? 1 : 0)
+  const esNoOk = (it: ChecklistV3Item) => (it.resultado ?? '').toLowerCase().replace(/[\s_]/g, '') === 'nook'
+  const visibles = items.filter((it) =>
+    !it.excluido
+    && (!q.trim() || norm(`${it.codigo ?? ''} ${it.descripcion} ${it.observacion ?? ''} ${it.bloque}`).includes(norm(q.trim())))
+    && (!soloConFoto || fotos(it) > 0)
+    && (!soloNoOk || esNoOk(it)))
+  const porBloque = new Map<string, ChecklistV3Item[]>()
+  for (const it of visibles) porBloque.set(it.bloque, [...(porBloque.get(it.bloque) ?? []), it])
+
+  const toggle = (id: string) => setSel((s) => {
+    const n = new Set(s)
+    if (n.has(id)) n.delete(id)
+    else n.add(id)
+    return n
+  })
+
+  return (
+    <div className="space-y-2 rounded-lg border border-violet-200 bg-white p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm font-semibold text-violet-900">Tareas del checklist de la OT</p>
+        <button className="text-xs text-gray-500 underline" onClick={onCerrar}>Cerrar</button>
+      </div>
+      <p className="text-xs text-gray-500">
+        Marca las tareas que se le cobran al cliente. Cada una entra con su observación y sus fotos (salen en el Word)
+        y una partida de mano de obra con el tiempo de la tarea; el precio lo pone el planificador.
+      </p>
+      <div className="flex flex-wrap items-center gap-3">
+        <input className="min-w-[12rem] flex-1 rounded border px-2 py-1.5 text-sm" placeholder="Buscar tarea, código u observación…"
+               value={q} onChange={(e) => setQ(e.target.value)} />
+        <label className="flex items-center gap-1 text-xs"><input type="checkbox" checked={soloConFoto} onChange={(e) => setSoloConFoto(e.target.checked)} /> Solo con foto</label>
+        <label className="flex items-center gap-1 text-xs"><input type="checkbox" checked={soloNoOk} onChange={(e) => setSoloNoOk(e.target.checked)} /> Solo NO OK</label>
+      </div>
+      {isLoading ? <p className="text-sm text-gray-400">Cargando checklist…</p> : (
+        <div className="max-h-[28rem] space-y-3 overflow-y-auto pr-1">
+          {porBloque.size === 0 && <p className="text-sm text-gray-400">No hay tareas con ese filtro.</p>}
+          {Array.from(porBloque.entries()).map(([bloque, xs]) => (
+            <div key={bloque}>
+              <p className="sticky top-0 bg-white py-1 text-xs font-bold uppercase text-gray-500">{bloque}</p>
+              {xs.map((it) => {
+                const ya = yaEnInforme.has(it.instance_item_id)
+                return (
+                  <label key={it.instance_item_id}
+                         className={`flex items-start gap-2 rounded px-2 py-1.5 text-sm ${ya ? 'opacity-60' : 'hover:bg-violet-50'}`}>
+                    <input type="checkbox" className="mt-1" disabled={ya}
+                           checked={ya || sel.has(it.instance_item_id)} onChange={() => toggle(it.instance_item_id)} />
+                    <span className="min-w-0 flex-1">
+                      <span className="font-mono text-xs text-gray-400">{it.codigo} </span>
+                      {it.descripcion}
+                      <span className="ml-2 text-xs text-gray-500">
+                        {it.resultado ? `· ${it.resultado}` : ''}{fotos(it) ? ` · 📷 ${fotos(it)}` : ''}{it.tiempo_min ? ` · ${it.tiempo_min} min` : ''}
+                        {ya ? ' · ya está en el recobro' : ''}
+                      </span>
+                      {it.observacion && <span className="block text-xs text-gray-600">«{it.observacion}»</span>}
+                    </span>
+                  </label>
+                )
+              })}
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="flex gap-2">
+        <Button size="sm" disabled={ocupado || sel.size === 0} onClick={() => onAgregar(Array.from(sel))}>
+          Agregar {sel.size || ''} tarea{sel.size === 1 ? '' : 's'} al recobro
+        </Button>
+        <Button size="sm" variant="secondary" onClick={onCerrar}>Cancelar</Button>
+      </div>
+    </div>
+  )
+}
+
