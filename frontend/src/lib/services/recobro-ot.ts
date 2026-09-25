@@ -47,6 +47,8 @@ export type RecobroOT = {
   nombres: Record<string, string>
   /** NC cobrables de la OT que todavía no están en ningún informe. */
   ncPendientes: number
+  /** [MIG578] Tareas del checklist que ya están en el informe abierto. */
+  itemsEnInforme: string[]
 }
 
 /** Perfil del usuario frente al recobro — el mismo criterio que fn_recobro_perfil. */
@@ -75,7 +77,14 @@ export async function getRecobroOT(otId: string): Promise<RecobroOT> {
   const informe = abierto ?? emitidos[0] ?? null
 
   let partidas: PartidaRecobro[] = []
+  let itemsEnInforme: string[] = []
   if (informe) {
+    const { data: hs } = await supabase
+      .from('informe_recepcion_hallazgos')
+      .select('checklist_v2_item_id')
+      .eq('informe_id', informe.id)
+      .not('checklist_v2_item_id', 'is', null)
+    itemsEnInforme = ((hs ?? []) as { checklist_v2_item_id: string }[]).map((h) => h.checklist_v2_item_id)
     const { data, error: e2 } = await supabase
       .from('informe_recepcion_costos')
       .select('id, tipo, descripcion, cantidad, unidad, precio_unitario, total, cobrable_cliente, hallazgo_id')
@@ -107,6 +116,7 @@ export async function getRecobroOT(otId: string): Promise<RecobroOT> {
     emitidos: emitidos.map((e) => ({ id: e.id, folio: e.folio, emitido_en: e.emitido_en, total: Number(e.total) })),
     nombres,
     ncPendientes,
+    itemsEnInforme,
   }
 }
 
@@ -133,6 +143,12 @@ export const guardarPartida = (informeId: string, p: {
   p_cobrable: p.cobrable,
   p_precio_unitario: p.precio_unitario ?? null,
 })
+
+/** [MIG578] Tareas del checklist de la OT → hallazgo con fotos + partida de HH en $0. */
+export const agregarDesdeChecklist = (informeId: string, itemIds: string[]) =>
+  rpc<{ agregadas: number; ya_estaban: number }>('rpc_recobro_agregar_checklist', {
+    p_informe_id: informeId, p_item_ids: itemIds,
+  })
 
 export const eliminarPartida = (partidaId: string) =>
   rpc<void>('rpc_recobro_partida_eliminar', { p_partida_id: partidaId })
