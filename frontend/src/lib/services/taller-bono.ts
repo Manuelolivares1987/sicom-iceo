@@ -143,6 +143,47 @@ export async function getOTSinDueno(desde: string, hasta: string) {
   return (data ?? []) as OTSinDueno[]
 }
 
+/** [MIG580] Una fila por técnico × OT pagada, con lo necesario para rehacer el número. */
+export type BonoTrabajoExcel = {
+  fuente: 'borrador' | 'cerrado'
+  tecnico: string
+  cargo: string | null
+  ot_folio: string | null
+  ot_tipo: string | null
+  equipo: string | null
+  concepto: string | null
+  concepto_nombre: string | null
+  fecha_inicio: string | null
+  fecha_termino: string | null
+  horas_calendario: number | null
+  dias: number | null
+  dias_en_corte: number | null
+  plazo_optimizado: number | null
+  plazo_normal: number | null
+  plazo_demora: number | null
+  tramo: string | null
+  tope_cargo: number | null
+  monto_ot_completa: number | null
+  rol: string | null
+  jornadas: number | null
+  horas_medidas: number | null
+  cuadrilla: string | null
+  participacion: number | null
+  base_reparto: string | null
+  monto_formula: number | null
+  monto_propuesto: number | null
+  falta: string | null
+  aviso: string | null
+}
+
+export async function getTrabajosExcel(desde: string, hasta: string) {
+  const { data, error } = await supabase.rpc('rpc_taller_bono_trabajos_excel', {
+    p_desde: desde, p_hasta: hasta,
+  })
+  if (error) throw new Error(error.message)
+  return (data ?? []) as BonoTrabajoExcel[]
+}
+
 export async function getPeriodos() {
   const { data, error } = await supabase.rpc('rpc_taller_bono_periodos')
   if (error) throw new Error(error.message)

@@ -22,7 +22,7 @@ import { Fragment, useMemo, useState } from 'react'
 import Link from 'next/link'
 import {
   Wallet, Lock, Unlock, AlertTriangle, ChevronLeft, ChevronRight, Users,
-  TrendingUp, Wrench, CheckCircle2, Info, ArrowLeft,
+  TrendingUp, Wrench, CheckCircle2, Info, ArrowLeft, FileSpreadsheet,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
@@ -32,7 +32,8 @@ import {
   useResumenBono, useDisponibilidadPeriodo, usePeriodosBono,
   useCerrarPeriodo, useReabrirPeriodo, useCartolaBono, useOTSinDueno,
 } from '@/hooks/use-taller-bono'
-import { clp, corteDelMes, CONCEPTO_LABEL } from '@/lib/services/taller-bono'
+import { clp, corteDelMes, CONCEPTO_LABEL, getTrabajosExcel } from '@/lib/services/taller-bono'
+import { descargarBlob } from '@/lib/export/plan-semanal-excel'
 
 // [MIG460] Mientras dure la marcha blanca el cálculo del bono no se le muestra
 // al taller. El candado de verdad vive en el RPC (tabla `taller_bono_acceso`);
@@ -75,6 +76,7 @@ export default function BonoTallerPage() {
   const [confirmando, setConfirmando] = useState(false)
   const [reabriendo, setReabriendo] = useState<string | null>(null)
   const [motivo, setMotivo] = useState('')
+  const [bajando, setBajando] = useState(false)
 
   const cerrado = periodos.find((p) => p.desde === corte.desde && p.hasta === corte.hasta)
   const conFalta = lineas.filter((l) => l.falta)
@@ -83,6 +85,29 @@ export default function BonoTallerPage() {
   const totalKpi = lineas.reduce((a, l) => a + (l.kpi_pagado ?? 0), 0)
   const totalFormula = lineas.reduce((a, l) => a + (l.plan_formula ?? 0), 0)
   const totalCalculado = lineas.reduce((a, l) => a + (l.plan_calculado ?? 0), 0)
+
+  // [MIG580] Un cobro se entiende rehaciéndolo: cada OT con sus fechas, días,
+  // tramo, cuadrilla y lo que le tocó a cada uno.
+  const descargarExcel = async () => {
+    setBajando(true)
+    try {
+      const [trabajos, { exportarBonoTrabajosExcel }] = await Promise.all([
+        getTrabajosExcel(corte.desde, corte.hasta),
+        import('@/lib/export/bono-trabajos-excel'),
+      ])
+      const blob = await exportarBonoTrabajosExcel({
+        corteNombre: corte.nombre, desde: corte.desde, hasta: corte.hasta,
+        cerrado: !!cerrado,
+        disponibilidadPct: cerrado?.disponibilidad_pct ?? disp?.disponibilidad_pct ?? null,
+        lineas, trabajos, sinDueno,
+      })
+      descargarBlob(blob, `Bono_taller_${corte.desde}_al_${corte.hasta}.xlsx`)
+    } catch (e) {
+      toast.error((e as Error).message)
+    } finally {
+      setBajando(false)
+    }
+  }
 
   const moverCorte = (meses: number) => {
     const d = new Date(ancla); d.setMonth(d.getMonth() + meses); setAncla(d)
@@ -122,7 +147,13 @@ export default function BonoTallerPage() {
           </p>
         </div>
 
-        <div className="ml-auto flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-1 py-1">
+        <Button variant="outline" className="ml-auto" disabled={bajando || isLoading || lineas.length === 0}
+                onClick={descargarExcel}>
+          {bajando ? <Spinner className="mr-1 h-4 w-4" /> : <FileSpreadsheet className="mr-1 h-4 w-4" />}
+          Excel de trabajos
+        </Button>
+
+        <div className="flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-1 py-1">
           <button onClick={() => moverCorte(-1)} className="rounded p-1.5 hover:bg-gray-100">
             <ChevronLeft className="h-4 w-4 text-gray-500" />
           </button>
