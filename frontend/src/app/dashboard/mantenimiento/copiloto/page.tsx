@@ -12,8 +12,9 @@
 
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import Link from 'next/link'
 import {
-  Bot, ThumbsUp, Camera, FileQuestion, DollarSign, Stethoscope, Repeat,
+  Bot, ThumbsUp, Camera, FileQuestion, DollarSign, Stethoscope, Repeat, MessageSquare,
 } from 'lucide-react'
 import { Spinner } from '@/components/ui/spinner'
 import { useRequireAuth } from '@/hooks/use-require-auth'
@@ -117,13 +118,22 @@ export default function CopilotoPanelPage() {
 
   return (
     <div className="space-y-5 p-4 md:p-6">
-      <div>
-        <h1 className="flex items-center gap-2 text-xl font-bold text-gray-900">
-          <Bot className="h-5 w-5 text-indigo-600" /> Copiloto Técnico
-        </h1>
-        <p className="text-sm text-gray-500">
-          Qué pregunta el taller, si las respuestas sirven y qué casos quedaron como conocimiento. Últimos 30 días.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="flex items-center gap-2 text-xl font-bold text-gray-900">
+            <Bot className="h-5 w-5 text-indigo-600" /> Copiloto Técnico
+          </h1>
+          <p className="text-sm text-gray-500">
+            Qué pregunta el taller, si las respuestas sirven y qué casos quedaron como conocimiento. Últimos 30 días.
+          </p>
+        </div>
+        {/* [MIG581] El menú traía a la jefatura a estos números y el chat quedaba
+            escondido dentro de la app del mecánico: quien quería preguntar algo
+            no encontraba dónde. */}
+        <Link href="/m/taller/copiloto"
+              className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700">
+          <MessageSquare className="h-4 w-4" /> Consultar al Copiloto
+        </Link>
       </div>
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
