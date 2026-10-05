@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  Users, ShieldCheck, Save, RotateCcw, AlertTriangle, CheckCircle2, Lock, UserPlus,
+  Users, ShieldCheck, Save, RotateCcw, AlertTriangle, CheckCircle2, Lock, UserPlus, KeyRound,
 } from 'lucide-react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -14,7 +14,7 @@ import { useRequireAuth } from '@/hooks/use-require-auth'
 import { usePermissions, useRolPermisosOverrides,
   ALL_ROLES, ALL_PERMISSIONS, PERMISSION_LABELS, MODULE_CATALOG, defaultPermsForRole,
   type PermisosOverrides } from '@/hooks/use-permissions'
-import { getUsuarios, updateUsuario, crearUsuarioAdmin, getTecnicosSinCuenta } from '@/lib/services/admin'
+import { getUsuarios, updateUsuario, crearUsuarioAdmin, resetPasswordAdmin, getTecnicosSinCuenta } from '@/lib/services/admin'
 import { supabase } from '@/lib/supabase'
 import type { RolUsuario } from '@/types/database'
 import type { Permission } from '@/hooks/use-permissions'
@@ -78,6 +78,9 @@ function UsuariosTab() {
   const [msg, setMsg] = useState<string | null>(null)
   const [filtro, setFiltro] = useState('')
   const [crear, setCrear] = useState(false)
+  // [2026-10-05] Restablecer clave desde la app: antes toda clave olvidada
+  // terminaba en un UPDATE a auth.users por SQL.
+  const [resetDe, setResetDe] = useState<{ id: string; nombre: string } | null>(null)
 
   const cambiarRol = async (id: string, rol: string) => {
     setSavingId(id); setMsg(null)
@@ -128,11 +131,22 @@ function UsuariosTab() {
                   {ALL_ROLES.map((r) => <option key={r} value={r}>{rolLabel(r)}</option>)}
                 </select>
                 {savingId === u.id && <Spinner className="h-4 w-4" />}
+                <Button size="sm" variant="outline" title="Restablecer contraseña"
+                  onClick={() => setResetDe({ id: u.id, nombre: u.nombre_completo ?? u.email })}>
+                  <KeyRound className="h-4 w-4" />
+                </Button>
               </div>
             </div>
           ))}
         </div>
       </CardContent>
+      {resetDe && (
+        <ResetPasswordModal
+          usuario={resetDe}
+          onClose={() => setResetDe(null)}
+          onDone={(m) => { setMsg(m); setResetDe(null) }}
+        />
+      )}
       {crear && (
         <CrearUsuarioModal
           onClose={() => setCrear(false)}
@@ -141,6 +155,16 @@ function UsuariosTab() {
       )}
     </Card>
   )
+}
+
+// Clave inicial legible (sin 0/O, 1/l/I): 10 caracteres, ~57 bits.
+function generarPassword(): string {
+  const chars = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789'
+  let p = ''
+  const buf = new Uint32Array(10)
+  crypto.getRandomValues(buf)
+  buf.forEach((n) => { p += chars[n % chars.length] })
+  return p
 }
 
 // ── Modal Crear usuario (via edge function admin-crear-usuario) ─────────────
@@ -166,14 +190,6 @@ function CrearUsuarioModal({ onClose, onCreated }: {
   const valido = nombre.trim().length > 0 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())
     && password.length >= 6
 
-  function generarPassword() {
-    const chars = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789'
-    let p = ''
-    const buf = new Uint32Array(10)
-    crypto.getRandomValues(buf)
-    buf.forEach((n) => { p += chars[n % chars.length] })
-    setPassword(p)
-  }
 
   async function guardar() {
     setSaving(true); setError(null)
@@ -209,7 +225,7 @@ function CrearUsuarioModal({ onClose, onCreated }: {
           <div className="mt-1 flex gap-2">
             <input className="w-full rounded border px-3 py-2 text-sm font-mono" value={password}
               onChange={(e) => setPassword(e.target.value)} />
-            <Button size="sm" variant="outline" type="button" onClick={generarPassword}>Generar</Button>
+            <Button size="sm" variant="outline" type="button" onClick={() => setPassword(generarPassword())}>Generar</Button>
           </div>
         </div>
         <div className="grid grid-cols-2 gap-2">
@@ -256,6 +272,57 @@ function CrearUsuarioModal({ onClose, onCreated }: {
         <Button onClick={guardar} disabled={!valido || saving}>
           {saving ? <Spinner className="h-4 w-4 mr-1" /> : <UserPlus className="h-4 w-4 mr-1" />}
           Crear usuario
+        </Button>
+      </ModalFooter>
+    </Modal>
+  )
+}
+
+// ── Modal Restablecer contraseña (misma edge function, accion reset_password) ──
+function ResetPasswordModal({ usuario, onClose, onDone }: {
+  usuario: { id: string; nombre: string }
+  onClose: () => void
+  onDone: (msg: string) => void
+}) {
+  const [password, setPassword] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function guardar() {
+    setSaving(true); setError(null)
+    try {
+      const r = await resetPasswordAdmin(usuario.id, password)
+      onDone(`Contraseña de ${usuario.nombre} (${r.email}) restablecida. Entrégasela: ${password}`)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Error al restablecer')
+    } finally { setSaving(false) }
+  }
+
+  return (
+    <Modal open onClose={onClose} title={`Restablecer contraseña · ${usuario.nombre}`}>
+      <div className="space-y-3">
+        <div>
+          <label className="text-xs font-medium text-muted-foreground">Nueva contraseña (mín. 6)</label>
+          <div className="mt-1 flex gap-2">
+            <input className="w-full rounded border px-3 py-2 text-sm font-mono" value={password}
+              onChange={(e) => setPassword(e.target.value)} autoFocus />
+            <Button size="sm" variant="outline" type="button" onClick={() => setPassword(generarPassword())}>Generar</Button>
+          </div>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          La sesión actual del usuario sigue abierta hasta que expire; la clave nueva aplica desde su próximo ingreso.
+        </p>
+        {error && (
+          <div className="flex items-center gap-2 text-sm text-red-600">
+            <AlertTriangle className="h-4 w-4 shrink-0" /> {error}
+          </div>
+        )}
+      </div>
+      <ModalFooter>
+        <Button variant="outline" onClick={onClose} disabled={saving}>Cancelar</Button>
+        <Button onClick={guardar} disabled={password.length < 6 || saving}>
+          {saving ? <Spinner className="h-4 w-4 mr-1" /> : <KeyRound className="h-4 w-4 mr-1" />}
+          Restablecer
         </Button>
       </ModalFooter>
     </Modal>

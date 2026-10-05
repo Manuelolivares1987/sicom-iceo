@@ -49,6 +49,23 @@ export async function crearUsuarioAdmin(params: CrearUsuarioParams): Promise<{
   return data as { user_id: string; tecnico_vinculado?: string | null; warning?: string }
 }
 
+// Restablece la contraseña de una cuenta existente (misma edge function,
+// accion reset_password). Solo administrador, validado server-side.
+export async function resetPasswordAdmin(userId: string, password: string): Promise<{ email: string }> {
+  const { data, error } = await supabase.functions.invoke('admin-crear-usuario', {
+    body: { accion: 'reset_password', user_id: userId, password },
+  })
+  if (error) {
+    const ctx = (error as { context?: Response }).context
+    if (ctx && typeof ctx.json === 'function') {
+      const body = await ctx.json().catch(() => null)
+      throw new Error(body?.error ?? error.message ?? 'Error al restablecer la contraseña')
+    }
+    throw new Error(error.message ?? 'Error al restablecer la contraseña')
+  }
+  return data as { email: string }
+}
+
 // Técnicos de taller sin cuenta vinculada (para el modal de crear usuario).
 export async function getTecnicosSinCuenta() {
   const { data, error } = await supabase
