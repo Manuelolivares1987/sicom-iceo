@@ -15,6 +15,10 @@
 //      (usuario_perfil_id) para que el operador vea las OTs de su cuadrilla.
 //   Si (3) falla se elimina el usuario auth creado (sin usuarios huerfanos).
 //
+// 2026-10-05 · accion "reset_password": el administrador restablece la clave
+//   de una cuenta existente desde la misma pantalla (antes solo por SQL).
+//   Misma autorizacion (rol administrador); no toca el perfil.
+//
 // Variables de entorno (Supabase las setea automaticamente):
 //   - SUPABASE_URL
 //   - SUPABASE_SERVICE_ROLE_KEY
@@ -41,7 +45,7 @@ const ROLES_VALIDOS = [
   "planificador", "tecnico_mantenimiento", "bodeguero", "operador_abastecimiento",
   "auditor", "rrhh_incentivos", "jefe_operaciones", "jefe_mantenimiento",
   "comercial", "prevencionista", "colaborador", "auditor_calidad",
-  "operador_taller",
+  "operador_taller", "operador_combustible",
 ];
 
 Deno.serve(async (req: Request) => {
@@ -75,6 +79,7 @@ Deno.serve(async (req: Request) => {
 
   // ── 2. Validar payload ──────────────────────────────────────────────────────
   let body: {
+    accion?: string; user_id?: string;
     email?: string; password?: string; nombre_completo?: string;
     rol?: string; cargo?: string | null; tecnico_id?: string | null;
   };
@@ -82,6 +87,19 @@ Deno.serve(async (req: Request) => {
 
   const email = (body.email ?? "").trim().toLowerCase();
   const password = body.password ?? "";
+
+  // ── 2b. Restablecer contraseña de una cuenta existente ─────────────────────
+  if (body.accion === "reset_password") {
+    const userId = (body.user_id ?? "").trim();
+    if (!/^[0-9a-f-]{36}$/i.test(userId)) return json(400, { error: "user_id inválido" });
+    if (password.length < 6) return json(400, { error: "La contraseña debe tener al menos 6 caracteres" });
+    const { data: perfil } = await admin.from("usuarios_perfil").select("email").eq("id", userId).maybeSingle();
+    if (!perfil) return json(404, { error: "Usuario no encontrado" });
+    const { error: updErr } = await admin.auth.admin.updateUserById(userId, { password });
+    if (updErr) return json(500, { error: updErr.message });
+    return json(200, { ok: true, user_id: userId, email: perfil.email });
+  }
+  if (body.accion && body.accion !== "crear") return json(400, { error: `Acción desconocida: ${body.accion}` });
   const nombre = (body.nombre_completo ?? "").trim();
   const rol = (body.rol ?? "").trim();
 
