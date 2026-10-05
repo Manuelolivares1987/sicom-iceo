@@ -4,7 +4,10 @@ import {
   autenticar, corpusCliente, slug, fichaEquipo, buscarCodigo, codigosEnTexto, urlPagina,
   BUCKET_ADJUNTOS, TIPOS_ADJUNTO, type FichaEquipo, type CodigoFalla, type AdjuntoRef,
 } from '@/lib/copiloto/server'
-import type { EventoCopiloto, FuenteCopiloto, CodigoCopiloto } from '@/lib/copiloto/tipos'
+import type {
+  EventoCopiloto, FuenteCopiloto, CodigoCopiloto, DiagnosticoCopiloto, PropuestaSolucion,
+} from '@/lib/copiloto/tipos'
+import { tituloConversacion, construirHistorial, describirPausa, HORAS_PARA_SEGUIMIENTO } from '@/lib/copiloto/conversacion'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -32,6 +35,17 @@ export const maxDuration = 300
 //     repositorio te ocupe a ti para solucionar»).
 // Reglas de no-invención intactas: valores críticos solo desde fuentes.
 // Cada consulta queda auditada en copiloto_consultas (MIG542).
+// 2026-10-05  MIG583 (Manuel: «que se entrene y entienda las fallas, y que
+//   quede un chat donde pueda retomar e indicar cuál fue la solución
+//   definitiva»):
+//   - Cada consulta cuelga de una conversación persistente; el historial para
+//     la IA sale de la BD (no del teléfono) y se puede retomar días después.
+//   - El copiloto registra lo que el mecánico INFORMA (registrar_comprobacion)
+//     y, cuando la evidencia cierra, PROPONE la solución (proponer_solucion):
+//     el mecánico la confirma con un toque y recién ahí es un caso.
+//   - historial_flota: busca por texto en OT y OS reales del mismo modelo.
+//   - Un caso reabierto («la falla volvió») lleva la reparación fallida en
+//     sus comprobaciones: el copiloto no la vuelve a proponer.
 // ============================================================================
 
 const MODELO_IA = 'claude-opus-5'
@@ -55,7 +69,7 @@ Flota de arriendo para minería en Chile: aljibes de combustible, camiones de ri
 6. Confirmación: cómo verificar que la reparación resolvió la causa raíz (no solo el síntoma).
 
 # FUENTES Y HERRAMIENTAS (en este orden)
-1. Repositorio del taller: usa buscar_manuales (varias veces si hace falta, también en inglés y portugués: fuse/relay/wiring diagram/connector; fusível/relé/esquema elétrico/chicote), buscar_codigo_falla, listar_documentos, casos_resueltos y ver_pagina para MIRAR diagramas, tablas de fusibles y pinouts antes de explicarlos (el mecánico ve la misma imagen).
+1. Repositorio del taller: usa buscar_manuales (varias veces si hace falta, también en inglés y portugués: fuse/relay/wiring diagram/connector; fusível/relé/esquema elétrico/chicote), buscar_codigo_falla, listar_documentos, casos_resueltos, historial_flota (qué se le hizo de verdad a este equipo y a los del mismo modelo: OT y órdenes de servicio) y ver_pagina para MIRAR diagramas, tablas de fusibles y pinouts antes de explicarlos (el mecánico ve la misma imagen).
 2. Adjuntos del mecánico: fotos y PDFs (informe de escáner, manual, placa, tablero). Léelos con atención; cita un PDF como "(adjunto: <nombre>, pág. N)".
 3. Web, si el repositorio no alcanza: web_search / web_fetch priorizando sitios oficiales del fabricante (manuales, body builder, boletines, recalls) y de fabricantes de componentes (Allison, WABCO, Bendix, Bosch, Delco Remy…). Foros solo como último recurso y nunca sitios de manuales pirateados. Cita cada dato web con un enlace markdown [dominio](URL) en la misma línea.
 4. Criterio experto: si no hay información en el repositorio ni en la web, NO te quedes en "no está". Resuelve con tu conocimiento de ingeniería de camiones pesados siguiendo el PROTOCOLO SIN DOCUMENTACIÓN.
@@ -73,8 +87,12 @@ Estructura la respuesta así:
 2. Cita cada dato del repositorio con su número entre corchetes: [F3], o varios: [F1][F4]. No inventes números de fuente.
 3. Jerarquía de confiabilidad: manual oficial > procedimiento interno de Pillado > guía técnica o web oficial del fabricante > web de terceros > experiencia de campo (foros) > criterio experto. Si usas foros o criterio experto, dilo explícitamente.
 4. Si la información es de otra variante (Volvo norteamericano para un FMX brasileño, Actros europeo para uno off-road, 12 V para un sistema de 24 V), adviértelo y pide validar en el equipo.
-5. La experiencia del taller es la pista más valiosa: si el mismo síntoma ya se resolvió en este equipo o en otro del mismo modelo, dilo primero ("En este mismo equipo / en otro GU813 esto se resolvió con…").
-6. Si hay un DIAGNÓSTICO EN CURSO: no pidas repetir comprobaciones hechas; propone LA siguiente comprobación más discriminante (una a la vez, con herramienta y valor esperado) y pide registrarla con "Registrar comprobación". Cuando la evidencia apunte a una causa, dilo y recuerda "Encontré la causa" para que el caso quede guardado.
+5. La experiencia del taller es la pista más valiosa: si el mismo síntoma ya se resolvió en este equipo o en otro del mismo modelo, dilo primero ("En este mismo equipo / en otro GU813 esto se resolvió con…"). Un caso "validado por jefatura" pesa más que uno sin validar; un caso con reaperturas tuvo reparaciones que no duraron: menciónalo.
+6. Si hay un CASO EN CURSO: no pidas repetir comprobaciones hechas; propone LA siguiente comprobación más discriminante (una a la vez, con herramienta y valor esperado). Una comprobación marcada "reparación anterior NO resolvió la falla" es evidencia fuerte: no vuelvas a proponer esa reparación ni esa causa.
+6b. REGISTRO DEL CASO (el copiloto lleva la bitácora, el mecánico no llena formularios):
+   - Cuando el mecánico INFORME el resultado de algo que hizo ("medí 24,1 V", "el fusible está bueno", "cambié el relé y sigue igual"), llama registrar_comprobacion con ese dato exacto. Solo lo que él reporta: nunca registres lo que tú propones ni lo que supones.
+   - Cuando el mecánico diga que quedó resuelto o la evidencia cierre la causa, llama proponer_solucion con causa raíz, reparación y sistema. La app le muestra la propuesta para que la confirme o corrija: dile que la revise y confirme con el botón; NO digas que ya quedó guardada.
+   - Si la conversación se retoma después de ${HORAS_PARA_SEGUIMIENTO} h o más y el caso sigue abierto, lo primero es preguntar cómo terminó: ¿se resolvió (cuál fue la solución definitiva)?, ¿sigue fallando?, ¿qué pasó con la última comprobación propuesta? Una sola pregunta, corta.
 7. Código de falla: qué significa, qué ECU lo levanta, causas probables en orden, primera comprobación y si el equipo puede seguir operando. Si no está en la tabla, dilo y explica cómo leer el código completo en el tablero de ESE modelo (ficha técnica) o con escáner.
 8. Si faltan datos para diagnosticar, no adivines: máximo 3 preguntas concretas, las que más discriminan.
 9. Foto: describe lo que se ve objetivamente y qué NO se puede confirmar solo con la imagen.
@@ -156,6 +174,47 @@ const TOOLS: Anthropic.Beta.Messages.BetaToolUnion[] = [
     },
     eager_input_streaming: true,
   },
+  {
+    name: 'historial_flota',
+    description: 'Busca por palabras en el historial REAL de mantenimiento: órdenes de trabajo ejecutadas y órdenes de servicio antiguas de este equipo y de los demás equipos del mismo modelo (trabajo realizado, motivo). Úsalo para saber si esta falla ya se reparó en la flota y qué se hizo. Términos concretos (componente, síntoma), 2 a 5 palabras.',
+    input_schema: {
+      type: 'object',
+      properties: { texto: { type: 'string', description: 'Ej: "alternador correa carga", "relé partida", "fuga aire compresor".' } },
+      required: ['texto'],
+    },
+    eager_input_streaming: true,
+  },
+  {
+    name: 'registrar_comprobacion',
+    description: 'Registra en la bitácora del caso una comprobación que el mecánico INFORMÓ haber hecho, con su resultado. Solo datos que él reportó en su mensaje (medición, inspección, prueba, cambio de pieza y qué pasó). Si no hay caso abierto se crea uno con el síntoma. La app se la muestra al mecánico.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        descripcion: { type: 'string', description: 'Qué comprobó, en sus palabras. Ej: "Voltaje en bornes de batería con motor detenido".' },
+        resultado: { type: 'string', enum: ['ok', 'no_ok', 'valor'], description: 'ok = normal/descartado; no_ok = falla confirmada; valor = medición numérica (pon el número en valor).' },
+        valor: { type: 'string', description: 'La medición o el detalle. Ej: "24,1 V", "cambió el relé K3 y siguió igual".' },
+        sintoma: { type: 'string', description: 'Solo si no hay caso abierto: el síntoma en una frase para abrirlo.' },
+        sistema: { type: 'string', enum: SISTEMAS_ENUM },
+      },
+      required: ['descripcion', 'resultado'],
+    },
+    eager_input_streaming: true,
+  },
+  {
+    name: 'proponer_solucion',
+    description: 'Propone al mecánico guardar la solución definitiva del caso (causa raíz + reparación). Llámala cuando él diga que quedó resuelto o cuando la evidencia registrada cierre la causa. Él la confirma o corrige en la app; hasta entonces NO está guardada.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        causa_raiz: { type: 'string', description: 'La causa real, concreta y verificada. Ej: "Masa del motor de partida sulfatada".' },
+        reparacion: { type: 'string', description: 'Qué se hizo para que no vuelva. Ej: "Se limpió y reapretó la masa; grasa dieléctrica".' },
+        sistema: { type: 'string', enum: SISTEMAS_ENUM },
+        sintoma: { type: 'string', description: 'El síntoma original en una frase (para el caso).' },
+      },
+      required: ['causa_raiz', 'reparacion'],
+    },
+    eager_input_streaming: true,
+  },
   // Respaldo cuando el repositorio no alcanza (herramientas de servidor de
   // Anthropic: corren en su infraestructura, sin código nuestro).
   { type: 'web_search_20260209', name: 'web_search', max_uses: 4 },
@@ -166,10 +225,11 @@ const TOOLS: Anthropic.Beta.Messages.BetaToolUnion[] = [
 type Turno = { rol: 'user' | 'assistant'; texto: string }
 type Body = {
   pregunta?: string
+  conversacionId?: string
   activoId?: string
   otId?: string
   diagnosticoId?: string
-  historial?: Turno[]
+  historial?: Turno[]            // respaldo para la PWA vieja; con conversación manda la BD
   fotoBase64?: string
   fotoTipo?: string
   adjuntos?: AdjuntoRef[]
@@ -182,10 +242,22 @@ type ChunkRow = {
 }
 type FuenteInterna = ChunkRow & { n: number }
 type Caso = {
-  equipo: string; mismo_equipo: boolean; sintoma: string; causa_raiz: string
+  equipo: string; mismo_equipo: boolean; mismo_modelo?: boolean; modelo?: string | null
+  sintoma: string; causa_raiz: string
   reparacion: string | null; sistema: string | null; resuelto_at: string
-  comprobaciones: { descripcion?: string; resultado?: string; valor?: string }[]
+  comprobaciones: { descripcion?: string; resultado?: string; valor?: string; tipo?: string }[]
+  leccion?: string | null; validado?: boolean; reaperturas?: number
 }
+type Conversacion = {
+  id: string; usuario_id: string; activo_id: string | null; ot_id: string | null
+  diagnostico_id: string | null; titulo: string; estado: string; ultimo_at: string; mensajes: number
+}
+type DxRow = {
+  id: string; sintoma: string; sistema: string | null; estado: string
+  causa_raiz: string | null; reparacion: string | null
+  comprobaciones: { descripcion?: string; resultado?: string; valor?: string; tipo?: string }[]
+}
+const SELECT_DX = 'id, ot_id, activo_id, usuario_id, sintoma, sistema, estado, comprobaciones, causa_raiz, reparacion, leccion, resuelto_at, validado_at, reaperturas, created_at'
 
 // Serializa filas de BD a texto compacto para el prompt: bota nulls, UUIDs
 // internos y trunca textos largos. Aguanta cambios de esquema sin romperse.
@@ -288,6 +360,20 @@ export async function POST(req: Request) {
   const ndjson = body.formato === 'ndjson'
   const corpus = corpusCliente()
 
+  // ── Conversación (MIG583): se retoma la indicada o nace una nueva ─────────
+  let conversacion: Conversacion | null = null
+  if (body.conversacionId) {
+    const { data } = await sb.from('copiloto_conversaciones')
+      .select('id, usuario_id, activo_id, ot_id, diagnostico_id, titulo, estado, ultimo_at, mensajes')
+      .eq('id', body.conversacionId).maybeSingle()
+    conversacion = (data as Conversacion | null) ?? null
+    if (conversacion) {
+      body.activoId ||= conversacion.activo_id ?? undefined
+      body.otId ||= conversacion.ot_id ?? undefined
+      body.diagnosticoId ||= conversacion.diagnostico_id ?? undefined
+    }
+  }
+
   // Sin equipo abierto pero la pregunta nombra una patente ("¿qué neumático
   // ocupa el hhwb-42?"): se carga ese equipo (RLS de SICOM decide si lo ve).
   if (!body.activoId) {
@@ -296,7 +382,53 @@ export async function POST(req: Request) {
       const { data } = await sb.from('activos').select('id')
         .ilike('patente', `${m[1].toUpperCase()}-${m[2]}`).limit(1).maybeSingle()
       const id = (data as { id?: string } | null)?.id
-      if (id) body.activoId = id
+      if (id) {
+        body.activoId = id
+        if (conversacion && !conversacion.activo_id) {
+          await sb.from('copiloto_conversaciones').update({ activo_id: id }).eq('id', conversacion.id)
+          conversacion.activo_id = id
+        }
+      }
+    }
+  }
+
+  if (!conversacion) {
+    const { data } = await sb.from('copiloto_conversaciones').insert({
+      usuario_id: uid,
+      activo_id: body.activoId ?? null,
+      ot_id: body.otId ?? null,
+      diagnostico_id: body.diagnosticoId ?? null,
+      titulo: tituloConversacion(pregunta, adjuntos),
+    }).select('id, usuario_id, activo_id, ot_id, diagnostico_id, titulo, estado, ultimo_at, mensajes').single()
+    conversacion = (data as Conversacion | null) ?? null
+  }
+  // El caso del hilo, si ya existe (lo registra el copiloto o el mecánico)
+  let dxId: string | null = body.diagnosticoId ?? null
+  // Si el mecánico retoma con la OT abierta pero sin conversación amarrada al
+  // caso (flujo MIG543), se busca el caso abierto de esa OT
+  if (!dxId && body.otId) {
+    const { data } = await sb.from('copiloto_diagnosticos').select('id').eq('ot_id', body.otId)
+      .eq('estado', 'abierto').order('created_at', { ascending: false }).limit(1).maybeSingle()
+    dxId = (data as { id?: string } | null)?.id ?? null
+  }
+
+  // Historial para la IA desde la BD (lo que el teléfono manda es respaldo)
+  let turnosHistorial: Turno[] = (body.historial ?? []).slice(-6)
+  let resumenAnteriores: string | null = null
+  let notaRetoma = ''
+  if (conversacion) {
+    const { data: previas } = await sb.from('copiloto_consultas')
+      .select('pregunta, respuesta, created_at').eq('conversacion_id', conversacion.id)
+      .order('created_at', { ascending: false }).limit(30)
+    const lista = ((previas ?? []) as { pregunta: string; respuesta: string | null; created_at: string }[])
+    if (lista.length) {
+      const h = construirHistorial(lista)
+      turnosHistorial = h.turnos
+      resumenAnteriores = h.resumenAnteriores
+      const horas = (Date.now() - new Date(conversacion.ultimo_at).getTime()) / 3_600_000
+      if (horas >= HORAS_PARA_SEGUIMIENTO) {
+        notaRetoma = `CONVERSACIÓN RETOMADA ${describirPausa(conversacion.ultimo_at)} (última actividad ${conversacion.ultimo_at.slice(0, 16).replace('T', ' ')} UTC; hoy es ${new Date().toISOString().slice(0, 10)}). Estado del hilo: ${conversacion.estado}.\n`
+      }
     }
   }
 
@@ -323,8 +455,8 @@ export async function POST(req: Request) {
       sb.rpc('rpc_copiloto_casos_similares', {
         p_activo_id: body.activoId, p_texto: pregunta || 'falla', p_limit: 3,
       }),
-      body.diagnosticoId
-        ? sb.from('copiloto_diagnosticos').select('sintoma, sistema, estado, comprobaciones').eq('id', body.diagnosticoId).maybeSingle()
+      dxId
+        ? sb.from('copiloto_diagnosticos').select('id, sintoma, sistema, estado, comprobaciones, causa_raiz, reparacion').eq('id', dxId).maybeSingle()
         : Promise.resolve({ data: null, error: null }),
     ])
 
@@ -352,19 +484,18 @@ export async function POST(req: Request) {
     const casosData = (casos.data ?? []) as Caso[]
     if (casosData.length) contextoEquipo += `\nCASOS RESUELTOS ANTERIORES (experiencia interna del taller):\n${casosATexto(casosData)}`
 
-    const dxData = dx.data as {
-      sintoma: string; sistema: string | null; estado: string
-      comprobaciones: { descripcion?: string; resultado?: string; valor?: string }[]
-    } | null
-    if (dxData && dxData.estado === 'abierto') {
-      const compr = (dxData.comprobaciones ?? [])
-        .map((x, i) => `${i + 1}. ${x.descripcion}${x.valor ? ` = ${x.valor}` : ''} → ${x.resultado}`)
-        .join('\n')
-      contextoEquipo += `\nDIAGNÓSTICO EN CURSO:\nSíntoma declarado: ${dxData.sintoma}`
-        + `${dxData.sistema ? ` · Sistema: ${dxData.sistema}` : ''}\n`
-        + (compr ? `Comprobaciones ya registradas:\n${compr}\n` : 'Aún sin comprobaciones registradas.\n')
-    }
+    const dxData = dx.data as DxRow | null
+    if (dxData) contextoEquipo += dxATexto(dxData)
+  } else if (dxId) {
+    // Caso sin equipo (consulta general que igual se está diagnosticando)
+    const { data } = await sb.from('copiloto_diagnosticos')
+      .select('id, sintoma, sistema, estado, comprobaciones, causa_raiz, reparacion').eq('id', dxId).maybeSingle()
+    if (data) contextoEquipo += dxATexto(data as DxRow)
   }
+  if (resumenAnteriores) {
+    contextoEquipo += `\nPREGUNTAS ANTERIORES DEL MECÁNICO EN ESTA MISMA CONVERSACIÓN (más antiguas que las que ves completas):\n${resumenAnteriores}\n`
+  }
+  if (notaRetoma) contextoEquipo += `\n${notaRetoma}`
 
   // ── Registro de fuentes: numeración estable [Fn] durante toda la consulta ──
   const fuentes = new Map<number, FuenteInterna>()       // chunk_id → fuente
@@ -435,11 +566,13 @@ export async function POST(req: Request) {
     usuario_id: uid,
     activo_id: body.activoId ?? null,
     ot_id: body.otId ?? null,
-    diagnostico_id: body.diagnosticoId ?? null,
+    diagnostico_id: dxId,
+    conversacion_id: conversacion?.id ?? null,
     pregunta: pregunta || (adjuntos.length ? `(adjuntos: ${adjuntos.map((a) => a.nombre).join(', ')})` : '(solo foto)'),
     con_foto: !!body.fotoBase64 || adjuntos.some((a) => a.tipo.startsWith('image/')),
     modelo: MODELO_IA,
     fuentes: [],
+    adjuntos: adjuntos.map((a) => ({ nombre: a.nombre, tipo: a.tipo, path: a.path })),
   }).select('id').single()
   const consultaId: string | null = ins?.id ?? null
 
@@ -484,7 +617,7 @@ export async function POST(req: Request) {
   })
 
   const mensajes: Anthropic.Beta.Messages.BetaMessageParam[] = [
-    ...(body.historial ?? []).slice(-6).map((t): Anthropic.Beta.Messages.BetaMessageParam => ({
+    ...turnosHistorial.map((t): Anthropic.Beta.Messages.BetaMessageParam => ({
       role: t.rol === 'assistant' ? 'assistant' : 'user',
       content: t.texto.slice(0, 4000),
     })),
@@ -608,6 +741,55 @@ export async function POST(req: Request) {
           const cs = (data ?? []) as Caso[]
           return ok(cs.length ? casosATexto(cs) : 'No hay casos resueltos parecidos para este equipo o modelo.')
         }
+        case 'historial_flota': {
+          const q = str('texto')
+          if (q.length < 3) return err('texto vacío')
+          if (!body.activoId) return ok('Sin equipo seleccionado: no hay historial por modelo.')
+          emitir({ t: 'estado', d: `Revisando historial de la flota: «${q}»` })
+          const { data, error } = await sb.rpc('rpc_copiloto_historial_fallas', { p_activo_id: body.activoId, p_texto: q, p_limit: 8 })
+          if (error) throw error
+          const filas = (data ?? []) as { equipo: string; mismo_equipo: boolean; fecha: string; origen: string; folio: string; tipo: string; motivo: string | null; trabajo: string | null }[]
+          return ok(filas.length
+            ? filas.map((f) => `- [${f.mismo_equipo ? 'ESTE EQUIPO' : f.equipo} · ${f.fecha} · ${f.folio} · ${f.tipo}]`
+              + `${f.motivo ? ` Motivo: ${f.motivo}` : ''}${f.trabajo ? ` Trabajo: ${f.trabajo}` : ''}`).join('\n')
+            : 'Nada parecido en el historial de este equipo ni de su modelo.')
+        }
+        case 'registrar_comprobacion': {
+          const descripcion = str('descripcion')
+          const resultado = str('resultado')
+          if (descripcion.length < 3 || !['ok', 'no_ok', 'valor'].includes(resultado)) return err('descripcion y resultado (ok|no_ok|valor) son obligatorios')
+          emitir({ t: 'estado', d: 'Anotando la comprobación en el caso' })
+          if (!dxId) {
+            // Nace el caso con el síntoma que el copiloto resume (o el título del hilo)
+            const sintoma = str('sintoma') || conversacion?.titulo || pregunta.slice(0, 200)
+            const { data: nuevo, error: e1 } = await sb.from('copiloto_diagnosticos').insert({
+              ot_id: body.otId ?? null, activo_id: body.activoId ?? null, usuario_id: uid,
+              sintoma, sistema: SISTEMAS_ENUM.includes(str('sistema')) ? str('sistema') : null,
+            }).select('id').single()
+            if (e1 || !nuevo) return err(`No se pudo abrir el caso: ${e1?.message ?? 'error'}`)
+            dxId = (nuevo as { id: string }).id
+            if (conversacion) await sb.from('copiloto_conversaciones').update({ diagnostico_id: dxId }).eq('id', conversacion.id)
+            if (consultaId) await sb.from('copiloto_consultas').update({ diagnostico_id: dxId }).eq('id', consultaId)
+          }
+          const { error: e2 } = await sb.rpc('rpc_diagnostico_comprobacion', {
+            p_diagnostico_id: dxId, p_descripcion: descripcion, p_resultado: resultado, p_valor: str('valor') || null,
+          })
+          if (e2) return err(`No se pudo registrar: ${e2.message}`)
+          const { data: dxRow } = await sb.from('copiloto_diagnosticos').select(SELECT_DX).eq('id', dxId).maybeSingle()
+          if (dxRow) emitir({ t: 'diagnostico', d: dxRow as unknown as DiagnosticoCopiloto })
+          return ok(`Registrado en el caso: ${descripcion}${str('valor') ? ` = ${str('valor')}` : ''} → ${resultado}. No lo repitas en tu respuesta como si fuera nuevo; sigue con el siguiente paso.`)
+        }
+        case 'proponer_solucion': {
+          const causa = str('causa_raiz'), rep = str('reparacion')
+          if (causa.length < 5 || rep.length < 5) return err('causa_raiz y reparacion deben ser concretas')
+          const propuesta: PropuestaSolucion = {
+            causa_raiz: causa.slice(0, 500), reparacion: rep.slice(0, 800),
+            sistema: SISTEMAS_ENUM.includes(str('sistema')) ? str('sistema') : null,
+            sintoma: str('sintoma').slice(0, 300) || null,
+          }
+          emitir({ t: 'propuesta', d: propuesta })
+          return ok('La propuesta se le mostró al mecánico con un botón para confirmarla o corregirla. Dile en una línea que la revise y la confirme; no afirmes que quedó guardada.')
+        }
         default:
           return err(`Herramienta desconocida: ${tool.name}`)
       }
@@ -639,6 +821,7 @@ export async function POST(req: Request) {
         url: f.url_fuente ? (esPdf ? `${f.url_fuente}#page=${f.pagina}` : f.url_fuente) : null,
         imagen: imgs.get(f.n) ?? null,
         citada: citadas.has(f.n),
+        documentoId: f.con_imagen ? f.documento_id : null,
       }
     })
     // Fuentes web: los enlaces markdown que Claude escribió en la respuesta
@@ -667,6 +850,7 @@ export async function POST(req: Request) {
       let respuesta = ''
       let inTok = 0, outTok = 0
       try {
+        if (conversacion) emitir({ t: 'conversacion', id: conversacion.id, titulo: conversacion.titulo })
         if (codigosEncontrados.length) emitir({ t: 'codigos', d: codigosEncontrados.map(codigoParaCliente) })
         emitir({ t: 'estado', d: 'Analizando con manuales, casos e historial…' })
 
@@ -738,7 +922,12 @@ export async function POST(req: Request) {
         if (consultaId) {
           await sb.from('copiloto_consultas').update({
             respuesta,
-            fuentes: fs.map((f) => ({ n: f.n, titulo: f.titulo, pagina: f.pagina, tipo: f.tipo, url: f.url, citada: f.citada })),
+            fuentes: fs.map((f) => ({
+              n: f.n, titulo: f.titulo, pagina: f.pagina, tipo: f.tipo, url: f.url, citada: f.citada,
+              confiabilidad: f.confiabilidad, documento_id: f.documentoId ?? null,
+            })),
+            codigos: codigosEncontrados.map(codigoParaCliente),
+            diagnostico_id: dxId,
             input_tokens: inTok,
             output_tokens: outTok,
             duracion_ms: Date.now() - t0,
@@ -774,6 +963,7 @@ export async function POST(req: Request) {
       'Cache-Control': 'no-cache',
       'X-Accel-Buffering': 'no',
       ...(consultaId ? { 'X-Copiloto-Id': consultaId } : {}),
+      ...(conversacion ? { 'X-Copiloto-Conversacion': conversacion.id } : {}),
     },
   })
 }
@@ -782,9 +972,29 @@ function casosATexto(cs: Caso[]): string {
   return cs.map((c) => {
     const compr = (c.comprobaciones ?? [])
       .map((x) => `${x.descripcion}${x.valor ? ` = ${x.valor}` : ''} (${x.resultado})`).join('; ')
-    return `- [${c.mismo_equipo ? 'ESTE MISMO EQUIPO' : `mismo modelo, ${c.equipo}`} · ${(c.resuelto_at ?? '').slice(0, 10)}] `
+    const donde = c.mismo_equipo ? 'ESTE MISMO EQUIPO'
+      : c.mismo_modelo ? `mismo modelo, ${c.equipo}`
+        : `otro equipo de la flota, ${c.equipo}${c.modelo ? ` (${c.modelo})` : ''}`
+    return `- [${donde} · ${(c.resuelto_at ?? '').slice(0, 10)}`
+      + `${c.validado ? ' · VALIDADO por jefatura' : ' · sin validar'}${c.reaperturas ? ` · ${c.reaperturas} reapertura(s)` : ''}] `
       + `Síntoma: ${c.sintoma}. Causa raíz: ${c.causa_raiz}.`
       + `${c.reparacion ? ` Reparación: ${c.reparacion}.` : ''}`
+      + `${c.leccion ? ` Lección: ${c.leccion.slice(0, 500)}` : ''}`
       + `${compr ? ` Comprobaciones: ${compr}.` : ''}`
   }).join('\n') + '\n'
+}
+
+function dxATexto(d: DxRow): string {
+  const compr = (d.comprobaciones ?? [])
+    .map((x, i) => `${i + 1}. ${x.tipo === 'reparacion_fallida' ? '⚠️ ' : ''}${x.descripcion}${x.valor ? ` = ${x.valor}` : ''} → ${x.resultado}`)
+    .join('\n')
+  if (d.estado === 'resuelto') {
+    return `\nCASO DE ESTA CONVERSACIÓN: RESUELTO. Síntoma: ${d.sintoma}${d.sistema ? ` · Sistema: ${d.sistema}` : ''}\n`
+      + `Causa raíz registrada: ${d.causa_raiz ?? '—'}. Solución definitiva: ${d.reparacion ?? '—'}.\n`
+      + (compr ? `Comprobaciones:\n${compr}\n` : '')
+      + 'Si el mecánico dice que volvió a fallar, dile que use "La falla volvió" en la app para reabrir el caso.\n'
+  }
+  return `\nCASO EN CURSO (bitácora del diagnóstico):\nSíntoma declarado: ${d.sintoma}`
+    + `${d.sistema ? ` · Sistema: ${d.sistema}` : ''}\n`
+    + (compr ? `Comprobaciones ya registradas:\n${compr}\n` : 'Aún sin comprobaciones registradas.\n')
 }

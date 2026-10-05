@@ -10,15 +10,17 @@
 // cuesta. Todo sale de copiloto_consultas + copiloto_diagnosticos.
 // ============================================================================
 
-import { useMemo } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useMemo, useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import Link from 'next/link'
 import {
-  Bot, ThumbsUp, Camera, FileQuestion, DollarSign, Stethoscope, Repeat, MessageSquare,
+  Bot, ThumbsUp, Camera, FileQuestion, DollarSign, Stethoscope, Repeat, MessageSquare, ShieldCheck, Clock, ExternalLink,
 } from 'lucide-react'
 import { Spinner } from '@/components/ui/spinner'
 import { useRequireAuth } from '@/hooks/use-require-auth'
 import { supabase } from '@/lib/supabase'
+import { validarCaso } from '@/lib/services/copiloto'
+import { describirPausa } from '@/lib/copiloto/conversacion'
 
 // Tarifa claude-opus-5: US$5/M entrada + US$25/M salida
 const USD_IN = 5 / 1_000_000
@@ -34,22 +36,36 @@ type Consulta = {
 
 type Dx = {
   id: string; sintoma: string; sistema: string | null; estado: string
-  causa_raiz: string | null; reparacion: string | null
+  causa_raiz: string | null; reparacion: string | null; leccion: string | null
+  validado_at: string | null; reaperturas: number
   comprobaciones: unknown[]; created_at: string; resuelto_at: string | null
   activo: { codigo: string | null; patente: string | null; modelo_id: string | null } | null
-  activo_id: string
+  activo_id: string | null
+}
+
+// [MIG583] Hilos abiertos con equipo y sin cierre: el mecánico no dijo cómo
+// terminó. Es conocimiento que se está perdiendo; jefatura lo persigue.
+type Conv = {
+  id: string; usuario_id: string; titulo: string; estado: string; mensajes: number; ultimo_at: string
+  activo_id: string | null; diagnostico_id: string | null
+  activo: { codigo: string | null; patente: string | null } | null
 }
 
 async function getDatos() {
   const desde = new Date(Date.now() - 30 * 86400_000).toISOString()
-  const [consultas, dxs, perfiles] = await Promise.all([
+  const hace3d = new Date(Date.now() - 3 * 86400_000).toISOString()
+  const [consultas, dxs, perfiles, convs] = await Promise.all([
     supabase.from('copiloto_consultas')
       .select('id, usuario_id, pregunta, con_foto, feedback, fuentes, input_tokens, output_tokens, created_at, diagnostico_id, activo:activos(codigo, patente)')
       .gte('created_at', desde).order('created_at', { ascending: false }).limit(300),
     supabase.from('copiloto_diagnosticos')
-      .select('id, sintoma, sistema, estado, causa_raiz, reparacion, comprobaciones, created_at, resuelto_at, activo_id, activo:activos(codigo, patente, modelo_id)')
+      .select('id, sintoma, sistema, estado, causa_raiz, reparacion, leccion, validado_at, reaperturas, comprobaciones, created_at, resuelto_at, activo_id, activo:activos(codigo, patente, modelo_id)')
       .order('created_at', { ascending: false }).limit(300),
     supabase.from('usuarios_perfil').select('id, nombre_completo'),
+    supabase.from('copiloto_conversaciones')
+      .select('id, usuario_id, titulo, estado, mensajes, ultimo_at, activo_id, diagnostico_id, activo:activos(codigo, patente)')
+      .eq('estado', 'abierta').not('activo_id', 'is', null).lt('ultimo_at', hace3d)
+      .order('ultimo_at', { ascending: false }).limit(50),
   ])
   if (consultas.error) throw consultas.error
   if (dxs.error) throw dxs.error
@@ -57,6 +73,7 @@ async function getDatos() {
   return {
     consultas: (consultas.data ?? []) as unknown as Consulta[],
     dxs: (dxs.data ?? []) as unknown as Dx[],
+    sinCierre: (convs.data ?? []) as unknown as Conv[],
     nombres,
   }
 }
@@ -82,7 +99,15 @@ const equipoLabel = (a: { codigo: string | null; patente: string | null } | null
 
 export default function CopilotoPanelPage() {
   const { loading: authLoading } = useRequireAuth()
+  const qc = useQueryClient()
   const { data, isLoading, error } = useQuery({ queryKey: ['copiloto-panel'], queryFn: getDatos })
+  const [validando, setValidando] = useState<string | null>(null)
+  async function validar(d: Dx) {
+    setValidando(d.id)
+    try { await validarCaso(d.id, !d.validado_at); await qc.invalidateQueries({ queryKey: ['copiloto-panel'] }) }
+    catch (e) { alert(e instanceof Error ? e.message : 'No se pudo validar') }
+    finally { setValidando(null) }
+  }
 
   const stats = useMemo(() => {
     if (!data) return null
@@ -136,14 +161,16 @@ export default function CopilotoPanelPage() {
         </Link>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-7">
         <Kpi icon={Bot} titulo="Consultas" valor={String(stats.cs.length)}
              detalle={`${stats.mecanicos} mecánico(s) · ${stats.cs.filter((c) => c.con_foto).length} con foto`} />
         <Kpi icon={ThumbsUp} titulo="¿Sirvió?" tono={stats.conFb.length && stats.utiles / stats.conFb.length >= 0.7 ? 'ok' : undefined}
              valor={stats.conFb.length ? `${Math.round(100 * stats.utiles / stats.conFb.length)}%` : '—'}
              detalle={stats.conFb.length ? `${stats.utiles} 👍 de ${stats.conFb.length} evaluadas` : 'sin evaluaciones aún'} />
         <Kpi icon={Stethoscope} titulo="Casos resueltos" tono="ok" valor={String(stats.resueltos.length)}
-             detalle={`${stats.abiertos.length} diagnóstico(s) abiertos`} />
+             detalle={`${stats.resueltos.filter((d) => d.validado_at).length} validados · ${stats.abiertos.length} abiertos`} />
+        <Kpi icon={Clock} titulo="Sin cierre" tono={data.sinCierre.length ? 'warn' : 'ok'} valor={String(data.sinCierre.length)}
+             detalle="hilos con equipo, >3 días sin decir cómo terminó" />
         <Kpi icon={FileQuestion} titulo="Sin fuentes" tono={stats.sinFuentes.length > 0 ? 'warn' : undefined}
              valor={String(stats.sinFuentes.length)} detalle="vacíos del corpus a revisar" />
         <Kpi icon={Repeat} titulo="Fallas recurrentes" tono={stats.recurrentes.length ? 'warn' : 'ok'}
@@ -159,7 +186,7 @@ export default function CopilotoPanelPage() {
         </div>
         {stats.resueltos.length === 0 ? (
           <p className="px-4 py-6 text-center text-sm text-gray-400">
-            Aún no hay casos. Nacen cuando un mecánico marca «Encontré la causa» en un diagnóstico.
+            Aún no hay casos. Nacen cuando un mecánico registra la solución definitiva de una conversación.
           </p>
         ) : (
           <div className="divide-y">
@@ -173,6 +200,15 @@ export default function CopilotoPanelPage() {
                 </div>
                 <div className="mt-0.5 text-gray-700"><b>Síntoma:</b> {d.sintoma}</div>
                 <div className="text-green-800"><b>Causa:</b> {d.causa_raiz}{d.reparacion ? ` — ${d.reparacion}` : ''}</div>
+                {d.leccion && <div className="mt-0.5 whitespace-pre-line text-[12px] text-gray-500">{d.leccion.split('\nPalabras clave:')[0]}</div>}
+                <div className="mt-1 flex items-center gap-2">
+                  {d.reaperturas > 0 && <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold text-red-700">reabierto ×{d.reaperturas}</span>}
+                  <button onClick={() => validar(d)} disabled={validando === d.id}
+                          className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[10.5px] font-semibold ${
+                            d.validado_at ? 'bg-green-100 text-green-700' : 'border border-gray-300 text-gray-600 hover:bg-gray-50'}`}>
+                    <ShieldCheck className="h-3 w-3" /> {d.validado_at ? 'Validado por jefatura' : 'Validar'}
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -203,6 +239,26 @@ export default function CopilotoPanelPage() {
 
         {/* Vacíos del corpus + recurrencia */}
         <div className="space-y-4">
+          <div className="rounded-lg border border-amber-200 bg-white">
+            <div className="border-b border-amber-100 bg-amber-50 px-4 py-2.5 text-sm font-semibold text-amber-800">
+              Conversaciones sin cierre <span className="font-normal text-amber-700/70">— nadie dijo cómo terminó</span>
+            </div>
+            <div className="divide-y">
+              {data.sinCierre.slice(0, 8).map((c) => (
+                <div key={c.id} className="flex items-center gap-2 px-4 py-2 text-sm">
+                  <span className="font-mono text-xs font-semibold text-gray-500">{equipoLabel(c.activo)}</span>
+                  <span className="min-w-0 flex-1 truncate text-gray-700">{c.titulo}</span>
+                  <span className="shrink-0 text-[11px] text-gray-400">{data.nombres.get(c.usuario_id)?.split(' ')[0] ?? '—'} · {describirPausa(c.ultimo_at)}</span>
+                  <Link href={`/m/taller/copiloto?c=${c.id}`} className="shrink-0 text-indigo-600" title="Abrir y cerrar el caso">
+                    <ExternalLink className="h-3.5 w-3.5" />
+                  </Link>
+                </div>
+              ))}
+              {data.sinCierre.length === 0 && (
+                <p className="px-4 py-4 text-center text-sm text-gray-400">Todo hilo con equipo tiene su cierre. 💪</p>
+              )}
+            </div>
+          </div>
           <div className="rounded-lg border border-amber-200 bg-white">
             <div className="border-b border-amber-100 bg-amber-50 px-4 py-2.5 text-sm font-semibold text-amber-800">
               Consultas sin fuentes — dónde faltan manuales

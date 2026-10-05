@@ -11,6 +11,12 @@
 //             por voz (manos sucias). Necesita señal: acá no hay offline.
 //             Adjuntos: varias fotos y PDFs desde el teléfono, subidos directo
 //             al storage del corpus; un PDF se puede proponer a la biblioteca.
+// 2026-10-05  v3 (MIG583): la conversación persiste y se retoma (?c=<id>);
+//             historial de hilos; al volver tras horas pregunta cómo terminó;
+//             el copiloto anota las comprobaciones que el mecánico informa y
+//             PROPONE la solución, que se confirma con un toque; «La falla
+//             volvió» reabre el caso dejando la reparación como intento
+//             fallido; 👎 con motivo.
 // ============================================================================
 
 import { Suspense, useCallback, useEffect, useRef, useState } from 'react'
@@ -18,8 +24,8 @@ import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import {
   ArrowLeft, Send, Camera, X, Loader2, WifiOff, Bot, ThumbsUp, ThumbsDown, Sparkles,
-  Stethoscope, ClipboardCheck, CheckCircle2, ChevronDown, ChevronUp, Mic, MicOff, Hash, Search, Truck,
-  Paperclip, FileText, AlertCircle, BookPlus,
+  Stethoscope, ClipboardCheck, CheckCircle2, Mic, MicOff, Hash, Search, Truck,
+  Paperclip, FileText, AlertCircle, BookPlus, History, MessageSquarePlus,
 } from 'lucide-react'
 import { Spinner } from '@/components/ui/spinner'
 import { Modal, ModalFooter } from '@/components/ui/modal'
@@ -28,12 +34,19 @@ import { supabase } from '@/lib/supabase'
 import { useNetworkStatus } from '@/hooks/use-taller-mecanico'
 import {
   getDiagnosticoDeOT, crearDiagnostico, agregarComprobacion, resolverDiagnostico,
-  SISTEMAS, type Diagnostico,
+  listarConversaciones, cargarConversacion, resolverConversacion, reabrirConversacion,
+  cambiarEstadoConversacion, enviarFeedback, SISTEMAS,
 } from '@/lib/services/copiloto'
-import type { EventoCopiloto, FuenteCopiloto, CodigoCopiloto } from '@/lib/copiloto/tipos'
+import type {
+  EventoCopiloto, FuenteCopiloto, CodigoCopiloto, DiagnosticoCopiloto, PropuestaSolucion, ConversacionCopiloto,
+} from '@/lib/copiloto/tipos'
+import { describirPausa, necesitaSeguimiento } from '@/lib/copiloto/conversacion'
 import {
   RespuestaMarkdown, ListaFuentes, VisorPagina, TarjetasCodigos, FichaEquipoCard, type FichaCliente,
 } from '@/components/copiloto/partes'
+import {
+  HistorialConversaciones, ListaRetomar, TarjetaSeguimiento, TarjetaPropuesta, TarjetaCaso, MotivosNoUtil, ESTADO_CONV,
+} from '@/components/copiloto/conversaciones'
 
 type Adjunto = {
   id: string
@@ -52,11 +65,13 @@ type Mensaje = {
   rol: 'user' | 'assistant'
   texto: string
   foto?: string
-  adjuntos?: { nombre: string; tipo: string; preview?: string }[]
+  adjuntos?: { nombre: string; tipo: string; preview?: string | null }[]
   consultaId?: string
   feedback?: 'util' | 'no_util'
   fuentes?: FuenteCopiloto[]
   codigos?: CodigoCopiloto[]
+  propuesta?: PropuestaSolucion | null
+  fecha?: string
 }
 
 const SUGERENCIAS_EQUIPO = [
@@ -109,12 +124,22 @@ function crearReconocedor(): Reconocedor | null {
   return r
 }
 
+function urlConversacion(c: { id: string; activo_id: string | null; ot_id: string | null; activo?: { patente: string | null; codigo: string | null } | null }, equipo?: string | null) {
+  const p = new URLSearchParams({ c: c.id })
+  if (c.ot_id) p.set('ot', c.ot_id)
+  if (c.activo_id) p.set('activo', c.activo_id)
+  const label = equipo ?? c.activo?.patente ?? c.activo?.codigo
+  if (label) p.set('equipo', label)
+  return `/m/taller/copiloto?${p.toString()}`
+}
+
 function CopilotoInner() {
   const params = useSearchParams()
   const router = useRouter()
   const otId = params.get('ot')
   const activoId = params.get('activo')
   const equipoLabel = params.get('equipo')
+  const convParam = params.get('c')
   const online = useNetworkStatus()
 
   const [mensajes, setMensajes] = useState<Mensaje[]>([])
@@ -127,9 +152,24 @@ function CopilotoInner() {
   const scrollRef = useRef<HTMLDivElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const archivoRef = useRef<HTMLInputElement>(null)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
   // Aporte a la biblioteca: foto (etiqueta de fusibles, placa) o PDF con descripción
   const [aporteDe, setAporteDe] = useState<Adjunto | null>(null)
   const [fAporte, setFAporte] = useState('')
+
+  // ── Conversación persistente (MIG583) ─────────────────────────────────────
+  const [conv, setConv] = useState<ConversacionCopiloto | null>(null)
+  const [cargandoConv, setCargandoConv] = useState(false)
+  const [modalHistorial, setModalHistorial] = useState(false)
+  const [retomables, setRetomables] = useState<ConversacionCopiloto[]>([])
+  const [seguimiento, setSeguimiento] = useState(false)
+  const [modalVolvio, setModalVolvio] = useState(false)
+  const [fMotivoVolvio, setFMotivoVolvio] = useState('')
+  const [motivoDe, setMotivoDe] = useState<number | null>(null)   // índice del mensaje con 👎 pendiente de motivo
+  const convRef = useRef<ConversacionCopiloto | null>(null)
+  convRef.current = conv
+  // «Nueva conversación» desde una OT: no volver a retomar la última de esa OT
+  const nuevaRef = useRef(false)
 
   // ── Ficha técnica y selector de equipo ────────────────────────────────────
   const [ficha, setFicha] = useState<FichaCliente | null>(null)
@@ -150,8 +190,8 @@ function CopilotoInner() {
   const recRef = useRef<Reconocedor | null>(null)
   useEffect(() => { setVozDisponible(!!crearReconocedor()) }, [])
 
-  // ── Diagnóstico guiado (MIG543) ───────────────────────────────────────────
-  const [dx, setDx] = useState<Diagnostico | null>(null)
+  // ── Caso (MIG543 + MIG583) ────────────────────────────────────────────────
+  const [dx, setDx] = useState<DiagnosticoCopiloto | null>(null)
   const [dxAbierto, setDxAbierto] = useState(true)
   const [modalSintoma, setModalSintoma] = useState(false)
   const [modalComprobacion, setModalComprobacion] = useState(false)
@@ -165,9 +205,58 @@ function CopilotoInner() {
   const [fCausa, setFCausa] = useState('')
   const [fReparacion, setFReparacion] = useState('')
 
+  // Cargar un hilo guardado (?c=) o, desde una OT, el último hilo de esa OT
   useEffect(() => {
-    if (otId) getDiagnosticoDeOT(otId).then(setDx).catch(() => { /* sin señal: chat igual sirve */ })
-  }, [otId])
+    let cancelado = false
+    async function cargar() {
+      let id = convParam
+      if (!id && otId && !nuevaRef.current) {
+        try {
+          const lista = await listarConversaciones({ otId, limit: 1 })
+          if (lista[0]) id = lista[0].id
+        } catch { /* sin señal */ }
+      }
+      nuevaRef.current = false
+      if (!id) {
+        setConv(null); setMensajes([]); setSeguimiento(false)
+        if (otId) getDiagnosticoDeOT(otId).then((d) => { if (!cancelado) setDx(d as DiagnosticoCopiloto | null) }).catch(() => { /* sin señal */ })
+        else setDx(null)
+        return
+      }
+      if (convRef.current?.id === id) return
+      setCargandoConv(true)
+      try {
+        const r = await cargarConversacion(id)
+        if (cancelado) return
+        setConv(r.conversacion)
+        setDx(r.diagnostico)
+        setMensajes(r.mensajes.flatMap((m): Mensaje[] => [
+          { rol: 'user', texto: m.pregunta, adjuntos: m.adjuntos, fecha: m.created_at },
+          ...(m.respuesta ? [{
+            rol: 'assistant' as const, texto: m.respuesta, consultaId: m.consultaId,
+            feedback: m.feedback ?? undefined, fuentes: m.fuentes, codigos: m.codigos, fecha: m.created_at,
+          }] : [{
+            rol: 'assistant' as const, texto: '⚠️ Esta respuesta no alcanzó a guardarse (se cortó la señal). Vuelve a preguntar.',
+            fecha: m.created_at,
+          }]),
+        ]))
+        setSeguimiento(necesitaSeguimiento(r.conversacion))
+        if (!convParam) router.replace(urlConversacion(r.conversacion, equipoLabel))
+      } catch (e) {
+        if (!cancelado) setMensajes([{ rol: 'assistant', texto: `⚠️ ${e instanceof Error ? e.message : 'No se pudo cargar la conversación.'}` }])
+      } finally { if (!cancelado) setCargandoConv(false) }
+    }
+    cargar()
+    return () => { cancelado = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [convParam, otId])
+
+  // Hilos para retomar en la pantalla vacía (los de este equipo, o los abiertos)
+  useEffect(() => {
+    if (convParam || mensajes.length) return
+    listarConversaciones({ activoId: activoId ?? undefined, estado: activoId ? undefined : 'abierta', limit: 3 })
+      .then(setRetomables).catch(() => setRetomables([]))
+  }, [activoId, convParam, mensajes.length])
 
   useEffect(() => {
     setFicha(null)
@@ -198,8 +287,24 @@ function CopilotoInner() {
 
   function elegirEquipo(e: { id: string; patente: string | null; codigo: string | null }) {
     setModalEquipo(false)
-    setMensajes([])
-    router.replace(`/m/taller/copiloto?activo=${e.id}&equipo=${encodeURIComponent(e.patente ?? e.codigo ?? '')}`)
+    nuevaConversacion(`/m/taller/copiloto?activo=${e.id}&equipo=${encodeURIComponent(e.patente ?? e.codigo ?? '')}`)
+  }
+
+  function nuevaConversacion(url?: string) {
+    nuevaRef.current = true
+    setMensajes([]); setConv(null); setDx(null); setSeguimiento(false); setAdjuntos([])
+    const p = new URLSearchParams()
+    if (otId) p.set('ot', otId)
+    if (activoId) p.set('activo', activoId)
+    if (equipoLabel) p.set('equipo', equipoLabel)
+    router.replace(url ?? `/m/taller/copiloto${p.toString() ? `?${p}` : ''}`)
+  }
+
+  function abrirConversacion(c: ConversacionCopiloto) {
+    setModalHistorial(false)
+    if (c.id === conv?.id) return
+    setMensajes([]); setConv(null); setDx(null); setSeguimiento(false)
+    router.replace(urlConversacion(c))
   }
 
   const actualizarUltimo = useCallback((fn: (m: Mensaje) => Mensaje) => {
@@ -223,7 +328,7 @@ function CopilotoInner() {
     // Respaldo: sin storage, la primera foto viaja inline como antes
     const inline = listos.find((a) => !a.path && a.base64)
     if (usarAdjuntos) setAdjuntos([])
-    setInput(''); setEnviando(true); setEstado('Revisando manuales, casos e historial…')
+    setInput(''); setEnviando(true); setEstado('Revisando manuales, casos e historial…'); setSeguimiento(false)
     const historial = mensajes.map((m) => ({ rol: m.rol, texto: m.texto }))
     setMensajes((p) => [...p, {
       rol: 'user',
@@ -237,6 +342,7 @@ function CopilotoInner() {
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${await token()}` },
         body: JSON.stringify({
           pregunta,
+          conversacionId: convRef.current?.id,
           activoId: activoId || undefined,
           otId: otId || undefined,
           diagnosticoId: dx?.estado === 'abierto' ? dx.id : undefined,
@@ -266,6 +372,19 @@ function CopilotoInner() {
         else if (ev.t === 'estado') setEstado(ev.d)
         else if (ev.t === 'fuentes') actualizarUltimo((m) => ({ ...m, fuentes: ev.d }))
         else if (ev.t === 'codigos') actualizarUltimo((m) => ({ ...m, codigos: ev.d }))
+        else if (ev.t === 'diagnostico') setDx(ev.d)
+        else if (ev.t === 'propuesta') actualizarUltimo((m) => ({ ...m, propuesta: ev.d }))
+        else if (ev.t === 'conversacion') {
+          if (!convRef.current) {
+            const nueva: ConversacionCopiloto = {
+              id: ev.id, titulo: ev.titulo, usuario_id: '', activo_id: activoId, ot_id: otId, diagnostico_id: null,
+              estado: 'abierta', mensajes: 1, ultimo_at: new Date().toISOString(), created_at: new Date().toISOString(),
+            }
+            setConv(nueva)
+            // La URL lleva el hilo: al recargar o volver, se retoma
+            window.history.replaceState(null, '', urlConversacion(nueva, equipoLabel))
+          }
+        }
       }
       for (;;) {
         const { done, value } = await reader.read()
@@ -286,11 +405,12 @@ function CopilotoInner() {
     }
   }
 
-  async function marcarFeedback(idx: number, fb: 'util' | 'no_util') {
+  async function marcarFeedback(idx: number, fb: 'util' | 'no_util', nota?: string) {
     const m = mensajes[idx]
-    if (!m.consultaId || m.feedback) return
+    if (!m.consultaId || (m.feedback && !nota)) return
     setMensajes((p) => p.map((x, i) => (i === idx ? { ...x, feedback: fb } : x)))
-    try { await supabase.rpc('rpc_copiloto_feedback', { p_consulta_id: m.consultaId, p_feedback: fb }) }
+    setMotivoDe(fb === 'no_util' && !nota ? idx : null)
+    try { await enviarFeedback(m.consultaId, fb, nota) }
     catch { /* el feedback no puede botar el chat */ }
   }
 
@@ -414,15 +534,13 @@ function CopilotoInner() {
     } finally { setBuscandoCodigo(false) }
   }
 
-  // ── Acciones del diagnóstico ──────────────────────────────────────────────
+  // ── Acciones del caso ─────────────────────────────────────────────────────
   async function iniciarDx() {
     if (!activoId || fSintoma.trim().length < 5 || guardando) return
     setGuardando(true)
     try {
-      const nuevo = await crearDiagnostico({
-        otId, activoId, sintoma: fSintoma, sistema: fSistema || null,
-      })
-      setDx(nuevo)
+      const nuevo = await crearDiagnostico({ otId, activoId, sintoma: fSintoma, sistema: fSistema || null })
+      setDx(nuevo as unknown as DiagnosticoCopiloto)
       setModalSintoma(false)
       // El síntoma parte la conversación: el copiloto responde ya en modo guiado
       await enviar(`Diagnóstico iniciado. Síntoma: ${fSintoma.trim()}. ¿Por dónde parto?`)
@@ -438,7 +556,7 @@ function CopilotoInner() {
     setGuardando(true)
     try {
       const comprobaciones = await agregarComprobacion(dx.id, fDesc, fResultado, fValor || undefined)
-      setDx({ ...dx, comprobaciones })
+      setDx({ ...dx, comprobaciones: comprobaciones as DiagnosticoCopiloto['comprobaciones'] })
       setModalComprobacion(false)
       const resumen = `Registré la comprobación: ${fDesc.trim()} → ${
         fResultado === 'valor' ? fValor.trim() : fResultado === 'ok' ? 'OK' : 'NO OK'}. ¿Siguiente paso?`
@@ -449,38 +567,89 @@ function CopilotoInner() {
     } finally { setGuardando(false) }
   }
 
-  async function resolverDx() {
-    if (!dx || fCausa.trim().length < 5 || guardando) return
+  // Abre el modal de solución, con la propuesta del copiloto si la hay
+  function abrirSolucion(prop?: PropuestaSolucion | null) {
+    setFCausa(prop?.causa_raiz ?? ''); setFReparacion(prop?.reparacion ?? '')
+    setFSistema(prop?.sistema ?? dx?.sistema ?? '')
+    setFSintoma(prop?.sintoma ?? dx?.sintoma ?? conv?.titulo ?? '')
+    setModalCausa(true)
+  }
+
+  async function guardarSolucion() {
+    if (fCausa.trim().length < 5 || fReparacion.trim().length < 5 || guardando) return
     setGuardando(true)
     try {
-      await resolverDiagnostico(dx.id, fCausa, fReparacion, fSistema || dx.sistema)
-      setDx({ ...dx, estado: 'resuelto', causa_raiz: fCausa.trim(), reparacion: fReparacion.trim() || null })
+      let leccion: string | null = null
+      if (conv) {
+        const r = await resolverConversacion({
+          conversacionId: conv.id, causa: fCausa, reparacion: fReparacion,
+          sistema: fSistema || null, sintoma: fSintoma || null,
+        })
+        leccion = r.leccion
+        if (r.diagnostico) setDx(r.diagnostico)
+        setConv({ ...conv, estado: 'resuelta', diagnostico_id: r.diagnosticoId })
+      } else if (dx) {
+        // Sin conversación guardada (PWA vieja): el camino de MIG543
+        await resolverDiagnostico(dx.id, fCausa, fReparacion, fSistema || dx.sistema)
+        setDx({ ...dx, estado: 'resuelto', causa_raiz: fCausa.trim(), reparacion: fReparacion.trim() || null })
+      }
       setModalCausa(false)
-      setMensajes((p) => [...p, {
+      const cierre: Mensaje = {
         rol: 'assistant',
-        texto: `✅ Caso guardado. La próxima vez que un equipo como este falle parecido, voy a partir por lo que encontraste: "${fCausa.trim()}". Buen trabajo.`,
-      }])
+        texto: `✅ Caso guardado. Causa: **${fCausa.trim()}**. Solución: **${fReparacion.trim()}**.`
+          + (leccion ? `\n\n**Lo que aprendí para la próxima:** ${leccion.split('\nPalabras clave:')[0]}` : '')
+          + '\n\nLa próxima vez que un equipo como este falle parecido, parto por aquí. Buen trabajo.',
+      }
+      setMensajes((p) => [...p.map((m): Mensaje => ({ ...m, propuesta: null })), cierre])
       setFCausa(''); setFReparacion('')
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'No se pudo guardar la causa')
+      alert(e instanceof Error ? e.message : 'No se pudo guardar la solución')
     } finally { setGuardando(false) }
   }
 
-  const nComprob = dx?.comprobaciones?.length ?? 0
+  async function confirmarVolvio() {
+    if (!conv || guardando) return
+    setGuardando(true)
+    try {
+      await reabrirConversacion(conv.id, fMotivoVolvio.trim() || undefined)
+      setConv({ ...conv, estado: 'abierta' })
+      setDx(dx ? { ...dx, estado: 'abierto', causa_raiz: null, reparacion: null, leccion: null, validado_at: null, reaperturas: dx.reaperturas + 1 } : dx)
+      setModalVolvio(false)
+      const motivo = fMotivoVolvio.trim()
+      setFMotivoVolvio('')
+      await enviar(`La falla volvió después de la reparación${motivo ? `: ${motivo}` : ''}. ¿Qué reviso ahora?`)
+      // El caso real (con la reparación fallida en la bitácora) llega al recargar
+      try { const r = await cargarConversacion(conv.id); setDx(r.diagnostico) } catch { /* opcional */ }
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'No se pudo reabrir')
+    } finally { setGuardando(false) }
+  }
+
+  async function marcarSoloConsulta() {
+    if (!conv) return
+    setSeguimiento(false)
+    try { await cambiarEstadoConversacion(conv.id, 'descartada'); setConv({ ...conv, estado: 'descartada' }) } catch { /* opcional */ }
+  }
+
   const sugerencias = activoId ? SUGERENCIAS_EQUIPO : SUGERENCIAS_GENERAL
+  const estadoConv = conv ? (ESTADO_CONV[conv.estado] ?? ESTADO_CONV.abierta) : null
+  const hayRespuesta = mensajes.some((m) => m.rol === 'assistant' && m.consultaId)
 
   return (
     <div className="flex h-dvh flex-col bg-gray-50">
       {/* Header */}
-      <header className="flex items-center gap-3 border-b bg-white px-4 py-3">
+      <header className="flex items-center gap-2 border-b bg-white px-3 py-3">
         <Link href={otId ? `/m/taller/ot/${otId}` : '/m/taller'} className="text-gray-500">
           <ArrowLeft className="h-5 w-5" />
         </Link>
-        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-indigo-100">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-indigo-100">
           <Bot className="h-5 w-5 text-indigo-600" />
         </div>
         <div className="min-w-0 flex-1">
-          <h1 className="text-sm font-bold text-gray-900">Copiloto Técnico</h1>
+          <h1 className="flex items-center gap-1.5 text-sm font-bold text-gray-900">
+            <span className="truncate">{conv ? conv.titulo : 'Copiloto Técnico'}</span>
+            {estadoConv && <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9.5px] font-semibold ${estadoConv.c}`}>{estadoConv.t}</span>}
+          </h1>
           {otId ? (
             <p className="truncate text-[11px] text-gray-500">{equipoLabel ? `Equipo ${equipoLabel}` : 'Diagnóstico con manuales de la flota'}</p>
           ) : (
@@ -495,10 +664,20 @@ function CopilotoInner() {
             <WifiOff className="h-3 w-3" /> Sin señal
           </span>
         )}
+        <button onClick={() => setModalHistorial(true)} aria-label="Mis conversaciones" title="Mis conversaciones"
+                className="rounded-xl border border-gray-200 p-2 text-gray-500">
+          <History className="h-5 w-5" />
+        </button>
+        {mensajes.length > 0 && (
+          <button onClick={() => nuevaConversacion()} aria-label="Nueva conversación" title="Nueva conversación"
+                  className="rounded-xl border border-gray-200 p-2 text-gray-500">
+            <MessageSquarePlus className="h-5 w-5" />
+          </button>
+        )}
       </header>
 
-      {/* Ficha + panel de diagnóstico */}
-      {(ficha || (otId && activoId)) && (
+      {/* Ficha + caso */}
+      {(ficha || dx || (otId && activoId)) && (
         <div className="space-y-2 border-b bg-white px-3 py-2">
           {ficha && <FichaEquipoCard ficha={ficha} />}
           {otId && activoId && !dx && (
@@ -507,55 +686,25 @@ function CopilotoInner() {
               <Stethoscope className="h-4 w-4" /> Iniciar diagnóstico guiado
             </button>
           )}
-          {dx && dx.estado === 'abierto' && (
-            <div className="rounded-xl border border-indigo-200 bg-indigo-50/60 px-3 py-2">
-              <button onClick={() => setDxAbierto((v) => !v)} className="flex w-full items-center gap-2 text-left">
-                <Stethoscope className="h-4 w-4 shrink-0 text-indigo-600" />
-                <span className="min-w-0 flex-1 truncate text-xs font-semibold text-indigo-900">
-                  Diagnóstico: {dx.sintoma}
-                </span>
-                <span className="rounded-full bg-indigo-600 px-1.5 py-0.5 text-[10px] font-bold text-white">{nComprob}</span>
-                {dxAbierto ? <ChevronUp className="h-4 w-4 text-indigo-400" /> : <ChevronDown className="h-4 w-4 text-indigo-400" />}
-              </button>
-              {dxAbierto && (
-                <div className="mt-2 space-y-1.5">
-                  {dx.comprobaciones.map((c, i) => (
-                    <div key={i} className="flex items-start gap-1.5 text-[12px] text-gray-700">
-                      <span className={`mt-0.5 h-2 w-2 shrink-0 rounded-full ${
-                        c.resultado === 'ok' ? 'bg-green-500' : c.resultado === 'no_ok' ? 'bg-red-500' : 'bg-blue-500'}`} />
-                      <span className="min-w-0">{c.descripcion}{c.valor ? ` = ${c.valor}` : ''}
-                        <span className="text-gray-400"> · {c.resultado === 'valor' ? 'medición' : c.resultado.toUpperCase()}</span>
-                      </span>
-                    </div>
-                  ))}
-                  <div className="flex gap-2 pt-1">
-                    <button onClick={() => setModalComprobacion(true)} disabled={!online}
-                            className="flex flex-1 items-center justify-center gap-1 rounded-lg border border-indigo-300 bg-white px-2 py-2 text-[11.5px] font-semibold text-indigo-700 disabled:opacity-50">
-                      <ClipboardCheck className="h-3.5 w-3.5" /> Registrar comprobación
-                    </button>
-                    <button onClick={() => { setFSistema(dx.sistema ?? ''); setModalCausa(true) }} disabled={!online}
-                            className="flex flex-1 items-center justify-center gap-1 rounded-lg bg-green-600 px-2 py-2 text-[11.5px] font-semibold text-white disabled:opacity-50">
-                      <CheckCircle2 className="h-3.5 w-3.5" /> Encontré la causa
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
+          {dx && (
+            <TarjetaCaso dx={dx} abierto={dxAbierto} onToggle={() => setDxAbierto((v) => !v)}
+                         onSolucion={() => abrirSolucion()} onVolvio={() => setModalVolvio(true)} online={online} />
           )}
-          {dx && dx.estado === 'resuelto' && (
-            <div className="flex items-start gap-2 rounded-xl border border-green-200 bg-green-50 px-3 py-2">
-              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-green-600" />
-              <div className="min-w-0 text-[12px] text-green-900">
-                <b>Caso resuelto y guardado.</b> Causa: {dx.causa_raiz}
-              </div>
-            </div>
+          {dx && dx.estado === 'abierto' && dxAbierto && (
+            <button onClick={() => setModalComprobacion(true)} disabled={!online}
+                    className="flex w-full items-center justify-center gap-1 rounded-lg border border-indigo-200 bg-white px-2 py-1.5 text-[11px] font-semibold text-indigo-700 disabled:opacity-50">
+              <ClipboardCheck className="h-3.5 w-3.5" /> Anotar una comprobación a mano
+            </button>
           )}
         </div>
       )}
 
       {/* Chat */}
       <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto px-3 py-4">
-        {mensajes.length === 0 && (
+        {cargandoConv && (
+          <p className="flex items-center justify-center gap-2 py-6 text-xs text-gray-400"><Loader2 className="h-4 w-4 animate-spin" /> Cargando la conversación…</p>
+        )}
+        {!cargandoConv && mensajes.length === 0 && (
           <div className="mx-auto mt-6 max-w-sm text-center">
             <Sparkles className="mx-auto h-8 w-8 text-indigo-400" />
             <p className="mt-2 text-sm font-semibold text-gray-800">¿Qué le pasa al equipo?</p>
@@ -563,6 +712,7 @@ function CopilotoInner() {
               Describe el síntoma, dicta con el micrófono, manda fotos o un PDF (informe del escáner, manual) o busca un código de falla.
               Respondo con los manuales y diagramas de la flota, los casos ya resueltos y el historial
               {equipoLabel ? ` del ${equipoLabel}` : ' del equipo'}, citando la fuente. Si no está en la biblioteca, lo busco en la web.
+              La conversación queda guardada: puedes volver después y contarme cómo terminó.
             </p>
             <div className="mt-4 space-y-2">
               {sugerencias.map((s) => (
@@ -576,6 +726,7 @@ function CopilotoInner() {
                 <Hash className="h-3.5 w-3.5" /> Buscar un código de falla
               </button>
             </div>
+            <ListaRetomar conversaciones={retomables} onElegir={abrirConversacion} onVerTodas={() => setModalHistorial(true)} />
           </div>
         )}
 
@@ -627,19 +778,27 @@ function CopilotoInner() {
                         {m.fuentes.map((f) => <span key={f.n} id={`m${i}-fuente-${f.n}`} />)}
                       </div>
                     )}
+                    {m.propuesta && (!enviando || !ultimo) && (
+                      <TarjetaPropuesta propuesta={m.propuesta} onRevisar={() => abrirSolucion(m.propuesta)}
+                                        onDescartar={() => setMensajes((p) => p.map((x, k) => (k === i ? { ...x, propuesta: null } : x)))} />
+                    )}
                   </>
                 )}
                 {m.rol === 'assistant' && m.consultaId && m.texto && (!enviando || !ultimo) && (
-                  <div className="mt-2 flex items-center gap-2 border-t pt-1.5">
-                    <span className="text-[10px] text-gray-400">¿Te sirvió?</span>
-                    <button onClick={() => marcarFeedback(i, 'util')}
-                            className={`rounded p-1 ${m.feedback === 'util' ? 'bg-green-100 text-green-600' : 'text-gray-400'}`}>
-                      <ThumbsUp className="h-3.5 w-3.5" />
-                    </button>
-                    <button onClick={() => marcarFeedback(i, 'no_util')}
-                            className={`rounded p-1 ${m.feedback === 'no_util' ? 'bg-red-100 text-red-600' : 'text-gray-400'}`}>
-                      <ThumbsDown className="h-3.5 w-3.5" />
-                    </button>
+                  <div className="mt-2 border-t pt-1.5">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] text-gray-400">¿Te sirvió?</span>
+                      <button onClick={() => marcarFeedback(i, 'util')}
+                              className={`rounded p-1 ${m.feedback === 'util' ? 'bg-green-100 text-green-600' : 'text-gray-400'}`}>
+                        <ThumbsUp className="h-3.5 w-3.5" />
+                      </button>
+                      <button onClick={() => marcarFeedback(i, 'no_util')}
+                              className={`rounded p-1 ${m.feedback === 'no_util' ? 'bg-red-100 text-red-600' : 'text-gray-400'}`}>
+                        <ThumbsDown className="h-3.5 w-3.5" />
+                      </button>
+                      {m.fecha && <span className="ml-auto text-[10px] text-gray-300">{m.fecha.slice(5, 16).replace('T', ' ')}</span>}
+                    </div>
+                    {motivoDe === i && <MotivosNoUtil onElegir={(mot) => marcarFeedback(i, 'no_util', mot)} />}
                   </div>
                 )}
               </div>
@@ -654,7 +813,24 @@ function CopilotoInner() {
             </div>
           </div>
         )}
+
+        {seguimiento && conv && !enviando && (
+          <TarjetaSeguimiento titulo={conv.titulo} pausa={describirPausa(conv.ultimo_at)}
+                              onResuelto={() => { setSeguimiento(false); abrirSolucion() }}
+                              onSigue={() => { setSeguimiento(false); setInput('Sigue fallando. '); inputRef.current?.focus() }}
+                              onConsulta={marcarSoloConsulta} />
+        )}
       </div>
+
+      {/* Cierre siempre a mano cuando ya hubo diálogo y no hay caso resuelto */}
+      {conv && conv.estado !== 'resuelta' && hayRespuesta && !dx && !enviando && (
+        <div className="border-t bg-white px-3 py-1.5">
+          <button onClick={() => abrirSolucion()} disabled={!online}
+                  className="flex w-full items-center justify-center gap-1 rounded-lg border border-green-300 bg-green-50 px-2 py-1.5 text-[11.5px] font-semibold text-green-800 disabled:opacity-50">
+            <CheckCircle2 className="h-3.5 w-3.5" /> ¿Quedó resuelto? Registrar la solución definitiva
+          </button>
+        </div>
+      )}
 
       <p className="border-t bg-amber-50 px-3 py-1 text-center text-[10px] text-amber-700">
         Apoyo al diagnóstico — los trabajos de riesgo se validan con el jefe de taller.
@@ -726,11 +902,12 @@ function CopilotoInner() {
           <input ref={fileRef} type="file" accept="image/*" capture="environment" hidden onChange={onArchivos} />
           <input ref={archivoRef} type="file" accept="image/*,application/pdf,.pdf" multiple hidden onChange={onArchivos} />
           <textarea
+            ref={inputRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); enviar() } }}
-            placeholder={online ? (escuchando ? 'Escuchando…' : 'Describe el síntoma…') : 'Necesitas señal para usar el copiloto'}
-            disabled={!online || enviando}
+            placeholder={online ? (escuchando ? 'Escuchando…' : (dx?.estado === 'abierto' ? 'Cuéntame qué mediste o qué pasó…' : 'Describe el síntoma…')) : 'Necesitas señal para usar el copiloto'}
+            disabled={!online || enviando || cargandoConv}
             rows={1}
             className="max-h-28 min-w-0 flex-1 resize-none rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-indigo-400 disabled:bg-gray-50"
           />
@@ -751,6 +928,9 @@ function CopilotoInner() {
       </div>
 
       <VisorPagina fuente={visor} onClose={() => setVisor(null)} />
+
+      <HistorialConversaciones open={modalHistorial} onClose={() => setModalHistorial(false)}
+                               activoId={activoId} actualId={conv?.id ?? null} onElegir={abrirConversacion} />
 
       {/* ── Aporte a la biblioteca del taller ── */}
       <Modal open={!!aporteDe} onClose={() => setAporteDe(null)} title="Aportar a la biblioteca">
@@ -844,7 +1024,7 @@ function CopilotoInner() {
         </ModalFooter>
       </Modal>
 
-      {/* ── Modales del diagnóstico ── */}
+      {/* ── Modales del caso ── */}
       <Modal open={modalSintoma} onClose={() => setModalSintoma(false)} title="Iniciar diagnóstico">
         <div className="space-y-3">
           <div>
@@ -907,8 +1087,14 @@ function CopilotoInner() {
         </ModalFooter>
       </Modal>
 
-      <Modal open={modalCausa} onClose={() => setModalCausa(false)} title="Causa encontrada">
+      <Modal open={modalCausa} onClose={() => setModalCausa(false)} title="Solución definitiva">
         <div className="space-y-3">
+          <div>
+            <label className="text-xs font-semibold text-gray-700">Síntoma</label>
+            <input value={fSintoma} onChange={(e) => setFSintoma(e.target.value)}
+                   placeholder="Ej: no parte en frío"
+                   className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-indigo-400" />
+          </div>
           <div>
             <label className="text-xs font-semibold text-gray-700">Causa raíz *</label>
             <textarea value={fCausa} onChange={(e) => setFCausa(e.target.value)} rows={2}
@@ -916,7 +1102,7 @@ function CopilotoInner() {
                       className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-indigo-400" />
           </div>
           <div>
-            <label className="text-xs font-semibold text-gray-700">¿Cómo se reparó?</label>
+            <label className="text-xs font-semibold text-gray-700">¿Qué lo solucionó definitivamente? *</label>
             <textarea value={fReparacion} onChange={(e) => setFReparacion(e.target.value)} rows={2}
                       placeholder="Ej: se limpió y reapretó la masa, se protegió con grasa dieléctrica"
                       className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-indigo-400" />
@@ -930,14 +1116,34 @@ function CopilotoInner() {
             </select>
           </div>
           <p className="text-[11px] text-gray-500">
-            Esto queda como caso técnico: el copiloto lo citará cuando otro equipo igual falle parecido.
+            Queda como caso técnico del taller: el copiloto lo citará cuando otro equipo igual falle parecido y guardará
+            una lección con lo aprendido. Si todavía no está reparado, espera: aquí va lo que DEFINITIVAMENTE lo solucionó.
           </p>
         </div>
         <ModalFooter>
           <Button variant="outline" onClick={() => setModalCausa(false)}>Cancelar</Button>
-          <Button onClick={resolverDx} disabled={fCausa.trim().length < 5 || guardando}>
-            {guardando ? 'Guardando…' : 'Guardar caso'}
+          <Button onClick={guardarSolucion} disabled={fCausa.trim().length < 5 || fReparacion.trim().length < 5 || guardando}>
+            {guardando ? 'Guardando y aprendiendo…' : 'Guardar caso'}
           </Button>
+        </ModalFooter>
+      </Modal>
+
+      <Modal open={modalVolvio} onClose={() => setModalVolvio(false)} title="La falla volvió">
+        <div className="space-y-3">
+          <p className="text-sm text-gray-700">
+            El caso se reabre y la reparación anterior queda registrada como intento que <b>no</b> resolvió la falla,
+            para que el copiloto no la vuelva a proponer.
+          </p>
+          <div>
+            <label className="text-xs font-semibold text-gray-700">¿Qué pasó? (opcional)</label>
+            <textarea value={fMotivoVolvio} onChange={(e) => setFMotivoVolvio(e.target.value)} rows={2}
+                      placeholder="Ej: a los 3 días volvió a quedar sin luces, ahora también en caliente"
+                      className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-indigo-400" />
+          </div>
+        </div>
+        <ModalFooter>
+          <Button variant="outline" onClick={() => setModalVolvio(false)}>Cancelar</Button>
+          <Button onClick={confirmarVolvio} disabled={guardando}>{guardando ? 'Reabriendo…' : 'Reabrir el caso'}</Button>
         </ModalFooter>
       </Modal>
     </div>
