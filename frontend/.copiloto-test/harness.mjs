@@ -29,8 +29,8 @@ async function fichaEquipo(corpus, patente) {
   return data ?? null;
 }
 async function buscarCodigo(corpus, texto2, marca, limit = 8) {
-  const { data, error } = await corpus.rpc("buscar_codigo_falla", { p_texto: texto2, p_marca: marca, p_limit: limit });
-  if (error) throw error;
+  const { data, error: error2 } = await corpus.rpc("buscar_codigo_falla", { p_texto: texto2, p_marca: marca, p_limit: limit });
+  if (error2) throw error2;
   return data ?? [];
 }
 function codigosEnTexto(q) {
@@ -86,8 +86,51 @@ async function autenticar() {
   return { sb, uid: "uid-prueba" };
 }
 
+// src/lib/copiloto/conversacion.ts
+var MAX_TURNOS_VERBATIM = 6;
+var MAX_PREGUNTAS_RESUMEN = 20;
+var HORAS_PARA_SEGUIMIENTO = 12;
+var PREFIJOS_AUTOMATICOS = [
+  /^diagn[oó]stico iniciado\.\s*s[ií]ntoma:\s*/i,
+  /^registr[eé] la comprobaci[oó]n:\s*/i,
+  /^sale el c[oó]digo de falla\s*/i,
+  /^tengo el c[oó]digo\s*/i,
+  /^la falla volvi[oó][^:]*:\s*/i
+];
+function tituloConversacion(pregunta2, adjuntos = []) {
+  let t = (pregunta2 ?? "").replace(/\s+/g, " ").trim();
+  for (const re of PREFIJOS_AUTOMATICOS) t = t.replace(re, "");
+  t = t.replace(/\s*¿por d[oó]nde (parto|empiezo)\??\s*$/i, "").replace(/\s*¿siguiente paso\??\s*$/i, "").trim();
+  if (!t && adjuntos.length) t = `Revisi\xF3n de ${adjuntos.length === 1 ? adjuntos[0].nombre : `${adjuntos.length} adjuntos`}`;
+  if (!t) t = "Consulta al copiloto";
+  if (t.length > 90) {
+    const corte = t.slice(0, 90).search(/[.;!?]\s[^.]*$/);
+    t = corte > 25 ? t.slice(0, corte + 1) : t.slice(0, 87).replace(/\s+\S*$/, "") + "\u2026";
+  }
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}
+function construirHistorial(consultas, maxTurnos = MAX_TURNOS_VERBATIM, maxTextoRespuesta = 4e3) {
+  const conRespuesta = consultas.filter((c) => c.respuesta && c.respuesta.trim()).sort((a, b) => a.created_at.localeCompare(b.created_at));
+  const recientes = conRespuesta.slice(-maxTurnos);
+  const anteriores = conRespuesta.slice(0, Math.max(0, conRespuesta.length - maxTurnos)).slice(-MAX_PREGUNTAS_RESUMEN);
+  const turnos = [];
+  for (const c of recientes) {
+    turnos.push({ rol: "user", texto: c.pregunta.slice(0, 2e3) });
+    turnos.push({ rol: "assistant", texto: (c.respuesta ?? "").slice(0, maxTextoRespuesta) });
+  }
+  const resumenAnteriores = anteriores.length ? anteriores.map((c) => `- (${c.created_at.slice(0, 10)}) ${c.pregunta.replace(/\s+/g, " ").slice(0, 160)}`).join("\n") : null;
+  return { turnos, resumenAnteriores };
+}
+function describirPausa(desdeIso, ahora = /* @__PURE__ */ new Date()) {
+  const ms = ahora.getTime() - new Date(desdeIso).getTime();
+  const h = Math.floor(ms / 36e5);
+  if (h < 1) return "hace menos de una hora";
+  if (h < 48) return `hace ${h} h`;
+  return `hace ${Math.floor(h / 24)} d\xEDas`;
+}
+
 // src/app/api/copiloto/consulta/route.ts
-var MODELO_IA = "claude-opus-5";
+var MODELO_IA = process.env.COPILOTO_MODELO ?? "claude-opus-5";
 var EFFORT = process.env.COPILOTO_EFFORT ?? "medium";
 var MAX_RONDAS = 6;
 var SYSTEM_PROMPT = `# ROL
@@ -105,7 +148,7 @@ Flota de arriendo para miner\xEDa en Chile: aljibes de combustible, camiones de 
 6. Confirmaci\xF3n: c\xF3mo verificar que la reparaci\xF3n resolvi\xF3 la causa ra\xEDz (no solo el s\xEDntoma).
 
 # FUENTES Y HERRAMIENTAS (en este orden)
-1. Repositorio del taller: usa buscar_manuales (varias veces si hace falta, tambi\xE9n en ingl\xE9s y portugu\xE9s: fuse/relay/wiring diagram/connector; fus\xEDvel/rel\xE9/esquema el\xE9trico/chicote), buscar_codigo_falla, listar_documentos, casos_resueltos y ver_pagina para MIRAR diagramas, tablas de fusibles y pinouts antes de explicarlos (el mec\xE1nico ve la misma imagen).
+1. Repositorio del taller: usa buscar_manuales (varias veces si hace falta, tambi\xE9n en ingl\xE9s y portugu\xE9s: fuse/relay/wiring diagram/connector; fus\xEDvel/rel\xE9/esquema el\xE9trico/chicote), buscar_codigo_falla, listar_documentos, casos_resueltos, historial_flota (qu\xE9 se le hizo de verdad a este equipo y a los del mismo modelo: OT y \xF3rdenes de servicio) y ver_pagina para MIRAR diagramas, tablas de fusibles y pinouts antes de explicarlos (el mec\xE1nico ve la misma imagen).
 2. Adjuntos del mec\xE1nico: fotos y PDFs (informe de esc\xE1ner, manual, placa, tablero). L\xE9elos con atenci\xF3n; cita un PDF como "(adjunto: <nombre>, p\xE1g. N)".
 3. Web, si el repositorio no alcanza: web_search / web_fetch priorizando sitios oficiales del fabricante (manuales, body builder, boletines, recalls) y de fabricantes de componentes (Allison, WABCO, Bendix, Bosch, Delco Remy\u2026). Foros solo como \xFAltimo recurso y nunca sitios de manuales pirateados. Cita cada dato web con un enlace markdown [dominio](URL) en la misma l\xEDnea.
 4. Criterio experto: si no hay informaci\xF3n en el repositorio ni en la web, NO te quedes en "no est\xE1". Resuelve con tu conocimiento de ingenier\xEDa de camiones pesados siguiendo el PROTOCOLO SIN DOCUMENTACI\xD3N.
@@ -123,8 +166,12 @@ Estructura la respuesta as\xED:
 2. Cita cada dato del repositorio con su n\xFAmero entre corchetes: [F3], o varios: [F1][F4]. No inventes n\xFAmeros de fuente.
 3. Jerarqu\xEDa de confiabilidad: manual oficial > procedimiento interno de Pillado > gu\xEDa t\xE9cnica o web oficial del fabricante > web de terceros > experiencia de campo (foros) > criterio experto. Si usas foros o criterio experto, dilo expl\xEDcitamente.
 4. Si la informaci\xF3n es de otra variante (Volvo norteamericano para un FMX brasile\xF1o, Actros europeo para uno off-road, 12 V para un sistema de 24 V), advi\xE9rtelo y pide validar en el equipo.
-5. La experiencia del taller es la pista m\xE1s valiosa: si el mismo s\xEDntoma ya se resolvi\xF3 en este equipo o en otro del mismo modelo, dilo primero ("En este mismo equipo / en otro GU813 esto se resolvi\xF3 con\u2026").
-6. Si hay un DIAGN\xD3STICO EN CURSO: no pidas repetir comprobaciones hechas; propone LA siguiente comprobaci\xF3n m\xE1s discriminante (una a la vez, con herramienta y valor esperado) y pide registrarla con "Registrar comprobaci\xF3n". Cuando la evidencia apunte a una causa, dilo y recuerda "Encontr\xE9 la causa" para que el caso quede guardado.
+5. La experiencia del taller es la pista m\xE1s valiosa: si el mismo s\xEDntoma ya se resolvi\xF3 en este equipo o en otro del mismo modelo, dilo primero ("En este mismo equipo / en otro GU813 esto se resolvi\xF3 con\u2026"). Un caso "validado por jefatura" pesa m\xE1s que uno sin validar; un caso con reaperturas tuvo reparaciones que no duraron: menci\xF3nalo.
+6. Si hay un CASO EN CURSO: no pidas repetir comprobaciones hechas; propone LA siguiente comprobaci\xF3n m\xE1s discriminante (una a la vez, con herramienta y valor esperado). Una comprobaci\xF3n marcada "reparaci\xF3n anterior NO resolvi\xF3 la falla" es evidencia fuerte: no vuelvas a proponer esa reparaci\xF3n ni esa causa.
+6b. REGISTRO DEL CASO (el copiloto lleva la bit\xE1cora, el mec\xE1nico no llena formularios):
+   - Cuando el mec\xE1nico INFORME el resultado de algo que hizo ("med\xED 24,1 V", "el fusible est\xE1 bueno", "cambi\xE9 el rel\xE9 y sigue igual"), llama registrar_comprobacion con ese dato exacto. Solo lo que \xE9l reporta: nunca registres lo que t\xFA propones ni lo que supones.
+   - Cuando el mec\xE1nico diga que qued\xF3 resuelto o la evidencia cierre la causa, llama proponer_solucion con causa ra\xEDz, reparaci\xF3n y sistema. La app le muestra la propuesta para que la confirme o corrija: dile que la revise y confirme con el bot\xF3n; NO digas que ya qued\xF3 guardada.
+   - Si la conversaci\xF3n se retoma despu\xE9s de ${HORAS_PARA_SEGUIMIENTO} h o m\xE1s y el caso sigue abierto, lo primero es preguntar c\xF3mo termin\xF3: \xBFse resolvi\xF3 (cu\xE1l fue la soluci\xF3n definitiva)?, \xBFsigue fallando?, \xBFqu\xE9 pas\xF3 con la \xFAltima comprobaci\xF3n propuesta? Una sola pregunta, corta.
 7. C\xF3digo de falla: qu\xE9 significa, qu\xE9 ECU lo levanta, causas probables en orden, primera comprobaci\xF3n y si el equipo puede seguir operando. Si no est\xE1 en la tabla, dilo y explica c\xF3mo leer el c\xF3digo completo en el tablero de ESE modelo (ficha t\xE9cnica) o con esc\xE1ner.
 8. Si faltan datos para diagnosticar, no adivines: m\xE1ximo 3 preguntas concretas, las que m\xE1s discriminan.
 9. Foto: describe lo que se ve objetivamente y qu\xE9 NO se puede confirmar solo con la imagen.
@@ -149,6 +196,7 @@ var SISTEMAS_ENUM = [
   "implemento",
   "lubricacion"
 ];
+var MARCAS_ENUM = ["mercedes-benz", "mack", "volvo", "renault", "scania", "imt", "todas"];
 var TOOLS = [
   {
     name: "buscar_manuales",
@@ -157,7 +205,8 @@ var TOOLS = [
       type: "object",
       properties: {
         consulta: { type: "string", description: 'Palabras clave, p.ej. "fusible luces trabajo", "wiring diagram PTO", "esquema el\xE9trico ARLA".' },
-        sistema: { type: "string", enum: SISTEMAS_ENUM, description: "Opcional: prioriza documentos de ese sistema." }
+        sistema: { type: "string", enum: SISTEMAS_ENUM, description: "Opcional: prioriza documentos de ese sistema." },
+        marca: { type: "string", enum: MARCAS_ENUM, description: "Solo si la pregunta es expl\xEDcitamente de OTRA marca que la del equipo abierto (o de todas). Si no, om\xEDtelo: se usa la del equipo." }
       },
       required: ["consulta"]
     },
@@ -175,11 +224,13 @@ var TOOLS = [
   },
   {
     name: "listar_documentos",
-    description: 'Lista los documentos disponibles cuyo t\xEDtulo calce (p.ej. "diagrama", "fusibles", "body builder", "Allison"). \xDAsalo cuando pregunten qu\xE9 manuales/diagramas hay, o para encontrar el documento correcto antes de buscar dentro.',
+    description: 'Lista los documentos de la biblioteca. Con `texto` busca por t\xEDtulo (p.ej. "diagrama", "fusibles", "body builder", "Allison"). Sin `texto` y con `marca` entrega el CAT\xC1LOGO completo de esa marca agrupado por sistema: \xFAsalo cuando pregunten "\xBFqu\xE9 tienes de Volvo/Mercedes\u2026?".',
     input_schema: {
       type: "object",
-      properties: { texto: { type: "string" } },
-      required: ["texto"]
+      properties: {
+        texto: { type: "string", description: "Palabras del t\xEDtulo. Omitir para ver el cat\xE1logo de una marca." },
+        marca: { type: "string", enum: MARCAS_ENUM, description: "Marca a listar; por defecto la del equipo abierto." }
+      }
     },
     eager_input_streaming: true
   },
@@ -206,11 +257,53 @@ var TOOLS = [
     },
     eager_input_streaming: true
   },
+  {
+    name: "historial_flota",
+    description: "Busca por palabras en el historial REAL de mantenimiento: \xF3rdenes de trabajo ejecutadas y \xF3rdenes de servicio antiguas de este equipo y de los dem\xE1s equipos del mismo modelo (trabajo realizado, motivo). \xDAsalo para saber si esta falla ya se repar\xF3 en la flota y qu\xE9 se hizo. T\xE9rminos concretos (componente, s\xEDntoma), 2 a 5 palabras.",
+    input_schema: {
+      type: "object",
+      properties: { texto: { type: "string", description: 'Ej: "alternador correa carga", "rel\xE9 partida", "fuga aire compresor".' } },
+      required: ["texto"]
+    },
+    eager_input_streaming: true
+  },
+  {
+    name: "registrar_comprobacion",
+    description: "Registra en la bit\xE1cora del caso una comprobaci\xF3n que el mec\xE1nico INFORM\xD3 haber hecho, con su resultado. Solo datos que \xE9l report\xF3 en su mensaje (medici\xF3n, inspecci\xF3n, prueba, cambio de pieza y qu\xE9 pas\xF3). Si no hay caso abierto se crea uno con el s\xEDntoma. La app se la muestra al mec\xE1nico.",
+    input_schema: {
+      type: "object",
+      properties: {
+        descripcion: { type: "string", description: 'Qu\xE9 comprob\xF3, en sus palabras. Ej: "Voltaje en bornes de bater\xEDa con motor detenido".' },
+        resultado: { type: "string", enum: ["ok", "no_ok", "valor"], description: "ok = normal/descartado; no_ok = falla confirmada; valor = medici\xF3n num\xE9rica (pon el n\xFAmero en valor)." },
+        valor: { type: "string", description: 'La medici\xF3n o el detalle. Ej: "24,1 V", "cambi\xF3 el rel\xE9 K3 y sigui\xF3 igual".' },
+        sintoma: { type: "string", description: "Solo si no hay caso abierto: el s\xEDntoma en una frase para abrirlo." },
+        sistema: { type: "string", enum: SISTEMAS_ENUM }
+      },
+      required: ["descripcion", "resultado"]
+    },
+    eager_input_streaming: true
+  },
+  {
+    name: "proponer_solucion",
+    description: "Propone al mec\xE1nico guardar la soluci\xF3n definitiva del caso (causa ra\xEDz + reparaci\xF3n). Ll\xE1mala cuando \xE9l diga que qued\xF3 resuelto o cuando la evidencia registrada cierre la causa. \xC9l la confirma o corrige en la app; hasta entonces NO est\xE1 guardada.",
+    input_schema: {
+      type: "object",
+      properties: {
+        causa_raiz: { type: "string", description: 'La causa real, concreta y verificada. Ej: "Masa del motor de partida sulfatada".' },
+        reparacion: { type: "string", description: 'Qu\xE9 se hizo para que no vuelva. Ej: "Se limpi\xF3 y reapret\xF3 la masa; grasa diel\xE9ctrica".' },
+        sistema: { type: "string", enum: SISTEMAS_ENUM },
+        sintoma: { type: "string", description: "El s\xEDntoma original en una frase (para el caso)." }
+      },
+      required: ["causa_raiz", "reparacion"]
+    },
+    eager_input_streaming: true
+  },
   // Respaldo cuando el repositorio no alcanza (herramientas de servidor de
   // Anthropic: corren en su infraestructura, sin código nuestro).
   { type: "web_search_20260209", name: "web_search", max_uses: 4 },
   { type: "web_fetch_20260209", name: "web_fetch", max_uses: 3 }
 ];
+var SELECT_DX = "id, ot_id, activo_id, usuario_id, sintoma, sistema, estado, comprobaciones, causa_raiz, reparacion, leccion, resuelto_at, validado_at, reaperturas, created_at";
 function filaATexto(row) {
   const partes = [];
   for (const [k, v] of Object.entries(row)) {
@@ -353,6 +446,62 @@ async function POST(req) {
   }
   const ndjson = body.formato === "ndjson";
   const corpus = corpusCliente();
+  let conversacion = null;
+  if (body.conversacionId) {
+    const { data } = await sb2.from("copiloto_conversaciones").select("id, usuario_id, activo_id, ot_id, diagnostico_id, titulo, estado, ultimo_at, mensajes").eq("id", body.conversacionId).maybeSingle();
+    conversacion = data ?? null;
+    if (conversacion) {
+      body.activoId ||= conversacion.activo_id ?? void 0;
+      body.otId ||= conversacion.ot_id ?? void 0;
+      body.diagnosticoId ||= conversacion.diagnostico_id ?? void 0;
+    }
+  }
+  if (!body.activoId) {
+    const m = pregunta2.match(/\b([A-Za-z]{4})[-\s]?(\d{2})\b/);
+    if (m) {
+      const { data } = await sb2.from("activos").select("id").ilike("patente", `${m[1].toUpperCase()}-${m[2]}`).limit(1).maybeSingle();
+      const id = data?.id;
+      if (id) {
+        body.activoId = id;
+        if (conversacion && !conversacion.activo_id) {
+          await sb2.from("copiloto_conversaciones").update({ activo_id: id }).eq("id", conversacion.id);
+          conversacion.activo_id = id;
+        }
+      }
+    }
+  }
+  if (!conversacion) {
+    const { data } = await sb2.from("copiloto_conversaciones").insert({
+      usuario_id: uid,
+      activo_id: body.activoId ?? null,
+      ot_id: body.otId ?? null,
+      diagnostico_id: body.diagnosticoId ?? null,
+      titulo: tituloConversacion(pregunta2, adjuntos)
+    }).select("id, usuario_id, activo_id, ot_id, diagnostico_id, titulo, estado, ultimo_at, mensajes").single();
+    conversacion = data ?? null;
+  }
+  let dxId = body.diagnosticoId ?? null;
+  if (!dxId && body.otId) {
+    const { data } = await sb2.from("copiloto_diagnosticos").select("id").eq("ot_id", body.otId).eq("estado", "abierto").order("created_at", { ascending: false }).limit(1).maybeSingle();
+    dxId = data?.id ?? null;
+  }
+  let turnosHistorial = (body.historial ?? []).slice(-6);
+  let resumenAnteriores = null;
+  let notaRetoma = "";
+  if (conversacion) {
+    const { data: previas } = await sb2.from("copiloto_consultas").select("pregunta, respuesta, created_at").eq("conversacion_id", conversacion.id).order("created_at", { ascending: false }).limit(30);
+    const lista = previas ?? [];
+    if (lista.length) {
+      const h = construirHistorial(lista);
+      turnosHistorial = h.turnos;
+      resumenAnteriores = h.resumenAnteriores;
+      const horas = (Date.now() - new Date(conversacion.ultimo_at).getTime()) / 36e5;
+      if (horas >= HORAS_PARA_SEGUIMIENTO) {
+        notaRetoma = `CONVERSACI\xD3N RETOMADA ${describirPausa(conversacion.ultimo_at)} (\xFAltima actividad ${conversacion.ultimo_at.slice(0, 16).replace("T", " ")} UTC; hoy es ${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}). Estado del hilo: ${conversacion.estado}.
+`;
+      }
+    }
+  }
   let contextoEquipo = "";
   let marcaSlug = null;
   let modeloSlug = null;
@@ -369,7 +518,7 @@ async function POST(req) {
         p_texto: pregunta2 || "falla",
         p_limit: 3
       }),
-      body.diagnosticoId ? sb2.from("copiloto_diagnosticos").select("sintoma, sistema, estado, comprobaciones").eq("id", body.diagnosticoId).maybeSingle() : Promise.resolve({ data: null, error: null })
+      dxId ? sb2.from("copiloto_diagnosticos").select("id, sintoma, sistema, estado, comprobaciones, causa_raiz, reparacion").eq("id", dxId).maybeSingle() : Promise.resolve({ data: null, error: null })
     ]);
     const a = act.data;
     if (a) {
@@ -402,25 +551,28 @@ NO CONFORMIDADES ABIERTAS (${ncs.data.length}):
 CASOS RESUELTOS ANTERIORES (experiencia interna del taller):
 ${casosATexto(casosData)}`;
     const dxData = dx.data;
-    if (dxData && dxData.estado === "abierto") {
-      const compr = (dxData.comprobaciones ?? []).map((x, i) => `${i + 1}. ${x.descripcion}${x.valor ? ` = ${x.valor}` : ""} \u2192 ${x.resultado}`).join("\n");
-      contextoEquipo += `
-DIAGN\xD3STICO EN CURSO:
-S\xEDntoma declarado: ${dxData.sintoma}${dxData.sistema ? ` \xB7 Sistema: ${dxData.sistema}` : ""}
-` + (compr ? `Comprobaciones ya registradas:
-${compr}
-` : "A\xFAn sin comprobaciones registradas.\n");
-    }
+    if (dxData) contextoEquipo += dxATexto(dxData);
+  } else if (dxId) {
+    const { data } = await sb2.from("copiloto_diagnosticos").select("id, sintoma, sistema, estado, comprobaciones, causa_raiz, reparacion").eq("id", dxId).maybeSingle();
+    if (data) contextoEquipo += dxATexto(data);
   }
-  const fuentes = /* @__PURE__ */ new Map();
+  if (resumenAnteriores) {
+    contextoEquipo += `
+PREGUNTAS ANTERIORES DEL MEC\xC1NICO EN ESTA MISMA CONVERSACI\xD3N (m\xE1s antiguas que las que ves completas):
+${resumenAnteriores}
+`;
+  }
+  if (notaRetoma) contextoEquipo += `
+${notaRetoma}`;
+  const fuentes2 = /* @__PURE__ */ new Map();
   const porNumero = /* @__PURE__ */ new Map();
   const paginasVistas = /* @__PURE__ */ new Set();
   function registrar(rows) {
     return rows.map((r) => {
-      const ya = fuentes.get(r.chunk_id);
+      const ya = fuentes2.get(r.chunk_id);
       if (ya) return ya;
-      const f = { ...r, n: fuentes.size + 1 };
-      fuentes.set(r.chunk_id, f);
+      const f = { ...r, n: fuentes2.size + 1 };
+      fuentes2.set(r.chunk_id, f);
       porNumero.set(f.n, f);
       return f;
     });
@@ -432,16 +584,17 @@ ${compr}
     ).join("\n\n");
   }
   let corpusDisponible = false;
-  async function buscarManuales(consulta, sistema, limit = 8) {
+  async function buscarManuales(consulta, sistema, limit = 8, marca) {
     if (!corpus) return [];
-    const { data, error } = await corpus.rpc("buscar_chunks", {
+    const otraMarca = marca && marca !== marcaSlug;
+    const { data, error: error2 } = await corpus.rpc("buscar_chunks", {
       p_query: consulta,
-      p_marca: marcaSlug,
-      p_modelo: modeloSlug,
+      p_marca: marca === "todas" ? null : marca ?? marcaSlug,
+      p_modelo: otraMarca ? null : modeloSlug,
       p_limit: limit,
       p_sistema: sistema ?? null
     });
-    if (error) throw error;
+    if (error2) throw error2;
     corpusDisponible = true;
     return registrar(data ?? []);
   }
@@ -475,19 +628,21 @@ C\xD3DIGOS DE FALLA: se detect\xF3 ${codigosDetectados.join(", ")} en la pregunt
     usuario_id: uid,
     activo_id: body.activoId ?? null,
     ot_id: body.otId ?? null,
-    diagnostico_id: body.diagnosticoId ?? null,
+    diagnostico_id: dxId,
+    conversacion_id: conversacion?.id ?? null,
     pregunta: pregunta2 || (adjuntos.length ? `(adjuntos: ${adjuntos.map((a) => a.nombre).join(", ")})` : "(solo foto)"),
     con_foto: !!body.fotoBase64 || adjuntos.some((a) => a.tipo.startsWith("image/")),
     modelo: MODELO_IA,
-    fuentes: []
+    fuentes: [],
+    adjuntos: adjuntos.map((a) => ({ nombre: a.nombre, tipo: a.tipo, path: a.path }))
   }).select("id").single();
   const consultaId = ins?.id ?? null;
   const contenidoUsuario = [];
   const adjuntosFallidos = [];
   if (adjuntos.length && corpus) {
     const bajados = await Promise.all(adjuntos.map(async (a) => {
-      const { data, error } = await corpus.storage.from(BUCKET_ADJUNTOS).download(a.path);
-      if (error || !data) return null;
+      const { data, error: error2 } = await corpus.storage.from(BUCKET_ADJUNTOS).download(a.path);
+      if (error2 || !data) return null;
       return { a, b64: Buffer.from(await data.arrayBuffer()).toString("base64") };
     }));
     bajados.forEach((x, i) => {
@@ -526,7 +681,7 @@ PREGUNTA DEL MEC\xC1NICO:
 ${pregunta2 || "Revisa lo que adjunt\xE9 y dime qu\xE9 observas y qu\xE9 hago."}`
   });
   const mensajes = [
-    ...(body.historial ?? []).slice(-6).map((t) => ({
+    ...turnosHistorial.map((t) => ({
       role: t.rol === "assistant" ? "assistant" : "user",
       content: t.texto.slice(0, 4e3)
     })),
@@ -545,7 +700,8 @@ ${pregunta2 || "Revisa lo que adjunt\xE9 y dime qu\xE9 observas y qu\xE9 hago."}
           emitir({ t: "estado", d: `Buscando en manuales: \xAB${q}\xBB` });
           if (!corpus) return ok("El corpus de manuales no est\xE1 disponible.");
           const sistema = SISTEMAS_ENUM.includes(str("sistema")) ? str("sistema") : void 0;
-          const r = await buscarManuales(q, sistema, 6);
+          const marca = MARCAS_ENUM.includes(str("marca")) ? str("marca") : void 0;
+          const r = await buscarManuales(q, sistema, 6, marca);
           return ok(r.length ? fuentesATexto(r) : "Sin resultados. Prueba otros t\xE9rminos, sin\xF3nimos o el idioma del manual (ingl\xE9s/portugu\xE9s).");
         }
         case "buscar_codigo_falla": {
@@ -559,10 +715,30 @@ ${pregunta2 || "Revisa lo que adjunt\xE9 y dime qu\xE9 observas y qu\xE9 hago."}
         }
         case "listar_documentos": {
           const q = str("texto");
-          emitir({ t: "estado", d: `Revisando documentos disponibles: \xAB${q}\xBB` });
+          const marcaPedida = MARCAS_ENUM.includes(str("marca")) ? str("marca") : null;
+          const marca = marcaPedida === "todas" ? null : marcaPedida ?? marcaSlug;
+          emitir({ t: "estado", d: q ? `Revisando documentos disponibles: \xAB${q}\xBB` : `Revisando la biblioteca de ${marca ?? "toda la flota"}` });
           if (!corpus) return ok("El corpus no est\xE1 disponible.");
-          const { data, error } = await corpus.rpc("buscar_documentos", { p_texto: q, p_marca: marcaSlug, p_limit: 15 });
-          if (error) throw error;
+          if (!q) {
+            let cat = corpus.from("copiloto_documentos").select("titulo, modelo, sistema, tipo_documento, paginas").order("sistema").order("titulo").limit(400);
+            if (marca) cat = cat.eq("marca", marca);
+            const { data: docs2, error: e2 } = await cat;
+            if (e2) throw e2;
+            const lista = docs2 ?? [];
+            if (!lista.length) return ok(`No hay documentos de ${marca ?? "ninguna marca"} en la biblioteca.`);
+            const grupos = /* @__PURE__ */ new Map();
+            for (const d of lista) {
+              const k = d.sistema ?? "general / varios";
+              if (!grupos.has(k)) grupos.set(k, []);
+              grupos.get(k).push(d);
+            }
+            return ok(`Cat\xE1logo ${marca ?? "toda la flota"}: ${lista.length} documentos.
+` + Array.from(grupos.entries()).map(([k, ds]) => `## ${k} (${ds.length})
+` + ds.slice(0, 25).map((d) => `- ${d.titulo}${d.modelo ? ` [${d.modelo}]` : ""} (${d.tipo_documento.replace(/_/g, " ")}, ${d.paginas ?? "?"} p\xE1gs)`).join("\n") + (ds.length > 25 ? `
+- \u2026 y ${ds.length - 25} m\xE1s` : "")).join("\n"));
+          }
+          const { data, error: error2 } = await corpus.rpc("buscar_documentos", { p_texto: q, p_marca: marca, p_limit: 20 });
+          if (error2) throw error2;
           const docs = data ?? [];
           return ok(docs.length ? docs.map((d) => `- ${d.titulo} (documento_id ${d.documento_id}; ${d.paginas ?? "?"} p\xE1gs; ${d.tipo_documento}${d.marca ? `; ${d.marca}` : ""}${d.con_imagenes ? "; p\xE1ginas con imagen" : ""})`).join("\n") : "No hay documentos con ese t\xEDtulo. Prueba buscar_manuales por contenido.");
         }
@@ -618,10 +794,62 @@ ${pregunta2 || "Revisa lo que adjunt\xE9 y dime qu\xE9 observas y qu\xE9 hago."}
           const q = str("texto");
           if (!body.activoId) return ok("Sin equipo seleccionado: no hay casos por modelo.");
           emitir({ t: "estado", d: "Revisando casos resueltos del taller" });
-          const { data, error } = await sb2.rpc("rpc_copiloto_casos_similares", { p_activo_id: body.activoId, p_texto: q || "falla", p_limit: 5 });
-          if (error) throw error;
+          const { data, error: error2 } = await sb2.rpc("rpc_copiloto_casos_similares", { p_activo_id: body.activoId, p_texto: q || "falla", p_limit: 5 });
+          if (error2) throw error2;
           const cs = data ?? [];
           return ok(cs.length ? casosATexto(cs) : "No hay casos resueltos parecidos para este equipo o modelo.");
+        }
+        case "historial_flota": {
+          const q = str("texto");
+          if (q.length < 3) return err("texto vac\xEDo");
+          if (!body.activoId) return ok("Sin equipo seleccionado: no hay historial por modelo.");
+          emitir({ t: "estado", d: `Revisando historial de la flota: \xAB${q}\xBB` });
+          const { data, error: error2 } = await sb2.rpc("rpc_copiloto_historial_fallas", { p_activo_id: body.activoId, p_texto: q, p_limit: 8 });
+          if (error2) throw error2;
+          const filas = data ?? [];
+          return ok(filas.length ? filas.map((f) => `- [${f.mismo_equipo ? "ESTE EQUIPO" : f.equipo} \xB7 ${f.fecha} \xB7 ${f.folio} \xB7 ${f.tipo}]${f.motivo ? ` Motivo: ${f.motivo}` : ""}${f.trabajo ? ` Trabajo: ${f.trabajo}` : ""}`).join("\n") : "Nada parecido en el historial de este equipo ni de su modelo.");
+        }
+        case "registrar_comprobacion": {
+          const descripcion = str("descripcion");
+          const resultado = str("resultado");
+          if (descripcion.length < 3 || !["ok", "no_ok", "valor"].includes(resultado)) return err("descripcion y resultado (ok|no_ok|valor) son obligatorios");
+          emitir({ t: "estado", d: "Anotando la comprobaci\xF3n en el caso" });
+          if (!dxId) {
+            const sintoma = str("sintoma") || conversacion?.titulo || pregunta2.slice(0, 200);
+            const { data: nuevo, error: e1 } = await sb2.from("copiloto_diagnosticos").insert({
+              ot_id: body.otId ?? null,
+              activo_id: body.activoId ?? null,
+              usuario_id: uid,
+              sintoma,
+              sistema: SISTEMAS_ENUM.includes(str("sistema")) ? str("sistema") : null
+            }).select("id").single();
+            if (e1 || !nuevo) return err(`No se pudo abrir el caso: ${e1?.message ?? "error"}`);
+            dxId = nuevo.id;
+            if (conversacion) await sb2.from("copiloto_conversaciones").update({ diagnostico_id: dxId }).eq("id", conversacion.id);
+            if (consultaId) await sb2.from("copiloto_consultas").update({ diagnostico_id: dxId }).eq("id", consultaId);
+          }
+          const { error: e2 } = await sb2.rpc("rpc_diagnostico_comprobacion", {
+            p_diagnostico_id: dxId,
+            p_descripcion: descripcion,
+            p_resultado: resultado,
+            p_valor: str("valor") || null
+          });
+          if (e2) return err(`No se pudo registrar: ${e2.message}`);
+          const { data: dxRow } = await sb2.from("copiloto_diagnosticos").select(SELECT_DX).eq("id", dxId).maybeSingle();
+          if (dxRow) emitir({ t: "diagnostico", d: dxRow });
+          return ok(`Registrado en el caso: ${descripcion}${str("valor") ? ` = ${str("valor")}` : ""} \u2192 ${resultado}. No lo repitas en tu respuesta como si fuera nuevo; sigue con el siguiente paso.`);
+        }
+        case "proponer_solucion": {
+          const causa = str("causa_raiz"), rep = str("reparacion");
+          if (causa.length < 5 || rep.length < 5) return err("causa_raiz y reparacion deben ser concretas");
+          const propuesta = {
+            causa_raiz: causa.slice(0, 500),
+            reparacion: rep.slice(0, 800),
+            sistema: SISTEMAS_ENUM.includes(str("sistema")) ? str("sistema") : null,
+            sintoma: str("sintoma").slice(0, 300) || null
+          };
+          emitir({ t: "propuesta", d: propuesta });
+          return ok("La propuesta se le mostr\xF3 al mec\xE1nico con un bot\xF3n para confirmarla o corregirla. Dile en una l\xEDnea que la revise y la confirme; no afirmes que qued\xF3 guardada.");
         }
         default:
           return err(`Herramienta desconocida: ${tool.name}`);
@@ -652,7 +880,8 @@ ${pregunta2 || "Revisa lo que adjunt\xE9 y dime qu\xE9 observas y qu\xE9 hago."}
         confiabilidad: f.confiabilidad ?? null,
         url: f.url_fuente ? esPdf ? `${f.url_fuente}#page=${f.pagina}` : f.url_fuente : null,
         imagen: imgs.get(f.n) ?? null,
-        citada: citadas.has(f.n)
+        citada: citadas.has(f.n),
+        documentoId: f.con_imagen ? f.documento_id : null
       };
     });
     const web = /* @__PURE__ */ new Map();
@@ -684,11 +913,22 @@ ${pregunta2 || "Revisa lo que adjunt\xE9 y dime qu\xE9 observas y qu\xE9 hago."}
       let respuesta = "";
       let inTok = 0, outTok = 0;
       try {
+        if (conversacion) emitir({ t: "conversacion", id: conversacion.id, titulo: conversacion.titulo });
         if (codigosEncontrados.length) emitir({ t: "codigos", d: codigosEncontrados.map(codigoParaCliente) });
         emitir({ t: "estado", d: "Analizando con manuales, casos e historial\u2026" });
+        const pedirCierre = (texto2) => {
+          const ultimo = mensajes[mensajes.length - 1];
+          const bloque = { type: "text", text: texto2 };
+          if (ultimo?.role === "user" && Array.isArray(ultimo.content)) ultimo.content.push(bloque);
+          else mensajes.push({ role: "user", content: [bloque] });
+        };
+        const CIERRE = "Ya no quedan b\xFAsquedas disponibles en esta consulta. Escribe AHORA la respuesta para el mec\xE1nico con lo que ya tienes: cita solo las fuentes encontradas y di claramente qu\xE9 no pudiste verificar.";
         let reintentosJson = 0;
-        for (let ronda = 0; ronda < MAX_RONDAS; ronda++) {
-          const ultima = ronda === MAX_RONDAS - 1;
+        let rondasExtra = 0;
+        let recuperando = false;
+        for (let ronda = 0; ronda < MAX_RONDAS + rondasExtra; ronda++) {
+          const ultima = recuperando || ronda >= MAX_RONDAS - 1;
+          if (ronda === MAX_RONDAS - 1 && !recuperando) pedirCierre(CIERRE);
           const s = anthropic.beta.messages.stream({
             model: MODELO_IA,
             max_tokens: 16e3,
@@ -699,8 +939,8 @@ ${pregunta2 || "Revisa lo que adjunt\xE9 y dime qu\xE9 observas y qu\xE9 hago."}
             system: [{ type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } }],
             // Caché del prefijo que crece ronda a ronda (PDFs adjuntos, resultados)
             cache_control: { type: "ephemeral" },
-            // En la última ronda se quitan las herramientas: tiene que responder
-            tools: ultima ? void 0 : TOOLS,
+            tools: TOOLS,
+            ...ultima ? { tool_choice: { type: "none" } } : {},
             messages: mensajes
           });
           s.on("text", (delta) => {
@@ -722,6 +962,19 @@ ${pregunta2 || "Revisa lo que adjunt\xE9 y dime qu\xE9 observas y qu\xE9 hago."}
           }
           inTok += Math.round((msg.usage.input_tokens ?? 0) + (msg.usage.cache_read_input_tokens ?? 0) * 0.1 + (msg.usage.cache_creation_input_tokens ?? 0) * 1.25);
           outTok += msg.usage.output_tokens ?? 0;
+          console.log(
+            "[copiloto] ronda",
+            ronda,
+            consultaId ?? "-",
+            "stop:",
+            msg.stop_reason,
+            "bloques:",
+            msg.content.map((b) => b.type).join(","),
+            "texto:",
+            respuesta.length,
+            "usage:",
+            JSON.stringify(msg.usage)
+          );
           if (msg.stop_reason === "refusal") {
             const aviso = "\n\n[El copiloto no puede responder esta consulta. Reform\xFAlala o consulta al jefe de taller.]";
             respuesta += aviso;
@@ -734,7 +987,16 @@ ${pregunta2 || "Revisa lo que adjunt\xE9 y dime qu\xE9 observas y qu\xE9 hago."}
             continue;
           }
           const usos = msg.content.filter((b) => b.type === "tool_use");
-          if (msg.stop_reason !== "tool_use" || usos.length === 0) break;
+          if (msg.stop_reason !== "tool_use" || usos.length === 0) {
+            if (!respuesta.trim() && rondasExtra === 0) {
+              console.warn("[copiloto] turno sin texto en ronda", ronda, consultaId ?? "-", "\u2192 ronda de recuperaci\xF3n");
+              rondasExtra = 1;
+              recuperando = true;
+              pedirCierre("No escribiste nada. " + CIERRE);
+              continue;
+            }
+            break;
+          }
           mensajes.push({ role: "assistant", content: msg.content });
           const resultados = await Promise.all(usos.map((u) => ejecutar(u, emitir)));
           mensajes.push({ role: "user", content: resultados });
@@ -743,24 +1005,42 @@ ${pregunta2 || "Revisa lo que adjunt\xE9 y dime qu\xE9 observas y qu\xE9 hago."}
             emitir({ t: "texto", d: "\n\n" });
           }
         }
+        if (!respuesta.trim()) {
+          console.error("[copiloto] respuesta vac\xEDa", consultaId, "inTok:", inTok, "outTok:", outTok);
+          const aviso = "[El copiloto termin\xF3 sin escribir una respuesta. Repite la pregunta; si vuelve a pasar, avisa a jefatura.]";
+          respuesta += aviso;
+          emitir({ t: "texto", d: aviso });
+        }
         const fs = await fuentesCliente(respuesta);
         emitir({ t: "fuentes", d: fs });
         if (codigosEncontrados.length) emitir({ t: "codigos", d: codigosEncontrados.map(codigoParaCliente) });
         if (consultaId) {
           await sb2.from("copiloto_consultas").update({
             respuesta,
-            fuentes: fs.map((f) => ({ n: f.n, titulo: f.titulo, pagina: f.pagina, tipo: f.tipo, url: f.url, citada: f.citada })),
+            fuentes: fs.map((f) => ({
+              n: f.n,
+              titulo: f.titulo,
+              pagina: f.pagina,
+              tipo: f.tipo,
+              url: f.url,
+              citada: f.citada,
+              confiabilidad: f.confiabilidad,
+              documento_id: f.documentoId ?? null
+            })),
+            codigos: codigosEncontrados.map(codigoParaCliente),
+            diagnostico_id: dxId,
             input_tokens: inTok,
             output_tokens: outTok,
             duracion_ms: Date.now() - t02
           }).eq("id", consultaId);
         }
-        emitir({ t: "fin", consultaId });
+        emitir({ t: "fin", consultaId, input_tokens: inTok, output_tokens: outTok, duracion_ms: Date.now() - t02, modelo: MODELO_IA });
       } catch (err) {
         console.error("[copiloto] consulta fall\xF3", consultaId, err instanceof Error ? err.message : err);
-        const msg = err instanceof Anthropic.APIError ? `
+        const detalle = err instanceof Error ? err.message : "";
+        const msg = /credit balance|billing/i.test(detalle) ? "\n\n[El copiloto est\xE1 sin saldo de IA. Avisa a jefatura para recargar la cuenta de Anthropic.]" : err instanceof Anthropic.RateLimitError || /overloaded/i.test(detalle) ? "\n\n[El copiloto est\xE1 con mucha demanda en este momento. Intenta de nuevo en un minuto.]" : err instanceof Anthropic.APIError ? `
 
-[El copiloto tuvo un problema (${err.status}). Intenta de nuevo.]` : "\n\n[El copiloto tuvo un problema. Intenta de nuevo.]";
+[El copiloto tuvo un problema (${err.status ?? "conexi\xF3n"}). Intenta de nuevo.]` : "\n\n[El copiloto tuvo un problema. Intenta de nuevo.]";
         emitir({ t: "texto", d: msg });
         emitir({ t: "error", d: msg.trim() });
         if (consultaId) {
@@ -781,15 +1061,34 @@ ${pregunta2 || "Revisa lo que adjunt\xE9 y dime qu\xE9 observas y qu\xE9 hago."}
       "Content-Type": ndjson ? "application/x-ndjson; charset=utf-8" : "text/plain; charset=utf-8",
       "Cache-Control": "no-cache",
       "X-Accel-Buffering": "no",
-      ...consultaId ? { "X-Copiloto-Id": consultaId } : {}
+      ...consultaId ? { "X-Copiloto-Id": consultaId } : {},
+      ...conversacion ? { "X-Copiloto-Conversacion": conversacion.id } : {}
     }
   });
 }
 function casosATexto(cs) {
   return cs.map((c) => {
     const compr = (c.comprobaciones ?? []).map((x) => `${x.descripcion}${x.valor ? ` = ${x.valor}` : ""} (${x.resultado})`).join("; ");
-    return `- [${c.mismo_equipo ? "ESTE MISMO EQUIPO" : `mismo modelo, ${c.equipo}`} \xB7 ${(c.resuelto_at ?? "").slice(0, 10)}] S\xEDntoma: ${c.sintoma}. Causa ra\xEDz: ${c.causa_raiz}.${c.reparacion ? ` Reparaci\xF3n: ${c.reparacion}.` : ""}${compr ? ` Comprobaciones: ${compr}.` : ""}`;
+    const donde = c.mismo_equipo ? "ESTE MISMO EQUIPO" : c.mismo_modelo ? `mismo modelo, ${c.equipo}` : `otro equipo de la flota, ${c.equipo}${c.modelo ? ` (${c.modelo})` : ""}`;
+    return `- [${donde} \xB7 ${(c.resuelto_at ?? "").slice(0, 10)}${c.validado ? " \xB7 VALIDADO por jefatura" : " \xB7 sin validar"}${c.reaperturas ? ` \xB7 ${c.reaperturas} reapertura(s)` : ""}] S\xEDntoma: ${c.sintoma}. Causa ra\xEDz: ${c.causa_raiz}.${c.reparacion ? ` Reparaci\xF3n: ${c.reparacion}.` : ""}${c.leccion ? ` Lecci\xF3n: ${c.leccion.slice(0, 500)}` : ""}${compr ? ` Comprobaciones: ${compr}.` : ""}`;
   }).join("\n") + "\n";
+}
+function dxATexto(d) {
+  const compr = (d.comprobaciones ?? []).map((x, i) => `${i + 1}. ${x.tipo === "reparacion_fallida" ? "\u26A0\uFE0F " : ""}${x.descripcion}${x.valor ? ` = ${x.valor}` : ""} \u2192 ${x.resultado}`).join("\n");
+  if (d.estado === "resuelto") {
+    return `
+CASO DE ESTA CONVERSACI\xD3N: RESUELTO. S\xEDntoma: ${d.sintoma}${d.sistema ? ` \xB7 Sistema: ${d.sistema}` : ""}
+Causa ra\xEDz registrada: ${d.causa_raiz ?? "\u2014"}. Soluci\xF3n definitiva: ${d.reparacion ?? "\u2014"}.
+` + (compr ? `Comprobaciones:
+${compr}
+` : "") + 'Si el mec\xE1nico dice que volvi\xF3 a fallar, dile que use "La falla volvi\xF3" en la app para reabrir el caso.\n';
+  }
+  return `
+CASO EN CURSO (bit\xE1cora del diagn\xF3stico):
+S\xEDntoma declarado: ${d.sintoma}${d.sistema ? ` \xB7 Sistema: ${d.sistema}` : ""}
+` + (compr ? `Comprobaciones ya registradas:
+${compr}
+` : "A\xFAn sin comprobaciones registradas.\n");
 }
 
 // .copiloto-test/harness.ts
@@ -805,6 +1104,11 @@ var reader = res.body.getReader();
 var dec = new TextDecoder();
 var buf = "";
 var texto = "";
+var estados = [];
+var fuentes = [];
+var codigos = [];
+var fin = {};
+var error = null;
 for (; ; ) {
   const { done, value } = await reader.read();
   if (done) break;
@@ -814,11 +1118,22 @@ for (; ; ) {
   for (const l of ls) {
     if (!l) continue;
     const e = JSON.parse(l);
-    if (e.t === "estado") console.log("  [estado]", e.d);
-    else if (e.t === "texto") texto += e.d;
-    else if (e.t === "fuentes") console.log("  [fuentes]", e.d.map((f) => `F${f.n}${f.imagen ? "\u{1F5BC}" : ""}${f.citada ? "" : "(no citada)"} ${f.titulo.slice(0, 55)} p${f.pagina}${f.url ? " \u{1F517}" : ""}`).join("\n            "));
-    else if (e.t === "codigos") console.log("  [codigos]", e.d.map((c) => c.codigo).join(", "));
-    else if (e.t === "error") console.log("  [ERROR]", e.d);
+    if (e.t === "estado") {
+      estados.push(e.d);
+      console.log("  [estado]", e.d);
+    } else if (e.t === "texto") texto += e.d;
+    else if (e.t === "fuentes") {
+      fuentes = e.d;
+      console.log("  [fuentes]", e.d.map((f) => `F${f.n}${f.imagen ? "\u{1F5BC}" : ""}${f.citada ? "" : "(no citada)"} ${f.titulo.slice(0, 55)} p${f.pagina}${f.url ? " \u{1F517}" : ""}`).join("\n            "));
+    } else if (e.t === "codigos") {
+      codigos = e.d.map((c) => c.codigo);
+      console.log("  [codigos]", codigos.join(", "));
+    } else if (e.t === "fin") fin = e;
+    else if (e.t === "error") {
+      error = e.d;
+      console.log("  [ERROR]", e.d);
+    }
   }
 }
 console.log("\n----- RESPUESTA (" + Math.round((Date.now() - t0) / 1e3) + " s) -----\n" + texto);
+if (process.env.EVAL_JSON) console.log("\n__EVAL__" + JSON.stringify({ texto, estados, fuentes, codigos, error, ms: Date.now() - t0, ...fin }));
