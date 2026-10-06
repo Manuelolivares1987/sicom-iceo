@@ -857,9 +857,25 @@ export async function POST(req: Request) {
         if (codigosEncontrados.length) emitir({ t: 'codigos', d: codigosEncontrados.map(codigoParaCliente) })
         emitir({ t: 'estado', d: 'Analizando con manuales, casos e historial…' })
 
+        // Última ronda (o recuperación): se le avisa al modelo que no quedan búsquedas y se
+        // bloquean las herramientas con tool_choice=none, SIN sacarlas del prompt. Sacarlas
+        // invalidaba la caché completa y, con claude-opus-5-5, terminaba en un turno con solo
+        // razonamiento y cero texto (consulta 93d6bdcc, 05-10-2026).
+        const pedirCierre = (texto: string) => {
+          const ultimo = mensajes[mensajes.length - 1]
+          const bloque: Anthropic.Beta.Messages.BetaTextBlockParam = { type: 'text', text: texto }
+          if (ultimo?.role === 'user' && Array.isArray(ultimo.content)) ultimo.content.push(bloque)
+          else mensajes.push({ role: 'user', content: [bloque] })
+        }
+        const CIERRE = 'Ya no quedan búsquedas disponibles en esta consulta. Escribe AHORA la respuesta para el mecánico '
+          + 'con lo que ya tienes: cita solo las fuentes encontradas y di claramente qué no pudiste verificar.'
+
         let reintentosJson = 0
-        for (let ronda = 0; ronda < MAX_RONDAS; ronda++) {
-          const ultima = ronda === MAX_RONDAS - 1
+        let rondasExtra = 0
+        let recuperando = false
+        for (let ronda = 0; ronda < MAX_RONDAS + rondasExtra; ronda++) {
+          const ultima = recuperando || ronda >= MAX_RONDAS - 1
+          if (ronda === MAX_RONDAS - 1 && !recuperando) pedirCierre(CIERRE)
           const s = anthropic.beta.messages.stream({
             model: MODELO_IA,
             max_tokens: 16000,
@@ -870,8 +886,8 @@ export async function POST(req: Request) {
             system: [{ type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }],
             // Caché del prefijo que crece ronda a ronda (PDFs adjuntos, resultados)
             cache_control: { type: 'ephemeral' },
-            // En la última ronda se quitan las herramientas: tiene que responder
-            tools: ultima ? undefined : TOOLS,
+            tools: TOOLS,
+            ...(ultima ? { tool_choice: { type: 'none' as const } } : {}),
             messages: mensajes,
           })
           s.on('text', (delta) => { respuesta += delta; emitir({ t: 'texto', d: delta }) })
@@ -896,6 +912,9 @@ export async function POST(req: Request) {
             + (msg.usage.cache_read_input_tokens ?? 0) * 0.1
             + (msg.usage.cache_creation_input_tokens ?? 0) * 1.25)
           outTok += msg.usage.output_tokens ?? 0
+          console.log('[copiloto] ronda', ronda, consultaId ?? '-', 'stop:', msg.stop_reason,
+            'bloques:', msg.content.map((b) => b.type).join(','), 'texto:', respuesta.length,
+            'usage:', JSON.stringify(msg.usage))
 
           if (msg.stop_reason === 'refusal') {
             const aviso = '\n\n[El copiloto no puede responder esta consulta. Reformúlala o consulta al jefe de taller.]'
@@ -909,13 +928,29 @@ export async function POST(req: Request) {
             continue
           }
           const usos = msg.content.filter((b): b is Anthropic.Beta.Messages.BetaToolUseBlock => b.type === 'tool_use')
-          if (msg.stop_reason !== 'tool_use' || usos.length === 0) break
+          if (msg.stop_reason !== 'tool_use' || usos.length === 0) {
+            // Turno sin texto (solo razonamiento): una ronda más, con la instrucción explícita
+            if (!respuesta.trim() && rondasExtra === 0) {
+              console.warn('[copiloto] turno sin texto en ronda', ronda, consultaId ?? '-', '→ ronda de recuperación')
+              rondasExtra = 1; recuperando = true
+              pedirCierre('No escribiste nada. ' + CIERRE)
+              continue
+            }
+            break
+          }
 
           mensajes.push({ role: 'assistant', content: msg.content })
           const resultados = await Promise.all(usos.map((u) => ejecutar(u, emitir)))
           mensajes.push({ role: 'user', content: resultados })
           // El texto previo a las herramientas ("voy a revisar…") no es la respuesta
           if (respuesta.trim()) { respuesta += '\n\n'; emitir({ t: 'texto', d: '\n\n' }) }
+        }
+
+        // Nunca silencio: si el modelo terminó sin texto, se avisa y queda rastro
+        if (!respuesta.trim()) {
+          console.error('[copiloto] respuesta vacía', consultaId, 'inTok:', inTok, 'outTok:', outTok)
+          const aviso = '[El copiloto terminó sin escribir una respuesta. Repite la pregunta; si vuelve a pasar, avisa a jefatura.]'
+          respuesta += aviso; emitir({ t: 'texto', d: aviso })
         }
 
         const fs = await fuentesCliente(respuesta)
