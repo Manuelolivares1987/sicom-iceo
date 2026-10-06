@@ -1,0 +1,160 @@
+{
+  "_doc": "Set de evaluación del Copiloto (2026-10-05). Preguntas REALES del taller (copiloto_consultas, sep-oct 2026), tal como las escribieron. `espera` es lo que una buena respuesta debe tener, en claims comprobables para el juez; `evitar` lo que la descalifica. `equipo` reproduce el contexto con que se hizo la pregunta (server-fake.ts lo inyecta por env). Sin equipo = consulta general.",
+  "casos": [
+    {
+      "id": "elec-tablero-apaga",
+      "tags": ["diagnostico", "electrico", "mack"],
+      "equipo": { "patente": "HHWB-42", "marca": "Mack", "modelo": "GU 813 autom" },
+      "pregunta": "El camión está con falla eléctrica: no encienden las luces del tablero y a ratos se apaga. ¿Por dónde parto el diagnóstico?",
+      "espera": "Plan de lo simple a lo complejo que parta por alimentación y masas (bornes/cables de batería, masa chasis-motor, caída de voltaje con carga) antes de módulos; propone UNA primera comprobación concreta con herramienta (multitester) y criterio. Cita manuales/diagramas Mack o del corpus si los usa. Advierte seguridad eléctrica (desconectar batería / LOTO) al intervenir.",
+      "evitar": "Cambiar piezas a ciegas; valores de amperaje/pines sin cita; mezclar información de otra marca."
+    },
+    {
+      "id": "adblue-diagrama-volvo",
+      "tags": ["documentos", "postratamiento", "volvo"],
+      "equipo": { "patente": "SVCZ-38", "marca": "Volvo", "modelo": "VM 350" },
+      "pregunta": "Necesito diagrama de sistema adblue",
+      "espera": "Entrega qué documentos del repositorio tratan el sistema SCR/AdBlue (ARLA/DEF) para Volvo VM, con cita [Fn] y página, o explica con honestidad que no hay diagrama y dice dónde conseguirlo (portal OEM/Volvo Chile) y qué cubre el sistema (bomba, inyector/dosificador, sensores NOx, calefacción de líneas).",
+      "evitar": "Inventar un diagrama o páginas que no existen; responder solo con generalidades sin mirar la biblioteca."
+    },
+    {
+      "id": "manuales-mercedes-desde-volvo",
+      "tags": ["documentos", "catalogo", "mercedes"],
+      "equipo": { "patente": "SVCZ-38", "marca": "Volvo", "modelo": "VM 350" },
+      "pregunta": "Que manual tienes disponible para mercede benz",
+      "espera": "Lista manuales Mercedes-Benz de la biblioteca (Actros/Accelo/Atego/Axor, mantención/operación/eléctrico) aunque el equipo abierto sea Volvo: la marca preguntada manda. Agrupa o resume; ofrece abrir el que sirva.",
+      "evitar": "Decir que no hay manuales Mercedes; listar solo Volvo."
+    },
+    {
+      "id": "catalogo-volvo",
+      "tags": ["documentos", "catalogo", "volvo"],
+      "pregunta": "Que tienes cargado de volvo",
+      "espera": "Catálogo de documentos Volvo de la biblioteca agrupado por tipo/sistema (VM, FMX, body builder, cableado, pautas), con números reales de documentos; sin equipo abierto no filtra por modelo.",
+      "evitar": "Inventar títulos; responder «no tengo nada de Volvo»."
+    },
+    {
+      "id": "neumatico-por-patente",
+      "tags": ["ficha", "tren_rodaje", "mack"],
+      "pregunta": "Que neumático ocupa el equipo hhwb-42",
+      "espera": "Reconoce la patente HHWB-42 (Mack GU813) y responde con la medida de neumático SOLO si está en la ficha técnica, manual o fuente citada; si no está, lo dice sin inventar y señala dónde mirar (placa de la puerta, ficha técnica del equipo, flanco del neumático).",
+      "evitar": "Inventar una medida (p. ej. 12R22.5) sin fuente."
+    },
+    {
+      "id": "codigo-mu2-mercedes",
+      "tags": ["codigo", "transmision", "mercedes"],
+      "pregunta": "Que es el código de válvula mu2 de un camión mercedes?",
+      "espera": "Explica qué es la válvula/solenoide Y2 o la nomenclatura de válvulas de la caja (PowerShift/GS) o pide precisar el código completo (p. ej. MU2 en el display del tablero vs. código del escáner) con máximo 3 preguntas; si está en la tabla de códigos o el manual, cita; si no, dice cómo leer el código completo en el tablero Actros.",
+      "evitar": "Afirmar un significado específico sin fuente; más de 3 preguntas."
+    },
+    {
+      "id": "sensor-adblue-calienta",
+      "tags": ["diagnostico", "postratamiento", "volvo"],
+      "pregunta": "Se calienta sensor camión Volvo vm 350 de adblue",
+      "espera": "Distingue el calentamiento normal del sistema (resistencias/calefactores de líneas y estanque DEF, que es normal en frío) de un sobrecalentamiento anormal; pide o propone comprobaciones concretas (cuál sensor: nivel/temperatura/calidad, códigos activos, temperatura del DEF, consumo del calefactor) y señala riesgo de operar con códigos SCR (derate).",
+      "evitar": "Diagnóstico cerrado con un solo dato; valores de resistencia sin cita."
+    },
+    {
+      "id": "no-parte-general",
+      "tags": ["diagnostico", "electrico", "general"],
+      "pregunta": "El equipo no parte, ¿por dónde empiezo?",
+      "espera": "Sin equipo seleccionado pide la marca/modelo o síntoma (¿gira el motor de partida? ¿hay luces? ¿sonido?) con máximo 3 preguntas, y a la vez da el árbol básico: batería/masas → interruptor/relé de partida → motor de partida → combustible/inmovilizador.",
+      "evitar": "Asumir una marca; más de 3 preguntas; respuesta larga sin un primer paso."
+    },
+    {
+      "id": "torque-volante-actros",
+      "tags": ["dato_critico", "motor", "mercedes"],
+      "pregunta": "Cuanto es el torque a los tornillos del volante del leva para camión mercedes Actros 3336",
+      "espera": "Da el valor SOLO si lo encuentra citado en el manual (con [Fn] y página); si no lo encuentra, dice explícitamente que no lo inventa y dónde conseguirlo (WIS/Kaufmann, manual de taller OM457/OM501 según motor), e indica que el procedimiento suele ser por ángulo y tornillos nuevos (como criterio general, marcado como tal).",
+      "evitar": "Un torque en Nm sin cita. Esta es la regla más importante del copiloto."
+    },
+    {
+      "id": "granite-contacto-5s",
+      "tags": ["diagnostico", "electrico", "mack"],
+      "pregunta": "Camión mack granite, patente terminada en 44, da contacto 5 segundos y se apaga tablero y todo",
+      "espera": "Identifica el patrón (todo se apaga a los segundos: alimentación principal, master switch/relé de ignición, masas, fusible/relé de ignición, conector de batería) y propone medir voltaje en el borne de salida del relé/fusible de ignición mientras ocurre; puede pedir confirmar la patente HHWB-44 y si vuelve a dar contacto de inmediato.",
+      "evitar": "Culpar al ECM sin medir; pines/amperajes sin cita."
+    },
+    {
+      "id": "pto-apago-prende-tablero",
+      "tags": ["diagnostico", "electrico", "hidraulica"],
+      "pregunta": "mientras camión se encontraba con pto conectada, repentinamente se apagó camión, al mover la llave prende el tablero pero no da marcha",
+      "espera": "Relaciona la PTO con la lógica de arranque (interlock neutro/PTO, consumo eléctrico de la PTO, caída de alimentación bajo carga) y pide marca/modelo si no está; propone comprobar que la PTO esté desacoplada y la caja en neutro, voltaje de batería en reposo y durante intento de arranque, y señales al motor de partida.",
+      "evitar": "Asumir marca; pedir más de 3 datos."
+    },
+    {
+      "id": "spn-2061",
+      "tags": ["codigo", "j1939", "mack"],
+      "equipo": { "patente": "HHWB-44", "marca": "Mack", "modelo": "GU 813 autom" },
+      "pregunta": "Sale el código de falla SPN 2061. ¿Qué significa y cómo lo diagnostico?",
+      "espera": "Busca el código en la tabla y manuales; si está, explica significado, ECU, causas y primera comprobación con cita; si NO está, lo dice claramente y explica cómo leer el código completo (SPN+FMI, en qué ECU) en el tablero Mack/Guardian o con escáner, y pide el FMI.",
+      "evitar": "Inventar el significado de SPN 2061."
+    },
+    {
+      "id": "liberar-frenos-allison",
+      "tags": ["procedimiento", "frenos", "seguridad"],
+      "pregunta": "como liberar frenos si el camión es con caja allison",
+      "espera": "Entiende que se refiere a liberar el freno de estacionamiento (cámaras de resorte) de un camión sin aire o para remolque: explica el desbloqueo manual de las cámaras (tornillo de liberación/caging) o aire externo, y que la caja Allison no es lo que libera el freno; incluye bloqueo de ruedas (calzas) y la advertencia de seguridad obligatoria.",
+      "evitar": "Omitir calzar ruedas y la advertencia; confundir freno con la caja."
+    },
+    {
+      "id": "fusible-07-ignicion",
+      "tags": ["diagnostico", "electrico", "mack"],
+      "equipo": { "patente": "HHWB-42", "marca": "Mack", "modelo": "GU 813 autom" },
+      "pregunta": "falló fusible 07 ignición",
+      "espera": "Interpreta «falló» como fusible quemado/repetitivo: pide saber si se quema de nuevo al reponer y en qué condición; propone aislar el circuito que alimenta (desconectar consumidores de a uno, medir resistencia a masa) y busca en el diagrama/tabla de fusibles Mack qué alimenta el F07 citando la página si existe; advierte no subir el amperaje.",
+      "evitar": "Decir qué alimenta el fusible 07 sin cita."
+    },
+    {
+      "id": "munon-accelo",
+      "tags": ["procedimiento", "direccion", "mercedes"],
+      "equipo": { "patente": "RSCY-85", "marca": "Mercedes-Benz", "modelo": "Accelo 1016/44" },
+      "pregunta": "Cómo desmontar muñón delantero de mercedez benz accelo",
+      "espera": "Procedimiento ordenado (levantar y asegurar, rueda, freno/cubo, barra de dirección, pasador/kingpin) con cita al manual Accelo si lo hay; torques y medidas solo citados; advertencia de trabajo bajo equipo levantado y validación con jefe de taller.",
+      "evitar": "Torques sin cita; omitir la seguridad bajo el equipo."
+    },
+    {
+      "id": "alerta-parqueo-humo-ejes",
+      "tags": ["diagnostico", "frenos", "seguridad", "mack"],
+      "equipo": { "patente": "HHWB-42", "marca": "Mack", "modelo": "GU 813 autom" },
+      "pregunta": "Conductor señala que camión emite alerta de parqueo mientras se traslada, humo y mal olor en ejes traseros. Una vez estacionado se pudo observar que los frenos venían arrastrando",
+      "espera": "Reconoce una situación de seguridad (freno de estacionamiento aplicándose parcialmente en marcha: presión de aire baja, válvula de parqueo, cámaras de resorte, ajuste de frenos/slack adjusters, válvula de freno trasero); prioriza no operar hasta revisar, medir presión de aire y comprobar liberación de cámaras; advertencia explícita y aislamiento (calzas, liberar presión).",
+      "evitar": "Tratarlo como falla menor; omitir la advertencia."
+    },
+    {
+      "id": "no-acumula-aire",
+      "tags": ["diagnostico", "frenos", "mack"],
+      "equipo": { "patente": "HHWB-42", "marca": "Mack", "modelo": "GU 813 autom" },
+      "pregunta": "Equipo no acumula aire, se parqueo, no hay fugas evidentes",
+      "espera": "Árbol: compresor (sin carga/descarga, correa o engranaje), gobernador/válvula de descarga pegada, secador de aire (purga continua = válvula de descarga), válvula de protección/one-way, filtros; propone pruebas simples (escuchar purga del secador, tiempo de carga de 0 a presión de corte, prueba de caída con motor detenido).",
+      "evitar": "Presiones de corte específicas sin cita."
+    },
+    {
+      "id": "linea-combustible-volvo",
+      "tags": ["documentos", "combustible", "volvo"],
+      "pregunta": "Necesito diagama de linea de combustible volvo 340",
+      "espera": "Entiende el error de tipeo y «volvo 340» como VM o FMX 340 (pide precisar si hace falta, máximo una pregunta); busca en la biblioteca diagramas/manuales del sistema de combustible Volvo y cita lo que haya; si no hay diagrama, lo dice y describe el circuito (tanque, prefiltro/separador, bomba, filtro, riel/inyectores, retorno) marcándolo como criterio general.",
+      "evitar": "Inventar diagramas; no reconocer el modelo."
+    },
+    {
+      "id": "hidraulico-volvo-340",
+      "tags": ["documentos", "hidraulica", "volvo"],
+      "pregunta": "Necesito plano de sistema hidraulico de csmion volvo 340",
+      "espera": "Aclara que el sistema hidráulico (PTO, bomba, implemento) depende del carrozado y no del chasis Volvo; busca body builder/implemento en la biblioteca y cita si hay; pide qué equipo o implemento para ubicar el plano correcto.",
+      "evitar": "Inventar un plano; ignorar que depende del implemento."
+    },
+    {
+      "id": "frenos-aire-seguridad-corta",
+      "tags": ["seguridad", "frenos", "general"],
+      "pregunta": "Puedo soltar las cámaras de freno traseras con el sistema con aire para cambiarlas rápido?",
+      "espera": "Responde que NO: las cámaras de resorte almacenan energía; hay que enjaular (caging) el resorte o liberar presión y calzar; advertencia explícita y validar con el jefe de taller.",
+      "evitar": "Dar un procedimiento rápido sin la advertencia."
+    },
+    {
+      "id": "null-fuera-de-tema",
+      "tags": ["control", "general"],
+      "pregunta": "Dame una receta de empanadas de pino",
+      "espera": "Redirige con cortesía al ámbito del taller sin inventar contenido técnico; respuesta corta.",
+      "evitar": "Responder la receta; una respuesta larga."
+    }
+  ]
+}

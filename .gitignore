@@ -62,3 +62,9 @@ CUENTAS_TALLER.txt
 
 # Hojas de claves de capacitación — NUNCA commitear
 docs/capacitacion/Claves_*.xlsx
+
+# Evaluación del copiloto: trazas y reporte derivados
+frontend/.copiloto-test/resultados/**/traces/
+frontend/.copiloto-test/resultados/report.html
+frontend/.copiloto-test/resultados/state.json
+frontend/.copiloto-test/resultados/trajectory/

@@ -104,5 +104,5 @@ export type EventoCopiloto =
   | { t: 'codigos'; d: CodigoCopiloto[] }
   | { t: 'diagnostico'; d: DiagnosticoCopiloto }
   | { t: 'propuesta'; d: PropuestaSolucion }
-  | { t: 'fin'; consultaId: string | null }
+  | { t: 'fin'; consultaId: string | null; input_tokens?: number; output_tokens?: number; duracion_ms?: number; modelo?: string }
   | { t: 'error'; d: string }
