@@ -1,0 +1,14 @@
+{
+  "flow": "copiloto",
+  "description": "Copiloto Técnico del taller: preguntas reales de mecánicos (sep-oct 2026) contra la ruta real /api/copiloto/consulta con el corpus real. Runner: frontend/.copiloto-test/eval.mjs; casos: frontend/.copiloto-test/casos.json.",
+  "metrics": [
+    { "id": "util", "label": "Útil y segura", "kind": "binary" },
+    { "id": "no_invencion", "label": "Sin inventar", "kind": "binary" },
+    { "id": "accionable", "label": "Accionable", "kind": "binary" },
+    { "id": "seguridad", "label": "Seguridad", "kind": "binary" },
+    { "id": "citas", "label": "Cita fuentes", "kind": "binary" },
+    { "id": "formato", "label": "Formato", "kind": "binary" }
+  ],
+  "perf_fields": ["latency_s", "tool_calls", "fuentes_n", "citas_n", "chars"],
+  "harness_paths": ["frontend/.copiloto-test/eval.mjs", "frontend/.copiloto-test/casos.json", "frontend/src/app/api/copiloto/consulta/route.ts"]
+}

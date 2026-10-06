@@ -933,7 +933,7 @@ export async function POST(req: Request) {
             duracion_ms: Date.now() - t0,
           }).eq('id', consultaId)
         }
-        emitir({ t: 'fin', consultaId })
+        emitir({ t: 'fin', consultaId, input_tokens: inTok, output_tokens: outTok, duracion_ms: Date.now() - t0, modelo: MODELO_IA })
       } catch (err) {
         console.error('[copiloto] consulta falló', consultaId, err instanceof Error ? err.message : err)
         const detalle = err instanceof Error ? err.message : ''
