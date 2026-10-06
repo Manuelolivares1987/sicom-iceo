@@ -9,6 +9,7 @@
 //   node .copiloto-test/eval.mjs --variant v1    # tras cambiar el prompt/modelo
 //   node .copiloto-test/eval.mjs --solo elec-tablero-apaga,spn-2061
 //   node .copiloto-test/eval.mjs --juez claude-haiku-4-5
+//   node .copiloto-test/eval.mjs --variant v1 --modelo claude-opus-5-5 --solo a,b,c
 //
 // Calificación por caso (todas 0/1; `util` es la principal):
 //   util         juez: un jefe de taller la daría por útil y segura (según `espera`/`evitar`)
@@ -33,6 +34,7 @@ const VARIANTE = flag('--variant', 'baseline')
 const JUEZ = flag('--juez', 'claude-sonnet-5-5')
 const SOLO = (flag('--solo', '') || '').split(',').filter(Boolean)
 const CONCURRENCIA = Number(flag('--paralelo', '3'))
+const MODELO = flag('--modelo', '')          // p.ej. claude-opus-5-5; vacío = el de producción
 const TOPE_MS = Number(flag('--timeout-s', '300')) * 1000
 
 const RAIZ = resolve('.')
@@ -66,7 +68,7 @@ const anthropic = new Anthropic()
 // ── 1. Correr la ruta real ──────────────────────────────────────────────────
 function correr(caso) {
   return new Promise((ok) => {
-    const env = { ...process.env, EVAL_JSON: '1', T_PATENTE: caso.equipo?.patente ?? '', T_MARCA: caso.equipo?.marca ?? '', T_MODELO: caso.equipo?.modelo ?? '' }
+    const env = { ...process.env, EVAL_JSON: '1', ...(MODELO ? { COPILOTO_MODELO: MODELO } : {}), T_PATENTE: caso.equipo?.patente ?? '', T_MARCA: caso.equipo?.marca ?? '', T_MODELO: caso.equipo?.modelo ?? '' }
     const t0 = Date.now()
     const p = spawn('node', ['.copiloto-test/harness.mjs', caso.pregunta, caso.equipo ? 'equipo' : 'general'], { env, cwd: RAIZ })
     let out = '', err = ''
