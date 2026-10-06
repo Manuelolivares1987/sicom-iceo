@@ -22,12 +22,16 @@ import { supabase } from '@/lib/supabase'
 import { validarCaso } from '@/lib/services/copiloto'
 import { describirPausa } from '@/lib/copiloto/conversacion'
 
-// Tarifa claude-opus-5: US$5/M entrada + US$25/M salida
-const USD_IN = 5 / 1_000_000
-const USD_OUT = 25 / 1_000_000
+// Tarifa por modelo (US$ por millón de tokens entrada/salida). Los tokens de
+// entrada ya vienen ponderados por caché desde la ruta.
+const TARIFA: Record<string, [number, number]> = { 'claude-opus-5': [5, 25], 'claude-opus-5-5': [4, 20] }
+const costoUsd = (c: { modelo: string | null; input_tokens: number | null; output_tokens: number | null }) => {
+  const [i, o] = TARIFA[c.modelo ?? ''] ?? [5, 25]
+  return ((c.input_tokens ?? 0) * i + (c.output_tokens ?? 0) * o) / 1_000_000
+}
 
 type Consulta = {
-  id: string; usuario_id: string; pregunta: string; con_foto: boolean
+  id: string; usuario_id: string; pregunta: string; con_foto: boolean; modelo: string | null
   feedback: 'util' | 'no_util' | null; fuentes: unknown[]
   input_tokens: number | null; output_tokens: number | null
   created_at: string; diagnostico_id: string | null
@@ -56,7 +60,7 @@ async function getDatos() {
   const hace3d = new Date(Date.now() - 3 * 86400_000).toISOString()
   const [consultas, dxs, perfiles, convs] = await Promise.all([
     supabase.from('copiloto_consultas')
-      .select('id, usuario_id, pregunta, con_foto, feedback, fuentes, input_tokens, output_tokens, created_at, diagnostico_id, activo:activos(codigo, patente)')
+      .select('id, usuario_id, pregunta, con_foto, modelo, feedback, fuentes, input_tokens, output_tokens, created_at, diagnostico_id, activo:activos(codigo, patente)')
       .gte('created_at', desde).order('created_at', { ascending: false }).limit(300),
     supabase.from('copiloto_diagnosticos')
       .select('id, sintoma, sistema, estado, causa_raiz, reparacion, leccion, validado_at, reaperturas, comprobaciones, created_at, resuelto_at, activo_id, activo:activos(codigo, patente, modelo_id)')
@@ -115,7 +119,7 @@ export default function CopilotoPanelPage() {
     const conFb = cs.filter((c) => c.feedback)
     const utiles = conFb.filter((c) => c.feedback === 'util').length
     const sinFuentes = cs.filter((c) => Array.isArray(c.fuentes) && c.fuentes.length === 0)
-    const costo = cs.reduce((s, c) => s + (c.input_tokens ?? 0) * USD_IN + (c.output_tokens ?? 0) * USD_OUT, 0)
+    const costo = cs.reduce((s, c) => s + costoUsd(c), 0)
     const mecanicos = new Set(cs.map((c) => c.usuario_id)).size
     const resueltos = data.dxs.filter((d) => d.estado === 'resuelto')
     const abiertos = data.dxs.filter((d) => d.estado === 'abierto')

@@ -48,7 +48,10 @@ export const maxDuration = 300
 //     sus comprobaciones: el copiloto no la vuelve a proponer.
 // ============================================================================
 
-const MODELO_IA = 'claude-opus-5'
+// Variable de entorno para probar otro modelo en la evaluación (eval.mjs
+// --modelo) o cambiarlo en Netlify sin redeploy; producción sigue en opus-5
+// hasta que la evaluación diga lo contrario.
+const MODELO_IA = process.env.COPILOTO_MODELO ?? 'claude-opus-5'
 // medium: buen balance calidad/latencia para un mecánico esperando en el
 // teléfono; se puede subir a 'high' en Netlify sin redeploy de código.
 const EFFORT = (process.env.COPILOTO_EFFORT ?? 'medium') as 'low' | 'medium' | 'high' | 'xhigh' | 'max'
