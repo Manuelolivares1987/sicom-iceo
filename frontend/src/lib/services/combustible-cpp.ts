@@ -202,6 +202,7 @@ export async function listarActivos() {
   const { data, error } = await supabase
     .from('activos')
     .select('id, codigo, nombre, tipo')
+    .neq('estado', 'dado_baja') // MIG589: un equipo vendido no carga combustible
     .order('codigo')
   return { data: data as ActivoMini[] | null, error }
 }

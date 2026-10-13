@@ -277,7 +277,9 @@ function CopilotoInner() {
     if (!modalEquipo) return
     const q = busqEquipo.trim()
     const h = setTimeout(async () => {
-      let query = supabase.from('activos').select('id, patente, codigo, nombre').limit(15)
+      let query = supabase.from('activos').select('id, patente, codigo, nombre')
+        .neq('estado', 'dado_baja') // MIG589: los vendidos no se buscan
+        .limit(15)
       if (q) query = query.or(`patente.ilike.%${q.replace(/[%,()]/g, '')}%,codigo.ilike.%${q.replace(/[%,()]/g, '')}%,nombre.ilike.%${q.replace(/[%,()]/g, '')}%`)
       const { data } = await query.order('patente', { ascending: true })
       setEquipos((data ?? []) as typeof equipos)
