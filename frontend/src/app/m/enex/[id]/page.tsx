@@ -23,6 +23,7 @@ import { useAuth } from '@/contexts/auth-context'
 import { useToast } from '@/contexts/toast-context'
 import { getEjecucionIdDeProgramacion, type EnexPautaItem, type EnexPendiente } from '@/lib/services/enex'
 import { generarYGuardarInformeEnex } from '@/components/enex/pdf-informe-enex'
+import { supabase } from '@/lib/supabase'
 import {
   getPendienteOffline, getPautaItemsOffline, getEjecucionItemsOffline, queueEjecucion,
   guardarFotoLocal, getFotoLocal, guardarDraft, getDraft, borrarDraft,
@@ -208,6 +209,18 @@ export default function EnexEjecutarPage() {
             enServidor.current.add(r.pauta_item_id)
           }
         } catch { /* sin señal y sin cache: se parte de cero */ }
+        // [MIG586] La observación general y el N° OT también vienen del
+        // servidor. Antes solo se leían del borrador local: al reabrir el
+        // servicio en otro teléfono (o con el borrador ya borrado) partían en
+        // blanco, y como el guardado reemplaza (MIG267), se borraban.
+        try {
+          const { data: cab } = await supabase.from('enex_ejecuciones')
+            .select('observacion, ot_numero').eq('id', prog.ejecucion_id).maybeSingle()
+          if (!cancel && cab) {
+            if (cab.observacion) setObs(cab.observacion)
+            if (cab.ot_numero) setOtNumero(cab.ot_numero)
+          }
+        } catch { /* sin señal: queda lo del borrador local */ }
       }
       // El borrador local manda: es lo último que hizo el mantenedor.
       const d = await getDraft(progId)

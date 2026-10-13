@@ -13,7 +13,7 @@
 // ============================================================================
 
 export type EstadoFlotaCodigo =
-  | 'A' | 'C' | 'D' | 'H' | 'R' | 'M' | 'T' | 'F' | 'V' | 'U' | 'L' | 'S'
+  | 'A' | 'C' | 'D' | 'H' | 'R' | 'M' | 'T' | 'F' | 'V' | 'U' | 'L' | 'S' | 'B'
 
 export const ESTADO_FLOTA_COLOR: Record<string, string> = {
   A: '#16A34A', // Arrendado
@@ -28,6 +28,7 @@ export const ESTADO_FLOTA_COLOR: Record<string, string> = {
   F: '#DC2626', // Fuera de servicio
   V: '#9333EA', // Venta
   S: '#7F1D1D', // Siniestrado / robado (MIG306)
+  B: '#374151', // Vendido (MIG585)
 }
 
 export const ESTADO_FLOTA_LABEL: Record<string, string> = {
@@ -43,12 +44,13 @@ export const ESTADO_FLOTA_LABEL: Record<string, string> = {
   U: 'Uso interno',
   L: 'Leasing',
   S: 'Siniestrado / robado',
+  B: 'Vendido',
 }
 
 // Orden en que se ofrecen al planificador: primero lo comercial, después lo
 // transitorio, al final lo excepcional.
 export const ESTADO_FLOTA_OPCIONES: EstadoFlotaCodigo[] =
-  ['A', 'C', 'D', 'H', 'R', 'M', 'T', 'F', 'U', 'L', 'V', 'S']
+  ['A', 'C', 'D', 'H', 'R', 'M', 'T', 'F', 'U', 'L', 'V', 'S', 'B']
 
 // Cómo se traduce el estado del planificador al estado operativo de la ficha.
 // Mismo mapeo que rpc_confirmar_estado_dia y rpc_actualizar_estado_diario_manual
@@ -57,6 +59,11 @@ export const ESTADO_FLOTA_A_FICHA: Record<string, 'operativo' | 'en_mantenimient
   M: 'en_mantenimiento', T: 'en_mantenimiento', H: 'en_mantenimiento',
   F: 'fuera_servicio', S: 'fuera_servicio',
 }
+
+// [MIG585] Estados que NO cuentan en fiabilidad ni disponibilidad: el equipo
+// dejó de ser flota operable. Sus días salen del denominador.
+//   S siniestrado/robado · V en venta · B vendido (la ficha queda dada de baja)
+export const ESTADOS_FUERA_DE_FLOTA = ['S', 'V', 'B'] as const
 
 // Qué equipos cierra el planificador todos los días. Es la misma lista que
 // filtra fn_sugerencias_estado_gps en la base: si no está aquí, el equipo NO

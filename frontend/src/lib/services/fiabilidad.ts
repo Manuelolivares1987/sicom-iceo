@@ -276,6 +276,8 @@ export async function getMatrizEstadosFlota(fechaInicio: string, fechaFin: strin
       .select('activo_id, fecha, estado_codigo')
       .gte('fecha', fechaInicio)
       .lte('fecha', fechaFin)
+      // [MIG585] En venta y vendido no son flota operable: fuera del status.
+      .not('estado_codigo', 'in', '(V,B)')
       .order('fecha', { ascending: true })
       .order('activo_id', { ascending: true })
       .range(from, from + PAGE - 1)

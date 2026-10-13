@@ -2,7 +2,7 @@ import { supabase } from '@/lib/supabase'
 
 // ── Estados del dia (estado_codigo) ────────────────────────
 export type EstadoCodigo =
-  | 'A' | 'C' | 'D' | 'H' | 'R' | 'M' | 'T' | 'F' | 'V' | 'U' | 'L' | 'S'
+  | 'A' | 'C' | 'D' | 'H' | 'R' | 'M' | 'T' | 'F' | 'V' | 'U' | 'L' | 'S' | 'B'
 
 export const ESTADO_CODIGO_LABELS: Record<EstadoCodigo, string> = {
   A: 'Arrendado', C: 'En contrato', D: 'Disponible', H: 'Habilitación',
@@ -10,6 +10,9 @@ export const ESTADO_CODIGO_LABELS: Record<EstadoCodigo, string> = {
   V: 'Venta', U: 'Uso interno', L: 'Leasing',
   // 'S' NO cuenta en disponibilidad: se excluye del denominador (MIG306).
   S: 'Siniestrado / fuera de control',
+  // 'B' vendido (MIG585): se marca SOLO desde Sugerencias GPS, con motivo.
+  // No se ofrece en este cierre; está aquí para poder mostrarlo.
+  B: 'Vendido',
 }
 
 export const ESTADO_CODIGO_COLORS: Record<EstadoCodigo, string> = {
@@ -25,6 +28,7 @@ export const ESTADO_CODIGO_COLORS: Record<EstadoCodigo, string> = {
   U: 'bg-teal-100 text-teal-700 border-teal-300',
   L: 'bg-violet-100 text-violet-700 border-violet-300',
   S: 'bg-slate-200 text-slate-700 border-slate-400',
+  B: 'bg-gray-200 text-gray-700 border-gray-400',
 }
 
 export const ESTADO_CODIGO_ORDEN: EstadoCodigo[] =
