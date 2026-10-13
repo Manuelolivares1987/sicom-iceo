@@ -87,15 +87,19 @@ export default function EnexInformesPage() {
 
   async function generar(r: EnexPanelRow) {
     if (!r.ejecucion_id) return
+    // La pestaña se abre en el mismo clic: abierta después de la espera, el
+    // navegador la bloquea y parece que no pasó nada.
+    const w = window.open('', '_blank')
+    try { if (w) w.document.body.innerHTML = '<p style="font:16px system-ui;padding:24px;color:#374151">Generando el informe PDF…</p>' } catch { /* no-op */ }
     setGenerando(r.ejecucion_id)
     setAvance('')
     try {
       const url = await generarYGuardarInformeEnex(r.ejecucion_id, (hechas, total) =>
         setAvance(`${hechas}/${total} fotos`))
       toast.success('Informe PDF generado')
-      window.open(url, '_blank')
+      if (w && !w.closed) w.location.href = url
       refetch()
-    } catch (e) { toast.error((e as Error).message) } finally { setGenerando(null); setAvance('') }
+    } catch (e) { w?.close(); toast.error((e as Error).message) } finally { setGenerando(null); setAvance('') }
   }
 
   /**
