@@ -141,6 +141,11 @@ export default function EditarInformeEnexPage() {
   const [subiendo, setSubiendo] = useState<string | null>(null)
   const [guardando, setGuardando] = useState(false)
   const [generando, setGenerando] = useState(false)
+  // Avance de la generación (fotos procesadas): un informe con fotos tarda y,
+  // sin esto, parece que la pantalla se quedó pegada.
+  const [avance, setAvance] = useState('')
+  // PDF listo cuando el navegador bloqueó la pestaña nueva: se ofrece el link.
+  const [pdfListo, setPdfListo] = useState<string | null>(null)
   const [soloTrabajadas, setSoloTrabajadas] = useState(true)
   // Salir con cambios pide un segundo toque (sin diálogos nativos: congelan la pestaña).
   const [avisoSalir, setAvisoSalir] = useState(false)
@@ -256,14 +261,37 @@ export default function EditarInformeEnexPage() {
   }
 
   async function guardarYGenerar() {
-    if (sucio && !(await guardar())) return
+    // La pestaña del PDF se abre AHORA, en el mismo clic. Abrirla después de
+    // esperar la generación hacía que el navegador la bloqueara: el PDF se
+    // guardaba, pero la pantalla se quedaba quieta sin mostrar nada.
+    const w = window.open('', '_blank')
+    if (w) {
+      try {
+        w.document.title = 'Generando informe…'
+        w.document.body.innerHTML = '<p style="font:16px system-ui;padding:24px;color:#374151">Generando el informe PDF… esta pestaña lo mostrará apenas esté listo.</p>'
+      } catch { /* sin acceso al documento: no importa */ }
+    }
+    setPdfListo(null)
+    if (sucio && !(await guardar())) { w?.close(); return }
     setGenerando(true)
+    setAvance('')
     try {
-      const url = await generarYGuardarInformeEnex(ejecucionId)
-      toast.success('Informe PDF rehecho con los cambios')
-      window.open(url, '_blank')
+      const url = await generarYGuardarInformeEnex(ejecucionId, (hechas, total) =>
+        setAvance(`${hechas}/${total} fotos`))
       refetch()
-    } catch (e) { toast.error((e as Error).message) } finally { setGenerando(false) }
+      qc.invalidateQueries({ queryKey: ['enex-informes'] })
+      if (w && !w.closed) {
+        w.location.href = url
+        toast.success('Informe PDF rehecho con los cambios')
+        router.push('/dashboard/enex/informes')
+      } else {
+        setPdfListo(url)
+        toast.success('Informe PDF rehecho. Ábrelo con el botón de arriba.')
+      }
+    } catch (e) {
+      w?.close()
+      toast.error((e as Error).message)
+    } finally { setGenerando(false); setAvance('') }
   }
 
   if (cargandoRep || (reporte && (cargandoPauta || !listo))) {
@@ -308,6 +336,17 @@ export default function EditarInformeEnexPage() {
         <div className="flex items-start gap-2 rounded-lg border border-gray-300 bg-gray-50 p-3 text-sm text-gray-700">
           <Lock className="mt-0.5 h-4 w-4 flex-shrink-0" />
           <span>ESM ya firmó la recepción conforme de este informe ({reporte.firmante_mandante_nombre ?? 'mandante'}). Se puede ver, pero no cambiar lo que firmó.</span>
+        </div>
+      )}
+
+      {pdfListo && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-green-300 bg-green-50 p-3 text-sm text-green-800">
+          <FileSpreadsheet className="h-4 w-4" />
+          <span className="flex-1">El informe PDF quedó rehecho con los cambios.</span>
+          <a href={pdfListo} target="_blank" rel="noreferrer"
+             className="rounded-md bg-green-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-green-700">Abrir PDF</a>
+          <Link href="/dashboard/enex/informes"
+                className="rounded-md border border-green-400 bg-white px-3 py-1.5 text-xs font-semibold text-green-700">Volver a informes</Link>
         </div>
       )}
 
@@ -458,7 +497,7 @@ export default function EditarInformeEnexPage() {
             </Button>
             <Button variant="primary" disabled={guardando || generando || !!subiendo} onClick={() => void guardarYGenerar()}>
               {generando ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <FileSpreadsheet className="mr-1 h-4 w-4" />}
-              {sucio ? 'Guardar y rehacer PDF' : 'Rehacer PDF'}
+              {generando ? (avance ? `Generando… ${avance}` : 'Generando…') : sucio ? 'Guardar y rehacer PDF' : 'Rehacer PDF'}
             </Button>
           </div>
         </div>
