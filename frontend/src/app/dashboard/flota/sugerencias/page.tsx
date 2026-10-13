@@ -44,8 +44,11 @@ function Pill({ e }: { e: string | null }) {
 // [MIG573] Prueba de vida: A/C sobre un equipo sin evidencia de estar
 // operando (7 días, o crítico en el Centinela) exige justificación. Así se
 // cortó el arrastre que tuvo a KVWD-27 «arrendado» 110 días sin GPS.
+// [MIG585] 'B' vendido también exige motivo: a quién se vendió o el
+// documento. Al confirmarlo la ficha queda dada de baja y desde el día
+// siguiente el equipo sale de esta lista y del status de fiabilidad.
 const pideJustificacion = (s: SugerenciaEstado, estado: string) =>
-  s.requiere_justificacion && (estado === 'A' || estado === 'C')
+  estado === 'B' || (s.requiere_justificacion && (estado === 'A' || estado === 'C'))
 
 function PruebaDeVida({ s }: { s: SugerenciaEstado }) {
   const rojo = s.requiere_justificacion
@@ -90,7 +93,8 @@ export default function SugerenciasEstadoPage() {
 
   // ── Modal Cambiar Estado (con contrato) desde una sugerencia ──
   const [modalActivo, setModalActivo] = useState<ActivoModal | null>(null)
-  const [modalEstado, setModalEstado] = useState<EstadoCodigo | undefined>(undefined)
+  // El modal de contrato no ofrece 'B': vender se confirma en la fila, con motivo.
+  const [modalEstado, setModalEstado] = useState<Exclude<EstadoCodigo, 'B'> | undefined>(undefined)
   const [abriendoModal, setAbriendoModal] = useState<string | null>(null)
 
   const abrirConContrato = async (activoId: string, estadoSugerido: string | null) => {
@@ -103,7 +107,7 @@ export default function SugerenciasEstadoPage() {
         .single()
       if (error) throw error
       setModalActivo(data as ActivoModal)
-      setModalEstado((estadoSugerido as EstadoCodigo) || undefined)
+      setModalEstado(estadoSugerido && estadoSugerido !== 'B' ? (estadoSugerido as Exclude<EstadoCodigo, 'B'>) : undefined)
     } catch (e) {
       toast.error(errorMessage(e, 'No se pudo abrir el equipo'))
     } finally {
@@ -143,11 +147,15 @@ export default function SugerenciasEstadoPage() {
 
   const confirmarUno = (s: SugerenciaEstado, estado: string) => {
     if (pideJustificacion(s, estado) && !justifOk(s.activo_id)) {
-      toast.error(`${s.patente}: escribe cómo sabes que está operando (mínimo 10 caracteres)`)
+      toast.error(estado === 'B'
+        ? `${s.patente}: escribe a quién se vendió o el documento de venta (mínimo 10 caracteres)`
+        : `${s.patente}: escribe cómo sabes que está operando (mínimo 10 caracteres)`)
       return
     }
     confirmar.mutate({ activoId: s.activo_id, fecha, estado, justificacion: justif[s.activo_id] }, {
-      onSuccess: () => toast.success('Estado confirmado'),
+      onSuccess: () => toast.success(estado === 'B'
+        ? `${s.patente} marcado como vendido: sale de la flota y del status de fiabilidad`
+        : 'Estado confirmado'),
       onError: (e) => toast.error(errorMessage(e, 'No se pudo confirmar')),
     })
   }
@@ -165,7 +173,7 @@ export default function SugerenciasEstadoPage() {
       } catch { fallidos.push(s.patente) }
     }
     toast.success(`${ok} equipos confirmados`)
-    if (omitidos.length) toast.error(`Sin confirmar por falta de prueba de vida: ${omitidos.join(', ')}. Escribe la justificación en su fila.`)
+    if (omitidos.length) toast.error(`Sin confirmar por falta de justificación (prueba de vida o motivo de venta): ${omitidos.join(', ')}. Escríbela en su fila.`)
     if (fallidos.length) toast.error(`No se pudieron confirmar: ${fallidos.join(', ')}`)
     refetch()
   }
@@ -312,7 +320,7 @@ export default function SugerenciasEstadoPage() {
                           <input
                             type="text"
                             className={`mt-1 block h-8 w-56 rounded border px-2 text-xs ${justifOk(s.activo_id) ? 'border-gray-300' : 'border-red-400 bg-red-50'}`}
-                            placeholder="¿Cómo sabes que está operando? (obligatorio)"
+                            placeholder={sel === 'B' ? '¿A quién se vendió? Factura / documento (obligatorio)' : '¿Cómo sabes que está operando? (obligatorio)'}
                             value={justif[s.activo_id] ?? ''}
                             onChange={(e) => setJustif((p) => ({ ...p, [s.activo_id]: e.target.value }))}
                           />

@@ -953,3 +953,18 @@ export async function getEjecucionReporte(id: string): Promise<{
 
   return { reporte: data as unknown as EnexReporte, items: ejecutados, requerimientos }
 }
+
+// ── [MIG586] Editar el informe desde la web ─────────────────────────────────
+// Observación general del servicio y N° OT del mandante. Se puede mientras ESM
+// no haya firmado; el cambio deja el PDF para rehacer.
+export async function editarInformeEnex(p: {
+  ejecucionId: string; observacion: string | null; otNumero: string | null
+}): Promise<{ cambio: boolean }> {
+  const { data, error } = await supabase.rpc('rpc_enex_informe_editar', {
+    p_ejecucion_id: p.ejecucionId,
+    p_observacion: p.observacion,
+    p_ot_numero: p.otNumero,
+  })
+  if (error) throw error
+  return { cambio: !!(data as { cambio?: boolean } | null)?.cambio }
+}
