@@ -44,9 +44,10 @@ function Pill({ e }: { e: string | null }) {
 // [MIG573] Prueba de vida: A/C sobre un equipo sin evidencia de estar
 // operando (7 días, o crítico en el Centinela) exige justificación. Así se
 // cortó el arrastre que tuvo a KVWD-27 «arrendado» 110 días sin GPS.
-// [MIG585] 'B' vendido también exige motivo: a quién se vendió o el
-// documento. Al confirmarlo la ficha queda dada de baja y desde el día
-// siguiente el equipo sale de esta lista y del status de fiabilidad.
+// [MIG585/589] 'B' vendido también exige motivo: a quién se vendió o el
+// documento. Al confirmarlo el equipo sale de todo el sistema (ficha dada de
+// baja, GPS, preventivas, correos, OT y NC al historial) y desde el día
+// siguiente deja esta lista. Ese mismo día se deshace cambiando el código.
 const pideJustificacion = (s: SugerenciaEstado, estado: string) =>
   estado === 'B' || (s.requiere_justificacion && (estado === 'A' || estado === 'C'))
 
@@ -154,7 +155,7 @@ export default function SugerenciasEstadoPage() {
     }
     confirmar.mutate({ activoId: s.activo_id, fecha, estado, justificacion: justif[s.activo_id] }, {
       onSuccess: () => toast.success(estado === 'B'
-        ? `${s.patente} marcado como vendido: sale de la flota y del status de fiabilidad`
+        ? `${s.patente} vendido: sale de todo el sistema (GPS, preventivas, correos, OT y NC al historial). Si fue un error, cámbialo hoy mismo.`
         : 'Estado confirmado'),
       onError: (e) => toast.error(errorMessage(e, 'No se pudo confirmar')),
     })

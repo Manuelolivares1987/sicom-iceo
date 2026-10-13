@@ -23,7 +23,6 @@ import {
 } from '@/lib/services/enex'
 import { generarYGuardarInformeEnex } from '@/components/enex/pdf-informe-enex'
 import { RequerimientosModal } from '@/components/enex/requerimientos-modal'
-import { EditarInformeModal } from '@/components/enex/editar-informe-modal'
 
 const hoy = () => { const d = new Date(); return { anio: d.getFullYear(), mes: d.getMonth() + 1 } }
 
@@ -49,8 +48,6 @@ export default function EnexInformesPage() {
     { instalacion: string; tecnico: string; mandante: string } | null>(null)
   // [MIG287] Comentarios y requerimientos del servicio abierto en el modal.
   const [reqDe, setReqDe] = useState<EnexPanelRow | null>(null)
-  // [MIG586] Observación general y N° OT editables desde aquí.
-  const [editarDe, setEditarDe] = useState<EnexPanelRow | null>(null)
 
   const { data: faenas = [] } = useQuery({ queryKey: ['enex-faenas'], queryFn: getFaenas, staleTime: 5 * 60_000 })
   const { data: informes = [], isLoading, refetch } = useQuery({
@@ -318,16 +315,15 @@ export default function EnexInformesPage() {
                               {generando === r.ejecucion_id ? (avance || 'Generando…') : 'Generar'}
                             </Button>
                           ) : null}
-                          {/* [MIG586] Editar observación general y N° OT del informe. */}
+                          {/* [MIG588] Editar el informe completo: datos, actividades y fotos. */}
                           {r.ejecucion_id && (
-                            <button
+                            <Link href={`/dashboard/enex/informes/${r.ejecucion_id}`}
                               title={r.firma_mandante_url
-                                ? 'Ver la observación general (el informe ya lo firmó ESM)'
-                                : 'Editar el informe: observación general y N° OT'}
-                              onClick={() => setEditarDe(r)}
+                                ? 'Ver el informe (ya lo firmó ESM: no se puede cambiar)'
+                                : 'Editar el informe completo: datos, actividades y fotos'}
                               className="rounded border p-1.5 text-gray-400 hover:text-blue-700">
                               <Pencil className="h-3.5 w-3.5" />
-                            </button>
+                            </Link>
                           )}
                           {/* [MIG287] Comentarios y requerimientos al mandante: lo que
                               hay que hacer y no se resolvió en terreno, impreso en el
@@ -375,20 +371,6 @@ export default function EnexInformesPage() {
           )}
         </CardContent>
       </Card>
-
-      {editarDe?.ejecucion_id && (
-        <EditarInformeModal
-          open onClose={() => setEditarDe(null)}
-          ejecucionId={editarDe.ejecucion_id}
-          programacionId={editarDe.programacion_id}
-          instalacion={editarDe.instalacion}
-          fecha={editarDe.fecha_ejecucion}
-          observacion={editarDe.ejec_observacion}
-          otNumero={editarDe.ot_numero}
-          firmadoPorMandante={!!editarDe.firma_mandante_url}
-          onGuardado={() => refetch()}
-        />
-      )}
 
       {/* [MIG287] Lo que se le pide al mandante, escrito en el informe que firma */}
       {reqDe?.ejecucion_id && (

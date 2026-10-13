@@ -954,17 +954,47 @@ export async function getEjecucionReporte(id: string): Promise<{
   return { reporte: data as unknown as EnexReporte, items: ejecutados, requerimientos }
 }
 
-// ── [MIG586] Editar el informe desde la web ─────────────────────────────────
-// Observación general del servicio y N° OT del mandante. Se puede mientras ESM
-// no haya firmado; el cambio deja el PDF para rehacer.
-export async function editarInformeEnex(p: {
-  ejecucionId: string; observacion: string | null; otNumero: string | null
-}): Promise<{ cambio: boolean }> {
-  const { data, error } = await supabase.rpc('rpc_enex_informe_editar', {
+// ── [MIG588] Editar el informe completo desde la web ────────────────────────
+// Encabezado, actividades y fotos. Lo que se manda de cada actividad reemplaza
+// lo que había (una foto que no viaja sale del informe); una actividad que va
+// vacía se borra. Se puede mientras ESM no haya firmado; deja el PDF para rehacer.
+export type EnexInformeItemEdit = {
+  pauta_item_id: string
+  resultado: string | null
+  valor_medicion: string | null
+  observacion: string | null
+  fotos_antes: string[]
+  fotos_despues: string[]
+}
+
+export async function guardarInformeEnex(p: {
+  ejecucionId: string
+  fecha: string | null
+  otNumero: string | null
+  ejecutor: string | null
+  observacion: string | null
+  evidenciaUrls: string[]
+  items: EnexInformeItemEdit[]
+}): Promise<{ actividades: number; borradas: number }> {
+  const { data, error } = await supabase.rpc('rpc_enex_informe_guardar', {
     p_ejecucion_id: p.ejecucionId,
-    p_observacion: p.observacion,
+    p_fecha: p.fecha,
     p_ot_numero: p.otNumero,
+    p_ejecutor: p.ejecutor,
+    p_observacion: p.observacion,
+    p_evidencia_urls: p.evidenciaUrls,
+    p_items: p.items,
   })
   if (error) throw error
-  return { cambio: !!(data as { cambio?: boolean } | null)?.cambio }
+  const r = (data ?? {}) as { actividades?: number; borradas?: number }
+  return { actividades: r.actividades ?? 0, borradas: r.borradas ?? 0 }
+}
+
+/** Sube una foto agregada desde la oficina: comprimida y en JPEG (HEIC incluida). */
+export async function subirFotoInformeEnex(file: File): Promise<string> {
+  const { compressImage } = await import('@/lib/image/compress')
+  const blob = await compressImage(file, { maxDim: 1600, quality: 0.75 })
+  const esJpeg = blob.type === 'image/jpeg'
+  const nombre = esJpeg ? 'foto.jpg' : file.name
+  return subirEvidenciaEnex(new File([blob], nombre, { type: blob.type || file.type || 'image/jpeg' }))
 }

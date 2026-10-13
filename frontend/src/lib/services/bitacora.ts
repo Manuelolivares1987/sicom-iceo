@@ -51,6 +51,7 @@ export async function getActivosParaBitacora() {
   const { data, error } = await supabase
     .from('activos')
     .select('id, codigo, patente, nombre, tipo, estado, operacion, cliente_actual')
+    .neq('estado', 'dado_baja') // MIG589: los vendidos salen de la lista
     .order('operacion', { ascending: true, nullsFirst: false })
     .order('codigo', { ascending: true })
   return { data: (data ?? []) as ActivoBitacora[], error }
