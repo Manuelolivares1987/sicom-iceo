@@ -139,6 +139,14 @@ const navGroups: NavGroup[] = [
             badge: 'Nuevo',
             tooltip: 'Cuadrantes Coquimbo y Calama, semana a semana',
           },
+          // La base filtra (fn_costos_operacion_puede_ver, MIG594); `roles` solo
+          // esconde el acceso a quien igual vería el aviso de "sin permiso".
+          {
+            label: 'Costos de Operación', href: '/dashboard/gerencia/costos', icon: Wallet,
+            badge: 'Nuevo',
+            roles: ['administrador', 'gerencia', 'subgerente_operaciones', 'jefe_operaciones', 'jefe_mantenimiento'],
+            tooltip: 'Salidas de bodega Softland por equipo, faena y familia',
+          },
         ],
       },
       {
