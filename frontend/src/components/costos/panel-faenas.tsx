@@ -10,7 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Spinner } from '@/components/ui/spinner'
 import { getCostosPorFaena, type FaenaCosto } from '@/lib/services/costos-operacion'
 import { fmtClp, fmtMM, fmtNum, fmtPct, pct } from '@/lib/costos-operacion'
-import { fmtMes } from '@/components/costos/comunes'
+import { ComoSeCalcula, fmtMes } from '@/components/costos/comunes'
 import type { PasoPareto } from '@/components/costos/pareto-modal'
 
 // ============================================================================
@@ -123,6 +123,19 @@ export function PanelFaenas({ desde, hasta, onPareto }: {
                             <div className="font-medium">{f.costo_hora != null ? `${fmtClp(f.costo_hora)}/h` : '—'}</div>
                           </div>
                         </div>
+                        <ComoSeCalcula>
+                          <p><b>Total</b> = lo que gastaron los equipos mientras estaban en {id} + los centros de costo
+                            propios de {id} en Softland{id === 'Calama' ? ' (Operaciones, Proyectos y Taller Calama = calibraciones)' : ` (Operaciones ${id})`}.
+                            El gasto de un equipo va a la faena donde estaba <b>ese día</b>: primero el GPS (geocerca),
+                            si no hay GPS el estado diario de flota, y si no, la última ubicación conocida.</p>
+                          <p><b>Por equipo-día</b> = gasto en equipos ÷ días que los equipos estuvieron en {id}:
+                            {' '}{fmtMM(f.equipos_costo)} ÷ {fmtNum(f.dias_equipo)} días = {fmtClp(f.costo_equipo_dia)}.
+                            Sirve para comparar faenas de distinto tamaño.</p>
+                          <p><b>Por hora operada</b> = mismo método que el costo por hora de la flota (dos lecturas de
+                            horómetro creíbles por equipo), pero las horas de cada equipo se reparten parejo por día y cada
+                            día se asigna a la faena donde estaba: {fmtClp(f.costo_medido)} ÷ {fmtNum(f.horas)} h
+                            = {f.costo_hora != null ? `${fmtClp(f.costo_hora)}/h` : '—'}.</p>
+                        </ComoSeCalcula>
                         {id === 'Calama' && (() => {
                           const subs = subDe('Calama')
                           const cal = subs.find((x) => x.subfaena === CALIBRACIONES)

@@ -1,6 +1,7 @@
 'use client'
 
-import { Truck } from 'lucide-react'
+import { useState } from 'react'
+import { Info, Truck } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import type { CostoEquipo } from '@/lib/services/costos-operacion'
 import type { PasoPareto } from '@/components/costos/pareto-modal'
@@ -145,6 +146,27 @@ export function Barras({ filas, formato, onClick }: {
           </div>
         </div>
       ))}
+    </div>
+  )
+}
+
+/**
+ * «¿Cómo se calcula?» desplegable (clic, no hover: sirve en el teléfono).
+ * Cada tarjeta del panel explica su fórmula con los números del período.
+ */
+export function ComoSeCalcula({ children }: { children: React.ReactNode }) {
+  const [abierto, setAbierto] = useState(false)
+  return (
+    <div className="mt-2" onClick={(e) => e.stopPropagation()}>
+      <button onClick={() => setAbierto(!abierto)}
+              className="flex items-center gap-1 text-xs font-medium text-pillado-green-700 hover:underline">
+        <Info className="h-3.5 w-3.5" /> {abierto ? 'Ocultar cálculo' : '¿Cómo se calcula?'}
+      </button>
+      {abierto && (
+        <div className="mt-1.5 space-y-1.5 rounded-md bg-gray-50 p-2.5 text-xs leading-relaxed text-gray-700">
+          {children}
+        </div>
+      )}
     </div>
   )
 }
