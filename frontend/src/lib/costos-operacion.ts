@@ -47,7 +47,7 @@ export function sumarMeses(mesIso: string, n: number): string {
   return `${Math.floor(t / 12)}-${String((t % 12) + 1).padStart(2, '0')}-01`
 }
 
-export type RangoPreset = 'mes' | 'ytd' | '12m' | '3m'
+export type RangoPreset = 'mes' | 'ytd' | '12m' | '3m' | 'anio_ant'
 
 /** Rango [desde, hasta] por meses completos, anclado al mes de `hoy`. */
 export function rangoPreset(p: RangoPreset, hoy: Date): { desde: string; hasta: string } {
@@ -56,6 +56,7 @@ export function rangoPreset(p: RangoPreset, hoy: Date): { desde: string; hasta: 
     case 'mes': return { desde: actual, hasta: actual }
     case '3m':  return { desde: sumarMeses(actual, -2), hasta: actual }
     case 'ytd': return { desde: `${hoy.getFullYear()}-01-01`, hasta: actual }
+    case 'anio_ant': return { desde: `${hoy.getFullYear() - 1}-01-01`, hasta: `${hoy.getFullYear() - 1}-12-01` }
     case '12m': return { desde: sumarMeses(actual, -11), hasta: actual }
   }
 }
@@ -81,4 +82,14 @@ export function fmtPct(v: number | null | undefined, signo = false): string {
   if (v == null) return '—'
   const s = v.toLocaleString('es-CL', { maximumFractionDigits: 1, minimumFractionDigits: 1 })
   return `${signo && v > 0 ? '+' : ''}${s} %`
+}
+
+const MES_CORTO = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
+
+/** «ene–oct 2025», «nov 24–oct 25»: rango de meses legible. */
+export function etiquetaRango(desde: string, hasta: string): string {
+  const [yd, md] = desde.split('-').map(Number)
+  const [yh, mh] = hasta.split('-').map(Number)
+  if (yd === yh) return `${MES_CORTO[md - 1]}–${MES_CORTO[mh - 1]} ${yd}`
+  return `${MES_CORTO[md - 1]} ${String(yd).slice(2)}–${MES_CORTO[mh - 1]} ${String(yh).slice(2)}`
 }
