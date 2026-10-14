@@ -178,6 +178,7 @@ export type FaenaCosto = {
 export type CostosPorFaena = {
   periodo: { desde: string; hasta: string }
   faenas: FaenaCosto[]
+  subfaenas: (FaenaCosto & { subfaena: string })[]
   por_mes: { mes: string; faena: string; total: number }[]
   equipos: { faena: string; activo_id: string; patente: string | null; total: number }[]
   directos: { faena: string; codi_cc: string | null; descripcion: string | null; total: number }[]
@@ -187,4 +188,101 @@ export async function getCostosPorFaena(desde: string, hasta: string) {
   const { data, error } = await supabase.rpc('rpc_costos_por_faena', { p_desde: desde, p_hasta: hasta })
   if (error) traducir(error)
   return data as CostosPorFaena
+}
+
+export type SubfaenaCosto = FaenaCosto & { subfaena: string }
+
+// ---------------------------------------------------------------------------
+// Pareto (MIG601): ranking descendente con % acumulado, con bajada en cadena.
+// ---------------------------------------------------------------------------
+
+export type DimensionPareto =
+  | 'faena' | 'subfaena' | 'equipo' | 'familia' | 'producto' | 'centro_costo' | 'mes' | 'linea'
+
+export type FiltrosPareto = Partial<{
+  faena: string
+  subfaena: string
+  activo_id: string
+  familia: string
+  grupo_prod: string
+  cod_prod: string
+  codi_cc: string
+  area: string
+  mes: string
+  tipo_equipo: string
+}>
+
+export type ItemPareto = {
+  clave: string
+  etiqueta: string
+  total: number
+  cantidad: number | null
+  lineas: number
+  pct: number
+  pct_acum: number
+}
+
+export type ResultadoPareto = {
+  dimension: DimensionPareto
+  total: number
+  n: number
+  vitales: number
+  items: ItemPareto[]
+  resto: { n: number; total: number }
+}
+
+export type LineaPareto = {
+  fecha: string
+  folio: number | null
+  concepto: string
+  bodega: string
+  codi_cc: string | null
+  cod_prod: string
+  des_prod: string | null
+  cantidad: number
+  precio_unit: number | null
+  total: number
+  glosa: string | null
+  patente: string | null
+  subfaena: string | null
+}
+
+export async function getPareto(v: {
+  desde: string; hasta: string; filtros: FiltrosPareto; dimension: DimensionPareto; conAdmin?: boolean
+}) {
+  const { data, error } = await supabase.rpc('rpc_costos_pareto', {
+    p_desde: v.desde, p_hasta: v.hasta, p_filtros: v.filtros,
+    p_dimension: v.dimension, p_con_admin: v.conAdmin ?? false,
+  })
+  if (error) traducir(error)
+  return data as ResultadoPareto & { lineas?: LineaPareto[] }
+}
+
+// ---------------------------------------------------------------------------
+// Conciliación de ubicación (MIG602): ficha vs estado diario vs GPS.
+// ---------------------------------------------------------------------------
+
+export type UbicacionCamion = {
+  activo_id: string
+  patente: string | null
+  tipo: string | null
+  faena_ficha: string | null
+  grupo_ficha: string | null
+  estado_ubicacion: string | null
+  estado_fecha: string | null
+  grupo_estado: string | null
+  gps_geocerca: string | null
+  gps_km: number | null
+  gps_fecha: string | null
+  grupo_gps: string | null
+  subfaena_gps: string | null
+  grupo_usado: string | null
+  subfaena_usada: string | null
+  fuente_usada: string | null
+}
+
+export async function getConciliacionUbicacion() {
+  const { data, error } = await supabase.from('v_flota_ubicacion_conciliacion').select('*')
+  if (error) throw new Error(error.message)
+  return (data ?? []) as UbicacionCamion[]
 }

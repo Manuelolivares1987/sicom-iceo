@@ -14,12 +14,13 @@ import { Spinner } from '@/components/ui/spinner'
 import { Modal } from '@/components/ui/modal'
 import { useRequireAuth } from '@/hooks/use-require-auth'
 import {
-  Barras, COLOR_EQUIPO, COLOR_OTROS, DetalleModal, PRESETS, TablaEquiposCosto,
-  etiquetaEquipo, fmtFecha, fmtMes, nombreTipo, type Detalle,
+  Barras, COLOR_EQUIPO, COLOR_OTROS, PRESETS, TablaEquiposCosto,
+  etiquetaEquipo, fmtFecha, fmtMes, nombreTipo, paretoEquipo,
 } from '@/components/costos/comunes'
 import { PanelFaenas } from '@/components/costos/panel-faenas'
+import { ParetoModal, type PasoPareto } from '@/components/costos/pareto-modal'
 import {
-  AREAS_OPERACION, NOMBRE_AREA, getDetalleCostos, getPanelCostos,
+  AREAS_OPERACION, NOMBRE_AREA, getPanelCostos,
   type AreaCosto, type CostoEquipo, type PanelCostos,
 } from '@/lib/services/costos-operacion'
 import {
@@ -47,7 +48,7 @@ export default function CostosOperacionPage() {
   useRequireAuth()
   const [preset, setPreset] = useState<RangoPreset>('12m')
   const [conAdmin, setConAdmin] = useState(false)
-  const [detalle, setDetalle] = useState<Detalle | null>(null)
+  const [pareto, setPareto] = useState<PasoPareto | null>(null)
   const rango = useMemo(() => rangoPreset(preset, new Date()), [preset])
   const areas: AreaCosto[] | null = conAdmin
     ? [...AREAS_OPERACION, 'administracion', 'comercial'] : null
@@ -88,18 +89,18 @@ export default function CostosOperacionPage() {
       {error && (
         <Card><CardContent className="p-6 text-sm text-red-700">{(error as Error).message}</CardContent></Card>
       )}
-      {data && <Contenido data={data} onDetalle={setDetalle} />}
+      {data && <Contenido data={data} onPareto={setPareto} />}
 
-      {detalle && (
-        <DetalleModal detalle={detalle} desde={rango.desde} hasta={rango.hasta}
-                      onClose={() => setDetalle(null)} />
+      {pareto && (
+        <ParetoModal inicio={pareto} desde={rango.desde} hasta={rango.hasta} conAdmin={conAdmin}
+                     onClose={() => setPareto(null)} />
       )}
     </div>
   )
 }
 
-function Contenido({ data, onDetalle }: {
-  data: PanelCostos; onDetalle: (d: Detalle) => void
+function Contenido({ data, onPareto }: {
+  data: PanelCostos; onPareto: (p: PasoPareto) => void
 }) {
   const k = data.kpi
   const pctAsignado = pct(k.asignado_equipo, k.total)
@@ -108,6 +109,7 @@ function Contenido({ data, onDetalle }: {
   const serieMes = data.por_mes
     .filter((m) => m.mes >= data.periodo.desde)
     .map((m) => ({
+      mesIso: m.mes,
       mes: fmtMes(m.mes),
       'Cargado a un equipo': Math.round(m.asignado_equipo ?? 0),
       'Otros centros de costo': Math.round(m.total - (m.asignado_equipo ?? 0)),
@@ -184,7 +186,7 @@ function Contenido({ data, onDetalle }: {
         <CardContent className="space-y-2 text-sm">
           {caros.map(({ e, r }) => (
             <Excepcion key={`c-${e.codi_cc}`}
-                       onClick={() => onDetalle({ titulo: etiquetaEquipo(e), codiCc: e.codi_cc })}>
+                       onClick={() => onPareto(paretoEquipo(e))}>
               <b>{etiquetaEquipo(e)}</b> cuesta <b>{fmtClp(e.costo_hora)}/h</b>,{' '}
               {(r ?? 0).toLocaleString('es-CL', { maximumFractionDigits: 1 })} veces la mediana de{' '}
               {nombreTipo(e.tipo_equipo)} ({fmtClp(e.mediana_tipo)}/h) · {fmtNum(e.horas)} h entre{' '}
@@ -197,13 +199,13 @@ function Contenido({ data, onDetalle }: {
             </Excepcion>
           )}
           {k.sin_cc > 0 && (
-            <Excepcion onClick={() => onDetalle({ titulo: 'Salidas sin centro de costo', codiCc: '(SIN CC)' })}>
+            <Excepcion onClick={() => onPareto({ titulo: 'Sin centro de costo', filtros: { codi_cc: '(SIN CC)' }, dimension: 'producto' })}>
               <b>{fmtMM(k.sin_cc)}</b> salieron sin centro de costo.
             </Excepcion>
           )}
           {alzas.map(({ e, v }) => (
             <Excepcion key={`a-${e.codi_cc}`}
-                       onClick={() => onDetalle({ titulo: etiquetaEquipo(e), codiCc: e.codi_cc })}>
+                       onClick={() => onPareto(paretoEquipo(e))}>
               <b>{etiquetaEquipo(e)}</b> gastó {fmtMM(e.total)}, {fmtPct(v, true)} sobre el período anterior.
             </Excepcion>
           ))}
@@ -222,7 +224,11 @@ function Contenido({ data, onDetalle }: {
           <CardContent>
             <div style={{ width: '100%', height: 300 }}>
               <ResponsiveContainer>
-                <BarChart data={serieMes} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
+                <BarChart data={serieMes} margin={{ top: 10, right: 10, left: 10, bottom: 0 }} className="cursor-pointer"
+                          onClick={(st: { activePayload?: { payload: { mesIso: string; mes: string } }[] }) => {
+                            const p = st?.activePayload?.[0]?.payload
+                            if (p) onPareto({ titulo: p.mes, filtros: { mes: p.mesIso }, dimension: 'faena' })
+                          }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" vertical={false} />
                   <XAxis dataKey="mes" tick={{ fontSize: 11 }} />
                   <YAxis tick={{ fontSize: 11 }} tickFormatter={(v: number) => `${Math.round(v / 1e6)} M`} />
@@ -242,8 +248,9 @@ function Contenido({ data, onDetalle }: {
           </CardHeader>
           <CardContent>
             <Barras filas={data.costo_hora_tipo.map((t) => ({
-              label: `${nombreTipo(t.tipo_equipo)} (${t.n})`, valor: t.mediana,
-            }))} formato={(v) => `${fmtClp(v)}/h`} />
+              label: `${nombreTipo(t.tipo_equipo)} (${t.n})`, valor: t.mediana, clave: t.tipo_equipo,
+            }))} formato={(v) => `${fmtClp(v)}/h`}
+                    onClick={(f) => onPareto({ titulo: nombreTipo(f.clave ?? null), filtros: { tipo_equipo: f.clave }, dimension: 'equipo' })} />
             <p className="mt-3 text-xs text-gray-400">
               Solo equipos con al menos {HORAS_MINIMAS_CPH} h medidas. Entre paréntesis, cuántos equipos.
             </p>
@@ -252,17 +259,18 @@ function Contenido({ data, onDetalle }: {
       </div>
 
       {/* 4b. Dónde se va el gasto */}
-      <PanelFaenas desde={data.periodo.desde} hasta={data.periodo.hasta} />
+      <PanelFaenas desde={data.periodo.desde} hasta={data.periodo.hasta} onPareto={onPareto} />
 
       <Card>
         <CardHeader className="pb-2"><CardTitle className="text-base">Por área</CardTitle></CardHeader>
         <CardContent>
-          <Barras filas={data.por_area.map((a) => ({ label: NOMBRE_AREA[a.area] ?? a.area, valor: a.total }))}
-                  formato={fmtMM} />
+          <Barras filas={data.por_area.map((a) => ({ label: NOMBRE_AREA[a.area] ?? a.area, valor: a.total, clave: a.area }))}
+                  formato={fmtMM}
+                  onClick={(f) => onPareto({ titulo: f.label, filtros: { area: f.clave }, dimension: 'centro_costo' })} />
         </CardContent>
       </Card>
 
-      <TablaEquiposCosto equipos={data.por_equipo} onDetalle={onDetalle} />
+      <TablaEquiposCosto equipos={data.por_equipo} onPareto={onPareto} />
 
       {/* 4d. Familias y centros de costo sin equipo */}
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
@@ -281,7 +289,7 @@ function Contenido({ data, onDetalle }: {
               <tbody>
                 {data.por_familia.slice(0, 20).map((f) => (
                   <tr key={f.familia} className="cursor-pointer border-t hover:bg-gray-50"
-                      onClick={() => onDetalle({ titulo: f.nombre, familia: f.familia })}>
+                      onClick={() => onPareto({ titulo: f.nombre, filtros: { familia: f.familia }, dimension: 'equipo' })}>
                     <td className="px-3 py-1.5">
                       {f.nombre} <span className="text-xs text-gray-400">{f.familia}</span>
                     </td>
@@ -310,7 +318,7 @@ function Contenido({ data, onDetalle }: {
               <tbody>
                 {data.por_cc_no_equipo.slice(0, 20).map((c) => (
                   <tr key={c.codi_cc} className="cursor-pointer border-t hover:bg-gray-50"
-                      onClick={() => onDetalle({ titulo: c.descripcion ?? c.codi_cc, codiCc: c.codi_cc })}>
+                      onClick={() => onPareto({ titulo: c.descripcion ?? c.codi_cc, filtros: { codi_cc: c.codi_cc }, dimension: 'familia' })}>
                     <td className="px-3 py-1.5">
                       {c.descripcion ?? '—'} <span className="text-xs text-gray-400">{c.codi_cc}</span>
                     </td>
