@@ -4,8 +4,18 @@
 
 import type {
   EnexPanelRow, EnexItemEjecutado, EnexRequerimiento, EnexReprogramacion, EnexPautaItem, EnexEjecucionMeta,
+  EnexLugarItem, EnexActividadTrimestre,
 } from '@/lib/services/enex'
 import { tramoMulta } from '@/lib/enex-avance'
+import { avancePorArea, type AvanceArea } from '@/lib/enex-pauta-lugar'
+
+/** Pauta por lugar (MIG591): avance por actividad como la planilla de Lomas. */
+export type PautaLugarInforme = {
+  areas: AvanceArea[]
+  total: AvanceArea
+  sinInforme: { area: string; lugar: string; codigo: string; descripcion: string; fecha: string | null }[]
+  faltantes: { area: string; lugar: string; codigo: string; descripcion: string; estado: string; fecha: string | null }[]
+}
 
 export type PuntoInforme = {
   instalacion_id: string
@@ -64,6 +74,7 @@ export type InformeTrimestral = {
   requerimientos: (EnexRequerimiento & { instalacion: string; fecha: string | null })[]
   cobertura: CoberturaPauta[]
   reprogramaciones: EnexReprogramacion[]
+  pautaLugar: PautaLugarInforme | null
   conclusion: string
 }
 
@@ -86,6 +97,9 @@ export function armarInformeTrimestral(p: {
   metas: EnexEjecucionMeta[]
   pautaItems: EnexPautaItem[]
   areaDe?: (instalacionId: string) => string | null
+  lugarItems?: EnexLugarItem[]
+  actividades?: EnexActividadTrimestre[]
+  hoy?: string
 }): InformeTrimestral {
   const { rows, meses, items, reqs, reprogs, metas, pautaItems } = p
   const ejec = rows.filter((r) => r.ejecucion_id && r.estado !== 'no_realizada')
@@ -178,18 +192,37 @@ export function armarInformeTrimestral(p: {
     reprogramaciones: reprogs.length,
   }
 
-  return { resumen, porMes, puntos, hallazgos, requerimientos, cobertura, reprogramaciones: reprogs, conclusion: conclusionAuto(resumen, cobertura) }
+  let pautaLugar: PautaLugarInforme | null = null
+  if (p.lugarItems && p.lugarItems.length > 0) {
+    const acts = p.actividades ?? []
+    const porItem = new Map(acts.map((a) => [a.lugar_item_id, a]))
+    const { areas, total } = avancePorArea(p.lugarItems, acts, p.hoy ?? '9999-12-31')
+    pautaLugar = {
+      areas, total,
+      // Ejecutada según la planilla o a mano, pero sin informe de terreno que la respalde.
+      sinInforme: p.lugarItems.filter((i) => { const a = porItem.get(i.lugar_item_id); return a?.estado === 'ejecutada' && !a.ejecucion_id })
+        .map((i) => ({ area: i.area, lugar: i.lugar, codigo: i.codigo, descripcion: i.descripcion, fecha: porItem.get(i.lugar_item_id)?.fecha_ejecucion ?? null })),
+      faltantes: p.lugarItems.filter((i) => { const e = porItem.get(i.lugar_item_id)?.estado ?? 'pendiente'; return e !== 'ejecutada' && e !== 'no_aplica' })
+        .map((i) => { const a = porItem.get(i.lugar_item_id); return { area: i.area, lugar: i.lugar, codigo: i.codigo, descripcion: i.descripcion, estado: a?.estado ?? 'pendiente', fecha: a?.fecha_plan ?? null } }),
+    }
+  }
+
+  return { resumen, porMes, puntos, hallazgos, requerimientos, cobertura, reprogramaciones: reprogs, pautaLugar, conclusion: conclusionAuto(resumen, cobertura, pautaLugar) }
 }
 
 const n1 = (x: number | null) => (x == null ? '—' : `${x.toLocaleString('es-CL', { maximumFractionDigits: 1 })} %`)
 
-function conclusionAuto(r: InformeTrimestral['resumen'], cob: CoberturaPauta[]): string {
+function conclusionAuto(r: InformeTrimestral['resumen'], cob: CoberturaPauta[], pl: PautaLugarInforme | null): string {
   const partes: string[] = []
   partes.push(`En el período se programaron ${r.programados} servicios y se ejecutaron ${r.ejecutados} (${n1(r.pctEjecucion)}).`)
   partes.push(`${r.cumplidos} ${r.cumplidos === 1 ? 'cuenta' : 'cuentan'} con firma del mandante: cumplimiento contractual ${n1(r.pctCumplimiento)}${r.programados ? ` (${r.tramo.etiqueta.toLowerCase()})` : ''}.`)
   if (r.sinFirma > 0) partes.push(`${r.sinFirma} servicio${r.sinFirma === 1 ? '' : 's'} ejecutado${r.sinFirma === 1 ? '' : 's'} aún sin firma del mandante: al firmarse el cumplimiento subiría a ${n1(r.programados ? Math.round(((r.cumplidos + r.sinFirma) / r.programados) * 1000) / 10 : null)}.`)
   if (r.pendientes > 0) partes.push(`${r.pendientes} servicio${r.pendientes === 1 ? ' quedó' : 's quedaron'} sin ejecutar.`)
-  for (const c of cob) {
+  if (pl) {
+    partes.push(`Avance de la pauta trimestral por lugar: ${pl.areas.map((a) => `${a.area} ${a.ejecutadas}/${a.total} (${n1(a.pctReal)})`).join(', ')}; total ${n1(pl.total.pctReal)}, proyectado ${n1(pl.total.pctProyectado)}.`)
+    if (pl.sinInforme.length) partes.push(`${pl.sinInforme.length} actividad${pl.sinInforme.length === 1 ? '' : 'es'} ejecutada${pl.sinInforme.length === 1 ? '' : 's'} según planilla no tiene${pl.sinInforme.length === 1 ? '' : 'n'} informe de terreno en SICOM que la${pl.sinInforme.length === 1 ? '' : 's'} respalde.`)
+  }
+  for (const c of pl ? [] : cob) {
     if (c.trimestrales > 0) partes.push(`Cobertura de la pauta trimestral: ${c.hechas} de ${c.trimestrales - c.noAplica} actividades aplicables (${n1(c.pct)})${c.pendientes.length ? `; ${c.pendientes.length} sin registro en el período` : ''}.`)
   }
   partes.push(`Se registraron ${r.actividades} actividades, ${r.hallazgos} hallazgo${r.hallazgos === 1 ? '' : 's'} (NO OK o fuera de tolerancia) y ${r.requerimientos} requerimiento${r.requerimientos === 1 ? '' : 's'}${r.requerimientosAlta ? ` (${r.requerimientosAlta} de prioridad alta)` : ''}.`)

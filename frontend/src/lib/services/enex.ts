@@ -1082,3 +1082,85 @@ export async function getEjecucionesMeta(ejecucionIds: string[]): Promise<EnexEj
   if (error) throw error
   return (data ?? []) as EnexEjecucionMeta[]
 }
+
+// ── Pauta trimestral por lugar (MIG591) ────────────────────────────────────
+// Lomas Bayas Lubricantes: 33 actividades por Truck Shop repartidas en
+// lugares (housekeeping, TK, sala de microfiltrado, racks). El avance se mide
+// por actividad, no por servicio. Planificar con fecha la deja en el «Plan de
+// hoy» del mantenedor (sin cambiar su pantalla).
+export type EstadoActividad = 'pendiente' | 'planificada' | 'ejecutada' | 'reprogramada' | 'no_aplica'
+
+export type EnexLugarItem = {
+  lugar_item_id: string
+  lugar_id: string
+  faena_id: string
+  area: string
+  lugar: string
+  lugar_observacion: string | null
+  instalacion_ids: string[]
+  lugar_orden: number
+  orden: number
+  observacion: string | null
+  pauta_item_id: string
+  codigo: string
+  descripcion: string
+  bloque: string
+  periodicidad: string
+}
+
+export type EnexActividadTrimestre = {
+  id: string
+  lugar_item_id: string
+  trimestre_inicio: string
+  estado: EstadoActividad
+  fecha_plan: string | null
+  fecha_ejecucion: string | null
+  ejecucion_id: string | null
+  comentario: string | null
+  origen: 'manual' | 'informe' | 'planilla'
+}
+
+export async function getFaenasConLugares(): Promise<string[]> {
+  const { data, error } = await supabase.from('enex_pauta_lugares').select('faena_id').eq('activo', true)
+  if (error) throw error
+  return Array.from(new Set((data ?? []).map((r: { faena_id: string }) => r.faena_id)))
+}
+
+export async function getLugarItems(faenaId: string): Promise<EnexLugarItem[]> {
+  const { data, error } = await supabase.from('v_enex_pauta_lugar_items').select('*')
+    .eq('faena_id', faenaId).order('area').order('lugar_orden').order('orden')
+  if (error) throw error
+  return (data ?? []) as EnexLugarItem[]
+}
+
+export async function getActividadesTrimestre(lugarItemIds: string[], trimestreInicio: string): Promise<EnexActividadTrimestre[]> {
+  if (lugarItemIds.length === 0) return []
+  const { data, error } = await supabase.from('enex_trimestre_actividades').select('*')
+    .eq('trimestre_inicio', trimestreInicio).in('lugar_item_id', lugarItemIds)
+  if (error) throw error
+  return (data ?? []) as EnexActividadTrimestre[]
+}
+
+export async function setActividadesTrimestre(p: {
+  lugarItemIds: string[]; trimestreInicio: string; estado: EstadoActividad; fecha?: string | null; comentario?: string | null
+}) {
+  const { data, error } = await supabase.rpc('rpc_enex_trimestre_actividad_set', {
+    p_lugar_item_ids: p.lugarItemIds, p_trimestre_inicio: p.trimestreInicio, p_estado: p.estado,
+    p_fecha: p.fecha ?? null, p_comentario: p.comentario ?? null,
+  })
+  if (error) throw error
+  return data as { success: boolean; actualizadas: number; plan_en_borrador: boolean }
+}
+
+export async function sincronizarTrimestre(faenaId: string, trimestreInicio: string) {
+  const { data, error } = await supabase.rpc('rpc_enex_trimestre_sincronizar', { p_faena_id: faenaId, p_trimestre_inicio: trimestreInicio })
+  if (error) throw error
+  return data as { success: boolean; marcadas: number }
+}
+
+export async function getInformesPdfDe(ejecucionIds: string[]): Promise<Record<string, string | null>> {
+  if (ejecucionIds.length === 0) return {}
+  const { data, error } = await supabase.from('enex_ejecuciones').select('id,informe_pdf_url').in('id', ejecucionIds)
+  if (error) throw error
+  return Object.fromEntries((data ?? []).map((r: { id: string; informe_pdf_url: string | null }) => [r.id, r.informe_pdf_url]))
+}

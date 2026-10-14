@@ -97,6 +97,7 @@ export default function EnexPlanificacionPage() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Link href="/dashboard/enex"><Button variant="outline"><Building2 className="mr-1 h-4 w-4" /> Control & KPI</Button></Link>
+          <Link href="/dashboard/enex/pauta-trimestral"><Button variant="outline"><FileText className="mr-1 h-4 w-4" /> Pauta por lugar</Button></Link>
           <Link href="/dashboard/enex/informe-trimestral"><Button variant="outline"><FileText className="mr-1 h-4 w-4" /> Informe trimestral</Button></Link>
           <Button variant="outline" disabled={rows.length === 0} onClick={() => exportarExcel(rows, instVista, faenasVista, ventana.desde, ventana.hasta)}>
             <FileSpreadsheet className="mr-1 h-4 w-4" /> Exportar Excel
