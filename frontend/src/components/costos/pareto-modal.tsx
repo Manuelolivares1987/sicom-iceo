@@ -94,7 +94,7 @@ export function ParetoModal({ inicio, desde, hasta, conAdmin, onClose }: {
   }))
 
   return (
-    <Modal open onClose={onClose} title="Pareto de costos" className="max-w-6xl"
+    <Modal open onClose={onClose} title="Pareto de costos" className="sm:max-w-6xl"
            description="En azul, lo que suma el 80 % del gasto: por ahí conviene atacar. Clic en una barra o fila para bajar un nivel.">
       {/* Miga de pan */}
       <div className="mb-3 flex flex-wrap items-center gap-1 text-sm">
