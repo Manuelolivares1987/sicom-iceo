@@ -202,6 +202,9 @@ const navGroups: NavGroup[] = [
             tooltip: 'Plan de incentivo por trabajo + KPI de disponibilidad, y el cierre del corte' },
           // [MIG399] Los tres tramos del trabajo medidos con los relojes que el
           // sistema ya guardaba: checklist, repuesto y no conformidad.
+          // [MIG597] Horómetro GPS por equipo y próximo preventivo por horas.
+          { label: 'Horas por equipo', href: '/dashboard/mantenimiento/horas-equipos', icon: Gauge, module: 'mantenimiento', badge: 'NUEVO',
+            tooltip: 'Horas trabajadas, ritmo y cuándo toca el próximo preventivo' },
           { label: 'Cuánto nos demoramos', href: '/dashboard/mantenimiento/tiempos', icon: Clock, module: 'mantenimiento', badge: 'NUEVO',
             tooltip: 'Cuánto toma el checklist, conseguir un repuesto y resolver una NC' },
           // [MIG543] El copiloto de diagnóstico: qué pregunta el taller, si las

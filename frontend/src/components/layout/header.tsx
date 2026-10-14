@@ -28,6 +28,7 @@ const accionDe: Record<string, string> = {
   no_conformidad:      'Planificar',
   bloqueante:          'Resolver',
   doc_sin_fecha:       'Poner la fecha',
+  preventiva_horas:    'Programar',
 }
 
 // Adónde lleva una alerta.
@@ -41,6 +42,8 @@ function rutaAlerta(entidadTipo: string | null, tipo?: string | null): string {
     case 'doc_vencido':
     case 'doc_por_vencer':
     case 'doc_vencidos_equipo': return '/dashboard/flota/control-documental'
+    // Preventivo por horas (MIG597): se ve y se programa desde la tabla de horas.
+    case 'preventiva_horas':    return '/dashboard/mantenimiento/horas-equipos'
   }
   switch (entidadTipo) {
     case 'no_conformidad': return '/dashboard/mantenimiento/no-conformidades'
