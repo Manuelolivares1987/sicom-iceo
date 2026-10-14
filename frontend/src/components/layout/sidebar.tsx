@@ -290,6 +290,11 @@ const navGroups: NavGroup[] = [
       { label: 'Control documental', href: '/dashboard/flota/control-documental', icon: FileWarning, module: 'flota', badge: 'NUEVO',
         tooltip: 'Papeles vencidos y sin fecha de toda la flota, camión por camión' },
       { label: 'Fiabilidad', href: '/dashboard/fiabilidad', icon: Activity, module: 'flota' },
+      // [MIG598-600] Costo por faena y por hora operada. La base filtra
+      // (fn_costos_operacion_puede_ver); `roles` solo esconde el acceso.
+      { label: 'Costo por faena y equipo', href: '/dashboard/flota/costos', icon: Wallet, module: 'flota', badge: 'NUEVO',
+        roles: ['administrador', 'gerencia', 'subgerente_operaciones', 'jefe_operaciones', 'jefe_mantenimiento'],
+        tooltip: 'Franke, Romeral, Calama y cada equipo: gasto, $/equipo-día y $/hora' },
       { label: 'Informes Recepción', href: '/dashboard/flota/recepcion', icon: FileText, module: 'flota' },
       { label: 'Jornada', href: '/dashboard/flota/jornada', icon: Timer, module: 'flota' },
       { label: 'Mapa GPS', href: '/dashboard/flota/mapa', icon: Satellite, module: 'flota', badge: 'Nuevo' },
