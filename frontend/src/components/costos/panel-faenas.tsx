@@ -12,6 +12,7 @@ import { getCostosPorFaena, type FaenaCosto } from '@/lib/services/costos-operac
 import { fmtClp, fmtMM, fmtNum, fmtPct, pct } from '@/lib/costos-operacion'
 import { ComoSeCalcula, fmtMes } from '@/components/costos/comunes'
 import type { PasoPareto } from '@/components/costos/pareto-modal'
+import { EquiposFaenaModal } from '@/components/costos/equipos-faena-modal'
 
 // ============================================================================
 // Costos por faena (MIG600-602)
@@ -46,6 +47,7 @@ export function PanelFaenas({ desde, hasta, onPareto }: {
   desde: string; hasta: string; onPareto: (p: PasoPareto) => void
 }) {
   const [abierta, setAbierta] = useState<string | null>('Calama')
+  const [verEquipos, setVerEquipos] = useState<{ faena: string; subfaena?: string } | null>(null)
   const { data, isLoading, error } = useQuery({
     queryKey: ['costos-por-faena', desde, hasta],
     queryFn: () => getCostosPorFaena(desde, hasta),
@@ -57,6 +59,13 @@ export function PanelFaenas({ desde, hasta, onPareto }: {
     [data],
   )
   const total = faenas.reduce((s, f) => s + f.total, 0)
+  // Días del período (hasta hoy si es el mes en curso): para «equipos en promedio».
+  const diasPeriodo = data
+    ? Math.round((new Date(data.periodo.hasta).getTime() - new Date(data.periodo.desde).getTime()) / 86_400_000) + 1
+    : 1
+  const promedio = (f: FaenaCosto) => (f.dias_equipo ?? 0) / diasPeriodo
+  const textoEquipos = (f: FaenaCosto) =>
+    `${fmtNum(f.equipos)} distintos · ${promedio(f).toLocaleString('es-CL', { maximumFractionDigits: 1 })} en promedio`
   const subDe = (faena: string) => (data?.subfaenas ?? []).filter((s) => s.faena === faena)
 
   const serie = useMemo(() => {
@@ -112,7 +121,13 @@ export function PanelFaenas({ desde, hasta, onPareto }: {
                     {f ? (
                       <>
                         <div className="mt-1 text-2xl font-bold text-gray-900">{fmtMM(f.total)}</div>
-                        <div className="text-xs text-gray-500">{fmtPct(pct(f.total, total))} del gasto · {fmtNum(f.equipos)} equipos</div>
+                        <div className="text-xs text-gray-500">
+                          {fmtPct(pct(f.total, total))} del gasto ·{' '}
+                          <button className="font-medium text-pillado-green-700 underline decoration-dotted"
+                                  onClick={(ev) => { ev.stopPropagation(); setVerEquipos({ faena: id }) }}>
+                            equipos: {textoEquipos(f)}
+                          </button>
+                        </div>
                         <div className="mt-2 grid grid-cols-2 gap-2 text-sm">
                           <div>
                             <div className="text-xs text-gray-500">Por equipo-día</div>
@@ -204,7 +219,7 @@ export function PanelFaenas({ desde, hasta, onPareto }: {
                     <th className="px-3 py-2 text-right">Repuestos</th>
                     <th className="px-3 py-2 text-right">Neumáticos</th>
                     <th className="px-3 py-2 text-right">Lubricantes</th>
-                    <th className="px-3 py-2 text-right">Equipos</th>
+                    <th className="px-3 py-2 text-right" title="Equipos distintos que estuvieron al menos un día; entre paréntesis, cuántos en promedio">Equipos</th>
                     <th className="px-3 py-2 text-right">$/equipo-día</th>
                     <th className="px-3 py-2 text-right">$/hora</th>
                     <th className="px-3 py-2" />
@@ -227,11 +242,13 @@ export function PanelFaenas({ desde, hasta, onPareto }: {
                             <i className="inline-block h-3 w-3 rounded-sm" style={{ background: colorDe(f.faena) }} />
                             {f.faena}
                           </span>}
-                              onPareto={() => onPareto(paretoFaena(f.faena))} />
+                              onPareto={() => onPareto(paretoFaena(f.faena))}
+                              promedio={promedio(f)} onEquipos={() => setVerEquipos({ faena: f.faena })} />
                         {desplegable && abierta === f.faena && subs.map((s) => (
                           <Fila key={s.subfaena} f={s} sub
                                 nombre={<span className="pl-10 text-gray-700">{s.subfaena}</span>}
-                                onPareto={() => onPareto(paretoSub(f.faena, s.subfaena))} />
+                                onPareto={() => onPareto(paretoSub(f.faena, s.subfaena))}
+                                promedio={promedio(s)} onEquipos={() => setVerEquipos({ faena: f.faena, subfaena: s.subfaena })} />
                         ))}
                       </Fragment>
                     )
@@ -249,12 +266,18 @@ export function PanelFaenas({ desde, hasta, onPareto }: {
           </>
         )}
       </CardContent>
+      {verEquipos && (
+        <EquiposFaenaModal faena={verEquipos.faena} subfaena={verEquipos.subfaena} desde={desde} hasta={hasta}
+                           onClose={() => setVerEquipos(null)}
+                           onPareto={(p) => { setVerEquipos(null); onPareto(p) }} />
+      )}
     </Card>
   )
 }
 
-function Fila({ f, nombre, sub, onPareto }: {
+function Fila({ f, nombre, sub, onPareto, onEquipos, promedio }: {
   f: FaenaCosto; nombre: React.ReactNode; sub?: boolean; onPareto: () => void
+  onEquipos?: () => void; promedio: number
 }) {
   return (
     <tr className={`cursor-pointer border-t hover:bg-gray-50 ${sub ? 'bg-gray-50/50 text-[13px]' : ''}`} onClick={onPareto}>
@@ -265,7 +288,15 @@ function Fila({ f, nombre, sub, onPareto }: {
       <td className="px-3 py-1.5 text-right">{fmtMM(f.repuestos)}</td>
       <td className="px-3 py-1.5 text-right">{fmtMM(f.neumaticos)}</td>
       <td className="px-3 py-1.5 text-right">{fmtMM(f.lubricantes)}</td>
-      <td className="px-3 py-1.5 text-right">{fmtNum(f.equipos)}</td>
+      <td className="px-3 py-1.5 text-right">
+        {f.equipos ? (
+          <button className="text-pillado-green-700 underline decoration-dotted"
+                  title="Ver qué equipos son y cuántos días estuvo cada uno"
+                  onClick={(ev) => { ev.stopPropagation(); onEquipos?.() }}>
+            {fmtNum(f.equipos)} <span className="text-xs text-gray-500">(prom. {promedio.toLocaleString('es-CL', { maximumFractionDigits: 1 })})</span>
+          </button>
+        ) : '—'}
+      </td>
       <td className="px-3 py-1.5 text-right">{fmtClp(f.costo_equipo_dia)}</td>
       <td className="px-3 py-1.5 text-right">{f.costo_hora != null ? fmtClp(f.costo_hora) : '—'}</td>
       <td className="px-3 py-1.5 text-right text-xs text-pillado-green-700">Pareto ›</td>
