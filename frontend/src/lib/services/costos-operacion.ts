@@ -152,3 +152,39 @@ export async function getDetalleCostos(v: {
   if (error) traducir(error)
   return (data ?? []) as LineaCosto[]
 }
+
+// ---------------------------------------------------------------------------
+// Por faena (MIG600): el gasto de un equipo va a la faena donde estaba el día
+// del gasto (estado_diario_flota); cada faena suma además sus CC propios.
+// ---------------------------------------------------------------------------
+
+export type FaenaCosto = {
+  faena: string
+  total: number
+  equipos_costo: number | null
+  directo: number | null
+  neumaticos: number | null
+  lubricantes: number | null
+  repuestos: number | null
+  seguridad_epp: number | null
+  dias_equipo: number | null
+  equipos: number | null
+  costo_equipo_dia: number | null
+  horas: number | null
+  costo_medido: number | null
+  costo_hora: number | null
+}
+
+export type CostosPorFaena = {
+  periodo: { desde: string; hasta: string }
+  faenas: FaenaCosto[]
+  por_mes: { mes: string; faena: string; total: number }[]
+  equipos: { faena: string; activo_id: string; patente: string | null; total: number }[]
+  directos: { faena: string; codi_cc: string | null; descripcion: string | null; total: number }[]
+}
+
+export async function getCostosPorFaena(desde: string, hasta: string) {
+  const { data, error } = await supabase.rpc('rpc_costos_por_faena', { p_desde: desde, p_hasta: hasta })
+  if (error) traducir(error)
+  return data as CostosPorFaena
+}
