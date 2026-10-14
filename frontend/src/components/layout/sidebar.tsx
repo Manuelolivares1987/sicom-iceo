@@ -241,6 +241,8 @@ const navGroups: NavGroup[] = [
         tooltip: 'Programa de mantención por instalación y cumplimiento del contrato ENEX (KPI y exposición a multa)' },
       { label: 'Planificación diaria', href: '/dashboard/enex/planificacion', icon: CalendarRange, badge: 'Nuevo',
         tooltip: 'Gantt del trimestre por instalación y día (como la planilla), con % de avance real, planificado y proyectado' },
+      { label: 'Pauta trimestral por lugar', href: '/dashboard/enex/pauta-trimestral', icon: ClipboardList, badge: 'Nuevo',
+        tooltip: 'Lomas Bayas Lubricantes: 33 actividades por Truck Shop por lugar y fecha (x / P / RP / n/a) con % de avance real y proyectado' },
       { label: 'Informe trimestral', href: '/dashboard/enex/informe-trimestral', icon: FileText, badge: 'Nuevo',
         tooltip: 'Consolidado del trimestre desde los informes de servicio: cumplimiento, cobertura de pauta, hallazgos y requerimientos (PDF)' },
       { label: 'Informes (PDF)', href: '/dashboard/enex/informes', icon: FileText, badge: 'Nuevo',

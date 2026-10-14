@@ -16,6 +16,7 @@ import { useToast } from '@/contexts/toast-context'
 import {
   getFaenas, getInstalaciones, getPanelVentana, getItemsDeEjecuciones, getRequerimientosDeEjecuciones,
   getReprogramacionesDeProgramaciones, getEjecucionesMeta, getItemsDePautas, MESES, REQ_PRIORIDAD_LABEL, REQ_TIPO_LABEL,
+  getLugarItems, getActividadesTrimestre, sincronizarTrimestre,
 } from '@/lib/services/enex'
 import { ventanaTrimestre, inicioTrimestreContractual, isoDe } from '@/lib/enex-avance'
 import { armarInformeTrimestral } from '@/lib/enex-informe-trimestral'
@@ -72,15 +73,22 @@ export default function InformeTrimestralPage() {
         getReprogramacionesDeProgramaciones(rows.map((r) => r.programacion_id)), getEjecucionesMeta(eids),
       ])
       const pautaItems = await getItemsDePautas(Array.from(new Set(metas.map((m) => m.pauta_id).filter(Boolean))) as string[])
-      return { rows, items, reqs, reprogs, metas, pautaItems }
+      // Pauta por lugar (Lomas): avance por actividad del trimestre que parte en `desde`.
+      const lugarItems = await getLugarItems(faenaId!)
+      let actividades: Awaited<ReturnType<typeof getActividadesTrimestre>> = []
+      if (lugarItems.length > 0) {
+        try { await sincronizarTrimestre(faenaId!, ventana!.desde) } catch { /* se muestra lo guardado */ }
+        actividades = await getActividadesTrimestre(lugarItems.map((i) => i.lugar_item_id), ventana!.desde)
+      }
+      return { rows, items, reqs, reprogs, metas, pautaItems, lugarItems, actividades }
     },
   })
 
   const informe = useMemo(() => {
     if (!inf || !ventana) return null
     const area = new Map(instalaciones.map((i) => [i.id, i.area]))
-    return armarInformeTrimestral({ ...inf, meses: ventana.meses, areaDe: (id) => area.get(id) ?? null })
-  }, [inf, ventana, instalaciones])
+    return armarInformeTrimestral({ ...inf, meses: ventana.meses, areaDe: (id) => area.get(id) ?? null, hoy })
+  }, [inf, ventana, instalaciones, hoy])
 
   function mover(delta: number) {
     if (!inicio) return
@@ -196,7 +204,35 @@ export default function InformeTrimestralPage() {
             </table>
           </Seccion>
 
-          <Seccion titulo="Cobertura de la pauta trimestral">
+          {informe.pautaLugar && (
+            <Seccion titulo="Avance de la pauta trimestral por lugar">
+              <div className="space-y-3 p-3">
+                <div className="grid gap-2 md:grid-cols-3">
+                  {[...informe.pautaLugar.areas, ...(informe.pautaLugar.areas.length > 1 ? [informe.pautaLugar.total] : [])].map((a) => (
+                    <div key={a.area} className={`rounded-lg border p-2 ${a.area === 'Total' ? 'border-blue-300 bg-blue-50/40' : ''}`}>
+                      <div className="text-xs font-semibold text-gray-700">{a.area === 'Total' ? 'Total faena' : a.area}</div>
+                      <div className="text-xl font-bold tabular-nums">{pct(a.pctReal)} <span className="text-sm font-semibold text-blue-700">· proy. {pct(a.pctProyectado)}</span></div>
+                      <div className="text-[11px] text-gray-500">{a.ejecutadas} de {a.total} ejecutadas{a.noAplica ? ` · ${a.noAplica} n/a` : ''}{a.atrasadas ? ` · ${a.atrasadas} atrasadas` : ''}</div>
+                    </div>
+                  ))}
+                </div>
+                {informe.pautaLugar.sinInforme.length > 0 && (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900">
+                    <div className="mb-1 flex items-center gap-1 font-semibold"><AlertTriangle className="h-3.5 w-3.5" /> Ejecutadas según planilla, sin informe de terreno en SICOM ({informe.pautaLugar.sinInforme.length})</div>
+                    <ul className="grid gap-0.5 md:grid-cols-2">{informe.pautaLugar.sinInforme.map((x, i) => <li key={i}>{x.area.replace('Truck Shop ', '')} · {x.lugar} · <b>{x.codigo}</b> {x.descripcion} {x.fecha ? `(${fecha(x.fecha)})` : ''}</li>)}</ul>
+                  </div>
+                )}
+                {informe.pautaLugar.faltantes.length > 0 && (
+                  <div className="rounded-lg border p-2 text-xs text-gray-700">
+                    <div className="mb-1 font-semibold">Sin ejecutar en el trimestre ({informe.pautaLugar.faltantes.length})</div>
+                    <ul className="grid gap-0.5 md:grid-cols-2">{informe.pautaLugar.faltantes.map((x, i) => <li key={i}>{x.area.replace('Truck Shop ', '')} · {x.lugar} · <b>{x.codigo}</b> {x.descripcion}{x.estado !== 'pendiente' ? ` — ${x.estado}${x.fecha ? ` ${fecha(x.fecha)}` : ''}` : ''}</li>)}</ul>
+                  </div>
+                )}
+              </div>
+            </Seccion>
+          )}
+
+          {!informe.pautaLugar && <Seccion titulo="Cobertura de la pauta trimestral">
             <div className="space-y-2 p-3">
               {informe.cobertura.length === 0 ? <p className="text-sm text-gray-400">Sin ejecuciones con pauta en el período.</p> : informe.cobertura.map((c) => (
                 <div key={c.pauta_id}>
@@ -210,7 +246,7 @@ export default function InformeTrimestralPage() {
                 </div>
               ))}
             </div>
-          </Seccion>
+          </Seccion>}
 
           <Seccion titulo={`Hallazgos (${informe.hallazgos.length})`}>
             <table className="w-full text-sm">

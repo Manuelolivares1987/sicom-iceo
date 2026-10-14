@@ -110,6 +110,25 @@ export function InformeTrimestralDoc({ inf, faena, periodo, desde, hasta, coment
             String(p.actividades), String(p.hallazgos), String(p.requerimientos), p.tecnicos.join(' / ') || '—',
           ])} />
 
+        {inf.pautaLugar ? (
+          <View>
+            <Text style={S.h2}>4. AVANCE DE LA PAUTA TRIMESTRAL POR LUGAR</Text>
+            <Tabla vacio=""
+              cols={[{ t: 'Área', w: '28%' }, { t: 'Actividades', w: '12%', align: 'right' }, { t: 'Ejecutadas', w: '12%', align: 'right' }, { t: 'n/a', w: '8%', align: 'right' }, { t: 'Atrasadas', w: '12%', align: 'right' }, { t: '% real', w: '14%', align: 'right' }, { t: '% proyectado', w: '14%', align: 'right' }]}
+              filas={[...inf.pautaLugar.areas, inf.pautaLugar.total].map((a) => [a.area === 'Total' ? 'Total faena' : a.area, String(a.total), String(a.ejecutadas), String(a.noAplica), String(a.atrasadas), pct(a.pctReal), pct(a.pctProyectado)])} />
+            {inf.pautaLugar.faltantes.length > 0 && (
+              <View style={{ marginTop: 4 }}>
+                <Tabla vacio="" cols={[{ t: 'Área', w: '16%' }, { t: 'Lugar', w: '26%' }, { t: 'Cód.', w: '7%' }, { t: 'Actividad sin ejecutar en el trimestre', w: '35%' }, { t: 'Estado', w: '16%' }]}
+                       filas={inf.pautaLugar.faltantes.map((x) => [x.area.replace('Truck Shop ', ''), x.lugar, x.codigo, x.descripcion, `${x.estado}${x.fecha ? ` ${fecha(x.fecha)}` : ''}`])} />
+              </View>
+            )}
+            {inf.pautaLugar.sinInforme.length > 0 && (
+              <Text style={[S.parrafo, { marginTop: 4, color: '#92400e' }]}>
+                {inf.pautaLugar.sinInforme.length} actividades figuran ejecutadas en la planilla sin informe de terreno en SICOM que las respalde: {inf.pautaLugar.sinInforme.map((x) => `${x.area.replace('Truck Shop ', '')} ${x.codigo}`).join(', ')}.
+              </Text>
+            )}
+          </View>
+        ) : (<View>
         <Text style={S.h2}>4. COBERTURA DE LA PAUTA TRIMESTRAL</Text>
         {inf.cobertura.length === 0 ? <Text style={S.vacio}>Sin ejecuciones con pauta en el período.</Text> : inf.cobertura.map((c) => (
           <View key={c.pauta_id} style={{ marginBottom: 4 }}>
@@ -124,6 +143,8 @@ export function InformeTrimestralDoc({ inf, faena, periodo, desde, hasta, coment
             )}
           </View>
         ))}
+
+        </View>)}
 
         <Text style={S.h2}>5. HALLAZGOS (NO OK / FUERA DE TOLERANCIA)</Text>
         <Tabla vacio="Sin hallazgos en el período."
