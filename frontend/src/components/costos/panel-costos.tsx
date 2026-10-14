@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
 import { Modal } from '@/components/ui/modal'
 import {
-  Barras, COLOR_EQUIPO, COLOR_OTROS, PRESETS, TablaEquiposCosto,
+  Barras, COLOR_EQUIPO, ComoSeCalcula, COLOR_OTROS, PRESETS, TablaEquiposCosto,
   etiquetaEquipo, fmtFecha, fmtMes, nombreTipo, paretoEquipo,
 } from '@/components/costos/comunes'
 import { PanelFaenas } from '@/components/costos/panel-faenas'
@@ -171,19 +171,59 @@ function Contenido({ data, onPareto }: {
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
         <Tarjeta icon={Wallet} titulo="Gasto de operación" valor={fmtMM(k.total)}
                  delta={variacionPct(k.total, k.total_anterior)}
-                 nota={`${compara}: ${fmtMM(k.total_anterior)}`} />
+                 nota={`${compara}: ${fmtMM(k.total_anterior)}`}
+                 calculo={<>
+                   <p>Suma de todas las <b>salidas de bodega de Softland</b> del período: consumo a centro de costo
+                     (concepto 07) y EPP entregado a personas (concepto 08), valorizadas al costo promedio de bodega.</p>
+                   <p><b>No incluye</b> el petróleo (se compra para revender) ni los centros de costo de administración y
+                     comercial (salvo que marques «Incluir administración y comercial»). Tampoco mano de obra del taller
+                     ni servicios externos: eso está en la contabilidad, que todavía no se trae.</p>
+                   <p>La flecha compara {compara}: {fmtMM(k.total)} contra {fmtMM(k.total_anterior)}.</p>
+                 </>} />
         <Tarjeta icon={Truck} titulo="Cargado a equipos" valor={fmtMM(k.asignado_equipo)}
                  delta={variacionPct(k.asignado_equipo, k.asignado_equipo_anterior)}
-                 nota={`${fmtNum(k.equipos_con_gasto)} equipos con gasto · ${compara}: ${fmtMM(k.asignado_equipo_anterior)}`} />
+                 nota={`${fmtNum(k.equipos_con_gasto)} equipos con gasto · ${compara}: ${fmtMM(k.asignado_equipo_anterior)}`}
+                 calculo={<>
+                   <p>La parte del gasto de operación cuyo <b>centro de costo en Softland es un equipo</b>: el código
+                     de equipo (AI agua industrial, CC combustible, CA camioneta, CP pluma, CS servicio…) o el CECO de la
+                     patente en SICOM; si no calza, se busca la patente escrita en la descripción del centro de costo.</p>
+                   <p>Es {fmtPct(pct(k.asignado_equipo, k.total))} del gasto ({fmtMM(k.asignado_equipo)} de {fmtMM(k.total)}).
+                     El resto se cargó a centros de costo de faena, taller o proyectos.</p>
+                 </>} />
         <Tarjeta icon={Gauge} titulo="Costo por hora operada (flota)"
                  valor={k.flota_costo_hora != null ? `${fmtClp(k.flota_costo_hora)}/h` : '—'}
-                 nota={`${fmtNum(k.equipos_medidos)} equipos · ${fmtNum(k.flota_horas)} h medidas · ventana típica ${fmtNum(k.dias_medidos_mediana)} días`} />
+                 nota={`${fmtNum(k.equipos_medidos)} equipos · ${fmtNum(k.flota_horas)} h medidas · ventana típica ${fmtNum(k.dias_medidos_mediana)} días`}
+                 calculo={<>
+                   <p><b>1. Horas operadas de cada equipo.</b> Se juntan todas las lecturas de horómetro que tiene SICOM
+                     dentro del período: GPS diario, recepción en taller, cierre de preventivas, OS históricas y cambios
+                     de estado o contrato. Se toma el <b>par de lecturas más separado</b> que sea creíble: el horómetro
+                     tiene que subir, a no más de 20 h por día, con al menos 30 días entre ambas (así un número mal
+                     digitado no entra). Horas = lectura final − lectura inicial.</p>
+                   <p><b>2. Costo del mismo equipo en esas mismas fechas.</b> Las salidas de bodega cargadas al equipo
+                     entre la lectura inicial y la final (sin petróleo). Misma ventana arriba y abajo: así no se divide
+                     un año de gasto por un mes de horas.</p>
+                   <p><b>3. Costo por hora del equipo</b> = costo ÷ horas. Está en la tabla de equipos; al pasar el mouse
+                     por «Horas medidas» se ven las dos lecturas usadas.</p>
+                   <p><b>4. Flota</b> = suma del costo de los equipos medidos ÷ suma de sus horas:{' '}
+                     <b>{fmtClp(k.flota_costo_medido)} ÷ {fmtNum(k.flota_horas)} h = {k.flota_costo_hora != null ? fmtClp(k.flota_costo_hora) : '—'}/h</b>,
+                     con {fmtNum(k.equipos_medidos)} de {fmtNum(k.equipos_con_gasto)} equipos con gasto.</p>
+                   <p><b>Quedan fuera:</b> equipos sin dos lecturas creíbles en el período o con menos de 20 h medidas.
+                     Para comparar contra la mediana de su tipo se exigen 100 h. No incluye mano de obra ni servicios
+                     externos, solo bodega.</p>
+                 </>} />
         <Tarjeta icon={Package} titulo="Neumáticos" valor={fmtMM(k.neumaticos)}
-                 nota={`${fmtPct(pct(k.neumaticos, k.total))} del gasto`} />
+                 nota={`${fmtPct(pct(k.neumaticos, k.total))} del gasto`}
+                 calculo={<p>Salidas de bodega de la familia <b>REPNEU</b> (código de producto que empieza con
+                   «REPNEU») dentro del gasto de operación del período. Es {fmtPct(pct(k.neumaticos, k.total))} del total.</p>} />
         <Tarjeta icon={HardHat} titulo="EPP entregado a personas" valor={fmtMM(k.epp)}
-                 nota="Concepto 08 de Softland" />
+                 nota="Concepto 08 de Softland"
+                 calculo={<p>Salidas de bodega con <b>concepto 08</b>: elementos de protección personal entregados a un
+                   trabajador (buzos, botines, cascos…). El EPP que salió con concepto 07 a un centro de costo no está aquí:
+                   aparece en la familia «EPP» del Pareto por familia.</p>} />
         <Tarjeta icon={AlertTriangle} titulo="Sin centro de costo" valor={fmtMM(k.sin_cc)}
-                 alerta={k.sin_cc > 0} nota="Salidas que no se pueden cargar a nadie" />
+                 alerta={k.sin_cc > 0} nota="Salidas que no se pueden cargar a nadie"
+                 calculo={<p>Salidas de bodega que en Softland no tienen <b>centro de costo</b> (CodiCC vacío). No se
+                   pueden asignar a un equipo ni a una faena. Hoy son casi todas entregas de EPP (concepto 08).</p>} />
       </div>
 
       {/* 3. Excepciones */}
@@ -345,8 +385,9 @@ function Contenido({ data, onPareto }: {
   )
 }
 
-function Tarjeta({ icon: Icon, titulo, valor, delta, nota, alerta }: {
+function Tarjeta({ icon: Icon, titulo, valor, delta, nota, alerta, calculo }: {
   icon: typeof Wallet; titulo: string; valor: string; delta?: number | null; nota?: string; alerta?: boolean
+  calculo?: React.ReactNode
 }) {
   return (
     <Card className={alerta ? 'border-amber-300' : ''}>
@@ -364,6 +405,7 @@ function Tarjeta({ icon: Icon, titulo, valor, delta, nota, alerta }: {
           )}
         </div>
         {nota && <div className="mt-1 text-xs text-gray-500">{nota}</div>}
+        {calculo && <ComoSeCalcula>{calculo}</ComoSeCalcula>}
       </CardContent>
     </Card>
   )
