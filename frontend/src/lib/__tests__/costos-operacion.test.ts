@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  fmtMM, fmtPct, nivelAsignacion, pct, precioLitro, rangoPreset, sumarMeses, variacionPct,
+  fmtMM, fmtPct, nivelAsignacion, pct, rangoPreset, sumarMeses, variacionPct, vsMediana,
 } from '../costos-operacion'
 
 describe('costos de operación', () => {
@@ -11,11 +11,16 @@ describe('costos de operación', () => {
     expect(variacionPct(50, 100)).toBe(-50)
   })
 
-  it('pct y $/L', () => {
+  it('pct', () => {
     expect(pct(25, 100)).toBe(25)
     expect(pct(1, 0)).toBeNull()
-    expect(precioLitro(88_569_182, 82_197)).toBeCloseTo(1077.5, 0)
-    expect(precioLitro(100, 0)).toBeNull()
+  })
+
+  it('costo por hora contra la mediana solo con horas suficientes', () => {
+    expect(vsMediana(8000, 4000, 500, 5)).toBe(2)
+    expect(vsMediana(69_000, 5000, 40, 5)).toBeNull()   // casi parado: no se compara
+    expect(vsMediana(3000, 3000, 500, 1)).toBeNull()    // tipo con un solo equipo
+    expect(vsMediana(null, 3000, 500, 5)).toBeNull()
   })
 
   it('semáforo de asignación', () => {

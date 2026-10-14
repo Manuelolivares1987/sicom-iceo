@@ -14,17 +14,20 @@ export function pct(parte: number, total: number): number | null {
   return (parte / total) * 100
 }
 
-/** $/L ponderado; null sin litros. */
-export function precioLitro(total: number, litros: number): number | null {
-  if (!litros || litros <= 0) return null
-  return total / litros
-}
+/** Horas mínimas para que un costo por hora signifique algo. */
+export const HORAS_MINIMAS_CPH = 100
 
 /**
- * Semáforo de calidad del dato: qué parte del gasto SIN petróleo llega a un
- * equipo. El petróleo se mide aparte porque hoy casi todo va a un centro de
- * costo genérico y taparía el resto.
+ * Costo por hora contra la mediana de su tipo de equipo. null si no se puede
+ * comparar (pocas horas, sin mediana o tipo con un solo equipo).
  */
+export function vsMediana(costoHora: number | null, mediana: number | null, horas: number | null,
+                          nTipo: number | null): number | null {
+  if (costoHora == null || !mediana || (horas ?? 0) < HORAS_MINIMAS_CPH || (nTipo ?? 0) < 2) return null
+  return costoHora / mediana
+}
+
+/** Semáforo de calidad del dato: qué parte del gasto llega a un equipo. */
 export function nivelAsignacion(pctAsignado: number | null): 'bien' | 'atencion' | 'mal' | null {
   if (pctAsignado == null) return null
   if (pctAsignado >= 90) return 'bien'
