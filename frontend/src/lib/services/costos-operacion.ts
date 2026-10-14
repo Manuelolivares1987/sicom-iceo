@@ -96,7 +96,10 @@ export type CostoFamilia = {
 }
 
 export type PanelCostos = {
-  periodo: { desde: string; hasta: string; meses: number; anterior_desde: string }
+  periodo: {
+    desde: string; hasta: string; meses: number
+    anterior_desde: string; anterior_hasta: string; compara_anio_anterior: boolean
+  }
   kpi: KpiCostos
   por_mes: CostoMes[]
   por_area: { area: AreaCosto; total: number }[]

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  fmtMM, fmtPct, nivelAsignacion, pct, rangoPreset, sumarMeses, variacionPct, vsMediana,
+  etiquetaRango, fmtMM, fmtPct, nivelAsignacion, pct, rangoPreset, sumarMeses, variacionPct, vsMediana,
 } from '../costos-operacion'
 
 describe('costos de operación', () => {
@@ -41,6 +41,12 @@ describe('costos de operación', () => {
     expect(rangoPreset('mes', hoy)).toEqual({ desde: '2026-10-01', hasta: '2026-10-01' })
     expect(rangoPreset('ytd', hoy)).toEqual({ desde: '2026-01-01', hasta: '2026-10-01' })
     expect(rangoPreset('12m', hoy)).toEqual({ desde: '2025-11-01', hasta: '2026-10-01' })
+    expect(rangoPreset('anio_ant', hoy)).toEqual({ desde: '2025-01-01', hasta: '2025-12-01' })
+  })
+
+  it('etiqueta del rango de comparación', () => {
+    expect(etiquetaRango('2025-01-01', '2025-10-01')).toBe('ene–oct 2025')
+    expect(etiquetaRango('2024-11-01', '2025-10-01')).toBe('nov 24–oct 25')
   })
 
   it('formatos', () => {

@@ -24,7 +24,7 @@ import {
 } from '@/lib/services/costos-operacion'
 import {
   HORAS_MINIMAS_CPH, fmtClp, fmtMM, fmtNum, fmtPct, nivelAsignacion, pct, rangoPreset,
-  variacionPct, vsMediana, type RangoPreset,
+  etiquetaRango, variacionPct, vsMediana, type RangoPreset,
 } from '@/lib/costos-operacion'
 
 // ============================================================================
@@ -52,7 +52,7 @@ import {
 export function PanelCostosOperacion({ titulo, descripcion, despues }: {
   titulo: string; descripcion: string; despues?: React.ReactNode
 }) {
-  const [preset, setPreset] = useState<RangoPreset>('12m')
+  const [preset, setPreset] = useState<RangoPreset>('ytd')
   const [conAdmin, setConAdmin] = useState(false)
   const [pareto, setPareto] = useState<PasoPareto | null>(null)
   const rango = useMemo(() => rangoPreset(preset, new Date()), [preset])
@@ -108,6 +108,8 @@ function Contenido({ data, onPareto }: {
   data: PanelCostos; onPareto: (p: PasoPareto) => void
 }) {
   const k = data.kpi
+  // Contra qué se compara: mismos meses del año anterior si el período es un año (MIG604).
+  const compara = `vs ${etiquetaRango(data.periodo.anterior_desde, data.periodo.anterior_hasta)}`
   const pctAsignado = pct(k.asignado_equipo, k.total)
   const nivel = nivelAsignacion(pctAsignado)
 
@@ -140,6 +142,9 @@ function Contenido({ data, onPareto }: {
       {/* 1. Calidad del dato */}
       <Card className={nivel === 'mal' ? 'border-red-300' : nivel === 'atencion' ? 'border-amber-300' : ''}>
         <CardContent className="flex flex-wrap items-center gap-x-6 gap-y-2 p-4 text-sm">
+          <span className="rounded bg-gray-100 px-2 py-0.5 font-medium text-gray-800">
+            Período: {etiquetaRango(data.periodo.desde, data.periodo.hasta)} · comparado {compara}
+          </span>
           <span className="flex items-center gap-2 font-medium text-gray-800">
             <ShieldCheck className="h-4 w-4" /> Calidad del dato
           </span>
@@ -166,10 +171,10 @@ function Contenido({ data, onPareto }: {
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
         <Tarjeta icon={Wallet} titulo="Gasto de operación" valor={fmtMM(k.total)}
                  delta={variacionPct(k.total, k.total_anterior)}
-                 nota={`Período anterior ${fmtMM(k.total_anterior)}`} />
+                 nota={`${compara}: ${fmtMM(k.total_anterior)}`} />
         <Tarjeta icon={Truck} titulo="Cargado a equipos" valor={fmtMM(k.asignado_equipo)}
                  delta={variacionPct(k.asignado_equipo, k.asignado_equipo_anterior)}
-                 nota={`${fmtNum(k.equipos_con_gasto)} equipos con gasto`} />
+                 nota={`${fmtNum(k.equipos_con_gasto)} equipos con gasto · ${compara}: ${fmtMM(k.asignado_equipo_anterior)}`} />
         <Tarjeta icon={Gauge} titulo="Costo por hora operada (flota)"
                  valor={k.flota_costo_hora != null ? `${fmtClp(k.flota_costo_hora)}/h` : '—'}
                  nota={`${fmtNum(k.equipos_medidos)} equipos · ${fmtNum(k.flota_horas)} h medidas · ventana típica ${fmtNum(k.dias_medidos_mediana)} días`} />

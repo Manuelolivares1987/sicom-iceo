@@ -15,11 +15,13 @@ import {
 export const COLOR_EQUIPO = '#2563EB'
 export const COLOR_OTROS = '#F59E0B'
 
+/** Filtros de período. El panel abre en «Este año» (Manuel: «ver solo este año»). */
 export const PRESETS: { id: RangoPreset; label: string }[] = [
+  { id: 'ytd', label: `Este año ${new Date().getFullYear()}` },
   { id: 'mes', label: 'Mes en curso' },
   { id: '3m', label: 'Últimos 3 meses' },
-  { id: 'ytd', label: 'Año a la fecha' },
   { id: '12m', label: 'Últimos 12 meses' },
+  { id: 'anio_ant', label: `Año ${new Date().getFullYear() - 1}` },
 ]
 
 export const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
