@@ -10,8 +10,10 @@ import { useRequireAuth } from '@/hooks/use-require-auth'
 import { getPanelCostos } from '@/lib/services/costos-operacion'
 import { fmtClp, fmtNum, rangoPreset, type RangoPreset } from '@/lib/costos-operacion'
 import {
-  DetalleModal, PRESETS, TablaEquiposCosto, type Detalle,
+  PRESETS, TablaEquiposCosto,
 } from '@/components/costos/comunes'
+import { ParetoModal, type PasoPareto } from '@/components/costos/pareto-modal'
+import { ConciliacionUbicacion } from '@/components/costos/conciliacion-ubicacion'
 import { PanelFaenas } from '@/components/costos/panel-faenas'
 
 // ============================================================================
@@ -25,7 +27,7 @@ import { PanelFaenas } from '@/components/costos/panel-faenas'
 export default function FlotaCostosPage() {
   useRequireAuth()
   const [preset, setPreset] = useState<RangoPreset>('12m')
-  const [detalle, setDetalle] = useState<Detalle | null>(null)
+  const [pareto, setPareto] = useState<PasoPareto | null>(null)
   const rango = useMemo(() => rangoPreset(preset, new Date()), [preset])
 
   const { data, isLoading, error } = useQuery({
@@ -57,7 +59,7 @@ export default function FlotaCostosPage() {
       </div>
 
       {error && <Card><CardContent className="p-6 text-sm text-red-700">{(error as Error).message}</CardContent></Card>}
-      {!error && <PanelFaenas desde={rango.desde} hasta={rango.hasta} />}
+      {!error && <PanelFaenas desde={rango.desde} hasta={rango.hasta} onPareto={setPareto} />}
 
       {isLoading && <div className="flex justify-center py-10"><Spinner /></div>}
       {data && (
@@ -74,13 +76,15 @@ export default function FlotaCostosPage() {
               </span>
             </CardContent>
           </Card>
-          <TablaEquiposCosto equipos={data.por_equipo} onDetalle={setDetalle} />
+          <TablaEquiposCosto equipos={data.por_equipo} onPareto={setPareto} />
         </>
       )}
 
-      {detalle && (
-        <DetalleModal detalle={detalle} desde={rango.desde} hasta={rango.hasta}
-                      onClose={() => setDetalle(null)} />
+      <ConciliacionUbicacion />
+
+      {pareto && (
+        <ParetoModal inicio={pareto} desde={rango.desde} hasta={rango.hasta}
+                     onClose={() => setPareto(null)} />
       )}
     </div>
   )
