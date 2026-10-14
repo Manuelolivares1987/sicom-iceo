@@ -198,7 +198,7 @@ function DetalleEquipo({ equipo, onClose }: { equipo: EquipoHoras; onClose: () =
   return (
     <Modal open onClose={onClose} title={`${equipo.patente ?? equipo.codigo} — horas por día`}
            description={`${equipo.faena ?? 'Sin faena'} · horómetro ${n0(equipo.horometro)} h · último dato GPS ${fecha(equipo.ultima_lectura)}`}
-           className="max-w-3xl">
+           className="sm:max-w-3xl">
       <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
         <Dato label="Ritmo (30 días)" valor={`${n1(equipo.horas_por_dia)} h/día`} />
         <Dato label="Días con uso (30)" valor={n0(equipo.dias_con_uso_30d)} />
