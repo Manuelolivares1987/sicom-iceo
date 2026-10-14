@@ -998,3 +998,87 @@ export async function subirFotoInformeEnex(file: File): Promise<string> {
   const nombre = esJpeg ? 'foto.jpg' : file.name
   return subirEvidenciaEnex(new File([blob], nombre, { type: blob.type || file.type || 'image/jpeg' }))
 }
+
+// ── Planificación diaria (MIG590) ──────────────────────────────────────────
+// La Gantt de /dashboard/enex/planificacion lee y escribe las MISMAS
+// programaciones que el mantenedor ve por fecha en /m/enex.
+
+/** Panel de varios meses que pueden cruzar el año (Nov–Ene). */
+export async function getPanelVentana(meses: { anio: number; mes: number }[], faenaId?: string): Promise<EnexPanelRow[]> {
+  if (meses.length === 0) return []
+  let q = supabase.from('v_enex_panel_mensual').select('*')
+    .or(meses.map((m) => `and(periodo_anio.eq.${m.anio},periodo_mes.eq.${m.mes})`).join(','))
+  if (faenaId) q = q.eq('faena_id', faenaId)
+  const { data, error } = await q.limit(5000)
+  if (error) throw error
+  return (data ?? []) as EnexPanelRow[]
+}
+
+export async function moverProgramacion(programacionId: string, fecha: string) {
+  const { error } = await supabase.rpc('rpc_enex_mover_programacion', { p_programacion_id: programacionId, p_fecha: fecha })
+  if (error) throw error
+}
+
+export async function programarLote(items: { instalacion_id: string; tipo_servicio: TipoServicio; fecha: string; observacion?: string | null }[]) {
+  const { data, error } = await supabase.rpc('rpc_enex_programar_lote', { p_items: items })
+  if (error) throw error
+  return data as { success: boolean; creadas: number; omitidas: number }
+}
+
+// ── Informe trimestral (consolidado de los informes del período) ───────────
+export type EnexItemEjecutado = {
+  ejecucion_id: string
+  pauta_item_id: string
+  item_codigo: string | null
+  descripcion: string | null
+  bloque: string | null
+  periodicidad: string | null
+  resultado: string | null
+  valor_medicion: number | null
+  dentro_tolerancia: boolean | null
+  observacion: string | null
+  critico: boolean | null
+  tipo_campo: string | null
+}
+
+export async function getItemsDeEjecuciones(ejecucionIds: string[]): Promise<EnexItemEjecutado[]> {
+  if (ejecucionIds.length === 0) return []
+  const { data, error } = await supabase.from('v_enex_ejecucion_items')
+    .select('ejecucion_id,pauta_item_id,item_codigo,descripcion,bloque,periodicidad,resultado,valor_medicion,dentro_tolerancia,observacion,critico,tipo_campo')
+    .in('ejecucion_id', ejecucionIds).limit(10000)
+  if (error) throw error
+  return (data ?? []) as EnexItemEjecutado[]
+}
+
+export async function getRequerimientosDeEjecuciones(ejecucionIds: string[]): Promise<EnexRequerimiento[]> {
+  if (ejecucionIds.length === 0) return []
+  const { data, error } = await supabase.from('v_enex_requerimientos').select('*').in('ejecucion_id', ejecucionIds)
+  if (error) throw error
+  return ((data ?? []) as EnexRequerimiento[]).sort(ordenReq)
+}
+
+export async function getReprogramacionesDeProgramaciones(programacionIds: string[]): Promise<EnexReprogramacion[]> {
+  if (programacionIds.length === 0) return []
+  const { data, error } = await supabase.from('v_enex_reprogramaciones').select('*')
+    .in('programacion_id', programacionIds).order('created_at')
+  if (error) throw error
+  return (data ?? []) as EnexReprogramacion[]
+}
+
+/** Actividades de la pauta (para medir cobertura: qué ítems trimestrales se hicieron). */
+export async function getItemsDePautas(pautaIds: string[]): Promise<EnexPautaItem[]> {
+  if (pautaIds.length === 0) return []
+  const { data, error } = await supabase.from('enex_pauta_items').select('*')
+    .in('pauta_id', pautaIds).eq('activo', true).order('bloque_orden').order('orden')
+  if (error) throw error
+  return (data ?? []) as EnexPautaItem[]
+}
+
+export type EnexEjecucionMeta = { id: string; pauta_id: string | null; duracion_segundos: number | null }
+
+export async function getEjecucionesMeta(ejecucionIds: string[]): Promise<EnexEjecucionMeta[]> {
+  if (ejecucionIds.length === 0) return []
+  const { data, error } = await supabase.from('enex_ejecuciones').select('id,pauta_id,duracion_segundos').in('id', ejecucionIds)
+  if (error) throw error
+  return (data ?? []) as EnexEjecucionMeta[]
+}

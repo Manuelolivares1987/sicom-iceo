@@ -37,6 +37,7 @@ import {
   HardHat,
   Briefcase,
   CalendarClock,
+  CalendarRange,
   Activity,
   Layers,
   QrCode,
@@ -238,6 +239,10 @@ const navGroups: NavGroup[] = [
     items: [
       { label: 'Control & KPI', href: '/dashboard/enex', icon: Building2, badge: 'Nuevo',
         tooltip: 'Programa de mantención por instalación y cumplimiento del contrato ENEX (KPI y exposición a multa)' },
+      { label: 'Planificación diaria', href: '/dashboard/enex/planificacion', icon: CalendarRange, badge: 'Nuevo',
+        tooltip: 'Gantt del trimestre por instalación y día (como la planilla), con % de avance real, planificado y proyectado' },
+      { label: 'Informe trimestral', href: '/dashboard/enex/informe-trimestral', icon: FileText, badge: 'Nuevo',
+        tooltip: 'Consolidado del trimestre desde los informes de servicio: cumplimiento, cobertura de pauta, hallazgos y requerimientos (PDF)' },
       { label: 'Informes (PDF)', href: '/dashboard/enex/informes', icon: FileText, badge: 'Nuevo',
         tooltip: 'Certificados de calibración y OT de mantenimiento generados en terreno — búsqueda por mes, día e instalación' },
       { label: 'Pautas (checklists)', href: '/dashboard/enex/pautas', icon: ClipboardList, badge: 'Nuevo',
