@@ -819,7 +819,12 @@ export default function PlanSemanalTallerPage() {
           onSubmit={(payload) => agregarTareaLibre.mutate(
             { planSemanalId, ...payload },
             {
-              onSuccess: () => { toast.success('Tarea programada'); setTareaLibreOpen(false) },
+              onSuccess: (r) => {
+                toast.success(r.folio
+                  ? `Tarea programada con la OT ${r.folio}: queda lista para liberar`
+                  : 'Tarea programada')
+                setTareaLibreOpen(false)
+              },
               onError: (err) => toast.error((err as Error).message),
             },
           )}
@@ -2613,14 +2618,15 @@ function TareaLibreDialog({ dias, tecnicos, operacionInicial, enviando, onClose,
             ))}
           </select>
         </div>
-        {/* [MIG607] La tarea libre no tiene OT: ni checklist ni tareas. */}
+        {/* [MIG608] Toda tarea programada crea su OT (se libera y la ve el jefe). */}
         {categoria === 'equipo_externo' && (
           <div className="rounded-lg border border-teal-200 bg-teal-50 p-2.5 text-xs text-teal-900">
             ¿Es un camión de un cliente que necesita checklist y tareas, como la flota?{' '}
             <button type="button" onClick={onUsarExterno} className="font-semibold underline">
               Prográmalo como Camión externo
             </button>
-            . Como tarea libre queda sin OT, sin checklist y sin tareas.
+            {' '}para registrar el camión con sus datos. Si no, al programarla igual se le crea su
+            OT, pero con el checklist vacío: el jefe de taller le agrega las tareas.
           </div>
         )}
         <div>
@@ -2877,7 +2883,21 @@ function JornadaCard({ jornada, onAsignar, onDetalle, onQuitar, onSacarOt, onDia
         ) : (
           <>
             <div className="font-mono font-bold mt-0.5">{jornada.ot_folio}</div>
-            {jornada.activo_codigo && (
+            {/* [MIG608] La OT de una tarea programada: lo que importa es la tarea. */}
+            {jornada.categoria && (
+              <>
+                <div className="font-semibold mt-0.5 line-clamp-2">
+                  <span className={`mr-1 text-[9px] px-1 py-0.5 rounded font-bold border ${colorCategoria(jornada.categoria)}`}>
+                    {CATEGORIA_CORTA[jornada.categoria] ?? 'TAREA'}
+                  </span>
+                  {jornada.titulo}
+                </div>
+                {jornada.equipo_externo && (
+                  <div className="text-[10px] text-teal-700 mt-0.5 line-clamp-1">🔧 {jornada.equipo_externo}</div>
+                )}
+              </>
+            )}
+            {jornada.activo_codigo && !jornada.activo_codigo.startsWith('EXT-SERV-') && (
               <div className="text-[10px] text-gray-600">
                 {jornada.activo_codigo} {jornada.activo_patente && `· ${jornada.activo_patente}`}
               </div>

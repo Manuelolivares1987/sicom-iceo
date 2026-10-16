@@ -536,7 +536,8 @@ export async function rpcAgregarTareaLibre(params: {
     p_horas: params.horas ?? null,
   })
   if (error) throw error
-  return data as { success: boolean; plan_ot_id: string }
+  // [MIG608] La tarea programada sale con su OT.
+  return data as { success: boolean; plan_ot_id: string; ot_id: string | null; folio: string | null }
 }
 
 export async function rpcEliminarTarea(planOtId: string) {
