@@ -535,6 +535,49 @@ export async function programarOtTaller(params: {
 }
 
 /**
+ * [MIG607] Camión EXTERNO (de un cliente, fuera de la flota Pillado).
+ *
+ * Se crea —o se reutiliza por patente si ya vino antes— una ficha marcada
+ * `es_externo`. Con esa ficha la OT se programa con `programarOtTaller`, igual
+ * que un equipo de la flota: checklist, tareas, recursos, /m/taller. La base lo
+ * deja fuera de disponibilidad, reporte diario, KPI y paneles de flota.
+ * Una patente de la flota Pillado no se acepta como externa.
+ */
+export type TipoEquipoExterno =
+  | 'generico' | 'aljibe_combustible' | 'aljibe_agua' | 'pluma_grua'
+  | 'ampliroll' | 'tracto' | 'camioneta' | 'grua_horquilla'
+
+// Define qué checklist V03 le toca (los ítems se filtran por tipo de equipamiento).
+export const TIPO_EQUIPO_EXTERNO_LABEL: Record<TipoEquipoExterno, string> = {
+  generico: 'Camión (general)',
+  aljibe_combustible: 'Aljibe de combustible',
+  aljibe_agua: 'Aljibe de agua / riego',
+  pluma_grua: 'Camión pluma / grúa',
+  ampliroll: 'Ampliroll / polibrazo',
+  tracto: 'Tracto camión',
+  camioneta: 'Camioneta',
+  grua_horquilla: 'Grúa horquilla',
+}
+
+export async function registrarEquipoExterno(params: {
+  patente: string
+  cliente: string
+  descripcion: string | null
+  tipoEquipo: TipoEquipoExterno
+  operacion: 'Coquimbo' | 'Calama'
+}): Promise<{ activo_id: string; codigo: string; patente: string; nombre: string; nuevo: boolean }> {
+  const { data, error } = await supabase.rpc('rpc_registrar_equipo_externo', {
+    p_patente: params.patente,
+    p_cliente: params.cliente,
+    p_descripcion: params.descripcion,
+    p_tipo_equipamiento: params.tipoEquipo,
+    p_operacion: params.operacion,
+  })
+  if (error) throw error
+  return data as { activo_id: string; codigo: string; patente: string; nombre: string; nuevo: boolean }
+}
+
+/**
  * [MIG538] Programar una ENTREGA en arriendo: OT por el camino del plan (tipo
  * inspección, siempre nueva) con el Check-List de Entrega V02 en vez de la
  * inspección. El operador la ve y la ejecuta en /m/taller.
