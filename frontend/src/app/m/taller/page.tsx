@@ -724,6 +724,10 @@ export default function MecanicoHomePage() {
                       {o.activo_codigo} {o.activo_patente && <span className="text-gray-500">· {o.activo_patente}</span>}
                     </div>
                     <div className="text-xs text-gray-500">{o.activo_nombre}</div>
+                    {/* [MIG608] Tarea programada: el nombre de la ficha de servicio no dice qué hacer. */}
+                    {o.tarea_titulo && (
+                      <div className="mt-0.5 text-xs font-medium text-teal-700">{o.tarea_titulo}</div>
+                    )}
                     {/* Quién la tiene. Estaba en los datos y no se mostraba: para
                         supervisar había que abrir la OT una por una. */}
                     {o.cuadrilla && (

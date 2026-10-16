@@ -52,6 +52,8 @@ export type MecanicoOT = {
    * pasaron). Una OT replanificada agrupa acá, no en su fecha original.
    */
   fecha_grupo: string | null
+  /** [MIG608] Título de la tarea programada (terreno, soldadura…), si viene de una. */
+  tarea_titulo?: string | null
 }
 
 const isOnline = () => (typeof navigator === 'undefined' ? true : navigator.onLine)
