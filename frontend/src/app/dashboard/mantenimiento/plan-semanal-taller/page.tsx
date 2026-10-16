@@ -56,6 +56,7 @@ import {
   getEquiposPadre, getRecepcionesPorPlanificar, programarRecepcion,
   getNcOtsPorAgendar,
   getPapelesProblema, papelProblemaTexto, TIPO_DOC_LABEL,
+  registrarEquipoExterno, TIPO_EQUIPO_EXTERNO_LABEL, type TipoEquipoExterno,
   type PlanActivo, type PreventivaDue, type TipoOtTaller, type PrioridadTaller,
   type RecepcionPorPlanificar, type NcOtPorAgendar, type PapelProblema,
 } from '@/lib/services/taller-planificacion'
@@ -107,6 +108,8 @@ type DropTarget = {
   fecha: string
   planIdPre: string | null
   tipoPre: TipoOtTaller
+  // [MIG607] Camión de un cliente: sin pauta ni entrega en arriendo.
+  externo?: boolean
 }
 
 function fmtFecha(iso: string) {
@@ -227,6 +230,7 @@ export default function PlanSemanalTallerPage() {
   // Filtro por operación/zona (Coquimbo / Calama). '' = todas.
   const [filtroOperacion, setFiltroOperacion] = useState('')
   const [tareaLibreOpen, setTareaLibreOpen] = useState(false)
+  const [externoOpen, setExternoOpen] = useState(false)
   const [gestionTecnicosOpen, setGestionTecnicosOpen] = useState(false)
   const { data: tecnicos } = useTallerTecnicos(filtroOperacion || null)
   const agregarTareaLibre = useAgregarTareaLibreTaller(planSemanalId)
@@ -534,6 +538,15 @@ export default function PlanSemanalTallerPage() {
           <Button
             variant="outline"
             size="sm"
+            disabled={!planSemanalId}
+            onClick={() => setExternoOpen(true)}
+            title="Camión de un cliente (fuera de la flota): OT con checklist y tareas, igual que la flota"
+          >
+            <Truck className="h-4 w-4 mr-1" /> Camión externo
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
             onClick={() => setGestionTecnicosOpen(true)}
             title="Agregar o quitar técnicos del taller"
           >
@@ -802,6 +815,7 @@ export default function PlanSemanalTallerPage() {
           operacionInicial={filtroOperacion || null}
           enviando={agregarTareaLibre.isPending}
           onClose={() => setTareaLibreOpen(false)}
+          onUsarExterno={() => { setTareaLibreOpen(false); setExternoOpen(true) }}
           onSubmit={(payload) => agregarTareaLibre.mutate(
             { planSemanalId, ...payload },
             {
@@ -809,6 +823,25 @@ export default function PlanSemanalTallerPage() {
               onError: (err) => toast.error((err as Error).message),
             },
           )}
+        />
+      )}
+
+      {/* [MIG607] Camión externo: se registra la ficha y sigue el camino de la flota */}
+      {externoOpen && (
+        <EquipoExternoDialog
+          operacionInicial={filtroOperacion === 'Calama' ? 'Calama' : 'Coquimbo'}
+          onClose={() => setExternoOpen(false)}
+          onRegistrado={(r) => {
+            setExternoOpen(false)
+            setDropTarget({
+              activoId: r.activo_id,
+              label: `${r.patente} · EXTERNO`,
+              fecha: fechaTapDefault(),
+              planIdPre: null,
+              tipoPre: 'correctivo',
+              externo: true,
+            })
+          }}
         />
       )}
 
@@ -1882,6 +1915,17 @@ function ProgramarOtDialog({ target, planSemanalId, dias, onClose, onDone, agreg
         {/* Lo primero, porque es lo que puede hacerte cambiar de opinión. */}
         <PapelesDelEquipoAviso activoId={target.activoId} />
 
+        {target.externo && (
+          <div className="rounded-lg border border-teal-200 bg-teal-50 p-2.5 text-xs text-teal-900">
+            <p className="font-semibold">Camión externo (no es flota Pillado)</p>
+            <p className="mt-0.5 text-teal-800">
+              Lleva su OT con el checklist de inspección del tipo de equipo, y el jefe de
+              taller le puede agregar tareas y pedir recursos igual que a la flota. No cuenta
+              en disponibilidad ni en los indicadores de la flota.
+            </p>
+          </div>
+        )}
+
         {/* [MIG256] El trabajo que se arrastra de una semana a otra sigue en la
             misma OT: un solo folio, con su checklist y su avance, hasta cerrarla. */}
         {otAbierta && (
@@ -1904,11 +1948,12 @@ function ProgramarOtDialog({ target, planSemanalId, dias, onClose, onDone, agreg
           <label className="text-xs font-medium">Tipo de trabajo</label>
           <select value={tipo} onChange={(e) => setTipo(e.target.value as TipoOtTaller)}
                   className="w-full rounded border px-2 py-1.5 text-sm">
-            <option value="preventivo">Preventivo (actividades desde pauta)</option>
+            <option value="preventivo">{target.externo ? 'Preventivo' : 'Preventivo (actividades desde pauta)'}</option>
             <option value="correctivo">Correctivo</option>
             <option value="inspeccion">Inspección</option>
-            {/* [MIG538] La entrega se planifica y la ejecuta el operador. */}
-            <option value="entrega">Entrega en arriendo (Check-List V02)</option>
+            {/* [MIG538] La entrega se planifica y la ejecuta el operador.
+                [MIG607] Un camión externo no se entrega en arriendo. */}
+            {!target.externo && <option value="entrega">Entrega en arriendo (Check-List V02)</option>}
           </select>
           {tipo === 'entrega' && (
             <p className="mt-1 text-[11px] text-gray-500">
@@ -2436,8 +2481,98 @@ function GestionarTecnicosDialog({ operacionInicial, onClose }: {
   )
 }
 
+// [MIG607] Diálogo: registrar el camión externo. Si la patente ya vino antes,
+// se reutiliza su ficha (y su historial). Después se abre el mismo diálogo de
+// programación que la flota.
+function EquipoExternoDialog({ operacionInicial, onClose, onRegistrado }: {
+  operacionInicial: 'Coquimbo' | 'Calama'
+  onClose: () => void
+  onRegistrado: (r: { activo_id: string; patente: string; nombre: string; nuevo: boolean }) => void
+}) {
+  const toast = useToast()
+  const [patente, setPatente] = useState('')
+  const [cliente, setCliente] = useState('')
+  const [descripcion, setDescripcion] = useState('')
+  const [tipoEquipo, setTipoEquipo] = useState<TipoEquipoExterno>('generico')
+  const [operacion, setOperacion] = useState<'Coquimbo' | 'Calama'>(operacionInicial)
+  const [enviando, setEnviando] = useState(false)
+
+  const valido = patente.replace(/[^A-Za-z0-9]/g, '').length >= 4 && cliente.trim().length >= 2
+
+  const submit = async () => {
+    setEnviando(true)
+    try {
+      const r = await registrarEquipoExterno({
+        patente, cliente: cliente.trim(), descripcion: descripcion.trim() || null, tipoEquipo, operacion,
+      })
+      toast.success(r.nuevo
+        ? `Camión externo ${r.patente} registrado`
+        : `${r.patente} ya había venido: se usa su misma ficha`)
+      onRegistrado(r)
+    } catch (e) {
+      toast.error((e as Error).message)
+    } finally {
+      setEnviando(false)
+    }
+  }
+
+  return (
+    <Modal open onClose={onClose} title="Camión externo">
+      <div className="space-y-3">
+        <p className="text-xs text-gray-600">
+          Camión de un cliente, fuera de la flota Pillado. Lleva OT con checklist y tareas igual
+          que la flota, pero no cuenta en disponibilidad ni en los indicadores.
+        </p>
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="text-xs font-medium">Patente <span className="text-red-500">*</span></label>
+            <Input value={patente} onChange={(e) => setPatente(e.target.value.toUpperCase())}
+                   placeholder="ABCD-12" maxLength={12} />
+          </div>
+          <div>
+            <label className="text-xs font-medium">Operación</label>
+            <select value={operacion} onChange={(e) => setOperacion(e.target.value as 'Coquimbo' | 'Calama')}
+                    className="mt-0.5 w-full rounded border border-gray-300 px-2 py-1.5 text-sm">
+              <option value="Coquimbo">Coquimbo</option>
+              <option value="Calama">Calama</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label className="text-xs font-medium">Cliente / dueño <span className="text-red-500">*</span></label>
+          <Input value={cliente} onChange={(e) => setCliente(e.target.value)}
+                 placeholder="Ej. ACME — TPC Terminal Puerto Coquimbo" maxLength={120} />
+        </div>
+        <div>
+          <label className="text-xs font-medium">Tipo de equipo</label>
+          <select value={tipoEquipo} onChange={(e) => setTipoEquipo(e.target.value as TipoEquipoExterno)}
+                  className="mt-0.5 w-full rounded border border-gray-300 px-2 py-1.5 text-sm">
+            {(Object.keys(TIPO_EQUIPO_EXTERNO_LABEL) as TipoEquipoExterno[]).map((t) => (
+              <option key={t} value={t}>{TIPO_EQUIPO_EXTERNO_LABEL[t]}</option>
+            ))}
+          </select>
+          <p className="mt-0.5 text-[10px] text-gray-500">Define los ítems del checklist de inspección.</p>
+        </div>
+        <div>
+          <label className="text-xs font-medium">Descripción del equipo</label>
+          <Input value={descripcion} onChange={(e) => setDescripcion(e.target.value)}
+                 placeholder="Ej. Camión de meter Mercedes Atego" maxLength={80} />
+        </div>
+      </div>
+      <ModalFooter>
+        <Button variant="outline" onClick={onClose}>Cancelar</Button>
+        <Button disabled={enviando || !valido} onClick={submit}>
+          {enviando ? <Spinner className="h-4 w-4 mr-1" /> : null}
+          Seguir: programar la OT
+        </Button>
+      </ModalFooter>
+    </Modal>
+  )
+}
+
 // Diálogo: programar una tarea sin equipo de flota (terreno / externo / soldadura).
-function TareaLibreDialog({ dias, tecnicos, operacionInicial, enviando, onClose, onSubmit }: {
+function TareaLibreDialog({ dias, tecnicos, operacionInicial, enviando, onClose, onSubmit, onUsarExterno }: {
+  onUsarExterno: () => void
   dias: { fecha: string; nombre_dia: string }[]
   tecnicos: TallerTecnico[]
   operacionInicial: string | null
@@ -2478,6 +2613,16 @@ function TareaLibreDialog({ dias, tecnicos, operacionInicial, enviando, onClose,
             ))}
           </select>
         </div>
+        {/* [MIG607] La tarea libre no tiene OT: ni checklist ni tareas. */}
+        {categoria === 'equipo_externo' && (
+          <div className="rounded-lg border border-teal-200 bg-teal-50 p-2.5 text-xs text-teal-900">
+            ¿Es un camión de un cliente que necesita checklist y tareas, como la flota?{' '}
+            <button type="button" onClick={onUsarExterno} className="font-semibold underline">
+              Prográmalo como Camión externo
+            </button>
+            . Como tarea libre queda sin OT, sin checklist y sin tareas.
+          </div>
+        )}
         <div>
           <label className="text-xs font-medium">Título <span className="text-red-500">*</span></label>
           <Input value={titulo} onChange={(e) => setTitulo(e.target.value)}
