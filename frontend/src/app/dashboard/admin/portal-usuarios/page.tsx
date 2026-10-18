@@ -18,6 +18,7 @@ import {
   type PerfilPortalAdmin,
 } from '@/lib/services/portal-cliente'
 import { cargarContratosActivos, type ContratoOption } from '@/lib/services/geocercas'
+import { PortalFlotaCuentas } from '@/components/admin/portal-flota-cuentas'
 
 export default function PortalUsuariosAdminPage() {
   useRequireAuth()
@@ -83,6 +84,10 @@ export default function PortalUsuariosAdminPage() {
           </Button>
         </div>
       </div>
+
+      <PortalFlotaCuentas contratos={contratos} />
+
+      <h2 className="pt-2 text-sm font-bold uppercase tracking-wide text-gray-500">Portal de combustible</h2>
 
       {/* Aviso de proceso */}
       <Card className="border-amber-200 bg-amber-50">
