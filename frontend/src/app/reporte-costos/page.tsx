@@ -27,7 +27,7 @@ const sumarMes = (iso: string, n: number) => {
 
 function Variacion({ actual, anterior }: { actual: number; anterior: number | null | undefined }) {
   const v = variacionPct(actual, anterior)
-  if (v == null) return <span className="text-gray-400">nuevo</span>
+  if (v == null) return <span className="text-gray-400">antes $0</span>
   return (
     <span className={`font-semibold ${v > 0 ? 'text-red-600' : 'text-green-700'}`}>
       {v > 0 ? '▲' : '▼'} {fmtPct(Math.abs(v))}
@@ -147,7 +147,7 @@ export default function ReporteCostosPage() {
           <div className="text-[11px] font-bold uppercase tracking-[2px] text-[#8bcc95]">Pillado Empresas · SICOM</div>
           <div className="mt-1 flex flex-wrap items-end justify-between gap-3">
             <div>
-              <h1 className="text-2xl font-extrabold capitalize">Costos de operación · {mesLargo(mes)}</h1>
+              <h1 className="text-2xl font-extrabold">Costos de operación · {mesLargo(mes)}</h1>
               <p className="text-sm text-[#dbf0de]">Salidas de bodega Softland (consumo y EPP). Sin petróleo, que se revende.</p>
             </div>
             <div className="flex items-center gap-2">

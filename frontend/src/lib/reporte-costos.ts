@@ -83,7 +83,7 @@ const esc = (s: unknown) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&
 /** Variación contra el mes anterior: gastar más es lo que se mira → rojo. */
 function variacionHtml(actual: number, anterior: number | null | undefined): string {
   const v = variacionPct(actual, anterior)
-  if (v == null) return '<span style="color:#9ca3af">nuevo</span>'
+  if (v == null) return '<span style="color:#9ca3af">antes $0</span>'
   const color = v > 0 ? MARCA.rojo : MARCA.verde
   return `<span style="color:${color};font-weight:700">${v > 0 ? '▲' : '▼'} ${fmtPct(Math.abs(v))}</span>`
 }
