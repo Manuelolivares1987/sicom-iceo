@@ -7,7 +7,7 @@
 // Origen: Desktop/OPERACIONES/02_FLOTA Y EQUIPOS/PATENTES/ESMAX_SQM/<patente>/
 // Cada dato sale de un papel leído (2026-10-18), nunca deducido:
 //   · motor / año / VIN: SOAP, permiso de circulación o factura SALFA
-//   · capacidad 20.000 L: TC8 INTECIL (sólo WBFZ-22 y WBGD-20 lo traen)
+//   · capacidad 20.000 L: TC8 INTECIL (WBFZ-22, WBGD-20 y WBGD-30 desde el 19-10)
 //   · vencimientos: los que el papel declara. Si no declara → sin vencimiento;
 //     si no se puede leer (escaneo de WBGD-30) → queda «falta la fecha»
 //     (2099 + archivo = 'sin_fecha'), nunca inventada.
@@ -36,7 +36,7 @@ const SIN_VENC = '2099-12-31'
 const CAMIONES = [
   { patente: 'WBFZ-22', codigo: 'CC-20-04', vin: 'VF630N36XTD003276', motor: '2602453', anio: 2026, tc8: true },
   { patente: 'WBGD-20', codigo: 'CC-20-05', vin: 'VF630N368TD003096', motor: '2566376', anio: 2026, tc8: true },
-  { patente: 'WBGD-30', codigo: 'CC-20-06', vin: 'VF630N363TD003104', motor: '2567508', anio: 2026, tc8: false },
+  { patente: 'WBGD-30', codigo: 'CC-20-06', vin: 'VF630N363TD003104', motor: '2567508', anio: 2026, tc8: true },
   { patente: 'WCWR-25', codigo: 'CC-20-07', vin: 'VF630N36XTD003214', motor: '2584779', anio: 2027, tc8: false },
   { patente: 'WCWR-33', codigo: 'CC-20-08', vin: 'VF630N363TD003278', motor: '2602909', anio: 2027, tc8: false },
   { patente: 'WCWR-35', codigo: 'CC-20-09', vin: 'VF630N367TD003199', motor: '2582675', anio: 2027, tc8: false },
@@ -72,7 +72,8 @@ function papeles(pat, f) {
   if (/ADAS/.test(f)) return [sinV('otra', { tipo_otro: 'Asistente de conducción ADAS' })]
   if (/^Certificado Estanque INTECIL (\d+)/.test(f)) {
     const n = f.match(/INTECIL (\d+)/)[1]
-    return [{ tipo: 'tc8_sec', numero: n, entidad: 'INTECIL SpA', emision: n === '757408' ? '2026-08-24' : '2026-09-22', vence: null,
+    const emision = { '757408': '2026-08-24', '761011': '2026-09-22', '759405': '2026-09-02' }[n]
+    return [{ tipo: 'tc8_sec', numero: n, entidad: 'INTECIL SpA', emision, vence: null,
               nota: 'Certificado de producción del estanque, 20.000 L (DOT MC-306). No declara vencimiento.' }]
   }
   if (/HDISOAP|^soap/i.test(f)) {
