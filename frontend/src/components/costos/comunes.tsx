@@ -37,6 +37,24 @@ export const NOMBRE_TIPO: Record<string, string> = {
 export const nombreTipo = (t: string | null) => (t ? NOMBRE_TIPO[t] ?? t.replace(/_/g, ' ') : '—')
 
 
+/**
+ * Las tablas del panel muestran sólo los 10 con más gasto (Manuel: el panel va
+ * al dueño, «no tan extenso»); el resto queda a un clic. `filas` ya viene
+ * ordenado por gasto descendente desde el RPC.
+ */
+export const TOP_N = 10
+export function useTop<T>(filas: T[], n = TOP_N) {
+  const [todos, setTodos] = useState(false)
+  const visibles = todos ? filas : filas.slice(0, n)
+  const pie = filas.length > n ? (
+    <button type="button" onClick={() => setTodos(!todos)}
+            className="w-full border-t px-3 py-2 text-left text-xs font-medium text-pillado-green-700 hover:bg-gray-50">
+      {todos ? `Mostrar sólo los ${n} con más gasto` : `Ver los ${filas.length} (${filas.length - n} más)`}
+    </button>
+  ) : null
+  return { visibles, pie }
+}
+
 export function etiquetaEquipo(e: CostoEquipo) {
   return e.patente ? `${e.patente}${e.tipo_equipo ? ` · ${nombreTipo(e.tipo_equipo)}` : ''}` : (e.descripcion ?? e.codi_cc)
 }
@@ -54,11 +72,12 @@ export function paretoEquipo(e: CostoEquipo): PasoPareto {
 export function TablaEquiposCosto({ equipos, onPareto }: {
   equipos: CostoEquipo[]; onPareto: (p: PasoPareto) => void
 }) {
+  const { visibles, pie } = useTop(equipos)
   return (
     <Card>
       <CardHeader className="pb-2">
         <CardTitle className="flex items-center gap-2 text-base">
-          <Truck className="h-4 w-4" /> Gasto y costo por hora por equipo
+          <Truck className="h-4 w-4" /> Los {Math.min(TOP_N, equipos.length)} equipos con más gasto
           <span className="text-xs font-normal text-gray-500">— clic en una fila: Pareto de lo que explica su gasto</span>
         </CardTitle>
       </CardHeader>
@@ -78,7 +97,7 @@ export function TablaEquiposCosto({ equipos, onPareto }: {
             </tr>
           </thead>
           <tbody>
-            {equipos.slice(0, 80).map((e) => {
+            {visibles.map((e) => {
               const v = variacionPct(e.total, e.total_anterior)
               const r = vsMediana(e.costo_hora, e.mediana_tipo, e.horas, e.n_tipo)
               const pocas = e.costo_hora != null && (e.horas ?? 0) < HORAS_MINIMAS_CPH
@@ -113,6 +132,7 @@ export function TablaEquiposCosto({ equipos, onPareto }: {
             })}
           </tbody>
         </table>
+        {pie}
         <p className="px-3 py-2 text-xs text-gray-400">
           Costo por hora = gasto de bodega entre dos lecturas de horómetro (GPS, recepción en taller, OS,
           preventivas) ÷ horas entre ellas. Pasa el mouse por las horas para ver qué lecturas se usaron.

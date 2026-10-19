@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
 import { Modal } from '@/components/ui/modal'
 import {
-  Barras, COLOR_EQUIPO, ComoSeCalcula, COLOR_OTROS, PRESETS, TablaEquiposCosto,
+  Barras, COLOR_EQUIPO, ComoSeCalcula, COLOR_OTROS, PRESETS, TablaEquiposCosto, TOP_N, useTop,
   etiquetaEquipo, fmtFecha, fmtMes, nombreTipo, paretoEquipo,
 } from '@/components/costos/comunes'
 import { PanelFaenas } from '@/components/costos/panel-faenas'
@@ -108,6 +108,8 @@ function Contenido({ data, onPareto }: {
   data: PanelCostos; onPareto: (p: PasoPareto) => void
 }) {
   const k = data.kpi
+  const familias = useTop(data.por_familia)
+  const centros = useTop(data.por_cc_no_equipo)
   // Contra qué se compara: mismos meses del año anterior si el período es un año (MIG604).
   const compara = `vs ${etiquetaRango(data.periodo.anterior_desde, data.periodo.anterior_hasta)}`
   const pctAsignado = pct(k.asignado_equipo, k.total)
@@ -325,7 +327,7 @@ function Contenido({ data, onPareto }: {
       {/* 4d. Familias y centros de costo sin equipo */}
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-base">Por familia de producto</CardTitle></CardHeader>
+          <CardHeader className="pb-2"><CardTitle className="text-base">Las {Math.min(TOP_N, data.por_familia.length)} familias con más gasto</CardTitle></CardHeader>
           <CardContent className="overflow-x-auto p-0">
             <table className="w-full text-sm">
               <thead className="bg-gray-50 text-xs text-gray-600">
@@ -337,7 +339,7 @@ function Contenido({ data, onPareto }: {
                 </tr>
               </thead>
               <tbody>
-                {data.por_familia.slice(0, 20).map((f) => (
+                {familias.visibles.map((f) => (
                   <tr key={f.familia} className="cursor-pointer border-t hover:bg-gray-50"
                       onClick={() => onPareto({ titulo: f.nombre, filtros: { familia: f.familia }, dimension: 'equipo' })}>
                     <td className="px-3 py-1.5">
@@ -350,11 +352,12 @@ function Contenido({ data, onPareto }: {
                 ))}
               </tbody>
             </table>
+            {familias.pie}
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">Centros de costo que no son un equipo</CardTitle>
+            <CardTitle className="text-base">Centros de costo que no son un equipo (top {TOP_N})</CardTitle>
           </CardHeader>
           <CardContent className="overflow-x-auto p-0">
             <table className="w-full text-sm">
@@ -366,7 +369,7 @@ function Contenido({ data, onPareto }: {
                 </tr>
               </thead>
               <tbody>
-                {data.por_cc_no_equipo.slice(0, 20).map((c) => (
+                {centros.visibles.map((c) => (
                   <tr key={c.codi_cc} className="cursor-pointer border-t hover:bg-gray-50"
                       onClick={() => onPareto({ titulo: c.descripcion ?? c.codi_cc, filtros: { codi_cc: c.codi_cc }, dimension: 'familia' })}>
                     <td className="px-3 py-1.5">
@@ -378,6 +381,7 @@ function Contenido({ data, onPareto }: {
                 ))}
               </tbody>
             </table>
+            {centros.pie}
           </CardContent>
         </Card>
       </div>
