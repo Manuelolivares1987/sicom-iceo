@@ -25,6 +25,9 @@ import {
 } from '@/lib/services/fiabilidad'
 import { todayISO } from '@/lib/utils'
 import { copiarReporteFiabilidad } from '@/lib/reporte-fiabilidad-email'
+import {
+  calcularIndicadores, exportarExcelConsolidado, exportarExcelMensual,
+} from '@/lib/fiabilidad/excel-fiabilidad'
 
 // ─── Paleta ─────────────────────────────────────────────
 // ─── Estados diarios de flota (Confiabilidad) ───────────
@@ -116,102 +119,20 @@ export function FiabilidadAnalisis({ readOnly = false }: { readOnly?: boolean } 
     catch (e) { setCopiaMsg((e as Error).message) }
   }
 
-  // Exporta TODA la info por patente a Excel (lo visible en el detalle)
-  async function exportarExcel(
-    rows: Array<ActivoFiabilidadDetalle & {
-      utilizacion?: number; reincidencias?: number; calidad_taller?: number; oee?: number
-    }>,
-  ) {
-    const ExcelJS = (await import('exceljs')).default
-    const wb = new ExcelJS.Workbook()
-    const ws = wb.addWorksheet('Equipos')
-    ws.columns = [
-      { header: 'Patente', key: 'patente', width: 12 },
-      { header: 'Equipamiento', key: 'equipamiento', width: 28 },
-      { header: 'Categoría', key: 'categoria_uso', width: 18 },
-      { header: 'Marca', key: 'marca', width: 14 },
-      { header: 'Modelo', key: 'modelo', width: 18 },
-      { header: 'Año', key: 'anio_fabricacion', width: 8 },
-      { header: 'Capacidad', key: 'capacidad', width: 16 },
-      { header: 'Potencia', key: 'potencia', width: 12 },
-      { header: 'VIN / Chasis', key: 'vin_chasis', width: 22 },
-      { header: 'N° Motor', key: 'numero_motor', width: 18 },
-      { header: 'Estado del día', key: 'estado_dia', width: 20 },
-      { header: 'Zona', key: 'zona', width: 16 },
-      // [MIG621] Ubicación = GPS; lugar físico = lo registrado a mano. Antes las
-      // dos repetían el mismo texto libre, viejo en 12 equipos.
-      { header: 'Ubicación (GPS)', key: 'ubicacion', width: 30 },
-      { header: 'Lugar físico (registrado)', key: 'lugar_fisico', width: 28 },
-      { header: '¿Coincide?', key: 'ubicacion_revisar', width: 16 },
-      { header: 'Último contrato', key: 'contrato_codigo', width: 18 },
-      { header: 'Cliente contrato', key: 'contrato_cliente', width: 26 },
-      { header: 'Cliente actual', key: 'cliente_actual', width: 24 },
-      { header: 'Días arriendo (total)', key: 'dias_arriendo_total', width: 16 },
-      { header: 'Días por contrato', key: 'contratos_dias_txt', width: 44 },
-      { header: 'Últ. arriendo cliente', key: 'ult_cliente', width: 22 },
-      { header: 'Últ. arriendo lugar', key: 'ult_lugar', width: 20 },
-      { header: 'Días observados', key: 'dias_observados', width: 14 },
-      { header: 'Días UP', key: 'dias_up', width: 9 }, { header: 'Días DOWN', key: 'dias_down', width: 10 },
-      // Desglose de días por estado (todas las letras), calculado desde la matriz.
-      ...ESTADO_ORDEN.map((s) => ({ header: `${s} — ${ESTADO_LABELS[s]}`, key: `dias_${s.toLowerCase()}`, width: 14 })),
-      { header: 'Total letras (=Días obs)', key: 'dias_letras_total', width: 18 },
-      { header: 'Cuadre (letras = días obs)', key: 'cuadre', width: 18 },
-      { header: 'N° Fallas', key: 'eventos_falla', width: 10 },
-      { header: 'MTBF (d)', key: 'mtbf_dias', width: 10 }, { header: 'MTTR (d)', key: 'mttr_dias', width: 10 },
-      { header: 'Disp. inherente %', key: 'disp_inh', width: 15 },
-      { header: 'Disp. física %', key: 'disp_fis', width: 14 },
-      { header: 'Utilización (A+L+C) %', key: 'util_pct', width: 18 },
-      { header: 'Fallas repetidas (mes)', key: 'reincidencias', width: 18 },
-      { header: 'Calidad del trabajo %', key: 'cal_taller_pct', width: 18 },
-      { header: 'OEE %', key: 'oee_pct', width: 10 },
-    ]
-    ws.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } }
-    ws.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A8A' } }
-    // Días por letra desde la matriz diaria (incluye todas las letras: A..V).
-    // UP = A,C,L,U,D,V ; DOWN = M,T,F,R,H (down operacional, incluye recepción
-    // y habilitación). Suma de letras = días observados.
-    const cuentaPorActivo = new Map<string, Record<string, number>>()
-    for (const c of matriz) {
-      const r = cuentaPorActivo.get(c.activo_id) ?? {}
-      r[c.estado_codigo] = (r[c.estado_codigo] ?? 0) + 1
-      cuentaPorActivo.set(c.activo_id, r)
-    }
-    const DOWN_LETRAS = new Set(['M', 'T', 'F', 'R', 'H'])
-    for (const e of rows) {
-      const code = estadoActualPorActivo.get(e.activo_id)
-      const cuenta = cuentaPorActivo.get(e.activo_id) ?? {}
-      const porLetra = Object.fromEntries(ESTADO_ORDEN.map((s) => [`dias_${s.toLowerCase()}`, cuenta[s] ?? 0]))
-      const upCalc = ESTADO_ORDEN.reduce((a, s) => a + (DOWN_LETRAS.has(s) ? 0 : (cuenta[s] ?? 0)), 0)
-      const downCalc = ESTADO_ORDEN.reduce((a, s) => a + (DOWN_LETRAS.has(s) ? (cuenta[s] ?? 0) : 0), 0)
-      const totalLetras = upCalc + downCalc
-      ws.addRow({
-        ...e,
-        ...porLetra,
-        dias_up: upCalc,
-        dias_down: downCalc,
-        dias_letras_total: totalLetras,
-        cuadre: totalLetras === Number(e.dias_observados) ? 'OK' : `≠ (${totalLetras}/${e.dias_observados})`,
-        estado_dia: code ? `${code} — ${ESTADO_LABELS[code] ?? code}` : '—',
-        ubicacion_revisar: e.ubicacion_coincide === false ? 'NO — revisar' : e.ubicacion_coincide ? 'Sí' : 'Sin GPS al día',
-        contratos_dias_txt: (e.contratos_dias ?? []).map((c) => `${c.codigo}: ${c.dias} d`).join('; '),
-        disp_inh: Math.round(Number(e.disponibilidad_inherente) * 100),
-        disp_fis: Math.round(Number(e.disponibilidad_fisica) * 100),
-        util_pct: e.utilizacion != null ? Math.round(e.utilizacion * 100) : '',
-        reincidencias: e.reincidencias ?? 0,
-        cal_taller_pct: e.calidad_taller != null ? Math.round(e.calidad_taller * 100) : '',
-        oee_pct: e.oee != null ? Math.round(e.oee * 100) : '',
+  // Excel mes a mes: una consulta por mes, puede tardar unos segundos.
+  const [mensualAvance, setMensualAvance] = useState<string | null>(null)
+  const [mensualError, setMensualError] = useState<string | null>(null)
+  const variosMeses = fechaInicio.slice(0, 7) !== fechaFin.slice(0, 7)
+  async function exportarMensual() {
+    if (mensualAvance !== null) return
+    setMensualError(null)
+    setMensualAvance('Preparando…')
+    try {
+      await exportarExcelMensual({
+        consolidado: detallesFiltrados, matriz, fechaInicio, fechaFin,
+        onProgreso: (h, t) => setMensualAvance(h < t ? `Mes ${h + 1} de ${t}…` : 'Armando Excel…'),
       })
-    }
-    ws.autoFilter = { from: 'A1', to: { row: 1, column: ws.columnCount } }
-    ws.views = [{ state: 'frozen', ySplit: 1 }]
-    const buf = await wb.xlsx.writeBuffer()
-    const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `fiabilidad_equipos_${fechaInicio}_a_${fechaFin}.xlsx`
-    a.click()
-    URL.revokeObjectURL(url)
+    } catch (e) { setMensualError((e as Error).message) } finally { setMensualAvance(null) }
   }
 
   const { data: porCategoria = [], isLoading: loadingCat } =
@@ -300,64 +221,9 @@ export function FiabilidadAnalisis({ readOnly = false }: { readOnly?: boolean } 
     return m
   }, [matriz, diasUnicos, idsFlota])
 
-  // Días en estado 'C' (en contrato) por activo — no viene en el detalle (OEE),
-  // se cuenta desde la matriz. Cuenta como utilización (A + L + C).
-  const diasCporActivo = useMemo(() => {
-    const m = new Map<string, number>()
-    for (const c of matriz) {
-      if (c.estado_codigo === 'C' && idsFlota.has(c.activo_id)) {
-        m.set(c.activo_id, (m.get(c.activo_id) ?? 0) + 1)
-      }
-    }
-    return m
-  }, [matriz, idsFlota])
-
-  // ── Calidad del trabajo (taller): penaliza FALLAS REPETIDAS en el mismo mes ──
-  // Una "falla" = un episodio (racha de días consecutivos) en estado M/T/F. Si en
-  // un mismo mes calendario hay 2+ episodios, los extra son "reincidencias" y
-  // bajan la nota. Calidad = fallas_primarias ÷ fallas_totales (1 si no hay fallas).
-  const tallerPorActivo = useMemo(() => {
-    const downByActivo = new Map<string, string[]>()
-    for (const c of matriz) {
-      if ((c.estado_codigo === 'M' || c.estado_codigo === 'T' || c.estado_codigo === 'F') && idsFlota.has(c.activo_id)) {
-        const arr = downByActivo.get(c.activo_id) ?? []
-        arr.push(c.fecha.slice(0, 10))
-        downByActivo.set(c.activo_id, arr)
-      }
-    }
-    const res = new Map<string, { fallas: number; reincidencias: number; calidad: number }>()
-    downByActivo.forEach((raw, id) => {
-      const fechas = Array.from(new Set(raw)).sort()
-      const porMes: Record<string, number> = {}
-      let prev: number | null = null
-      for (const f of fechas) {
-        const t = new Date(f).getTime()
-        if (prev === null || t - prev > 86400000) porMes[f.slice(0, 7)] = (porMes[f.slice(0, 7)] ?? 0) + 1 // nuevo episodio
-        prev = t
-      }
-      const fallas = Object.values(porMes).reduce((a, b) => a + b, 0)
-      const primarias = Object.keys(porMes).length // meses con al menos una falla
-      res.set(id, { fallas, reincidencias: fallas - primarias, calidad: fallas > 0 ? primarias / fallas : 1 })
-    })
-    return res
-  }, [matriz, idsFlota])
-
-  // OEE (único, lente del taller) = Disp. Técnica × Calidad del trabajo.
-  // La Utilización (A+L+C) es comercial → se muestra aparte, NO entra al OEE.
-  const detallesCalc = useMemo(() => detalles.map((d) => {
-    const diasC = diasCporActivo.get(d.activo_id) ?? 0
-    const dispFis = Number(d.disponibilidad_fisica ?? 0) // UP / Total (servidor, nueva def)
-    const util = d.dias_observados > 0 ? (d.dias_a + d.dias_l + diasC) / d.dias_observados : 0
-    const t = tallerPorActivo.get(d.activo_id)
-    const calidadTaller = t?.calidad ?? 1
-    return {
-      ...d, dias_c: diasC, utilizacion: util,
-      fallas_taller: t?.fallas ?? 0,
-      reincidencias: t?.reincidencias ?? 0,
-      calidad_taller: calidadTaller,
-      oee: dispFis * calidadTaller,
-    }
-  }), [detalles, diasCporActivo, tallerPorActivo])
+  // Utilización (A+L+C), calidad del trabajo y OEE por equipo. El cálculo vive
+  // en lib/fiabilidad/excel-fiabilidad: lo usan también los dos Excel.
+  const detallesCalc = useMemo(() => calcularIndicadores(detalles, matriz), [detalles, matriz])
 
   // Utilización bruta de la flota = (A + L + C) ÷ días totales.
   const utilBruta = useMemo(() => {
@@ -912,13 +778,24 @@ export function FiabilidadAnalisis({ readOnly = false }: { readOnly?: boolean } 
                   <option value="venta">Venta</option>
                 </select>
                 <button
-                  onClick={() => exportarExcel(detallesFiltrados)}
+                  onClick={() => exportarExcelConsolidado(detallesFiltrados, matriz, fechaInicio, fechaFin)}
                   disabled={detallesFiltrados.length === 0}
                   className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-green-600 px-3 text-sm font-semibold text-white hover:bg-green-700 disabled:opacity-50"
                   title="Exporta toda la información de cada patente a Excel"
                 >
                   ⬇ Exportar a Excel ({detallesFiltrados.length})
                 </button>
+                <button
+                  onClick={exportarMensual}
+                  disabled={detallesFiltrados.length === 0 || !variosMeses || mensualAvance !== null}
+                  className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-green-600 bg-white px-3 text-sm font-semibold text-green-700 hover:bg-green-50 disabled:opacity-50"
+                  title={variosMeses
+                    ? 'Un Excel con el período abierto mes a mes: resumen de la flota, una tabla por indicador (patentes × meses) y el detalle completo por mes'
+                    : 'Elige un rango de más de un mes (por ejemplo, desde el 1 de enero) para abrirlo mes a mes'}
+                >
+                  {mensualAvance ?? '⬇ Excel mes a mes'}
+                </button>
+                {mensualError && <span className="max-w-[260px] text-xs text-red-600">{mensualError}</span>}
               </div>
             </CardHeader>
             <CardContent className="overflow-x-auto">
