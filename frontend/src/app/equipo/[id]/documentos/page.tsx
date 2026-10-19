@@ -36,6 +36,11 @@ const ESTADO_UI: Record<string, { label: string; cls: string }> = {
 }
 const ORDEN_ESTADO: Record<string, number> = { vencido: 0, sin_fecha: 1, por_vencer: 2, vigente: 3, permanente: 4 }
 
+// La etiqueta del RPC es el nombre propio del papel (tipo_otro) o, si no tiene,
+// el código del tipo: en ese caso se muestra el nombre del catálogo.
+const nombreDoc = (d: { tipo: string; etiqueta?: string | null }) =>
+  d.etiqueta?.trim() && d.etiqueta !== d.tipo ? d.etiqueta : TIPO_DOC_LABEL[d.tipo] || d.tipo
+
 export default function DocumentosEquipoPage() {
   const params = useParams()
   const id = params.id as string
@@ -54,7 +59,7 @@ export default function DocumentosEquipoPage() {
   const f = ficha as any
   const ordenados = [...docs].sort((a, b) =>
     (ORDEN_ESTADO[a.estado] ?? 9) - (ORDEN_ESTADO[b.estado] ?? 9) ||
-    (a.etiqueta?.trim() || TIPO_DOC_LABEL[a.tipo] || a.tipo).localeCompare(b.etiqueta?.trim() || TIPO_DOC_LABEL[b.tipo] || b.tipo))
+    nombreDoc(a).localeCompare(nombreDoc(b)))
   const vencidos = docs.filter((d) => d.estado === 'vencido').length
   const porConfirmar = docs.filter((d) => d.estado === 'sin_fecha').length
 
@@ -112,7 +117,7 @@ export default function DocumentosEquipoPage() {
                   <div key={d.tipo} className="flex items-center gap-2 rounded-lg border border-gray-100 bg-gray-50/60 px-2.5 py-2">
                     <FileText className="h-4 w-4 shrink-0 text-gray-300" />
                     <div className="flex-1 min-w-0">
-                      <p className="truncate text-xs font-medium text-gray-800">{d.etiqueta?.trim() || TIPO_DOC_LABEL[d.tipo] || d.tipo}</p>
+                      <p className="truncate text-xs font-medium text-gray-800">{nombreDoc(d)}</p>
                       {d.estado !== 'permanente' && d.fecha_vencimiento && (
                         <p className={cn('text-[10px]',
                           d.estado === 'vencido' ? 'text-red-600 font-semibold'

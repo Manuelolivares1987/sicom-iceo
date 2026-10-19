@@ -54,8 +54,10 @@ const estadoUI = (e: string) => ESTADO[e as EstadoDocPortal] ?? { label: e, nive
 const humanizar = (s: string | null | undefined) =>
   s ? s.charAt(0).toUpperCase() + s.slice(1).replace(/_/g, ' ') : ''
 
+// El nombre propio del papel (p. ej. «Cert. Salfa - Frenado») manda sobre el
+// del catálogo; sin él, «otra» se mostraba como «Otro».
 const etiquetaDoc = (d: DocumentoPortal) =>
-  TIPO_DOC_LABEL[d.tipo] ?? (d.etiqueta && d.etiqueta !== d.tipo ? d.etiqueta : humanizar(d.tipo))
+  d.etiqueta && d.etiqueta !== d.tipo ? d.etiqueta : TIPO_DOC_LABEL[d.tipo] ?? humanizar(d.tipo)
 
 const num = (n: number | null | undefined) =>
   n == null ? null : Number(n).toLocaleString('es-CL', { maximumFractionDigits: 0 })
@@ -218,6 +220,9 @@ function CambiarPassword({ sesion, obligatorio, onListo, onCancelar }: {
 function resumenDocs(e: EquipoPortalResumen): { nivel: Nivel; texto: string } {
   if (e.docs_total === 0) return { nivel: 'gris', texto: 'Documentación en carga' }
   if (e.docs_vencidos > 0) return { nivel: 'rojo', texto: `${e.docs_vencidos} vencido${e.docs_vencidos > 1 ? 's' : ''}` }
+  // Un documento exigido que no está es tan pendiente como uno vencido: no
+  // se puede decir «al día» a un camión sin RT.
+  if (e.docs_pendientes > 0) return { nivel: 'rojo', texto: `${e.docs_pendientes} pendiente${e.docs_pendientes > 1 ? 's' : ''}` }
   if (e.docs_sin_fecha > 0) return { nivel: 'naranjo', texto: `${e.docs_sin_fecha} por confirmar` }
   if (e.docs_por_vencer > 0) return { nivel: 'amarillo', texto: `${e.docs_por_vencer} por vencer` }
   return { nivel: 'verde', texto: 'Al día' }
@@ -234,28 +239,33 @@ function ListaFlota({ equipos, onAbrir }: { equipos: EquipoPortalResumen[]; onAb
   }, [equipos, buscar])
 
   const vencidos = equipos.reduce((s, e) => s + e.docs_vencidos, 0)
+  const pendientes = equipos.reduce((s, e) => s + e.docs_pendientes, 0)
   const porVencer = equipos.reduce((s, e) => s + e.docs_por_vencer, 0)
+  const conProblema = equipos.filter((e) => e.docs_vencidos > 0 || e.docs_pendientes > 0).length
+  const mal = vencidos + pendientes > 0
 
   return (
     <div className="space-y-5">
       <div className={cn(
         'flex items-start gap-3 rounded-xl border px-4 py-3.5',
-        vencidos > 0 ? 'border-red-200 bg-red-50' : 'border-emerald-200 bg-emerald-50',
+        mal ? 'border-red-200 bg-red-50' : 'border-emerald-200 bg-emerald-50',
       )}>
-        {vencidos > 0
+        {mal
           ? <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-red-500" />
           : <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" />}
         <div>
-          <p className={cn('text-sm font-semibold', vencidos > 0 ? 'text-red-800' : 'text-emerald-800')}>
-            {vencidos > 0
-              ? `${vencidos} documento${vencidos > 1 ? 's' : ''} vencido${vencidos > 1 ? 's' : ''} en ${equipos.filter((e) => e.docs_vencidos > 0).length} equipo(s)`
-              : `${equipos.length} equipo${equipos.length === 1 ? '' : 's'} sin documentos vencidos`}
+          <p className={cn('text-sm font-semibold', mal ? 'text-red-800' : 'text-emerald-800')}>
+            {mal
+              ? `${conProblema} de ${equipos.length} equipos con documentación pendiente`
+              : `${equipos.length} equipo${equipos.length === 1 ? '' : 's'} con la documentación al día`}
           </p>
-          <p className={cn('mt-0.5 text-xs', vencidos > 0 ? 'text-red-700' : 'text-emerald-700')}>
-            {porVencer > 0
-              ? `${porVencer} vence${porVencer > 1 ? 'n' : ''} dentro de los próximos 45 días. `
-              : ''}
-            Información en línea desde el sistema de gestión de Pillado Empresas.
+          <p className={cn('mt-0.5 text-xs', mal ? 'text-red-700' : 'text-emerald-700')}>
+            {[
+              pendientes > 0 && `${pendientes} documento${pendientes > 1 ? 's' : ''} exigido${pendientes > 1 ? 's' : ''} sin cargar`,
+              vencidos > 0 && `${vencidos} vencido${vencidos > 1 ? 's' : ''}`,
+              porVencer > 0 && `${porVencer} vence${porVencer > 1 ? 'n' : ''} dentro de 45 días`,
+            ].filter(Boolean).join(' · ')}
+            {mal || porVencer > 0 ? '. ' : ''}Información en línea desde el sistema de gestión de Pillado Empresas.
           </p>
         </div>
       </div>
@@ -443,6 +453,9 @@ function FichaEquipo({ ficha, token, onVolver }: { ficha: FichaEquipoPortal; tok
             <h2 className="font-mono text-xl font-bold tracking-tight text-slate-900">{eq.patente}</h2>
             <p className="truncate text-xs text-slate-500">{eq.nombre ?? eq.codigo}</p>
           </div>
+          {ficha.pendientes.length > 0 || docs.some((d) => d.estado === 'vencido')
+            ? <Chip nivel="rojo">Documentación pendiente</Chip>
+            : <Chip nivel="verde">Documentación al día</Chip>}
         </header>
         <dl className="grid grid-cols-2 gap-x-6 gap-y-3 px-4 py-4 text-xs sm:grid-cols-4">
           {datos.filter(([, v]) => v).map(([k, v]) => (
@@ -456,7 +469,7 @@ function FichaEquipo({ ficha, token, onVolver }: { ficha: FichaEquipoPortal; tok
 
       <div className="flex gap-1 rounded-lg bg-slate-200/60 p-1">
         {([
-          ['documentos', `Documentación (${docs.length})`],
+          ['documentos', `Documentación (${docs.length}${ficha.pendientes.length ? ` · ${ficha.pendientes.length} pendiente${ficha.pendientes.length > 1 ? 's' : ''}` : ''})`],
           ['mantenciones', `Mantenciones (${ficha.mantenciones.length})`],
         ] as const).map(([k, t]) => (
           <button key={k} onClick={() => setTab(k)}
@@ -483,12 +496,22 @@ function FichaEquipo({ ficha, token, onVolver }: { ficha: FichaEquipoPortal; tok
             </div>
           )}
           {aviso && <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">{aviso}</p>}
-          {docs.length === 0 ? (
+          {docs.length === 0 && ficha.pendientes.length === 0 ? (
             <p className="rounded-xl border border-dashed border-slate-300 bg-white py-10 text-center text-sm text-slate-400">
               La documentación de este equipo está en proceso de carga.
             </p>
           ) : (
             <ul className="divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200 bg-white">
+              {ficha.pendientes.map((t) => (
+                <li key={`pend-${t}`} className="flex flex-wrap items-center gap-x-3 gap-y-2 bg-red-50/40 px-4 py-3">
+                  <FileText className="h-4 w-4 shrink-0 text-red-300" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-slate-800">{TIPO_DOC_LABEL[t] ?? humanizar(t)}</p>
+                    <p className="text-[11px] text-slate-500">Documento exigido por el contrato, aún no cargado.</p>
+                  </div>
+                  <Chip nivel="rojo">Pendiente</Chip>
+                </li>
+              ))}
               {docs.map((d, i) => <FilaDocumento key={`${d.tipo}-${i}`} d={d} patente={eq.patente} onDescarga={registrar} />)}
             </ul>
           )}

@@ -326,6 +326,7 @@ export const TIPO_DOC_LABEL: Record<string, string> = {
   ficha_tecnica: 'Ficha Técnica',
   factura_compra: 'Factura de Compra',
   manual: 'Manual',
+  programa_mantenimiento: 'Programa de Mantenimiento', // MIG612
   otra: 'Otro',
 }
 

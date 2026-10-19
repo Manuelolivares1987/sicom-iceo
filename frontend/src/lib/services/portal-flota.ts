@@ -32,6 +32,7 @@ export type EquipoPortalResumen = {
   docs_vencidos: number
   docs_por_vencer: number
   docs_sin_fecha: number
+  docs_pendientes: number
   ultima_mantencion: string | null
 }
 
@@ -82,6 +83,8 @@ export type FichaEquipoPortal = {
     horometro: number | null
   }
   documentos: DocumentoPortal[]
+  /** Tipos que el contrato exige y no están cargados (MIG612). */
+  pendientes: string[]
   mantenciones: MantencionPortal[]
 }
 
