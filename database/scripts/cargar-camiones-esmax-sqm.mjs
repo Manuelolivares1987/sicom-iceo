@@ -175,7 +175,7 @@ async function main() {
                   $6, '440HP', $7, $8, $9, $1, 'Salinas y Fabres S.A. (SALFA)', true, CURRENT_DATE, $10)
           RETURNING id`,
           [c.codigo, `Aljibe Comb. 20kL ${c.patente}`, c.patente, ctx.modelo, ctx.contrato,
-           c.tc8 ? '20.000 L 6x4' : '20.000 L 6x4 (sin TC8 en carpeta: confirmar)',
+           '20.000 L 6x4', // sin TC8 la duda va a notas (MIG615), no al cliente
            c.vin, c.motor, c.anio,
            'Renault C440 nuevo (SALFA, oct-2026). Propietario según padrón/SOAP: Banco Santander Chile (leasing). ' +
            'Alta MIG609b desde carpeta ESMAX_SQM 2026-10-18. Faena y operación por asignar.']))
