@@ -24,6 +24,11 @@ export const dynamic = 'force-dynamic'
 // que Outlook no lo mande a no deseado (24-09, pedido de Manuel).
 //
 // Reemplaza al aviso semanal de revisión técnica (MIG504, pausado).
+//
+// [MIG613] Primera sección: lo que un PORTAL DE CLIENTE exige y no está cargado
+// (ESMAX: RT, SOAP, permiso, programa de mantenimiento). No tiene fecha que
+// vencer, así que la lista de vencimientos nunca lo mostraba. Un pendiente
+// nuevo dispara el correo; después va en el recordatorio de los lunes.
 // Lo invoca el cron 'documentos-flota-diario' con x-cron-secret; sin service_role.
 // Destinatarios: DOCS_FLOTA_EMAIL_TO (si no está, RT_EMAIL_TO).
 // ?prueba=1 → solo el equipo de laboratorio, solo a Manuel, sin marcar nada.
@@ -49,6 +54,18 @@ type Doc = {
   estado: 'vencido' | 'por_vencer'
   bloqueante: boolean
   tramo: string
+  nuevo: boolean
+}
+
+type Pendiente = {
+  cuenta_id: string
+  empresa: string
+  activo_id: string
+  patente: string | null
+  codigo: string | null
+  zona: string
+  faena: string | null
+  tipo: string
   nuevo: boolean
 }
 
@@ -103,9 +120,20 @@ export async function POST(req: Request) {
 
   const docs = (data ?? []) as Doc[]
   const nuevos = docs.filter((d) => d.nuevo)
+
+  // El laboratorio no está en ningún portal: en ?prueba=1 no hay pendientes.
+  let pendientes: Pendiente[] = []
+  if (!esPrueba) {
+    const { data: pd, error: ep } = await sb.rpc('fn_portal_flota_pendientes_cron', { p_secreto: secret })
+    if (ep) return NextResponse.json({ error: ep.message }, { status: 500 })
+    pendientes = (pd ?? []) as Pendiente[]
+  }
+  const pendNuevos = pendientes.filter((p) => p.nuevo)
+
   const lunes = esLunesEnChile()
-  if (docs.length === 0 || (nuevos.length === 0 && !lunes && !forzar)) {
-    return NextResponse.json({ ok: true, enviado: false, papeles: docs.length, nuevos: 0 })
+  const hayAlgo = docs.length + pendientes.length > 0
+  if (!hayAlgo || (nuevos.length + pendNuevos.length === 0 && !lunes && !forzar)) {
+    return NextResponse.json({ ok: true, enviado: false, papeles: docs.length, pendientes: pendientes.length, nuevos: 0 })
   }
 
   // Zona → equipo → papeles. La función ya viene ordenada (arrendados primero,
@@ -151,6 +179,27 @@ export async function POST(req: Request) {
     }
   })
 
+  // Portal de cliente → equipo → documentos que faltan. Va primero: es lo que
+  // el cliente ya está viendo en rojo.
+  const porPortal = new Map<string, Map<string, Pendiente[]>>()
+  for (const p of pendientes) {
+    const m = porPortal.get(p.empresa) ?? new Map<string, Pendiente[]>()
+    m.set(p.activo_id, [...(m.get(p.activo_id) ?? []), p])
+    porPortal.set(p.empresa, m)
+  }
+  const seccionesPortal: SeccionSimple[] = Array.from(porPortal.entries()).map(([empresa, equipos]) => {
+    const lista = Array.from(equipos.values())
+    const n = lista.flat().length
+    return {
+      titulo: `Portal ${empresa} — ${n} documento${n === 1 ? '' : 's'} exigido${n === 1 ? '' : 's'} sin cargar en ${lista.length} equipo${lista.length === 1 ? '' : 's'}`,
+      items: lista.map((xs) => ({
+        titulo: [xs[0].patente, xs[0].codigo].filter(Boolean).join(' · ') || 'Sin patente',
+        sub: [xs[0].faena, xs[0].zona].filter(Boolean).join(' · '),
+        lineas: xs.map((p) => ({ texto: `${p.nuevo ? '[NUEVO] ' : ''}${nombreTipo(p.tipo)}: PENDIENTE (el cliente lo ve en rojo)`, alerta: true })),
+      })),
+    }
+  })
+
   const vencidos = docs.filter((d) => d.estado === 'vencido').length
   const porVencer = docs.length - vencidos
   const hoy = new Date().toLocaleDateString('es-CL', { timeZone: 'America/Santiago', day: '2-digit', month: 'long' })
@@ -159,13 +208,16 @@ export async function POST(req: Request) {
   const { html, text } = correoSimple({
     titulo: `Papeles de flota vencidos o por vencer — ${hoy}`,
     intro: [
-      `${vencidos} vencidos y ${porVencer} que vencen en los próximos 30 días (o 50 horas de horómetro).`
-      + (nuevos.length > 0
-        ? ` ${nuevos.length} son nuevos desde el último aviso: van marcados [NUEVO].`
+      (pendientes.length > 0
+        ? `${pendientes.length} documento${pendientes.length === 1 ? '' : 's'} exigido${pendientes.length === 1 ? '' : 's'} por un portal de cliente sin cargar. `
+        : '')
+      + `${vencidos} vencidos y ${porVencer} que vencen en los próximos 30 días (o 50 horas de horómetro).`
+      + (nuevos.length + pendNuevos.length > 0
+        ? ` ${nuevos.length + pendNuevos.length} son nuevos desde el último aviso: van marcados [NUEVO].`
         : ' Sin novedades desde el último aviso: este es el recordatorio de los lunes.'),
       'Por zona, y en cada zona primero los equipos arrendados o en leasing.',
     ],
-    secciones,
+    secciones: [...seccionesPortal, ...secciones],
     enlace: { url: `${base}/dashboard/flota/control-documental/`, texto: 'Abrir Control documental de flota en SICOM' },
     pie: 'Aviso automático de SICOM. Sale cuando hay novedades y los lunes como recordatorio. '
        + 'Al cargar el papel renovado en SICOM, sale solo de esta lista.',
@@ -173,7 +225,8 @@ export async function POST(req: Request) {
 
   const asunto = (esPrueba ? '[PRUEBA] ' : previa ? '[VISTA PREVIA] ' : '')
     + `Papeles de flota: ${vencidos} vencidos, ${porVencer} por vencer`
-    + (nuevos.length > 0 ? ` (${nuevos.length} nuevos)` : '')
+    + (pendientes.length > 0 ? `, ${pendientes.length} pendientes de portal` : '')
+    + (nuevos.length + pendNuevos.length > 0 ? ` (${nuevos.length + pendNuevos.length} nuevos)` : '')
 
   const r = await sendMail({ to, subject: asunto, html, text })
   if (!r.ok) return NextResponse.json({ error: r.error ?? 'No se pudo enviar' }, { status: 500 })
@@ -182,9 +235,15 @@ export async function POST(req: Request) {
     const items = docs.map((d) => ({ certificacion_id: d.certificacion_id, tramo: d.tramo }))
     const { error: eMarca } = await sb.rpc('fn_docs_flota_marcar_cron', { p_secreto: secret, p_items: items })
     if (eMarca) return NextResponse.json({ ok: true, enviado: true, marcado: false, error: eMarca.message })
+    const { error: eMp } = await sb.rpc('fn_portal_flota_pendientes_marcar_cron', {
+      p_secreto: secret,
+      p_items: pendientes.map((p) => ({ cuenta_id: p.cuenta_id, activo_id: p.activo_id, tipo: p.tipo })),
+    })
+    if (eMp) return NextResponse.json({ ok: true, enviado: true, marcado: false, error: eMp.message })
   }
   return NextResponse.json({
-    ok: true, enviado: true, papeles: docs.length, nuevos: nuevos.length,
+    ok: true, enviado: true, papeles: docs.length, nuevos: nuevos.length + pendNuevos.length,
+    pendientes_portal: pendientes.length,
     zonas: nombresZona, vencidos, por_vencer: porVencer,
   })
 }
