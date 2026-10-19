@@ -136,10 +136,13 @@ export function FiabilidadAnalisis({ readOnly = false }: { readOnly?: boolean } 
       { header: 'Potencia', key: 'potencia', width: 12 },
       { header: 'VIN / Chasis', key: 'vin_chasis', width: 22 },
       { header: 'N° Motor', key: 'numero_motor', width: 18 },
-      { header: 'Estado (GPS)', key: 'estado_dia', width: 20 },
+      { header: 'Estado del día', key: 'estado_dia', width: 20 },
       { header: 'Zona', key: 'zona', width: 16 },
-      { header: 'Ubicación', key: 'ubicacion', width: 18 },
-      { header: 'Lugar físico', key: 'lugar_fisico', width: 26 },
+      // [MIG621] Ubicación = GPS; lugar físico = lo registrado a mano. Antes las
+      // dos repetían el mismo texto libre, viejo en 12 equipos.
+      { header: 'Ubicación (GPS)', key: 'ubicacion', width: 30 },
+      { header: 'Lugar físico (registrado)', key: 'lugar_fisico', width: 28 },
+      { header: '¿Coincide?', key: 'ubicacion_revisar', width: 16 },
       { header: 'Último contrato', key: 'contrato_codigo', width: 18 },
       { header: 'Cliente contrato', key: 'contrato_cliente', width: 26 },
       { header: 'Cliente actual', key: 'cliente_actual', width: 24 },
@@ -189,6 +192,7 @@ export function FiabilidadAnalisis({ readOnly = false }: { readOnly?: boolean } 
         dias_letras_total: totalLetras,
         cuadre: totalLetras === Number(e.dias_observados) ? 'OK' : `≠ (${totalLetras}/${e.dias_observados})`,
         estado_dia: code ? `${code} — ${ESTADO_LABELS[code] ?? code}` : '—',
+        ubicacion_revisar: e.ubicacion_coincide === false ? 'NO — revisar' : e.ubicacion_coincide ? 'Sí' : 'Sin GPS al día',
         contratos_dias_txt: (e.contratos_dias ?? []).map((c) => `${c.codigo}: ${c.dias} d`).join('; '),
         disp_inh: Math.round(Number(e.disponibilidad_inherente) * 100),
         disp_fis: Math.round(Number(e.disponibilidad_fisica) * 100),
@@ -1083,7 +1087,11 @@ export function FiabilidadAnalisis({ readOnly = false }: { readOnly?: boolean } 
                 <div className="rounded-lg border border-blue-100 bg-blue-50/50 p-2.5 text-xs">
                   <div className="text-[10px] uppercase tracking-wide text-gray-400">📍 Dónde está</div>
                   <div className="font-semibold text-gray-800">
-                    {equipoHistoria.det.lugar_fisico ?? equipoHistoria.det.ubicacion ?? 'Sin registrar'}
+                    {equipoHistoria.det.ubicacion ?? 'Sin GPS'}
+                  </div>
+                  <div className="text-[11px] text-gray-500">
+                    Registrado: {equipoHistoria.det.lugar_fisico ?? '—'}
+                    {equipoHistoria.det.ubicacion_coincide === false && <b className="ml-1 text-amber-700">· no coincide</b>}
                   </div>
                 </div>
               </div>
