@@ -101,9 +101,16 @@ function papeles(pat, f) {
     const base = { numero: 'A1308000000148410', entidad: 'Systech Chile SpA (planta AB-1308)', emision: '2026-10-14', vence: '2027-04-14' }
     return [{ tipo: 'revision_tecnica', ...base }, { tipo: 'analisis_gases', ...base }]
   }
-  if (f.startsWith('3104 PRT+GASES')) { // escaneo ilegible: falta la fecha, no se inventa
-    const base = { entidad: 'Planta de revisión técnica', emision: '2026-10-16', vence: 'FALTA',
-                   nota: 'Escaneo ilegible (incluye PRT, gases, cert. frenado y medidas): confirmar vencimiento con el papel. Emisión = fecha del permiso.' }
+  // RT + gases de UVT (planta A-1303), leídos como imagen. OJO: pdf.js los
+  // renderiza casi en blanco; con pdfium (pypdfium2) se leen perfecto. El
+  // 2026-10-18 se cargó WBGD-30 como «falta la fecha» por ese error del lector.
+  const UVT = {
+    '3104 PRT+GASES+CERT FRENADO+ CERT MEDIDAS.pdf':        { numero: 'A1303000000588254', emision: '2026-10-05', vence: '2027-04-05' },
+    '3276 PRT + GASES + FRENADO + DIMENSIONES.pdf':         { numero: 'A1303000000583388', emision: '2026-09-04', vence: '2027-03-04' },
+    '3096 PRT + GASES + CERT MEDIDAS + CERT FRENADO.pdf':   { numero: 'A1303000000586045', emision: '2026-09-22', vence: '2027-03-22' },
+  }
+  if (UVT[f]) {
+    const base = { ...UVT[f], entidad: 'Revisiones Técnicas UVT S.A. (planta A-1303)' }
     return [{ tipo: 'revision_tecnica', ...base }, { tipo: 'analisis_gases', ...base }]
   }
   throw new Error(`Archivo sin regla: ${pat}/${f}`)
