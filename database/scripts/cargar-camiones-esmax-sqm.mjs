@@ -37,9 +37,9 @@ const CAMIONES = [
   { patente: 'WBFZ-22', codigo: 'CC-20-04', vin: 'VF630N36XTD003276', motor: '2602453', anio: 2026, tc8: true },
   { patente: 'WBGD-20', codigo: 'CC-20-05', vin: 'VF630N368TD003096', motor: '2566376', anio: 2026, tc8: true },
   { patente: 'WBGD-30', codigo: 'CC-20-06', vin: 'VF630N363TD003104', motor: '2567508', anio: 2026, tc8: true },
-  { patente: 'WCWR-25', codigo: 'CC-20-07', vin: 'VF630N36XTD003214', motor: '2584779', anio: 2027, tc8: false },
-  { patente: 'WCWR-33', codigo: 'CC-20-08', vin: 'VF630N363TD003278', motor: '2602909', anio: 2027, tc8: false },
-  { patente: 'WCWR-35', codigo: 'CC-20-09', vin: 'VF630N367TD003199', motor: '2582675', anio: 2027, tc8: false },
+  { patente: 'WCWR-25', codigo: 'CC-20-08', vin: 'VF630N36XTD003214', motor: '2584779', anio: 2027, tc8: false },
+  { patente: 'WCWR-33', codigo: 'CC-20-09', vin: 'VF630N363TD003278', motor: '2602909', anio: 2027, tc8: false },
+  { patente: 'WCWR-35', codigo: 'CC-20-07', vin: 'VF630N367TD003199', motor: '2582675', anio: 2027, tc8: false },
 ]
 
 // Datos leídos de SOAP y permisos (texto del PDF).
