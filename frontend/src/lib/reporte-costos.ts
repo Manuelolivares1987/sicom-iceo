@@ -78,6 +78,10 @@ export async function getTokenReporteCostos(): Promise<string | null> {
 export const linkReporteCostos = (origin: string, mes: string, token?: string | null) =>
   `${origin}/reporte-costos/?mes=${mes.slice(0, 7)}${token ? `&t=${token}` : ''}`
 
+/** El panel completo de SICOM (gráficos + Pareto), abierto con el token del link (MIG620). */
+export const linkPanelCostos = (origin: string, token?: string | null) =>
+  `${origin}/reporte-costos/panel/${token ? `?t=${token}` : ''}`
+
 const esc = (s: unknown) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c] as string))
 
 /** Variación contra el mes anterior: gastar más es lo que se mira → rojo. */
@@ -146,7 +150,7 @@ export function buildCostosEmailHtml(r: ReporteCostos, link: string): string {
     chips,
     cuerpo,
     ctaUrl: link,
-    ctaTexto: 'Ver informe interactivo',
+    ctaTexto: 'Abrir panel de costos (gráficos y Pareto)',
     pie: 'Costo/h = gasto entre dos lecturas de horómetro ÷ horas entre ellas, últimos 12 meses. '
       + '«Sin medición» = el equipo no tiene dos lecturas de horómetro confiables en ese período. SICOM · Pillado Empresas.',
   })
@@ -154,7 +158,9 @@ export function buildCostosEmailHtml(r: ReporteCostos, link: string): string {
 
 /** Arma el correo y lo deja en el portapapeles con formato, para pegar en Outlook. */
 export async function copiarReporteCostos(r: ReporteCostos, token: string | null): Promise<string> {
-  const link = linkReporteCostos(window.location.origin, r.mes, token)
+  // El botón del correo abre el panel completo de SICOM (Manuel: «que pueda ir al
+  // gráfico que aparece en SICOM y ver los paretos y todo»).
+  const link = linkPanelCostos(window.location.origin, token)
   const html = buildCostosEmailHtml(r, link)
   try {
     await navigator.clipboard.write([new ClipboardItem({

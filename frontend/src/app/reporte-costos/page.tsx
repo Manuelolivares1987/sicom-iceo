@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase'
 import { fmtClp, fmtMM, fmtPct, variacionPct } from '@/lib/costos-operacion'
 import { nombreTipo } from '@/components/costos/comunes'
 import {
-  NOMBRE_AREA_CC, copiarReporteCostos, getReporteCostos, getTokenReporteCostos, mesCerradoIso, mesLargo,
+  NOMBRE_AREA_CC, copiarReporteCostos, linkPanelCostos, getReporteCostos, getTokenReporteCostos, mesCerradoIso, mesLargo,
   type ReporteCostos,
 } from '@/lib/reporte-costos'
 
@@ -156,6 +156,10 @@ export default function ReporteCostosPage() {
               <span className="min-w-[7rem] text-center text-sm font-semibold capitalize">{mesLargo(mes)}</span>
               <button onClick={() => cambiarMes(sumarMes(mes, 1))} disabled={mes >= mesMax}
                       className="h-9 rounded-lg bg-white/15 px-3 text-sm font-semibold hover:bg-white/25 disabled:opacity-40" aria-label="Mes siguiente">▶</button>
+              <a href={linkPanelCostos('', tokenLink)}
+                 className="ml-2 inline-flex h-9 items-center rounded-lg bg-white/15 px-3 text-sm font-semibold hover:bg-white/25">
+                Panel completo →
+              </a>
               <button onClick={copiar} disabled={!data}
                       className="ml-2 h-9 rounded-lg bg-white px-4 text-sm font-semibold text-[#1e5929] hover:bg-[#dbf0de] disabled:opacity-50"
                       title="Copia el informe con formato para pegarlo en Outlook">
