@@ -9,7 +9,7 @@ import Link from 'next/link'
 import { useQuery } from '@tanstack/react-query'
 import {
   ArrowLeft, ChevronLeft, ChevronRight, FileText, Printer, CheckCircle2, Clock,
-  FileSpreadsheet, X, RefreshCw, Send, MessageSquarePlus, Pencil,
+  FileSpreadsheet, X, RefreshCw, Send, MessageSquarePlus, Pencil, Download, FilePlus2,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -23,6 +23,7 @@ import {
 } from '@/lib/services/enex'
 import { generarYGuardarInformeEnex } from '@/components/enex/pdf-informe-enex'
 import { RequerimientosModal } from '@/components/enex/requerimientos-modal'
+import { descargarInformesZip } from '@/lib/enex/descargar-informes-zip'
 
 const hoy = () => { const d = new Date(); return { anio: d.getFullYear(), mes: d.getMonth() + 1 } }
 
@@ -48,6 +49,9 @@ export default function EnexInformesPage() {
     { instalacion: string; tecnico: string; mandante: string } | null>(null)
   // [MIG287] Comentarios y requerimientos del servicio abierto en el modal.
   const [reqDe, setReqDe] = useState<EnexPanelRow | null>(null)
+  // Descarga masiva del mes y generación en lote de los que no tienen PDF.
+  const [zipAvance, setZipAvance] = useState<string | null>(null)
+  const [loteAvance, setLoteAvance] = useState<string | null>(null)
 
   const { data: faenas = [] } = useQuery({ queryKey: ['enex-faenas'], queryFn: getFaenas, staleTime: 5 * 60_000 })
   const { data: informes = [], isLoading, refetch } = useQuery({
@@ -84,6 +88,47 @@ export default function EnexInformesPage() {
 
   const conPdf = filtrados.filter((r) => r.informe_pdf_url).length
   const conReq = filtrados.filter((r) => (reqCount[r.ejecucion_id ?? ''] ?? 0) > 0).length
+
+  /** Todos los PDF de la lista filtrada en un ZIP (carpeta por faena + índice). */
+  async function descargarZip() {
+    if (zipAvance !== null) return
+    const faena = faenaSel ? faenas.find((f) => f.id === faenaSel)?.nombre : ''
+    const nombre = ['Informes ENEX', `${anio}-${String(mes).padStart(2, '0')}`, faena,
+      tipoSel === 'calibracion' ? 'Calibración' : tipoSel === 'mantencion' ? 'Mantención' : '',
+      dia ? fmtFecha(dia) : ''].filter(Boolean).join(' ')
+    setZipAvance('Preparando…')
+    try {
+      const res = await descargarInformesZip(filtrados, nombre, (h, t) => setZipAvance(`${h}/${t} PDF`))
+      const extra = [
+        res.sinPdf ? `${res.sinPdf} sin PDF` : '',
+        res.fallidos.length ? `${res.fallidos.length} no se pudieron bajar` : '',
+      ].filter(Boolean).join(' · ')
+      if (res.fallidos.length) toast.error(`ZIP con ${res.incluidos} informes · ${extra} (ver Índice.csv)`)
+      else toast.success(`ZIP con ${res.incluidos} informes${extra ? ` · ${extra} (ver Índice.csv)` : ''}`)
+    } catch (e) { toast.error((e as Error).message) } finally { setZipAvance(null) }
+  }
+
+  /**
+   * Genera uno tras otro los informes que aún no tienen PDF, para que el ZIP
+   * salga completo. De a uno: cada informe comprime decenas de fotos y en
+   * paralelo el navegador se queda sin memoria.
+   */
+  async function generarFaltantes() {
+    const faltan = filtrados.filter((r) => r.ejecucion_id && !r.informe_pdf_url)
+    if (!faltan.length || loteAvance !== null) return
+    let ok = 0
+    const errores: string[] = []
+    for (let i = 0; i < faltan.length; i++) {
+      const r = faltan[i]
+      setLoteAvance(`${i + 1}/${faltan.length}`)
+      try { await generarYGuardarInformeEnex(r.ejecucion_id!); ok++ }
+      catch { errores.push(r.instalacion) }
+    }
+    setLoteAvance(null)
+    refetch()
+    if (errores.length) toast.error(`${ok} generados · fallaron ${errores.length}: ${errores.slice(0, 3).join(', ')}${errores.length > 3 ? '…' : ''}`)
+    else toast.success(`${ok} informes generados`)
+  }
 
   async function generar(r: EnexPanelRow) {
     if (!r.ejecucion_id) return
@@ -190,6 +235,22 @@ export default function EnexInformesPage() {
           <div className="text-xs text-gray-500 pb-2">
             {filtrados.length} servicio{filtrados.length !== 1 ? 's' : ''} · {conPdf} con PDF
             {conReq > 0 && <> · <span className="font-semibold text-amber-700">{conReq} con requerimientos</span></>}
+          </div>
+          <div className="flex items-center gap-2 pb-0.5">
+            {filtrados.length - conPdf > 0 && (
+              <Button size="sm" variant="outline" disabled={loteAvance !== null || zipAvance !== null}
+                      onClick={generarFaltantes}
+                      title="Genera uno por uno los informes que aún no tienen PDF (puede tardar varios minutos: no cierres la pestaña)">
+                {loteAvance !== null ? <Spinner className="h-3.5 w-3.5 mr-1" /> : <FilePlus2 className="h-3.5 w-3.5 mr-1" />}
+                {loteAvance !== null ? `Generando ${loteAvance}…` : `Generar faltantes (${filtrados.length - conPdf})`}
+              </Button>
+            )}
+            <Button size="sm" variant="primary" disabled={conPdf === 0 || zipAvance !== null || loteAvance !== null}
+                    onClick={descargarZip}
+                    title="Baja todos los PDF de la lista (con los filtros aplicados) en un ZIP, una carpeta por faena y un índice en Excel">
+              {zipAvance !== null ? <Spinner className="h-3.5 w-3.5 mr-1" /> : <Download className="h-3.5 w-3.5 mr-1" />}
+              {zipAvance !== null ? zipAvance : `Descargar ${conPdf} PDF (ZIP)`}
+            </Button>
           </div>
         </CardContent>
       </Card>
