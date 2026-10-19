@@ -72,9 +72,11 @@ function papeles(pat, f) {
   if (/ADAS/.test(f)) return [sinV('otra', { tipo_otro: 'Asistente de conducción ADAS' })]
   if (/^Certificado Estanque INTECIL (\d+)/.test(f)) {
     const n = f.match(/INTECIL (\d+)/)[1]
+    // [MIG616] Vence con la «Fecha Inspección Periódica» del papel: emisión + 5 años.
     const emision = { '757408': '2026-08-24', '761011': '2026-09-22', '759405': '2026-09-02' }[n]
-    return [{ tipo: 'tc8_sec', numero: n, entidad: 'INTECIL SpA', emision, vence: null,
-              nota: 'Certificado de producción del estanque, 20.000 L (DOT MC-306). No declara vencimiento.' }]
+    const vence = `${Number(emision.slice(0, 4)) + 5}${emision.slice(4)}`
+    return [{ tipo: 'tc8_sec', numero: n, entidad: 'INTECIL SpA', emision, vence,
+              nota: 'Certificado de producción del estanque, 20.000 L (DOT MC-306). Inspección periódica a 5 años.' }]
   }
   if (/HDISOAP|^soap/i.test(f)) {
     const s = SOAP[pat]
