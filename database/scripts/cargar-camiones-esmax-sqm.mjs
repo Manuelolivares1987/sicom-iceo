@@ -61,6 +61,13 @@ const SALFA_EMISION = '2026-10-08' // «Santiago de Chile, 08 de octubre de 2026
 // Un archivo → uno o más papeles. `vence: null` = el papel no declara vencimiento.
 function papeles(pat, f) {
   const sinV = (tipo, extra = {}) => ({ tipo, emision: SALFA_EMISION, vence: null, entidad: 'Salinas y Fabres S.A. (SALFA)', ...extra })
+  // Pauta SALFA del modelo C440 P6X4 (500 h): una sola en la raíz, vale para los 6.
+  // No trae fecha ni vencimiento: es el programa del fabricante, se reemplaza
+  // cuando SALFA mande otro. Emisión = día que llegó a la carpeta.
+  if (/^Pauta\(500hrs\)C440/.test(f)) {
+    return [{ tipo: 'programa_mantenimiento', entidad: 'Salinas y Fabres S.A. (SALFA)', emision: '2026-10-19', vence: null,
+              nota: 'Pauta SALFA Renault C440 P6X4 Faena E6: servicio cada 500 h hasta 8.000 h (repuestos, lubricantes y HH). Común a los 6 C440.' }]
+  }
   if (/^Certificado BBM/.test(f)) return [sinV('otra', { tipo_otro: 'Certificado conexiones auxiliares (BBM)' })]
   if (/Apriete y Torque/.test(f)) return [sinV('torque_ruedas')]
   if (/Cabina, Parabrisas/.test(f)) return [sinV('cert_cabina')]
@@ -144,12 +151,15 @@ async function main() {
              WHERE ma.nombre = 'Renault' AND mo.nombre = 'C440') AS modelo`)
   if (!ctx.contrato || !ctx.modelo) throw new Error('Falta contrato ESMAX o modelo Renault C440')
 
+  // Papeles del modelo, en la raíz de la carpeta: se cargan en cada camión.
+  const COMUNES = readdirSync(CARPETA).filter((f) => /^Pauta.*\.pdf$/i.test(f))
   // Plan completo antes de tocar nada.
   const plan = CAMIONES.map((c) => ({
     ...c,
     archivos: readdirSync(join(CARPETA, c.patente))
       .sort((a, b) => a.localeCompare(b)) // T2025 antes que T2026: la versión vigente es la última cargada
-      .map((f) => ({ f, papeles: papeles(c.patente, f) })),
+      .map((f) => ({ f, dir: c.patente, papeles: papeles(c.patente, f) }))
+      .concat(COMUNES.map((f) => ({ f, dir: '.', papeles: papeles(c.patente, f) }))),
   }))
   for (const c of plan) {
     console.log(`\n${c.codigo}  ${c.patente}  ${c.vin}  motor ${c.motor}  ${c.anio}`)
@@ -184,9 +194,9 @@ async function main() {
            'Alta MIG609b desde carpeta ESMAX_SQM 2026-10-18. Faena y operación por asignar.']))
         camiones++
       }
-      for (const { f, papeles: ps } of c.archivos) {
+      for (const { f, dir, papeles: ps } of c.archivos) {
         const ruta = `certificaciones/${a.id}/${slug(f)}`
-        const r = await subir(join(CARPETA, c.patente, f), ruta)
+        const r = await subir(join(CARPETA, dir, f), ruta)
         if (r === 'subido') subidos++
         const url = `${SUPA_URL}/storage/v1/object/public/documentos/${ruta}`
         for (const p of ps) {
