@@ -215,6 +215,7 @@ export const TIPO_DOC: Record<string, string> = {
   optico_sobrellenado: 'Óptico de sobrellenado', calibracion: 'Calibración', tc8_sec: 'TC8 SEC',
   inscripcion_sec: 'Inscripción SEC', inscripcion_rnvm: 'Inscripción RNVM', padron: 'Padrón',
   ficha_tecnica: 'Ficha técnica', factura_compra: 'Factura de compra', homologacion: 'Homologación',
+  programa_mantenimiento: 'Programa de mantenimiento',
   gps: 'GPS', cert_gancho: 'Certificado de gancho', sec: 'SEC', seremi: 'SEREMI',
   otra: 'Otro (especificar cuál)',
 }
