@@ -3,7 +3,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { Modal } from '@/components/ui/modal'
 import { Spinner } from '@/components/ui/spinner'
-import { supabase } from '@/lib/supabase'
+import { rpcCostos } from '@/lib/services/costos-operacion'
 import { fmtClp, fmtMM, fmtNum } from '@/lib/costos-operacion'
 import { fmtFecha, nombreTipo } from '@/components/costos/comunes'
 import type { PasoPareto } from '@/components/costos/pareto-modal'
@@ -32,7 +32,7 @@ type EquipoFaena = {
 }
 
 async function getEquiposFaena(desde: string, hasta: string, faena: string, subfaena?: string) {
-  const { data, error } = await supabase.rpc('rpc_costos_faena_equipos', {
+  const { data, error } = await rpcCostos('rpc_costos_faena_equipos', {
     p_desde: desde, p_hasta: hasta, p_faena: faena, p_subfaena: subfaena ?? null,
   })
   if (error) throw new Error(error.message)

@@ -137,8 +137,20 @@ function traducir(error: { code?: string; message: string }): never {
   throw new Error(error.message)
 }
 
+// [MIG620] El panel abierto desde el correo (/reporte-costos/panel?t=…) no tiene
+// sesión: manda el token del link en `x-reporte-token` y la base lo acepta en
+// fn_costos_operacion_puede_ver. Con sesión, el token queda en null.
+let tokenReporte: string | null = null
+export function usarTokenReporteCostos(token: string | null) { tokenReporte = token }
+
+/** rpc de costos: agrega el token del link cuando la página se abrió sin sesión. */
+export function rpcCostos(fn: string, args: Record<string, unknown>) {
+  const q = supabase.rpc(fn, args)
+  return tokenReporte ? q.setHeader('x-reporte-token', tokenReporte) : q
+}
+
 export async function getPanelCostos(desde: string, hasta: string, areas: AreaCosto[] | null) {
-  const { data, error } = await supabase.rpc('rpc_costos_operacion_panel', {
+  const { data, error } = await rpcCostos('rpc_costos_operacion_panel', {
     p_desde: desde, p_hasta: hasta, p_areas: areas,
   })
   if (error) traducir(error)
@@ -148,7 +160,7 @@ export async function getPanelCostos(desde: string, hasta: string, areas: AreaCo
 export async function getDetalleCostos(v: {
   desde: string; hasta: string; codiCc?: string | null; familia?: string | null
 }) {
-  const { data, error } = await supabase.rpc('rpc_costos_operacion_detalle', {
+  const { data, error } = await rpcCostos('rpc_costos_operacion_detalle', {
     p_desde: v.desde, p_hasta: v.hasta,
     p_codi_cc: v.codiCc ?? null, p_familia: v.familia ?? null, p_limite: 500,
   })
@@ -188,7 +200,7 @@ export type CostosPorFaena = {
 }
 
 export async function getCostosPorFaena(desde: string, hasta: string) {
-  const { data, error } = await supabase.rpc('rpc_costos_por_faena', { p_desde: desde, p_hasta: hasta })
+  const { data, error } = await rpcCostos('rpc_costos_por_faena', { p_desde: desde, p_hasta: hasta })
   if (error) traducir(error)
   return data as CostosPorFaena
 }
@@ -253,7 +265,7 @@ export type LineaPareto = {
 export async function getPareto(v: {
   desde: string; hasta: string; filtros: FiltrosPareto; dimension: DimensionPareto; conAdmin?: boolean
 }) {
-  const { data, error } = await supabase.rpc('rpc_costos_pareto', {
+  const { data, error } = await rpcCostos('rpc_costos_pareto', {
     p_desde: v.desde, p_hasta: v.hasta, p_filtros: v.filtros,
     p_dimension: v.dimension, p_con_admin: v.conAdmin ?? false,
   })
