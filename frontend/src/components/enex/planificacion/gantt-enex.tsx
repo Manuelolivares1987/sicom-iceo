@@ -161,10 +161,12 @@ export function GanttEnex({ rows, faenas, instalaciones, ventana, hoy, puedeEdit
               ))}
             </tr>
             <tr>
-              {dias.map((d) => <th key={d} className={`border-r text-center text-[10px] font-semibold ${claseDia(d, hoy)}`} style={{ width: ANCHO_DIA, minWidth: ANCHO_DIA }}>{Number(d.slice(8, 10))}</th>)}
+              {dias.map((d) => <th key={d} className={`border-r text-center text-[10px] font-semibold ${d === hoy ? 'bg-violet-600 text-white' : claseDia(d, hoy)}`} style={{ width: ANCHO_DIA, minWidth: ANCHO_DIA }}>{Number(d.slice(8, 10))}</th>)}
             </tr>
             <tr>
-              {dias.map((d) => <th key={d} className={`border-b border-r text-center text-[10px] font-normal text-gray-500 ${claseDia(d, hoy)}`} title={FERIADOS_CL[d]}>{DOW[fechaDeIso(d).getDay()]}</th>)}
+              {dias.map((d) => d === hoy
+                ? <th key={d} className="border-b border-r bg-violet-600 text-center text-[9px] font-bold text-white" title="Hoy">HOY</th>
+                : <th key={d} className={`border-b border-r text-center text-[10px] font-normal text-gray-500 ${claseDia(d, hoy)}`} title={FERIADOS_CL[d]}>{DOW[fechaDeIso(d).getDay()]}</th>)}
             </tr>
           </thead>
           <tbody>
@@ -272,7 +274,8 @@ export function GanttEnex({ rows, faenas, instalaciones, ventana, hoy, puedeEdit
 }
 
 function claseDia(d: string, hoy: string): string {
-  if (d === hoy) return 'bg-blue-50'
+  // Hoy: columna violeta (no se confunde con los colores de estado) con bordes marcados, para no perderse al planificar.
+  if (d === hoy) return 'bg-violet-50 shadow-[inset_2px_0_0_#7c3aed,inset_-2px_0_0_#7c3aed]'
   if (FERIADOS_CL[d]) return 'bg-gray-300/70'
   const dow = fechaDeIso(d).getDay()
   return dow === 0 || dow === 6 ? 'bg-gray-100' : ''

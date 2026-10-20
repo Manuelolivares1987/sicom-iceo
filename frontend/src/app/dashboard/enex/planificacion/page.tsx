@@ -163,6 +163,7 @@ export default function EnexPlanificacionPage() {
             <span><b>CMP</b> mant.+calib.</span><span><b>C</b> calibración</span><span><b>MP</b> mantención</span><span><b>CP·n</b> camiones</span>
             {LEYENDA_ESTADO.map(([e, l]) => <span key={e} className="flex items-center gap-1"><span className={`inline-block h-2.5 w-2.5 rounded-sm ${MUESTRA[e]}`} />{l}</span>)}
             <span className="flex items-center gap-1"><span className="inline-block h-2.5 w-2.5 rounded-sm bg-gray-300" />Feriado</span>
+            <span className="flex items-center gap-1"><span className="inline-block h-2.5 w-2.5 rounded-sm bg-violet-600" />Hoy</span>
           </div>
         </div>
         <GanttEnex rows={rows} faenas={faenasVista} instalaciones={instVista} ventana={ventana} hoy={hoy}
