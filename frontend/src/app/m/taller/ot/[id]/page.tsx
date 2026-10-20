@@ -1082,6 +1082,18 @@ export default function MecanicoOTPage() {
     return t?.id ?? null
   }, [tecnicos])
 
+  /**
+   * [MIG624] Cada mecánico de la cuadrilla tiene su propio reloj. Los botones
+   * siguen al de quien tiene el teléfono, no al estado de la OT: si un
+   * compañero ya está trabajando, a este le toca «Sumarme», no «Pausar».
+   */
+  const relojes = ot?.relojes ?? []
+  const miReloj = tecnicoId ? relojes.find((r) => r.tecnico_id === tecnicoId) : undefined
+  const companeros = relojes.filter((r) => !tecnicoId || r.tecnico_id !== tecnicoId)
+  const otAbierta = estado === 'en_ejecucion' || estado === 'pausada'
+  // Sin nombre elegido no se sabe cuál es «mi» reloj: se usa el de la OT.
+  const yoTrabajando = tecnicoId ? miReloj?.estado === 'en_ejecucion' : estado === 'en_ejecucion'
+
   function doTiming(accion: 'iniciar' | 'pausar') {
     if (accion === 'pausar' && noOkSinFoto > 0) { setWarnFoto(true); return }
     // [MIG461] El taller entra con una cuenta compartida, así que la sesión no
@@ -1202,13 +1214,14 @@ export default function MecanicoOTPage() {
             <Play className="h-4 w-4" /> Iniciar jornada
           </button>
         )}
-        {estado === 'pausada' && (
+        {otAbierta && !yoTrabajando && (
           <button onClick={() => doTiming('iniciar')} disabled={timing.isPending}
                   className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-green-600 py-3 text-sm font-semibold text-white disabled:opacity-50">
-            <Play className="h-4 w-4" /> Reanudar
+            <Play className="h-4 w-4" />
+            {!miReloj && tecnicoId && relojes.length > 0 ? 'Sumarme' : 'Reanudar'}
           </button>
         )}
-        {estado === 'en_ejecucion' && (
+        {otAbierta && yoTrabajando && (
           <button onClick={() => doTiming('pausar')} disabled={timing.isPending}
                   className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-amber-500 py-3 text-sm font-semibold text-white disabled:opacity-50">
             <Pause className="h-4 w-4" /> Pausar (fin jornada)
@@ -1221,6 +1234,24 @@ export default function MecanicoOTPage() {
           </button>
         )}
       </div>
+      )}
+      {/* [MIG624] Quién más está en esta OT, con su reloj. */}
+      {!otNoDisponible && companeros.length > 0 && (
+        <div className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs">
+          <div className="mb-1 font-semibold text-gray-600">
+            {tecnicoId ? 'También en esta OT' : 'Trabajando en esta OT'}
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {companeros.map((r) => (
+              <span key={r.ejecucion_id}
+                    className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-medium ${
+                      r.estado === 'en_ejecucion' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`}>
+                {r.estado === 'en_ejecucion' ? <Play className="h-3 w-3" /> : <Pause className="h-3 w-3" />}
+                {r.tecnico}
+              </span>
+            ))}
+          </div>
+        </div>
       )}
       {sinNombre && (
         <p className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-900">

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect, useMemo } from 'react'
+import { MAX_MECANICOS } from '@/lib/taller-grupos'
 import { useToast } from '@/contexts/toast-context'
 import { getTecnicosActivos } from '@/lib/services/taller-plan-semanal'
 import {
@@ -1742,7 +1743,7 @@ function EditarOTCard({ otData, otId }: { otData: any; otId: string }) {
     setParejaSel(() => {
       const p = pareja
       if (p.includes(id)) return p.filter((x) => x !== id)
-      if (p.length >= 2) return [p[1], id]  // entra el nuevo, sale el más antiguo
+      if (p.length >= MAX_MECANICOS) return [...p.slice(1), id]  // entra el nuevo, sale el más antiguo
       return [...p, id]
     })
 
@@ -1861,7 +1862,7 @@ function EditarOTCard({ otData, otId }: { otData: any; otId: string }) {
           {jornadas.length > 0 && (
             <div className="sm:col-span-2">
               <label className="mb-1 block text-xs font-medium text-gray-500">
-                Pareja de mecánicos (todas las jornadas del plan) <span className="font-normal text-gray-400">— máximo 2</span>
+                Mecánicos (todas las jornadas del plan) <span className="font-normal text-gray-400">— máximo {MAX_MECANICOS}</span>
               </label>
               <div className="flex flex-wrap gap-1">
                 {tecnicos.map((t) => {
@@ -1960,11 +1961,11 @@ function PlanSemanalBanner({ otId }: { otId: string }) {
     setErrorCuadrilla(null)
     setEditando(true)
   }
-  // El RPC (MIG451) acepta máximo 2: es la pareja, no una cuadrilla abierta.
+  // El RPC acepta máximo MAX_MECANICOS (MIG624: 4; antes la pareja).
   const toggleTec = (id: string) =>
     setSel((p) => {
       if (p.includes(id)) return p.filter((x) => x !== id)
-      if (p.length >= 2) return [p[1], id]  // entra el nuevo, sale el más antiguo
+      if (p.length >= MAX_MECANICOS) return [...p.slice(1), id]  // entra el nuevo, sale el más antiguo
       return [...p, id]
     })
 
@@ -1985,7 +1986,7 @@ function PlanSemanalBanner({ otId }: { otId: string }) {
       {editando ? (
         <div className="mt-2 rounded-lg border border-blue-200 bg-white p-2.5">
           <p className="text-xs font-semibold text-gray-700">
-            ¿Quiénes trabajan esta visita? <span className="font-normal text-gray-400">(máximo 2 — la pareja)</span>
+            ¿Quiénes trabajan esta visita? <span className="font-normal text-gray-400">(máximo {MAX_MECANICOS})</span>
           </p>
           <div className="mt-1.5 flex flex-wrap gap-1">
             {tecnicos.map((t) => {

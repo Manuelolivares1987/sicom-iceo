@@ -13,7 +13,7 @@ import {
 import { getRecursosOT, solicitarRecurso, subirFotoRecurso, type OTRecurso } from '@/lib/services/ot-recursos'
 import { getNotasOT, subirFotoNota, agregarNotaOT, type OTNota } from '@/lib/services/ot-notas'
 import { tallerDB, newId, type TallerPending } from './taller-db'
-import type { MedicionItem } from '@/lib/services/taller-plan-semanal'
+import type { MedicionItem, RelojTaller } from '@/lib/services/taller-plan-semanal'
 
 const FIRMA_BUCKET = 'calama-firmas'
 async function subirFirmaMecanico(blob: Blob): Promise<string> {
@@ -54,6 +54,8 @@ export type MecanicoOT = {
   fecha_grupo: string | null
   /** [MIG608] Título de la tarea programada (terreno, soldadura…), si viene de una. */
   tarea_titulo?: string | null
+  /** [MIG624] El reloj de cada mecánico que está en la OT. */
+  relojes?: RelojTaller[]
 }
 
 const isOnline = () => (typeof navigator === 'undefined' ? true : navigator.onLine)
@@ -363,6 +365,25 @@ export async function queueItem(params: {
   if (isOnline()) { try { await syncTallerPending() } catch { /* queda en cola */ } }
 }
 
+/**
+ * [MIG624] Cada mecánico tiene su reloj. Sin señal, el teléfono adelanta lo que
+ * hará el servidor: su reloj corre o se pausa, y la OT queda pausada sólo
+ * cuando ya no trabaja nadie. Sin persona (no eligió nombre) pausar es de todos.
+ */
+function relojOptimista(o: MecanicoOT, accion: 'iniciar' | 'pausar', tecnicoId: string | null): MecanicoOT {
+  const nuevo: RelojTaller['estado'] = accion === 'iniciar' ? 'en_ejecucion' : 'pausada'
+  let relojes = [...(o.relojes ?? [])]
+  if (!tecnicoId) {
+    relojes = relojes.map((r) => ({ ...r, estado: nuevo }))
+  } else if (relojes.some((r) => r.tecnico_id === tecnicoId)) {
+    relojes = relojes.map((r) => (r.tecnico_id === tecnicoId ? { ...r, estado: nuevo } : r))
+  } else if (accion === 'iniciar') {
+    relojes.push({ ejecucion_id: `offline:${tecnicoId}`, tecnico_id: tecnicoId, tecnico: 'Yo', estado: nuevo, segundos: 0 })
+  }
+  const alguienTrabaja = relojes.some((r) => r.estado === 'en_ejecucion')
+  return { ...o, relojes, ot_estado: alguienTrabaja ? 'en_ejecucion' : 'pausada' }
+}
+
 export async function queueTiming(
   otId: string, accion: 'iniciar' | 'pausar' | 'finalizar', userId: string,
   opts?: {
@@ -395,8 +416,9 @@ export async function queueTiming(
     if (accion === 'finalizar') {
       list = list.filter((o) => o.ot_id !== otId)
     } else {
-      const nuevo = accion === 'iniciar' ? 'en_ejecucion' : 'pausada'
-      list = list.map((o) => (o.ot_id === otId ? { ...o, ot_estado: nuevo } : o))
+      list = list.map((o) => (o.ot_id === otId
+        ? relojOptimista(o, accion, opts?.tecnicoId ?? null)
+        : o))
     }
     await tallerDB().cache.put({ key: 'ots', value: list, updated_at: new Date().toISOString() })
   }
@@ -525,12 +547,12 @@ export async function syncTallerPending(): Promise<{ ok: number; failed: number 
         //
         // Primero se intenta reanudar —si el mecánico pausó y vuelve, es la
         // misma ejecución— y sólo si no había ninguna abierta se arranca una.
-        const r = await rpcReanudarEjecucionOT(p.ot_id)
+        const r = await rpcReanudarEjecucionOT(p.ot_id, p.tecnico_id ?? null)
         if (r?.sin_ejecucion) {
           await rpcIniciarEjecucion(p.ot_id, null, p.tecnico_id ?? null)
         }
       } else {
-        await rpcPausarEjecucionOT(p.ot_id, p.observaciones ?? null)
+        await rpcPausarEjecucionOT(p.ot_id, p.observaciones ?? null, p.tecnico_id ?? null)
       }
       await db.pending.delete(p.local_id)
       ok++

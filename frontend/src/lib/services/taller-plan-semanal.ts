@@ -30,6 +30,15 @@ export type TallerPlanDia = {
   estado: string
 }
 
+/** [MIG624] El reloj abierto de una persona en una OT. */
+export type RelojTaller = {
+  ejecucion_id: string
+  tecnico_id: string | null
+  tecnico: string
+  estado: 'en_ejecucion' | 'pausada'
+  segundos: number
+}
+
 export type TallerPlanOTFull = {
   plan_ot_id: string
   plan_semanal_id: string
@@ -74,6 +83,8 @@ export type TallerPlanOTFull = {
   tiempo_estimado_total_min: number | null
   ejecucion_activa_id: string | null
   ejecucion_activa_estado: string | null
+  /** [MIG624] Un reloj por persona: quién está trabajando la OT ahora. */
+  relojes?: RelojTaller[]
   ultima_ejecucion_avance: number | null
   // MIG182: categoría / tarea libre / técnico / operación
   categoria: CategoriaTareaTaller | null
@@ -931,17 +942,22 @@ export async function getTecnicosActivos(): Promise<TecnicoTallerLite[]> {
 /**
  * Pausar y reanudar desde la OT y no desde el id de la ejecución: el teléfono
  * trabaja sin señal y no siempre conoce ese id.
+ *
+ * [MIG624] Cada mecánico tiene su reloj: con `tecnicoId` se pausa/reanuda sólo
+ * el suyo. Sin él (el jefe desde el tablero) pausar detiene a toda la cuadrilla.
  */
-export async function rpcPausarEjecucionOT(otId: string, motivo?: string | null) {
+export async function rpcPausarEjecucionOT(otId: string, motivo?: string | null, tecnicoId?: string | null) {
   const { data, error } = await supabase.rpc('rpc_taller_pausar_ejecucion_ot', {
-    p_ot_id: otId, p_motivo: motivo ?? null, p_motivo_tipo: null,
+    p_ot_id: otId, p_motivo: motivo ?? null, p_motivo_tipo: null, p_tecnico_id: tecnicoId ?? null,
   })
   if (error) throw error
   return data as { success: boolean; sin_ejecucion?: boolean }
 }
 
-export async function rpcReanudarEjecucionOT(otId: string) {
-  const { data, error } = await supabase.rpc('rpc_taller_reanudar_ejecucion_ot', { p_ot_id: otId })
+export async function rpcReanudarEjecucionOT(otId: string, tecnicoId?: string | null) {
+  const { data, error } = await supabase.rpc('rpc_taller_reanudar_ejecucion_ot', {
+    p_ot_id: otId, p_tecnico_id: tecnicoId ?? null,
+  })
   if (error) throw error
   return data as { success: boolean; sin_ejecucion?: boolean }
 }
