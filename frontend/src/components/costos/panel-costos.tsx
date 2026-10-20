@@ -19,8 +19,8 @@ import {
 import { PanelFaenas } from '@/components/costos/panel-faenas'
 import { ParetoModal, type PasoPareto } from '@/components/costos/pareto-modal'
 import {
-  AREAS_OPERACION, NOMBRE_AREA, getPanelCostos,
-  type AreaCosto, type CostoEquipo, type PanelCostos,
+  AREAS_OPERACION, NOMBRE_AREA, getCostoAcumulado, getPanelCostos,
+  type AreaCosto, type CostoAcumulado, type CostoEquipo, type PanelCostos,
 } from '@/lib/services/costos-operacion'
 import {
   HORAS_MINIMAS_CPH, fmtClp, fmtMM, fmtNum, fmtPct, nivelAsignacion, pct, rangoPreset,
@@ -65,6 +65,12 @@ export function PanelCostosOperacion({ titulo, descripcion, despues }: {
     staleTime: 5 * 60_000,
     retry: (n, err) => err?.name !== 'CostosNoAutorizadoError' && n < 2,
   })
+  const { data: acumulado } = useQuery({
+    queryKey: ['costos-acumulado', conAdmin],
+    queryFn: () => getCostoAcumulado(areas),
+    staleTime: 30 * 60_000,
+    retry: (n, err) => err?.name !== 'CostosNoAutorizadoError' && n < 2,
+  })
 
   return (
     <div className="space-y-5 p-4 md:p-6">
@@ -92,6 +98,10 @@ export function PanelCostosOperacion({ titulo, descripcion, despues }: {
       {isLoading && <div className="flex justify-center py-16"><Spinner /></div>}
       {error && (
         <Card><CardContent className="p-6 text-sm text-red-700">{(error as Error).message}</CardContent></Card>
+      )}
+      {acumulado && acumulado.total > 0 && (
+        <BandaAcumulado acumulado={acumulado} periodo={data?.kpi.total ?? null}
+                        etiquetaPeriodo={etiquetaRango(rango.desde, rango.hasta)} conAdmin={conAdmin} />
       )}
       {data && <Contenido data={data} onPareto={setPareto} />}
       {despues}
@@ -386,6 +396,61 @@ function Contenido({ data, onPareto }: {
         </Card>
       </div>
     </>
+  )
+}
+
+/**
+ * Costo acumulado total de operaciones (MIG627): todo lo que salió de bodega
+ * desde el primer registro de Softland, más el acumulado del período elegido
+ * y el desglose por año.
+ */
+function BandaAcumulado({ acumulado: a, periodo, etiquetaPeriodo, conAdmin }: {
+  acumulado: CostoAcumulado; periodo: number | null; etiquetaPeriodo: string; conAdmin: boolean
+}) {
+  const max = Math.max(...a.por_anio.map((x) => x.total), 1)
+  return (
+    <Card className="border-pillado-green-300 bg-pillado-green-50/40">
+      <CardContent className="space-y-3 p-4">
+        <div className="flex flex-wrap items-end gap-x-10 gap-y-3">
+          <div>
+            <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-gray-600">
+              <Wallet className="h-4 w-4" /> Costo acumulado total de operaciones
+            </div>
+            <div className="text-3xl font-bold text-gray-900">{fmtClp(a.total)}</div>
+            <div className="text-xs text-gray-500">
+              Desde {a.desde ? fmtMes(a.desde) : '—'} hasta {a.hasta ? fmtMes(a.hasta) : '—'} · {fmtMM(a.total)}
+            </div>
+          </div>
+          {periodo != null && (
+            <div>
+              <div className="text-xs font-medium uppercase tracking-wide text-gray-600">Acumulado del período</div>
+              <div className="text-2xl font-bold text-gray-900">{fmtClp(periodo)}</div>
+              <div className="text-xs text-gray-500">{etiquetaPeriodo}</div>
+            </div>
+          )}
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {a.por_anio.map((x) => (
+            <div key={x.anio} title={`${x.anio}: ${fmtClp(x.total)} en ${x.meses} ${x.meses === 1 ? 'mes' : 'meses'} con registros`}
+                 className="min-w-[72px] flex-1 rounded-md border border-gray-200 bg-white px-2 py-1">
+              <div className="flex items-baseline justify-between gap-1 text-[11px] text-gray-500">
+                <span className="font-semibold text-gray-700">{x.anio}</span>
+                {x.meses < 12 && <span>{x.meses} m</span>}
+              </div>
+              <div className="text-sm font-semibold text-gray-900">{fmtMM(x.total)}</div>
+              <div className="mt-0.5 h-1 rounded bg-gray-100">
+                <div className="h-1 rounded bg-pillado-green-500" style={{ width: `${(x.total / max) * 100}%` }} />
+              </div>
+            </div>
+          ))}
+        </div>
+        <p className="text-xs text-gray-500">
+          Salidas de bodega Softland (consumo y EPP) sin petróleo, que se revende
+          {conAdmin ? ', incluyendo administración y comercial' : '; sin administración ni comercial'}.
+          No incluye mano de obra ni servicios externos. Los años con menos de 12 meses de registros se marcan («m»).
+        </p>
+      </CardContent>
+    </Card>
   )
 }
 
