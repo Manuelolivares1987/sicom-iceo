@@ -3,7 +3,8 @@
 import { useQuery } from '@tanstack/react-query'
 import { Modal } from '@/components/ui/modal'
 import { Spinner } from '@/components/ui/spinner'
-import { rpcCostos } from '@/lib/services/costos-operacion'
+import { rpcCostos, type FuenteCosto } from '@/lib/services/costos-operacion'
+import { useFuenteCostos } from '@/components/costos/fuente'
 import { fmtClp, fmtMM, fmtNum } from '@/lib/costos-operacion'
 import { fmtFecha, nombreTipo } from '@/components/costos/comunes'
 import type { PasoPareto } from '@/components/costos/pareto-modal'
@@ -31,9 +32,9 @@ type EquipoFaena = {
   costo: number
 }
 
-async function getEquiposFaena(desde: string, hasta: string, faena: string, subfaena?: string) {
+async function getEquiposFaena(desde: string, hasta: string, faena: string, subfaena: string | undefined, fuente: FuenteCosto) {
   const { data, error } = await rpcCostos('rpc_costos_faena_equipos', {
-    p_desde: desde, p_hasta: hasta, p_faena: faena, p_subfaena: subfaena ?? null,
+    p_desde: desde, p_hasta: hasta, p_faena: faena, p_subfaena: subfaena ?? null, p_fuente: fuente,
   })
   if (error) throw new Error(error.message)
   return data as { dias_periodo: number; equipos: EquipoFaena[] }
@@ -46,9 +47,10 @@ export function EquiposFaenaModal({ faena, subfaena, desde, hasta, onClose, onPa
   faena: string; subfaena?: string; desde: string; hasta: string
   onClose: () => void; onPareto: (p: PasoPareto) => void
 }) {
+  const fuente = useFuenteCostos()
   const { data, isLoading, error } = useQuery({
-    queryKey: ['costos-faena-equipos', desde, hasta, faena, subfaena ?? null],
-    queryFn: () => getEquiposFaena(desde, hasta, faena, subfaena),
+    queryKey: ['costos-faena-equipos', fuente, desde, hasta, faena, subfaena ?? null],
+    queryFn: () => getEquiposFaena(desde, hasta, faena, subfaena, fuente),
     staleTime: 5 * 60_000,
   })
   const dp = data?.dias_periodo ?? 1

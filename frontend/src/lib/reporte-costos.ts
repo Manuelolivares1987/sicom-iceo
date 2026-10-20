@@ -146,7 +146,7 @@ export function buildCostosEmailHtml(r: ReporteCostos, link: string): string {
 
   return emailShell({
     titulo: `Costos de operación · ${mes}`,
-    subtitulo: 'Salidas de bodega Softland (consumo y EPP). Sin petróleo, que se revende.',
+    subtitulo: 'Órdenes de compra aprobadas en Softland (materiales y servicios, neto). Sin combustible de reventa.',
     chips,
     cuerpo,
     ctaUrl: link,

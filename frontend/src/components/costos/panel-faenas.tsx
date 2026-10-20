@@ -9,6 +9,7 @@ import { ChevronDown, ChevronRight, MapPin, Target } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Spinner } from '@/components/ui/spinner'
 import { getCostosPorFaena, type FaenaCosto } from '@/lib/services/costos-operacion'
+import { useFuenteCostos } from '@/components/costos/fuente'
 import { fmtClp, fmtMM, fmtNum, fmtPct, pct } from '@/lib/costos-operacion'
 import { ComoSeCalcula, fmtMes } from '@/components/costos/comunes'
 import type { PasoPareto } from '@/components/costos/pareto-modal'
@@ -48,9 +49,10 @@ export function PanelFaenas({ desde, hasta, onPareto }: {
 }) {
   const [abierta, setAbierta] = useState<string | null>('Calama')
   const [verEquipos, setVerEquipos] = useState<{ faena: string; subfaena?: string } | null>(null)
+  const fuente = useFuenteCostos()
   const { data, isLoading, error } = useQuery({
-    queryKey: ['costos-por-faena', desde, hasta],
-    queryFn: () => getCostosPorFaena(desde, hasta),
+    queryKey: ['costos-por-faena', fuente, desde, hasta],
+    queryFn: () => getCostosPorFaena(desde, hasta, fuente),
     staleTime: 5 * 60_000,
   })
 
