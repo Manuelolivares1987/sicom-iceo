@@ -7,13 +7,15 @@
 // ese día en /m/enex.
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ChevronDown, ChevronRight, Loader2, Trash2, CalendarClock, Truck } from 'lucide-react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { ChevronDown, ChevronRight, Loader2, Trash2, CalendarClock, Truck, Redo2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Modal, ModalFooter } from '@/components/ui/modal'
 import { useToast } from '@/contexts/toast-context'
+import { ReprogramacionModal } from '@/components/enex/reprogramacion-modal'
 import {
-  programarLote, moverProgramacion, desprogramar, TIPO_INSTALACION_LABEL,
+  programarLote, moverProgramacion, desprogramar, getReprogramaciones, TIPO_INSTALACION_LABEL,
   type EnexFaena, type EnexInstalacion, type EnexPanelRow, type TipoServicio,
 } from '@/lib/services/enex'
 import {
@@ -55,6 +57,13 @@ export function GanttEnex({ rows, faenas, instalaciones, ventana, hoy, puedeEdit
   const toast = useToast()
   const [abiertos, setAbiertos] = useState<Record<string, boolean>>({})
   const [sel, setSel] = useState<Seleccion | null>(null)
+  // Programaciones con registro de reprogramación → fecha original (marca «RP» en la celda).
+  const { data: reprogs = [] } = useQuery({ queryKey: ['enex-reprogramaciones'], queryFn: getReprogramaciones, staleTime: 60_000 })
+  const reprogDe = useMemo(() => {
+    const m = new Map<string, string>()
+    for (const r of reprogs) if (r.programacion_id && !m.has(r.programacion_id)) m.set(r.programacion_id, r.fecha_original ?? '')
+    return m
+  }, [reprogs])
   const [arrastre, setArrastre] = useState<{ filaKey: string; ids: string[] } | null>(null)
   const [moviendo, setMoviendo] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -226,6 +235,7 @@ export function GanttEnex({ rows, faenas, instalaciones, ventana, hoy, puedeEdit
                     const peor = PRIORIDAD.find((p) => estados.includes(p)) ?? 'programada'
                     const codigo = codigoCelda(rs.map((r) => ({ tipo_servicio: r.tipo_servicio, esCamion: r.instalacion_tipo === 'camion' && fila.tipo === 'camiones' })))
                     const movibles = rs.filter((r) => !r.ejecucion_id).map((r) => r.programacion_id)
+                    const rp = rs.filter((r) => reprogDe.has(r.programacion_id)).map((r) => reprogDe.get(r.programacion_id) || 's/f')
                     return (
                       <td key={d} className={`border-b border-r p-0.5 ${fondo}`}
                           onDragOver={(e) => { if (arrastre?.filaKey === fila.key) e.preventDefault() }}
@@ -235,9 +245,10 @@ export function GanttEnex({ rows, faenas, instalaciones, ventana, hoy, puedeEdit
                           onDragStart={(e) => { e.dataTransfer.effectAllowed = 'move'; setArrastre({ filaKey: fila.key, ids: movibles }) }}
                           onDragEnd={() => setArrastre(null)}
                           onClick={() => setSel({ modo: 'detalle', fila, fecha: d, rows: rs })}
-                          title={tooltipCelda(rs, hoy, instPorId)}
-                          className={`block h-5 w-full rounded text-[9px] font-bold leading-5 ${ESTILO[peor]}`}>
+                          title={tooltipCelda(rs, hoy, instPorId) + (rp.length ? `\nReprogramado (fecha original ${rp.join(', ')})` : '')}
+                          className={`relative block h-5 w-full rounded text-[9px] font-bold leading-5 ${ESTILO[peor]}`}>
                           {codigo}
+                          {rp.length > 0 && <span className="absolute -right-0.5 -top-1 rounded-sm bg-orange-500 px-0.5 text-[7px] leading-[9px] text-white">RP</span>}
                         </button>
                       </td>
                     )
@@ -265,7 +276,7 @@ export function GanttEnex({ rows, faenas, instalaciones, ventana, hoy, puedeEdit
                         onClose={() => setSel(null)} onDone={() => { setSel(null); onCambio() }} />
       )}
       {sel?.modo === 'detalle' && (
-        <DetalleModal fila={sel.fila} fecha={sel.fecha} rows={sel.rows} hoy={hoy} puedeEditar={puedeEditar}
+        <DetalleModal fila={sel.fila} fecha={sel.fecha} rows={sel.rows} hoy={hoy} puedeEditar={puedeEditar} reprogDe={reprogDe}
                       onProgramarOtro={sel.fecha ? () => setSel({ modo: 'programar', fila: sel.fila, fecha: sel.fecha! }) : undefined}
                       onClose={() => setSel(null)} onDone={() => { setSel(null); onCambio() }} />
       )}
@@ -384,13 +395,22 @@ function ProgramarModal({ fila, fecha, rows, onClose, onDone }: {
 }
 
 // ── Detalle de una celda: mover o quitar ────────────────────────────────────
-function DetalleModal({ fila, fecha, rows, hoy, puedeEditar, onProgramarOtro, onClose, onDone }: {
+function DetalleModal({ fila, fecha, rows, hoy, puedeEditar, reprogDe, onProgramarOtro, onClose, onDone }: {
   fila: Exclude<FilaGantt, { tipo: 'faena' }>; fecha: string | null; rows: EnexPanelRow[]; hoy: string; puedeEditar: boolean
-  onProgramarOtro?: () => void; onClose: () => void; onDone: () => void
+  reprogDe: Map<string, string>; onProgramarOtro?: () => void; onClose: () => void; onDone: () => void
 }) {
   const toast = useToast()
   const [busy, setBusy] = useState<string | null>(null)
   const [nuevas, setNuevas] = useState<Record<string, string>>({})
+  const [reprog, setReprog] = useState<EnexPanelRow | null>(null)
+  const qc = useQueryClient()
+
+  if (reprog) {
+    return <ReprogramacionModal row={reprog} nombre={reprog.instalacion_tipo === 'camion' ? `Camión ${reprog.patente ?? reprog.instalacion}` : reprog.instalacion}
+                                limitarTrimestre fechaInicial={nuevas[reprog.programacion_id] ?? ''}
+                                onClose={() => setReprog(null)}
+                                onDone={() => { qc.invalidateQueries({ queryKey: ['enex-reprogramaciones'] }); onDone() }} />
+  }
 
   async function mover(r: EnexPanelRow) {
     const f = nuevas[r.programacion_id]
@@ -418,6 +438,7 @@ function DetalleModal({ fila, fecha, rows, hoy, puedeEditar, onProgramarOtro, on
                 <span className="font-medium">{r.instalacion_tipo === 'camion' ? (r.patente ?? r.instalacion) : r.instalacion}</span>
                 <span className="text-gray-500">· {SERV_TXT[r.tipo_servicio]}</span>
                 <span className={`rounded px-1.5 text-[10px] font-semibold ${ESTILO[e]}`}>{ESTADO_TXT[e]}</span>
+                {reprogDe.has(r.programacion_id) && <span className="rounded bg-orange-500 px-1.5 text-[10px] font-semibold text-white">RP · original {reprogDe.get(r.programacion_id) || 's/f'}</span>}
               </div>
               {r.ejecucion_id ? (
                 <p className="mt-1 text-xs text-gray-500">
@@ -431,6 +452,10 @@ function DetalleModal({ fila, fecha, rows, hoy, puedeEditar, onProgramarOtro, on
                   <Button size="sm" variant="outline" disabled={busy !== null} onClick={() => mover(r)}>
                     {busy === r.programacion_id ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <CalendarClock className="mr-1 h-3.5 w-3.5" />} Mover
                   </Button>
+                  <Button size="sm" variant="outline" className="text-orange-700" disabled={busy !== null} onClick={() => setReprog(r)}
+                          title="Reprogramación formal (registro + PDF para ESM), dentro del trimestre">
+                    <Redo2 className="mr-1 h-3.5 w-3.5" /> Reprogramar
+                  </Button>
                   <Button size="sm" variant="outline" className="text-red-600" disabled={busy !== null} onClick={() => quitar(r)}>
                     <Trash2 className="mr-1 h-3.5 w-3.5" /> Quitar
                   </Button>
@@ -441,8 +466,8 @@ function DetalleModal({ fila, fecha, rows, hoy, puedeEditar, onProgramarOtro, on
           )
         })}
         <p className="text-[11px] text-gray-400">
-          Para reprogramar con registro firmado para ESM, o registrar la ejecución, usa el panel «Control & KPI».
-          También puedes arrastrar la celda a otro día de la misma fila.
+          «Mover» cambia la fecha sin dejar registro (ajuste de plan). «Reprogramar» deja el registro firmado para ESM
+          y la celda queda marcada RP; la nueva fecha debe caer dentro del trimestre. La ejecución se registra en «Control & KPI».
         </p>
       </div>
       <ModalFooter>
