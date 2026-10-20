@@ -157,6 +157,20 @@ export async function getPanelCostos(desde: string, hasta: string, areas: AreaCo
   return data as PanelCostos
 }
 
+// [MIG627] Acumulado desde el primer registro de Softland, año por año.
+export type CostoAcumulado = {
+  desde: string | null
+  hasta: string | null
+  total: number
+  por_anio: { anio: number; total: number; meses: number }[]
+}
+
+export async function getCostoAcumulado(areas: AreaCosto[] | null) {
+  const { data, error } = await rpcCostos('rpc_costos_operacion_acumulado', { p_areas: areas })
+  if (error) traducir(error)
+  return data as CostoAcumulado
+}
+
 export async function getDetalleCostos(v: {
   desde: string; hasta: string; codiCc?: string | null; familia?: string | null
 }) {
