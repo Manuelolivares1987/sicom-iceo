@@ -15,6 +15,7 @@ import {
   getTallerTecnicos, getUsuariosAsignables, getChecklistV3OT,
   rpcGetOrCreatePlanSemanal, rpcMoverJornada, rpcAsignarResponsable, rpcEditarJornada,
   rpcIniciarEjecucion, rpcPausarEjecucion, rpcReanudarEjecucion, rpcFinalizarEjecucion,
+  rpcPausarEjecucionOT,
   type TallerPlanOTFull,
 } from '@/lib/services/taller-plan-semanal'
 import { tallerDB, newId, type TallerPlanPending } from './taller-db'
@@ -144,6 +145,9 @@ export async function iniciarEjecucionOffline(p: { otId: string; planOtId?: stri
 }
 
 export async function pausarEjecucionOffline(p: { ejecucionId?: string | null; otId?: string | null; planOtId?: string | null; motivo?: string | null }) {
+  // [MIG624] Con cuadrilla hay un reloj por mecánico: el jefe pausa la OT
+  // completa (todos), no sólo el reloj que el tablero tenía a mano.
+  if (isOnline() && p.otId) return rpcPausarEjecucionOT(p.otId, p.motivo)
   if (isOnline() && p.ejecucionId && !p.ejecucionId.startsWith('offline:')) {
     return rpcPausarEjecucion(p.ejecucionId, p.motivo)
   }
@@ -225,6 +229,8 @@ export async function syncTallerPlanPending(): Promise<{ ok: number; failed: num
         if (p.accion === 'iniciar') {
           const r = await rpcIniciarEjecucion(p.ot_id!, p.observacion)
           ejecMap.set(`offline:${p.local_id}`, r.ejecucion_id)
+        } else if (p.accion === 'pausar' && p.ot_id) {
+          await rpcPausarEjecucionOT(p.ot_id, p.motivo)
         } else {
           let ejecId = p.ejecucion_id ?? null
           if (!ejecId || ejecId.startsWith('offline:')) {

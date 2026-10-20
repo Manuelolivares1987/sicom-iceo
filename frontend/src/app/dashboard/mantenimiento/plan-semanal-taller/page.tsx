@@ -727,7 +727,7 @@ export default function PlanSemanalTallerPage() {
                         onSuccess: () => toast.success('OT iniciada'),
                         onError: (err) => toast.error((err as Error).message),
                       })}
-                      onPausar={(j) => j.ejecucion_activa_id && pausarEjec.mutate(
+                      onPausar={(j) => (j.ot_id || j.ejecucion_activa_id) && pausarEjec.mutate(
                         { ejecucionId: j.ejecucion_activa_id, otId: j.ot_id, planOtId: j.plan_ot_id }, {
                         onSuccess: () => toast.success('OT pausada'),
                         onError: (err) => toast.error((err as Error).message),
@@ -816,10 +816,16 @@ export default function PlanSemanalTallerPage() {
           enviando={agregarTareaLibre.isPending}
           onClose={() => setTareaLibreOpen(false)}
           onUsarExterno={() => { setTareaLibreOpen(false); setExternoOpen(true) }}
-          onSubmit={(payload) => agregarTareaLibre.mutate(
+          onSubmit={({ tecnicoIds, ...payload }) => agregarTareaLibre.mutate(
             { planSemanalId, ...payload },
             {
-              onSuccess: (r) => {
+              onSuccess: async (r) => {
+                // [MIG624] La cuadrilla completa va por persona (de ahí sale el
+                // bono); el RPC de la tarea sólo conoce al titular.
+                if (r.plan_ot_id && (tecnicoIds?.length ?? 0) > 1) {
+                  try { await rpcSetCuadrilla(r.plan_ot_id, tecnicoIds!) }
+                  catch (e) { toast.error(`La tarea se creó, pero la cuadrilla no: ${(e as Error).message}`) }
+                }
                 toast.success(r.folio
                   ? `Tarea programada con la OT ${r.folio}: queda lista para liberar`
                   : 'Tarea programada')
@@ -2317,7 +2323,7 @@ function ProgramarOtDialog({ target, planSemanalId, dias, onClose, onDone, agreg
           )}
         </div>
 
-        {/* Mecánicos a cargo (hasta 2) */}
+        {/* Mecánicos a cargo (hasta MAX_MECANICOS) */}
         <div>
           <label className="text-xs font-medium">Técnicos a cargo (hasta {MAX_MECANICOS})</label>
           <MecanicosPicker value={mecanicos} onChange={setMecanicos} opciones={tecnicos ?? []} />
@@ -2345,7 +2351,6 @@ function ProgramarOtDialog({ target, planSemanalId, dias, onClose, onDone, agreg
   )
 }
 
-// Selector de técnicos (hasta 2). Devuelve nombres; se guardan en `cuadrilla`.
 /**
  * [MIG451] Elige personas, no nombres.
  *
@@ -2593,6 +2598,8 @@ function TareaLibreDialog({ dias, tecnicos, operacionInicial, enviando, onClose,
     tecnicoId?: string | null
     cuadrilla?: string | null
     horas?: number | null
+    /** [MIG624] Toda la cuadrilla; el primero es el titular. */
+    tecnicoIds?: string[]
   }) => void
 }) {
   const [categoria, setCategoria] = useState<CategoriaTareaTaller>(CATEGORIAS_TAREA_LIBRE[0])
@@ -2601,10 +2608,12 @@ function TareaLibreDialog({ dias, tecnicos, operacionInicial, enviando, onClose,
   const [descripcion, setDescripcion] = useState('')
   const [operacion, setOperacion] = useState(operacionInicial ?? '')
   const [fecha, setFecha] = useState(dias[0]?.fecha ?? '')
-  const [tecnicoId, setTecnicoId] = useState('')
+  const [mecanicos, setMecanicos] = useState<string[]>([])
   const [horas, setHoras] = useState('')
 
-  const tecnico = tecnicos.find((t) => t.id === tecnicoId)
+  const nombresMecanicos = mecanicos
+    .map((id) => tecnicos.find((t) => t.id === id)?.nombre)
+    .filter(Boolean) as string[]
 
   return (
     <Modal open onClose={onClose} title="Programar tarea">
@@ -2668,21 +2677,13 @@ function TareaLibreDialog({ dias, tecnicos, operacionInicial, enviando, onClose,
             </select>
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-2">
-          <div>
-            <label className="text-xs font-medium">Técnico a cargo</label>
-            <select value={tecnicoId} onChange={(e) => setTecnicoId(e.target.value)}
-                    className="mt-0.5 w-full rounded border border-gray-300 px-2 py-1.5 text-sm">
-              <option value="">— Sin asignar —</option>
-              {tecnicos.map((t) => (
-                <option key={t.id} value={t.id}>{t.nombre} · {t.especialidad}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="text-xs font-medium">Horas estimadas</label>
-            <Input type="number" min="0" value={horas} onChange={(e) => setHoras(e.target.value)} placeholder="opcional" />
-          </div>
+        <div>
+          <label className="text-xs font-medium">Técnicos a cargo (hasta {MAX_MECANICOS})</label>
+          <MecanicosPicker value={mecanicos} onChange={setMecanicos} opciones={tecnicos} />
+        </div>
+        <div className="w-1/2 pr-1">
+          <label className="text-xs font-medium">Horas estimadas</label>
+          <Input type="number" min="0" value={horas} onChange={(e) => setHoras(e.target.value)} placeholder="opcional" />
         </div>
       </div>
       <ModalFooter>
@@ -2695,8 +2696,9 @@ function TareaLibreDialog({ dias, tecnicos, operacionInicial, enviando, onClose,
                   descripcion: descripcion.trim() || null,
                   equipoExterno: equipoExterno.trim() || null,
                   operacion: operacion || null,
-                  tecnicoId: tecnicoId || null,
-                  cuadrilla: tecnico?.nombre ?? null,
+                  tecnicoId: mecanicos[0] ?? null,
+                  cuadrilla: nombresMecanicos.length ? nombresMecanicos.join(', ') : null,
+                  tecnicoIds: mecanicos,
                   horas: horas ? Number(horas) : null,
                 })}>
           {enviando ? <Spinner className="h-4 w-4 mr-1" /> : null}
@@ -2913,6 +2915,19 @@ function JornadaCard({ jornada, onAsignar, onDetalle, onQuitar, onSacarOt, onDia
             {jornada.cuadrilla ?? jornada.responsable ?? 'Sin asignar'}
           </span>
         </div>
+        {/* [MIG624] Un reloj por mecánico: quién está trabajando y quién en pausa. */}
+        {(jornada.relojes?.length ?? 0) > 0 && !finalizada && (
+          <div className="mt-0.5 flex flex-wrap gap-0.5">
+            {jornada.relojes!.map((r) => (
+              <span key={r.ejecucion_id}
+                    title={r.estado === 'en_ejecucion' ? 'Trabajando' : 'En pausa'}
+                    className={`rounded px-1 py-0.5 text-[9px] font-medium ${
+                      r.estado === 'en_ejecucion' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-500'}`}>
+                {r.estado === 'en_ejecucion' ? '▶' : '⏸'} {r.tecnico.split(' ')[0]}
+              </span>
+            ))}
+          </div>
+        )}
         {jornada.avance_objetivo_pct && (
           <div className="text-[9px] text-gray-500 mt-0.5">Meta {jornada.avance_objetivo_pct}%</div>
         )}
