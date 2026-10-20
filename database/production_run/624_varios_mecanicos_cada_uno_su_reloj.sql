@@ -428,7 +428,9 @@ BEGIN
     PERFORM fn_taller_cerrar_ejecuciones_abiertas(v_ot, p_observacion);
 
     UPDATE ordenes_trabajo
-       SET estado = CASE WHEN p_avance_final >= 100 THEN 'ejecutada_ok' ELSE 'ejecutada_con_observaciones' END,
+       -- [MIG624] Sin el cast el CASE salía como text y Finalizar desde el tablero
+       -- fallaba siempre («estado is of type estado_ot_enum but expression is of type text»).
+       SET estado = (CASE WHEN p_avance_final >= 100 THEN 'ejecutada_ok' ELSE 'ejecutada_con_observaciones' END)::estado_ot_enum,
            fecha_termino = NOW(),
            horas_hombre = COALESCE(horas_hombre, 0) + ((v_t_efectivo + v_otros)::NUMERIC / 3600.0),
            updated_at = NOW()
