@@ -460,18 +460,37 @@ function BandaComparada({ c, conAdmin }: { c: CostoComparado; conAdmin: boolean 
   const corte = new Date(c.hoy + 'T12:00:00').toLocaleDateString('es-CL', { day: 'numeric', month: 'long' })
   const datosDesde = c.datos_desde ? Number(c.datos_desde.slice(0, 4)) : null
 
-  // Curva acumulada: una fila por mes (ene → mes en curso), una columna por año.
+  // Por defecto, el gasto de cada mes: las curvas acumuladas de años parecidos
+  // corren casi juntas y no se distinguen. La vista acumulada queda a un clic.
+  const [vista, setVista] = useState<'mes' | 'acum'>('mes')
+
+  // Una fila por mes (ene → mes en curso), una columna por año.
   const serie = useMemo(() => {
     const filas = Array.from({ length: mesHoy }, (_, i) => ({ mes: MESES[i] } as Record<string, number | string>))
     for (const a of c.anios) {
       let acum = 0
       for (let m = 1; m <= mesHoy; m++) {
-        acum += c.por_mes.find((x) => x.anio === a.anio && x.mes === m)?.total ?? 0
-        filas[m - 1][String(a.anio)] = Math.round(acum)
+        const v = c.por_mes.find((x) => x.anio === a.anio && x.mes === m)?.total ?? 0
+        acum += v
+        filas[m - 1][String(a.anio)] = Math.round(vista === 'mes' ? v : acum)
       }
     }
     return filas
-  }, [c, mesHoy])
+  }, [c, mesHoy, vista])
+
+  const ejeY = (
+    <YAxis tick={{ fontSize: 12, fill: '#52514e' }} axisLine={false} tickLine={false} width={56}
+           tickFormatter={(v: number) => `${Math.round(v / 1e6)} M`} />
+  )
+  const ejeX = <XAxis dataKey="mes" tick={{ fontSize: 12, fill: '#52514e' }} axisLine={{ stroke: '#D1D5DB' }} tickLine={false} />
+  const tooltip = (
+    <Tooltip cursor={vista === 'mes' ? { fill: '#F3F4F6' } : { stroke: '#9CA3AF', strokeDasharray: '4 4' }}
+             itemSorter={(it) => -Number(it.value ?? 0)}
+             formatter={(v: number, n: string) => [fmtMM(v), n]}
+             labelFormatter={(m: string) => (vista === 'mes'
+               ? `Gasto de ${m}${m === MESES[mesHoy - 1] ? ` (hasta el ${Number(c.hoy.slice(8, 10))})` : ''}`
+               : `Acumulado a fines de ${m}`)} />
+  )
 
   return (
     <Card className="border-pillado-green-300">
@@ -516,31 +535,48 @@ function BandaComparada({ c, conAdmin }: { c: CostoComparado; conAdmin: boolean 
             )
           })}
         </div>
-        <div className="text-sm font-medium text-gray-700">Costo acumulado mes a mes</div>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="text-sm font-medium text-gray-700">
+            {vista === 'mes' ? 'Gasto de cada mes, año contra año' : 'Costo acumulado mes a mes'}
+          </div>
+          <div className="flex overflow-hidden rounded-lg border">
+            {([['mes', 'Por mes'], ['acum', 'Acumulado']] as const).map(([v, txt]) => (
+              <button key={v} onClick={() => setVista(v)}
+                      className={`px-3 py-1 text-xs font-medium ${vista === v ? 'bg-gray-900 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
+                {txt}
+              </button>
+            ))}
+          </div>
+        </div>
         <div style={{ width: '100%', height: 300 }}>
           <ResponsiveContainer>
-            <LineChart data={serie} margin={{ top: 8, right: 16, left: 10, bottom: 0 }}>
-              <CartesianGrid stroke="#EEF0F2" vertical={false} />
-              <XAxis dataKey="mes" tick={{ fontSize: 12, fill: '#52514e' }} axisLine={{ stroke: '#D1D5DB' }} tickLine={false} />
-              <YAxis tick={{ fontSize: 12, fill: '#52514e' }} axisLine={false} tickLine={false} width={56}
-                     tickFormatter={(v: number) => `${Math.round(v / 1e6)} M`} />
-              <Tooltip cursor={{ stroke: '#9CA3AF', strokeDasharray: '4 4' }}
-                       itemSorter={(it) => -Number(it.value ?? 0)}
-                       formatter={(v: number, n: string) => [fmtMM(v), n]}
-                       labelFormatter={(m: string) => `Acumulado a fines de ${m}`} />
-              <Legend wrapperStyle={{ fontSize: 12 }} iconType="plainline" />
-              {/* Los años anteriores primero: el año en curso queda encima. */}
-              {c.anios.map((a) => {
-                const esActual = a.anio === actual.anio
-                const color = colorAnio(a.anio, actual.anio)
-                return (
-                  <Line key={a.anio} type="linear" dataKey={String(a.anio)} stroke={color}
-                        strokeWidth={esActual ? 3.5 : 2}
-                        dot={{ r: esActual ? 4.5 : 3.5, fill: color, stroke: '#fff', strokeWidth: 2 }}
-                        activeDot={{ r: 6, fill: color, stroke: '#fff', strokeWidth: 2 }} />
-                )
-              })}
-            </LineChart>
+            {vista === 'mes' ? (
+              <BarChart data={serie} margin={{ top: 8, right: 16, left: 10, bottom: 0 }} barCategoryGap="18%" barGap={2}>
+                <CartesianGrid stroke="#EEF0F2" vertical={false} />
+                {ejeX}{ejeY}{tooltip}
+                <Legend wrapperStyle={{ fontSize: 12 }} />
+                {c.anios.map((a) => (
+                  <Bar key={a.anio} dataKey={String(a.anio)} fill={colorAnio(a.anio, actual.anio)} radius={[4, 4, 0, 0]} />
+                ))}
+              </BarChart>
+            ) : (
+              <LineChart data={serie} margin={{ top: 8, right: 16, left: 10, bottom: 0 }}>
+                <CartesianGrid stroke="#EEF0F2" vertical={false} />
+                {ejeX}{ejeY}{tooltip}
+                <Legend wrapperStyle={{ fontSize: 12 }} iconType="plainline" />
+                {/* Los años anteriores primero: el año en curso queda encima. */}
+                {c.anios.map((a) => {
+                  const esActual = a.anio === actual.anio
+                  const color = colorAnio(a.anio, actual.anio)
+                  return (
+                    <Line key={a.anio} type="linear" dataKey={String(a.anio)} stroke={color}
+                          strokeWidth={esActual ? 3.5 : 2}
+                          dot={{ r: esActual ? 4.5 : 3.5, fill: color, stroke: '#fff', strokeWidth: 2 }}
+                          activeDot={{ r: 6, fill: color, stroke: '#fff', strokeWidth: 2 }} />
+                  )
+                })}
+              </LineChart>
+            )}
           </ResponsiveContainer>
         </div>
         <p className="text-xs text-gray-500">
