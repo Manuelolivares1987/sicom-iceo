@@ -148,7 +148,7 @@ export default function ReporteCostosPage() {
           <div className="mt-1 flex flex-wrap items-end justify-between gap-3">
             <div>
               <h1 className="text-2xl font-extrabold">Costos de operación · {mesLargo(mes)}</h1>
-              <p className="text-sm text-[#dbf0de]">Salidas de bodega Softland (consumo y EPP). Sin petróleo, que se revende.</p>
+              <p className="text-sm text-[#dbf0de]">Órdenes de compra aprobadas en Softland (materiales y servicios, neto). Sin combustible de reventa.</p>
             </div>
             <div className="flex items-center gap-2">
               <button onClick={() => cambiarMes(sumarMes(mes, -1))}

@@ -13,7 +13,7 @@ export default function CostosOperacionPage() {
     <InformeMensualCostos />
     <PanelCostosOperacion
       titulo="Costos de Operación"
-      descripcion="Salidas de bodega Softland (consumo y EPP) por equipo, faena y familia de producto. Sin petróleo, que se revende." />
+      descripcion="Compras aprobadas (OC) o consumo de bodega de Softland, por equipo, faena y familia. Sin combustible de reventa." />
     </>
   )
 }

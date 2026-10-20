@@ -30,12 +30,17 @@ export const NOMBRE_AREA: Record<AreaCosto, string> = {
   sin_clasificar: 'Sin clasificar',
 }
 
+/** De dónde sale el gasto (MIG628): OC aprobadas de Softland o salidas de bodega. */
+export type FuenteCosto = 'oc' | 'bodega'
+
 export type KpiCostos = {
   total: number
   total_anterior: number
   asignado_equipo: number
   asignado_equipo_anterior: number
   epp: number
+  servicios: number
+  servicios_anterior: number
   neumaticos: number
   lineas: number
   lineas_sin_precio: number
@@ -52,6 +57,7 @@ export type CostoMes = {
   mes: string
   total: number
   asignado_equipo: number | null
+  servicios: number | null
 }
 
 export type CostoEquipo = {
@@ -66,6 +72,7 @@ export type CostoEquipo = {
   neumaticos: number | null
   lubricantes: number | null
   repuestos: number | null
+  servicios: number | null
   total_anterior: number | null
   // Costo por hora: ventana entre dos lecturas de horómetro creíbles (MIG599)
   horas: number | null
@@ -96,6 +103,7 @@ export type CostoFamilia = {
 }
 
 export type PanelCostos = {
+  fuente: FuenteCosto
   periodo: {
     desde: string; hasta: string; meses: number
     anterior_desde: string; anterior_hasta: string; compara_anio_anterior: boolean
@@ -149,9 +157,9 @@ export function rpcCostos(fn: string, args: Record<string, unknown>) {
   return tokenReporte ? q.setHeader('x-reporte-token', tokenReporte) : q
 }
 
-export async function getPanelCostos(desde: string, hasta: string, areas: AreaCosto[] | null) {
+export async function getPanelCostos(desde: string, hasta: string, areas: AreaCosto[] | null, fuente: FuenteCosto = 'oc') {
   const { data, error } = await rpcCostos('rpc_costos_operacion_panel', {
-    p_desde: desde, p_hasta: hasta, p_areas: areas,
+    p_desde: desde, p_hasta: hasta, p_areas: areas, p_fuente: fuente,
   })
   if (error) traducir(error)
   return data as PanelCostos
@@ -165,18 +173,18 @@ export type CostoAcumulado = {
   por_anio: { anio: number; total: number; meses: number }[]
 }
 
-export async function getCostoAcumulado(areas: AreaCosto[] | null) {
-  const { data, error } = await rpcCostos('rpc_costos_operacion_acumulado', { p_areas: areas })
+export async function getCostoAcumulado(areas: AreaCosto[] | null, fuente: FuenteCosto = 'oc') {
+  const { data, error } = await rpcCostos('rpc_costos_operacion_acumulado', { p_areas: areas, p_fuente: fuente })
   if (error) traducir(error)
   return data as CostoAcumulado
 }
 
 export async function getDetalleCostos(v: {
-  desde: string; hasta: string; codiCc?: string | null; familia?: string | null
+  desde: string; hasta: string; codiCc?: string | null; familia?: string | null; fuente?: FuenteCosto
 }) {
   const { data, error } = await rpcCostos('rpc_costos_operacion_detalle', {
     p_desde: v.desde, p_hasta: v.hasta,
-    p_codi_cc: v.codiCc ?? null, p_familia: v.familia ?? null, p_limite: 500,
+    p_codi_cc: v.codiCc ?? null, p_familia: v.familia ?? null, p_limite: 500, p_fuente: v.fuente ?? 'oc',
   })
   if (error) traducir(error)
   return (data ?? []) as LineaCosto[]
@@ -196,6 +204,7 @@ export type FaenaCosto = {
   lubricantes: number | null
   repuestos: number | null
   seguridad_epp: number | null
+  servicios: number | null
   dias_equipo: number | null
   equipos: number | null
   costo_equipo_dia: number | null
@@ -213,8 +222,8 @@ export type CostosPorFaena = {
   directos: { faena: string; codi_cc: string | null; descripcion: string | null; total: number }[]
 }
 
-export async function getCostosPorFaena(desde: string, hasta: string) {
-  const { data, error } = await rpcCostos('rpc_costos_por_faena', { p_desde: desde, p_hasta: hasta })
+export async function getCostosPorFaena(desde: string, hasta: string, fuente: FuenteCosto = 'oc') {
+  const { data, error } = await rpcCostos('rpc_costos_por_faena', { p_desde: desde, p_hasta: hasta, p_fuente: fuente })
   if (error) traducir(error)
   return data as CostosPorFaena
 }
@@ -226,7 +235,7 @@ export type SubfaenaCosto = FaenaCosto & { subfaena: string }
 // ---------------------------------------------------------------------------
 
 export type DimensionPareto =
-  | 'faena' | 'subfaena' | 'equipo' | 'familia' | 'producto' | 'centro_costo' | 'mes' | 'linea'
+  | 'faena' | 'subfaena' | 'equipo' | 'familia' | 'producto' | 'centro_costo' | 'mes' | 'linea' | 'proveedor'
 
 export type FiltrosPareto = Partial<{
   faena: string
@@ -239,6 +248,7 @@ export type FiltrosPareto = Partial<{
   area: string
   mes: string
   tipo_equipo: string
+  proveedor: string
 }>
 
 export type ItemPareto = {
@@ -277,11 +287,11 @@ export type LineaPareto = {
 }
 
 export async function getPareto(v: {
-  desde: string; hasta: string; filtros: FiltrosPareto; dimension: DimensionPareto; conAdmin?: boolean
+  desde: string; hasta: string; filtros: FiltrosPareto; dimension: DimensionPareto; conAdmin?: boolean; fuente?: FuenteCosto
 }) {
   const { data, error } = await rpcCostos('rpc_costos_pareto', {
     p_desde: v.desde, p_hasta: v.hasta, p_filtros: v.filtros,
-    p_dimension: v.dimension, p_con_admin: v.conAdmin ?? false,
+    p_dimension: v.dimension, p_con_admin: v.conAdmin ?? false, p_fuente: v.fuente ?? 'oc',
   })
   if (error) traducir(error)
   return data as ResultadoPareto & { lineas?: LineaPareto[] }

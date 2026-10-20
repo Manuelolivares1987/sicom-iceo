@@ -17,7 +17,7 @@ export default function FlotaCostosPage() {
   return (
     <PanelCostosOperacion
       titulo="Costo por faena y por equipo"
-      descripcion="Gasto de bodega Softland (repuestos, neumáticos, lubricantes, insumos y EPP). Sin petróleo, que se revende."
+      descripcion="Compras aprobadas (OC) o consumo de bodega de Softland, por equipo, faena y familia. Sin combustible de reventa."
       despues={<ConciliacionUbicacion />} />
   )
 }

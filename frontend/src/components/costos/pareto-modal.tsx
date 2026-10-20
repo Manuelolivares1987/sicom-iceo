@@ -12,6 +12,7 @@ import {
   getPareto, type DimensionPareto, type FiltrosPareto, type ItemPareto,
 } from '@/lib/services/costos-operacion'
 import { fmtClp, fmtMM, fmtNum, fmtPct } from '@/lib/costos-operacion'
+import { useFuenteCostos } from '@/components/costos/fuente'
 
 // ============================================================================
 // Pareto con bajada (MIG601)
@@ -31,13 +32,13 @@ export type PasoPareto = {
 
 const NOMBRE_DIM: Record<DimensionPareto, string> = {
   faena: 'Faena', subfaena: 'Subfaena', equipo: 'Equipo', familia: 'Familia',
-  producto: 'Producto', centro_costo: 'Centro de costo', mes: 'Mes', linea: 'Líneas',
+  producto: 'Producto', centro_costo: 'Centro de costo', mes: 'Mes', linea: 'Líneas', proveedor: 'Proveedor',
 }
 
 // A qué nivel se baja desde cada dimensión.
 const SIGUIENTE: Record<DimensionPareto, DimensionPareto> = {
   faena: 'subfaena', subfaena: 'equipo', equipo: 'familia', familia: 'producto',
-  producto: 'linea', centro_costo: 'familia', mes: 'faena', linea: 'linea',
+  producto: 'linea', centro_costo: 'familia', mes: 'faena', linea: 'linea', proveedor: 'familia',
 }
 
 // Cómo se convierte la clave del ítem en filtro.
@@ -50,6 +51,7 @@ function filtroDe(dim: DimensionPareto, clave: string): FiltrosPareto {
     case 'producto': return { cod_prod: clave }
     case 'centro_costo': return { codi_cc: clave }
     case 'mes': return { mes: clave }
+    case 'proveedor': return { proveedor: clave }
     default: return {}
   }
 }
@@ -66,10 +68,11 @@ export function ParetoModal({ inicio, desde, hasta, conAdmin, onClose }: {
   const [pasos, setPasos] = useState<PasoPareto[]>([inicio])
   const paso = pasos[pasos.length - 1]
   const [dim, setDim] = useState<DimensionPareto>(inicio.dimension)
+  const fuente = useFuenteCostos()
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ['costos-pareto', desde, hasta, conAdmin ?? false, paso.filtros, dim],
-    queryFn: () => getPareto({ desde, hasta, filtros: paso.filtros, dimension: dim, conAdmin }),
+    queryKey: ['costos-pareto', fuente, desde, hasta, conAdmin ?? false, paso.filtros, dim],
+    queryFn: () => getPareto({ desde, hasta, filtros: paso.filtros, dimension: dim, conAdmin, fuente }),
     staleTime: 5 * 60_000,
   })
 
@@ -111,7 +114,8 @@ export function ParetoModal({ inicio, desde, hasta, conAdmin, onClose }: {
 
       {/* Cambiar el corte sin bajar */}
       <div className="mb-3 flex flex-wrap gap-1">
-        {(['subfaena', 'equipo', 'familia', 'producto', 'centro_costo', 'mes', 'linea'] as DimensionPareto[]).map((d) => (
+        {(['subfaena', 'equipo', 'familia', 'producto', 'centro_costo', 'mes',
+           ...(fuente === 'oc' ? ['proveedor'] : []), 'linea'] as DimensionPareto[]).map((d) => (
           <button key={d} onClick={() => setDim(d)}
                   className={`rounded-full px-3 py-1 text-xs font-medium ${dim === d ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
             Por {NOMBRE_DIM[d].toLowerCase()}
@@ -122,7 +126,7 @@ export function ParetoModal({ inicio, desde, hasta, conAdmin, onClose }: {
       {isLoading && <div className="flex justify-center py-12"><Spinner /></div>}
       {error && <div className="text-sm text-red-700">{(error as Error).message}</div>}
 
-      {data && dim === 'linea' && <TablaLineas lineas={data.lineas ?? []} total={data.total} />}
+      {data && dim === 'linea' && <TablaLineas lineas={data.lineas ?? []} total={data.total} esOc={fuente === 'oc'} />}
 
       {data && dim !== 'linea' && (
         <>
@@ -205,27 +209,27 @@ export function ParetoModal({ inicio, desde, hasta, conAdmin, onClose }: {
   )
 }
 
-function TablaLineas({ lineas, total }: {
-  lineas: NonNullable<Awaited<ReturnType<typeof getPareto>>['lineas']>; total: number
+function TablaLineas({ lineas, total, esOc }: {
+  lineas: NonNullable<Awaited<ReturnType<typeof getPareto>>['lineas']>; total: number; esOc: boolean
 }) {
   return (
     <>
       <div className="mb-2 text-sm text-gray-600">
-        Salidas de bodega Softland, de mayor a menor (máx. 300) · total {fmtClp(total)}
+        {esOc ? 'Líneas de órdenes de compra aprobadas' : 'Salidas de bodega Softland'}, de mayor a menor (máx. 300) · total {fmtClp(total)}
       </div>
       <div className="max-h-[60vh] overflow-auto">
         <table className="w-full text-xs">
           <thead className="sticky top-0 bg-gray-50 text-gray-600">
             <tr>
               <th className="px-2 py-1.5 text-left">Fecha</th>
-              <th className="px-2 py-1.5 text-left">Folio</th>
+              <th className="px-2 py-1.5 text-left">{esOc ? 'N° OC' : 'Folio'}</th>
               <th className="px-2 py-1.5 text-left">Equipo / CC</th>
               <th className="px-2 py-1.5 text-left">Subfaena</th>
               <th className="px-2 py-1.5 text-left">Producto</th>
               <th className="px-2 py-1.5 text-right">Cant.</th>
               <th className="px-2 py-1.5 text-right">Precio</th>
               <th className="px-2 py-1.5 text-right">Total</th>
-              <th className="px-2 py-1.5 text-left">Glosa</th>
+              <th className="px-2 py-1.5 text-left">{esOc ? 'Proveedor' : 'Glosa'}</th>
             </tr>
           </thead>
           <tbody>
@@ -239,7 +243,7 @@ function TablaLineas({ lineas, total }: {
                 <td className="px-2 py-1 text-right">{fmtNum(l.cantidad)}</td>
                 <td className="px-2 py-1 text-right">{fmtClp(l.precio_unit)}</td>
                 <td className="px-2 py-1 text-right font-medium">{fmtClp(l.total)}</td>
-                <td className="px-2 py-1 text-gray-500">{l.glosa}</td>
+                <td className="px-2 py-1 text-gray-500">{esOc ? l.bodega : l.glosa}</td>
               </tr>
             ))}
           </tbody>

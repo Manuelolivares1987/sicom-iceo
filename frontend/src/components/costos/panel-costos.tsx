@@ -6,7 +6,7 @@ import {
   Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts'
 import {
-  AlertTriangle, Database, Gauge, HardHat, Package, ShieldCheck, Truck, Wallet,
+  AlertTriangle, Database, Gauge, HardHat, Package, ShieldCheck, Truck, Wallet, Wrench,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -18,9 +18,10 @@ import {
 } from '@/components/costos/comunes'
 import { PanelFaenas } from '@/components/costos/panel-faenas'
 import { ParetoModal, type PasoPareto } from '@/components/costos/pareto-modal'
+import { FuenteCostosContext, NOMBRE_FUENTE } from '@/components/costos/fuente'
 import {
   AREAS_OPERACION, NOMBRE_AREA, getCostoAcumulado, getPanelCostos,
-  type AreaCosto, type CostoAcumulado, type CostoEquipo, type PanelCostos,
+  type AreaCosto, type CostoAcumulado, type FuenteCosto, type CostoEquipo, type PanelCostos,
 } from '@/lib/services/costos-operacion'
 import {
   HORAS_MINIMAS_CPH, fmtClp, fmtMM, fmtNum, fmtPct, nivelAsignacion, pct, rangoPreset,
@@ -30,8 +31,11 @@ import {
 // ============================================================================
 // Panel de costos de operación (MIG594-603) — compartido Gerencia / Flota
 // ----------------------------------------------------------------------------
-// Salidas de bodega Softland (consumo 07 + EPP 08), copiadas una vez al día.
-// El petróleo NO está: se compra para revender, es mercadería (MIG598).
+// Dos fuentes de Softland, copiadas una vez al día (selector arriba):
+//  · Compras aprobadas (OC, MIG628, por defecto): owordendet de OC en estado AP,
+//    por fecha de la OC. Incluye servicios (seguros, arriendos, reparaciones).
+//  · Consumo de bodega: salidas (consumo 07 + EPP 08), por fecha de salida.
+// El combustible de reventa NO está: es mercadería (MIG598/628).
 // Se lee de arriba hacia abajo:
 //   1. ¿Le puedo creer?                → calidad del dato y última sincronización
 //   2. ¿Cuánto y cuánto cuesta la hora? → tarjetas
@@ -55,24 +59,26 @@ export function PanelCostosOperacion({ titulo, descripcion, despues }: {
   const [preset, setPreset] = useState<RangoPreset>('ytd')
   const [conAdmin, setConAdmin] = useState(false)
   const [pareto, setPareto] = useState<PasoPareto | null>(null)
+  const [fuente, setFuente] = useState<FuenteCosto>('oc')
   const rango = useMemo(() => rangoPreset(preset, new Date()), [preset])
   const areas: AreaCosto[] | null = conAdmin
     ? [...AREAS_OPERACION, 'administracion', 'comercial'] : null
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ['costos-operacion', rango.desde, rango.hasta, conAdmin],
-    queryFn: () => getPanelCostos(rango.desde, rango.hasta, areas),
+    queryKey: ['costos-operacion', fuente, rango.desde, rango.hasta, conAdmin],
+    queryFn: () => getPanelCostos(rango.desde, rango.hasta, areas, fuente),
     staleTime: 5 * 60_000,
     retry: (n, err) => err?.name !== 'CostosNoAutorizadoError' && n < 2,
   })
   const { data: acumulado } = useQuery({
-    queryKey: ['costos-acumulado', conAdmin],
-    queryFn: () => getCostoAcumulado(areas),
+    queryKey: ['costos-acumulado', fuente, conAdmin],
+    queryFn: () => getCostoAcumulado(areas, fuente),
     staleTime: 30 * 60_000,
     retry: (n, err) => err?.name !== 'CostosNoAutorizadoError' && n < 2,
   })
 
   return (
+    <FuenteCostosContext.Provider value={fuente}>
     <div className="space-y-5 p-4 md:p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
@@ -82,6 +88,14 @@ export function PanelCostosOperacion({ titulo, descripcion, despues }: {
           <p className="text-sm text-gray-500">{descripcion}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <div className="flex overflow-hidden rounded-lg border" title="De dónde sale el gasto">
+            {(['oc', 'bodega'] as const).map((f) => (
+              <button key={f} onClick={() => setFuente(f)}
+                      className={`px-3 py-1.5 text-sm font-medium ${fuente === f ? 'bg-pillado-green-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
+                {NOMBRE_FUENTE[f]}
+              </button>
+            ))}
+          </div>
           {PRESETS.map((p) => (
             <Button key={p.id} size="sm" variant={preset === p.id ? 'primary' : 'outline'}
                     onClick={() => setPreset(p.id)}>
@@ -101,9 +115,9 @@ export function PanelCostosOperacion({ titulo, descripcion, despues }: {
       )}
       {acumulado && acumulado.total > 0 && (
         <BandaAcumulado acumulado={acumulado} periodo={data?.kpi.total ?? null}
-                        etiquetaPeriodo={etiquetaRango(rango.desde, rango.hasta)} conAdmin={conAdmin} />
+                        etiquetaPeriodo={etiquetaRango(rango.desde, rango.hasta)} conAdmin={conAdmin} fuente={fuente} />
       )}
-      {data && <Contenido data={data} onPareto={setPareto} />}
+      {data && <Contenido data={data} fuente={fuente} onPareto={setPareto} />}
       {despues}
 
       {pareto && (
@@ -111,13 +125,15 @@ export function PanelCostosOperacion({ titulo, descripcion, despues }: {
                      onClose={() => setPareto(null)} />
       )}
     </div>
+    </FuenteCostosContext.Provider>
   )
 }
 
-function Contenido({ data, onPareto }: {
-  data: PanelCostos; onPareto: (p: PasoPareto) => void
+function Contenido({ data, fuente, onPareto }: {
+  data: PanelCostos; fuente: FuenteCosto; onPareto: (p: PasoPareto) => void
 }) {
   const k = data.kpi
+  const esOc = fuente === 'oc'
   const familias = useTop(data.por_familia)
   const centros = useTop(data.por_cc_no_equipo)
   // Contra qué se compara: mismos meses del año anterior si el período es un año (MIG604).
@@ -173,30 +189,44 @@ function Contenido({ data, onPareto }: {
             <Database className="h-3.5 w-3.5" />
             Softland {data.sync.ultima
               ? new Date(data.sync.ultima).toLocaleString('es-CL', { dateStyle: 'short', timeStyle: 'short' })
-              : 'nunca'} · último documento {data.sync.max_fecha ?? '—'}
+              : 'nunca'} · {esOc ? 'última OC' : 'último documento'} {data.sync.max_fecha ?? '—'}
           </span>
-          <span className="text-xs text-gray-400">Sin petróleo (se revende). El mes en curso está incompleto.</span>
+          <span className="text-xs text-gray-400">
+            {esOc
+              ? 'Solo OC aprobadas (pendientes y nulas fuera), por fecha de la OC. Sin combustible de reventa ni de stock.'
+              : 'Sin petróleo (se revende).'} El mes en curso está incompleto.
+          </span>
         </CardContent>
       </Card>
 
       {/* 2. Tarjetas */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        <Tarjeta icon={Wallet} titulo="Gasto de operación" valor={fmtMM(k.total)}
+        <Tarjeta icon={Wallet} titulo={esOc ? 'Compras de operación' : 'Gasto de operación'} valor={fmtMM(k.total)}
                  delta={variacionPct(k.total, k.total_anterior)}
                  nota={`${compara}: ${fmtMM(k.total_anterior)}`}
                  calculo={<>
-                   <p>Suma de todas las <b>salidas de bodega de Softland</b> del período: consumo a centro de costo
-                     (concepto 07) y EPP entregado a personas (concepto 08), valorizadas al costo promedio de bodega.</p>
-                   <p><b>No incluye</b> el petróleo (se compra para revender) ni los centros de costo de administración y
-                     comercial (salvo que marques «Incluir administración y comercial»). Tampoco mano de obra del taller
-                     ni servicios externos: eso está en la contabilidad, que todavía no se trae.</p>
+                   {esOc ? <>
+                     <p>Suma de las líneas de <b>órdenes de compra aprobadas</b> en Softland (estado AP) emitidas en el período,
+                       en valor neto (sin IVA). Las OC pendientes (PE) y las nulas (UN) no cuentan. Incluye materiales,
+                       repuestos y <b>servicios</b> (seguros, arriendos, reparaciones externas, permisos…), que no pasan por bodega.</p>
+                     <p><b>No incluye</b> el combustible comprado para revender o para stock (centros de costo OC-TA-03 y OC-TA-04)
+                       ni los centros de costo de administración y comercial (salvo que marques «Incluir administración y
+                       comercial»). El combustible cargado a un equipo sí está. Tampoco la mano de obra propia.</p>
+                     <p>Es lo comprado, no lo consumido: un repuesto comprado para stock cuenta el mes de la OC.</p>
+                   </> : <>
+                     <p>Suma de todas las <b>salidas de bodega de Softland</b> del período: consumo a centro de costo
+                       (concepto 07) y EPP entregado a personas (concepto 08), valorizadas al costo promedio de bodega.</p>
+                     <p><b>No incluye</b> el petróleo (se compra para revender) ni los centros de costo de administración y
+                       comercial (salvo que marques «Incluir administración y comercial»). Tampoco mano de obra del taller
+                       ni servicios externos, que no pasan por bodega (están en «Compras aprobadas»).</p>
+                   </>}
                    <p>La flecha compara {compara}: {fmtMM(k.total)} contra {fmtMM(k.total_anterior)}.</p>
                  </>} />
         <Tarjeta icon={Truck} titulo="Cargado a equipos" valor={fmtMM(k.asignado_equipo)}
                  delta={variacionPct(k.asignado_equipo, k.asignado_equipo_anterior)}
                  nota={`${fmtNum(k.equipos_con_gasto)} equipos con gasto · ${compara}: ${fmtMM(k.asignado_equipo_anterior)}`}
                  calculo={<>
-                   <p>La parte del gasto de operación cuyo <b>centro de costo en Softland es un equipo</b>: el código
+                   <p>La parte del gasto cuyo <b>centro de costo en Softland{esOc ? ' (el de la línea de la OC)' : ''} es un equipo</b>: el código
                      de equipo (AI agua industrial, CC combustible, CA camioneta, CP pluma, CS servicio…) o el CECO de la
                      patente en SICOM; si no calza, se busca la patente escrita en la descripción del centro de costo.</p>
                    <p>Es {fmtPct(pct(k.asignado_equipo, k.total))} del gasto ({fmtMM(k.asignado_equipo)} de {fmtMM(k.total)}).
@@ -211,8 +241,8 @@ function Contenido({ data, onPareto }: {
                      de estado o contrato. Se toma el <b>par de lecturas más separado</b> que sea creíble: el horómetro
                      tiene que subir, a no más de 20 h por día, con al menos 30 días entre ambas (así un número mal
                      digitado no entra). Horas = lectura final − lectura inicial.</p>
-                   <p><b>2. Costo del mismo equipo en esas mismas fechas.</b> Las salidas de bodega cargadas al equipo
-                     entre la lectura inicial y la final (sin petróleo). Misma ventana arriba y abajo: así no se divide
+                   <p><b>2. Costo del mismo equipo en esas mismas fechas.</b> {esOc ? 'Las compras aprobadas (OC)' : 'Las salidas de bodega'} cargadas al equipo
+                     entre la lectura inicial y la final. Misma ventana arriba y abajo: así no se divide
                      un año de gasto por un mes de horas.</p>
                    <p><b>3. Costo por hora del equipo</b> = costo ÷ horas. Está en la tabla de equipos; al pasar el mouse
                      por «Horas medidas» se ven las dos lecturas usadas.</p>
@@ -220,22 +250,38 @@ function Contenido({ data, onPareto }: {
                      <b>{fmtClp(k.flota_costo_medido)} ÷ {fmtNum(k.flota_horas)} h = {k.flota_costo_hora != null ? fmtClp(k.flota_costo_hora) : '—'}/h</b>,
                      con {fmtNum(k.equipos_medidos)} de {fmtNum(k.equipos_con_gasto)} equipos con gasto.</p>
                    <p><b>Quedan fuera:</b> equipos sin dos lecturas creíbles en el período o con menos de 20 h medidas.
-                     Para comparar contra la mediana de su tipo se exigen 100 h. No incluye mano de obra ni servicios
-                     externos, solo bodega.</p>
+                     Para comparar contra la mediana de su tipo se exigen 100 h. No incluye mano de obra propia{esOc ? '' : ' ni servicios externos (solo bodega)'}.</p>
                  </>} />
         <Tarjeta icon={Package} titulo="Neumáticos" valor={fmtMM(k.neumaticos)}
                  nota={`${fmtPct(pct(k.neumaticos, k.total))} del gasto`}
-                 calculo={<p>Salidas de bodega de la familia <b>REPNEU</b> (código de producto que empieza con
+                 calculo={<p>{esOc ? 'Compras' : 'Salidas de bodega'} de la familia <b>REPNEU</b> (código de producto que empieza con
                    «REPNEU») dentro del gasto de operación del período. Es {fmtPct(pct(k.neumaticos, k.total))} del total.</p>} />
-        <Tarjeta icon={HardHat} titulo="EPP entregado a personas" valor={fmtMM(k.epp)}
-                 nota="Concepto 08 de Softland"
-                 calculo={<p>Salidas de bodega con <b>concepto 08</b>: elementos de protección personal entregados a un
-                   trabajador (buzos, botines, cascos…). El EPP que salió con concepto 07 a un centro de costo no está aquí:
-                   aparece en la familia «EPP» del Pareto por familia.</p>} />
-        <Tarjeta icon={AlertTriangle} titulo="Sin centro de costo" valor={fmtMM(k.sin_cc)}
-                 alerta={k.sin_cc > 0} nota="Salidas que no se pueden cargar a nadie"
-                 calculo={<p>Salidas de bodega que en Softland no tienen <b>centro de costo</b> (CodiCC vacío). No se
-                   pueden asignar a un equipo ni a una faena. Hoy son casi todas entregas de EPP (concepto 08).</p>} />
+        {esOc ? (
+          <Tarjeta icon={HardHat} titulo="EPP comprado" valor={fmtMM(k.epp)}
+                   nota="Familia ISEEPP"
+                   calculo={<p>Compras aprobadas de la familia <b>ISEEPP</b> (elementos de protección personal: buzos,
+                     botines, cascos…). Es {fmtPct(pct(k.epp, k.total))} del total.</p>} />
+        ) : (
+          <Tarjeta icon={HardHat} titulo="EPP entregado a personas" valor={fmtMM(k.epp)}
+                   nota="Concepto 08 de Softland"
+                   calculo={<p>Salidas de bodega con <b>concepto 08</b>: elementos de protección personal entregados a un
+                     trabajador (buzos, botines, cascos…). El EPP que salió con concepto 07 a un centro de costo no está aquí:
+                     aparece en la familia «EPP» del Pareto por familia.</p>} />
+        )}
+        {esOc ? (
+          <Tarjeta icon={Wrench} titulo="Servicios" valor={fmtMM(k.servicios)}
+                   delta={variacionPct(k.servicios, k.servicios_anterior)}
+                   nota={`${fmtPct(pct(k.servicios, k.total))} de las compras · ${compara}: ${fmtMM(k.servicios_anterior)}`}
+                   calculo={<p>Líneas de OC aprobadas con código de producto <b>SER</b>: seguros, arriendos de bodega y
+                     galpón, reparaciones y mantenciones externas, permisos de circulación, alojamiento, GPS, telefonía…
+                     No pasan por bodega, por eso no aparecen en «Consumo de bodega». Clic en el Pareto por familia para
+                     ver el detalle.</p>} />
+        ) : (
+          <Tarjeta icon={AlertTriangle} titulo="Sin centro de costo" valor={fmtMM(k.sin_cc)}
+                   alerta={k.sin_cc > 0} nota="Salidas que no se pueden cargar a nadie"
+                   calculo={<p>Salidas de bodega que en Softland no tienen <b>centro de costo</b> (CodiCC vacío). No se
+                     pueden asignar a un equipo ni a una faena. Hoy son casi todas entregas de EPP (concepto 08).</p>} />
+        )}
       </div>
 
       {/* 3. Excepciones */}
@@ -257,7 +303,7 @@ function Contenido({ data, onPareto }: {
           ))}
           {k.lineas_sin_precio > 0 && (
             <Excepcion>
-              <b>{fmtNum(k.lineas_sin_precio)}</b> líneas salieron de bodega con precio 0: el costo está subvaluado.
+              <b>{fmtNum(k.lineas_sin_precio)}</b> {esOc ? 'líneas de OC aprobadas con valor 0' : 'líneas salieron de bodega con precio 0'}: el costo está subvaluado.
             </Excepcion>
           )}
           {k.sin_cc > 0 && (
@@ -281,7 +327,7 @@ function Contenido({ data, onPareto }: {
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
         <Card className="xl:col-span-2">
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">Gasto mensual de bodega</CardTitle>
+            <CardTitle className="text-base">{esOc ? 'Compras aprobadas por mes' : 'Gasto mensual de bodega'}</CardTitle>
           </CardHeader>
           <CardContent>
             <div style={{ width: '100%', height: 300 }}>
@@ -400,12 +446,12 @@ function Contenido({ data, onPareto }: {
 }
 
 /**
- * Costo acumulado total de operaciones (MIG627): todo lo que salió de bodega
+ * Costo acumulado total de operaciones (MIG627): todo lo de la fuente elegida
  * desde el primer registro de Softland, más el acumulado del período elegido
  * y el desglose por año.
  */
-function BandaAcumulado({ acumulado: a, periodo, etiquetaPeriodo, conAdmin }: {
-  acumulado: CostoAcumulado; periodo: number | null; etiquetaPeriodo: string; conAdmin: boolean
+function BandaAcumulado({ acumulado: a, periodo, etiquetaPeriodo, conAdmin, fuente }: {
+  acumulado: CostoAcumulado; periodo: number | null; etiquetaPeriodo: string; conAdmin: boolean; fuente: FuenteCosto
 }) {
   const max = Math.max(...a.por_anio.map((x) => x.total), 1)
   return (
@@ -445,9 +491,11 @@ function BandaAcumulado({ acumulado: a, periodo, etiquetaPeriodo, conAdmin }: {
           ))}
         </div>
         <p className="text-xs text-gray-500">
-          Salidas de bodega Softland (consumo y EPP) sin petróleo, que se revende
+          {fuente === 'oc'
+            ? 'Órdenes de compra aprobadas (neto, con servicios), sin combustible de reventa ni de stock'
+            : 'Salidas de bodega Softland (consumo y EPP) sin petróleo, que se revende'}
           {conAdmin ? ', incluyendo administración y comercial' : '; sin administración ni comercial'}.
-          No incluye mano de obra ni servicios externos. Los años con menos de 12 meses de registros se marcan («m»).
+          No incluye mano de obra propia. Los años con menos de 12 meses de registros se marcan («m»).
         </p>
       </CardContent>
     </Card>

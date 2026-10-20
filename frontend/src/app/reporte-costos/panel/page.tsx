@@ -49,7 +49,7 @@ export default function PanelCostosPublicoPage() {
       <div className="mx-auto max-w-7xl">
         <PanelCostosOperacion
           titulo="Costos de Operación — Pillado"
-          descripcion="Salidas de bodega Softland (consumo y EPP) por equipo, faena y familia de producto. Sin petróleo, que se revende. Clic en cualquier barra o fila para ver su Pareto." />
+          descripcion="Compras aprobadas (OC) o consumo de bodega de Softland, por equipo, faena y familia. Sin combustible de reventa. Clic en cualquier barra o fila para ver su Pareto." />
       </div>
     </div>
   )

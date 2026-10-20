@@ -134,7 +134,7 @@ export function TablaEquiposCosto({ equipos, onPareto }: {
         </table>
         {pie}
         <p className="px-3 py-2 text-xs text-gray-400">
-          Costo por hora = gasto de bodega entre dos lecturas de horómetro (GPS, recepción en taller, OS,
+          Costo por hora = gasto del equipo (según la fuente elegida) entre dos lecturas de horómetro (GPS, recepción en taller, OS,
           preventivas) ÷ horas entre ellas. Pasa el mouse por las horas para ver qué lecturas se usaron.
           «vs su tipo» compara contra la mediana de equipos del mismo tipo.
         </p>

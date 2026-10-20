@@ -2,7 +2,8 @@
 # softland-sync.ps1 - Copia diaria Softland -> SICOM (MIG594)
 # ----------------------------------------------------------------------------
 # Lee las salidas de bodega (iw_gsaen + iw_gmovi, Tipo S, Estado V, conceptos
-# 07 consumo y 08 EPP) y los centros de costo (cwtccos) de
+# 07 consumo y 08 EPP), las ordenes de compra (owordencom + owordendet, MIG628)
+# y los centros de costo (cwtccos) de
 # SERVERPILLADO\SQLEXPRESS por la LAN, y los sube a Supabase con las RPC de
 # MIG594 (anon key + secreto 'softland_sync'; nunca el service_role).
 #
@@ -10,6 +11,8 @@
 # lanza cada hora y el script sale sin hacer nada si ya corrio bien hoy o si
 # no esta en la red de la oficina. Si un dia no corre, el siguiente relee la
 # ventana completa (60 dias; 400 los domingos), asi que no se pierde nada.
+# Las OC se releen siempre 400 dias: su estado (PE/AP/UN) y lo recibido
+# cambian semanas despues de emitidas.
 #
 # Secretos: config cifrada con DPAPI (solo este usuario de Windows en este PC)
 # en %LOCALAPPDATA%\SICOM\softland-sync. Nunca se imprimen.
@@ -20,13 +23,15 @@
 #   powershell -File softland-sync.ps1                 # corrida normal (1 vez al dia)
 #   powershell -File softland-sync.ps1 -Forzar         # corre aunque ya haya corrido hoy
 #   powershell -File softland-sync.ps1 -Desde 2014-01-01   # carga historica
+#   powershell -File softland-sync.ps1 -Forzar -DesdeOC 2014-01-01   # historico de OC
 # ============================================================================
 param(
     [switch]$Configurar,
     [string]$Excel = '',
     [switch]$InstalarTarea,
     [switch]$Forzar,
-    [string]$Desde = ''
+    [string]$Desde = '',
+    [string]$DesdeOC = ''
 )
 $ErrorActionPreference = 'Stop'
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -130,7 +135,7 @@ if ($InstalarTarea) {
 # ----------------------------------------------------------------------------
 $hoy = (Get-Date).ToString('yyyy-MM-dd')
 $estado = if (Test-Path $estadoFile) { Get-Content $estadoFile -Raw | ConvertFrom-Json } else { $null }
-if (-not $Forzar -and -not $Desde -and $estado -and $estado.ultima_ok -eq $hoy) { exit 0 }
+if (-not $Forzar -and -not $Desde -and -not $DesdeOC -and $estado -and $estado.ultima_ok -eq $hoy) { exit 0 }
 
 if (-not (Test-Connection $SERVIDOR -Count 1 -Quiet -ErrorAction SilentlyContinue)) {
     Log "Sin acceso a $SERVIDOR (fuera de la red de la oficina). Se reintenta en la proxima hora."
@@ -143,7 +148,10 @@ $run = [guid]::NewGuid().ToString()
 $desdeFecha = if ($Desde) { [datetime]::ParseExact($Desde, 'yyyy-MM-dd', $null) }
               elseif ((Get-Date).DayOfWeek -eq 'Sunday') { (Get-Date).Date.AddDays(-400) }
               else { (Get-Date).Date.AddDays(-60) }
-Log "Inicio corrida $run desde $($desdeFecha.ToString('yyyy-MM-dd'))"
+$ventanaOC = if ($DesdeOC) { [datetime]::ParseExact($DesdeOC, 'yyyy-MM-dd', $null) }
+           elseif ($Desde) { $desdeFecha }
+           else { (Get-Date).Date.AddDays(-400) }
+Log "Inicio corrida $run desde $($desdeFecha.ToString('yyyy-MM-dd')) (OC desde $($ventanaOC.ToString('yyyy-MM-dd')))"
 
 function Rpc($nombre, $cuerpo) {
     $json = $cuerpo | ConvertTo-Json -Depth 8 -Compress
@@ -239,8 +247,74 @@ SELECT g.Tipo, g.CodBode, g.NroInt, g.Folio, g.Concepto, g.Fecha, g.Glosa, g.Ord
     Cerrar-Doc
     Enviar
 
-    # 3) Cierre: borra lo anulado en la ventana, refresca el resumen y deja bitacora.
-    $stats = @{ docs = $tot.docs; cambiados = $tot.cambiados; lineas = $tot.lineas; equipo = $env:COMPUTERNAME; centros_costo = $ccs.Count }
+    # 3) Ordenes de compra (todas; el panel usa solo las AP). Orden estable para el hash.
+    $cmd = $cn.CreateCommand()
+    $cmd.CommandTimeout = 300
+    $cmd.CommandText = @"
+SELECT c.NumInterOC, c.NumOC, c.FechaOC, c.CodEstado, c.CodAux, a.NomAux, c.CodiCC AS CcOC, c.CodArn, c.Usuario,
+       c.NomAprobador, c.SubTotalOC, c.ValorTotOC,
+       d.NumLinea, d.CodProd, d.DetProd, d.CodiCC AS CcLinea, d.FechaEnt, d.Cantidad, d.Recibido, d.Saldo,
+       d.PrecioUnit, d.ValorTotal
+  FROM pillado.softland.owordencom c
+  LEFT JOIN pillado.softland.owordendet d ON d.NumInterOC = c.NumInterOC
+  LEFT JOIN pillado.softland.cwtauxi a ON a.CodAux = c.CodAux
+ WHERE c.FechaOC >= ?
+ ORDER BY c.NumInterOC, d.NumLinea
+"@
+    [void]$cmd.Parameters.Add((New-Object System.Data.Odbc.OdbcParameter('@d', [System.Data.Odbc.OdbcType]::DateTime)))
+    $cmd.Parameters[0].Value = $ventanaOC
+    $r = $cmd.ExecuteReader()
+    $ocs = New-Object System.Collections.ArrayList
+    $oc = $null; $ocKey = $null; $osb = $null
+    $totOc = @{ ocs = 0; cambiadas = 0; lineas = 0 }
+    function Cerrar-Oc {
+        if ($script:oc) { $script:oc.hash = Hash $script:osb.ToString(); [void]$script:ocs.Add($script:oc) }
+    }
+    function Enviar-Oc {
+        if ($script:ocs.Count -eq 0) { return }
+        $res = Rpc 'rpc_softland_cargar_oc' @{ p_secreto = $cfg.secreto; p_run = $run; p_ocs = @($script:ocs) }
+        $script:totOc.ocs += $res.ocs; $script:totOc.cambiadas += $res.cambiadas; $script:totOc.lineas += $res.lineas
+        $script:ocs.Clear()
+    }
+    function Fecha($v) { if ($v -is [System.DBNull] -or $null -eq $v) { return $null } return ([datetime]$v).ToString('yyyy-MM-dd') }
+    while ($r.Read()) {
+        $key = [int]$r['NumInterOC']
+        if ($key -ne $ocKey) {
+            Cerrar-Oc
+            if ($ocs.Count -ge $LOTE) { Enviar-Oc }
+            $ocKey = $key
+            $oc = [ordered]@{
+                num_inter_oc = $key
+                num_oc = $(if ($r['NumOC'] -is [System.DBNull]) { $null } else { [int]$r['NumOC'] })
+                fecha_oc = (Fecha $r['FechaOC']); estado = (Txt $r['CodEstado'])
+                cod_aux = (Txt $r['CodAux']); proveedor = (Txt $r['NomAux']); codi_cc = (Txt $r['CcOC'])
+                cod_arn = (Txt $r['CodArn']); usuario = (Txt $r['Usuario']); aprobador = (Txt $r['NomAprobador'])
+                neto = (Num $r['SubTotalOC']); total_oc = (Num $r['ValorTotOC'])
+                hash = ''; lineas = (New-Object System.Collections.ArrayList)
+            }
+            $osb = New-Object System.Text.StringBuilder
+            [void]$osb.Append("$key|$($oc.num_oc)|$($oc.fecha_oc)|$($oc.estado)|$($oc.cod_aux)|$($oc.proveedor)|$($oc.codi_cc)|$($oc.cod_arn)|$($oc.aprobador)|$($oc.neto)|$($oc.total_oc)")
+        }
+        if (-not ($r['NumLinea'] -is [System.DBNull])) {
+            $lin = [ordered]@{
+                num_linea = [int]$r['NumLinea']; cod_prod = (Txt $r['CodProd']); det_prod = (Txt $r['DetProd'])
+                codi_cc = (Txt $r['CcLinea']); fecha_ent = (Fecha $r['FechaEnt'])
+                cantidad = (Num $r['Cantidad']); recibido = (Num $r['Recibido']); saldo = (Num $r['Saldo'])
+                precio_unit = (Num $r['PrecioUnit']); total = (Num $r['ValorTotal'])
+            }
+            [void]$oc.lineas.Add($lin)
+            [void]$osb.Append("#$($lin.num_linea)|$($lin.cod_prod)|$($lin.det_prod)|$($lin.codi_cc)|$($lin.cantidad)|$($lin.recibido)|$($lin.saldo)|$($lin.precio_unit)|$($lin.total)")
+        }
+    }
+    $r.Close()
+    Cerrar-Oc
+    Enviar-Oc
+    $cierreOc = Rpc 'rpc_softland_cerrar_oc' @{ p_secreto = $cfg.secreto; p_run = $run; p_desde = $ventanaOC.ToString('yyyy-MM-dd') }
+    Log "OC: $($totOc.ocs) ordenes ($($totOc.cambiadas) nuevas o cambiadas, $($totOc.lineas) lineas), $($cierreOc.borradas) borradas"
+
+    # 4) Cierre: borra lo anulado en la ventana, refresca el resumen y deja bitacora.
+    $stats = @{ docs = $tot.docs; cambiados = $tot.cambiados; lineas = $tot.lineas; equipo = $env:COMPUTERNAME; centros_costo = $ccs.Count
+                ocs = $totOc.ocs; ocs_cambiadas = $totOc.cambiadas; oc_lineas = $totOc.lineas }
     $cierre = Rpc 'rpc_softland_cerrar_corrida' @{
         p_secreto = $cfg.secreto; p_run = $run; p_inicio = $inicio.ToString('o')
         p_desde = $desdeFecha.ToString('yyyy-MM-dd'); p_stats = $stats }
