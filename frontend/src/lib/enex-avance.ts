@@ -46,6 +46,17 @@ export function ventanaTrimestre(anio: number, mesInicio: number): Ventana {
   }
 }
 
+/** Ventana de la Gantt: desde un día cualquiera hasta el fin del mes n-1 después (mira hacia adelante). */
+export function ventanaDesde(desde: string, nMeses: number): Ventana {
+  const [y, m] = desde.split('-').map(Number)
+  const meses = Array.from({ length: nMeses }, (_, k) => {
+    const m0 = m - 1 + k
+    return { anio: y + Math.floor(m0 / 12), mes: (m0 % 12) + 1 }
+  })
+  const ult = meses[meses.length - 1]
+  return { desde, hasta: ultimoDiaMes(ult.anio, ult.mes), meses }
+}
+
 /** Trimestre contractual ENEX anclado en febrero (Feb-Abr, May-Jul, Ago-Oct, Nov-Ene), como fn_enex_trimestre_key. */
 export function inicioTrimestreContractual(iso: string): { anio: number; mes: number } {
   const [y, m] = iso.split('-').map(Number)

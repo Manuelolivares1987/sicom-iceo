@@ -23,7 +23,7 @@ import {
   type EnexPanelRow, type EnexInstalacion, type EnexFaena,
 } from '@/lib/services/enex'
 import {
-  ventanaTrimestre, inicioTrimestreContractual, calcularAvance, estadoProg, codigoCelda, isoDe, sumarDias, fechaDeIso, FERIADOS_CL,
+  ventanaTrimestre, ventanaDesde, inicioTrimestreContractual, calcularAvance, estadoProg, codigoCelda, isoDe, sumarDias, fechaDeIso, FERIADOS_CL,
 } from '@/lib/enex-avance'
 import { TarjetasAvance, CurvaSEnex, TablaFaenas } from '@/components/enex/planificacion/avance-enex'
 import { GanttEnex, LEYENDA_ESTADO } from '@/components/enex/planificacion/gantt-enex'
@@ -42,9 +42,19 @@ export default function EnexPlanificacionPage() {
   const [faenaSel, setFaenaSel] = useState<string>('todas')
   const [mundo, setMundo] = useState<Mundo>('todos')
   const [importar, setImportar] = useState(false)
+  const [horizonte, setHorizonte] = useState<3 | 6 | 12>(6)
   const puedeEditar = !!perfil?.rol && ROLES_GESTION.includes(perfil.rol)
 
   const ventana = useMemo(() => (inicio ? ventanaTrimestre(inicio.anio, inicio.mes) : null), [inicio])
+  // La Gantt mira hacia adelante: en el trimestre en curso parte el lunes de la semana pasada y
+  // sigue `horizonte` meses. Si se navega a otro trimestre, parte al inicio de ese trimestre.
+  // El avance, la curva S y el KPI siguen midiéndose sobre el trimestre contractual.
+  const ventanaGantt = useMemo(() => {
+    if (!ventana || !hoy) return null
+    const enCurso = hoy >= ventana.desde && hoy <= ventana.hasta
+    const lunes = sumarDias(hoy, -7 - ((fechaDeIso(hoy).getDay() + 6) % 7))
+    return ventanaDesde(enCurso ? lunes : ventana.desde, horizonte)
+  }, [ventana, hoy, horizonte])
 
   const { data: faenas = [] } = useQuery({ queryKey: ['enex-faenas'], queryFn: getFaenas, staleTime: 5 * 60_000 })
   const { data: instalaciones = [], refetch: refetchInst } = useQuery({
@@ -53,6 +63,10 @@ export default function EnexPlanificacionPage() {
   const { data: panel = [], isLoading } = useQuery({
     queryKey: ['enex-plan-ventana', ventana?.desde],
     queryFn: () => getPanelVentana(ventana!.meses), enabled: !!ventana, staleTime: 10_000,
+  })
+  const { data: panelGantt = [], isLoading: cargandoGantt } = useQuery({
+    queryKey: ['enex-plan-ventana', 'gantt', ventanaGantt?.desde, horizonte],
+    queryFn: () => getPanelVentana(ventanaGantt!.meses), enabled: !!ventanaGantt, staleTime: 10_000,
   })
 
   const invalidar = () => {
@@ -66,6 +80,9 @@ export default function EnexPlanificacionPage() {
   const rows = useMemo(() => panel.filter((r) => (faenaSel === 'todas' || r.faena_id === faenaSel) && enMundo(r.linea)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [panel, faenaSel, mundo])
+  const rowsGantt = useMemo(() => panelGantt.filter((r) => (faenaSel === 'todas' || r.faena_id === faenaSel) && enMundo(r.linea)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [panelGantt, faenaSel, mundo])
   const instVista = useMemo(() => instalaciones.filter((i) => (faenaSel === 'todas' || i.faena_id === faenaSel) && enMundo(i.linea)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [instalaciones, faenaSel, mundo])
@@ -80,7 +97,7 @@ export default function EnexPlanificacionPage() {
     setInicio({ anio: a, mes: m })
   }
 
-  if (!ventana || !hoy) return <div className="flex justify-center p-10"><Spinner /></div>
+  if (!ventana || !ventanaGantt || !hoy) return <div className="flex justify-center p-10"><Spinner /></div>
   const m0 = ventana.meses[0], m2 = ventana.meses[2]
 
   return (
@@ -99,7 +116,7 @@ export default function EnexPlanificacionPage() {
           <Link href="/dashboard/enex"><Button variant="outline"><Building2 className="mr-1 h-4 w-4" /> Control & KPI</Button></Link>
           <Link href="/dashboard/enex/pauta-trimestral"><Button variant="outline"><FileText className="mr-1 h-4 w-4" /> Pauta por lugar</Button></Link>
           <Link href="/dashboard/enex/informe-trimestral"><Button variant="outline"><FileText className="mr-1 h-4 w-4" /> Informe trimestral</Button></Link>
-          <Button variant="outline" disabled={rows.length === 0} onClick={() => exportarExcel(rows, instVista, faenasVista, ventana.desde, ventana.hasta)}>
+          <Button variant="outline" disabled={rowsGantt.length === 0} onClick={() => exportarExcel(rowsGantt, instVista, faenasVista, ventanaGantt.desde, ventanaGantt.hasta)}>
             <FileSpreadsheet className="mr-1 h-4 w-4" /> Exportar Excel
           </Button>
           {puedeEditar && (
@@ -156,17 +173,28 @@ export default function EnexPlanificacionPage() {
           <div>
             <h2 className="text-sm font-semibold">Planificación diaria</h2>
             <p className="text-[11px] text-gray-500">
-              {puedeEditar ? 'Clic en un día vacío para programar · clic en un código para ver, mover o quitar · arrastra un código a otro día de la misma fila.' : 'Solo lectura.'}
+              {puedeEditar ? 'Clic en un día vacío para programar · clic en un código para mover, reprogramar o quitar · arrastra un código a otro día de la misma fila.' : 'Solo lectura.'}
             </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] text-gray-500">Ver</span>
+            <div className="flex overflow-hidden rounded-lg border">
+              {([3, 6, 12] as const).map((n) => (
+                <button key={n} onClick={() => setHorizonte(n)}
+                        className={`px-2 py-1 text-xs font-semibold ${horizonte === n ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>{n} meses</button>
+              ))}
+            </div>
+            {cargandoGantt && <Spinner className="h-4 w-4" />}
           </div>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-gray-600">
             <span><b>CMP</b> mant.+calib.</span><span><b>C</b> calibración</span><span><b>MP</b> mantención</span><span><b>CP·n</b> camiones</span>
             {LEYENDA_ESTADO.map(([e, l]) => <span key={e} className="flex items-center gap-1"><span className={`inline-block h-2.5 w-2.5 rounded-sm ${MUESTRA[e]}`} />{l}</span>)}
             <span className="flex items-center gap-1"><span className="inline-block h-2.5 w-2.5 rounded-sm bg-gray-300" />Feriado</span>
             <span className="flex items-center gap-1"><span className="inline-block h-2.5 w-2.5 rounded-sm bg-violet-600" />Hoy</span>
+            <span className="flex items-center gap-1"><span className="rounded-sm bg-orange-500 px-0.5 text-[7px] font-bold text-white">RP</span>Reprogramado</span>
           </div>
         </div>
-        <GanttEnex rows={rows} faenas={faenasVista} instalaciones={instVista} ventana={ventana} hoy={hoy}
+        <GanttEnex rows={rowsGantt} faenas={faenasVista} instalaciones={instVista} ventana={ventanaGantt} hoy={hoy}
                    puedeEditar={puedeEditar} onCambio={invalidar} />
       </CardContent></Card>
 
