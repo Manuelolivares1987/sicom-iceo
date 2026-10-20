@@ -19,6 +19,7 @@ import {
 import { PanelFaenas } from '@/components/costos/panel-faenas'
 import { ParetoModal, type PasoPareto } from '@/components/costos/pareto-modal'
 import { FuenteCostosContext, NOMBRE_FUENTE } from '@/components/costos/fuente'
+import { mesLargo } from '@/lib/reporte-costos'
 import {
   AREAS_OPERACION, NOMBRE_AREA, getCostoComparado, getPanelCostos,
   type AreaCosto, type CostoComparado, type FuenteCosto, type CostoEquipo, type PanelCostos,
@@ -53,14 +54,16 @@ import {
  * excepciones, mismo Pareto. `despues` agrega bloques al final (p. ej. la
  * conciliación de ubicación en Flota).
  */
-export function PanelCostosOperacion({ titulo, descripcion, despues }: {
+export function PanelCostosOperacion({ titulo, descripcion, despues, mes = null, onLimpiarMes }: {
   titulo: string; descripcion: string; despues?: React.ReactNode
+  /** Mes elegido arriba (YYYY-MM-01): filtra todo el panel a ese mes. */
+  mes?: string | null; onLimpiarMes?: () => void
 }) {
   const [preset, setPreset] = useState<RangoPreset>('ytd')
   const [conAdmin, setConAdmin] = useState(false)
   const [pareto, setPareto] = useState<PasoPareto | null>(null)
   const [fuente, setFuente] = useState<FuenteCosto>('oc')
-  const rango = useMemo(() => rangoPreset(preset, new Date()), [preset])
+  const rango = useMemo(() => (mes ? { desde: mes, hasta: mes } : rangoPreset(preset, new Date())), [preset, mes])
   const areas: AreaCosto[] | null = conAdmin
     ? [...AREAS_OPERACION, 'administracion', 'comercial'] : null
 
@@ -71,8 +74,8 @@ export function PanelCostosOperacion({ titulo, descripcion, despues }: {
     retry: (n, err) => err?.name !== 'CostosNoAutorizadoError' && n < 2,
   })
   const { data: comparado } = useQuery({
-    queryKey: ['costos-comparado', fuente, conAdmin],
-    queryFn: () => getCostoComparado(areas, fuente),
+    queryKey: ['costos-comparado', fuente, conAdmin, mes],
+    queryFn: () => getCostoComparado(areas, fuente, mes),
     staleTime: 30 * 60_000,
     retry: (n, err) => err?.name !== 'CostosNoAutorizadoError' && n < 2,
   })
@@ -97,11 +100,17 @@ export function PanelCostosOperacion({ titulo, descripcion, despues }: {
             ))}
           </div>
           {PRESETS.map((p) => (
-            <Button key={p.id} size="sm" variant={preset === p.id ? 'primary' : 'outline'}
-                    onClick={() => setPreset(p.id)}>
+            <Button key={p.id} size="sm" variant={!mes && preset === p.id ? 'primary' : 'outline'}
+                    onClick={() => { setPreset(p.id); onLimpiarMes?.() }}>
               {p.label}
             </Button>
           ))}
+          {mes && (
+            <button onClick={() => onLimpiarMes?.()} title="Quitar el filtro de mes"
+                    className="rounded-full bg-pillado-green-600 px-3 py-1 text-sm font-medium capitalize text-white hover:bg-pillado-green-700">
+              {mesLargo(mes)} ✕
+            </button>
+          )}
           <label className="ml-2 flex items-center gap-1.5 text-sm text-gray-600">
             <input type="checkbox" checked={conAdmin} onChange={(e) => setConAdmin(e.target.checked)} />
             Incluir administración y comercial
@@ -442,6 +451,9 @@ function Contenido({ data, fuente, onPareto }: {
   )
 }
 
+const MESES_LARGOS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto',
+  'septiembre', 'octubre', 'noviembre', 'diciembre']
+
 // Un color por antigüedad, en el orden fijo de la paleta categórica (validada con
 // el validador de dataviz: CVD y visión normal pasan; contraste bajo en aqua y
 // amarillo, compensado con los recuadros de arriba que llevan el monto).
@@ -458,6 +470,7 @@ function BandaComparada({ c, conAdmin }: { c: CostoComparado; conAdmin: boolean 
   const actual = c.anios[c.anios.length - 1]
   const mesHoy = Number(c.hoy.slice(5, 7))
   const corte = new Date(c.hoy + 'T12:00:00').toLocaleDateString('es-CL', { day: 'numeric', month: 'long' })
+  const nombreMes = c.mes ? MESES_LARGOS[Number(c.mes.slice(5, 7)) - 1] : null
   const datosDesde = c.datos_desde ? Number(c.datos_desde.slice(0, 4)) : null
 
   // Por defecto, el gasto de cada mes: las curvas acumuladas de años parecidos
@@ -496,7 +509,10 @@ function BandaComparada({ c, conAdmin }: { c: CostoComparado; conAdmin: boolean 
     <Card className="border-pillado-green-300">
       <CardContent className="space-y-3 p-4">
         <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-gray-600">
-          <Wallet className="h-4 w-4" /> Costo al {corte}, comparado con los años anteriores a la misma fecha
+          <Wallet className="h-4 w-4" />
+          {nombreMes
+            ? <>Costo de {nombreMes}, comparado con {nombreMes} de los años anteriores</>
+            : <>Costo al {corte}, comparado con los años anteriores a la misma fecha</>}
         </div>
         <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
           {c.anios.map((a, i) => {
@@ -512,7 +528,7 @@ function BandaComparada({ c, conAdmin }: { c: CostoComparado; conAdmin: boolean 
                     <i className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: colorAnio(a.anio, actual.anio) }} />
                     {a.anio}{esActual ? ' (en curso)' : ''}
                   </span>
-                  <span>1 ene → {fmtFecha(a.hasta)}</span>
+                  <span>{fmtFecha(a.desde)} → {fmtFecha(a.hasta)}</span>
                 </div>
                 <div className={`mt-0.5 font-bold text-gray-900 ${esActual ? 'text-2xl' : 'text-xl'}`}>
                   {sinDatos ? '—' : fmtMM(a.total)}
@@ -535,6 +551,7 @@ function BandaComparada({ c, conAdmin }: { c: CostoComparado; conAdmin: boolean 
             )
           })}
         </div>
+        {!c.mes && <>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="text-sm font-medium text-gray-700">
             {vista === 'mes' ? 'Gasto de cada mes, año contra año' : 'Costo acumulado mes a mes'}
@@ -579,8 +596,11 @@ function BandaComparada({ c, conAdmin }: { c: CostoComparado; conAdmin: boolean 
             )}
           </ResponsiveContainer>
         </div>
+        </>}
         <p className="text-xs text-gray-500">
-          Mismo tramo en cada año: del 1 de enero al {corte}; el último mes de la curva llega solo hasta ese día.{' '}
+          {nombreMes
+            ? <>Mismo mes en cada año{c.mes === c.hoy.slice(0, 8) + '01' ? `, hasta el ${Number(c.hoy.slice(8, 10))}` : ''}.{' '}</>
+            : <>Mismo tramo en cada año: del 1 de enero al {corte}; el último mes de la curva llega solo hasta ese día.{' '}</>}
           {c.fuente === 'oc'
             ? 'Órdenes de compra aprobadas (neto, con servicios), por fecha de la OC'
             : 'Salidas de bodega Softland (consumo y EPP)'}

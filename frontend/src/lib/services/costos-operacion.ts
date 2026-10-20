@@ -180,13 +180,14 @@ export type AnioComparado = {
 export type CostoComparado = {
   fuente: FuenteCosto
   hoy: string
+  mes: string | null
   anios: AnioComparado[]
   por_mes: { anio: number; mes: number; total: number }[]
   datos_desde: string | null
 }
 
-export async function getCostoComparado(areas: AreaCosto[] | null, fuente: FuenteCosto = 'oc') {
-  const { data, error } = await rpcCostos('rpc_costos_comparado_misma_fecha', { p_areas: areas, p_fuente: fuente })
+export async function getCostoComparado(areas: AreaCosto[] | null, fuente: FuenteCosto = 'oc', mes: string | null = null) {
+  const { data, error } = await rpcCostos('rpc_costos_comparado_misma_fecha', { p_areas: areas, p_fuente: fuente, p_mes: mes })
   if (error) traducir(error)
   return data as CostoComparado
 }
