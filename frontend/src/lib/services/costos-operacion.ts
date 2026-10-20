@@ -165,18 +165,30 @@ export async function getPanelCostos(desde: string, hasta: string, areas: AreaCo
   return data as PanelCostos
 }
 
-// [MIG627] Acumulado desde el primer registro de Softland, año por año.
-export type CostoAcumulado = {
-  desde: string | null
-  hasta: string | null
+// [MIG629-630] Año en curso hasta hoy contra el mismo tramo (1-ene → mismo día
+// y mes) de los años anteriores. La inversión (EQUMAQ) va aparte.
+export type AnioComparado = {
+  anio: number
+  desde: string
+  hasta: string
   total: number
-  por_anio: { anio: number; total: number; meses: number }[]
+  servicios: number
+  asignado_equipo: number
+  inversion: number
 }
 
-export async function getCostoAcumulado(areas: AreaCosto[] | null, fuente: FuenteCosto = 'oc') {
-  const { data, error } = await rpcCostos('rpc_costos_operacion_acumulado', { p_areas: areas, p_fuente: fuente })
+export type CostoComparado = {
+  fuente: FuenteCosto
+  hoy: string
+  anios: AnioComparado[]
+  por_mes: { anio: number; mes: number; total: number }[]
+  datos_desde: string | null
+}
+
+export async function getCostoComparado(areas: AreaCosto[] | null, fuente: FuenteCosto = 'oc') {
+  const { data, error } = await rpcCostos('rpc_costos_comparado_misma_fecha', { p_areas: areas, p_fuente: fuente })
   if (error) traducir(error)
-  return data as CostoAcumulado
+  return data as CostoComparado
 }
 
 export async function getDetalleCostos(v: {

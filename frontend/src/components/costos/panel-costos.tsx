@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
-  Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis,
+  Bar, BarChart, CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts'
 import {
   AlertTriangle, Database, Gauge, HardHat, Package, ShieldCheck, Truck, Wallet, Wrench,
@@ -14,14 +14,14 @@ import { Spinner } from '@/components/ui/spinner'
 import { Modal } from '@/components/ui/modal'
 import {
   Barras, COLOR_EQUIPO, ComoSeCalcula, COLOR_OTROS, PRESETS, TablaEquiposCosto, TOP_N, useTop,
-  etiquetaEquipo, fmtFecha, fmtMes, nombreTipo, paretoEquipo,
+  MESES, etiquetaEquipo, fmtFecha, fmtMes, nombreTipo, paretoEquipo,
 } from '@/components/costos/comunes'
 import { PanelFaenas } from '@/components/costos/panel-faenas'
 import { ParetoModal, type PasoPareto } from '@/components/costos/pareto-modal'
 import { FuenteCostosContext, NOMBRE_FUENTE } from '@/components/costos/fuente'
 import {
-  AREAS_OPERACION, NOMBRE_AREA, getCostoAcumulado, getPanelCostos,
-  type AreaCosto, type CostoAcumulado, type FuenteCosto, type CostoEquipo, type PanelCostos,
+  AREAS_OPERACION, NOMBRE_AREA, getCostoComparado, getPanelCostos,
+  type AreaCosto, type CostoComparado, type FuenteCosto, type CostoEquipo, type PanelCostos,
 } from '@/lib/services/costos-operacion'
 import {
   HORAS_MINIMAS_CPH, fmtClp, fmtMM, fmtNum, fmtPct, nivelAsignacion, pct, rangoPreset,
@@ -70,9 +70,9 @@ export function PanelCostosOperacion({ titulo, descripcion, despues }: {
     staleTime: 5 * 60_000,
     retry: (n, err) => err?.name !== 'CostosNoAutorizadoError' && n < 2,
   })
-  const { data: acumulado } = useQuery({
-    queryKey: ['costos-acumulado', fuente, conAdmin],
-    queryFn: () => getCostoAcumulado(areas, fuente),
+  const { data: comparado } = useQuery({
+    queryKey: ['costos-comparado', fuente, conAdmin],
+    queryFn: () => getCostoComparado(areas, fuente),
     staleTime: 30 * 60_000,
     retry: (n, err) => err?.name !== 'CostosNoAutorizadoError' && n < 2,
   })
@@ -113,10 +113,7 @@ export function PanelCostosOperacion({ titulo, descripcion, despues }: {
       {error && (
         <Card><CardContent className="p-6 text-sm text-red-700">{(error as Error).message}</CardContent></Card>
       )}
-      {acumulado && acumulado.total > 0 && (
-        <BandaAcumulado acumulado={acumulado} periodo={data?.kpi.total ?? null}
-                        etiquetaPeriodo={etiquetaRango(rango.desde, rango.hasta)} conAdmin={conAdmin} fuente={fuente} />
-      )}
+      {comparado && comparado.anios.length > 0 && <BandaComparada c={comparado} conAdmin={conAdmin} />}
       {data && <Contenido data={data} fuente={fuente} onPareto={setPareto} />}
       {despues}
 
@@ -445,57 +442,100 @@ function Contenido({ data, fuente, onPareto }: {
   )
 }
 
+// Un color por año, fijo por antigüedad: el año en curso siempre es el oscuro.
+const COLOR_ANIO = ['#CBD5E1', '#94A3B8', '#64748B', '#15803D']
+
 /**
- * Costo acumulado total de operaciones (MIG627): todo lo de la fuente elegida
- * desde el primer registro de Softland, más el acumulado del período elegido
- * y el desglose por año.
+ * Costo a la misma fecha (MIG629-630): el año en curso desde el 1 de enero hasta
+ * hoy contra el mismo tramo de los 3 años anteriores, más la curva acumulada mes
+ * a mes. La compra de equipos (inversión) va aparte: no es costo de operación.
  */
-function BandaAcumulado({ acumulado: a, periodo, etiquetaPeriodo, conAdmin, fuente }: {
-  acumulado: CostoAcumulado; periodo: number | null; etiquetaPeriodo: string; conAdmin: boolean; fuente: FuenteCosto
-}) {
-  const max = Math.max(...a.por_anio.map((x) => x.total), 1)
+function BandaComparada({ c, conAdmin }: { c: CostoComparado; conAdmin: boolean }) {
+  const actual = c.anios[c.anios.length - 1]
+  const mesHoy = Number(c.hoy.slice(5, 7))
+  const corte = new Date(c.hoy + 'T12:00:00').toLocaleDateString('es-CL', { day: 'numeric', month: 'long' })
+  const datosDesde = c.datos_desde ? Number(c.datos_desde.slice(0, 4)) : null
+
+  // Curva acumulada: una fila por mes (ene → mes en curso), una columna por año.
+  const serie = useMemo(() => {
+    const filas = Array.from({ length: mesHoy }, (_, i) => ({ mes: MESES[i] } as Record<string, number | string>))
+    for (const a of c.anios) {
+      let acum = 0
+      for (let m = 1; m <= mesHoy; m++) {
+        acum += c.por_mes.find((x) => x.anio === a.anio && x.mes === m)?.total ?? 0
+        filas[m - 1][String(a.anio)] = Math.round(acum)
+      }
+    }
+    return filas
+  }, [c, mesHoy])
+
   return (
-    <Card className="border-pillado-green-300 bg-pillado-green-50/40">
+    <Card className="border-pillado-green-300">
       <CardContent className="space-y-3 p-4">
-        <div className="flex flex-wrap items-end gap-x-10 gap-y-3">
-          <div>
-            <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-gray-600">
-              <Wallet className="h-4 w-4" /> Costo acumulado total de operaciones
-            </div>
-            <div className="text-3xl font-bold text-gray-900">{fmtClp(a.total)}</div>
-            <div className="text-xs text-gray-500">
-              Desde {a.desde ? fmtMes(a.desde) : '—'} hasta {a.hasta ? fmtMes(a.hasta) : '—'} · {fmtMM(a.total)}
-            </div>
-          </div>
-          {periodo != null && (
-            <div>
-              <div className="text-xs font-medium uppercase tracking-wide text-gray-600">Acumulado del período</div>
-              <div className="text-2xl font-bold text-gray-900">{fmtClp(periodo)}</div>
-              <div className="text-xs text-gray-500">{etiquetaPeriodo}</div>
-            </div>
-          )}
+        <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-gray-600">
+          <Wallet className="h-4 w-4" /> Costo al {corte}, comparado con los años anteriores a la misma fecha
         </div>
-        <div className="flex flex-wrap gap-1.5">
-          {a.por_anio.map((x) => (
-            <div key={x.anio} title={`${x.anio}: ${fmtClp(x.total)} en ${x.meses} ${x.meses === 1 ? 'mes' : 'meses'} con registros`}
-                 className="min-w-[72px] flex-1 rounded-md border border-gray-200 bg-white px-2 py-1">
-              <div className="flex items-baseline justify-between gap-1 text-[11px] text-gray-500">
-                <span className="font-semibold text-gray-700">{x.anio}</span>
-                {x.meses < 12 && <span>{x.meses} m</span>}
+        <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+          {c.anios.map((a, i) => {
+            const esActual = a.anio === actual.anio
+            const sinDatos = datosDesde != null && a.anio < datosDesde
+            // Cuánto cambia el año en curso contra este año (positivo = hoy se gasta más).
+            const dif = esActual || a.total === 0 ? null : variacionPct(actual.total, a.total)
+            return (
+              <div key={a.anio}
+                   className={`rounded-lg border px-3 py-2 ${esActual ? 'border-pillado-green-400 bg-pillado-green-50' : 'border-gray-200 bg-white'}`}>
+                <div className="flex items-center justify-between text-xs text-gray-500">
+                  <span className="flex items-center gap-1.5 font-semibold text-gray-700">
+                    <i className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: COLOR_ANIO[i + COLOR_ANIO.length - c.anios.length] }} />
+                    {a.anio}{esActual ? ' (en curso)' : ''}
+                  </span>
+                  <span>1 ene → {fmtFecha(a.hasta)}</span>
+                </div>
+                <div className={`mt-0.5 font-bold text-gray-900 ${esActual ? 'text-2xl' : 'text-xl'}`}>
+                  {sinDatos ? '—' : fmtMM(a.total)}
+                </div>
+                <div className="text-xs text-gray-500">
+                  {sinDatos ? 'Sin datos en Softland' : <>
+                    Servicios {fmtMM(a.servicios)} · equipos {fmtMM(a.asignado_equipo)}
+                    {dif != null && (
+                      <div className={`mt-0.5 font-medium ${dif > 0 ? 'text-red-700' : 'text-green-700'}`}>
+                        {actual.anio} va {dif > 0 ? '▲' : '▼'} {fmtPct(Math.abs(dif))} {dif > 0 ? 'sobre' : 'bajo'} {a.anio}
+                        {' '}({dif > 0 ? '+' : '−'}{fmtMM(Math.abs(actual.total - a.total))})
+                      </div>
+                    )}
+                    {a.inversion > 0 && (
+                      <div className="text-gray-400">+ inversión en equipos {fmtMM(a.inversion)} (aparte)</div>
+                    )}
+                  </>}
+                </div>
               </div>
-              <div className="text-sm font-semibold text-gray-900">{fmtMM(x.total)}</div>
-              <div className="mt-0.5 h-1 rounded bg-gray-100">
-                <div className="h-1 rounded bg-pillado-green-500" style={{ width: `${(x.total / max) * 100}%` }} />
-              </div>
-            </div>
-          ))}
+            )
+          })}
+        </div>
+        <div style={{ width: '100%', height: 220 }}>
+          <ResponsiveContainer>
+            <LineChart data={serie} margin={{ top: 5, right: 10, left: 10, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" vertical={false} />
+              <XAxis dataKey="mes" tick={{ fontSize: 11 }} />
+              <YAxis tick={{ fontSize: 11 }} tickFormatter={(v: number) => `${Math.round(v / 1e6)} M`} />
+              <Tooltip formatter={(v: number, n: string) => [fmtMM(v), `Acumulado ${n}`]} />
+              <Legend wrapperStyle={{ fontSize: 12 }} />
+              {c.anios.map((a, i) => (
+                <Line key={a.anio} type="monotone" dataKey={String(a.anio)} dot={false}
+                      stroke={COLOR_ANIO[i + COLOR_ANIO.length - c.anios.length]}
+                      strokeWidth={a.anio === actual.anio ? 3 : 2} />
+              ))}
+            </LineChart>
+          </ResponsiveContainer>
         </div>
         <p className="text-xs text-gray-500">
-          {fuente === 'oc'
-            ? 'Órdenes de compra aprobadas (neto, con servicios), sin combustible de reventa ni de stock'
-            : 'Salidas de bodega Softland (consumo y EPP) sin petróleo, que se revende'}
-          {conAdmin ? ', incluyendo administración y comercial' : '; sin administración ni comercial'}.
-          No incluye mano de obra propia. Los años con menos de 12 meses de registros se marcan («m»).
+          Mismo tramo en cada año: del 1 de enero al {corte}; el último mes de la curva llega solo hasta ese día.{' '}
+          {c.fuente === 'oc'
+            ? 'Órdenes de compra aprobadas (neto, con servicios), por fecha de la OC'
+            : 'Salidas de bodega Softland (consumo y EPP)'}
+          {conAdmin ? ', incluyendo administración y comercial' : ', sin administración ni comercial'}; sin combustible de
+          reventa. La compra de camiones, grúas, estanques y carrocerías (familia EQUMAQ) es inversión y se muestra aparte.
+          Sin mano de obra propia.
         </p>
       </CardContent>
     </Card>
