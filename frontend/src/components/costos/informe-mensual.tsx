@@ -20,9 +20,14 @@ function ultimosMeses(): string[] {
  * Informe mensual para gerencia (MIG617): top 10 por equipo, familia y centro
  * de costo. Copia el correo con formato (como fiabilidad) o abre el informe
  * interactivo, que se ve sin sesión con el token del link.
+ *
+ * El selector de mes también filtra todo el panel de abajo (`onMes`). Vacío =
+ * el panel usa los botones de período y el correo, el último mes cerrado.
  */
-export function InformeMensualCostos() {
-  const [mes, setMes] = useState(mesCerradoIso())
+export function InformeMensualCostos({ mesFiltro = null, onMes }: {
+  mesFiltro?: string | null; onMes?: (mes: string | null) => void
+} = {}) {
+  const mes = mesFiltro ?? mesCerradoIso()
   const [msg, setMsg] = useState<string | null>(null)
   const [ocupado, setOcupado] = useState(false)
 
@@ -50,10 +55,15 @@ export function InformeMensualCostos() {
         <div className="text-sm font-semibold text-gray-900">Informe mensual por correo</div>
         <div className="text-xs text-gray-600">Top 10 del mes por equipo, familia y centro de costo, con link interactivo.</div>
       </div>
-      <select value={mes} onChange={(e) => setMes(e.target.value)}
-              className="h-9 rounded-lg border border-gray-300 bg-white px-2 text-sm capitalize">
-        {ultimosMeses().map((m) => <option key={m} value={m}>{mesLargo(m)}</option>)}
-      </select>
+      <label className="flex items-center gap-1.5 text-sm text-gray-700">
+        Mes
+        <select value={mesFiltro ?? ''} onChange={(e) => onMes?.(e.target.value || null)}
+                title="Filtra todo el panel de abajo a ese mes"
+                className="h-9 rounded-lg border border-gray-300 bg-white px-2 text-sm capitalize">
+          <option value="">Todos (usar el período de abajo)</option>
+          {ultimosMeses().map((m) => <option key={m} value={m}>{mesLargo(m)}</option>)}
+        </select>
+      </label>
       <Button size="sm" variant="outline" onClick={abrir}>Ver informe</Button>
       <Button size="sm" onClick={copiar} disabled={ocupado}>{ocupado ? 'Armando…' : '📋 Copiar para correo'}</Button>
       {msg && <div className="w-full text-sm text-pillado-green-800">{msg}</div>}
