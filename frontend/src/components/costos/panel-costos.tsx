@@ -442,8 +442,12 @@ function Contenido({ data, fuente, onPareto }: {
   )
 }
 
-// Un color por año, fijo por antigüedad: el año en curso siempre es el oscuro.
-const COLOR_ANIO = ['#CBD5E1', '#94A3B8', '#64748B', '#15803D']
+// Un color por antigüedad, en el orden fijo de la paleta categórica (validada con
+// el validador de dataviz: CVD y visión normal pasan; contraste bajo en aqua y
+// amarillo, compensado con los recuadros de arriba que llevan el monto).
+// 0 = año en curso (azul), 1 = año pasado (naranjo), 2 y 3 = aqua y amarillo.
+const COLOR_ANIO = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100']
+const colorAnio = (anio: number, actual: number) => COLOR_ANIO[Math.min(actual - anio, COLOR_ANIO.length - 1)]
 
 /**
  * Costo a la misma fecha (MIG629-630): el año en curso desde el 1 de enero hasta
@@ -486,7 +490,7 @@ function BandaComparada({ c, conAdmin }: { c: CostoComparado; conAdmin: boolean 
                    className={`rounded-lg border px-3 py-2 ${esActual ? 'border-pillado-green-400 bg-pillado-green-50' : 'border-gray-200 bg-white'}`}>
                 <div className="flex items-center justify-between text-xs text-gray-500">
                   <span className="flex items-center gap-1.5 font-semibold text-gray-700">
-                    <i className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: COLOR_ANIO[i + COLOR_ANIO.length - c.anios.length] }} />
+                    <i className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: colorAnio(a.anio, actual.anio) }} />
                     {a.anio}{esActual ? ' (en curso)' : ''}
                   </span>
                   <span>1 ene → {fmtFecha(a.hasta)}</span>
@@ -512,19 +516,30 @@ function BandaComparada({ c, conAdmin }: { c: CostoComparado; conAdmin: boolean 
             )
           })}
         </div>
-        <div style={{ width: '100%', height: 220 }}>
+        <div className="text-sm font-medium text-gray-700">Costo acumulado mes a mes</div>
+        <div style={{ width: '100%', height: 300 }}>
           <ResponsiveContainer>
-            <LineChart data={serie} margin={{ top: 5, right: 10, left: 10, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" vertical={false} />
-              <XAxis dataKey="mes" tick={{ fontSize: 11 }} />
-              <YAxis tick={{ fontSize: 11 }} tickFormatter={(v: number) => `${Math.round(v / 1e6)} M`} />
-              <Tooltip formatter={(v: number, n: string) => [fmtMM(v), `Acumulado ${n}`]} />
-              <Legend wrapperStyle={{ fontSize: 12 }} />
-              {c.anios.map((a, i) => (
-                <Line key={a.anio} type="monotone" dataKey={String(a.anio)} dot={false}
-                      stroke={COLOR_ANIO[i + COLOR_ANIO.length - c.anios.length]}
-                      strokeWidth={a.anio === actual.anio ? 3 : 2} />
-              ))}
+            <LineChart data={serie} margin={{ top: 8, right: 16, left: 10, bottom: 0 }}>
+              <CartesianGrid stroke="#EEF0F2" vertical={false} />
+              <XAxis dataKey="mes" tick={{ fontSize: 12, fill: '#52514e' }} axisLine={{ stroke: '#D1D5DB' }} tickLine={false} />
+              <YAxis tick={{ fontSize: 12, fill: '#52514e' }} axisLine={false} tickLine={false} width={56}
+                     tickFormatter={(v: number) => `${Math.round(v / 1e6)} M`} />
+              <Tooltip cursor={{ stroke: '#9CA3AF', strokeDasharray: '4 4' }}
+                       itemSorter={(it) => -Number(it.value ?? 0)}
+                       formatter={(v: number, n: string) => [fmtMM(v), n]}
+                       labelFormatter={(m: string) => `Acumulado a fines de ${m}`} />
+              <Legend wrapperStyle={{ fontSize: 12 }} iconType="plainline" />
+              {/* Los años anteriores primero: el año en curso queda encima. */}
+              {c.anios.map((a) => {
+                const esActual = a.anio === actual.anio
+                const color = colorAnio(a.anio, actual.anio)
+                return (
+                  <Line key={a.anio} type="linear" dataKey={String(a.anio)} stroke={color}
+                        strokeWidth={esActual ? 3.5 : 2}
+                        dot={{ r: esActual ? 4.5 : 3.5, fill: color, stroke: '#fff', strokeWidth: 2 }}
+                        activeDot={{ r: 6, fill: color, stroke: '#fff', strokeWidth: 2 }} />
+                )
+              })}
             </LineChart>
           </ResponsiveContainer>
         </div>
