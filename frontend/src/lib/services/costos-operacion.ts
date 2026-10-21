@@ -107,6 +107,8 @@ export type PanelCostos = {
   periodo: {
     desde: string; hasta: string; meses: number
     anterior_desde: string; anterior_hasta: string; compara_anio_anterior: boolean
+    /** Último día con datos del período y del anterior (MIG632: si el período está en curso, mismo día). */
+    fin: string; anterior_fin: string
   }
   kpi: KpiCostos
   por_mes: CostoMes[]

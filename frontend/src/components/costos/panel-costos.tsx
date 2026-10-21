@@ -143,7 +143,12 @@ function Contenido({ data, fuente, onPareto }: {
   const familias = useTop(data.por_familia)
   const centros = useTop(data.por_cc_no_equipo)
   // Contra qué se compara: mismos meses del año anterior si el período es un año (MIG604).
-  const compara = `vs ${etiquetaRango(data.periodo.anterior_desde, data.periodo.anterior_hasta)}`
+  // Si el período llega al mes en curso, ambos lados se cortan el mismo día (MIG632): se muestra con día.
+  const per = data.periodo
+  const ultimoDia = new Date(Number(per.hasta.slice(0, 4)), Number(per.hasta.slice(5, 7)), 0).getDate()
+  const parcial = !!per.fin && Number(per.fin.slice(8, 10)) < ultimoDia && per.fin.slice(0, 7) === per.hasta.slice(0, 7)
+  const etiquetaPeriodo = parcial ? `${fmtFecha(per.desde)} → ${fmtFecha(per.fin)}` : etiquetaRango(per.desde, per.hasta)
+  const compara = `vs ${parcial ? `${fmtFecha(per.anterior_desde)} → ${fmtFecha(per.anterior_fin)}` : etiquetaRango(per.anterior_desde, per.anterior_hasta)}`
   const pctAsignado = pct(k.asignado_equipo, k.total)
   const nivel = nivelAsignacion(pctAsignado)
 
@@ -177,7 +182,7 @@ function Contenido({ data, fuente, onPareto }: {
       <Card className={nivel === 'mal' ? 'border-red-300' : nivel === 'atencion' ? 'border-amber-300' : ''}>
         <CardContent className="flex flex-wrap items-center gap-x-6 gap-y-2 p-4 text-sm">
           <span className="rounded bg-gray-100 px-2 py-0.5 font-medium text-gray-800">
-            Período: {etiquetaRango(data.periodo.desde, data.periodo.hasta)} · comparado {compara}
+            Período: {etiquetaPeriodo} · comparado {compara}
           </span>
           <span className="flex items-center gap-2 font-medium text-gray-800">
             <ShieldCheck className="h-4 w-4" /> Calidad del dato
