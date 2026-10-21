@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, BarChart, Bar, XAxis, YAxis } from 'recharts'
 import { supabase } from '@/lib/supabase'
+import { AvisoFueraDeCalculo, type FueraDeCalculo } from '@/components/fiabilidad/aviso-fuera-de-calculo'
 
 // ── Estados ────────────────────────────────────────────────
 const COLOR: Record<string, string> = {
@@ -48,6 +49,7 @@ type Estanque = {
 type Reporte = {
   desde: string; hasta: string; categorias: Categoria[]; equipos: Equipo[]
   matriz: Celda[]; combustible: Estanque[]
+  fuera_de_calculo?: FueraDeCalculo[]   // [MIG634]
 }
 
 const SEV: Record<string, [string, string]> = {
@@ -389,6 +391,9 @@ export default function ReporteFiabilidadPublicoPage() {
               MTBF · MTTR · Disponibilidad Inherente · {desde} a {hasta} · SICOM-ICEO
             </p>
             <p className="mt-1 text-xs text-gray-400">Haz click en una patente para ver su historial diario.</p>
+            {data?.fuera_de_calculo && data.fuera_de_calculo.length > 0 && (
+              <div className="mt-2"><AvisoFueraDeCalculo items={data.fuera_de_calculo} /></div>
+            )}
           </div>
           <div className="flex items-end gap-2">
             <div>

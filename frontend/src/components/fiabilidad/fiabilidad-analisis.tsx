@@ -15,8 +15,9 @@ import { Badge } from '@/components/ui/badge'
 import { Modal } from '@/components/ui/modal'
 import { useRequireAuth } from '@/hooks/use-require-auth'
 import {
-  useFiabilidadFlota, useDetalleFiabilidadFlota, useMatrizEstadosFlota,
+  useFiabilidadFlota, useDetalleFiabilidadFlota, useMatrizEstadosFlota, useExcluidosFiabilidad,
 } from '@/hooks/use-fiabilidad'
+import { AvisoFueraDeCalculo } from '@/components/fiabilidad/aviso-fuera-de-calculo'
 import {
   CATEGORIA_LABELS,
   CATEGORIA_COLORS,
@@ -141,6 +142,7 @@ export function FiabilidadAnalisis({ readOnly = false }: { readOnly?: boolean } 
     useDetalleFiabilidadFlota(fechaInicio, fechaFin)
   const { data: matriz = [], isLoading: loadingMatriz } =
     useMatrizEstadosFlota(fechaInicio, fechaFin)
+  const { data: excluidos = [] } = useExcluidosFiabilidad(fechaInicio, fechaFin)
 
   // Comparación: "resto del año" = 1-ene al día anterior al período seleccionado
   const compIni = `${fechaInicio.slice(0, 4)}-01-01`
@@ -417,6 +419,8 @@ export function FiabilidadAnalisis({ readOnly = false }: { readOnly?: boolean } 
           <div className="mt-3 rounded-lg bg-white/15 px-3 py-2 text-sm text-white">{copiaMsg}</div>
         )}
       </div>
+
+      <AvisoFueraDeCalculo items={excluidos} />
 
       {isLoading && (
         <div className="flex h-64 items-center justify-center">

@@ -1,5 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { getSugerenciasEstadoGps, confirmarEstadoDia } from '@/lib/services/sugerencias-estado'
+import {
+  getSugerenciasEstadoGps, confirmarEstadoDia, getExclusionesFiabilidad, excluirDeFiabilidad, incluirEnFiabilidad,
+} from '@/lib/services/sugerencias-estado'
 
 export function useSugerenciasEstado(fecha: string) {
   return useQuery({
@@ -7,6 +9,25 @@ export function useSugerenciasEstado(fecha: string) {
     queryFn: () => getSugerenciasEstadoGps(fecha),
     enabled: !!fecha,
     staleTime: 30_000,
+  })
+}
+
+// [MIG633] Quién está fuera del cálculo de fiabilidad, y sacar / dar de alta.
+export function useExclusionesFiabilidad() {
+  return useQuery({ queryKey: ['fiabilidad-exclusiones'], queryFn: getExclusionesFiabilidad, staleTime: 30_000 })
+}
+
+export function useCambiarExclusionFiabilidad() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (v: { activoId: string; incluir: boolean; desde: string | null; motivo?: string }) =>
+      v.incluir ? incluirEnFiabilidad(v.activoId, v.desde) : excluirDeFiabilidad(v.activoId, v.motivo ?? '', v.desde),
+    onSuccess: () => {
+      for (const k of ['fiabilidad-exclusiones', 'fiabilidad-excluidos', 'matriz-estados-flota', 'fiabilidad-detalle',
+                       'fiabilidad-flota', 'fiabilidad-activo', 'oee-fiabilidad-activo']) {
+        qc.invalidateQueries({ queryKey: [k] })
+      }
+    },
   })
 }
 

@@ -4,10 +4,20 @@ import {
   getFiabilidadFlota,
   getOEEFiabilidadActivo,
   getDetalleFiabilidadFlota,
-  getMatrizEstadosFlota,
+  getMatrizEstadosFlota, getExcluidosFiabilidad,
   updateCategoriaActivo,
   type CategoriaUso,
 } from '@/lib/services/fiabilidad'
+
+// [MIG633] Equipos fuera del cálculo de fiabilidad en el rango (para avisarlo en el informe).
+export function useExcluidosFiabilidad(fechaInicio: string, fechaFin: string) {
+  return useQuery({
+    queryKey: ['fiabilidad-excluidos', fechaInicio, fechaFin],
+    queryFn: () => getExcluidosFiabilidad(fechaInicio, fechaFin),
+    enabled: !!fechaInicio && !!fechaFin,
+    staleTime: 30_000,
+  })
+}
 
 export function useMatrizEstadosFlota(fechaInicio: string, fechaFin: string) {
   return useQuery({

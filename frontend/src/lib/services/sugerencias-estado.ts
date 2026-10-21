@@ -27,6 +27,32 @@ export async function getSugerenciasEstadoGps(fecha: string): Promise<Sugerencia
   return (data ?? []) as SugerenciaEstado[]
 }
 
+// [MIG633] Equipos que hoy están fuera del cálculo de fiabilidad (período abierto).
+export interface ExclusionFiabilidad { activo_id: string; desde: string; motivo: string }
+
+export async function getExclusionesFiabilidad(): Promise<ExclusionFiabilidad[]> {
+  const { data, error } = await supabase
+    .from('activo_fiabilidad_exclusion')
+    .select('activo_id, desde, motivo')
+    .is('hasta', null)
+  if (error) throw error
+  return (data ?? []) as ExclusionFiabilidad[]
+}
+
+/** Saca el equipo del cálculo desde `desde` (vacío = su primer día en el sistema). */
+export async function excluirDeFiabilidad(activoId: string, motivo: string, desde: string | null) {
+  const { error } = await supabase.rpc('rpc_fiabilidad_excluir', {
+    p_activo_id: activoId, p_motivo: motivo.trim(), p_desde: desde || null,
+  })
+  if (error) throw error
+}
+
+/** Lo da de alta: vuelve a contar desde `desde` (vacío = hoy). */
+export async function incluirEnFiabilidad(activoId: string, desde: string | null) {
+  const { error } = await supabase.rpc('rpc_fiabilidad_incluir', { p_activo_id: activoId, p_desde: desde || null })
+  if (error) throw error
+}
+
 // El planificador confirma (aplica) un estado para esa fecha.
 // [MIG573] A/C sobre un equipo sin prueba de vida exige justificación; la
 // base responde con un error que empieza por PRUEBA_DE_VIDA.
