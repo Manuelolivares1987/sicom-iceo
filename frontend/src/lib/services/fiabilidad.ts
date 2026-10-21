@@ -262,7 +262,8 @@ export async function getDetalleFiabilidadFlota(
 }
 
 // ── Matriz de estados diarios (equipo × día) ──
-// Lee estado_diario_flota en el rango. Alimenta la distribución diaria de
+// [MIG633] Lee v_estado_diario_fiabilidad (estado diario sin los días en que
+// el equipo está fuera del cálculo) en el rango. Alimenta la distribución diaria de
 // estados y la historia mensual por equipo.
 
 export interface EstadoDiaCelda {
@@ -278,7 +279,7 @@ export async function getMatrizEstadosFlota(fechaInicio: string, fechaFin: strin
   let todas: EstadoDiaCelda[] = []
   for (;;) {
     const { data, error } = await supabase
-      .from('estado_diario_flota')
+      .from('v_estado_diario_fiabilidad')
       .select('activo_id, fecha, estado_codigo')
       .gte('fecha', fechaInicio)
       .lte('fecha', fechaFin)
@@ -293,6 +294,22 @@ export async function getMatrizEstadosFlota(fechaInicio: string, fechaFin: strin
     from += PAGE
   }
   return { data: todas, error: null }
+}
+
+// ── [MIG633] Equipos fuera del cálculo de fiabilidad en el rango ──
+export interface ExcluidoFiabilidad {
+  activo_id: string
+  patente: string | null
+  codigo: string | null
+  desde: string
+  hasta: string | null
+  motivo: string
+}
+
+export async function getExcluidosFiabilidad(fechaInicio: string, fechaFin: string) {
+  const { data, error } = await supabase.rpc('fn_fiabilidad_excluidos', { p_ini: fechaInicio, p_fin: fechaFin })
+  if (error) throw error
+  return (data ?? []) as ExcluidoFiabilidad[]
 }
 
 // ── Actualizar categoria_uso del activo (manual) ──

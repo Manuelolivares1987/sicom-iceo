@@ -9,7 +9,10 @@ import { Spinner } from '@/components/ui/spinner'
 import { useRequireAuth } from '@/hooks/use-require-auth'
 import { useToast } from '@/contexts/toast-context'
 import { errorMessage, todayISO } from '@/lib/utils'
-import { useSugerenciasEstado, useConfirmarEstado } from '@/hooks/use-sugerencias-estado'
+import {
+  useSugerenciasEstado, useConfirmarEstado, useExclusionesFiabilidad, useCambiarExclusionFiabilidad,
+} from '@/hooks/use-sugerencias-estado'
+import { Modal } from '@/components/ui/modal'
 import { CambiarEstadoModal } from '@/components/flota/cambiar-estado-modal'
 import { supabase } from '@/lib/supabase'
 import type { EstadoFlotaCodigo } from '@/lib/estado-flota'
@@ -91,6 +94,30 @@ export default function SugerenciasEstadoPage() {
 
   const { data: sugerencias = [], isLoading, refetch, isFetching } = useSugerenciasEstado(fecha)
   const confirmar = useConfirmarEstado()
+
+  // ── [MIG633] Cuenta para fiabilidad (casilla por equipo) ──
+  const { data: exclusiones = [] } = useExclusionesFiabilidad()
+  const fueraDe = useMemo(() => new Map(exclusiones.map((x) => [x.activo_id, x])), [exclusiones])
+  const cambiarExclusion = useCambiarExclusionFiabilidad()
+  const [fiab, setFiab] = useState<{ s: SugerenciaEstado; incluir: boolean } | null>(null)
+  const [fiabDesde, setFiabDesde] = useState('')
+  const [fiabMotivo, setFiabMotivo] = useState('')
+  const abrirFiab = (s: SugerenciaEstado, incluir: boolean) => {
+    setFiab({ s, incluir }); setFiabDesde(incluir ? todayISO() : ''); setFiabMotivo('')
+  }
+  const guardarFiab = () => {
+    if (!fiab) return
+    if (!fiab.incluir && fiabMotivo.trim().length < 5) { toast.error('Escribe el motivo (mínimo 5 caracteres)'); return }
+    cambiarExclusion.mutate({ activoId: fiab.s.activo_id, incluir: fiab.incluir, desde: fiabDesde || null, motivo: fiabMotivo }, {
+      onSuccess: () => {
+        toast.success(fiab.incluir
+          ? `${fiab.s.patente} vuelve a contar para fiabilidad`
+          : `${fiab.s.patente} fuera del cálculo de fiabilidad`)
+        setFiab(null)
+      },
+      onError: (e) => toast.error(errorMessage(e, 'No se pudo guardar')),
+    })
+  }
 
   // ── Modal Cambiar Estado (con contrato) desde una sugerencia ──
   const [modalActivo, setModalActivo] = useState<ActivoModal | null>(null)
@@ -289,6 +316,7 @@ export default function SugerenciasEstadoPage() {
                   <th className="px-2 py-2">Confirmado ese día</th>
                   <th className="px-2 py-2">Confirmar como</th>
                   <th className="px-2 py-2"></th>
+                  <th className="px-2 py-2" title="Si el equipo cuenta para el cálculo de fiabilidad">Fiabilidad</th>
                 </tr>
               </thead>
               <tbody>
@@ -342,6 +370,21 @@ export default function SugerenciasEstadoPage() {
                           </Button>
                         </div>
                       </td>
+                      <td className="px-2 py-1.5">
+                        {(() => {
+                          const x = fueraDe.get(s.activo_id)
+                          return (
+                            <label className="flex cursor-pointer items-start gap-1.5"
+                                   title={x ? `Fuera desde ${x.desde}: ${x.motivo}` : 'Cuenta para el cálculo de fiabilidad'}>
+                              <input type="checkbox" className="mt-0.5" checked={!x} disabled={cambiarExclusion.isPending}
+                                     onChange={() => abrirFiab(s, !!x)} />
+                              <span className={x ? 'text-[10px] font-semibold text-sky-700' : 'text-[10px] text-gray-500'}>
+                                {x ? <>Fuera desde<br />{x.desde.split('-').reverse().slice(0, 2).join('-')}</> : 'Cuenta'}
+                              </span>
+                            </label>
+                          )
+                        })()}
+                      </td>
                     </tr>
                   )
                 })}
@@ -357,6 +400,39 @@ export default function SugerenciasEstadoPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* [MIG633] Sacar o dar de alta en el cálculo de fiabilidad */}
+      <Modal open={!!fiab} onClose={() => setFiab(null)}
+             title={fiab ? `${fiab.s.patente}: ${fiab.incluir ? 'volver a contar' : 'sacar del cálculo'} de fiabilidad` : ''}>
+        {fiab && (
+          <div className="space-y-3 text-sm">
+            <p className="text-gray-600">
+              {fiab.incluir
+                ? 'Desde esta fecha sus días vuelven a contar. Los días que estuvo fuera siguen fuera: lo ya informado no cambia.'
+                : 'Sus días dejan de contar (ni arriba ni abajo) desde la fecha que elijas. El equipo sigue en el mapa, taller, costos y documentos; su estado diario no cambia.'}
+            </p>
+            <label className="block">
+              <span className="text-xs text-gray-500">{fiab.incluir ? 'Cuenta desde' : 'Fuera desde (vacío = su primer día en el sistema)'}</span>
+              <input type="date" className="mt-1 block h-9 rounded border border-gray-300 px-2"
+                     value={fiabDesde} onChange={(e) => setFiabDesde(e.target.value)} />
+            </label>
+            {!fiab.incluir && (
+              <label className="block">
+                <span className="text-xs text-gray-500">Motivo (obligatorio)</span>
+                <input type="text" className="mt-1 block h-9 w-full rounded border border-gray-300 px-2"
+                       placeholder="Ej.: camión nuevo en equipamiento" value={fiabMotivo}
+                       onChange={(e) => setFiabMotivo(e.target.value)} />
+              </label>
+            )}
+            <div className="flex justify-end gap-2 pt-1">
+              <Button variant="outline" size="sm" onClick={() => setFiab(null)}>Cancelar</Button>
+              <Button size="sm" onClick={guardarFiab} disabled={cambiarExclusion.isPending}>
+                {fiab.incluir ? 'Dar de alta' : 'Sacar del cálculo'}
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
 
       {/* Modal Cambiar Estado con gestión de contrato (mantener / cambiar / asignar) */}
       <CambiarEstadoModal
