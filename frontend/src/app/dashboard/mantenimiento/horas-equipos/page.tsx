@@ -82,6 +82,10 @@ export default function HorasEquiposPage() {
           Horómetro del GPS, uso real de los últimos 30 días y próximo preventivo por horas.
           La campanita avisa al jefe de mantenimiento y a planificación cuando faltan 50 h o menos.
         </p>
+        <p className="mt-1 text-sm text-gray-700">
+          Con <b>Actualizar</b> en cada equipo: corregir el horómetro (Radicom y SICOM), registrar una
+          mantención hecha o cambiar cuál es la próxima.
+        </p>
       </div>
 
       {/* Contadores = filtros */}
@@ -118,6 +122,7 @@ export default function HorasEquiposPage() {
                   <th className="px-3 py-2 text-right">Faltan</th>
                   <th className="px-3 py-2 text-left">Fecha estimada</th>
                   <th className="px-3 py-2 text-left">Estado</th>
+                  <th className="px-3 py-2" />
                 </tr>
               </thead>
               <tbody>
@@ -160,11 +165,16 @@ export default function HorasEquiposPage() {
                           <Icon className="h-3 w-3" /> {est.label}
                         </span>
                       </td>
+                      <td className="px-3 py-1.5 text-right">
+                        <Button size="sm" variant="outline" onClick={(ev) => { ev.stopPropagation(); setAbierto(e) }}>
+                          Actualizar
+                        </Button>
+                      </td>
                     </tr>
                   )
                 })}
                 {filas.length === 0 && (
-                  <tr><td colSpan={10} className="p-6 text-center text-sm text-gray-500">Sin equipos para este filtro.</td></tr>
+                  <tr><td colSpan={11} className="p-6 text-center text-sm text-gray-500">Sin equipos para este filtro.</td></tr>
                 )}
               </tbody>
             </table>
@@ -212,6 +222,8 @@ function DetalleEquipo({ equipo, onClose }: { equipo: EquipoHoras; onClose: () =
         <Dato label="Última preventiva" valor={`${fecha(equipo.ultima_preventiva_fecha)} · ${n0(equipo.ultima_preventiva_horas)} h`} />
         <Dato label="Próxima" valor={equipo.proxima_pauta ?? '—'} />
       </div>
+      <PautasEquipo equipo={equipo} horasDia={data ?? []} />
+      <CorregirHorometro equipo={equipo} />
       <Card className="mt-4">
         <CardHeader className="pb-1"><CardTitle className="text-sm">Horas trabajadas por día (últimos 60 días)</CardTitle></CardHeader>
         <CardContent>
@@ -236,8 +248,6 @@ function DetalleEquipo({ equipo, onClose }: { equipo: EquipoHoras; onClose: () =
           </p>
         </CardContent>
       </Card>
-      <CorregirHorometro equipo={equipo} />
-      <PautasEquipo equipo={equipo} horasDia={data ?? []} />
       <ConsumoEquipo activoId={equipo.activo_id} desde={desde} />
     </Modal>
   )
