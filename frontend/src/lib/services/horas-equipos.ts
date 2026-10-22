@@ -160,3 +160,12 @@ export const leerHorometro = (activoId: string) =>
 export const corregirHorometro = (v: {
   activoId: string; horas: number | null; km: number | null; moverBases: boolean; nota: string
 }) => llamarHorometro<CorreccionHorometro>({ accion: 'corregir', ...v, nota: v.nota.trim() })
+
+/** [MIG642] Elige la próxima pauta y su horómetro; la escalera se reacomoda. */
+export async function reprogramarEscaleraEquipo(v: { planId: string; horas: number; nota: string }) {
+  const { data, error } = await supabase.rpc('rpc_escalera_reprogramar', {
+    p_plan_id: v.planId, p_horas: v.horas, p_nota: v.nota.trim(),
+  })
+  if (error) throw new Error(error.message)
+  return data as { pautas: number; cambios: { pauta: string; base: number; fecha: string }[] }
+}

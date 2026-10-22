@@ -13,8 +13,9 @@ import { Spinner } from '@/components/ui/spinner'
 import { Modal } from '@/components/ui/modal'
 import { useRequireAuth } from '@/hooks/use-require-auth'
 import { useToast } from '@/hooks/use-toast'
+import { limiteProxima, reprogramarEscalera, secuenciaEscalera } from '@/lib/escalera-mantencion'
 import {
-  getConsumoDia, getEquiposHoras, getHorasDia, getPautasEquipo, registrarPreventivaRealizada, leerHorometro, corregirHorometro,
+  getConsumoDia, getEquiposHoras, getHorasDia, getPautasEquipo, registrarPreventivaRealizada, leerHorometro, corregirHorometro, reprogramarEscaleraEquipo,
   type EquipoHoras, type EstadoPreventiva, type HorasDia, type PautaEquipo,
 } from '@/lib/services/horas-equipos'
 
@@ -408,6 +409,121 @@ function CorregirHorometro({ equipo }: { equipo: EquipoHoras }) {
   )
 }
 
+// [MIG642] Las próximas de la escalera y elegir cuál toca: las bases se
+// reacomodan para que el ciclo siga en orden (lib/escalera-mantencion.ts).
+function CambiarProxima({ equipo, pautas }: { equipo: EquipoHoras; pautas: PautaEquipo[] }) {
+  const qc = useQueryClient()
+  const toast = useToast()
+  const [abierto, setAbierto] = useState(false)
+  const [planId, setPlanId] = useState('')
+  const [horas, setHoras] = useState('')
+  const [nota, setNota] = useState('')
+
+  const actuales = useMemo(() => secuenciaEscalera(pautas.map((p) => ({
+    nombre: p.nombre, frecuencia_horas: p.frecuencia_horas, base: p.ultima_ejecucion_horas || null,
+  }))), [pautas])
+
+  const x = Number(horas.replace(',', '.'))
+  const nuevas = useMemo(
+    () => (planId && x > 0 ? reprogramarEscalera(pautas, planId, x) : null),
+    [pautas, planId, x],
+  )
+  const limite = nuevas && equipo.horometro != null ? limiteProxima(nuevas, x, equipo.horometro) : null
+  const fueraDeLimite = limite != null && x > limite + 0.05
+  const secuencia = nuevas ? secuenciaEscalera(nuevas.map((p) => ({
+    nombre: p.nombre, frecuencia_horas: p.frecuencia_horas,
+    base: p.base_nueva ?? (p.ultima_ejecucion_horas || null),
+  }))) : []
+
+  const guardar = useMutation({
+    mutationFn: () => reprogramarEscaleraEquipo({ planId, horas: x, nota }),
+    onSuccess: (r) => {
+      toast.success(`Escalera reprogramada: ${r.pautas} pauta(s) actualizadas`)
+      setAbierto(false); setPlanId(''); setHoras(''); setNota('')
+      for (const k of ['equipo-horas', 'pautas-equipo', 'planes-mantenimiento', 'plan-mantenimiento']) {
+        qc.invalidateQueries({ queryKey: [k] })
+      }
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+
+  const elegir = (id: string) => {
+    setPlanId(id)
+    if (!horas && equipo.horometro != null) setHoras(String(Math.round(equipo.horometro)))
+  }
+  const valido = !!planId && x > 0 && !fueraDeLimite && nota.trim().length >= 5
+  const lista = (s: { horas: number; nombre: string }[]) =>
+    s.map((v) => `${n0(v.horas)} h ${v.nombre.replace(/^.* - /, '')}`).join(' → ')
+
+  return (
+    <div className="mt-3 text-xs">
+      {actuales.length > 0 && (
+        <div className="text-gray-600"><b>Próximas:</b> {lista(actuales)}</div>
+      )}
+      {!abierto ? (
+        <div className="mt-2 flex justify-end">
+          <Button size="sm" variant="outline" onClick={() => setAbierto(true)}>Cambiar próxima mantención</Button>
+        </div>
+      ) : (
+        <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
+          <div className="mb-2 text-sm font-medium">¿Cuál es la próxima mantención?</div>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <label className="text-gray-600">Pauta
+              <select className="mt-1 h-10 w-full rounded-md border border-gray-300 bg-white px-2 text-sm"
+                      value={planId} onChange={(e) => elegir(e.target.value)}>
+                <option value="">Elegir…</option>
+                {pautas.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+              </select>
+            </label>
+            <label className="text-gray-600">Toca a las (h)
+              <Input inputMode="decimal" value={horas} onChange={(e) => setHoras(e.target.value)} />
+              <span className="text-[11px] text-gray-500">
+                Horómetro actual {n1(equipo.horometro)} h{limite != null ? ` · máximo ${n1(limite)} h` : ''}
+              </span>
+            </label>
+          </div>
+          <label className="mt-2 block text-gray-600">Motivo
+            <Input value={nota} onChange={(e) => setNota(e.target.value)}
+                   placeholder="Ej.: según libro del taller la última fue SM1" />
+          </label>
+
+          {nuevas && (
+            <div className="mt-3 rounded-md bg-white p-2">
+              {fueraDeLimite ? (
+                <div className="text-red-600">
+                  Con el horómetro actual, la próxima puede tocar a lo más a las {n1(limite)} h.
+                </div>
+              ) : (
+                <>
+                  <div><b>Quedaría:</b> {lista(secuencia)}</div>
+                  <table className="mt-2 w-full">
+                    <tbody>
+                      {nuevas.map((p) => (
+                        <tr key={p.id} className="border-t">
+                          <td className="py-1 pr-2">{p.nombre}</td>
+                          <td className="py-1 pr-2 text-right text-gray-500">base {n0(p.ultima_ejecucion_horas)} h</td>
+                          <td className="py-1 text-right">
+                            {p.base_nueva == null ? <span className="text-gray-400">no cambia</span> : <b>→ {n0(p.base_nueva)} h</b>}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </>
+              )}
+            </div>
+          )}
+          <div className="mt-2 flex justify-end gap-2">
+            <Button size="sm" variant="ghost" onClick={() => setAbierto(false)}>Cancelar</Button>
+            <Button size="sm" variant="primary" disabled={!valido} loading={guardar.isPending}
+                    onClick={() => guardar.mutate()}>Guardar</Button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function PautasEquipo({ equipo, horasDia }: { equipo: EquipoHoras; horasDia: HorasDia[] }) {
   const qc = useQueryClient()
   const toast = useToast()
@@ -497,6 +613,8 @@ function PautasEquipo({ equipo, horasDia }: { equipo: EquipoHoras; horasDia: Hor
               </table>
             </div>
           )}
+
+        {!!pautas?.length && <CambiarProxima equipo={equipo} pautas={pautas} />}
 
         {sel && (
           <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50 p-3">
