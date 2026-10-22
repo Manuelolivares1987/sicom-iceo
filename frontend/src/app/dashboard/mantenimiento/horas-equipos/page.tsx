@@ -12,7 +12,7 @@ import { Spinner } from '@/components/ui/spinner'
 import { Modal } from '@/components/ui/modal'
 import { useRequireAuth } from '@/hooks/use-require-auth'
 import {
-  getEquiposHoras, getHorasDia, type EquipoHoras, type EstadoPreventiva,
+  getConsumoDia, getEquiposHoras, getHorasDia, type EquipoHoras, type EstadoPreventiva,
 } from '@/lib/services/horas-equipos'
 
 // ============================================================================
@@ -229,7 +229,58 @@ function DetalleEquipo({ equipo, onClose }: { equipo: EquipoHoras; onClose: () =
           </p>
         </CardContent>
       </Card>
+      <ConsumoEquipo activoId={equipo.activo_id} desde={desde} />
     </Modal>
+  )
+}
+
+// [MIG635] Litros desde el computador del camión (GPS de fábrica Renault).
+// Sin GPS de fábrica no hay filas y la tarjeta no aparece.
+function ConsumoEquipo({ activoId, desde }: { activoId: string; desde: string }) {
+  const { data } = useQuery({
+    queryKey: ['equipo-consumo-dia', activoId, desde],
+    queryFn: () => getConsumoDia(activoId, desde),
+  })
+  const dias = (data ?? []).filter((d) => d.litros != null)
+  if (dias.length === 0) return null
+
+  const suma = (f: (d: (typeof dias)[number]) => number | null) => dias.reduce((t, d) => t + (f(d) ?? 0), 0)
+  const litros = suma((d) => d.litros)
+  const ralenti = suma((d) => d.litros_ralenti)
+  const horas = suma((d) => (d.litros != null ? d.horas : null))
+  const km = suma((d) => (d.litros != null ? d.km : null))
+  const serie = dias.map((d) => ({ fecha: d.fecha.slice(5), litros: d.litros, ralenti: d.litros_ralenti }))
+
+  return (
+    <Card className="mt-4">
+      <CardHeader className="pb-1"><CardTitle className="text-sm">Combustible por día (computador del camión)</CardTitle></CardHeader>
+      <CardContent>
+        <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
+          <Dato label="Litros (período)" valor={`${n0(litros)} L`} />
+          <Dato label="Litros por hora" valor={horas > 0 ? `${n1(litros / horas)} L/h` : '—'} />
+          <Dato label="Rendimiento" valor={litros > 0 && km > 0 ? `${n1(km / litros)} km/L` : '—'} />
+          <Dato label="En ralentí" valor={litros > 0 ? `${n0((100 * ralenti) / litros)} % · ${n0(ralenti)} L` : '—'} />
+        </div>
+        <div className="mt-3" style={{ width: '100%', height: 200 }}>
+          <ResponsiveContainer>
+            <BarChart data={serie} margin={{ top: 5, right: 5, left: -15, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" vertical={false} />
+              <XAxis dataKey="fecha" tick={{ fontSize: 10 }} interval="preserveStartEnd" />
+              <YAxis tick={{ fontSize: 11 }} />
+              <Tooltip
+                formatter={(v: number, k: string) => [`${n1(v)} L`, k === 'ralenti' ? 'En ralentí' : 'Total']}
+                cursor={{ fill: '#F3F4F6' }} />
+              <Bar dataKey="litros" fill="#2563EB" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="ralenti" fill="#F59E0B" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+        <p className="mt-2 text-xs text-gray-400">
+          Azul: litros del día. Ámbar: litros quemados con el camión detenido y el motor en marcha. Son los
+          acumulados del motor, no las cargas: sirven para cruzar contra lo despachado.
+        </p>
+      </CardContent>
+    </Card>
   )
 }
 
