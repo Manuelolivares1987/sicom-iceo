@@ -237,6 +237,7 @@ function DetalleEquipo({ equipo, onClose }: { equipo: EquipoHoras; onClose: () =
         </CardContent>
       </Card>
       <CorregirHorometro equipo={equipo} />
+      <CambiarProximaEquipo equipo={equipo} />
       <PautasEquipo equipo={equipo} horasDia={data ?? []} />
       <ConsumoEquipo activoId={equipo.activo_id} desde={desde} />
     </Modal>
@@ -411,6 +412,14 @@ function CorregirHorometro({ equipo }: { equipo: EquipoHoras }) {
 
 // [MIG642] Las próximas de la escalera y elegir cuál toca: las bases se
 // reacomodan para que el ciclo siga en orden (lib/escalera-mantencion.ts).
+function CambiarProximaEquipo({ equipo }: { equipo: EquipoHoras }) {
+  const { data: pautas } = useQuery({
+    queryKey: ['pautas-equipo', equipo.activo_id],
+    queryFn: () => getPautasEquipo(equipo.activo_id),
+  })
+  return pautas?.length ? <CambiarProxima equipo={equipo} pautas={pautas} /> : null
+}
+
 function CambiarProxima({ equipo, pautas }: { equipo: EquipoHoras; pautas: PautaEquipo[] }) {
   const qc = useQueryClient()
   const toast = useToast()
@@ -614,7 +623,6 @@ function PautasEquipo({ equipo, horasDia }: { equipo: EquipoHoras; horasDia: Hor
             </div>
           )}
 
-        {!!pautas?.length && <CambiarProxima equipo={equipo} pautas={pautas} />}
 
         {sel && (
           <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50 p-3">
