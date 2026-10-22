@@ -29,8 +29,7 @@ import {
   TableCell,
 } from '@/components/ui/table'
 import { formatDate } from '@/lib/utils'
-import { useAllCertificaciones } from '@/hooks/use-certificaciones'
-import { documentosVigentes, estadoDocumento } from '@/domain/activos/documentos'
+import { getPapelesFlota } from '@/lib/services/control-documental'
 import { useActivos } from '@/hooks/use-activos'
 import { getFaenas } from '@/lib/services/faenas'
 import {
@@ -39,7 +38,7 @@ import {
   renovarCertificacion,
   subirDocumentoCert,
 } from '@/lib/services/taller-planificacion'
-import { useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 
 // ---------------------------------------------------------------------------
 // Filter options
@@ -49,6 +48,7 @@ const estadoOptions: { value: string; label: string }[] = [
   { value: 'vigente', label: 'Vigente' },
   { value: 'por_vencer', label: 'Por Vencer' },
   { value: 'vencido', label: 'Vencido' },
+  { value: 'sin_fecha', label: 'Falta la fecha' },
   { value: 'no_aplica', label: 'Sin vencimiento' },
 ]
 
@@ -68,6 +68,7 @@ function getEstadoBadge(estado: string) {
     vigente: { className: 'bg-green-100 text-green-700', label: 'Vigente' },
     por_vencer: { className: 'bg-yellow-100 text-yellow-700', label: 'Por Vencer' },
     vencido: { className: 'bg-red-100 text-red-700', label: 'Vencido' },
+    sin_fecha: { className: 'bg-orange-100 text-orange-800', label: 'Falta la fecha' },
     no_aplica: { className: 'bg-gray-100 text-gray-600', label: 'Sin vencimiento' },
     permanente: { className: 'bg-gray-100 text-gray-600', label: 'Sin vencimiento' },
   }
@@ -312,6 +313,8 @@ function CertificacionModal({
       })
 
       queryClient.invalidateQueries({ queryKey: ['certificaciones'] })
+      queryClient.invalidateQueries({ queryKey: ['control-doc-papeles'] })
+      queryClient.invalidateQueries({ queryKey: ['control-doc-equipos'] })
       queryClient.invalidateQueries({ queryKey: ['certificaciones-activo'] })
       queryClient.invalidateQueries({ queryKey: ['certificacion-stats'] })
       queryClient.invalidateQueries({ queryKey: ['documentos-por-vencer'] })
@@ -450,7 +453,7 @@ function MobileCard({ cert, onRenovar }: { cert: any; onRenovar: (cert: any) => 
           </div>
           <div className="ml-2 flex shrink-0 items-center gap-2">
             {cert.bloqueante && <Lock className="h-4 w-4 text-red-500" />}
-            {getEstadoBadge(estadoDocumento(cert.fecha_vencimiento))}
+            {getEstadoBadge(cert.estado)}
           </div>
         </div>
         <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -509,33 +512,30 @@ export default function CumplimientoPage() {
     })
   }, [])
 
-  // [MIG273] Se traen todas las filas y se filtra en cliente porque hay que
-  // quedarse primero con la ÚLTIMA versión de cada (equipo, documento): filtrar
-  // por estado en el servidor dejaba entrar versiones ya renovadas y el equipo
-  // seguía apareciendo con el papel vencido.
-  const { data: todas, isLoading, error } = useAllCertificaciones()
-
-  const vigentes = useMemo(
-    () => documentosVigentes(todas as any[] | undefined),
-    [todas]
-  )
+  // Los papeles que rigen y su estado salen de v_control_documental: los mismos
+  // números que Control Documental y la ficha del equipo. Antes esta pantalla
+  // recalculaba la versión vigente en el navegador sobre la tabla cruda, que
+  // además se cortaba en 1.000 filas de 1.230 (y contaba los anulados).
+  const { data: vigentes = [], isLoading, error } = useQuery({
+    queryKey: ['control-doc-papeles', 'flota'],
+    queryFn: getPapelesFlota,
+  })
 
   const stats = useMemo(() => ({
     total: vigentes.length,
-    vigentes: vigentes.filter((c: any) => estadoDocumento(c.fecha_vencimiento) === 'vigente').length,
-    por_vencer: vigentes.filter((c: any) => estadoDocumento(c.fecha_vencimiento) === 'por_vencer').length,
-    vencidas: vigentes.filter((c: any) => estadoDocumento(c.fecha_vencimiento) === 'vencido').length,
+    vigentes: vigentes.filter((c) => c.estado === 'vigente').length,
+    por_vencer: vigentes.filter((c) => c.estado === 'por_vencer').length,
+    vencidas: vigentes.filter((c) => c.estado === 'vencido').length,
   }), [vigentes])
 
-  const certificaciones = useMemo(() => vigentes.filter((c: any) => {
-    if (tipoFilter && c.tipo !== tipoFilter) return false
-    if (faenaFilter && c.activo?.faena_id !== faenaFilter) return false
-    if (estadoFilter) {
-      const e = estadoDocumento(c.fecha_vencimiento)
-      if (estadoFilter === 'no_aplica' ? e !== 'permanente' : e !== estadoFilter) return false
-    }
-    return true
-  }), [vigentes, tipoFilter, faenaFilter, estadoFilter])
+  const certificaciones = useMemo(() => vigentes
+    .map((c) => ({ ...c, id: c.certificacion_id }))
+    .filter((c) => {
+      if (tipoFilter && c.tipo !== tipoFilter) return false
+      if (faenaFilter && c.activo?.faena_id !== faenaFilter) return false
+      if (estadoFilter && c.estado !== estadoFilter) return false
+      return true
+    }), [vigentes, tipoFilter, faenaFilter, estadoFilter])
 
   function handleNuevaCertificacion() {
     setModalTitle('Nueva Certificacion')
@@ -693,7 +693,7 @@ export default function CumplimientoPage() {
                           <TableCell className="text-sm text-gray-700">
                             {formatDate(cert.fecha_vencimiento)}
                           </TableCell>
-                          <TableCell>{getEstadoBadge(estadoDocumento(cert.fecha_vencimiento))}</TableCell>
+                          <TableCell>{getEstadoBadge(cert.estado)}</TableCell>
                           <TableCell className="text-center">
                             {cert.bloqueante && (
                               <Lock className="mx-auto h-4 w-4 text-red-500" />
