@@ -1,18 +1,21 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts'
 import { AlertTriangle, CheckCircle2, Clock, Gauge, HelpCircle, Search, Wrench } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
 import { Modal } from '@/components/ui/modal'
 import { useRequireAuth } from '@/hooks/use-require-auth'
+import { useToast } from '@/hooks/use-toast'
 import {
-  getConsumoDia, getEquiposHoras, getHorasDia, type EquipoHoras, type EstadoPreventiva,
+  getConsumoDia, getEquiposHoras, getHorasDia, getPautasEquipo, registrarPreventivaRealizada,
+  type EquipoHoras, type EstadoPreventiva, type HorasDia, type PautaEquipo,
 } from '@/lib/services/horas-equipos'
 
 // ============================================================================
@@ -168,7 +171,10 @@ export default function HorasEquiposPage() {
         </Card>
       )}
 
-      {abierto && <DetalleEquipo equipo={abierto} onClose={() => setAbierto(null)} />}
+      {abierto && (
+        <DetalleEquipo equipo={data?.find((e) => e.activo_id === abierto.activo_id) ?? abierto}
+                       onClose={() => setAbierto(null)} />
+      )}
     </div>
   )
 }
@@ -229,8 +235,152 @@ function DetalleEquipo({ equipo, onClose }: { equipo: EquipoHoras; onClose: () =
           </p>
         </CardContent>
       </Card>
+      <PautasEquipo equipo={equipo} horasDia={data ?? []} />
       <ConsumoEquipo activoId={equipo.activo_id} desde={desde} />
     </Modal>
+  )
+}
+
+// [MIG640] Las pautas del equipo y registrar una ya hecha (taller sin OT
+// ligada al plan, servicio externo). El horómetro se propone desde el GPS de
+// ese día; la pauta mayor deja al día a las menores de su escalera.
+const hoyISO = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Santiago' })
+
+/** Horómetro GPS al cierre de ese día, o del último día anterior con lectura. */
+function horometroDelDia(horasDia: HorasDia[], dia: string): number | null {
+  let v: number | null = null
+  for (const d of horasDia) {
+    if (d.fecha.slice(0, 10) > dia) break
+    if (d.horometro_fin != null) v = d.horometro_fin
+  }
+  return v
+}
+
+function PautasEquipo({ equipo, horasDia }: { equipo: EquipoHoras; horasDia: HorasDia[] }) {
+  const qc = useQueryClient()
+  const toast = useToast()
+  const [sel, setSel] = useState<PautaEquipo | null>(null)
+  const [dia, setDia] = useState(hoyISO())
+  const [horas, setHoras] = useState('')
+  const [km, setKm] = useState('')
+  const [nota, setNota] = useState('')
+
+  const { data: pautas, isLoading } = useQuery({
+    queryKey: ['pautas-equipo', equipo.activo_id],
+    queryFn: () => getPautasEquipo(equipo.activo_id),
+  })
+
+  const proponer = (d: string) => {
+    const h = horometroDelDia(horasDia, d) ?? equipo.horometro
+    setHoras(h == null ? '' : String(h))
+  }
+  const abrir = (p: PautaEquipo) => {
+    const d = hoyISO()
+    setSel(p); setDia(d); setKm(''); setNota('')
+    proponer(d)
+  }
+
+  const registrar = useMutation({
+    mutationFn: () => registrarPreventivaRealizada({
+      planId: sel!.id, fecha: dia, horas: Number(horas.replace(',', '.')),
+      km: km.trim() ? Number(km.replace(/\./g, '').replace(',', '.')) : null, nota,
+    }),
+    onSuccess: (r) => {
+      toast.success(r.absorbidos > 0
+        ? `${r.plan} registrada; ${r.absorbidos} pauta(s) menor(es) quedan al día`
+        : `${r.plan} registrada`)
+      setSel(null)
+      for (const k of ['equipo-horas', 'pautas-equipo', 'planes-mantenimiento', 'plan-mantenimiento']) {
+        qc.invalidateQueries({ queryKey: [k] })
+      }
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+
+  const gpsDelDia = horometroDelDia(horasDia, dia)
+  const horasNum = Number(horas.replace(',', '.'))
+  const valido = !!sel && !!dia && horasNum > 0 && nota.trim().length >= 5
+
+  return (
+    <Card className="mt-4">
+      <CardHeader className="pb-1">
+        <CardTitle className="flex items-center gap-2 text-sm"><Wrench className="h-4 w-4" /> Pautas por horas</CardTitle>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? <div className="flex justify-center py-6"><Spinner /></div>
+          : !pautas?.length ? <div className="py-4 text-center text-sm text-gray-500">El equipo no tiene pautas por horas activas.</div>
+          : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b text-left text-xs text-gray-500">
+                    <th className="py-1 pr-2">Pauta</th>
+                    <th className="py-1 pr-2 text-right">Cada</th>
+                    <th className="py-1 pr-2">Última</th>
+                    <th className="py-1 pr-2 text-right">Faltan</th>
+                    <th />
+                  </tr>
+                </thead>
+                <tbody>
+                  {pautas.map((p) => {
+                    const faltan = p.ultima_ejecucion_horas && equipo.horometro != null
+                      ? p.frecuencia_horas - (equipo.horometro - p.ultima_ejecucion_horas) : null
+                    return (
+                      <tr key={p.id} className="border-b last:border-0">
+                        <td className="py-1.5 pr-2">{p.nombre}</td>
+                        <td className="py-1.5 pr-2 text-right">{n0(p.frecuencia_horas)} h</td>
+                        <td className="py-1.5 pr-2 whitespace-nowrap">
+                          {fecha(p.ultima_ejecucion_fecha)} · {p.ultima_ejecucion_horas ? `${n0(p.ultima_ejecucion_horas)} h` : 'sin horómetro'}
+                        </td>
+                        <td className={`py-1.5 pr-2 text-right font-medium ${faltan != null && faltan <= 0 ? 'text-red-600' : ''}`}>
+                          {faltan == null ? '—' : `${n0(faltan)} h`}
+                        </td>
+                        <td className="py-1.5 text-right">
+                          <Button size="sm" variant="ghost" onClick={() => abrir(p)}>Registrar hecha</Button>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+        {sel && (
+          <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50 p-3">
+            <div className="mb-2 text-sm font-medium">Registrar «{sel.nombre}» como realizada</div>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+              <label className="text-xs text-gray-600">Fecha
+                <Input type="date" value={dia} max={hoyISO()}
+                       onChange={(e) => { setDia(e.target.value); proponer(e.target.value) }} />
+              </label>
+              <label className="text-xs text-gray-600">Horómetro (h)
+                <Input inputMode="decimal" value={horas} onChange={(e) => setHoras(e.target.value)} />
+                <span className="text-[11px] text-gray-500">
+                  {gpsDelDia != null ? `GPS ese día: ${n1(gpsDelDia)} h` : `Actual: ${n1(equipo.horometro)} h`}
+                </span>
+              </label>
+              <label className="text-xs text-gray-600">Km (opcional)
+                <Input inputMode="numeric" value={km} onChange={(e) => setKm(e.target.value)}
+                       placeholder={equipo.odometro != null ? `actual ${n0(equipo.odometro)}` : ''} />
+              </label>
+            </div>
+            <label className="mt-2 block text-xs text-gray-600">De dónde sale el dato
+              <Input value={nota} onChange={(e) => setNota(e.target.value)}
+                     placeholder="Ej.: OS 3410 taller Coquimbo, OT-202610-00016" />
+            </label>
+            <p className="mt-2 text-[11px] text-gray-500">
+              Las pautas menores de la misma escalera quedan al día con esta fecha y horómetro (si la suya es anterior).
+            </p>
+            <div className="mt-2 flex justify-end gap-2">
+              <Button size="sm" variant="ghost" onClick={() => setSel(null)}>Cancelar</Button>
+              <Button size="sm" variant="primary" disabled={!valido} loading={registrar.isPending}
+                      onClick={() => registrar.mutate()}>Guardar</Button>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   )
 }
 
