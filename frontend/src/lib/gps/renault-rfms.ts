@@ -105,7 +105,11 @@ export function statusesAEventos(statuses: RfmsStatus[]): EventoGps[] {
     lista.sort((a, b) => a.CreatedDateTime.localeCompare(b.CreatedDateTime))
     let ultimoGuardado = -Infinity
     let ralenti: { l: number; h: number } | null = null
+    let anterior = ''
     for (const s of lista) {
+      // La última lectura llega también por latestOnly: una sola vez.
+      if (s.CreatedDateTime === anterior) continue
+      anterior = s.CreatedDateTime
       const acc = s.AccumulatedData
       if (acc?.FuelWheelbaseSpeedZero != null && acc?.DurationWheelbaseSpeedZero != null) {
         ralenti = {
@@ -225,6 +229,12 @@ export async function leerRenault(opts: {
       lastVin = ultimo.Vin
     }
   }
+
+  // La última lectura de cada camión va siempre: un camión que no transmite
+  // desde antes de que existiera la historia (o fuera de la ventana) igual
+  // aparece en el mapa. La base descarta lo repetido.
+  const ultimas = await get('/vehiclestatuses?latestOnly=true', ACCEPT_STATUSES)
+  statuses.push(...((ultimas.VehicleStatus ?? []) as RfmsStatus[]))
 
   return {
     vehiculos,
