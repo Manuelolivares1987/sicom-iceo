@@ -120,3 +120,43 @@ export async function registrarPreventivaRealizada(v: {
   if (error) throw new Error(error.message)
   return data as { plan: string; absorbidos: number }
 }
+
+// ── [MIG641] Corregir horómetro / odómetro en Radicom y SICOM ───────────────
+
+export type LecturaHorometro = {
+  fuente: 'radicom' | 'renault' | 'sin_gps'
+  horas_sicom: number | null
+  km_sicom: number | null
+  horas_gps: number | null
+  km_gps: number | null
+}
+
+export type CorreccionHorometro = {
+  fuente: 'radicom' | 'sin_gps'
+  dif_horas: number
+  dif_km: number
+  bases_movidas: number
+  aviso: string | null
+}
+
+async function llamarHorometro<T>(body: Record<string, unknown>): Promise<T> {
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session?.access_token) throw new Error('Tu sesión expiró. Vuelve a entrar.')
+  const res = await fetch('/api/gps/horometro', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+    body: JSON.stringify(body),
+  })
+  const j = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(j.error ?? `Error ${res.status}`)
+  return j as T
+}
+
+/** Lo que marcan ahora Radicom y SICOM. */
+export const leerHorometro = (activoId: string) =>
+  llamarHorometro<LecturaHorometro>({ accion: 'leer', activoId })
+
+/** Fija el valor en Radicom y luego en SICOM (con su historial). */
+export const corregirHorometro = (v: {
+  activoId: string; horas: number | null; km: number | null; moverBases: boolean; nota: string
+}) => llamarHorometro<CorreccionHorometro>({ accion: 'corregir', ...v, nota: v.nota.trim() })
