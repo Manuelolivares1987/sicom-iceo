@@ -61,6 +61,11 @@ describe('statusesAEventos', () => {
     expect(ts).toEqual([1, 2])
   })
 
+  it('la misma lectura repetida (historia + latestOnly) sale una vez', () => {
+    const l = st('2026-10-22T00:33:16.000Z', { TotalEngineHours: 1944.85 })
+    expect(statusesAEventos([l, { ...l }])).toHaveLength(1)
+  })
+
   it('descarta el resumen horario sin posición', () => {
     const sinPos = st('2026-10-22T01:00:00.000Z', { TotalEngineHours: 1945.29 })
     delete sinPos.SnapshotData
