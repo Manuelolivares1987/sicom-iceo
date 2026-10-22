@@ -87,3 +87,36 @@ export async function getConsumoDia(activoId: string, desde: string) {
   if (error) throw new Error(error.message)
   return (data ?? []) as ConsumoDia[]
 }
+
+/** [MIG640] Pautas por horas del equipo, con su última ejecución. */
+export type PautaEquipo = {
+  id: string
+  nombre: string
+  frecuencia_horas: number
+  ultima_ejecucion_fecha: string | null
+  ultima_ejecucion_horas: number | null
+  ultima_ejecucion_km: number | null
+}
+
+export async function getPautasEquipo(activoId: string) {
+  const { data, error } = await supabase
+    .from('planes_mantenimiento')
+    .select('id, nombre, frecuencia_horas, ultima_ejecucion_fecha, ultima_ejecucion_horas, ultima_ejecucion_km')
+    .eq('activo_id', activoId)
+    .eq('activo_plan', true)
+    .not('frecuencia_horas', 'is', null)
+    .order('frecuencia_horas')
+  if (error) throw new Error(error.message)
+  return (data ?? []) as PautaEquipo[]
+}
+
+/** Registra una preventiva ya hecha; deja al día los peldaños menores. */
+export async function registrarPreventivaRealizada(v: {
+  planId: string; fecha: string; horas: number; km: number | null; nota: string
+}) {
+  const { data, error } = await supabase.rpc('rpc_preventiva_registrar_realizada', {
+    p_plan_id: v.planId, p_fecha: v.fecha, p_horas: v.horas, p_km: v.km, p_nota: v.nota.trim(),
+  })
+  if (error) throw new Error(error.message)
+  return data as { plan: string; absorbidos: number }
+}
