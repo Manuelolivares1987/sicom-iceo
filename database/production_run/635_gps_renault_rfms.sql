@@ -37,9 +37,9 @@ BEGIN;
 -- ############################################################################
 
 INSERT INTO config_gps_proveedor (nombre, activo, api_base_url, api_tipo_auth, config_mapeo)
-VALUES ('Renault rFMS', TRUE, 'https://api.renault-trucks.com/rfms', 'basic',
-        jsonb_build_object('cursor_ts', NULL, 'cursor_vin', NULL))
-ON CONFLICT (nombre) DO NOTHING;
+SELECT 'Renault rFMS', TRUE, 'https://api.renault-trucks.com/rfms', 'basic',
+       jsonb_build_object('cursor_ts', NULL, 'cursor_vin', NULL)
+ WHERE NOT EXISTS (SELECT 1 FROM config_gps_proveedor WHERE nombre = 'Renault rFMS');
 
 
 -- ############################################################################
