@@ -22,6 +22,7 @@ export interface DocumentoEquipo {
   id?: string
   activo_id?: string
   tipo: string
+  tipo_otro?: string | null
   fecha_vencimiento: string | null
   created_at?: string | null
 }
@@ -62,9 +63,11 @@ export function diasParaVencer(fechaVencimiento: string | null | undefined): num
   return Math.round((venc.getTime() - hoy.getTime()) / 86_400_000)
 }
 
-/** Clave de agrupación: un documento es "el mismo papel" por equipo y tipo. */
+/** Clave de agrupación: un documento es "el mismo papel" por equipo y tipo.
+ *  [MIG484] Cada «otra» con su nombre es un papel distinto (fn_certificado_clave). */
 function claveDocumento(d: DocumentoEquipo): string {
-  return `${d.activo_id ?? ''}|${d.tipo}`
+  const otro = d.tipo === 'otra' ? (d.tipo_otro ?? '').trim().toLowerCase() : ''
+  return `${d.activo_id ?? ''}|${d.tipo}|${otro}`
 }
 
 /** La versión que rige hoy de cada documento: la de vencimiento más lejano y,
