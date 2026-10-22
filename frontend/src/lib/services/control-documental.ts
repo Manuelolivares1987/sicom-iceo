@@ -107,6 +107,46 @@ export async function getPapelesEquipo(activoId: string): Promise<PapelEquipo[]>
     (a, b) => (orden[a.estado] ?? 9) - (orden[b.estado] ?? 9) || a.tipo.localeCompare(b.tipo))
 }
 
+/** Papel de la flota con el equipo y su faena, para Cumplimiento. */
+export type PapelFlota = PapelEquipo & {
+  activo: { id: string; codigo: string | null; nombre: string | null; faena_id: string | null;
+            faena: { nombre: string } | null }
+}
+
+/**
+ * Todos los papeles que rigen en la flota, con el mismo estado que Control
+ * Documental. Paginado: la API corta en 1.000 filas y la flota ya pasa de 900
+ * (la tabla cruda, con versiones, tiene más de 1.200 — Cumplimiento perdía 230).
+ */
+export async function getPapelesFlota(): Promise<PapelFlota[]> {
+  const paginar = async <T,>(armar: (desde: number, hasta: number) => PromiseLike<{ data: T[] | null; error: unknown }>) => {
+    const filas: T[] = []
+    for (let desde = 0; ; desde += 1000) {
+      const { data, error } = await armar(desde, desde + 999)
+      if (error) throw error
+      filas.push(...(data ?? []))
+      if (!data || data.length < 1000) return filas
+    }
+  }
+  const [papeles, activos] = await Promise.all([
+    paginar<PapelEquipo>((d, h) => supabase.from('v_control_documental').select('*')
+      .order('certificacion_id').range(d, h)),
+    paginar<{ id: string; faena_id: string | null; faena: { nombre: string } | null }>((d, h) =>
+      supabase.from('activos').select('id, faena_id, faena:faenas(nombre)').order('id').range(d, h) as any),
+  ])
+  const faenaDe = new Map(activos.map((a) => [a.id, a]))
+  return papeles.map((p) => ({
+    ...p,
+    activo: {
+      id: p.activo_id,
+      codigo: (p as any).activo_codigo ?? null,
+      nombre: (p as any).activo_nombre ?? null,
+      faena_id: faenaDe.get(p.activo_id)?.faena_id ?? null,
+      faena: faenaDe.get(p.activo_id)?.faena ?? null,
+    },
+  }))
+}
+
 /** Fija el vencimiento. `origen` deja escrito de dónde salió la fecha. */
 export async function fijarFecha(params: {
   certificacionId: string
