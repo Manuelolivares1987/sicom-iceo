@@ -120,6 +120,8 @@ export async function getCertificacionesByActivo(activoId: string) {
     .from('certificaciones')
     .select('*')
     .eq('activo_id', activoId)
+    // [MIG486] Un papel anulado no existe: ni rige ni es versión anterior.
+    .is('anulado_at', null)
     .order('fecha_vencimiento', { ascending: true })
   return { data, error }
 }

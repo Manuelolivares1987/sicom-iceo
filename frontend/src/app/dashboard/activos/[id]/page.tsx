@@ -82,10 +82,10 @@ import {
 } from '@/lib/services/taller-planificacion'
 import {
   documentosVigentes,
-  documentosReemplazados,
   estadoDocumento,
   diasParaVencer,
 } from '@/domain/activos/documentos'
+import { getPapelesEquipo, type PapelEquipo } from '@/lib/services/control-documental'
 import { useOEEActivo } from '@/hooks/use-flota'
 import { HistorialEstadosChart } from '@/components/flota/historial-estados-chart'
 import { CambiarContratoModal } from '@/components/activos/cambiar-contrato-modal'
@@ -188,6 +188,7 @@ export default function ActivoDetailPage() {
 
   const { data: activo, isLoading, refetch: refetchActivo } = useActivo(id)
   const { data: certs } = useCertificacionesByActivo(id)
+  const { data: papeles } = usePapelesEquipo(id)
   const { data: ultimoArriendo } = useUltimoArriendo(id)
   const updateActivo = useUpdateActivo()
 
@@ -199,16 +200,17 @@ export default function ActivoDetailPage() {
 
   // Alertas de certificaciones. Solo la versión vigente de cada papel: si se
   // cuenta el histórico, el equipo queda marcado vencido aunque ya se renovó.
+  // El estado es el de Control Documental (v_control_documental), no uno propio.
   const certsAlerta = useMemo(() => {
-    const vigentes = documentosVigentes(certs as any[] | undefined)
-    const vencidas = vigentes.filter((c: any) => estadoDocumento(c.fecha_vencimiento) === 'vencido')
-    const porVencer = vigentes.filter((c: any) => estadoDocumento(c.fecha_vencimiento) === 'por_vencer')
+    const vigentes = papelesQueRigen(certs as any[] | undefined, papeles)
+    const vencidas = vigentes.filter((c) => c.estado === 'vencido')
+    const porVencer = vigentes.filter((c) => c.estado === 'por_vencer')
     return {
       vencidas: vencidas.length,
       porVencer: porVencer.length,
       items: [...vencidas, ...porVencer],
     }
-  }, [certs])
+  }, [certs, papeles])
 
   const handleUpdateField = (field: string) => (value: string) => {
     if (!id) return
@@ -542,8 +544,50 @@ const EMPTY_DOC_FORM = {
   bloqueante: true,
 }
 
+// ---------------------------------------------------------------------------
+// Qué papel rige y en qué estado: lo dice la base, igual que Control Documental
+// ---------------------------------------------------------------------------
+// Antes esta ficha recalculaba en el navegador cuál versión rige y su estado,
+// y se quedó atrás de la vista: mostraba papeles anulados, juntaba todos los
+// «otra» en uno, daba «sin vencimiento» a los 2099 con archivo y no conocía la
+// vigencia por horas. 45 de 69 equipos no cuadraban con Control Documental.
+function usePapelesEquipo(activoId?: string) {
+  return useQuery({
+    queryKey: ['control-doc-papeles', activoId],
+    queryFn: () => getPapelesEquipo(activoId!),
+    enabled: !!activoId,
+  })
+}
+
+type CertConEstado = Record<string, any> & { estado: string; dias_restantes: number | null }
+
+/** Los papeles que rigen, con el estado de la vista. Equipo fuera de la vista
+ *  (de baja o externo): se calcula como antes. */
+function papelesQueRigen(certs: any[] | undefined, papeles: PapelEquipo[] | undefined): CertConEstado[] {
+  if (!certs?.length) return []
+  if (!papeles?.length) {
+    return documentosVigentes(certs).map((c: any) => ({
+      ...c, estado: estadoDocumento(c.fecha_vencimiento), dias_restantes: diasParaVencer(c.fecha_vencimiento),
+    }))
+  }
+  const porId = new Map(papeles.map((p) => [p.certificacion_id, p]))
+  return certs.filter((c) => porId.has(c.id)).map((c) => {
+    const p = porId.get(c.id)!
+    return {
+      ...c,
+      etiqueta: p.etiqueta ?? c.etiqueta,
+      // 'no_aplica' es el papel que no vence: en esta ficha se lee «Sin vencimiento».
+      estado: p.estado === 'no_aplica' ? 'permanente' : p.estado,
+      dias_restantes: p.dias_restantes,
+      horas_restantes: p.horas_restantes,
+    }
+  })
+}
+
 function TabCertificaciones({ activoId, patente }: { activoId: string; patente?: string | null }) {
-  const { data: certs, isLoading } = useCertificacionesByActivo(activoId)
+  const { data: certs, isLoading: cargandoCerts } = useCertificacionesByActivo(activoId)
+  const { data: papeles, isLoading: cargandoPapeles } = usePapelesEquipo(activoId)
+  const isLoading = cargandoCerts || cargandoPapeles
   const queryClient = useQueryClient()
   const toast = useToast()
   const [showAdd, setShowAdd] = useState(false)
@@ -600,21 +644,16 @@ function TabCertificaciones({ activoId, patente }: { activoId: string; patente?:
 
   // [MIG273] Renovar no pisa la fila: crea una versión nueva. Solo la última de
   // cada tipo rige; las anteriores se muestran aparte y no marcan vencido.
-  const vigentes = useMemo(() => documentosVigentes(certs as any[] | undefined), [certs])
-  // [MIG407] Qué tipos vencen: si algún certificado de ese tipo en TODA la
-  // ficha tiene fecha real, el tipo vence. Mismo criterio que la vista.
-  const tiposQueVencen = useMemo(() => {
-    const s = new Set<string>()
-    for (const c of (certs as any[] | undefined) ?? []) {
-      const f = c.fecha_vencimiento as string | null
-      if (f && f < '2099-01-01') s.add(c.tipo)
-    }
-    return s
-  }, [certs])
-  const reemplazados = useMemo(() => documentosReemplazados(certs as any[] | undefined), [certs])
+  const vigentes = useMemo(() => papelesQueRigen(certs as any[] | undefined, papeles), [certs, papeles])
+  const reemplazados = useMemo(() => {
+    const rigen = new Set(vigentes.map((c) => c.id))
+    return ((certs as any[] | undefined) ?? []).filter((c) => !rigen.has(c.id))
+  }, [certs, vigentes])
 
   const refrescar = () => {
     queryClient.invalidateQueries({ queryKey: ['certificaciones-activo', activoId] })
+    queryClient.invalidateQueries({ queryKey: ['control-doc-papeles'] })
+    queryClient.invalidateQueries({ queryKey: ['control-doc-equipos'] })
     queryClient.invalidateQueries({ queryKey: ['certificaciones'] })
     queryClient.invalidateQueries({ queryKey: ['activo', activoId] })
     queryClient.invalidateQueries({ queryKey: ['documentos-por-vencer'] })
@@ -890,16 +929,12 @@ function TabCertificaciones({ activoId, patente }: { activoId: string; patente?:
               const order: Record<string, number> = {
                 vencido: 0, sin_fecha: 1, por_vencer: 2, vigente: 3, permanente: 4,
               }
-              const est = (d: any) => estadoDocumento(d.fecha_vencimiento, {
-                tieneArchivo: !!d.archivo_url, tipoVence: tiposQueVencen.has(d.tipo),
-              })
-              return (order[est(a)] ?? 5) - (order[est(b)] ?? 5)
+              return (order[a.estado] ?? 5) - (order[b.estado] ?? 5)
             })
             .map((c: any) => (
               <DocumentoCard
                 key={c.id}
                 c={c}
-                tipoVence={tiposQueVencen.has(c.tipo)}
                 subiendo={subiendo}
                 onSubirArchivo={() => handleFileUpload(c.id)}
                 onRenovar={() => handleRenovar(c)}
@@ -957,11 +992,10 @@ function TabCertificaciones({ activoId, patente }: { activoId: string; patente?:
   )
 }
 
-function DocumentoCard({ c, subiendo, reemplazado, tipoVence, onSubirArchivo, onRenovar,
+function DocumentoCard({ c, subiendo, reemplazado, onSubirArchivo, onRenovar,
                          onCorregir, onAnular }: {
+  /** Si rige, trae `estado` y `dias_restantes` de v_control_documental. */
   c: any
-  /** [MIG407] Si el tipo de este papel vence, un 2099 es un hueco, no «permanente». */
-  tipoVence?: boolean
   subiendo?: boolean
   reemplazado?: boolean
   onSubirArchivo?: () => void
@@ -970,10 +1004,8 @@ function DocumentoCard({ c, subiendo, reemplazado, tipoVence, onSubirArchivo, on
   onCorregir?: () => void
   onAnular?: () => void
 }) {
-  const estado = reemplazado ? 'reemplazado' : estadoDocumento(c.fecha_vencimiento, {
-    tieneArchivo: !!c.archivo_url, tipoVence,
-  })
-  const dias = diasParaVencer(c.fecha_vencimiento)
+  const estado: string = reemplazado ? 'reemplazado' : c.estado
+  const dias: number | null = reemplazado ? diasParaVencer(c.fecha_vencimiento) : c.dias_restantes
 
   return (
     <Card className={cn(
