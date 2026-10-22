@@ -14,7 +14,7 @@ import { Modal } from '@/components/ui/modal'
 import { useRequireAuth } from '@/hooks/use-require-auth'
 import { useToast } from '@/hooks/use-toast'
 import {
-  getConsumoDia, getEquiposHoras, getHorasDia, getPautasEquipo, registrarPreventivaRealizada,
+  getConsumoDia, getEquiposHoras, getHorasDia, getPautasEquipo, registrarPreventivaRealizada, leerHorometro, corregirHorometro,
   type EquipoHoras, type EstadoPreventiva, type HorasDia, type PautaEquipo,
 } from '@/lib/services/horas-equipos'
 
@@ -235,6 +235,7 @@ function DetalleEquipo({ equipo, onClose }: { equipo: EquipoHoras; onClose: () =
           </p>
         </CardContent>
       </Card>
+      <CorregirHorometro equipo={equipo} />
       <PautasEquipo equipo={equipo} horasDia={data ?? []} />
       <ConsumoEquipo activoId={equipo.activo_id} desde={desde} />
     </Modal>
@@ -254,6 +255,157 @@ function horometroDelDia(horasDia: HorasDia[], dia: string): number | null {
     if (d.horometro_fin != null) v = d.horometro_fin
   }
   return v
+}
+
+// [MIG641] Corregir el horómetro con lo que marca el tablero: se fija en
+// Radicom (el GPS sigue contando desde ahí) y en SICOM con su historial.
+// Por defecto la próxima mantención se recalcula contra el valor corregido;
+// «mantener lo que falta» mueve también las bases de las pautas.
+function CorregirHorometro({ equipo }: { equipo: EquipoHoras }) {
+  const qc = useQueryClient()
+  const toast = useToast()
+  const [abierto, setAbierto] = useState(false)
+  const [horas, setHoras] = useState('')
+  const [km, setKm] = useState('')
+  const [nota, setNota] = useState('')
+  const [moverBases, setMoverBases] = useState(false)
+
+  const lectura = useQuery({
+    queryKey: ['horometro-leer', equipo.activo_id],
+    queryFn: () => leerHorometro(equipo.activo_id),
+    enabled: abierto,
+    staleTime: 0,
+    retry: false,
+  })
+  const { data: pautas } = useQuery({
+    queryKey: ['pautas-equipo', equipo.activo_id],
+    queryFn: () => getPautasEquipo(equipo.activo_id),
+    enabled: abierto,
+  })
+
+  const corregir = useMutation({
+    mutationFn: () => corregirHorometro({
+      activoId: equipo.activo_id,
+      horas: horas.trim() ? Number(horas.replace(',', '.')) : null,
+      km: km.trim() ? Number(km.replace(/\./g, '').replace(',', '.')) : null,
+      moverBases, nota,
+    }),
+    onSuccess: (r) => {
+      const dest = r.fuente === 'radicom' ? 'Radicom y SICOM' : 'SICOM'
+      toast.success(`Horómetro corregido en ${dest}${r.bases_movidas ? `; ${r.bases_movidas} pauta(s) movidas` : ''}`)
+      if (r.aviso) toast.warning(r.aviso)
+      setAbierto(false); setHoras(''); setKm(''); setNota(''); setMoverBases(false)
+      for (const k of ['equipo-horas', 'pautas-equipo', 'equipo-horas-dia', 'horometro-leer', 'equipo-consumo-dia']) {
+        qc.invalidateQueries({ queryKey: [k] })
+      }
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+
+  const l = lectura.data
+  const nuevo = horas.trim() ? Number(horas.replace(',', '.')) : null
+  // GPS en este instante; sin GPS, lo que tiene SICOM.
+  const gpsAhora = l?.fuente === 'radicom' ? (l.horas_gps ?? l.horas_sicom) : l?.horas_sicom ?? null
+
+  // La pauta que toca primero, hoy y con cada opción.
+  const proxima = (horometro: number | null, corrimiento: number) => {
+    if (horometro == null || !pautas?.length) return null
+    let mejor: { nombre: string; faltan: number } | null = null
+    for (const p of pautas) {
+      if (!p.ultima_ejecucion_horas) continue
+      const faltan = p.frecuencia_horas - (horometro - (p.ultima_ejecucion_horas + corrimiento))
+      if (!mejor || faltan < mejor.faltan) mejor = { nombre: p.nombre, faltan }
+    }
+    return mejor
+  }
+  const hoy = proxima(equipo.horometro, 0)
+  const conNuevo = nuevo != null && nuevo > 0
+    ? proxima(nuevo, moverBases && gpsAhora != null ? nuevo - gpsAhora : 0) : null
+
+  if (!abierto) {
+    return (
+      <div className="mt-4 flex justify-end">
+        <Button size="sm" variant="outline" onClick={() => setAbierto(true)}>
+          <Gauge className="mr-1 h-4 w-4" /> Corregir horómetro
+        </Button>
+      </div>
+    )
+  }
+
+  const renault = l?.fuente === 'renault'
+  const valido = !renault && !!l && ((nuevo != null && nuevo > 0) || km.trim() !== '') && nota.trim().length >= 5
+
+  return (
+    <Card className="mt-4 border-amber-200">
+      <CardHeader className="pb-1">
+        <CardTitle className="flex items-center gap-2 text-sm"><Gauge className="h-4 w-4" /> Corregir horómetro</CardTitle>
+      </CardHeader>
+      <CardContent className="text-sm">
+        {lectura.isLoading ? <div className="flex justify-center py-4"><Spinner /></div>
+          : lectura.error ? <div className="text-red-600">{(lectura.error as Error).message}</div>
+          : renault ? (
+            <p className="text-gray-600">Este camión toma el horómetro de su computador (GPS de fábrica Renault): no se corrige.</p>
+          ) : l && (
+            <>
+              <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                <Dato label="SICOM" valor={`${n1(l.horas_sicom)} h`} />
+                <Dato label={l.fuente === 'radicom' ? 'Radicom ahora' : 'GPS'}
+                      valor={l.fuente === 'radicom' ? `${n1(l.horas_gps)} h` : 'sin GPS'} />
+                <Dato label="Km SICOM" valor={n0(l.km_sicom)} />
+                <Dato label={l.fuente === 'radicom' ? 'Km Radicom' : 'Km GPS'}
+                      valor={l.fuente === 'radicom' ? n0(l.km_gps) : '—'} />
+              </div>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <label className="text-xs text-gray-600">Horómetro del tablero (h)
+                  <Input inputMode="decimal" value={horas} onChange={(e) => setHoras(e.target.value)} />
+                </label>
+                <label className="text-xs text-gray-600">Odómetro del tablero (km, opcional)
+                  <Input inputMode="numeric" value={km} onChange={(e) => setKm(e.target.value)} />
+                </label>
+              </div>
+              <label className="mt-2 block text-xs text-gray-600">De dónde sale el dato
+                <Input value={nota} onChange={(e) => setNota(e.target.value)}
+                       placeholder="Ej.: foto tablero recepción 22-10, OS 3410" />
+              </label>
+
+              <div className="mt-3 space-y-1 text-xs">
+                <label className="flex items-start gap-2">
+                  <input type="radio" className="mt-0.5" checked={!moverBases} onChange={() => setMoverBases(false)} />
+                  <span><b>Recalcular la próxima mantención</b> con el horómetro corregido (las bases de las pautas no cambian).</span>
+                </label>
+                <label className="flex items-start gap-2">
+                  <input type="radio" className="mt-0.5" checked={moverBases} onChange={() => setMoverBases(true)} />
+                  <span><b>Mantener lo que falta</b>: las bases se mueven en la misma diferencia (úsalo si las bases se tomaron del GPS).</span>
+                </label>
+              </div>
+
+              {hoy && (
+                <div className="mt-3 rounded-md bg-gray-50 p-2 text-xs">
+                  <div>Próxima hoy: <b>{hoy.nombre}</b> · {hoy.faltan <= 0 ? `vencida por ${n0(-hoy.faltan)} h` : `faltan ${n0(hoy.faltan)} h`}</div>
+                  {conNuevo && (
+                    <div>Con la corrección: <b>{conNuevo.nombre}</b> · {conNuevo.faltan <= 0
+                      ? <span className="text-red-600">vencida por {n0(-conNuevo.faltan)} h</span>
+                      : `faltan ${n0(conNuevo.faltan)} h`}</div>
+                  )}
+                </div>
+              )}
+              <p className="mt-2 text-[11px] text-gray-500">
+                {l.fuente === 'radicom'
+                  ? 'Se fija en Radicom y el GPS sigue contando desde ese valor. El historial de horas por día se ajusta a la escala nueva.'
+                  : 'Equipo sin GPS: se corrige solo en SICOM.'}
+              </p>
+            </>
+          )}
+        <div className="mt-3 flex justify-end gap-2">
+          <Button size="sm" variant="ghost" onClick={() => setAbierto(false)}>Cancelar</Button>
+          {!renault && (
+            <Button size="sm" variant="primary" disabled={!valido} loading={corregir.isPending}
+                    onClick={() => corregir.mutate()}>Corregir</Button>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  )
 }
 
 function PautasEquipo({ equipo, horasDia }: { equipo: EquipoHoras; horasDia: HorasDia[] }) {
