@@ -35,6 +35,11 @@ export type PosicionFlota = {
   gsm_red: string | null
   estado_pin: 'sin_datos' | 'sin_senal' | 'en_ruta' | 'detenido_motor_on' | 'detenido'
   minutos_desde_reporte: number | null
+  /** [MIG635] 'Radicom' o 'Renault rFMS' (GPS de fábrica). */
+  proveedor?: string | null
+  /** [MIG635] Solo GPS de fábrica: nivel de estanque y AdBlue en %. */
+  combustible_pct?: number | null
+  adblue_pct?: number | null
 }
 
 const COLOR_BY_ESTADO: Record<PosicionFlota['estado_pin'], string> = {
@@ -153,8 +158,22 @@ export function MapaFlota({ posiciones }: { posiciones: PosicionFlota[] }) {
               <hr style={{ margin: '6px 0', border: 'none', borderTop: '1px solid #E5E7EB' }} />
               <div>Odometro: <b>{p.odometro_km != null ? `${p.odometro_km.toFixed(0)} km` : '—'}</b></div>
               <div>Horometro: <b>{p.horometro_hrs != null ? `${p.horometro_hrs.toFixed(1)} h` : '—'}</b></div>
-              <div>Bateria: <b>{p.bateria_pct != null ? `${p.bateria_pct}%` : '—'}</b></div>
-              <div>Red: <b>{p.gsm_red ?? '—'}</b></div>
+              {p.combustible_pct != null || p.adblue_pct != null ? (
+                <>
+                  <div>Estanque: <b>{p.combustible_pct != null ? `${Math.round(p.combustible_pct)}%` : '—'}</b></div>
+                  <div>AdBlue: <b>{p.adblue_pct != null ? `${Math.round(p.adblue_pct)}%` : '—'}</b></div>
+                </>
+              ) : (
+                <>
+                  <div>Bateria: <b>{p.bateria_pct != null ? `${p.bateria_pct}%` : '—'}</b></div>
+                  <div>Red: <b>{p.gsm_red ?? '—'}</b></div>
+                </>
+              )}
+              {p.proveedor && (
+                <div style={{ fontSize: 11, color: '#6B7280', marginTop: 4 }}>
+                  GPS: {p.proveedor === 'Renault rFMS' ? 'de fábrica Renault' : p.proveedor}
+                </div>
+              )}
             </div>
           </Popup>
         </Marker>

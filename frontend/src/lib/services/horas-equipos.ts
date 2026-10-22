@@ -63,3 +63,27 @@ export async function getHorasDia(activoId: string, desde: string) {
   if (error) throw new Error(error.message)
   return (data ?? []) as HorasDia[]
 }
+
+/** [MIG635] Consumo por día desde la ECU (solo GPS de fábrica Renault). */
+export type ConsumoDia = {
+  fecha: string
+  horas: number | null
+  km: number | null
+  litros: number | null
+  litros_ralenti: number | null
+  horas_ralenti: number | null
+  litros_hora: number | null
+  km_litro: number | null
+  pct_ralenti: number | null
+}
+
+export async function getConsumoDia(activoId: string, desde: string) {
+  const { data, error } = await supabase
+    .from('v_activo_consumo_dia')
+    .select('fecha, horas, km, litros, litros_ralenti, horas_ralenti, litros_hora, km_litro, pct_ralenti')
+    .eq('activo_id', activoId)
+    .gte('fecha', desde)
+    .order('fecha')
+  if (error) throw new Error(error.message)
+  return (data ?? []) as ConsumoDia[]
+}
