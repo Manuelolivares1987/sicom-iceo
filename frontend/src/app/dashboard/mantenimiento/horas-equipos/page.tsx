@@ -147,7 +147,8 @@ export default function HorasEquiposPage() {
                       <td className={`px-3 py-1.5 text-right font-medium ${(e.horas_faltan ?? 1) <= 0 ? 'text-red-700' : ''}`}>
                         {e.estado_preventiva === 'revisar_base' ? '—'
                           : e.horas_faltan == null ? '—'
-                          : e.horas_faltan <= 0 ? `+${n0(Math.abs(e.horas_faltan))} h atraso`
+                          : Math.round(e.horas_faltan) === 0 ? 'toca ahora'
+                          : e.horas_faltan < 0 ? `+${n0(Math.abs(e.horas_faltan))} h atraso`
                           : `${n0(e.horas_faltan)} h`}
                       </td>
                       <td className="px-3 py-1.5">

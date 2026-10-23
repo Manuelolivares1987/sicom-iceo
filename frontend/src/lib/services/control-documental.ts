@@ -167,6 +167,37 @@ export async function fijarFecha(params: {
 }
 
 /**
+ * [MIG646] Los dos horómetros que trae el certificado de mantención: el de la
+ * mantención hecha y el de la próxima. La próxima reprograma la escalera del
+ * equipo (Horas por equipo) y el papel queda «vence a las X h».
+ */
+export async function fijarHorometrosMantencion(params: {
+  certificacionId: string
+  horasMantencion: number | null
+  horasProxima: number
+}) {
+  const { data, error } = await supabase.rpc('rpc_certificado_mantencion_horometros', {
+    p_cert_id: params.certificacionId,
+    p_horas_mantencion: params.horasMantencion,
+    p_horas_proxima: params.horasProxima,
+  })
+  if (error) throw error
+  return data as {
+    success: boolean; pautas_movidas: number; proxima_pauta: string | null
+    horas_faltan: number | null; horometro: number | null
+  }
+}
+
+/** Texto del resultado: cuántas horas le quedan a la próxima mantención. */
+export function textoHorasFaltan(r: { horas_faltan: number | null; proxima_pauta: string | null }) {
+  if (r.horas_faltan == null) return 'Horómetros guardados'
+  const h = Math.abs(Math.round(r.horas_faltan)).toLocaleString('es-CL')
+  return r.horas_faltan > 0
+    ? `Faltan ${h} h para ${r.proxima_pauta ?? 'la próxima mantención'}`
+    : `${r.proxima_pauta ?? 'La próxima mantención'} está pasada por ${h} h`
+}
+
+/**
  * [MIG427] Decir que un papel no caduca.
  *
  * El alcance importa y no se adivina: «este» habla de un documento —éste no
