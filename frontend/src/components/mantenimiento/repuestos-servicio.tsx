@@ -3,13 +3,12 @@
 import { useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  AlertTriangle, ChevronDown, ChevronUp, ClipboardList, Download, Package, Pencil, Plus, ShoppingCart, Trash2, Wrench,
+  AlertTriangle, ChevronDown, ChevronUp, Download, Pencil, Plus, Trash2,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
 import { Modal } from '@/components/ui/modal'
-import { useRequireAuth } from '@/hooks/use-require-auth'
 import { useToast } from '@/hooks/use-toast'
 import {
   claveRepuesto, fijarIntervalo, getModelos, getOperaciones, getProgramas, getRepuestos,
@@ -19,7 +18,7 @@ import {
 } from '@/lib/services/programa-servicio'
 
 // ============================================================================
-// Repuestos por servicio (MIG647)
+// Repuestos por servicio (MIG647) — pestañas de Horas por equipo
 // ----------------------------------------------------------------------------
 // Tres miradas sobre lo mismo:
 //   · Próximos servicios — para el jefe de taller: qué camión, cuándo, qué se
@@ -40,11 +39,10 @@ const ACCION: Record<AccionOperacion, string> = {
   sustituir: 'Sustituir', lubricar: 'Lubricar', ajustar: 'Ajustar', inspeccionar: 'Inspeccionar', otro: 'Otro',
 }
 
-type Tab = 'servicios' | 'compras' | 'programa'
+export type VistaRepuestos = 'servicios' | 'compras' | 'programa'
 
-export default function RepuestosServicioPage() {
-  useRequireAuth()
-  const [tab, setTab] = useState<Tab>('servicios')
+/** Las vistas de repuestos dentro de Horas por equipo: la pestaña la elige la página. */
+export function RepuestosServicio({ vista }: { vista: VistaRepuestos }) {
   const [horizonte, setHorizonte] = useState(30)
 
   const servicios = useQuery({ queryKey: ['servicios-proyectados'], queryFn: getServiciosProyectados, staleTime: 5 * 60_000 })
@@ -68,30 +66,13 @@ export default function RepuestosServicioPage() {
   }), [servicios.data, horizonte])
 
   return (
-    <div className="space-y-5 p-4 md:p-6">
-      <div>
-        <h1 className="flex items-center gap-2 text-2xl font-bold text-gray-900">
-          <Package className="h-6 w-6 text-pillado-green-600" /> Repuestos por servicio
-        </h1>
-        <p className="mt-1 text-sm text-gray-500">
-          Servicio cada 300 h; lo que se hace en cada uno sigue la pauta del fabricante contada en
-          servicios (una operación «cada 3» toca en el 3, 6, 9…). El cuándo sale de Horas por equipo.
-        </p>
-      </div>
-
+    <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
-        {([
-          ['servicios', 'Próximos servicios', Wrench],
-          ['compras', 'Compras', ShoppingCart],
-          ['programa', 'Programa por modelo', ClipboardList],
-        ] as const).map(([id, label, Icon]) => (
-          <button key={id} type="button" onClick={() => setTab(id)}
-            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium ${
-              tab === id ? 'bg-gray-900 text-white' : 'bg-white text-gray-700 ring-1 ring-gray-200 hover:bg-gray-50'}`}>
-            <Icon className="h-4 w-4" /> {label}
-          </button>
-        ))}
-        {tab !== 'programa' && (
+        <p className="text-xs text-gray-500">
+          Servicio cada 300 h; lo que se hace en cada uno sigue la pauta del fabricante contada en
+          servicios (una operación «cada 3» toca en el 3, 6, 9…). El cuándo sale de la escalera.
+        </p>
+        {vista !== 'programa' && (
           <div className="ml-auto flex items-center gap-1 text-xs text-gray-500">
             Próximos
             {[30, 60, 90].map((d) => (
@@ -108,9 +89,9 @@ export default function RepuestosServicioPage() {
         <Card><CardContent className="p-4 text-sm text-red-600">{(error as Error).message}</CardContent></Card>
       ) : cargando ? (
         <div className="py-16 text-center"><Spinner /></div>
-      ) : tab === 'servicios' ? (
+      ) : vista === 'servicios' ? (
         <TabServicios servicios={paraTaller} ops={ops.data ?? []} reps={reps.data ?? []} />
-      ) : tab === 'compras' ? (
+      ) : vista === 'compras' ? (
         <TabCompras servicios={enHorizonte} ops={ops.data ?? []} reps={reps.data ?? []} horizonte={horizonte} />
       ) : (
         <TabPrograma ops={ops.data ?? []} reps={reps.data ?? []}

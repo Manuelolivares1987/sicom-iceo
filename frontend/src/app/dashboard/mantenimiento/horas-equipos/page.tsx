@@ -5,7 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts'
-import { AlertTriangle, CheckCircle2, Clock, Gauge, HelpCircle, Search, Wrench } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, ClipboardList, Clock, Gauge, HelpCircle, Package, Search, ShoppingCart, Wrench } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -13,6 +13,7 @@ import { Spinner } from '@/components/ui/spinner'
 import { Modal } from '@/components/ui/modal'
 import { useRequireAuth } from '@/hooks/use-require-auth'
 import { useToast } from '@/hooks/use-toast'
+import { RepuestosServicio, type VistaRepuestos } from '@/components/mantenimiento/repuestos-servicio'
 import { limiteProxima, reprogramarEscalera, secuenciaEscalera } from '@/lib/escalera-mantencion'
 import {
   getConsumoDia, getEquiposHoras, getHorasDia, getPautasEquipo, registrarPreventivaRealizada, leerHorometro, corregirHorometro, reprogramarEscaleraEquipo,
@@ -44,11 +45,19 @@ const n0 = (v: number | null | undefined) => (v == null ? '—' : NUM0.format(v)
 const fecha = (iso: string | null | undefined) =>
   iso ? new Date(iso.slice(0, 10) + 'T12:00:00').toLocaleDateString('es-CL', { day: '2-digit', month: 'short', year: '2-digit' }) : '—'
 
+const VISTAS = [
+  ['horas', 'Horas y próximo preventivo', Gauge],
+  ['servicios', 'Qué se hace y repuestos', Package],
+  ['compras', 'Compras', ShoppingCart],
+  ['programa', 'Programa por modelo', ClipboardList],
+] as const
+
 export default function HorasEquiposPage() {
   useRequireAuth()
   const [filtro, setFiltro] = useState<EstadoPreventiva | 'todos'>('todos')
   const [texto, setTexto] = useState('')
   const [abierto, setAbierto] = useState<EquipoHoras | null>(null)
+  const [vista, setVista] = useState<'horas' | VistaRepuestos>('horas')
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['equipo-horas'],
@@ -84,6 +93,21 @@ export default function HorasEquiposPage() {
         </p>
       </div>
 
+      {/* [MIG647] Todo el preventivo en un solo lugar: horas, qué se hace en
+          cada servicio, qué repuestos comprar y el programa del fabricante. */}
+      <div className="flex flex-wrap gap-2 border-b pb-2">
+        {VISTAS.map(([id, label, Icon]) => (
+          <button key={id} type="button" onClick={() => setVista(id)}
+            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium ${
+              vista === id ? 'bg-gray-900 text-white' : 'bg-white text-gray-700 ring-1 ring-gray-200 hover:bg-gray-50'}`}>
+            <Icon className="h-4 w-4" /> {label}
+          </button>
+        ))}
+      </div>
+
+      {vista !== 'horas' && <RepuestosServicio vista={vista} />}
+
+      {vista === 'horas' && (<>
       {/* Contadores = filtros */}
       <div className="flex flex-wrap gap-2">
         <Chip activo={filtro === 'todos'} onClick={() => setFiltro('todos')}
@@ -172,6 +196,7 @@ export default function HorasEquiposPage() {
           </CardContent>
         </Card>
       )}
+      </>)}
 
       {abierto && (
         <DetalleEquipo equipo={data?.find((e) => e.activo_id === abierto.activo_id) ?? abierto}

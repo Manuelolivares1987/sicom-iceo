@@ -204,11 +204,7 @@ const navGroups: NavGroup[] = [
           // sistema ya guardaba: checklist, repuesto y no conformidad.
           // [MIG597] Horómetro GPS por equipo y próximo preventivo por horas.
           { label: 'Horas por equipo', href: '/dashboard/mantenimiento/horas-equipos', icon: Gauge, module: 'mantenimiento', badge: 'NUEVO',
-            tooltip: 'Horas trabajadas, ritmo y cuándo toca el próximo preventivo' },
-          // [MIG647] Qué se hace en cada servicio (pauta del fabricante contada en
-          // servicios cada 300 h) y qué repuestos pide: taller y compras.
-          { label: 'Repuestos por servicio', href: '/dashboard/mantenimiento/repuestos-servicio', icon: Package, module: 'mantenimiento', badge: 'NUEVO',
-            tooltip: 'Próximos servicios por equipo, repuestos a comprar y programa del fabricante por modelo' },
+            tooltip: 'Horas trabajadas, próximo preventivo, qué se hace en cada servicio y repuestos a comprar' },
           { label: 'Cuánto nos demoramos', href: '/dashboard/mantenimiento/tiempos', icon: Clock, module: 'mantenimiento', badge: 'NUEVO',
             tooltip: 'Cuánto toma el checklist, conseguir un repuesto y resolver una NC' },
           // [MIG543] El copiloto de diagnóstico: qué pregunta el taller, si las
