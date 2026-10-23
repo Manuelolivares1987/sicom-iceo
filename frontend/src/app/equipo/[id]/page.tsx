@@ -14,6 +14,8 @@ import {
 } from '@/domain/activos/status'
 import { useFichaActivo } from '@/hooks/use-activos'
 import { supabase } from '@/lib/supabase'
+import { TIPO_DOC_LABEL } from '@/lib/services/taller-planificacion'
+import { DescargarDocumentosZip } from '@/components/qr/descargar-documentos-zip'
 
 // Documentos del equipo para la ficha pública (QR): último por tipo, con
 // vigencia calculada en el servidor (MIG227).
@@ -164,6 +166,13 @@ export default function FichaEquipoPage() {
               titulo="Documentación vigente"
               detalle={docs.length > 0 ? `${docs.length} documentos del equipo` : 'Permisos, certificados y vigencias'}
               alerta={docsVencidos > 0 ? `${docsVencidos} por renovar` : null}
+            />
+            <DescargarDocumentosZip
+              patente={f.patente ?? f.codigo ?? 'Equipo'}
+              docs={docs.map((d) => ({
+                etiqueta: d.etiqueta?.trim() && d.etiqueta !== d.tipo ? d.etiqueta : TIPO_DOC_LABEL[d.tipo] || d.tipo,
+                url: d.archivo_url,
+              }))}
             />
             <OpcionMenu
               href={`/equipo/${id}/checklist-cliente`} emoji="✅" color="blue"

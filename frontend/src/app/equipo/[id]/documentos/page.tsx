@@ -12,6 +12,7 @@ import { cn, formatDate } from '@/lib/utils'
 import { TIPO_DOC_LABEL } from '@/lib/services/taller-planificacion'
 import { useFichaActivo } from '@/hooks/use-activos'
 import { supabase } from '@/lib/supabase'
+import { DescargarDocumentosZip } from '@/components/qr/descargar-documentos-zip'
 
 interface DocPublico {
   tipo: string
@@ -111,6 +112,11 @@ export default function DocumentosEquipoPage() {
             <p className="py-10 text-center text-sm text-gray-400">Este equipo aún no tiene documentos cargados.</p>
           ) : (
             <div className="space-y-1.5">
+              <DescargarDocumentosZip
+                className="pb-1"
+                patente={f?.patente ?? f?.codigo ?? 'Equipo'}
+                docs={ordenados.map((d) => ({ etiqueta: nombreDoc(d), url: d.archivo_url }))}
+              />
               {ordenados.map((d) => {
                 const ui = ESTADO_UI[d.estado] ?? ESTADO_UI.permanente
                 return (
