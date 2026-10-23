@@ -24,7 +24,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 // `Infinity` es un valor global de JavaScript: se importa con alias para no
 // sombrearlo dentro de este archivo.
-import { Infinity as IconoSinVencimiento, Upload, Pencil, Trash2, Archive } from 'lucide-react'
+import { Infinity as IconoSinVencimiento, Upload, Pencil, Trash2, Archive, Gauge } from 'lucide-react'
 import { subirDocumentoCert, renovarCertificacion } from '@/lib/services/taller-planificacion'
 import { leerDocumento, type LecturaDocumento } from '@/lib/documentos/leer-documento'
 // El status y sus colores se toman de donde ya viven: es el mismo vocabulario
@@ -43,6 +43,7 @@ import { useToast } from '@/contexts/toast-context'
 import { useRequireAuth } from '@/hooks/use-require-auth'
 import {
   getEquiposDocumental, getPapelesEquipo, fijarFecha, descartarPropuesta,
+  fijarHorometrosMantencion, textoHorasFaltan,
   marcarNoCaduca, vuelveACaducar,
   ESTADO_DOC, CONFIANZA, nombreTipo, nombrePapel, getTiposOtrosUsados, TIPO_DOC,
   type EquipoDocumental, type PapelEquipo,
@@ -73,6 +74,8 @@ export default function ControlDocumentalPage() {
   // [MIG486] Corregir un papel mal cargado, o sacarlo de circulación.
   const [corrigiendo, setCorrigiendo] = useState<PapelEquipo | null>(null)
   const [anulando, setAnulando] = useState<PapelEquipo | null>(null)
+  // [MIG646] Horómetro de la mantención y de la próxima, escritos del papel.
+  const [horometros, setHorometros] = useState<PapelEquipo | null>(null)
   const [verAnulados, setVerAnulados] = useState(false)
   // [MIG428] El status va primero porque es la pregunta que se hace primero:
   // «de los que están arrendados, ¿cuáles tienen los papeles al día?».
@@ -306,6 +309,7 @@ export default function ControlDocumentalPage() {
                            onSubir={() => setSubiendo(p)}
                            onCorregir={() => setCorrigiendo(p)}
                            onAnular={() => setAnulando(p)}
+                           onHorometros={() => setHorometros(p)}
                            onVuelveACaducar={async () => {
                              try {
                                // Si el TIPO estaba marcado, revertir sólo este papel
@@ -373,6 +377,10 @@ export default function ControlDocumentalPage() {
         <ModalAnularPapel p={anulando} onClose={() => setAnulando(null)}
                           onListo={() => { setAnulando(null); refrescar() }} />
       )}
+      {horometros && (
+        <ModalHorometrosMantencion p={horometros} onClose={() => setHorometros(null)}
+                                   onListo={() => { setHorometros(null); refrescar() }} />
+      )}
       {verAnulados && eqSel && (
         <ModalAnulados activoId={eqSel.activo_id} patente={eqSel.patente}
                        onClose={() => setVerAnulados(false)}
@@ -418,10 +426,10 @@ function Chip({ n, cls, t }: { n: number; cls: string; t: string }) {
 }
 
 function PapelCard({ p, onAceptar, onDescartar, onEditar, onNoCaduca, onVuelveACaducar,
-                     onSubir, onCorregir, onAnular }: {
+                     onSubir, onCorregir, onAnular, onHorometros }: {
   p: PapelEquipo; onAceptar: () => void; onDescartar: () => void; onEditar: () => void
   onNoCaduca: () => void; onVuelveACaducar: () => void; onSubir: () => void
-  onCorregir: () => void; onAnular: () => void
+  onCorregir: () => void; onAnular: () => void; onHorometros: () => void
 }) {
   const [busy, setBusy] = useState(false)
   const est = ESTADO_DOC[p.estado] ?? ESTADO_DOC.no_aplica
@@ -557,6 +565,15 @@ function PapelCard({ p, onAceptar, onDescartar, onEditar, onNoCaduca, onVuelveAC
           <Upload className="mr-1 h-3 w-3" /> Subir el papel nuevo
         </Button>
 
+        {/* [MIG646] El certificado de mantención trae a qué horómetro toca la
+            próxima: escrito acá, manda sobre la escalera del equipo. */}
+        {p.tipo === 'mantencion' && (
+          <Button variant="outline" className="h-7 text-xs" onClick={onHorometros}>
+            <Gauge className="mr-1 h-3 w-3" />
+            {p.horometro_vence != null ? 'Horómetros' : 'Escribir horómetros'}
+          </Button>
+        )}
+
         {/* [MIG486] Corregir es para el dato mal cargado —el tipo equivocado, el
             número, la entidad—. Anular es para el papel que no debió estar. */}
         <Button variant="outline" className="h-7 text-xs" onClick={onCorregir}>
@@ -608,6 +625,11 @@ function ModalSubirPapel({ p, onClose, onListo }: {
   const [venc, setVenc] = useState('')
   const [emi, setEmi] = useState('')
   const [busy, setBusy] = useState(false)
+  // [MIG646] Del certificado de mantención: horómetro de la mantención y de la próxima.
+  const esMantencion = p.tipo === 'mantencion'
+  const [hMant, setHMant] = useState('')
+  const [hProx, setHProx] = useState('')
+  const errHoras = horometrosInvalidos(hMant, hProx)
 
   const revisar = async (f: File | null) => {
     setFile(f); setLectura(null); setVenc(''); setEmi('')
@@ -624,14 +646,14 @@ function ModalSubirPapel({ p, onClose, onListo }: {
   }
 
   const bloqueado = !!lectura?.avisos.some((a) => a.severidad === 'bloqueante')
-  const puedeGuardar = !!file && !!venc && !bloqueado && !busy
+  const puedeGuardar = !!file && !!venc && !bloqueado && !busy && !errHoras
 
   const guardar = async () => {
     if (!file) return
     setBusy(true)
     try {
       const url = await subirDocumentoCert(p.activo_id, p.tipo, file)
-      await renovarCertificacion({
+      const nuevo = await renovarCertificacion({
         activoId: p.activo_id,
         tipo: p.tipo,
         // [MIG484] El nombre viaja con la renovación: sin esto, renovar un
@@ -648,7 +670,16 @@ function ModalSubirPapel({ p, onClose, onListo }: {
           ? `Fecha leída del documento al subirlo. ${lectura.evidencia ?? ''}`.slice(0, 400)
           : 'Fecha escrita a mano al subir el papel.',
       })
-      toast.success(`${nombrePapel(p)} del ${p.patente} actualizado — vence ${venc}`)
+      let extra = ''
+      if (esMantencion && hProx.trim()) {
+        const r = await fijarHorometrosMantencion({
+          certificacionId: (nuevo as { certificacion_id: string }).certificacion_id,
+          horasMantencion: hMant.trim() ? numeroCl(hMant) : null,
+          horasProxima: numeroCl(hProx)!,
+        })
+        extra = ` · ${textoHorasFaltan(r)}`
+      }
+      toast.success(`${nombrePapel(p)} del ${p.patente} actualizado — vence ${venc}${extra}`)
       onListo()
     } catch (e) {
       toast.error((e as Error).message)
@@ -715,6 +746,11 @@ function ModalSubirPapel({ p, onClose, onListo }: {
           </div>
         </div>
 
+        {esMantencion && (
+          <CamposHorometros hMant={hMant} setHMant={setHMant} hProx={hProx} setHProx={setHProx}
+                            error={errHoras} />
+        )}
+
         <div className="mt-5 flex justify-end gap-2">
           <Button variant="outline" onClick={onClose}>Cancelar</Button>
           <Button disabled={!puedeGuardar} onClick={guardar}>
@@ -727,6 +763,107 @@ function ModalSubirPapel({ p, onClose, onListo }: {
         )}
       </div>
     </div>
+  )
+}
+
+/** «2.300», «2300», «2000,1» → número. Vacío o basura → null. */
+function numeroCl(s: string): number | null {
+  const t = s.trim().replace(/\s/g, '')
+  if (!t) return null
+  // Con coma decimal, los puntos son de miles; sin coma, un punto seguido de
+  // exactamente 3 dígitos también es de miles («2.300»).
+  const norm = t.includes(',') ? t.replace(/\./g, '').replace(',', '.')
+    : /^\d{1,3}(\.\d{3})+$/.test(t) ? t.replace(/\./g, '') : t
+  const n = Number(norm)
+  return Number.isFinite(n) && n > 0 ? n : null
+}
+
+function horometrosInvalidos(hMant: string, hProx: string): string | null {
+  if (!hMant.trim() && !hProx.trim()) return null
+  const m = numeroCl(hMant), x = numeroCl(hProx)
+  if (hMant.trim() && m == null) return 'El horómetro de la mantención no es un número.'
+  if (!hProx.trim()) return 'Falta el horómetro de la próxima mantención.'
+  if (x == null) return 'El horómetro de la próxima no es un número.'
+  if (m != null && x <= m) return 'La próxima tiene que ser mayor que la mantención hecha.'
+  return null
+}
+
+function CamposHorometros({ hMant, setHMant, hProx, setHProx, error }: {
+  hMant: string; setHMant: (s: string) => void
+  hProx: string; setHProx: (s: string) => void; error: string | null
+}) {
+  const m = numeroCl(hMant), x = numeroCl(hProx)
+  return (
+    <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50/50 p-3">
+      <p className="text-xs font-semibold text-gray-700">Horómetros del certificado</p>
+      <p className="mt-0.5 text-[11px] text-gray-500">
+        Cópialos tal como vienen en el papel. La <b>próxima</b> es la que manda: con ella
+        el sistema calcula cuántas horas faltan para la mantención.
+      </p>
+      <div className="mt-2 grid grid-cols-2 gap-3">
+        <label className="text-xs font-medium text-gray-600">
+          Horómetro de esta mantención
+          <input inputMode="decimal" value={hMant} onChange={(e) => setHMant(e.target.value)}
+                 placeholder="Ej: 2.000" className="mt-1 w-full rounded border px-2 py-1.5 text-sm" />
+        </label>
+        <label className="text-xs font-medium text-gray-600">
+          Horómetro próxima mantención
+          <input inputMode="decimal" value={hProx} onChange={(e) => setHProx(e.target.value)}
+                 placeholder="Ej: 2.300" className="mt-1 w-full rounded border px-2 py-1.5 text-sm" />
+        </label>
+      </div>
+      {error ? <p className="mt-1.5 text-[11px] text-red-600">{error}</p>
+        : m != null && x != null ? (
+          <p className="mt-1.5 text-[11px] text-gray-600">Período: {Math.round(x - m).toLocaleString('es-CL')} h</p>
+        ) : null}
+    </div>
+  )
+}
+
+/** [MIG646] Escribir los horómetros de un certificado de mantención ya cargado. */
+function ModalHorometrosMantencion({ p, onClose, onListo }: {
+  p: PapelEquipo; onClose: () => void; onListo: () => void
+}) {
+  const toast = useToast()
+  const fmt = (n: number | null) => (n == null ? '' : n.toLocaleString('es-CL'))
+  const [hMant, setHMant] = useState(fmt(p.horometro_emision))
+  const [hProx, setHProx] = useState(fmt(p.horometro_vence))
+  const [busy, setBusy] = useState(false)
+  const error = horometrosInvalidos(hMant, hProx)
+
+  const guardar = async () => {
+    setBusy(true)
+    try {
+      const r = await fijarHorometrosMantencion({
+        certificacionId: p.certificacion_id,
+        horasMantencion: numeroCl(hMant),
+        horasProxima: numeroCl(hProx)!,
+      })
+      toast.success(`${p.patente}: ${textoHorasFaltan(r)}`)
+      onListo()
+    } catch (e) { toast.error((e as Error).message) } finally { setBusy(false) }
+  }
+
+  return (
+    <Modal open onClose={onClose} title={`${nombrePapel(p)} · ${p.patente}`}>
+      <div className="space-y-3">
+        {p.archivo_url && (
+          <a href={p.archivo_url} target="_blank" rel="noreferrer"
+             className="inline-flex items-center gap-1 text-sm font-medium text-blue-600 hover:underline">
+            Abrir el certificado para copiar los horómetros <ExternalLink className="h-3.5 w-3.5" />
+          </a>
+        )}
+        <CamposHorometros hMant={hMant} setHMant={setHMant} hProx={hProx} setHProx={setHProx}
+                          error={error} />
+        <div className="flex justify-end gap-2">
+          <Button variant="outline" onClick={onClose}>Cancelar</Button>
+          <Button disabled={busy || !!error || !hProx.trim()} onClick={guardar}>
+            {busy && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}
+            Guardar
+          </Button>
+        </div>
+      </div>
+    </Modal>
   )
 }
 
