@@ -62,6 +62,10 @@ export interface UsuarioPerfil {
   /** La faena de la persona, con la app de terreno que le corresponde (MIG361). */
   /** [MIG385] TRUE = el menú y la navegación quedan acotados a su faena. */
   solo_su_faena?: boolean
+  /** [MIG648] App de terreno a la que entra la cuenta al abrir el sistema. */
+  app_terreno?: string | null
+  /** [MIG648] Mundo por defecto en /m/enex. */
+  enex_mundo?: 'combustible' | 'lubricante' | null
   faena?: {
     id: string; codigo: string; nombre: string
     app_movil: string | null

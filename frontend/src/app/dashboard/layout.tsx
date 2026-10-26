@@ -56,6 +56,13 @@ export default function DashboardLayout({
       router.replace(appDeFaena)
       return
     }
+    // [MIG648] La cuenta que trabaja en una app de terreno (supervisores ENEX)
+    // entra directo a ella: hace login y queda trabajando, sin buscarla en el
+    // menú. Solo desde la portada; el resto del panel sigue abierto.
+    if (perfil?.app_terreno && /^\/dashboard\/?$/.test(pathname)) {
+      router.replace(perfil.app_terreno)
+      return
+    }
     if (esSupervisorCalamaSolo() && !pathname.startsWith('/dashboard/operacion-calama')) {
       router.replace('/dashboard/operacion-calama')
       return
@@ -67,7 +74,7 @@ export default function DashboardLayout({
       router.replace(faenaSolo.panel_web ?? faenaSolo.app_movil ?? '/dashboard')
     }
   }, [loading, pathname, esOperadorCalamaSolo, esSupervisorCalamaSolo, esOperadorTallerSolo,
-      esOperadorCombustibleSolo, appDeFaena, perfil?.rol, faenaSolo, router])
+      esOperadorCombustibleSolo, appDeFaena, perfil?.rol, perfil?.app_terreno, faenaSolo, router])
 
   if (loading) {
     return (
