@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabase'
-import { emailShell, seccionTitulo, tablaAbrir, tablaCerrar, celda, MARCA, FUENTE, type ChipResumen } from '@/lib/email/plantilla'
+import { emailShell, seccionTitulo, tablaAbrir, tablaCerrar, celda, tx, MARCA, FUENTE, type ChipResumen } from '@/lib/email/plantilla'
 import { fmtClp, fmtMM, fmtPct, variacionPct } from '@/lib/costos-operacion'
 
 // ============================================================================
@@ -78,9 +78,6 @@ export async function getTokenReporteCostos(): Promise<string | null> {
 export const linkReporteCostos = (origin: string, mes: string, token?: string | null) =>
   `${origin}/reporte-costos/?mes=${mes.slice(0, 7)}${token ? `&t=${token}` : ''}`
 
-/** El panel de costos dentro de SICOM (con sesión iniciada). */
-export const linkSicomCostos = (origin: string) => `${origin}/dashboard/gerencia/costos/`
-
 /** El panel completo de SICOM (gráficos + Pareto), abierto con el token del link (MIG620). */
 export const linkPanelCostos = (origin: string, token?: string | null) =>
   `${origin}/reporte-costos/panel/${token ? `?t=${token}` : ''}`
@@ -90,9 +87,9 @@ const esc = (s: unknown) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&
 /** Variación contra el mes anterior: gastar más es lo que se mira → rojo. */
 function variacionHtml(actual: number, anterior: number | null | undefined): string {
   const v = variacionPct(actual, anterior)
-  if (v == null) return '<span style="color:#9ca3af">antes $0</span>'
+  if (v == null) return tx('antes $0', '#9ca3af')
   const color = v > 0 ? MARCA.rojo : MARCA.verde
-  return `<span style="color:${color};font-weight:700">${v > 0 ? '▲' : '▼'} ${fmtPct(Math.abs(v))}</span>`
+  return `<b>${tx(`${v > 0 ? '▲' : '▼'} ${fmtPct(Math.abs(v))}`, color, 'font-weight:700')}</b>`
 }
 
 const MESES_CORTO = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
@@ -116,11 +113,11 @@ function tendenciaHtml(tend: { mes: string; total: number }[], mes: string): str
     return `<td valign="bottom" align="center" style="padding:0 2px;${FUENTE}">
       <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width:100%">
         <tr><td align="center" style="${FUENTE};font-size:10px;line-height:13px;color:${actual ? MARCA.verdeOscuro : '#6b7280'};
-                 font-weight:${actual ? 'bold' : 'normal'};padding-bottom:3px">${etiqueta}</td></tr>
+                 font-weight:${actual ? 'bold' : 'normal'};padding-bottom:3px">${tx(etiqueta, actual ? MARCA.verdeOscuro : '#6b7280', 'font-size:10px')}</td></tr>
         <tr><td height="${h}" bgcolor="${color}" style="height:${h}px;background:${color};font-size:1px;line-height:1px;
                  border-radius:3px 3px 0 0">&nbsp;</td></tr>
         <tr><td align="center" style="${FUENTE};font-size:10px;line-height:14px;color:${actual ? MARCA.verdeOscuro : '#6b7280'};
-                 font-weight:${actual ? 'bold' : 'normal'};padding-top:4px;border-top:1px solid #d1d5db">${MESES_CORTO[Number(String(t.mes).slice(5, 7)) - 1]}</td></tr>
+                 font-weight:${actual ? 'bold' : 'normal'};padding-top:4px;border-top:1px solid #d1d5db">${tx(MESES_CORTO[Number(String(t.mes).slice(5, 7)) - 1], actual ? MARCA.verdeOscuro : '#6b7280', 'font-size:10px')}</td></tr>
       </table></td>`
   }
   return `${seccionTitulo('Gasto de los últimos 12 meses (millones de $)', MARCA.verdeOscuro, MARCA.verdeClaro)}
@@ -139,7 +136,7 @@ function pctConBarra(pct: number): string {
     </table>`
 }
 
-export function buildCostosEmailHtml(r: ReporteCostos, link: string, linkSicom?: string): string {
+export function buildCostosEmailHtml(r: ReporteCostos, link: string): string {
   const k = r.kpi
   const mes = mesLargo(r.mes)
   const ant = mesLargo(r.mes_anterior)
@@ -159,14 +156,14 @@ export function buildCostosEmailHtml(r: ReporteCostos, link: string, linkSicom?:
   ]
 
   const resto = (n: number, mostrados: number, total: number, cols: number) => n > mostrados
-    ? `<tr><td colspan="${cols}" style="padding:8px 10px;font-size:12px;color:#6b7280">Otros ${n - mostrados}: ${fmtClp(total)}</td></tr>` : ''
+    ? `<tr><td colspan="${cols}" style="padding:8px 10px;font-size:12px;color:#6b7280">${tx(`Otros ${n - mostrados}: ${fmtClp(total)}`, '#6b7280', 'font-size:12px')}</td></tr>` : ''
 
   const equipos = r.equipos.items.map((e, i) => {
     const z = i % 2 === 1
     const sub = [e.faena, e.familias[0] ? `${e.familias[0].nombre}` : null].filter(Boolean).join(' · ')
-    return `<tr>${celda(`<b>${i + 1}. ${esc(e.etiqueta)}</b>${sub ? `<div style="font-size:11px;color:#6b7280">${esc(sub)}</div>` : ''}`, z)}
+    return `<tr>${celda(`<b>${i + 1}. ${esc(e.etiqueta)}</b>${sub ? `<div style="font-size:11px;color:#6b7280">${tx(esc(sub), '#6b7280', 'font-size:11px')}</div>` : ''}`, z)}
       ${celda(fmtClp(e.total), z, der)}${celda(variacionHtml(e.total, e.total_anterior), z, der)}
-      ${celda(e.costo_hora_12m == null ? '<span style="color:#9ca3af">sin medición</span>' : fmtClp(e.costo_hora_12m), z, der)}</tr>`
+      ${celda(e.costo_hora_12m == null ? tx('sin medición', '#9ca3af') : fmtClp(e.costo_hora_12m), z, der)}</tr>`
   }).join('')
 
   const familias = r.familias.items.map((f, i) => {
@@ -177,15 +174,15 @@ export function buildCostosEmailHtml(r: ReporteCostos, link: string, linkSicom?:
 
   const ccs = r.centros_costo.items.map((c, i) => {
     const z = i % 2 === 1
-    return `<tr>${celda(`<b>${i + 1}. ${esc(c.descripcion ?? c.codi_cc)}</b><div style="font-size:11px;color:#6b7280">${esc(c.codi_cc)} · ${esc(NOMBRE_AREA_CC[c.area] ?? c.area)}</div>`, z)}
+    return `<tr>${celda(`<b>${i + 1}. ${esc(c.descripcion ?? c.codi_cc)}</b><div style="font-size:11px;color:#6b7280">${tx(`${esc(c.codi_cc)} · ${esc(NOMBRE_AREA_CC[c.area] ?? c.area)}`, '#6b7280', 'font-size:11px')}</div>`, z)}
       ${celda(fmtClp(c.total), z, der)}${celda(variacionHtml(c.total, c.total_anterior), z, der)}</tr>`
   }).join('')
 
   const cuerpo = `
     <p style="${FUENTE};font-size:13px;color:#4b5563;margin:14px 0 0">
       Gasto del mes: <b style="color:#1f2937">${fmtClp(k.total)}</b> en ${k.equipos_con_gasto} equipos.
-      Variaciones contra ${esc(ant)}: <span style="color:${MARCA.rojo}">▲ rojo = se gastó más</span>,
-      <span style="color:${MARCA.verde}">▼ verde = se gastó menos</span>.
+      Variaciones contra ${esc(ant)}: ${tx('▲ rojo = se gastó más', MARCA.rojo)},
+      ${tx('▼ verde = se gastó menos', MARCA.verde)}.
     </p>
     ${tendenciaHtml(r.tendencia ?? [], r.mes)}
     ${seccionTitulo('Los 10 equipos con más gasto', MARCA.verdeOscuro, MARCA.verdeClaro)}
@@ -200,14 +197,9 @@ export function buildCostosEmailHtml(r: ReporteCostos, link: string, linkSicom?:
     subtitulo: 'Órdenes de compra aprobadas en Softland (materiales y servicios, neto). Sin combustible de reventa.',
     chips,
     cuerpo,
-    // Manuel: «debe existir un link que lleve a este informe» (/dashboard/gerencia/costos).
-    // Sin sesión en SICOM, el segundo enlace abre el mismo panel con el token.
-    ctaUrl: linkSicom ?? link,
-    ctaTexto: linkSicom ? 'Ver el informe completo en SICOM' : 'Abrir panel de costos (gráficos y Pareto)',
-    ctaExtra: linkSicom
-      ? `<p style="${FUENTE};font-size:12px;color:#6b7280;margin:10px 0 0">¿No tiene sesión iniciada en SICOM?
-          <a href="${link}" target="_blank" style="color:${MARCA.verde};font-weight:bold">Abrir el panel de costos sin iniciar sesión</a></p>`
-      : undefined,
+    // Manuel (26-10): un solo botón, el que abre el panel sin iniciar sesión.
+    ctaUrl: link,
+    ctaTexto: 'Abrir el panel de costos sin iniciar sesión',
     pie: 'Costo/h = gasto entre dos lecturas de horómetro ÷ horas entre ellas, últimos 12 meses. '
       + '«Sin medición» = el equipo no tiene dos lecturas de horómetro confiables en ese período. SICOM · Pillado Empresas.',
   })
@@ -218,16 +210,15 @@ export async function copiarReporteCostos(r: ReporteCostos, token: string | null
   // El botón del correo abre el panel completo de SICOM (Manuel: «que pueda ir al
   // gráfico que aparece en SICOM y ver los paretos y todo»).
   const link = linkPanelCostos(window.location.origin, token)
-  const linkSicom = linkSicomCostos(window.location.origin)
   // Debajo de la tarjeta queda un párrafo en blanco con letra normal para
   // escribir la minuta de trabajos sin heredar el formato del informe.
-  const html = `${buildCostosEmailHtml(r, link, linkSicom)}
+  const html = `${buildCostosEmailHtml(r, link)}
     <p style="font-family:Calibri,Arial,sans-serif;font-size:11pt;margin:0">&nbsp;</p>
     <p style="font-family:Calibri,Arial,sans-serif;font-size:11pt;margin:0">&nbsp;</p>`
   try {
     await navigator.clipboard.write([new ClipboardItem({
       'text/html': new Blob([html], { type: 'text/html' }),
-      'text/plain': new Blob([`Costos de operación · ${mesLargo(r.mes)} — ${linkSicom}`], { type: 'text/plain' }),
+      'text/plain': new Blob([`Costos de operación · ${mesLargo(r.mes)} — ${link}`], { type: 'text/plain' }),
     })])
     return 'Copiado ✓ — ahora pega en Outlook (Ctrl+V)'
   } catch {
