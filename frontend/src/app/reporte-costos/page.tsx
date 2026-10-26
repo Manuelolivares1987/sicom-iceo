@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase'
 import { fmtClp, fmtMM, fmtPct, variacionPct } from '@/lib/costos-operacion'
 import { nombreTipo } from '@/components/costos/comunes'
 import {
-  NOMBRE_AREA_CC, copiarReporteCostos, linkPanelCostos, getReporteCostos, getTokenReporteCostos, mesCerradoIso, mesLargo,
+  NOMBRE_AREA_CC, copiarReporteCostos, linkPanelCostos, getReporteCostos, getTokenReporteCostos, mesCerradoIso, mesEnCursoIso, mesLargo,
   type ReporteCostos,
 } from '@/lib/reporte-costos'
 
@@ -64,7 +64,7 @@ const th = 'px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-gra
 const td = 'px-3 py-2'
 
 export default function ReporteCostosPage() {
-  const [mes, setMes] = useState(mesCerradoIso())
+  const [mes, setMes] = useState(mesEnCursoIso())
   const [data, setData] = useState<ReporteCostos | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [cargando, setCargando] = useState(true)

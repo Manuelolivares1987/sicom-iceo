@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { Mail } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
-  copiarReporteCostos, getReporteCostos, getTokenReporteCostos, linkReporteCostos, mesCerradoIso, mesLargo,
+  copiarReporteCostos, getReporteCostos, getTokenReporteCostos, linkReporteCostos, mesEnCursoIso, mesLargo,
 } from '@/lib/reporte-costos'
 
 /** Últimos 12 meses, del más reciente (mes en curso) hacia atrás. */
@@ -22,12 +22,12 @@ function ultimosMeses(): string[] {
  * interactivo, que se ve sin sesión con el token del link.
  *
  * El selector de mes también filtra todo el panel de abajo (`onMes`). Vacío =
- * el panel usa los botones de período y el correo, el último mes cerrado.
+ * el panel usa los botones de período y el correo, el mes en curso.
  */
 export function InformeMensualCostos({ mesFiltro = null, onMes }: {
   mesFiltro?: string | null; onMes?: (mes: string | null) => void
 } = {}) {
-  const mes = mesFiltro ?? mesCerradoIso()
+  const mes = mesFiltro ?? mesEnCursoIso()
   const [msg, setMsg] = useState<string | null>(null)
   const [ocupado, setOcupado] = useState(false)
 
