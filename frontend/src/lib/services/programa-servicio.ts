@@ -1,7 +1,7 @@
 // ============================================================================
 // [MIG647] Programa de servicio por modelo
 // ----------------------------------------------------------------------------
-// El servicio va cada 300 h (intervalo SICOM); lo que se hace en cada uno sigue
+// El servicio va cada intervalo_horas del modelo (Volvo 400 h, MIG652); lo que se hace en cada uno sigue
 // la pauta del fabricante contada en servicios: una operación «cada 3» toca en
 // los servicios 3, 6, 9… El kit de repuestos del servicio N° n es la suma de
 // los repuestos de las operaciones que tocan en n.

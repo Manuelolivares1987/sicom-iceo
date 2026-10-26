@@ -69,7 +69,7 @@ export function RepuestosServicio({ vista }: { vista: VistaRepuestos }) {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
         <p className="text-xs text-gray-500">
-          Servicio cada 300 h; lo que se hace en cada uno sigue la pauta del fabricante contada en
+          Servicio según el intervalo de cada modelo (Volvo 400 h, el resto 300 h); lo que se hace en cada uno sigue la pauta del fabricante contada en
           servicios (una operación «cada 3» toca en el 3, 6, 9…). El cuándo sale de la escalera.
         </p>
         {vista !== 'programa' && (
