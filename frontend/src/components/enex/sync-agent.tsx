@@ -8,7 +8,7 @@
 
 import { useEffect } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { syncEnexPending, protegerAlmacenamiento } from '@/lib/offline/enex-offline'
+import { syncEnexPending, protegerAlmacenamiento, guardarPantallasOffline } from '@/lib/offline/enex-offline'
 
 const REINTENTO_MS = 60_000
 
@@ -18,6 +18,14 @@ export function EnexSyncAgent() {
   useEffect(() => {
     // Sin esto el navegador puede vaciar lo guardado si le falta espacio.
     void protegerAlmacenamiento()
+
+    // La primera vez en un teléfono (recién hecho el login) el service worker
+    // todavía no controla la página y la descarga de las pantallas no queda
+    // guardada. Se repite apenas toma el control: sin que nadie apriete nada.
+    const sw = typeof navigator !== 'undefined' ? navigator.serviceWorker : undefined
+    const alTomarControl = () => { void guardarPantallasOffline() }
+    if (sw?.controller) alTomarControl()
+    sw?.addEventListener('controllerchange', alTomarControl)
 
     let vivo = true
     const intentar = async () => {
@@ -41,6 +49,7 @@ export function EnexSyncAgent() {
       clearInterval(t)
       window.removeEventListener('online', intentar)
       document.removeEventListener('visibilitychange', alVolver)
+      sw?.removeEventListener('controllerchange', alTomarControl)
     }
   }, [qc])
 

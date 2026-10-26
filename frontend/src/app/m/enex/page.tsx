@@ -19,6 +19,7 @@ import {
 import { getPendientesOffline, prepararEnexOffline, getEnexPendingCount, ultimaDescargaEnex, getPlanDiaOffline } from '@/lib/offline/enex-offline'
 import { useNetworkStatus } from '@/hooks/use-calama-offline'
 import { useExigirSesion } from '@/hooks/use-exigir-sesion'
+import { useAuth } from '@/contexts/auth-context'
 import { SinSesionOffline } from '@/components/enex/sin-sesion-offline'
 import { BandejaPorEnviar } from '@/components/enex/bandeja-por-enviar'
 import { ListoSinSenal } from '@/components/enex/listo-sin-senal'
@@ -53,14 +54,29 @@ export default function EnexTerrenoHome() {
   const online = useNetworkStatus()
   const [descargaMsg, setDescargaMsg] = useState('')
 
-  // Mundo del supervisor (combustible / lubricantes). Se elige y se recuerda:
-  // dos supervisores usan la MISMA app y cada uno filtra su mundo según su día.
+  // Mundo del supervisor (combustible / lubricantes). [MIG648] Lo fija la
+  // cuenta: cada supervisor entra directo a lo suyo. Si un día cubre el otro
+  // mundo y lo cambia a mano, el cambio vale solo ese día; al siguiente vuelve
+  // a lo de su cuenta.
+  const { perfil } = useAuth()
+  const mundoCuenta = perfil?.enex_mundo ?? null
   const [mundo, setMundo] = useState<Mundo | null>(null)
   useEffect(() => {
-    const saved = typeof localStorage !== 'undefined' ? localStorage.getItem(MUNDO_KEY) : null
-    setMundo(saved === 'lubricante' || saved === 'combustible' ? saved : 'combustible')
-  }, [])
-  function elegirMundo(m: Mundo) { setMundo(m); try { localStorage.setItem(MUNDO_KEY, m) } catch { /* no-op */ } }
+    let elegido: { m?: string; dia?: string } = {}
+    try { elegido = JSON.parse(localStorage.getItem(MUNDO_KEY) ?? '{}') ?? {} } catch {
+      // Valor de antes de MIG648: texto plano, sin día.
+      const viejo = typeof localStorage !== 'undefined' ? localStorage.getItem(MUNDO_KEY) : null
+      elegido = { m: viejo ?? undefined }
+    }
+    const valido = (x?: string | null): x is Mundo => x === 'combustible' || x === 'lubricante'
+    if (valido(elegido.m) && elegido.dia === hoyISOf()) setMundo(elegido.m)
+    else if (valido(mundoCuenta)) setMundo(mundoCuenta)
+    else setMundo(valido(elegido.m) ? elegido.m : 'combustible')
+  }, [mundoCuenta])
+  function elegirMundo(m: Mundo) {
+    setMundo(m)
+    try { localStorage.setItem(MUNDO_KEY, JSON.stringify({ m, dia: hoyISOf() })) } catch { /* no-op */ }
+  }
 
   const { data: pend = [], isLoading, refetch, isFetching } = useQuery({
     queryKey: ['enex-terreno', anio, mes], queryFn: () => getPendientesOffline(anio, mes),
