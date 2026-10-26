@@ -61,6 +61,16 @@ export function CarpetaCertificados({ activoId, acciones }: {
   const { data: tipos } = useQuery({ queryKey: ['certificado-tipos'], queryFn: getCertificadoTipos, staleTime: 300_000 })
   const { data: tecnicos } = useQuery({ queryKey: ['taller-tecnicos-cert'], queryFn: getTecnicosTaller, staleTime: 300_000 })
   const { data: activo } = useQuery({ queryKey: ['activo-lite-cert', activoId], queryFn: () => getActivoLite(activoId) })
+  // [MIG652] Intervalo de mantención del equipo (Volvo 400 h, el resto 300 h).
+  const { data: intervalo = 300 } = useQuery({
+    queryKey: ['intervalo-mantencion', activoId],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('fn_intervalo_mantencion_horas', { p_activo_id: activoId })
+      if (error) return 300
+      return Number(data) || 300
+    },
+    staleTime: 300_000,
+  })
   // Informes de recepción/recobro del equipo: también viven en la carpeta.
   const { data: informes } = useQuery({
     queryKey: ['activo-informes-recepcion', activoId],
@@ -78,7 +88,7 @@ export function CarpetaCertificados({ activoId, acciones }: {
   // «no vence», que sobre un certificado de mantención es falso.
   const [venceEl, setVenceEl] = useState('')
   // [MIG514] La vigencia de los certificados de mantención es POR HORAS:
-  // horómetro de emisión + horas (300, la pauta compañía). La fecha queda
+  // horómetro de emisión + horas (el intervalo del equipo: 300, Volvo 400). La fecha queda
   // solo para los certificados de calendario.
   const [horometro, setHorometro] = useState('')
   const [vigenciaHoras, setVigenciaHoras] = useState('300')
@@ -93,7 +103,7 @@ export function CarpetaCertificados({ activoId, acciones }: {
     const hoy = new Date().toISOString().slice(0, 10)
     setTipoCodigo(''); setFecha(hoy); setVenceEl('')
     setHorometro(activo?.horas_uso_actual != null ? String(activo.horas_uso_actual) : '')
-    setVigenciaHoras('300')
+    setVigenciaHoras(String(intervalo))
     setDatos({
       equipo: activo?.nombre ?? '',
       marca: activo?.modelo?.marca?.nombre ?? '',
@@ -312,7 +322,7 @@ export function CarpetaCertificados({ activoId, acciones }: {
                     <p className="mt-0.5 text-[10px] leading-tight text-gray-500">
                       {vigenciaHoras.trim() !== '' && Number(vigenciaHoras) > 0 && horometro.trim() !== ''
                         ? `Vence cuando el equipo llegue a las ${(Number(horometro) + Number(vigenciaHoras)).toLocaleString('es-CL')} h de horómetro.`
-                        : 'Mantención = 300 h. El certificado vence por horómetro, no por calendario.'}
+                        : `Mantención = ${intervalo} h. El certificado vence por horómetro, no por calendario.`}
                     </p>
                   </div>
                   {(vigenciaHoras.trim() === '' || Number(vigenciaHoras) <= 0) && (
