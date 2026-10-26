@@ -117,11 +117,11 @@ function columnasEquipos() {
     { header: 'N° Motor', key: 'numero_motor', width: 18 },
     { header: 'Estado del día', key: 'estado_dia', width: 20 },
     { header: 'Zona', key: 'zona', width: 16 },
-    // [MIG621] Ubicación = GPS; lugar físico = lo registrado a mano. Antes las
-    // dos repetían el mismo texto libre, viejo en 12 equipos.
-    { header: 'Ubicación (GPS)', key: 'ubicacion', width: 30 },
-    { header: 'Lugar físico (registrado)', key: 'lugar_fisico', width: 28 },
-    { header: '¿Coincide?', key: 'ubicacion_revisar', width: 16 },
+    // [MIG650] Ubicación = lo que fijó el planificador en Sugerencias GPS; el GPS
+    // queda como referencia (TRDP-97 salía «Spence» estando en Sierra Gorda).
+    { header: 'Ubicación (planificador)', key: 'ubicacion', width: 30 },
+    { header: 'GPS (referencia)', key: 'ubicacion_gps', width: 34 },
+    { header: '¿GPS coincide?', key: 'ubicacion_revisar', width: 16 },
     { header: 'Último contrato', key: 'contrato_codigo', width: 18 },
     { header: 'Cliente contrato', key: 'contrato_cliente', width: 26 },
     { header: 'Cliente actual', key: 'cliente_actual', width: 24 },
@@ -172,7 +172,7 @@ function filaEquipo(e: DetalleCalc, cuenta: Record<string, number>, code: string
     dias_letras_total: totalLetras,
     cuadre: totalLetras === Number(e.dias_observados) ? 'OK' : `≠ (${totalLetras}/${e.dias_observados})`,
     estado_dia: code ? `${code} — ${ESTADO_LABELS[code] ?? code}` : '—',
-    ubicacion_revisar: e.ubicacion_coincide === false ? 'NO — revisar' : e.ubicacion_coincide ? 'Sí' : 'Sin GPS al día',
+    ubicacion_revisar: e.ubicacion_coincide === false ? 'NO — revisar' : e.ubicacion_coincide ? 'Sí' : 'Sin GPS en geocerca',
     contratos_dias_txt: (e.contratos_dias ?? []).map((c) => `${c.codigo}: ${c.dias} d`).join('; '),
     disp_inh: Math.round(Number(e.disponibilidad_inherente) * 100),
     disp_fis: Math.round(Number(e.disponibilidad_fisica) * 100),

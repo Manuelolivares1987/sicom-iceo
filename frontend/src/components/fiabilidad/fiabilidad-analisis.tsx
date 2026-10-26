@@ -968,10 +968,10 @@ export function FiabilidadAnalisis({ readOnly = false }: { readOnly?: boolean } 
                 <div className="rounded-lg border border-blue-100 bg-blue-50/50 p-2.5 text-xs">
                   <div className="text-[10px] uppercase tracking-wide text-gray-400">📍 Dónde está</div>
                   <div className="font-semibold text-gray-800">
-                    {equipoHistoria.det.ubicacion ?? 'Sin GPS'}
+                    {equipoHistoria.det.ubicacion ?? 'Sin registro'}
                   </div>
                   <div className="text-[11px] text-gray-500">
-                    Registrado: {equipoHistoria.det.lugar_fisico ?? '—'}
+                    GPS: {equipoHistoria.det.ubicacion_gps ?? 'Sin GPS'}
                     {equipoHistoria.det.ubicacion_coincide === false && <b className="ml-1 text-amber-700">· no coincide</b>}
                   </div>
                 </div>
