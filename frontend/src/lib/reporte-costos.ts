@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabase'
-import { emailShell, seccionTitulo, tablaAbrir, tablaCerrar, celda, MARCA, type ChipResumen } from '@/lib/email/plantilla'
+import { emailShell, seccionTitulo, tablaAbrir, tablaCerrar, celda, MARCA, FUENTE, type ChipResumen } from '@/lib/email/plantilla'
 import { fmtClp, fmtMM, fmtPct, variacionPct } from '@/lib/costos-operacion'
 
 // ============================================================================
@@ -92,6 +92,50 @@ function variacionHtml(actual: number, anterior: number | null | undefined): str
   return `<span style="color:${color};font-weight:700">${v > 0 ? '▲' : '▼'} ${fmtPct(Math.abs(v))}</span>`
 }
 
+const MESES_CORTO = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
+
+/**
+ * Gráfico de barras de los últimos 12 meses hecho con celdas de tabla: Outlook
+ * no muestra SVG ni canvas, pero sí una celda con alto y color de fondo.
+ * El mes del informe va en verde oscuro, el resto en verde claro.
+ */
+function tendenciaHtml(tend: { mes: string; total: number }[], mes: string): string {
+  const xs = tend.slice(-12)
+  const max = Math.max(...xs.map((t) => Number(t.total) || 0), 0)
+  if (xs.length < 2 || max <= 0) return ''
+  const ALTO = 90
+  const col = (t: { mes: string; total: number }) => {
+    const v = Number(t.total) || 0
+    const h = Math.max(2, Math.round((v / max) * ALTO))
+    const actual = String(t.mes).slice(0, 7) === mes.slice(0, 7)
+    const color = actual ? MARCA.verdeOscuro : '#a7d4ae'
+    const etiqueta = `${(v / 1e6).toLocaleString('es-CL', { maximumFractionDigits: 0 })}`
+    return `<td valign="bottom" align="center" style="padding:0 2px;${FUENTE}">
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width:100%">
+        <tr><td align="center" style="${FUENTE};font-size:10px;line-height:13px;color:${actual ? MARCA.verdeOscuro : '#6b7280'};
+                 font-weight:${actual ? 'bold' : 'normal'};padding-bottom:3px">${etiqueta}</td></tr>
+        <tr><td height="${h}" bgcolor="${color}" style="height:${h}px;background:${color};font-size:1px;line-height:1px;
+                 border-radius:3px 3px 0 0">&nbsp;</td></tr>
+        <tr><td align="center" style="${FUENTE};font-size:10px;line-height:14px;color:${actual ? MARCA.verdeOscuro : '#6b7280'};
+                 font-weight:${actual ? 'bold' : 'normal'};padding-top:4px;border-top:1px solid #d1d5db">${MESES_CORTO[Number(String(t.mes).slice(5, 7)) - 1]}</td></tr>
+      </table></td>`
+  }
+  return `${seccionTitulo('Gasto de los últimos 12 meses (millones de $)', MARCA.verdeOscuro, MARCA.verdeClaro)}
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width:100%;table-layout:fixed">
+      <tr>${xs.map(col).join('')}</tr>
+    </table>`
+}
+
+/** % del mes con una barra de participación debajo — tablas, se ve en Outlook. */
+function pctConBarra(pct: number): string {
+  const p = Math.min(100, Math.max(1, Math.round(pct)))
+  return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="72" align="right" style="width:72px">
+      <tr><td colspan="2" align="right" style="${FUENTE};font-size:13px;color:#1f2937;padding-bottom:4px">${fmtPct(pct)}</td></tr>
+      <tr><td width="${p}%" height="5" bgcolor="${MARCA.verde}" style="background:${MARCA.verde};font-size:1px;line-height:1px">&nbsp;</td>
+      ${p < 100 ? `<td width="${100 - p}%" height="5" bgcolor="#e5e7eb" style="background:#e5e7eb;font-size:1px;line-height:1px">&nbsp;</td>` : ''}</tr>
+    </table>`
+}
+
 export function buildCostosEmailHtml(r: ReporteCostos, link: string): string {
   const k = r.kpi
   const mes = mesLargo(r.mes)
@@ -107,6 +151,7 @@ export function buildCostosEmailHtml(r: ReporteCostos, link: string): string {
       color: vTotal != null && vTotal > 0 ? MARCA.rojo : MARCA.verdeOscuro,
       fondo: vTotal != null && vTotal > 0 ? MARCA.rojoFondo : MARCA.verdeClaro,
     },
+    { n: pctAsignado == null ? '—' : `${Math.round(pctAsignado)}%`, label: 'Asignado a equipo', color: '#1d4ed8', fondo: '#dbeafe' },
     { n: k.costo_hora_12m == null ? '—' : fmtClp(k.costo_hora_12m), label: 'Costo/h flota 12 m', color: MARCA.ambar, fondo: MARCA.ambarFondo },
   ]
 
@@ -124,7 +169,7 @@ export function buildCostosEmailHtml(r: ReporteCostos, link: string): string {
   const familias = r.familias.items.map((f, i) => {
     const z = i % 2 === 1
     return `<tr>${celda(`<b>${i + 1}. ${esc(f.nombre)}</b>`, z)}${celda(fmtClp(f.total), z, der)}
-      ${celda(k.total > 0 ? fmtPct((f.total / k.total) * 100) : '—', z, der)}${celda(variacionHtml(f.total, f.total_anterior), z, der)}</tr>`
+      ${celda(k.total > 0 ? pctConBarra((f.total / k.total) * 100) : '—', z, der)}${celda(variacionHtml(f.total, f.total_anterior), z, der)}</tr>`
   }).join('')
 
   const ccs = r.centros_costo.items.map((c, i) => {
@@ -134,15 +179,18 @@ export function buildCostosEmailHtml(r: ReporteCostos, link: string): string {
   }).join('')
 
   const cuerpo = `
-    <p style="font-size:13px;color:#4b5563;margin:14px 0 0">
-      ${pctAsignado == null ? '' : `${Math.round(pctAsignado)}% del gasto quedó asignado a un equipo. `}Variaciones contra ${esc(ant)}.
+    <p style="${FUENTE};font-size:13px;color:#4b5563;margin:14px 0 0">
+      Gasto del mes: <b style="color:#1f2937">${fmtClp(k.total)}</b> en ${k.equipos_con_gasto} equipos.
+      Variaciones contra ${esc(ant)}: <span style="color:${MARCA.rojo}">▲ rojo = se gastó más</span>,
+      <span style="color:${MARCA.verde}">▼ verde = se gastó menos</span>.
     </p>
+    ${tendenciaHtml(r.tendencia ?? [], r.mes)}
     ${seccionTitulo('Los 10 equipos con más gasto', MARCA.verdeOscuro, MARCA.verdeClaro)}
-    ${tablaAbrir(['Equipo', 'Gasto', 'vs mes ant.', 'Costo/h 12 m'])}${equipos}${resto(r.equipos.n, r.equipos.items.length, r.equipos.resto, 4)}${tablaCerrar}
+    ${tablaAbrir(['Equipo', 'Gasto', 'vs mes ant.', 'Costo/h 12 m'], [1, 2, 3])}${equipos}${resto(r.equipos.n, r.equipos.items.length, r.equipos.resto, 4)}${tablaCerrar}
     ${seccionTitulo('Las 10 familias con más gasto', MARCA.verdeOscuro, MARCA.verdeClaro)}
-    ${tablaAbrir(['Familia', 'Gasto', '% del mes', 'vs mes ant.'])}${familias}${resto(r.familias.n, r.familias.items.length, r.familias.resto, 4)}${tablaCerrar}
+    ${tablaAbrir(['Familia', 'Gasto', '% del mes', 'vs mes ant.'], [1, 2, 3])}${familias}${resto(r.familias.n, r.familias.items.length, r.familias.resto, 4)}${tablaCerrar}
     ${r.centros_costo.items.length ? `${seccionTitulo('Centros de costo (fuera de los equipos)', MARCA.verdeOscuro, MARCA.verdeClaro)}
-    ${tablaAbrir(['Centro de costo', 'Gasto', 'vs mes ant.'])}${ccs}${resto(r.centros_costo.n, r.centros_costo.items.length, r.centros_costo.resto, 3)}${tablaCerrar}` : ''}`
+    ${tablaAbrir(['Centro de costo', 'Gasto', 'vs mes ant.'], [1, 2])}${ccs}${resto(r.centros_costo.n, r.centros_costo.items.length, r.centros_costo.resto, 3)}${tablaCerrar}` : ''}`
 
   return emailShell({
     titulo: `Costos de operación · ${mes}`,
@@ -161,7 +209,11 @@ export async function copiarReporteCostos(r: ReporteCostos, token: string | null
   // El botón del correo abre el panel completo de SICOM (Manuel: «que pueda ir al
   // gráfico que aparece en SICOM y ver los paretos y todo»).
   const link = linkPanelCostos(window.location.origin, token)
-  const html = buildCostosEmailHtml(r, link)
+  // Debajo de la tarjeta queda un párrafo en blanco con letra normal para
+  // escribir la minuta de trabajos sin heredar el formato del informe.
+  const html = `${buildCostosEmailHtml(r, link)}
+    <p style="font-family:Calibri,Arial,sans-serif;font-size:11pt;margin:0">&nbsp;</p>
+    <p style="font-family:Calibri,Arial,sans-serif;font-size:11pt;margin:0">&nbsp;</p>`
   try {
     await navigator.clipboard.write([new ClipboardItem({
       'text/html': new Blob([html], { type: 'text/html' }),
