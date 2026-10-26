@@ -37,6 +37,16 @@ export const MARCA = {
 /** Fuente segura: Segoe UI en Windows/Outlook, Arial en el resto. Nunca system-ui (Outlook → Times). */
 export const FUENTE = "font-family:'Segoe UI',Arial,Helvetica,sans-serif"
 
+/**
+ * Texto con color que sobrevive al pegar en Outlook. Al pegar, Outlook (Word)
+ * descarta el `color` de los estilos (probado 26-10: el título quedó negro sobre
+ * verde y el botón azul sobre verde), pero respeta la etiqueta clásica <font>.
+ * Va el <font> por fuera y el estilo por dentro, para el resto de los clientes.
+ */
+export function tx(html: string, color: string, extra = ''): string {
+  return `<font color="${color}" face="Segoe UI, Arial, sans-serif"><span style="color:${color};${FUENTE};${extra}">${html}</span></font>`
+}
+
 /** Ancho de la tarjeta. Outlook de escritorio solo respeta el atributo width. */
 export const ANCHO_CORREO = 680
 
@@ -45,7 +55,7 @@ export function seccionTitulo(texto: string, color: string, fondo: string): stri
   return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:22px 0 8px">
     <tr><td height="22" style="font-size:1px;line-height:1px">&nbsp;</td></tr>
     <tr><td bgcolor="${fondo}" style="background:${fondo};border-radius:999px;padding:6px 14px;
-                 ${FUENTE};font-size:13px;font-weight:bold;color:${color}">${texto}</td></tr>
+                 ${FUENTE};font-size:13px;font-weight:bold;color:${color}"><b>${tx(texto, color, 'font-size:13px')}</b></td></tr>
     <tr><td height="8" style="font-size:1px;line-height:1px">&nbsp;</td></tr>
   </table>`
 }
@@ -53,7 +63,7 @@ export function seccionTitulo(texto: string, color: string, fondo: string): stri
 /** Chip de estado dentro de una celda (ej. VENCIDO, hace 12 días). En Outlook queda como texto resaltado. */
 export function chipEstado(texto: string, color: string, fondo: string): string {
   return `<span style="display:inline-block;background:${fondo};mso-highlight:${fondo};color:${color};${FUENTE};
-                       font-size:11px;font-weight:bold;padding:3px 10px;border-radius:999px;white-space:nowrap">&nbsp;${texto}&nbsp;</span>`
+                       font-size:11px;font-weight:bold;padding:3px 10px;border-radius:999px;white-space:nowrap"><font color="${color}"><b>&nbsp;${texto}&nbsp;</b></font></span>`
 }
 
 /** Cabecera de tabla consistente. `derecha` = índices de columnas numéricas (título a la derecha). */
@@ -64,7 +74,7 @@ export function tablaAbrir(cols: string[], derecha: number[] = []): string {
       const al = derecha.includes(i) ? 'right' : 'left'
       return `<th align="${al}" style="padding:8px 10px;${FUENTE};font-size:11px;
         font-weight:bold;color:#6b7280;text-transform:uppercase;letter-spacing:.5px;
-        border-bottom:2px solid #e5e7eb;text-align:${al}">${c}</th>`
+        border-bottom:2px solid #e5e7eb;text-align:${al}">${tx(c, '#6b7280', 'font-size:11px;font-weight:bold')}</th>`
     }).join('')}
     </tr>`
 }
@@ -83,7 +93,7 @@ export function boton(url: string, texto: string, color: string = MARCA.verde): 
     <tr><td height="24" style="font-size:1px;line-height:1px">&nbsp;</td></tr>
     <tr><td bgcolor="${color}" align="center" style="background:${color};border-radius:10px;padding:13px 28px">
       <a href="${url}" target="_blank"
-         style="${FUENTE};font-size:14px;font-weight:bold;color:#ffffff;text-decoration:none;display:inline-block">${texto} &rarr;</a>
+         style="${FUENTE};font-size:14px;font-weight:bold;color:#ffffff;text-decoration:none;display:inline-block"><b>${tx(`${texto} &rarr;`, '#ffffff', 'font-size:14px;text-decoration:none')}</b></a>
     </td></tr></table>`
 }
 
@@ -98,9 +108,9 @@ function chipsFila(chips: ChipResumen[]): string {
       ${chips.map((c, i) => `${i > 0 ? '<td width="10" style="width:10px;font-size:1px">&nbsp;</td>' : ''}
         <td width="${ancho}%" bgcolor="${c.fondo}" align="center" valign="middle"
             style="background:${c.fondo};border-radius:12px;padding:14px 10px;text-align:center">
-          <div style="${FUENTE};font-size:26px;font-weight:bold;color:${c.color};line-height:30px;mso-line-height-rule:exactly">${c.n}</div>
+          <div style="${FUENTE};font-size:26px;font-weight:bold;color:${c.color};line-height:30px;mso-line-height-rule:exactly"><b>${tx(String(c.n), c.color, 'font-size:26px')}</b></div>
           <div style="${FUENTE};font-size:10px;font-weight:bold;color:${c.color};line-height:14px;
-                      text-transform:uppercase;letter-spacing:.6px">${c.label}</div>
+                      text-transform:uppercase;letter-spacing:.6px"><b>${tx(c.label, c.color, 'font-size:10px')}</b></div>
         </td>`).join('')}
       </tr>
     </table>`
@@ -127,9 +137,9 @@ export function emailShell(p: {
       <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="${ANCHO_CORREO}" align="center"
              style="width:${ANCHO_CORREO}px;max-width:100%;background:#ffffff;border:1px solid #dfe8e1;border-radius:16px">
         <tr><td bgcolor="${MARCA.verdeOscuro}" style="background:${MARCA.verdeOscuro};padding:22px 30px;border-radius:16px 16px 0 0">
-          <div style="${FUENTE};font-size:11px;font-weight:bold;letter-spacing:2px;color:#8bcc95;text-transform:uppercase">Pillado Empresas · SICOM</div>
-          <div style="${FUENTE};font-size:22px;font-weight:bold;color:#ffffff;line-height:30px;mso-line-height-rule:exactly">${p.titulo}</div>
-          ${p.subtitulo ? `<div style="${FUENTE};font-size:13px;color:${MARCA.verdeClaro};line-height:19px">${p.subtitulo}</div>` : ''}
+          <div style="${FUENTE};font-size:11px;font-weight:bold;letter-spacing:2px;color:#8bcc95;text-transform:uppercase"><b>${tx('PILLADO EMPRESAS · SICOM', '#8bcc95', 'font-size:11px;letter-spacing:2px')}</b></div>
+          <div style="${FUENTE};font-size:22px;font-weight:bold;color:#ffffff;line-height:30px;mso-line-height-rule:exactly"><b>${tx(p.titulo, '#ffffff', 'font-size:22px')}</b></div>
+          ${p.subtitulo ? `<div style="${FUENTE};font-size:13px;color:${MARCA.verdeClaro};line-height:19px">${tx(p.subtitulo, MARCA.verdeClaro, 'font-size:13px')}</div>` : ''}
         </td></tr>
         <tr><td bgcolor="#ffffff" style="background:#ffffff;padding:6px 30px 26px;${FUENTE};font-size:13px;color:#1f2937">
           ${chipsFila(p.chips ?? [])}
@@ -139,7 +149,7 @@ export function emailShell(p: {
         </td></tr>
         <tr><td bgcolor="#f6f9f6" style="background:#f6f9f6;border-top:1px solid #e8efe9;padding:14px 30px;
                        ${FUENTE};font-size:11px;color:#87a08c;line-height:17px;border-radius:0 0 16px 16px">
-          ${p.pie ?? 'Correo automático de SICOM · Pillado Empresas. No responder a este mensaje.'}
+          ${tx(p.pie ?? 'Correo automático de SICOM · Pillado Empresas. No responder a este mensaje.', '#6b7f70', 'font-size:11px')}
         </td></tr>
       </table>
     </td></tr>
