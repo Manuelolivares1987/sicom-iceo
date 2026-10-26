@@ -131,6 +131,7 @@ export interface ActivoFiabilidadDetalle extends FiabilidadActivo {
   contrato_cliente?: string | null
   faena?: string | null
   ubicacion?: string | null
+  ubicacion_gps?: string | null
   lugar_fisico?: string | null
   ubicacion_coincide?: boolean | null
   zona?: string | null
@@ -181,8 +182,8 @@ export async function getDetalleFiabilidadFlota(
   const [{ data: ultimos }, { data: diasCont }, { data: ubic }] = await Promise.all([
     supabase.from('v_activo_ultimo_arriendo').select('activo_id, cliente, lugar, fecha_inicio, fecha_fin, dias, vigente').in('activo_id', ids),
     supabase.from('v_activo_dias_contrato').select('activo_id, codigo, cliente, dias').in('activo_id', ids),
-    // [MIG621] Dónde está según el GPS, y si contradice lo registrado a mano.
-    supabase.from('v_activo_ubicacion_reporte').select('activo_id, ubicacion_gps, coincide').in('activo_id', ids),
+    // [MIG650] Dónde está = lo que fijó el planificador; el GPS es referencia.
+    supabase.from('v_activo_ubicacion_reporte').select('activo_id, ubicacion, ubicacion_gps, coincide').in('activo_id', ids),
   ])
   const ubicMap = new Map<string, any>((ubic ?? []).map((u: any) => [u.activo_id, u]))
   const ultMap = new Map<string, any>((ultimos ?? []).map((u: any) => [u.activo_id, u]))
@@ -218,7 +219,8 @@ export async function getDetalleFiabilidadFlota(
         contrato_codigo: a.contrato?.codigo ?? null,
         contrato_cliente: a.contrato?.cliente ?? null,
         faena: a.faena?.nombre ?? null,
-        ubicacion: ubicMap.get(a.id)?.ubicacion_gps ?? null,
+        ubicacion: ubicMap.get(a.id)?.ubicacion ?? null,
+        ubicacion_gps: ubicMap.get(a.id)?.ubicacion_gps ?? null,
         // Lugar físico = lo registrado a mano (la faena de la ficha no es confiable).
         lugar_fisico: a.ubicacion_actual?.trim() || null,
         ubicacion_coincide: ubicMap.get(a.id)?.coincide ?? null,

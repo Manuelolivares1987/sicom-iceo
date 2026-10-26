@@ -27,7 +27,7 @@ type Equipo = {
   categoria_uso: string | null; cliente: string | null
   marca: string | null; modelo: string | null; anio: number | null
   capacidad: string | null; potencia: string | null; vin_chasis: string | null; numero_motor: string | null
-  estado_comercial: string | null; faena: string | null; ubicacion: string | null; lugar_fisico: string | null
+  estado_comercial: string | null; faena: string | null; ubicacion: string | null; ubicacion_gps?: string | null; lugar_fisico: string | null
   ubicacion_coincide: boolean | null; ubicacion_gps_fecha: string | null
   zona: string | null
   gps_lat: number | null; gps_lng: number | null; gps_ts: string | null
@@ -289,11 +289,11 @@ export default function ReporteFiabilidadPublicoPage() {
       { header: 'N° Motor', key: 'numero_motor', width: 18 },
       { header: 'Estado del día', key: 'estado_dia', width: 20 },
       { header: 'Zona', key: 'zona', width: 16 },
-      // [MIG621] Ubicación = GPS; lugar físico = lo registrado a mano. Antes las
-      // dos repetían el mismo texto libre, viejo en 12 equipos.
-      { header: 'Ubicación (GPS)', key: 'ubicacion', width: 30 },
-      { header: 'Lugar físico (registrado)', key: 'lugar_fisico', width: 28 },
-      { header: '¿Coincide?', key: 'ubicacion_revisar', width: 16 },
+      // [MIG650] Ubicación = lo que fijó el planificador en Sugerencias GPS; el GPS
+      // queda como referencia (TRDP-97 salía «Spence» estando en Sierra Gorda).
+      { header: 'Ubicación (planificador)', key: 'ubicacion', width: 30 },
+      { header: 'GPS (referencia)', key: 'ubicacion_gps', width: 34 },
+      { header: '¿GPS coincide?', key: 'ubicacion_revisar', width: 16 },
       { header: 'Último contrato', key: 'contrato_codigo', width: 18 },
       { header: 'Cliente contrato', key: 'contrato_cliente', width: 26 },
       { header: 'Cliente actual', key: 'cliente', width: 24 },
@@ -338,7 +338,7 @@ export default function ReporteFiabilidadPublicoPage() {
         dias_letras_total: totalLetras,
         cuadre: totalLetras === Number(e.dias_observados) ? 'OK' : `≠ (${totalLetras}/${e.dias_observados})`,
         estado_dia: code ? `${code} — ${LABEL[code] ?? code}` : '—',
-        ubicacion_revisar: e.ubicacion_coincide === false ? 'NO — revisar' : e.ubicacion_coincide ? 'Sí' : 'Sin GPS al día',
+        ubicacion_revisar: e.ubicacion_coincide === false ? 'NO — revisar' : e.ubicacion_coincide ? 'Sí' : 'Sin GPS en geocerca',
         contratos_dias_txt: (e.contratos_dias ?? []).map((c) => `${c.codigo}: ${c.dias} d`).join('; '),
         ult_desde: e.ult_desde ? String(e.ult_desde).slice(0, 10) : '',
         ult_hasta: e.ult_vigente ? 'vigente' : (e.ult_hasta ? String(e.ult_hasta).slice(0, 10) : ''),
@@ -640,9 +640,11 @@ export default function ReporteFiabilidadPublicoPage() {
                   </p>
                 )}
                 <p className="text-sm text-gray-700">
-                  📍 Dónde está (GPS): <b>{histSel.det?.ubicacion ?? 'Sin GPS'}</b>
-                  {histSel.det?.ubicacion_coincide === false && (
-                    <span className="ml-1 text-xs text-amber-700">· registrado: {histSel.det.lugar_fisico}</span>
+                  📍 Dónde está: <b>{histSel.det?.ubicacion ?? 'Sin registro'}</b>
+                  {histSel.det?.ubicacion_gps && (
+                    <span className={`ml-1 text-xs ${histSel.det.ubicacion_coincide === false ? 'text-amber-700' : 'text-gray-500'}`}>
+                      · GPS: {histSel.det.ubicacion_gps}
+                    </span>
                   )}
                 </p>
               </div>
