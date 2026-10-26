@@ -16,6 +16,7 @@
 // ============================================================================
 
 import { useMemo, useState } from 'react'
+import { useActivosVisibles } from '@/hooks/use-permissions'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   FileWarning, Search, ExternalLink, Check, X, AlertTriangle, Loader2, ShieldCheck,
@@ -86,9 +87,14 @@ export default function ControlDocumentalPage() {
   const [status, setStatus] = useState<string>('')
   const [zona, setZona] = useState<string>('')
 
-  const { data: equipos = [], isLoading } = useQuery({
+  // [MIG656] Operaciones Calama ve solo los equipos de Calama.
+  const activosVisibles = useActivosVisibles()
+  const { data: equiposTodos = [], isLoading } = useQuery({
     queryKey: ['control-doc-equipos'], queryFn: getEquiposDocumental,
   })
+  const equipos = useMemo(
+    () => (activosVisibles ? equiposTodos.filter((e) => activosVisibles.has(e.activo_id)) : equiposTodos),
+    [equiposTodos, activosVisibles])
   const activo = sel ?? equipos[0]?.activo_id ?? null
   const { data: papeles = [], isLoading: cargandoPapeles } = useQuery({
     queryKey: ['control-doc-papeles', activo],
