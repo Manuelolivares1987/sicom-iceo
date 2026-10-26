@@ -114,6 +114,8 @@ export function emailShell(p: {
   cuerpo: string
   ctaUrl?: string
   ctaTexto?: string
+  /** HTML bajo el botón (ej. un enlace alternativo). */
+  ctaExtra?: string
   pie?: string
 }): string {
   const cta = p.ctaUrl ? boton(p.ctaUrl, p.ctaTexto ?? 'Abrir en SICOM') : ''
@@ -133,6 +135,7 @@ export function emailShell(p: {
           ${chipsFila(p.chips ?? [])}
           ${p.cuerpo}
           ${cta}
+          ${p.ctaExtra ?? ''}
         </td></tr>
         <tr><td bgcolor="#f6f9f6" style="background:#f6f9f6;border-top:1px solid #e8efe9;padding:14px 30px;
                        ${FUENTE};font-size:11px;color:#87a08c;line-height:17px;border-radius:0 0 16px 16px">
