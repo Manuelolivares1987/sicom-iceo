@@ -47,10 +47,9 @@ const withPWA = require('@ducanh2912/next-pwa').default({
           networkTimeoutSeconds: 4,
           expiration: { maxEntries: 40, maxAgeSeconds: 30 * 24 * 60 * 60 },
           plugins: [{
-            cacheKeyWillBeUsed: async ({ request }) => {
-              const u = new URL(request.url)
-              return u.origin + u.pathname
-            },
+            // Con punto y coma: el plugin copia la función al service worker
+            // en una sola línea.
+            cacheKeyWillBeUsed: async ({ request }) => { const u = new URL(request.url); return u.origin + u.pathname },
           }],
         },
       },
@@ -66,10 +65,9 @@ const withPWA = require('@ducanh2912/next-pwa').default({
           networkTimeoutSeconds: 4,
           expiration: { maxEntries: 40, maxAgeSeconds: 30 * 24 * 60 * 60 },
           plugins: [{
-            cacheKeyWillBeUsed: async ({ request }) => {
-              const u = new URL(request.url)
-              return u.origin + u.pathname
-            },
+            // Con punto y coma: el plugin copia la función al service worker
+            // en una sola línea.
+            cacheKeyWillBeUsed: async ({ request }) => { const u = new URL(request.url); return u.origin + u.pathname },
           }],
         },
       },
