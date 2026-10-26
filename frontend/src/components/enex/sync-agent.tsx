@@ -9,6 +9,7 @@
 import { useEffect } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { syncEnexPending, protegerAlmacenamiento, guardarPantallasOffline } from '@/lib/offline/enex-offline'
+import { despacharCorreosEnex } from '@/lib/offline/enex-correo'
 
 const REINTENTO_MS = 60_000
 
@@ -37,6 +38,8 @@ export function EnexSyncAgent() {
       }
       qc.invalidateQueries({ queryKey: ['enex-pending-count'] })
       qc.invalidateQueries({ queryKey: ['enex-bandeja'] })
+      // [MIG649] Informe + correo a la jefatura de lo que ya llegó.
+      await despacharCorreosEnex().catch(() => 0)
     }
     const alVolver = () => { if (document.visibilityState === 'visible') void intentar() }
 

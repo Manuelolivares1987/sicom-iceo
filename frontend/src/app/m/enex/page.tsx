@@ -8,7 +8,7 @@ import Link from 'next/link'
 import { useQuery } from '@tanstack/react-query'
 import {
   Building2, ChevronRight, ChevronLeft, CheckCircle2, Clock, RefreshCw, AlertTriangle,
-  WifiOff, CloudOff, Download, Fuel, Droplets, Repeat, Check, CalendarDays, Sun,
+  WifiOff, CloudOff, Fuel, Droplets, Repeat, Check, CalendarDays, Sun,
   ClipboardList,
 } from 'lucide-react'
 import { Spinner } from '@/components/ui/spinner'
@@ -246,12 +246,8 @@ export default function EnexTerrenoHome() {
         <span className="font-medium">{online ? 'En línea' : 'Sin conexión — se guarda local'}</span>
         {pendientesSync > 0 && <span className="ml-auto flex items-center gap-1"><CloudOff className="h-3 w-3" /> {pendientesSync} por sincronizar</span>}
       </div>
-      {online && pend.length > 0 && (
-        <button onClick={async () => { const n = await prepararEnexOffline(anio, mes); setDescargaMsg(`${n} servicios descargados para usar sin internet`) }}
-                className="flex w-full items-center justify-center gap-2 rounded-lg border border-blue-300 bg-blue-50 py-2 text-xs font-medium text-blue-700">
-          <Download className="h-4 w-4" /> Descargar el mes para trabajar sin señal
-        </button>
-      )}
+      {/* La descarga para trabajar sin señal es automática (al abrir, cada 10
+          minutos y al volver la red): el botón «Descargar el mes» sobraba. */}
       {descargaMsg && <p className="text-center text-[11px] text-green-600">{descargaMsg}</p>}
 
       {pendientesSync > 0 && <BandejaPorEnviar />}

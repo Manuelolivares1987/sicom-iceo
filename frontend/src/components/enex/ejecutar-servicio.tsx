@@ -21,10 +21,12 @@ import { Button } from '@/components/ui/button'
 import { SignaturePad } from '@/components/ui/signature-pad'
 import { useAuth } from '@/contexts/auth-context'
 import { useToast } from '@/contexts/toast-context'
-import { getEjecucionIdDeProgramacion, type EnexPautaItem, type EnexPendiente } from '@/lib/services/enex'
-import { generarYGuardarInformeEnex } from '@/components/enex/pdf-informe-enex'
+import { type EnexPautaItem, type EnexPendiente } from '@/lib/services/enex'
+import { despacharCorreosEnex } from '@/lib/offline/enex-correo'
 import { supabase } from '@/lib/supabase'
 import { withTimeout } from '@/lib/upload/with-timeout'
+import type { EnexRepuesto } from '@/lib/offline/enex-db'
+import { ObservacionesYRepuestos } from '@/components/enex/observaciones-repuestos'
 import { compressImage } from '@/lib/image/compress'
 import {
   getPendienteOffline, getPautaItemsOffline, getEjecucionItemsOffline, queueEjecucion,
@@ -135,6 +137,12 @@ export function EjecutarServicio({ progId }: { progId: string }) {
   const [estado, setEstado] = useState<Record<string, Estado>>({})
   const [otNumero, setOtNumero] = useState('')
   const [obs, setObs] = useState('')
+  // [MIG649] Pedido de repuestos. `repuestosListos` = la lista viene del
+  // borrador o del servidor (o el supervisor la tocó): solo entonces viaja.
+  // Si se abrió sin señal y sin borrador, mandar una lista vacía borraría lo
+  // que el servidor sí tiene.
+  const [repuestos, setRepuestos] = useState<EnexRepuesto[]>([])
+  const [repuestosListos, setRepuestosListos] = useState(false)
   const [firmaTec, setFirmaTec] = useState('')
   const [firmaMand, setFirmaMand] = useState('')
   const [firmante, setFirmante] = useState('')
@@ -230,6 +238,23 @@ export function EjecutarServicio({ progId }: { progId: string }) {
             if (cab.ot_numero) setOtNumero(cab.ot_numero)
           }
         } catch { /* sin señal: queda lo del borrador local */ }
+        try {
+          const { data: reps, error: errReps } = await withTimeout(
+            Promise.resolve(supabase.from('enex_repuestos_pedido')
+              .select('id, descripcion, cantidad, unidad, urgente, nota, estado')
+              .eq('ejecucion_id', prog.ejecucion_id).neq('estado', 'anulado').order('created_at')),
+            6000, 'repuestos')
+          if (!cancel && !errReps) {
+            setRepuestos((reps ?? []).map((r) => ({
+              id: r.id, descripcion: r.descripcion, cantidad: Number(r.cantidad), unidad: r.unidad,
+              urgente: r.urgente, nota: r.nota,
+            })))
+            setRepuestosListos(true)
+          }
+        } catch { /* sin señal: queda lo del borrador local */ }
+      } else {
+        // Sin ejecución todavía no hay nada en el servidor que cuidar.
+        setRepuestosListos(true)
       }
       // El borrador local manda: es lo último que hizo el mantenedor.
       const d = await getDraft(progId)
@@ -269,6 +294,7 @@ export function EjecutarServicio({ progId }: { progId: string }) {
         if (d.ot_numero) setOtNumero(d.ot_numero)
         if (d.observacion) setObs(d.observacion)
         if (d.firmante) setFirmante(d.firmante)
+        if (d.repuestos) { setRepuestos(d.repuestos); setRepuestosListos(true) }
         setBorradorAt(d.updated_at)
       }
       if (!cancel) { setEstado(base); setCargado(true) }
@@ -298,10 +324,11 @@ export function EjecutarServicio({ progId }: { progId: string }) {
       guardarDraft({
         programacion_id: progId, ot_numero: otNumero || null, observacion: obs || null,
         firmante: firmante || null, inicio_at: inicioAt, items: itemsDraft,
+        ...(repuestosListos ? { repuestos } : {}),
       }).then(() => setBorradorAt(new Date().toISOString())).catch(() => { /* no bloquear el trabajo */ })
     }, 600)
     return () => { if (draftTimer.current) clearTimeout(draftTimer.current) }
-  }, [estado, otNumero, obs, firmante, inicioAt, cargado, progId])
+  }, [estado, otNumero, obs, firmante, inicioAt, cargado, progId, repuestos, repuestosListos])
 
   // [MIG274] Se entra desde el plan del día con las actividades que tocan
   // (?items=1.1,1.2). Se muestran solo esas, más los datos del servicio, que
@@ -409,6 +436,8 @@ export function EjecutarServicio({ progId }: { progId: string }) {
       toast.error('No hay ninguna actividad de la pauta trabajada para cerrar el servicio')
       return
     }
+    const repMal = repuestos.find((r) => r.descripcion.trim() && !(r.cantidad > 0))
+    if (repMal) { toast.error(`Falta la cantidad del repuesto «${repMal.descripcion.slice(0, 30)}»`); return }
     setGuardando(true)
     try {
       const finAt = new Date().toISOString()
@@ -441,6 +470,9 @@ export function EjecutarServicio({ progId }: { progId: string }) {
         // Lo que va arriba es el estado completo de la pantalla, así que el
         // servidor puede vaciar lo que llegue vacío.
         reemplazar: true,
+        repuestos: repuestosListos
+          ? repuestos.filter((r) => r.descripcion.trim()).map((r) => ({ ...r, descripcion: r.descripcion.trim() }))
+          : undefined,
       })
       qc.invalidateQueries({ queryKey: ['enex-terreno'] })
       qc.invalidateQueries({ queryKey: ['enex-servicio', progId] })
@@ -459,12 +491,10 @@ export function EjecutarServicio({ progId }: { progId: string }) {
         await borrarDraft(prog.programacion_id).catch(() => undefined)
         try { localStorage.removeItem(claveTimer) } catch { /* no-op */ }
       }
-      if (conFirmaMandante && r.synced) {
-        getEjecucionIdDeProgramacion(prog.programacion_id)
-          .then((eid) => (eid ? generarYGuardarInformeEnex(eid) : null))
-          .then((url) => { if (url) toast.success('Informe PDF generado y guardado') })
-          .catch(() => toast.error('El informe PDF no se pudo generar — se puede generar desde el panel'))
-      }
+      // [MIG649] Informe PDF + correo a la jefatura: los despacha el agente de
+      // envío apenas la ejecución está en el servidor, también si se cerró
+      // sin señal. Con señal, se parte ya.
+      if (r.synced) void despacharCorreosEnex().catch(() => 0)
       // Guardar avance NO saca de la pantalla: en terreno se sigue trabajando
       // el mismo punto. Solo el cierre vuelve a la lista de servicios.
       if (conFirmaMandante) router.push('/m/enex')
@@ -549,12 +579,8 @@ export function EjecutarServicio({ progId }: { progId: string }) {
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-2">
-        <input value={otNumero} onChange={(e) => setOtNumero(e.target.value)} placeholder="N° OT (mandante)"
-               className="rounded-lg border border-gray-200 px-3 py-2 text-sm" />
-        <input value={obs} onChange={(e) => setObs(e.target.value)} placeholder="Observación general"
-               className="rounded-lg border border-gray-200 px-3 py-2 text-sm" />
-      </div>
+      <input value={otNumero} onChange={(e) => setOtNumero(e.target.value)} placeholder="N° OT (mandante)"
+             className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm" />
 
       {isLoading ? <div className="flex justify-center py-8"><Spinner /></div> : grupos.map((g) => {
         const trabG = g.items.filter((it) => trabajado(estado[it.id] ?? vacio())).length
@@ -756,6 +782,14 @@ export function EjecutarServicio({ progId }: { progId: string }) {
         </div>
         )
       })}
+
+      {/* [MIG649] Observaciones + pedido de repuestos: igual en calibración y
+          mantención, combustible y lubricantes. Van en el correo a la jefatura. */}
+      <ObservacionesYRepuestos
+        obs={obs} setObs={setObs}
+        repuestos={repuestos}
+        setRepuestos={(r) => { setRepuestos(r); setRepuestosListos(true) }}
+      />
 
       {/* Firmas */}
       <div className="rounded-xl border border-gray-200 bg-white p-3 space-y-3">

@@ -5,11 +5,11 @@
 
 import {
   getTerrenoPendientes, getPautaItems, ejecutarPauta, getEjecucionItems, getPendientePorId,
-  subirEvidenciaEnex, subirFirmaEnex, getPlanTareasDia,
+  subirEvidenciaEnex, subirFirmaEnex, getPlanTareasDia, guardarRepuestosEnex,
   type EnexPendiente, type EnexPautaItem, type EnexItemResultado, type EnexPlanTarea,
 } from '@/lib/services/enex'
 import { withTimeout } from '@/lib/upload/with-timeout'
-import { enexDB, newId, type EnexPending, type EnexPendItem, type EnexDraft } from './enex-db'
+import { enexDB, newId, type EnexPending, type EnexPendItem, type EnexDraft, type EnexRepuesto } from './enex-db'
 
 const isOnline = () => (typeof navigator === 'undefined' ? true : navigator.onLine)
 const keyPend = (a: number, m: number) => `pend:${a}-${m}`
@@ -252,6 +252,8 @@ export async function queueEjecucion(params: {
   // [MIG267] `items` trae el estado completo de la pantalla, incluidas las
   // actividades que quedaron vacías a propósito.
   reemplazar?: boolean
+  // [MIG649] Lista completa del pedido de repuestos.
+  repuestos?: EnexRepuesto[]
 }): Promise<{ synced: boolean; error?: string | null }> {
   const db = enexDB()
   // Guardar blobs de fotos + firmas
@@ -296,6 +298,7 @@ export async function queueEjecucion(params: {
     inicio_at: params.inicioAt ?? null, fin_at: params.finAt ?? null,
     duracion_segundos: params.duracionSegundos ?? null,
     reemplazar: params.reemplazar === true,
+    repuestos: params.repuestos,
     sync_status: 'pending', retries: 0, last_error: null, created_at: new Date().toISOString(),
   }
   // Reemplazar cualquier pendiente previo de la misma programación (última gana)
@@ -453,6 +456,24 @@ async function enviarCola(): Promise<SyncResult> {
         // por la app anterior no llevan la marca y siguen siendo aditivas.
         reemplazar: p.reemplazar === true,
       }), REGISTRO_MS, 'registro')
+
+      // [MIG649] El pedido de repuestos va después: necesita la ejecución.
+      if (p.repuestos !== undefined) {
+        try {
+          await withTimeout(guardarRepuestosEnex(p.programacion_id, p.repuestos, p.tecnico_nombre ?? null),
+            REGISTRO_MS, 'repuestos')
+        } catch (e) {
+          // Sin MIG649 en la base la ejecución igual tiene que entrar: no se
+          // traba la cola por esto. Cualquier otro error sí se reintenta.
+          if (!/rpc_enex_guardar_repuestos|PGRST202|does not exist/i.test(mensajeError(e))) throw e
+        }
+      }
+      // El correo a la jefatura sale aparte (necesita sesión, el informe y
+      // red): queda anotado y lo despacha el agente de envío.
+      if (p.con_mandante || (p.repuestos?.length ?? 0) > 0) {
+        await db.cache.put({ key: `correo:${p.programacion_id}`, value: { programacion_id: p.programacion_id,
+          cierre: p.con_mandante, intentos: 0 }, updated_at: new Date().toISOString() })
+      }
 
       // Si mientras se enviaba el mantenedor volvió a guardar, esta fila ya fue
       // reemplazada por la nueva: esa se envía en la vuelta siguiente y reusa

@@ -231,6 +231,18 @@ export async function registrarEjecucion(p: {
 }
 
 // Ejecución asociada a una programación (para generar el informe PDF post-cierre).
+/** [MIG649] Reemplaza la lista de repuestos pedidos de la ejecución del servicio. */
+export async function guardarRepuestosEnex(
+  programacionId: string,
+  repuestos: { id: string; descripcion: string; cantidad: number; unidad: string; urgente: boolean; nota?: string | null }[],
+  pedidoPorNombre: string | null,
+): Promise<void> {
+  const { error } = await supabase.rpc('rpc_enex_guardar_repuestos', {
+    p_programacion_id: programacionId, p_repuestos: repuestos, p_pedido_por_nombre: pedidoPorNombre,
+  })
+  if (error) throw new Error(`${error.message} (${error.code ?? ''})`)
+}
+
 export async function getEjecucionIdDeProgramacion(programacionId: string): Promise<string | null> {
   const { data, error } = await supabase.from('enex_ejecuciones')
     .select('id').eq('programacion_id', programacionId).maybeSingle()
