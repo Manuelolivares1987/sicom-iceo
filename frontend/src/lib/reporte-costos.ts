@@ -143,7 +143,28 @@ function pctConBarra(pct: number): string {
     </table>`
 }
 
-export function buildCostosEmailHtml(r: ReporteCostos, link: string): string {
+/**
+ * Minuta de la reunión escrita en SICOM antes de copiar (Manuel 26-10: pegado
+ * el informe en Outlook no lograba escribir debajo, «borro todo»). Cada línea es
+ * un párrafo; las que empiezan con «-», «•» o «*» salen como viñeta.
+ */
+function minutaHtml(minuta: string): string {
+  const lineas = minuta.split(/\r?\n/).map((l) => l.trim())
+  if (!lineas.some(Boolean)) return ''
+  const filas = lineas.map((l) => {
+    if (!l) return '<tr><td height="8" style="font-size:1px;line-height:1px">&nbsp;</td></tr>'
+    const vineta = /^[-•*]\s*/.test(l)
+    const texto = esc(l.replace(/^[-•*]\s*/, ''))
+    return vineta
+      ? `<tr><td valign="top" width="18" style="width:18px;${FUENTE};font-size:14px;color:#1f2937;padding:2px 0">${tx('•', MARCA.verde, 'font-size:14px')}</td>
+           <td style="${FUENTE};font-size:14px;line-height:20px;color:#1f2937;padding:2px 0">${tx(texto, '#1f2937', 'font-size:14px')}</td></tr>`
+      : `<tr><td colspan="2" style="${FUENTE};font-size:14px;line-height:20px;color:#1f2937;padding:2px 0">${tx(texto, '#1f2937', 'font-size:14px')}</td></tr>`
+  }).join('')
+  return `${seccionTitulo('Minuta de la reunión', MARCA.verdeOscuro, MARCA.verdeClaro)}
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width:100%">${filas}</table>`
+}
+
+export function buildCostosEmailHtml(r: ReporteCostos, link: string, minuta = ''): string {
   const k = r.kpi
   const mes = mesLargo(r.mes)
   const ant = mesLargo(r.mes_anterior)
@@ -201,7 +222,8 @@ export function buildCostosEmailHtml(r: ReporteCostos, link: string): string {
     ${seccionTitulo('Las 10 familias con más gasto', MARCA.verdeOscuro, MARCA.verdeClaro)}
     ${tablaAbrir(['Familia', 'Gasto', '% del mes', 'vs. mes ant.'], [1, 2, 3])}${familias}${resto(r.familias.n, r.familias.items.length, r.familias.resto, 4)}${tablaCerrar}
     ${r.centros_costo.items.length ? `${seccionTitulo('Centros de costo (fuera de los equipos)', MARCA.verdeOscuro, MARCA.verdeClaro)}
-    ${tablaAbrir(['Centro de costo', 'Gasto', 'vs. mes ant.'], [1, 2])}${ccs}${resto(r.centros_costo.n, r.centros_costo.items.length, r.centros_costo.resto, 3)}${tablaCerrar}` : ''}`
+    ${tablaAbrir(['Centro de costo', 'Gasto', 'vs. mes ant.'], [1, 2])}${ccs}${resto(r.centros_costo.n, r.centros_costo.items.length, r.centros_costo.resto, 3)}${tablaCerrar}` : ''}
+    ${minutaHtml(minuta)}`
 
   return emailShell({
     titulo: `Costos de operación · ${mes}${diaCorte ? ` (al ${diaCorte} de ${mes.split(' ')[0]})` : ''}`,
@@ -217,14 +239,18 @@ export function buildCostosEmailHtml(r: ReporteCostos, link: string): string {
 }
 
 /** Arma el correo y lo deja en el portapapeles con formato, para pegar en Outlook. */
-export async function copiarReporteCostos(r: ReporteCostos, token: string | null): Promise<string> {
+export async function copiarReporteCostos(r: ReporteCostos, token: string | null, minuta = ''): Promise<string> {
   // El botón del correo abre el panel completo de SICOM (Manuel: «que pueda ir al
   // gráfico que aparece en SICOM y ver los paretos y todo»).
   const link = linkPanelCostos(window.location.origin, token)
   // Debajo de la tarjeta queda un párrafo en blanco con letra normal para
   // escribir la minuta de trabajos sin heredar el formato del informe.
-  const html = `${buildCostosEmailHtml(r, link)}
-    <p style="font-family:Calibri,Arial,sans-serif;font-size:11pt;margin:0">&nbsp;</p>
+  // Sin minuta escrita en SICOM, queda una línea visible debajo de la tarjeta:
+  // se selecciona y se escribe encima (un párrafo vacío Outlook lo descarta).
+  const lugarMinuta = minuta.trim() ? '' : `
+    <p style="font-family:Calibri,Arial,sans-serif;font-size:11pt;margin:12px 0 0"><b>Minuta de la reunión:</b></p>
+    <p style="font-family:Calibri,Arial,sans-serif;font-size:11pt;margin:0">Escriba aquí la minuta…</p>`
+  const html = `${buildCostosEmailHtml(r, link, minuta)}${lugarMinuta}
     <p style="font-family:Calibri,Arial,sans-serif;font-size:11pt;margin:0">&nbsp;</p>`
   try {
     await navigator.clipboard.write([new ClipboardItem({
