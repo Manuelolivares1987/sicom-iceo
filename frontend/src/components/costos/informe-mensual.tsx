@@ -7,6 +7,8 @@ import {
   copiarReporteCostos, getReporteCostos, getTokenReporteCostos, linkReporteCostos, mesEnCursoIso, mesLargo,
 } from '@/lib/reporte-costos'
 
+const MINUTA_KEY = 'costos-minuta-borrador'
+
 /** Últimos 12 meses, del más reciente (mes en curso) hacia atrás. */
 function ultimosMeses(): string[] {
   const hoy = new Date()
@@ -30,12 +32,21 @@ export function InformeMensualCostos({ mesFiltro = null, onMes }: {
   const mes = mesFiltro ?? mesEnCursoIso()
   const [msg, setMsg] = useState<string | null>(null)
   const [ocupado, setOcupado] = useState(false)
+  // Minuta de la reunión: se escribe aquí y sale dentro del correo, debajo del
+  // informe. Se guarda como borrador en este navegador.
+  const [minuta, setMinuta] = useState(() => {
+    try { return localStorage.getItem(MINUTA_KEY) ?? '' } catch { return '' }
+  })
+  const cambiarMinuta = (v: string) => {
+    setMinuta(v)
+    try { localStorage.setItem(MINUTA_KEY, v) } catch { /* sin almacenamiento: solo en memoria */ }
+  }
 
   const copiar = async () => {
     setOcupado(true); setMsg(null)
     try {
       const [data, token] = await Promise.all([getReporteCostos(mes), getTokenReporteCostos()])
-      setMsg(await copiarReporteCostos(data, token))
+      setMsg(await copiarReporteCostos(data, token, minuta))
     } catch (e) {
       setMsg(`No se pudo armar el informe: ${(e as Error).message}`)
     } finally {
@@ -66,6 +77,14 @@ export function InformeMensualCostos({ mesFiltro = null, onMes }: {
       </label>
       <Button size="sm" variant="outline" onClick={abrir}>Ver informe</Button>
       <Button size="sm" onClick={copiar} disabled={ocupado}>{ocupado ? 'Armando…' : '📋 Copiar para correo'}</Button>
+      <div className="w-full">
+        <label className="mb-1 block text-xs font-semibold text-gray-700">
+          Minuta de la reunión <span className="font-normal text-gray-500">(sale en el correo debajo del informe; «-» al inicio de línea = viñeta)</span>
+        </label>
+        <textarea value={minuta} onChange={(e) => cambiarMinuta(e.target.value)} rows={4}
+                  placeholder={'- Acuerdo 1\n- Acuerdo 2'}
+                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm" />
+      </div>
       {msg && <div className="w-full text-sm text-pillado-green-800">{msg}</div>}
     </div>
   )
