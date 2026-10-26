@@ -1,5 +1,6 @@
 'use client'
 
+import { useActivosVisibles } from '@/hooks/use-permissions'
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
@@ -59,11 +60,16 @@ export default function HorasEquiposPage() {
   const [abierto, setAbierto] = useState<EquipoHoras | null>(null)
   const [vista, setVista] = useState<'horas' | VistaRepuestos>('horas')
 
-  const { data, isLoading, error } = useQuery({
+  // [MIG656] Operaciones Calama ve solo los equipos de Calama.
+  const activosVisibles = useActivosVisibles()
+  const { data: dataTodos, isLoading, error } = useQuery({
     queryKey: ['equipo-horas'],
     queryFn: getEquiposHoras,
     staleTime: 5 * 60_000,
   })
+  const data = useMemo(
+    () => (activosVisibles && dataTodos ? dataTodos.filter((e) => activosVisibles.has(e.activo_id)) : dataTodos),
+    [dataTodos, activosVisibles])
 
   const conteo = useMemo(() => {
     const c: Partial<Record<EstadoPreventiva, number>> = {}

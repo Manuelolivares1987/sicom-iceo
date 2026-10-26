@@ -413,6 +413,28 @@ export function useRolPermisosOverrides() {
   })
 }
 
+// [MIG656] Permisos extra de ESTA persona (suman a los del rol, nunca quitan).
+// Operaciones Calama: dos supervisores editan equipos y preventivas de su flota
+// sin subirle el permiso a todos los supervisores.
+export function usePermisosExtra(usuarioId: string | undefined) {
+  return useQuery({
+    queryKey: ['permisos-extra', usuarioId],
+    queryFn: async (): Promise<Record<string, Permission[]>> => {
+      const { data, error } = await supabase
+        .from('usuario_permisos_extra')
+        .select('modulo, permisos')
+        .eq('usuario_id', usuarioId!)
+      // Sin la tabla (MIG656 sin aplicar) se sigue solo con el rol.
+      if (error) return {}
+      const map: Record<string, Permission[]> = {}
+      for (const row of (data ?? []) as Array<{ modulo: string; permisos: string[] }>) map[row.modulo] = row.permisos as Permission[]
+      return map
+    },
+    enabled: !!usuarioId,
+    staleTime: 300_000,
+  })
+}
+
 // Metadatos para la pagina de administracion de permisos.
 export const ALL_PERMISSIONS: Permission[] = ['view', 'create', 'edit', 'delete', 'approve', 'export']
 
@@ -455,12 +477,16 @@ export function usePermissions() {
   const { perfil, rolCalama } = useAuth()
   const rol = perfil?.rol as RolUsuario | undefined
   const { data: overrides } = useRolPermisosOverrides()
+  const { data: extras } = usePermisosExtra(perfil?.id)
+  const tieneExtras = !!extras && Object.keys(extras).length > 0
 
   // Permisos efectivos = override de BD si existe, si no el default hardcodeado.
+  // [MIG656] Más los extra de la persona (solo para su propio rol).
   function effectivePerms(r: RolUsuario, modulo: string): Permission[] {
     const ov = overrides?.[r]?.[modulo]
-    if (ov) return ov
-    return defaultPermsForRole(r, modulo)
+    const base = ov ?? defaultPermsForRole(r, modulo)
+    const extra = r === rol ? extras?.[modulo] : undefined
+    return extra ? Array.from(new Set([...base, ...extra])) : base
   }
 
   function isAdminGlobal(): boolean {
@@ -489,6 +515,9 @@ export function usePermissions() {
   // Solo puede ver /dashboard/operacion-calama/*.
   function esSupervisorCalamaSolo(): boolean {
     if (rolCalama !== 'supervisor_calama') return false
+    // [MIG656] Con permisos extra (gestiona la flota de Calama) deja de estar
+    // encerrado en Operación Calama: su menú lo acota el ámbito.
+    if (tieneExtras) return false
     return !isAdminGlobal()
   }
 
@@ -515,6 +544,17 @@ export function usePermissions() {
     if (!perfil?.solo_su_faena) return null
     if (isAdminGlobal()) return null
     return perfil.faena ?? null
+  }
+
+  /**
+   * [MIG656] La operación a la que está acotada la vista de equipos de esta
+   * persona (ámbito Calama → solo equipos con operación Calama), o null si ve
+   * toda la flota. Filtro de pantalla, como faenaExclusiva: no es RLS.
+   */
+  function operacionExclusiva(): string | null {
+    if (isAdminGlobal()) return null
+    const ambito = (perfil as { ambito?: string } | null)?.ambito
+    return ambito === 'calama' ? 'Calama' : null
   }
 
   function tieneRolCalama(): boolean { return rolCalama !== null }
@@ -572,7 +612,29 @@ export function usePermissions() {
     esOperadorTallerSolo,
     esOperadorCombustibleSolo,
     esComercialSolo,
-    faenaExclusiva,
+    faenaExclusiva, operacionExclusiva,
     tieneRolCalama, tieneAccesoDashboardCalama,
   }
+}
+
+/**
+ * [MIG656] Ids de los equipos que esta persona ve (ámbito Calama → los de
+ * operación Calama). null = sin restricción.
+ */
+export function useActivosVisibles(): Set<string> | null {
+  const { operacionExclusiva } = usePermissions()
+  const op = operacionExclusiva()
+  const { data } = useQuery({
+    queryKey: ['activos-de-operacion', op],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('activos').select('id').eq('operacion', op!)
+      if (error) throw error
+      return new Set((data ?? []).map((r: { id: string }) => r.id))
+    },
+    enabled: !!op,
+    staleTime: 300_000,
+  })
+  if (!op) return null
+  // Mientras carga, nada: mostrar de más sería peor (mismo criterio que MIG385).
+  return data ?? new Set<string>()
 }

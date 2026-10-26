@@ -77,6 +77,9 @@ type NavItem = {
   // prevencionista los equipos le llegan por Prevención (control documental),
   // así que el mismo link en Flota sería un duplicado.
   excluirRoles?: string[]
+  // [MIG656] Solo para estos ámbitos de vista (usuarios_perfil.ambito). Se usa
+  // cuando un ámbito necesita un acceso que el resto encuentra en otro grupo.
+  ambitos?: string[]
   badge?: string                  // 'Legacy' | 'Nuevo' | etc.
   tooltip?: string                // texto descriptivo opcional
   // Cuenta viva de lo que espera una decisión. El jefe de taller no mira la
@@ -304,6 +307,10 @@ const navGroups: NavGroup[] = [
       { label: 'Sugerencias estado (GPS)', href: '/dashboard/flota/sugerencias', icon: Satellite, module: 'flota', badge: 'Nuevo' },
       { label: 'Check-List Entrega', href: '/dashboard/flota/checklist-salida', icon: ClipboardCheck, module: 'flota', badge: 'V02' },
       { label: 'Estado Flota', href: '/dashboard/flota/estado-flota', icon: ShieldCheck, module: 'flota', badge: 'Nuevo' },
+      // [MIG656] Operaciones Calama no ve el grupo Taller: sus preventivas le
+      // llegan por acá (el resto las tiene en Taller → Horas por equipo).
+      { label: 'Mantenciones preventivas', href: '/dashboard/mantenimiento/horas-equipos', icon: Gauge, module: 'mantenimiento',
+        ambitos: ['calama'], tooltip: 'Cuándo le toca la próxima mantención a cada equipo de Calama' },
       { label: 'Equipos y Bitácora (QR)', href: '/dashboard/activos', icon: QrCode, module: 'activos',
         // Al prevencionista este mismo destino le llega por Prevención, con el
         // nombre de lo que va a buscar ahí (Documentos de equipos).
@@ -664,6 +671,7 @@ export default function Sidebar({ collapsed, onToggle, onClose }: SidebarProps) 
             // los dos, tienen que cumplirse ambos.
             if (item.roles && !item.roles.includes(perfil?.rol ?? '')) return false
             if (item.excluirRoles?.includes(perfil?.rol ?? '')) return false
+            if (item.ambitos && !item.ambitos.includes(ambito)) return false
             if (item.module) return canView(item.module)
             if (item.extendedModule) return canViewExtended(item.extendedModule)
             return true

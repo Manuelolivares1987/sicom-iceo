@@ -32,7 +32,7 @@ import { useActivos, useEstadosPlanificador } from '@/hooks/use-activos'
 import { EstadoFlotaPill } from '@/components/flota/estado-flota-pill'
 import { ESTADO_FLOTA_LABEL, ESTADO_FLOTA_OPCIONES, esFlotaDelPlanificador } from '@/lib/estado-flota'
 import { getFaenas } from '@/lib/services/faenas'
-import { usePermissions } from '@/hooks/use-permissions'
+import { usePermissions, useActivosVisibles } from '@/hooks/use-permissions'
 import type { Activo, TipoActivo, EstadoActivo, Criticidad } from '@/types/database'
 
 // ---------------------------------------------------------------------------
@@ -228,6 +228,8 @@ export default function ActivosPage() {
   if (criticidadFilter) filters.criticidad = criticidadFilter
 
   const { data: activos, isLoading, error } = useActivos(filters)
+  // [MIG656] Operaciones Calama ve solo los equipos de Calama.
+  const activosVisibles = useActivosVisibles()
   const { data: estadosPlan } = useEstadosPlanificador()
 
   const estadoPorActivo = useMemo(() => {
@@ -238,6 +240,7 @@ export default function ActivosPage() {
 
   // Client-side text search + estado del planificador
   const filtered = (activos ?? []).filter((a) => {
+    if (activosVisibles && !activosVisibles.has(a.id)) return false
     if (estadoFilter) {
       if (!esFlotaDelPlanificador(a.tipo)) return false
       if (estadoPorActivo[a.id]?.estado_codigo !== estadoFilter) return false
