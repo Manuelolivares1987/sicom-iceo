@@ -58,6 +58,13 @@ export function mesCerradoIso(hoy = new Date()): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`
 }
 
+/** Mes en curso. Es el que va por defecto en el correo (Manuel 26-10: «tengo hasta
+ * octubre y el correo muestra septiembre»); se compara contra el mes anterior
+ * cortado el mismo día (MIG632). */
+export function mesEnCursoIso(hoy = new Date()): string {
+  return `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-01`
+}
+
 export const NOMBRE_AREA_CC: Record<string, string> = {
   operacion: 'Operación de faena', taller: 'Taller', proyectos: 'Proyectos',
   generico: 'Sin equipo', sin_clasificar: 'Sin centro de costo',
@@ -140,6 +147,10 @@ export function buildCostosEmailHtml(r: ReporteCostos, link: string): string {
   const k = r.kpi
   const mes = mesLargo(r.mes)
   const ant = mesLargo(r.mes_anterior)
+  // Mes en curso: los datos llegan hasta la última sincronización de Softland y
+  // el mes anterior se corta ese mismo día.
+  const corte = r.sync?.max_fecha && r.sync.max_fecha.slice(0, 7) === r.mes.slice(0, 7) ? r.sync.max_fecha : null
+  const diaCorte = corte ? Number(corte.slice(8, 10)) : null
   const der = 'text-align:right;white-space:nowrap'
   const pctAsignado = k.total > 0 ? (k.asignado_equipo / k.total) * 100 : null
   const vTotal = variacionPct(k.total, k.total_anterior)
@@ -147,7 +158,7 @@ export function buildCostosEmailHtml(r: ReporteCostos, link: string): string {
   const chips: ChipResumen[] = [
     { n: fmtMM(k.total), label: `Gasto de ${mes.split(' ')[0]}`, color: MARCA.verdeOscuro, fondo: MARCA.verdeClaro },
     {
-      n: vTotal == null ? '—' : `${vTotal > 0 ? '+' : ''}${Math.round(vTotal)}%`, label: `vs. ${ant.split(' ')[0]}`,
+      n: vTotal == null ? '—' : `${vTotal > 0 ? '+' : ''}${Math.round(vTotal)}%`, label: `vs. ${ant.split(' ')[0]}${diaCorte ? ` al día ${diaCorte}` : ''}`,
       color: vTotal != null && vTotal > 0 ? MARCA.rojo : MARCA.verdeOscuro,
       fondo: vTotal != null && vTotal > 0 ? MARCA.rojoFondo : MARCA.verdeClaro,
     },
@@ -181,7 +192,7 @@ export function buildCostosEmailHtml(r: ReporteCostos, link: string): string {
   const cuerpo = `
     <p style="${FUENTE};font-size:13px;color:#4b5563;margin:14px 0 0">
       Gasto del mes: <b style="color:#1f2937">${fmtClp(k.total)}</b> en ${k.equipos_con_gasto} equipos.
-      Variaciones contra ${esc(ant)}: ${tx('▲ rojo = se gastó más', MARCA.rojo)},
+      Variaciones contra ${esc(ant)}${diaCorte ? ` hasta el mismo día ${diaCorte}` : ''}: ${tx('▲ rojo = se gastó más', MARCA.rojo)},
       ${tx('▼ verde = se gastó menos', MARCA.verde)}.
     </p>
     ${tendenciaHtml(r.tendencia ?? [], r.mes)}
@@ -193,7 +204,7 @@ export function buildCostosEmailHtml(r: ReporteCostos, link: string): string {
     ${tablaAbrir(['Centro de costo', 'Gasto', 'vs. mes ant.'], [1, 2])}${ccs}${resto(r.centros_costo.n, r.centros_costo.items.length, r.centros_costo.resto, 3)}${tablaCerrar}` : ''}`
 
   return emailShell({
-    titulo: `Costos de operación · ${mes}`,
+    titulo: `Costos de operación · ${mes}${diaCorte ? ` (al ${diaCorte} de ${mes.split(' ')[0]})` : ''}`,
     subtitulo: 'Órdenes de compra aprobadas en Softland (materiales y servicios, neto). Sin combustible de reventa.',
     chips,
     cuerpo,
