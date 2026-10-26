@@ -5,7 +5,12 @@
 import Dexie, { type Table } from 'dexie'
 
 export type EnexCacheRow = { key: string; value: unknown; updated_at: string }
-export type EnexBlob = { blob_id: string; blob: Blob; mime: string }
+/**
+ * Foto o firma guardada en el teléfono. `url` se anota apenas llega al
+ * servidor: si el envío se corta a la mitad, el reintento no la vuelve a subir
+ * (con señal intermitente el envío entero no terminaba nunca y duplicaba fotos).
+ */
+export type EnexBlob = { blob_id: string; blob: Blob; mime: string; url?: string | null }
 
 /** Resultado local de un ítem (foto como blob hasta sincronizar). */
 export type EnexPendItem = {
@@ -47,7 +52,13 @@ export type EnexPending = {
   // vacío se vacía en el servidor (borrar una foto, desmarcar una actividad).
   reemplazar?: boolean
   // control
-  sync_status: 'pending' | 'error'
+  // 'sending' solo mientras un envío está en curso; si la app se cierra a la
+  // mitad, el próximo intento lo retoma igual que a un 'pending'.
+  sync_status: 'pending' | 'sending' | 'error'
+  /** Avance del envío para la bandeja «Por enviar»: «3 de 8 fotos». */
+  fotos_total?: number
+  fotos_subidas?: number
+  last_try_at?: string | null
   retries: number
   last_error: string | null
   created_at: string

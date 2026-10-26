@@ -5,7 +5,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import {
   Building2, ChevronRight, ChevronLeft, CheckCircle2, Clock, RefreshCw, AlertTriangle,
   WifiOff, CloudOff, Download, Fuel, Droplets, Repeat, Check, CalendarDays, Sun,
@@ -13,13 +13,15 @@ import {
 } from 'lucide-react'
 import { Spinner } from '@/components/ui/spinner'
 import {
-  MESES, TIPO_INSTALACION_LABEL, MUNDO_LABEL, mundoDeLinea, getPlanTareasDia,
+  MESES, TIPO_INSTALACION_LABEL, MUNDO_LABEL, mundoDeLinea,
   type Mundo, type EnexPendiente, type EnexPlanTarea,
 } from '@/lib/services/enex'
-import { getPendientesOffline, prepararEnexOffline, getEnexPendingCount, syncEnexPending, ultimaDescargaEnex } from '@/lib/offline/enex-offline'
+import { getPendientesOffline, prepararEnexOffline, getEnexPendingCount, ultimaDescargaEnex, getPlanDiaOffline } from '@/lib/offline/enex-offline'
 import { useNetworkStatus } from '@/hooks/use-calama-offline'
 import { useExigirSesion } from '@/hooks/use-exigir-sesion'
 import { SinSesionOffline } from '@/components/enex/sin-sesion-offline'
+import { BandejaPorEnviar } from '@/components/enex/bandeja-por-enviar'
+import { ListoSinSenal } from '@/components/enex/listo-sin-senal'
 
 const MUNDO_KEY = 'enex-mundo-supervisor'
 
@@ -48,7 +50,6 @@ export default function EnexTerrenoHome() {
   useEffect(() => { setPeriodo(hoy()); setHoyISO(hoyISOf()) }, [])
   const anio = periodo?.anio ?? 0
   const mes = periodo?.mes ?? 1
-  const qc = useQueryClient()
   const online = useNetworkStatus()
   const [descargaMsg, setDescargaMsg] = useState('')
 
@@ -100,24 +101,15 @@ export default function EnexTerrenoHome() {
     queryKey: ['enex-pending-count'], queryFn: getEnexPendingCount, networkMode: 'always', refetchInterval: 4000,
   })
 
-  // [MIG274] Plan del día: qué actividades tocan hoy y en qué área. Requiere
-  // señal — sin ella queda la agenda por fecha programada, que sí va offline.
+  // [MIG274] Plan del día: qué actividades tocan hoy y en qué área. Queda
+  // guardado en el teléfono (hoy y los dos días siguientes) para verlo sin señal.
   const { data: planHoy = [] } = useQuery({
-    queryKey: ['enex-plan-dia', hoyISO], queryFn: () => getPlanTareasDia(hoyISO),
-    enabled: !!hoyISO, staleTime: 60_000, retry: false,
+    queryKey: ['enex-plan-dia', hoyISO], queryFn: () => getPlanDiaOffline(hoyISO),
+    enabled: !!hoyISO, staleTime: 60_000, retry: false, networkMode: 'always',
   })
 
-  // Sincroniza al recuperar conexión
-  useEffect(() => {
-    const trySync = async () => {
-      if (typeof navigator !== 'undefined' && navigator.onLine) {
-        const r = await syncEnexPending()
-        if (r.ok > 0 || r.failed > 0) { qc.invalidateQueries({ queryKey: ['enex-terreno'] }); qc.invalidateQueries({ queryKey: ['enex-pending-count'] }) }
-      }
-    }
-    window.addEventListener('online', trySync); void trySync()
-    return () => window.removeEventListener('online', trySync)
-  }, [qc])
+  // El envío de lo pendiente lo hace <EnexSyncAgent /> en el layout: corre en
+  // las dos pantallas, cada minuto y al volver a la app.
 
   function cambiarMes(d: number) {
     let m = mes + d, a = anio
@@ -246,6 +238,9 @@ export default function EnexTerrenoHome() {
       )}
       {descargaMsg && <p className="text-center text-[11px] text-green-600">{descargaMsg}</p>}
 
+      {pendientesSync > 0 && <BandejaPorEnviar />}
+      <ListoSinSenal anio={anio} mes={mes} pendientes={pendientesSync} />
+
       {/* Vista: Hoy vs Agenda del mes */}
       <div className="grid grid-cols-2 gap-2">
         <button onClick={() => setVista('hoy')}
@@ -303,7 +298,7 @@ export default function EnexTerrenoHome() {
                     </span>
                   ) : g.candidatos.map((p) => (
                     <Link key={p.programacion_id}
-                          href={`/m/enex/${p.programacion_id}?items=${encodeURIComponent(g.codigos.join(','))}`}
+                          href={`/m/enex/servicio/?id=${p.programacion_id}&items=${encodeURIComponent(g.codigos.join(','))}`}
                           className="rounded-lg bg-emerald-600 px-2.5 py-1.5 text-[11px] font-semibold text-white active:bg-emerald-700">
                       {p.instalacion} <ChevronRight className="inline h-3 w-3" />
                     </Link>
@@ -358,7 +353,7 @@ export default function EnexTerrenoHome() {
             </div>
             <div className="space-y-2 pt-2">
               {dia.items.map((p) => (
-                <Link key={p.programacion_id} href={`/m/enex/${p.programacion_id}`}
+                <Link key={p.programacion_id} href={`/m/enex/servicio/?id=${p.programacion_id}`}
                       className="block rounded-xl border border-gray-200 bg-white p-3 active:bg-gray-50">
                   <div className="flex items-center gap-2">
                     <span className="flex-1 text-sm font-medium text-gray-800">

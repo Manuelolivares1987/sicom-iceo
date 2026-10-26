@@ -3,7 +3,11 @@ const withPWA = require('@ducanh2912/next-pwa').default({
   dest: 'public',
   disable: process.env.NODE_ENV === 'development',
   register: true,
-  reloadOnOnline: true,
+  // Recargar la página al volver la señal botaba al mantenedor en medio del
+  // formulario y, con señal que va y viene (lo normal en faena), la recarga
+  // quedaba colgada esperando a la red. Las apps de terreno envían solas lo
+  // pendiente al volver la conexión; no hace falta recargar.
+  reloadOnOnline: false,
   cacheOnFrontEndNav: true,
   aggressiveFrontEndNavCaching: true,
   // Fallback offline: cuando una navegacion (document) no esta en cache y no
@@ -27,6 +31,46 @@ const withPWA = require('@ducanh2912/next-pwa').default({
   workboxOptions: {
     disableDevLogs: true,
     runtimeCaching: [
+      // App de terreno ENEX: tiene que abrir sin señal días después de la
+      // última conexión. La regla general de páginas guarda 32 por 1 día y
+      // espera a la red sin límite, así que al día siguiente en faena (o con
+      // antena sin datos) caía en /offline teniendo todo descargado.
+      // Acá: 30 días, y si la red no contesta en 4 s se usa lo guardado. La
+      // clave ignora los parámetros (?id=…): /m/enex/servicio/ es una sola
+      // página para todos los servicios.
+      {
+        urlPattern: ({ request, url, sameOrigin }) =>
+          sameOrigin && url.pathname.startsWith('/m/enex') && request.headers.get('RSC') !== '1',
+        handler: 'NetworkFirst',
+        options: {
+          cacheName: 'enex-terreno-paginas',
+          networkTimeoutSeconds: 4,
+          expiration: { maxEntries: 40, maxAgeSeconds: 30 * 24 * 60 * 60 },
+          plugins: [{
+            // Con punto y coma: el plugin copia la función al service worker
+            // en una sola línea.
+            cacheKeyWillBeUsed: async ({ request }) => { const u = new URL(request.url); return u.origin + u.pathname },
+          }],
+        },
+      },
+      // Lo mismo para la navegación interna de Next (payload RSC). Los
+      // prefetch se dejan a la regla general.
+      {
+        urlPattern: ({ request, url, sameOrigin }) =>
+          sameOrigin && url.pathname.startsWith('/m/enex') &&
+          request.headers.get('RSC') === '1' && !request.headers.get('Next-Router-Prefetch'),
+        handler: 'NetworkFirst',
+        options: {
+          cacheName: 'enex-terreno-rsc',
+          networkTimeoutSeconds: 4,
+          expiration: { maxEntries: 40, maxAgeSeconds: 30 * 24 * 60 * 60 },
+          plugins: [{
+            // Con punto y coma: el plugin copia la función al service worker
+            // en una sola línea.
+            cacheKeyWillBeUsed: async ({ request }) => { const u = new URL(request.url); return u.origin + u.pathname },
+          }],
+        },
+      },
       {
         urlPattern: /^https:\/\/[a-z0-9-]+\.supabase\.co\/(rest|auth|functions|realtime|graphql)\//i,
         handler: 'NetworkOnly',

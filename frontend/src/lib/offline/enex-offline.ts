@@ -5,9 +5,10 @@
 
 import {
   getTerrenoPendientes, getPautaItems, ejecutarPauta, getEjecucionItems, getPendientePorId,
-  subirEvidenciaEnex, subirFirmaEnex,
-  type EnexPendiente, type EnexPautaItem, type EnexItemResultado,
+  subirEvidenciaEnex, subirFirmaEnex, getPlanTareasDia,
+  type EnexPendiente, type EnexPautaItem, type EnexItemResultado, type EnexPlanTarea,
 } from '@/lib/services/enex'
+import { withTimeout } from '@/lib/upload/with-timeout'
 import { enexDB, newId, type EnexPending, type EnexPendItem, type EnexDraft } from './enex-db'
 
 const isOnline = () => (typeof navigator === 'undefined' ? true : navigator.onLine)
@@ -84,6 +85,23 @@ export async function getPendienteOffline(programacionId: string): Promise<EnexP
   return null
 }
 
+// ── Plan del día ─────────────────────────────────────────────────────────
+// [MIG274] El plan que publica el planificador. Antes solo se leía con señal:
+// sin ella desaparecía y el técnico no sabía qué actividades tocaban.
+const keyPlan = (fecha: string) => `plan:${fecha}`
+
+export async function getPlanDiaOffline(fecha: string): Promise<EnexPlanTarea[]> {
+  if (isOnline()) {
+    try {
+      const plan = await conTimeout(getPlanTareasDia(fecha))
+      await enexDB().cache.put({ key: keyPlan(fecha), value: plan, updated_at: new Date().toISOString() })
+      return plan
+    } catch { /* cae a la cache */ }
+  }
+  const row = await enexDB().cache.get(keyPlan(fecha))
+  return (row?.value as EnexPlanTarea[]) ?? []
+}
+
 // ── Ítems de pauta ────────────────────────────────────────────────────────
 export async function getPautaItemsOffline(pautaId: string): Promise<EnexPautaItem[]> {
   if (isOnline()) {
@@ -126,14 +144,37 @@ export async function getEjecucionItemsOffline(ejecucionId: string): Promise<Ene
 }
 
 // Pre-descargar todo lo del período para operar sin señal: pendientes, ítems de
-// cada pauta y lo ya ejecutado de cada servicio.
-export async function prepararEnexOffline(anio: number, mes: number): Promise<number> {
-  const pend = await getTerrenoPendientes(anio, mes)
+// cada pauta y lo ya ejecutado de cada servicio. También el mes anterior (un
+// trabajo a medias de fin de mes) y el siguiente (la cuadrilla sale el 30 y
+// trabaja el 1), el plan de hoy y los dos días que vienen, y las pantallas.
+const DESCARGA_MS = 30_000
+
+async function bajarPeriodo(anio: number, mes: number): Promise<EnexPendiente[]> {
+  const pend = await conTimeout(getTerrenoPendientes(anio, mes), DESCARGA_MS)
   await enexDB().cache.put({ key: keyPend(anio, mes), value: pend, updated_at: new Date().toISOString() })
-  const pautas = Array.from(new Set(pend.map((p) => p.pauta_id).filter(Boolean))) as string[]
+  return pend
+}
+
+export async function prepararEnexOffline(anio: number, mes: number): Promise<number> {
+  // Las pantallas primero: sin ellas lo demás no se puede abrir sin señal.
+  await guardarPantallasOffline()
+  const pend = await bajarPeriodo(anio, mes)
+  const vecinos: EnexPendiente[] = []
+  for (const d of [-1, 1]) {
+    let m = mes + d, a = anio
+    if (m < 1) { m = 12; a-- } else if (m > 12) { m = 1; a++ }
+    try { vecinos.push(...(await bajarPeriodo(a, m)).filter((p) => !p.cumplida)) } catch { /* sigue */ }
+  }
+  const todos = [...pend, ...vecinos]
+  const pautas = Array.from(new Set(todos.map((p) => p.pauta_id).filter(Boolean))) as string[]
   for (const pid of pautas) { try { await getPautaItemsOffline(pid) } catch { /* sigue */ } }
-  const ejecuciones = pend.map((p) => p.ejecucion_id).filter(Boolean) as string[]
+  const ejecuciones = todos.map((p) => p.ejecucion_id).filter(Boolean) as string[]
   for (const eid of ejecuciones) { try { await getEjecucionItemsOffline(eid) } catch { /* sigue */ } }
+  for (let i = 0; i < 3; i++) {
+    const d = new Date(); d.setDate(d.getDate() + i)
+    const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    try { await getPlanDiaOffline(iso) } catch { /* sigue */ }
+  }
   await enexDB().cache.put({
     key: `descarga:${anio}-${mes}`, value: { at: new Date().toISOString(), servicios: pend.length },
     updated_at: new Date().toISOString(),
@@ -162,6 +203,12 @@ export async function guardarFotoLocal(file: File | Blob): Promise<string> {
 export async function getFotoLocal(blobId: string): Promise<Blob | null> {
   const b = await enexDB().blobs.get(blobId)
   return b?.blob ?? null
+}
+
+/** La foto local y, si ya llegó al servidor, su URL. */
+export async function getFotoLocalInfo(blobId: string): Promise<{ blob: Blob; url: string | null } | null> {
+  const b = await enexDB().blobs.get(blobId)
+  return b ? { blob: b.blob, url: b.url ?? null } : null
 }
 
 export async function guardarDraft(draft: Omit<EnexDraft, 'updated_at'>): Promise<void> {
@@ -205,7 +252,7 @@ export async function queueEjecucion(params: {
   // [MIG267] `items` trae el estado completo de la pantalla, incluidas las
   // actividades que quedaron vacías a propósito.
   reemplazar?: boolean
-}): Promise<{ synced: boolean }> {
+}): Promise<{ synced: boolean; error?: string | null }> {
   const db = enexDB()
   // Guardar blobs de fotos + firmas
   const items: EnexPendItem[] = []
@@ -255,38 +302,120 @@ export async function queueEjecucion(params: {
   await db.pending.where('programacion_id').equals(params.programacionId).delete()
   await db.pending.put(row)
 
+  // Guardar NUNCA espera a la red. Lo guardado ya está en el teléfono; si hay
+  // señal se intenta enviar, pero el botón se libera a los pocos segundos y el
+  // envío sigue solo. Antes, con antena sin datos, «Guardar» quedaba girando y
+  // el mantenedor creía que había perdido el trabajo.
   if (isOnline()) {
-    const r = await syncEnexPending()
+    await Promise.race([
+      syncEnexPending().catch(() => undefined),
+      new Promise((r) => setTimeout(r, ESPERA_GUARDAR_MS)),
+    ])
     const after = await db.pending.get(row.local_id)
-    if (after?.sync_status === 'error') throw new Error(after.last_error ?? 'El servidor rechazó la ejecución')
-    return { synced: r.ok > 0 && !after }
+    if (!after) return { synced: true }
+    return { synced: false, error: after.sync_status === 'error' ? after.last_error : null }
   }
   return { synced: false }
 }
 
 // ── Sync ────────────────────────────────────────────────────────────────
-export async function syncEnexPending(): Promise<{ ok: number; failed: number }> {
-  if (!isOnline()) return { ok: 0, failed: 0 }
+// Como Kizeo: cada foto viaja por separado y queda anotada al llegar, y la
+// bandeja «Por enviar» muestra cuántas van. Un corte a la mitad ya no obliga a
+// partir de cero.
+
+/** Techo por foto: ~400 KB comprimida pasa holgado incluso con 2G. */
+export const SUBIDA_FOTO_MS = 90_000
+/** Techo para registrar la ejecución en el servidor. */
+export const REGISTRO_MS = 45_000
+/** Lo que «Guardar» espera al envío antes de liberar el botón. */
+export const ESPERA_GUARDAR_MS = 15_000
+
+type SyncResult = { ok: number; failed: number }
+let enCurso: Promise<SyncResult> | null = null
+let otraVuelta = false
+
+/**
+ * Un solo envío a la vez. El reintento periódico, el evento «online» y el
+ * botón Guardar llaman todos acá: si ya hay un envío corriendo, se pide otra
+ * vuelta al terminar (para lo que se encoló mientras tanto) en vez de subir
+ * las mismas fotos dos veces en paralelo.
+ */
+export function syncEnexPending(): Promise<SyncResult> {
+  if (!isOnline()) return Promise.resolve({ ok: 0, failed: 0 })
+  if (enCurso) { otraVuelta = true; return enCurso }
+  enCurso = (async () => {
+    const total: SyncResult = { ok: 0, failed: 0 }
+    do {
+      otraVuelta = false
+      const r = await enviarCola()
+      total.ok += r.ok; total.failed += r.failed
+    } while (otraVuelta && isOnline())
+    await limpiarBlobsSubidos().catch(() => undefined)
+    return total
+  })().finally(() => { enCurso = null })
+  return enCurso
+}
+
+/** ¿Hay un envío corriendo ahora? (para la bandeja) */
+export function enexEnviando(): boolean {
+  return enCurso !== null
+}
+
+/** Todas las fotos y firmas de una ejecución encolada. */
+function blobIdsDe(p: EnexPending): string[] {
+  const ids: string[] = []
+  for (const it of p.items) {
+    if (it.foto_blob_id) ids.push(it.foto_blob_id)
+    if (it.foto_antes_blob_id) ids.push(it.foto_antes_blob_id)
+    if (it.foto_despues_blob_id) ids.push(it.foto_despues_blob_id)
+    ids.push(...(it.fotos_antes_blob_ids ?? []), ...(it.fotos_despues_blob_ids ?? []))
+  }
+  if (p.firma_tec_blob_id) ids.push(p.firma_tec_blob_id)
+  if (p.con_mandante && p.firma_mand_blob_id) ids.push(p.firma_mand_blob_id)
+  return ids
+}
+
+async function enviarCola(): Promise<SyncResult> {
   const db = enexDB()
   const rows = (await db.pending.toArray()).sort((a, b) => a.created_at.localeCompare(b.created_at))
   let ok = 0, failed = 0
   for (const p of rows) {
+    if (!isOnline()) break
     try {
-      // subir fotos de ítems (única + antes/después de actividades críticas)
+      const ids = blobIdsDe(p)
+      const yaSubidas = (await db.blobs.bulkGet(ids)).filter((b) => b?.url).length
+      let subidas = yaSubidas
+      await db.pending.update(p.local_id, {
+        sync_status: 'sending', fotos_total: ids.length, fotos_subidas: subidas,
+        last_try_at: new Date().toISOString(),
+      })
+
+      /** Sube un blob una sola vez: si ya llegó, devuelve su URL anotada. */
+      const subir = async (id: string, nombre: string, firma = false): Promise<string | null> => {
+        const b = await db.blobs.get(id)
+        if (!b) return null
+        if (b.url) return b.url
+        const url = await withTimeout(
+          firma ? subirFirmaBlob(b.blob) : subirEvidenciaEnex(new File([b.blob], nombre + '.jpg', { type: b.mime })),
+          SUBIDA_FOTO_MS, nombre)
+        await db.blobs.update(id, { url })
+        subidas++
+        await db.pending.update(p.local_id, { fotos_subidas: subidas })
+        return url
+      }
+
+      // subir fotos de ítems (única + antes/después)
       const itemsPayload: EnexItemResultado[] = []
       for (const it of p.items) {
         const ex = it as unknown as { foto_url_existente?: string; foto_antes_url_existente?: string; foto_despues_url_existente?: string }
         let fotoUrl: string | null = ex.foto_url_existente ?? null
-        if (it.foto_blob_id) {
-          const b = await db.blobs.get(it.foto_blob_id)
-          if (b) fotoUrl = await subirEvidenciaEnex(new File([b.blob], 'foto.jpg', { type: b.mime }))
-        }
+        if (it.foto_blob_id) fotoUrl = (await subir(it.foto_blob_id, 'foto')) ?? fotoUrl
         // [MIG265] Galerías: primero lo ya subido, después lo capturado offline.
-        const subirGaleria = async (ids: string[] | undefined, nombre: string): Promise<string[]> => {
+        const subirGaleria = async (galeria: string[] | undefined, nombre: string): Promise<string[]> => {
           const urls: string[] = []
-          for (const id of ids ?? []) {
-            const b = await db.blobs.get(id)
-            if (b) urls.push(await subirEvidenciaEnex(new File([b.blob], nombre + '.jpg', { type: b.mime })))
+          for (const id of galeria ?? []) {
+            const u = await subir(id, nombre)
+            if (u) urls.push(u)
           }
           return urls
         }
@@ -306,12 +435,12 @@ export async function syncEnexPending(): Promise<{ ok: number; failed: number }>
         })
       }
       // firmas
-      let firmaTecUrl: string | null = null
-      if (p.firma_tec_blob_id) { const b = await db.blobs.get(p.firma_tec_blob_id); if (b) firmaTecUrl = await subirFirmaBlob(b.blob) }
-      let firmaMandUrl: string | null = null
-      if (p.con_mandante && p.firma_mand_blob_id) { const b = await db.blobs.get(p.firma_mand_blob_id); if (b) firmaMandUrl = await subirFirmaBlob(b.blob) }
+      const firmaTecUrl = p.firma_tec_blob_id ? await subir(p.firma_tec_blob_id, 'firma', true) : null
+      const firmaMandUrl = p.con_mandante && p.firma_mand_blob_id ? await subir(p.firma_mand_blob_id, 'firma', true) : null
 
-      await ejecutarPauta({
+      // client_uuid hace idempotente el registro: si la respuesta se pierde en
+      // el camino y se reintenta, el servidor no duplica la ejecución.
+      await withTimeout(ejecutarPauta({
         programacionId: p.programacion_id, items: itemsPayload,
         otNumero: p.ot_numero, ejecutor: p.ejecutor, observacion: p.observacion,
         firmaTecnicoUrl: firmaTecUrl, tecnicoNombre: p.tecnico_nombre,
@@ -323,44 +452,58 @@ export async function syncEnexPending(): Promise<{ ok: number; failed: number }>
         // lo que viaja vacío se vacía en el servidor. Las ejecuciones encoladas
         // por la app anterior no llevan la marca y siguen siendo aditivas.
         reemplazar: p.reemplazar === true,
-      })
-      // El borrador apuntaba a los blobs que acabamos de subir y que estamos a
-      // punto de borrar. Si se deja así, al reabrir el servicio las fotos
-      // desaparecen de la pantalla (y la app se niega a cerrar por «falta
-      // evidencia») aunque el servidor ya las tenga. Se reemplazan por sus URL.
-      const draft = await db.drafts.get(p.programacion_id)
-      if (draft) {
-        p.items.forEach((it, idx) => {
-          const di = draft.items?.[it.pauta_item_id]
-          if (!di) return
-          const subidas = (urls: string[], previas: typeof di.antes, blobIds: string[] | undefined) => [
-            ...urls.map((u) => ({ id: `s-${u}`, url: u })),
-            // lo capturado DESPUÉS de encolar (blob que no viajó) se conserva
-            ...previas.filter((f) => f.blob_id && !(blobIds ?? []).includes(f.blob_id)),
-          ]
-          di.antes = subidas(itemsPayload[idx]?.fotos_antes ?? [], di.antes ?? [], it.fotos_antes_blob_ids)
-          di.despues = subidas(itemsPayload[idx]?.fotos_despues ?? [], di.despues ?? [], it.fotos_despues_blob_ids)
-        })
-        await db.drafts.put({ ...draft, updated_at: new Date().toISOString() })
-      }
-      // limpiar blobs
-      for (const it of p.items) {
-        if (it.foto_blob_id) await db.blobs.delete(it.foto_blob_id)
-        if (it.foto_antes_blob_id) await db.blobs.delete(it.foto_antes_blob_id)
-        if (it.foto_despues_blob_id) await db.blobs.delete(it.foto_despues_blob_id)
-        for (const id of it.fotos_antes_blob_ids ?? []) await db.blobs.delete(id)
-        for (const id of it.fotos_despues_blob_ids ?? []) await db.blobs.delete(id)
-      }
-      if (p.firma_tec_blob_id) await db.blobs.delete(p.firma_tec_blob_id)
-      if (p.firma_mand_blob_id) await db.blobs.delete(p.firma_mand_blob_id)
+      }), REGISTRO_MS, 'registro')
+
+      // Si mientras se enviaba el mantenedor volvió a guardar, esta fila ya fue
+      // reemplazada por la nueva: esa se envía en la vuelta siguiente y reusa
+      // las fotos que acabamos de subir.
+      if (!(await db.pending.get(p.local_id))) { ok++; continue }
+
+      // El borrador NO se toca: sigue apuntando a las fotos locales, que ahora
+      // llevan su URL anotada. Antes se reescribía con las URL y las fotos se
+      // borraban del teléfono, pero la pantalla abierta seguía usando sus ids
+      // locales: el siguiente «Guardar avance» las mandaba vacías y el servidor
+      // las sacaba del informe. Al reabrir, las que ya están en el servidor no
+      // se repiten (getFotoLocalInfo).
       await db.pending.delete(p.local_id)
       ok++
     } catch (e) {
       failed++
-      await db.pending.update(p.local_id, { sync_status: 'error', retries: (p.retries || 0) + 1, last_error: (e as Error).message })
+      await db.pending.update(p.local_id, {
+        sync_status: 'error', retries: (p.retries || 0) + 1, last_error: mensajeError(e),
+      })
     }
   }
   return { ok, failed }
+}
+
+/** El motivo, en palabras de terreno. */
+function mensajeError(e: unknown): string {
+  const msg = (e as Error)?.message ?? String(e)
+  if (/timeout|failed to fetch|network|load failed|networkerror/i.test(msg)) {
+    return 'Señal insuficiente para terminar el envío'
+  }
+  return msg
+}
+
+/**
+ * Las fotos ya subidas se borran del teléfono cuando nadie las necesita:
+ * ni la cola ni el borrador del servicio. Mientras el servicio siga abierto,
+ * la pantalla las referencia por su id local; borrarlas antes hacía que el
+ * siguiente «Guardar avance» las mandara vacías y el servidor las sacara.
+ */
+async function limpiarBlobsSubidos(): Promise<void> {
+  const db = enexDB()
+  const usados = new Set<string>()
+  for (const p of await db.pending.toArray()) blobIdsDe(p).forEach((id) => usados.add(id))
+  for (const d of await db.drafts.toArray()) {
+    for (const di of Object.values(d.items ?? {})) {
+      for (const f of [...(di.antes ?? []), ...(di.despues ?? [])]) if (f.blob_id) usados.add(f.blob_id)
+    }
+  }
+  const borrar: string[] = []
+  await db.blobs.each((b) => { if (b.url && !usados.has(b.blob_id)) borrar.push(b.blob_id) })
+  if (borrar.length) await db.blobs.bulkDelete(borrar)
 }
 
 // Sube una firma (blob PNG) al bucket público reutilizando el helper de dataURL.
@@ -376,4 +519,93 @@ async function subirFirmaBlob(blob: Blob): Promise<string> {
 
 export async function getEnexPendingCount(): Promise<number> {
   return enexDB().pending.count()
+}
+
+// ── Bandeja «Por enviar» ─────────────────────────────────────────────────
+export type EnexBandejaRow = {
+  local_id: string
+  programacion_id: string
+  instalacion: string | null
+  con_mandante: boolean
+  estado: 'en_espera' | 'enviando' | 'error'
+  fotos_total: number
+  fotos_subidas: number
+  intentos: number
+  motivo: string | null
+  guardado_at: string
+  ultimo_intento_at: string | null
+}
+
+export async function getBandejaEnex(): Promise<EnexBandejaRow[]> {
+  const db = enexDB()
+  const rows = (await db.pending.toArray()).sort((a, b) => a.created_at.localeCompare(b.created_at))
+  if (rows.length === 0) return []
+  // El nombre de la instalación sale de lo descargado.
+  const nombres = new Map<string, string>()
+  for (const c of await db.cache.where('key').startsWith('pend:').toArray()) {
+    for (const r of (c.value as EnexPendiente[]) ?? []) nombres.set(r.programacion_id, r.instalacion)
+  }
+  const corriendo = enexEnviando()
+  return rows.map((p) => ({
+    local_id: p.local_id,
+    programacion_id: p.programacion_id,
+    instalacion: nombres.get(p.programacion_id) ?? null,
+    con_mandante: p.con_mandante,
+    estado: p.sync_status === 'sending' && corriendo ? 'enviando' : p.sync_status === 'error' ? 'error' : 'en_espera',
+    fotos_total: p.fotos_total ?? blobIdsDe(p).length,
+    fotos_subidas: p.fotos_subidas ?? 0,
+    intentos: p.retries ?? 0,
+    motivo: p.last_error,
+    guardado_at: p.created_at,
+    ultimo_intento_at: p.last_try_at ?? null,
+  }))
+}
+
+// ── Preparado para trabajar sin señal ────────────────────────────────────
+// Kizeo pide abrir la app con red antes de salir. Acá la app lo hace sola y
+// muestra qué tan lista quedó.
+
+/** Pantallas que tienen que estar guardadas en el teléfono. */
+export const PANTALLAS_ENEX = ['/m/enex/', '/m/enex/servicio/']
+
+/**
+ * Pide al navegador que no borre lo guardado si falta espacio. Sin esto
+ * Android/iPhone pueden vaciar IndexedDB y la cola «Por enviar» con él.
+ */
+export async function protegerAlmacenamiento(): Promise<{ persistente: boolean; libreMB: number | null }> {
+  if (typeof navigator === 'undefined' || !navigator.storage) return { persistente: false, libreMB: null }
+  let persistente = false
+  try {
+    persistente = (await navigator.storage.persisted?.()) ?? false
+    if (!persistente) persistente = (await navigator.storage.persist?.()) ?? false
+  } catch { /* navegador sin la API */ }
+  let libreMB: number | null = null
+  try {
+    const est = await navigator.storage.estimate()
+    if (est.quota != null && est.usage != null) libreMB = Math.round((est.quota - est.usage) / 1_048_576)
+  } catch { /* sin estimación */ }
+  return { persistente, libreMB }
+}
+
+/**
+ * Baja las pantallas de la app (HTML y datos de navegación) para que abran
+ * sin señal. El service worker las guarda al pasar por él.
+ */
+export async function guardarPantallasOffline(): Promise<void> {
+  if (!isOnline() || typeof fetch === 'undefined') return
+  for (const url of PANTALLAS_ENEX) {
+    try { await conTimeout(fetch(url, { credentials: 'same-origin' }), 15_000) } catch { /* sigue */ }
+    try { await conTimeout(fetch(url, { headers: { RSC: '1' }, credentials: 'same-origin' }), 15_000) } catch { /* sigue */ }
+  }
+}
+
+/** ¿Las pantallas ya están guardadas en el teléfono? */
+export async function pantallasDisponiblesOffline(): Promise<boolean> {
+  if (typeof caches === 'undefined') return false
+  try {
+    for (const url of PANTALLAS_ENEX) {
+      if (!(await caches.match(new URL(url, location.origin).toString(), { ignoreSearch: true }))) return false
+    }
+    return true
+  } catch { return false }
 }
