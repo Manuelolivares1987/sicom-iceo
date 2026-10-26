@@ -6,7 +6,9 @@
 import {
   getTerrenoPendientes, getPautaItems, ejecutarPauta, getEjecucionItems, getPendientePorId,
   subirEvidenciaEnex, subirFirmaEnex, getPlanTareasDia, guardarRepuestosEnex,
+  terrenoCamion, terrenoServicio, porReprogramar, zonaTerreno, getTerrenoInstalaciones, getLugarItemsTodas,
   type EnexPendiente, type EnexPautaItem, type EnexItemResultado, type EnexPlanTarea,
+  type EnexTerrenoInstalacion, type EnexLugarItem, type TipoServicio,
 } from '@/lib/services/enex'
 import { withTimeout } from '@/lib/upload/with-timeout'
 import { enexDB, newId, type EnexPending, type EnexPendItem, type EnexDraft, type EnexRepuesto } from './enex-db'
@@ -44,6 +46,9 @@ export async function getPendientesOffline(anio: number, mes: number): Promise<E
   } else {
     base = await getCachedPend(anio, mes)
   }
+  // [MIG651] Lo hecho en terreno que todavía no llega: servicios nuevos,
+  // patentes anotadas y «no se hizo».
+  base = await aplicarCambiosTerreno(base, { anio, mes })
   // Overlay: marcar como ejecutada/cumplida lo que está en cola local
   const pend = await enexDB().pending.toArray()
   if (pend.length === 0) return base
@@ -71,17 +76,21 @@ export async function getPendienteOffline(programacionId: string): Promise<EnexP
     if (!p) return r
     return { ...r, estado: p.con_mandante ? 'cumplida' : 'ejecutada', cumplida: r.cumplida || p.con_mandante }
   }
+  const conCambios = async (r: EnexPendiente) => aplicarCola((await aplicarCambiosTerreno([r]))[0])
   if (isOnline()) {
     try {
       const r = await conTimeout(getPendientePorId(programacionId))
-      if (r) return aplicarCola(r)
+      if (r) return conCambios(r)
     } catch { /* cae a la cache */ }
   }
   const cacheados = await enexDB().cache.where('key').startsWith('pend:').toArray()
   for (const row of cacheados) {
     const hit = ((row.value as EnexPendiente[]) ?? []).find((r) => r.programacion_id === programacionId)
-    if (hit) return aplicarCola(hit)
+    if (hit) return conCambios(hit)
   }
+  // Creado en terreno y todavía sin llegar al servidor.
+  const local = await enexDB().cache.get(keyLocal(programacionId))
+  if (local) return conCambios(local.value as EnexPendiente)
   return null
 }
 
@@ -166,7 +175,12 @@ export async function prepararEnexOffline(anio: number, mes: number): Promise<nu
     try { vecinos.push(...(await bajarPeriodo(a, m)).filter((p) => !p.cumplida)) } catch { /* sigue */ }
   }
   const todos = [...pend, ...vecinos]
-  const pautas = Array.from(new Set(todos.map((p) => p.pauta_id).filter(Boolean))) as string[]
+  // [MIG651] Puntos y zonas, para abrir sin señal un servicio no planificado.
+  const puntos = await bajarParaCambios().catch(() => [] as EnexTerrenoInstalacion[])
+  const pautas = Array.from(new Set([
+    ...todos.map((p) => p.pauta_id),
+    ...puntos.flatMap((i) => [i.pauta_mantencion_id, i.pauta_calibracion_id]),
+  ].filter(Boolean))) as string[]
   for (const pid of pautas) { try { await getPautaItemsOffline(pid) } catch { /* sigue */ } }
   const ejecuciones = todos.map((p) => p.ejecucion_id).filter(Boolean) as string[]
   for (const eid of ejecuciones) { try { await getEjecucionItemsOffline(eid) } catch { /* sigue */ } }
@@ -380,8 +394,11 @@ function blobIdsDe(p: EnexPending): string[] {
 
 async function enviarCola(): Promise<SyncResult> {
   const db = enexDB()
+  // [MIG651] Primero los cambios de programa: el servicio nuevo y la patente
+  // tienen que existir en el servidor antes que su ejecución.
+  const previos = await enviarCambiosTerreno()
   const rows = (await db.pending.toArray()).sort((a, b) => a.created_at.localeCompare(b.created_at))
-  let ok = 0, failed = 0
+  let ok = previos.ok, failed = previos.failed
   for (const p of rows) {
     if (!isOnline()) break
     try {
@@ -539,7 +556,8 @@ async function subirFirmaBlob(blob: Blob): Promise<string> {
 }
 
 export async function getEnexPendingCount(): Promise<number> {
-  return enexDB().pending.count()
+  const ops = await enexDB().cache.where('key').startsWith('op:').count()
+  return (await enexDB().pending.count()) + ops
 }
 
 // ── Bandeja «Por enviar» ─────────────────────────────────────────────────
@@ -555,12 +573,20 @@ export type EnexBandejaRow = {
   motivo: string | null
   guardado_at: string
   ultimo_intento_at: string | null
+  /** [MIG651] Cambio de programa (patente, «no se hizo», servicio nuevo). */
+  etiqueta?: string
 }
 
 export async function getBandejaEnex(): Promise<EnexBandejaRow[]> {
   const db = enexDB()
   const rows = (await db.pending.toArray()).sort((a, b) => a.created_at.localeCompare(b.created_at))
-  if (rows.length === 0) return []
+  const ops = (await db.cache.where('key').startsWith('op:').toArray()).map((c) => c.value as EnexOp)
+  const filasOps: EnexBandejaRow[] = ops.map((o) => ({
+    local_id: o.id, programacion_id: o.programacion_id ?? '', instalacion: o.titulo, con_mandante: false,
+    estado: o.error ? 'error' : 'en_espera', fotos_total: 0, fotos_subidas: 0, intentos: o.intentos ?? 0,
+    motivo: o.error ?? null, guardado_at: o.created_at, ultimo_intento_at: null, etiqueta: ETIQUETA_OP[o.tipo],
+  }))
+  if (rows.length === 0) return filasOps
   // El nombre de la instalación sale de lo descargado.
   const nombres = new Map<string, string>()
   for (const c of await db.cache.where('key').startsWith('pend:').toArray()) {
@@ -579,7 +605,7 @@ export async function getBandejaEnex(): Promise<EnexBandejaRow[]> {
     motivo: p.last_error,
     guardado_at: p.created_at,
     ultimo_intento_at: p.last_try_at ?? null,
-  }))
+  } as EnexBandejaRow)).concat(filasOps)
 }
 
 // ── Preparado para trabajar sin señal ────────────────────────────────────
@@ -629,4 +655,224 @@ export async function pantallasDisponiblesOffline(): Promise<boolean> {
     }
     return true
   } catch { return false }
+}
+
+// ── Cambio de programa en terreno (MIG651) ──────────────────────────────────
+// ESM pide otra cosa al llegar (camiones en vez de la EESS, la sala de
+// microfiltrado en vez del rack). Todo se anota en el teléfono y viaja por la
+// misma cola, antes que las ejecuciones: el servicio nuevo y la patente tienen
+// que existir en el servidor cuando llegue el trabajo.
+
+export type EnexOp = {
+  id: string
+  tipo: 'camion' | 'servicio' | 'por_reprogramar' | 'zona'
+  titulo: string
+  programacion_id?: string
+  patente?: string
+  faena_id?: string
+  instalacion_id?: string
+  tipo_servicio?: TipoServicio
+  fecha?: string
+  motivo?: string | null
+  lugar_id?: string
+  hacer?: boolean
+  created_at: string
+  intentos?: number
+  error?: string | null
+}
+
+const ETIQUETA_OP: Record<EnexOp['tipo'], string> = {
+  camion: 'Patente', servicio: 'Servicio nuevo', por_reprogramar: 'No se hizo', zona: 'Zona',
+}
+const keyLocal = (progId: string) => `local:${progId}`
+const keyPatch = (progId: string) => `patch:${progId}`
+const keyZonasDia = (fecha: string) => `zonasdia:${fecha}`
+
+type PatchTerreno = Partial<Pick<EnexPendiente, 'patente' | 'instalacion' | 'por_reprogramar_motivo' | 'por_reprogramar_at' | 'es_comodin'>>
+
+async function encolarOp(op: Omit<EnexOp, 'id' | 'created_at'>): Promise<void> {
+  const created_at = new Date().toISOString()
+  const id = newId()
+  await enexDB().cache.put({ key: `op:${created_at}:${id}`, value: { ...op, id, created_at }, updated_at: created_at })
+  if (isOnline()) void syncEnexPending().catch(() => undefined)
+}
+
+async function parchar(progId: string, cambios: PatchTerreno): Promise<void> {
+  const row = await enexDB().cache.get(keyPatch(progId))
+  await enexDB().cache.put({ key: keyPatch(progId), value: { ...((row?.value as PatchTerreno) ?? {}), ...cambios },
+    updated_at: new Date().toISOString() })
+}
+
+/** Encima de lo del servidor: servicios creados acá, patentes y «no se hizo». */
+async function aplicarCambiosTerreno(base: EnexPendiente[], periodo?: { anio: number; mes: number }): Promise<EnexPendiente[]> {
+  const db = enexDB()
+  const patches = await db.cache.where('key').startsWith('patch:').toArray()
+  const locales = await db.cache.where('key').startsWith('local:').toArray()
+  if (patches.length === 0 && locales.length === 0) return base
+  const ids = new Set(base.map((r) => r.programacion_id))
+  const extra: EnexPendiente[] = []
+  for (const l of locales) {
+    const r = l.value as EnexPendiente
+    if (ids.has(r.programacion_id)) {
+      // Ya llegó al servidor: la copia local sobra.
+      if (periodo) await db.cache.delete(l.key)
+      continue
+    }
+    if (!periodo || (r.periodo_anio === periodo.anio && r.periodo_mes === periodo.mes)) extra.push(r)
+  }
+  const porId = new Map(patches.map((p) => [p.key.slice('patch:'.length), p.value as PatchTerreno]))
+  return [...base, ...extra].map((r) => {
+    const p = porId.get(r.programacion_id)
+    return p ? { ...r, ...p } : r
+  })
+}
+
+async function enviarCambiosTerreno(): Promise<SyncResult> {
+  const db = enexDB()
+  const ops = (await db.cache.where('key').startsWith('op:').toArray()).sort((a, b) => a.key.localeCompare(b.key))
+  let ok = 0, failed = 0
+  for (const row of ops) {
+    if (!isOnline()) break
+    const o = row.value as EnexOp
+    try {
+      if (o.tipo === 'camion') {
+        await withTimeout(terrenoCamion({ programacionId: o.programacion_id!, patente: o.patente!,
+          faenaId: o.faena_id, fecha: o.fecha, motivo: o.motivo }), REGISTRO_MS, 'patente')
+      } else if (o.tipo === 'servicio') {
+        await withTimeout(terrenoServicio({ programacionId: o.programacion_id!, instalacionId: o.instalacion_id!,
+          tipoServicio: o.tipo_servicio!, fecha: o.fecha!, motivo: o.motivo }), REGISTRO_MS, 'servicio')
+      } else if (o.tipo === 'por_reprogramar') {
+        await withTimeout(porReprogramar(o.programacion_id!, o.motivo ?? null, o.hacer === false), REGISTRO_MS, 'reprogramar')
+      } else {
+        await withTimeout(zonaTerreno(o.lugar_id!, o.fecha!, o.hacer === true, o.motivo ?? null), REGISTRO_MS, 'zona')
+      }
+      await db.cache.delete(row.key)
+      // Con todo lo de ese servicio ya en el servidor, el parche sobra: la
+      // próxima lectura trae la patente o la marca desde allá.
+      if (o.programacion_id) {
+        const quedan = (await db.cache.where('key').startsWith('op:').toArray())
+          .some((r) => (r.value as EnexOp).programacion_id === o.programacion_id)
+        if (!quedan) await db.cache.delete(keyPatch(o.programacion_id))
+      }
+      ok++
+    } catch (e) {
+      failed++
+      await db.cache.put({ ...row, value: { ...o, intentos: (o.intentos ?? 0) + 1, error: mensajeError(e) } })
+    }
+  }
+  return { ok, failed }
+}
+
+const keyPuntos = 'terreno:instalaciones'
+const keyLugares = 'terreno:lugares'
+
+async function bajarParaCambios(): Promise<EnexTerrenoInstalacion[]> {
+  const puntos = await conTimeout(getTerrenoInstalaciones(), DESCARGA_MS)
+  await enexDB().cache.put({ key: keyPuntos, value: puntos, updated_at: new Date().toISOString() })
+  try {
+    const lugares = await conTimeout(getLugarItemsTodas(), DESCARGA_MS)
+    await enexDB().cache.put({ key: keyLugares, value: lugares, updated_at: new Date().toISOString() })
+  } catch { /* sigue con lo que había */ }
+  return puntos
+}
+
+/** Puntos de todas las faenas con su pauta (lo bajado; con señal, al día). */
+export async function getPuntosOffline(): Promise<EnexTerrenoInstalacion[]> {
+  if (isOnline()) { try { return await bajarParaCambios() } catch { /* cache */ } }
+  return ((await enexDB().cache.get(keyPuntos))?.value as EnexTerrenoInstalacion[]) ?? []
+}
+
+/** Zonas de Lomas (lugar + actividades). */
+export async function getLugaresOffline(): Promise<EnexLugarItem[]> {
+  return ((await enexDB().cache.get(keyLugares))?.value as EnexLugarItem[]) ?? []
+}
+
+function hoyIso(): string {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+export function normalizarPatente(p: string): string {
+  return p.toUpperCase().replace(/[^A-Z0-9]/g, '')
+}
+
+/**
+ * Servicio que no estaba planificado. Se arma en el teléfono con su propio id
+ * (así se puede abrir y trabajar sin señal) y viaja por la cola.
+ */
+export async function crearServicioTerreno(p: {
+  punto: EnexTerrenoInstalacion; tipoServicio: TipoServicio; motivo: string; patente?: string | null
+}): Promise<string> {
+  const id = newId()
+  const fecha = hoyIso()
+  const pautaId = p.tipoServicio === 'mantencion' ? p.punto.pauta_mantencion_id : p.punto.pauta_calibracion_id
+  const items: EnexPautaItem[] = pautaId ? await getPautaItemsOffline(pautaId).catch(() => []) : []
+  const pat = p.patente ? normalizarPatente(p.patente) : null
+  const local: EnexPendiente = {
+    programacion_id: id, periodo_anio: Number(fecha.slice(0, 4)), periodo_mes: Number(fecha.slice(5, 7)),
+    tipo_servicio: p.tipoServicio, fecha_programada: fecha,
+    instalacion_id: p.punto.instalacion_id,
+    instalacion: pat ? `Aljibe ${pat}` : p.punto.instalacion,
+    instalacion_tipo: p.punto.instalacion_tipo, patente: pat ?? p.punto.patente, linea: p.punto.linea,
+    faena_id: p.punto.faena_id, faena_codigo: p.punto.faena_codigo, faena: p.punto.faena,
+    pauta_id: pautaId, pauta_nombre: null, pauta_borrador: null, pauta_items: items.length,
+    ejecucion_id: null, estado: null, cumplida: false, es_recobro: false,
+    es_comodin: p.punto.es_comodin && !pat, origen: 'terreno', por_reprogramar_at: null, por_reprogramar_motivo: null,
+    local: true,
+  }
+  await enexDB().cache.put({ key: keyLocal(id), value: local, updated_at: new Date().toISOString() })
+  if (p.punto.instalacion_tipo === 'camion' && pat) {
+    await encolarOp({ tipo: 'camion', titulo: `Calibración ${pat} · ${p.punto.faena}`, programacion_id: id, patente: pat,
+      faena_id: p.punto.faena_id, fecha, motivo: p.motivo })
+  } else {
+    await encolarOp({ tipo: 'servicio', titulo: `${p.punto.instalacion} · ${p.punto.faena}`, programacion_id: id,
+      instalacion_id: p.punto.instalacion_id, tipo_servicio: p.tipoServicio, fecha, motivo: p.motivo })
+  }
+  return id
+}
+
+/** El supervisor anota la patente del camión «por asignar» (o la corrige). */
+export async function asignarPatenteTerreno(prog: EnexPendiente, patente: string): Promise<string> {
+  const pat = normalizarPatente(patente)
+  if (pat.length < 4 || pat.length > 8) throw new Error('Patente inválida: entre 4 y 8 letras/números')
+  // Si el servicio nació en este teléfono y todavía no sale, su op de creación
+  // lleva la patente: se corrige ahí en vez de encolar otra.
+  const ops = await enexDB().cache.where('key').startsWith('op:').toArray()
+  const creacion = ops.find((r) => {
+    const o = r.value as EnexOp
+    return o.programacion_id === prog.programacion_id && o.tipo === 'camion' && !!o.faena_id
+  })
+  if (creacion) {
+    await enexDB().cache.put({ ...creacion, value: { ...(creacion.value as EnexOp), patente: pat, error: null } })
+    if (isOnline()) void syncEnexPending().catch(() => undefined)
+  } else {
+    await encolarOp({ tipo: 'camion', titulo: `Patente ${pat} · ${prog.faena}`, programacion_id: prog.programacion_id, patente: pat })
+  }
+  await parchar(prog.programacion_id, { patente: pat, instalacion: `Aljibe ${pat}`, es_comodin: false })
+  return pat
+}
+
+/** «No se hizo»: queda por reprogramar con el motivo (deshacer = volver atrás). */
+export async function marcarNoSeHizo(prog: EnexPendiente, motivo: string, deshacer = false): Promise<void> {
+  await encolarOp({ tipo: 'por_reprogramar', titulo: `${prog.instalacion} · ${prog.faena}`, programacion_id: prog.programacion_id,
+    motivo: deshacer ? null : motivo, hacer: deshacer ? false : undefined })
+  await parchar(prog.programacion_id, deshacer
+    ? { por_reprogramar_motivo: null, por_reprogramar_at: null }
+    : { por_reprogramar_motivo: motivo, por_reprogramar_at: new Date().toISOString() })
+}
+
+export type ZonaDia = { lugar_id: string; area: string; lugar: string; hacer: boolean; motivo: string | null }
+
+/** Lomas: la zona del plan no se hizo (hacer=false) o se hace hoy (hacer=true). */
+export async function marcarZonaTerreno(z: ZonaDia): Promise<void> {
+  const fecha = hoyIso()
+  await encolarOp({ tipo: 'zona', titulo: `${z.area} · ${z.lugar}`, lugar_id: z.lugar_id, fecha, hacer: z.hacer, motivo: z.motivo })
+  const row = await enexDB().cache.get(keyZonasDia(fecha))
+  const lista = ((row?.value as ZonaDia[]) ?? []).filter((x) => x.lugar_id !== z.lugar_id)
+  await enexDB().cache.put({ key: keyZonasDia(fecha), value: [...lista, z], updated_at: new Date().toISOString() })
+}
+
+/** Lo que el supervisor cambió hoy en las zonas (para pintarlo en «Plan de hoy»). */
+export async function getZonasDia(fecha: string): Promise<ZonaDia[]> {
+  return ((await enexDB().cache.get(keyZonasDia(fecha)))?.value as ZonaDia[]) ?? []
 }

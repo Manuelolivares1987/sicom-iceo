@@ -9,14 +9,15 @@ import { useQuery } from '@tanstack/react-query'
 import {
   Building2, ChevronRight, ChevronLeft, CheckCircle2, Clock, RefreshCw, AlertTriangle,
   WifiOff, CloudOff, Fuel, Droplets, Repeat, Check, CalendarDays, Sun,
-  ClipboardList,
+  ClipboardList, Shuffle, Ban,
 } from 'lucide-react'
 import { Spinner } from '@/components/ui/spinner'
 import {
   MESES, TIPO_INSTALACION_LABEL, MUNDO_LABEL, mundoDeLinea,
   type Mundo, type EnexPendiente, type EnexPlanTarea,
 } from '@/lib/services/enex'
-import { getPendientesOffline, prepararEnexOffline, getEnexPendingCount, ultimaDescargaEnex, getPlanDiaOffline } from '@/lib/offline/enex-offline'
+import { getPendientesOffline, prepararEnexOffline, getEnexPendingCount, ultimaDescargaEnex, getPlanDiaOffline, getZonasDia } from '@/lib/offline/enex-offline'
+import { CambioPrograma } from '@/components/enex/cambio-programa'
 import { useNetworkStatus } from '@/hooks/use-calama-offline'
 import { useExigirSesion } from '@/hooks/use-exigir-sesion'
 import { useAuth } from '@/contexts/auth-context'
@@ -124,6 +125,13 @@ export default function EnexTerrenoHome() {
     enabled: !!hoyISO, staleTime: 60_000, retry: false, networkMode: 'always',
   })
 
+  // [MIG651] Cambio de programa en terreno (pedido de ESM).
+  const [cambioAbierto, setCambioAbierto] = useState(false)
+  const { data: zonasDia = [] } = useQuery({
+    queryKey: ['enex-zonas-dia', hoyISO], queryFn: () => getZonasDia(hoyISO),
+    enabled: !!hoyISO, networkMode: 'always',
+  })
+
   // El envío de lo pendiente lo hace <EnexSyncAgent /> en el layout: corre en
   // las dos pantallas, cada minuto y al volver a la app.
 
@@ -159,31 +167,41 @@ export default function EnexTerrenoHome() {
 
   // El plan del día agrupado por área, con el punto y los códigos que tocan.
   // Cada grupo apunta al servicio del punto para poder ejecutarlo de una.
+  // [MIG651] Agrupado por área + zona (Lomas: Instalaciones exteriores · Sala
+  // de microfiltrado · Racks). Una zona con varios puntos (los racks) muestra
+  // la lista de actividades una vez y un botón por punto.
   const planPorArea = useMemo(() => {
-    const grupos: { clave: string; area: string; tareas: EnexPlanTarea[] }[] = []
+    const grupos: { clave: string; area: string; zona: string | null; tareas: EnexPlanTarea[] }[] = []
     for (const t of planHoy) {
-      const clave = `${t.area ?? ''}|${t.instalacion_id ?? ''}`
+      const clave = `${t.area ?? ''}|${t.alcance ?? t.instalacion_id ?? ''}`
       let g = grupos.find((x) => x.clave === clave)
-      if (!g) { g = { clave, area: t.area || t.instalacion || 'Sin área', tareas: [] }; grupos.push(g) }
+      if (!g) { g = { clave, area: t.area || t.instalacion || 'Sin área', zona: t.alcance, tareas: [] }; grupos.push(g) }
       g.tareas.push(t)
     }
     return grupos.map((g) => {
-      // El punto exacto si el plan lo fijó; si no, los del área que estén
+      // Los puntos que fijó el plan; si no fijó ninguno, los del área que estén
       // programados este período (el técnico elige en cuál trabaja).
-      const instId = g.tareas.find((t) => t.instalacion_id)?.instalacion_id ?? null
-      const candidatos = instId
-        ? pend.filter((p) => p.instalacion_id === instId)
+      const instIds = Array.from(new Set(g.tareas.map((t) => t.instalacion_id).filter(Boolean) as string[]))
+      const candidatos = instIds.length > 0
+        ? pend.filter((p) => instIds.includes(p.instalacion_id) && p.tipo_servicio === 'mantencion')
         : pend.filter((p) => p.tipo_servicio === 'mantencion' &&
             g.tareas.some((t) => t.area && p.instalacion.toLowerCase().includes(t.area.toLowerCase().replace('truck shop ', ''))))
+      // Una actividad por código (el plan la repite en cada rack).
+      const tareas = g.tareas.filter((t, i, arr) => arr.findIndex((x) => x.codigo_item === t.codigo_item) === i)
       const codigos = Array.from(new Set(g.tareas.map((t) => t.codigo_item).filter(Boolean) as string[]))
-      return { ...g, candidatos, codigos }
+      const noSeHizo = zonasDia.find((z) => !z.hacer && z.area === g.area && z.lugar === g.zona) ?? null
+      return { ...g, tareas, candidatos, codigos, noSeHizo }
     })
-  }, [planHoy, pend])
+  }, [planHoy, pend, zonasDia])
+  // Zonas hechas hoy por cambio de programa (no estaban en el plan).
+  const zonasExtra = useMemo(
+    () => zonasDia.filter((z) => z.hacer && !planPorArea.some((g) => g.area === z.area && g.zona === z.lugar)),
+    [zonasDia, planPorArea])
 
   const pendHoy = useMemo(
-    () => pendMundo.filter((p) => !p.cumplida && p.fecha_programada?.slice(0, 10) === hoyISO).length,
+    () => pendMundo.filter((p) => !p.cumplida && !p.por_reprogramar_motivo && p.fecha_programada?.slice(0, 10) === hoyISO).length,
     [pendMundo, hoyISO])
-  const pendMes = pendMundo.filter((p) => !p.cumplida).length
+  const pendMes = pendMundo.filter((p) => !p.cumplida && !p.por_reprogramar_motivo).length
   // Lo de hoy en el OTRO mundo: con el selector recordado del día anterior se
   // veía «No tienes tareas para hoy» teniendo trabajo al lado.
   const otroMundo: Mundo = mundo === 'lubricante' ? 'combustible' : 'lubricante'
@@ -276,6 +294,31 @@ export default function EnexTerrenoHome() {
         </div>
       )}
 
+      {/* [MIG651] ESM pidió otra cosa al llegar */}
+      {vista === 'hoy' && mundo && (
+        <button onClick={() => setCambioAbierto(true)}
+                className="flex w-full items-center gap-2 rounded-xl border-2 border-dashed border-orange-300 bg-orange-50 p-2.5 text-left active:bg-orange-100">
+          <Shuffle className="h-4 w-4 flex-shrink-0 text-orange-600" />
+          <span className="flex-1">
+            <span className="block text-sm font-bold text-orange-900">Cambio de programa</span>
+            <span className="block text-[11px] text-orange-800">
+              {mundo === 'combustible' ? 'ESM pidió otra cosa: calibrar camiones, otro punto…' : 'ESM pidió otra zona: la sala en vez del rack…'}
+            </span>
+          </span>
+          <ChevronRight className="h-4 w-4 text-orange-500" />
+        </button>
+      )}
+      {cambioAbierto && mundo && (
+        <CambioPrograma mundo={mundo} hoy={hoyISO} pend={pend} planHoy={planHoy} zonasDia={zonasDia}
+                        onClose={() => setCambioAbierto(false)} />
+      )}
+      {vista === 'hoy' && zonasExtra.length > 0 && (
+        <div className="rounded-xl border border-orange-200 bg-white p-2.5 text-xs">
+          <p className="font-bold text-orange-900">Hoy, por cambio de programa</p>
+          {zonasExtra.map((z) => <p key={z.lugar_id} className="text-gray-700">{z.area} · <b>{z.lugar}</b></p>)}
+        </div>
+      )}
+
       {/* [MIG274] Plan del día publicado por el planificador */}
       {vista === 'hoy' && planPorArea.length > 0 && (
         <div className="rounded-xl border-2 border-emerald-300 bg-emerald-50/60 p-2.5">
@@ -287,14 +330,20 @@ export default function EnexTerrenoHome() {
           <div className="mt-2 space-y-2">
             {planPorArea.map((g) => (
               <div key={g.clave} className="rounded-lg border border-emerald-200 bg-white p-2">
-                <p className="text-xs font-bold text-gray-800">{g.area}</p>
-                {g.tareas[0]?.alcance && <p className="text-[11px] text-gray-500">{g.tareas[0].alcance}</p>}
+                <p className="text-xs font-bold text-gray-800">{g.zona ? `${g.zona}` : g.area}</p>
+                {g.zona && <p className="text-[11px] text-gray-500">{g.area}</p>}
+                {g.noSeHizo && (
+                  <p className="mt-1 rounded bg-orange-100 px-1.5 py-0.5 text-[10px] font-semibold text-orange-800">
+                    No se hizo — {g.noSeHizo.motivo} (queda por reprogramar)
+                  </p>
+                )}
                 <ul className="mt-1 space-y-0.5">
                   {g.tareas.map((t) => (
                     <li key={t.id} className="flex items-start gap-1.5 text-[11px] text-gray-600">
                       <span className="font-mono text-gray-400">{t.codigo_item}</span>
                       <span className="flex-1">{t.actividad ?? '—'}</span>
                       {t.estado === 'hecha' && <CheckCircle2 className="h-3 w-3 flex-shrink-0 text-green-600" />}
+                      {t.estado === 'no_realizada' && <span className="flex-shrink-0 text-[10px] text-orange-700">no se hizo</span>}
                     </li>
                   ))}
                 </ul>
@@ -312,7 +361,7 @@ export default function EnexTerrenoHome() {
                     <Link key={p.programacion_id}
                           href={`/m/enex/servicio/?id=${p.programacion_id}&items=${encodeURIComponent(g.codigos.join(','))}`}
                           className="rounded-lg bg-emerald-600 px-2.5 py-1.5 text-[11px] font-semibold text-white active:bg-emerald-700">
-                      {p.instalacion} <ChevronRight className="inline h-3 w-3" />
+                      {g.candidatos.length > 1 || !g.zona ? p.instalacion : 'Abrir'} <ChevronRight className="inline h-3 w-3" />
                     </Link>
                   ))}
                 </div>
@@ -351,7 +400,7 @@ export default function EnexTerrenoHome() {
         </div>
       ) : diasVisibles.map((dia) => {
         const esHoy = dia.fecha === hoyISO
-        const porEjecutar = dia.items.filter((p) => !p.cumplida).length
+        const porEjecutar = dia.items.filter((p) => !p.cumplida && !p.por_reprogramar_motivo).length
         return (
           <div key={dia.fecha}>
             {/* Cabecera del día */}
@@ -369,10 +418,12 @@ export default function EnexTerrenoHome() {
                       className="block rounded-xl border border-gray-200 bg-white p-3 active:bg-gray-50">
                   <div className="flex items-center gap-2">
                     <span className="flex-1 text-sm font-medium text-gray-800">
-                      {p.instalacion}
-                      {p.patente && <span className="text-gray-500"> · {p.patente}</span>}
+                      {p.es_comodin ? 'Camión por asignar' : p.instalacion}
+                      {p.patente && !p.es_comodin && <span className="text-gray-500"> · {p.patente}</span>}
                     </span>
-                    {p.cumplida
+                    {p.por_reprogramar_motivo && !p.ejecucion_id
+                      ? <span className="flex items-center gap-1 rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-medium text-orange-800"><Ban className="h-3 w-3" /> No se hizo</span>
+                      : p.cumplida
                       ? <span className="flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-medium text-green-700"><CheckCircle2 className="h-3 w-3" /> Cumplida</span>
                       : p.estado === 'ejecutada'
                       ? <span className="flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800"><Clock className="h-3 w-3" /> Falta firma</span>
@@ -384,6 +435,15 @@ export default function EnexTerrenoHome() {
                     </span>
                     <ChevronRight className="h-4 w-4 text-gray-400" />
                   </div>
+                  {p.es_comodin && !p.cumplida && (
+                    <div className="mt-1 text-[10px] text-blue-700">La patente la anotas en terreno, con el camión que entregue la operación.</div>
+                  )}
+                  {p.origen === 'terreno' && (
+                    <div className="mt-1 text-[10px] text-orange-700">Fuera de plan · cambio de programa en terreno{p.local ? ' (por enviar)' : ''}</div>
+                  )}
+                  {p.por_reprogramar_motivo && !p.ejecucion_id && (
+                    <div className="mt-1 text-[10px] text-orange-700">{p.por_reprogramar_motivo} — queda por reprogramar</div>
+                  )}
                   {p.es_recobro && !p.cumplida && (
                     <div className="mt-1 flex items-center gap-1 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800">
                       <Repeat className="h-3 w-3" /> RECOBRO — repetición del trimestre (se factura a ENEX)

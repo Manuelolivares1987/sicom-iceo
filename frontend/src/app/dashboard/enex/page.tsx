@@ -316,6 +316,10 @@ export default function EnexControlPage() {
         </CardContent>
       </Card>
 
+      {/* [MIG651] Patentes calibradas: se conocen recién en terreno. */}
+      <CamionesCalibrados rows={panel} titulo={vista === 'mes' ? `${MESES[mes - 1]} ${anio}` : `T${trimestreNum} ${anio}`}
+                          faena={faenaActual?.nombre ?? ''} />
+
       {cell && (
         <CeldaModal anio={anio} mes={cell.mes} inst={cell.inst} servicio={cell.servicio} row={cell.row}
                     onClose={() => setCell(null)} onDone={() => { setCell(null); invalidar() }} />
@@ -680,5 +684,74 @@ function AgregarInstalacionModal({ faenaId, onClose, onDone }: { faenaId: string
         <Button disabled={busy || !nombre.trim()} onClick={guardar}>{busy ? <Spinner className="h-4 w-4 mr-1" /> : null} Agregar</Button>
       </ModalFooter>
     </Modal>
+  )
+}
+
+// [MIG651] Cumplimiento de calibración de camiones por patente. Al planificar
+// no se sabe qué camión entrega la operación: el supervisor anota la patente
+// en terreno y acá se rescata la lista para el cumplimiento.
+function CamionesCalibrados({ rows, titulo, faena }: { rows: EnexPanelRow[]; titulo: string; faena: string }) {
+  const cam = rows.filter((r) => r.instalacion_tipo === 'camion' && r.tipo_servicio === 'calibracion')
+    .sort((a, b) => (a.fecha_ejecucion ?? a.fecha_programada ?? '').localeCompare(b.fecha_ejecucion ?? b.fecha_programada ?? ''))
+  if (cam.length === 0) return null
+  const hechos = cam.filter((r) => r.ejecucion_id && !r.es_comodin)
+  const patentes = Array.from(new Set(hechos.map((r) => r.patente).filter(Boolean) as string[]))
+  const cumplidos = hechos.filter((r) => r.cumplida).length
+  const porAsignar = cam.filter((r) => r.es_comodin && !r.ejecucion_id && !r.por_reprogramar_motivo).length
+  const noHechos = cam.filter((r) => r.por_reprogramar_motivo && !r.ejecucion_id).length
+
+  function exportar() {
+    const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`
+    const filas = hechos.map((r) => [r.faena, r.patente, r.fecha_ejecucion ?? '', r.cumplida ? 'CUMPLIDA' : 'Falta firma mandante',
+      r.origen === 'terreno' ? 'Fuera de plan (terreno)' : 'Planificado', r.ot_numero ?? '', r.tecnico_nombre ?? '', r.informe_pdf_url ?? ''].map(esc).join(';'))
+    const csv = ['Faena;Patente;Calibrado;Estado;Origen;OT;Técnico;Informe', ...filas].join('\r\n')
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' }))
+    a.download = `ENEX_camiones_calibrados_${faena.replace(/\W+/g, '_')}_${titulo.replace(/\s+/g, '_')}.csv`
+    a.click()
+    URL.revokeObjectURL(a.href)
+  }
+
+  return (
+    <Card>
+      <CardContent className="p-0">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b p-3">
+          <div>
+            <h2 className="text-sm font-semibold">Camiones calibrados · {titulo}</h2>
+            <p className="text-[11px] text-gray-500">
+              {patentes.length} patente{patentes.length === 1 ? '' : 's'} calibrada{patentes.length === 1 ? '' : 's'} · {cumplidos} con firma del mandante
+              {porAsignar > 0 && ` · ${porAsignar} planificada${porAsignar === 1 ? '' : 's'} sin patente aún`}
+              {noHechos > 0 && ` · ${noHechos} no se hicieron (por reprogramar)`}
+            </p>
+          </div>
+          <Button variant="outline" size="sm" disabled={hechos.length === 0} onClick={exportar}>
+            <FileSpreadsheet className="mr-1 h-4 w-4" /> Exportar patentes
+          </Button>
+        </div>
+        {hechos.length === 0 ? (
+          <p className="p-4 text-center text-sm text-gray-400">Todavía no hay camiones calibrados en el período.</p>
+        ) : (
+          <table className="w-full text-xs">
+            <thead><tr className="border-b text-gray-500">
+              <th className="p-2 text-left">Patente</th><th className="p-2 text-left">Calibrado</th><th className="p-2 text-left">Estado</th>
+              <th className="p-2 text-left">Origen</th><th className="p-2 text-left">Informe</th>
+            </tr></thead>
+            <tbody>
+              {hechos.map((r) => (
+                <tr key={r.programacion_id} className="border-b last:border-0">
+                  <td className="p-2 font-mono font-semibold">{r.patente ?? '—'}{r.creada_en_terreno && <span className="ml-1 rounded bg-amber-100 px-1 font-sans text-[9px] font-normal text-amber-800" title="Patente anotada en terreno: no estaba en el maestro">nueva</span>}</td>
+                  <td className="p-2 tabular-nums">{r.fecha_ejecucion ?? '—'}</td>
+                  <td className="p-2">{r.cumplida
+                    ? <span className="rounded bg-green-100 px-1.5 py-0.5 text-green-700">Cumplida</span>
+                    : <span className="rounded bg-amber-100 px-1.5 py-0.5 text-amber-800">Falta firma mandante</span>}</td>
+                  <td className="p-2 text-gray-600">{r.origen === 'terreno' ? 'Fuera de plan (terreno)' : 'Planificado'}</td>
+                  <td className="p-2">{r.informe_pdf_url ? <a href={r.informe_pdf_url} target="_blank" rel="noreferrer" className="text-blue-600 underline">PDF</a> : '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </CardContent>
+    </Card>
   )
 }

@@ -37,6 +37,10 @@ export type EnexInstalacion = {
   area: string | null
   activo: boolean
   orden: number
+  // [MIG651] «Camión por asignar»: se planifica contra él y la patente la pone
+  // el supervisor en terreno. creada_en_terreno = patente nueva anotada allá.
+  es_comodin?: boolean
+  creada_en_terreno?: boolean
 }
 
 // "Mundo" del supervisor de terreno (MIG234): combustible vs lubricantes.
@@ -84,6 +88,12 @@ export type EnexPanelRow = {
   // sigue siendo la del mandante, que es la que vale para el KPI.
   firma_tecnico_lista: boolean | null
   tecnico_nombre: string | null
+  // [MIG651] Cambio de programa en terreno.
+  es_comodin?: boolean | null
+  creada_en_terreno?: boolean | null
+  origen?: 'plan' | 'terreno' | null
+  por_reprogramar_at?: string | null
+  por_reprogramar_motivo?: string | null
 }
 
 export type EnexKpi = {
@@ -386,6 +396,13 @@ export type EnexPendiente = {
   cumplida: boolean
   // MIG234: el punto+servicio ya tiene otra ejecución en el mismo trimestre → recobro.
   es_recobro: boolean
+  // [MIG651] Camión por asignar / creado en terreno / no se hizo (pedido ESM).
+  es_comodin?: boolean | null
+  origen?: 'plan' | 'terreno' | null
+  por_reprogramar_at?: string | null
+  por_reprogramar_motivo?: string | null
+  // Solo en el teléfono: creado sin señal, todavía no llega al servidor.
+  local?: boolean
 }
 
 export type EnexItemResultado = {
@@ -419,6 +436,77 @@ export async function getPendientePorId(programacionId: string): Promise<EnexPen
     .eq('programacion_id', programacionId).maybeSingle()
   if (error) throw error
   return (data ?? null) as EnexPendiente | null
+}
+
+// ── Cambio de programa en terreno (MIG651) ──────────────────────────────────
+// Todo esto viaja por la cola del teléfono (puede pasar sin señal), por eso los
+// RPC son idempotentes y el id de un servicio nuevo lo genera el teléfono.
+
+/** Patente del camión que se calibra (y, si no existía, el servicio). */
+export async function terrenoCamion(p: {
+  programacionId: string; patente: string; faenaId?: string | null; fecha?: string | null; motivo?: string | null
+}) {
+  const { data, error } = await supabase.rpc('rpc_enex_terreno_camion', {
+    p_programacion_id: p.programacionId, p_patente: p.patente,
+    p_faena_id: p.faenaId ?? null, p_fecha: p.fecha ?? null, p_motivo: p.motivo ?? null,
+  })
+  if (error) throw error
+  return data as { success: boolean; instalacion_id: string; patente: string; camion_nuevo: boolean }
+}
+
+/** Servicio que no estaba planificado (otra zona, otro punto). */
+export async function terrenoServicio(p: {
+  programacionId: string; instalacionId: string; tipoServicio: TipoServicio; fecha: string; motivo?: string | null
+}) {
+  const { error } = await supabase.rpc('rpc_enex_terreno_servicio', {
+    p_programacion_id: p.programacionId, p_instalacion_id: p.instalacionId,
+    p_tipo_servicio: p.tipoServicio, p_fecha: p.fecha, p_motivo: p.motivo ?? null,
+  })
+  if (error) throw error
+}
+
+/** «No se hizo»: queda por reprogramar con el motivo (o se deshace). */
+export async function porReprogramar(programacionId: string, motivo: string | null, deshacer = false) {
+  const { error } = await supabase.rpc('rpc_enex_por_reprogramar', {
+    p_programacion_id: programacionId, p_motivo: motivo, p_deshacer: deshacer,
+  })
+  if (error) throw error
+}
+
+/** Lomas: la zona planificada no se hizo (hacer=false) o se hace hoy (hacer=true). */
+export async function zonaTerreno(lugarId: string, fecha: string, hacer: boolean, motivo: string | null) {
+  const { error } = await supabase.rpc('rpc_enex_zona_terreno', {
+    p_lugar_id: lugarId, p_fecha: fecha, p_hacer: hacer, p_motivo: motivo,
+  })
+  if (error) throw error
+}
+
+export type EnexTerrenoInstalacion = {
+  instalacion_id: string
+  instalacion: string
+  instalacion_tipo: string
+  patente: string | null
+  linea: string | null
+  area: string | null
+  es_comodin: boolean
+  faena_id: string
+  faena_codigo: string
+  faena: string
+  pauta_mantencion_id: string | null
+  pauta_calibracion_id: string | null
+}
+
+export async function getTerrenoInstalaciones(): Promise<EnexTerrenoInstalacion[]> {
+  const { data, error } = await supabase.from('v_enex_terreno_instalaciones').select('*')
+  if (error) throw error
+  return (data ?? []) as EnexTerrenoInstalacion[]
+}
+
+export async function getLugarItemsTodas(): Promise<EnexLugarItem[]> {
+  const { data, error } = await supabase.from('v_enex_pauta_lugar_items').select('*')
+    .order('area').order('lugar_orden').order('orden')
+  if (error) throw error
+  return (data ?? []) as EnexLugarItem[]
 }
 
 export async function getEjecucionItems(ejecucionId: string) {
@@ -1031,7 +1119,7 @@ export async function moverProgramacion(programacionId: string, fecha: string) {
   if (error) throw error
 }
 
-export async function programarLote(items: { instalacion_id: string; tipo_servicio: TipoServicio; fecha: string; observacion?: string | null }[]) {
+export async function programarLote(items: { instalacion_id: string; tipo_servicio: TipoServicio; fecha: string; observacion?: string | null; cantidad?: number }[]) {
   const { data, error } = await supabase.rpc('rpc_enex_programar_lote', { p_items: items })
   if (error) throw error
   return data as { success: boolean; creadas: number; omitidas: number }
@@ -1130,6 +1218,9 @@ export type EnexActividadTrimestre = {
   ejecucion_id: string | null
   comentario: string | null
   origen: 'manual' | 'informe' | 'planilla'
+  // [MIG651] La zona no se hizo en terreno (pedido ESM): espera fecha nueva.
+  por_reprogramar_at?: string | null
+  por_reprogramar_motivo?: string | null
 }
 
 export async function getFaenasConLugares(): Promise<string[]> {
