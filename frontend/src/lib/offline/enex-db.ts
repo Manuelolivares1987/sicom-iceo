@@ -30,6 +30,19 @@ export type EnexPendItem = {
   fotos_despues_urls?: string[]
 }
 
+/**
+ * [MIG649] Repuesto que pide el supervisor desde terreno. El id lo genera el
+ * teléfono: la lista completa viaja en cada guardado y reenviarla no duplica.
+ */
+export type EnexRepuesto = {
+  id: string
+  descripcion: string
+  cantidad: number
+  unidad: string
+  urgente: boolean
+  nota?: string | null
+}
+
 /** Ejecución pendiente de subir. */
 export type EnexPending = {
   local_id: string
@@ -51,6 +64,9 @@ export type EnexPending = {
   // [MIG267] El payload es el estado completo de la pantalla: lo que viaja
   // vacío se vacía en el servidor (borrar una foto, desmarcar una actividad).
   reemplazar?: boolean
+  // [MIG649] Pedido de repuestos (lista completa de la pantalla). undefined =
+  // encolado por la app anterior: no toca la lista del servidor.
+  repuestos?: EnexRepuesto[]
   // control
   // 'sending' solo mientras un envío está en curso; si la app se cierra a la
   // mitad, el próximo intento lo retoma igual que a un 'pending'.
@@ -85,6 +101,7 @@ export type EnexDraft = {
   firmante?: string | null
   inicio_at?: string | null
   items: Record<string, EnexDraftItem>
+  repuestos?: EnexRepuesto[]
   updated_at: string
 }
 

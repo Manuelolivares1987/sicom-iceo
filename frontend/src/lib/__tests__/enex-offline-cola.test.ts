@@ -36,9 +36,10 @@ vi.mock('@/lib/offline/enex-db', () => ({ enexDB: () => db, newId: () => `id${++
 
 const subirEvidenciaEnex = vi.fn()
 const ejecutarPauta = vi.fn()
+const guardarRepuestosEnex = vi.fn()
 vi.mock('@/lib/services/enex', () => ({
   getTerrenoPendientes: vi.fn(), getPautaItems: vi.fn(), getEjecucionItems: vi.fn(),
-  getPendientePorId: vi.fn(), getPlanTareasDia: vi.fn(),
+  getPendientePorId: vi.fn(), getPlanTareasDia: vi.fn(), guardarRepuestosEnex: (...a: unknown[]) => guardarRepuestosEnex(...a),
   subirEvidenciaEnex: (...a: unknown[]) => subirEvidenciaEnex(...a),
   subirFirmaEnex: vi.fn(async () => 'https://s/firma.png'),
   ejecutarPauta: (...a: unknown[]) => ejecutarPauta(...a),
@@ -59,6 +60,7 @@ beforeEach(() => {
   Object.values(db).forEach((t) => t.m.clear())
   subirEvidenciaEnex.mockReset()
   ejecutarPauta.mockReset()
+  guardarRepuestosEnex.mockReset()
   vi.stubGlobal('navigator', { onLine: false })
 })
 
@@ -148,5 +150,48 @@ describe('cola ENEX con señal intermitente', () => {
     await borrarDraft('prog-1')
     await syncEnexPending()
     expect(db.blobs.m.has(blobId)).toBe(false)
+  })
+
+  it('el pedido de repuestos viaja después de la ejecución y deja anotado el correo', async () => {
+    const { queueEjecucion, syncEnexPending } = await import('@/lib/offline/enex-offline')
+    const rep = [{ id: 'r1', descripcion: 'Sello pistola', cantidad: 2, unidad: 'un', urgente: true, nota: null }]
+    await queueEjecucion({ programacionId: 'prog-1', conMandante: false, reemplazar: true, tecnicoNombre: 'Sup',
+      items: [{ pauta_item_id: 'it-1', resultado: 'ok' }], repuestos: rep })
+    vi.stubGlobal('navigator', { onLine: true })
+    const orden: string[] = []
+    ejecutarPauta.mockImplementation(async () => { orden.push('ejecucion') })
+    guardarRepuestosEnex.mockImplementation(async () => { orden.push('repuestos') })
+
+    expect(await syncEnexPending()).toEqual({ ok: 1, failed: 0 })
+    expect(orden).toEqual(['ejecucion', 'repuestos'])
+    expect(guardarRepuestosEnex).toHaveBeenCalledWith('prog-1', rep, 'Sup')
+    expect(db.cache.m.get('correo:prog-1')).toMatchObject({ value: { cierre: false } })
+  })
+
+  it('sin MIG649 en la base la ejecución igual entra', async () => {
+    const { queueEjecucion, syncEnexPending } = await import('@/lib/offline/enex-offline')
+    await queueEjecucion({ programacionId: 'prog-1', conMandante: true, reemplazar: true,
+      items: [{ pauta_item_id: 'it-1', resultado: 'ok' }], repuestos: [] })
+    vi.stubGlobal('navigator', { onLine: true })
+    ejecutarPauta.mockResolvedValue({})
+    guardarRepuestosEnex.mockRejectedValue(new Error('Could not find the function public.rpc_enex_guardar_repuestos (PGRST202)'))
+
+    expect(await syncEnexPending()).toEqual({ ok: 1, failed: 0 })
+    expect(db.pending.m.size).toBe(0)
+    // El cierre igual avisa a la jefatura.
+    expect(db.cache.m.get('correo:prog-1')).toMatchObject({ value: { cierre: true } })
+  })
+
+  it('un avance sin repuestos no toca la lista ni manda correo', async () => {
+    const { queueEjecucion, syncEnexPending } = await import('@/lib/offline/enex-offline')
+    // Abierto sin señal y sin borrador: la lista no se cargó, viaja undefined.
+    await queueEjecucion({ programacionId: 'prog-1', conMandante: false, reemplazar: true,
+      items: [{ pauta_item_id: 'it-1', resultado: 'ok' }] })
+    vi.stubGlobal('navigator', { onLine: true })
+    ejecutarPauta.mockResolvedValue({})
+
+    await syncEnexPending()
+    expect(guardarRepuestosEnex).not.toHaveBeenCalled()
+    expect(db.cache.m.has('correo:prog-1')).toBe(false)
   })
 })
