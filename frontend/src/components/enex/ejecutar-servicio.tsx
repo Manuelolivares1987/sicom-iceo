@@ -31,6 +31,7 @@ import { compressImage } from '@/lib/image/compress'
 import {
   getPendienteOffline, getPautaItemsOffline, getEjecucionItemsOffline, queueEjecucion,
   guardarFotoLocal, getFotoLocalInfo, guardarDraft, getDraft, borrarDraft,
+  asignarPatenteTerreno, getPuntosOffline,
 } from '@/lib/offline/enex-offline'
 import { useNetworkStatus } from '@/hooks/use-calama-offline'
 import { useExigirSesion } from '@/hooks/use-exigir-sesion'
@@ -135,6 +136,32 @@ export function EjecutarServicio({ progId }: { progId: string }) {
   })
 
   const [estado, setEstado] = useState<Record<string, Estado>>({})
+  // [MIG651] Camión «por asignar»: la patente la pone el supervisor acá, con
+  // el camión que la operación entregó en el momento.
+  const faltaPatente = !!prog && prog.instalacion_tipo === 'camion' && (!!prog.es_comodin || !prog.patente)
+  const [patente, setPatente] = useState('')
+  const [anotandoPatente, setAnotandoPatente] = useState(false)
+  const { data: patentesFaena = [] } = useQuery({
+    queryKey: ['enex-patentes-faena', prog?.faena_id],
+    queryFn: async () => (await getPuntosOffline())
+      .filter((i) => i.faena_id === prog!.faena_id && i.instalacion_tipo === 'camion' && !i.es_comodin && i.patente)
+      .map((i) => i.patente as string).sort(),
+    enabled: !!prog && prog.instalacion_tipo === 'camion', networkMode: 'always', staleTime: 5 * 60_000,
+  })
+  async function anotarPatente() {
+    if (!prog) return
+    setAnotandoPatente(true)
+    try {
+      const pat = await asignarPatenteTerreno(prog, patente)
+      setPatente('')
+      toast.success(patentesFaena.includes(pat)
+        ? `Patente ${pat} anotada`
+        : `Patente ${pat} anotada — es nueva: se agrega a los camiones de ${prog.faena}`)
+      qc.invalidateQueries({ queryKey: ['enex-servicio', progId] })
+      qc.invalidateQueries({ queryKey: ['enex-terreno'] })
+      qc.invalidateQueries({ queryKey: ['enex-pending-count'] })
+    } catch (e) { toast.error((e as Error).message) } finally { setAnotandoPatente(false) }
+  }
   const [otNumero, setOtNumero] = useState('')
   const [obs, setObs] = useState('')
   // [MIG649] Pedido de repuestos. `repuestosListos` = la lista viene del
@@ -416,6 +443,11 @@ export function EjecutarServicio({ progId }: { progId: string }) {
   async function guardar(conFirmaMandante: boolean) {
     if (!prog) return
     if (conFirmaMandante && !firmaMand) { toast.error('Falta la firma del mandante'); return }
+    if (conFirmaMandante && faltaPatente) {
+      toast.error('Falta la patente del camión calibrado: anótala arriba antes de cerrar')
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+      return
+    }
     // La evidencia se exige en lo que SE TRABAJÓ. Lo no intervenido no bloquea:
     // en terreno la pauta se ataca por partes.
     if (conFirmaMandante && faltanFotos.length > 0) {
@@ -555,6 +587,31 @@ export function EjecutarServicio({ progId }: { progId: string }) {
           </div>
         )}
       </div>
+
+      {prog.instalacion_tipo === 'camion' && !prog.cumplida && (
+        <div className={`rounded-xl border-2 p-3 ${faltaPatente ? 'border-amber-400 bg-amber-50' : 'border-gray-200 bg-white'}`}>
+          <p className="text-xs font-bold text-gray-800">
+            {faltaPatente ? '¿Qué camión estás calibrando?' : `Camión ${prog.patente}`}
+          </p>
+          <p className="text-[11px] text-gray-600">
+            {faltaPatente
+              ? 'Anota la patente del camión que entregó la operación. Es obligatoria para cerrar.'
+              : 'Si te equivocaste de camión, corrige la patente.'}
+          </p>
+          <div className="mt-2 flex gap-2">
+            <input value={patente} onChange={(e) => setPatente(e.target.value.toUpperCase())}
+                   list={`patentes-${prog.faena_id}`} placeholder="Ej. SZBD35" autoCapitalize="characters"
+                   className="flex-1 rounded-lg border border-gray-300 px-3 py-2 font-mono text-sm uppercase" />
+            <datalist id={`patentes-${prog.faena_id}`}>
+              {patentesFaena.map((p) => <option key={p} value={p} />)}
+            </datalist>
+            <button onClick={anotarPatente} disabled={anotandoPatente || patente.replace(/[^A-Za-z0-9]/g, '').length < 4}
+                    className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-40">
+              {faltaPatente ? 'Anotar' : 'Corregir'}
+            </button>
+          </div>
+        </div>
+      )}
 
       {prog.es_recobro && !prog.cumplida && (
         <div className="flex items-start gap-2 rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-800">

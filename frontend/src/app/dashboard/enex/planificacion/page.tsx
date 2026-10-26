@@ -28,6 +28,7 @@ import {
 import { TarjetasAvance, CurvaSEnex, TablaFaenas } from '@/components/enex/planificacion/avance-enex'
 import { GanttEnex, LEYENDA_ESTADO } from '@/components/enex/planificacion/gantt-enex'
 import { ImportarPlanillaModal } from '@/components/enex/planificacion/importar-planilla-modal'
+import { ReprogramacionModal } from '@/components/enex/reprogramacion-modal'
 
 const ROLES_GESTION = ['administrador', 'subgerente_operaciones', 'jefe_operaciones', 'supervisor', 'planificador', 'jefe_mantenimiento']
 type Mundo = 'todos' | 'combustible' | 'lubricante'
@@ -168,6 +169,8 @@ export default function EnexPlanificacionPage() {
         </CardContent></Card>
       )}
 
+      <NoSeHizoEnTerreno rows={rowsGantt} puedeEditar={puedeEditar} onCambio={invalidar} />
+
       <Card><CardContent className="p-0">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b px-3 py-2">
           <div>
@@ -192,6 +195,7 @@ export default function EnexPlanificacionPage() {
             <span className="flex items-center gap-1"><span className="inline-block h-2.5 w-2.5 rounded-sm bg-gray-300" />Feriado</span>
             <span className="flex items-center gap-1"><span className="inline-block h-2.5 w-2.5 rounded-sm bg-violet-600" />Hoy</span>
             <span className="flex items-center gap-1"><span className="rounded-sm bg-orange-500 px-0.5 text-[7px] font-bold text-white">RP</span>Reprogramado</span>
+            <span className="flex items-center gap-1"><span className="rounded-sm bg-orange-600 px-0.5 text-[7px] font-bold text-white">NH</span>No se hizo en terreno</span>
           </div>
         </div>
         <GanttEnex rows={rowsGantt} faenas={faenasVista} instalaciones={instVista} ventana={ventanaGantt} hoy={hoy}
@@ -341,3 +345,41 @@ async function exportarExcel(rows: EnexPanelRow[], instalaciones: EnexInstalacio
   URL.revokeObjectURL(a.href)
 }
 
+
+// [MIG651] Lo que la cuadrilla no hizo porque ESM pidió otra cosa: espera
+// fecha nueva. Sigue contando como programado (el KPI no se maquilla).
+function NoSeHizoEnTerreno({ rows, puedeEditar, onCambio }: { rows: EnexPanelRow[]; puedeEditar: boolean; onCambio: () => void }) {
+  const [reprog, setReprog] = useState<EnexPanelRow | null>(null)
+  const qc = useQueryClient()
+  const pend = rows.filter((r) => r.por_reprogramar_motivo && !r.ejecucion_id)
+    .sort((a, b) => (a.fecha_programada ?? '').localeCompare(b.fecha_programada ?? ''))
+  if (pend.length === 0) return null
+  return (
+    <Card className="border-orange-300"><CardContent className="p-3">
+      <p className="flex items-center gap-1.5 text-sm font-semibold text-orange-900">
+        <AlertTriangle className="h-4 w-4" /> No se hizo en terreno — falta fecha nueva ({pend.length})
+      </p>
+      <p className="text-[11px] text-gray-500">El supervisor lo marcó desde el teléfono (cambio de programa). «Reprogramar» deja el registro y el PDF para ESM.</p>
+      <div className="mt-2 divide-y rounded border">
+        {pend.map((r) => (
+          <div key={r.programacion_id} className="flex flex-wrap items-center gap-2 px-2 py-1.5 text-xs">
+            <span className="w-20 tabular-nums text-gray-500">{r.fecha_programada ? `${r.fecha_programada.slice(8, 10)}/${r.fecha_programada.slice(5, 7)}` : 's/f'}</span>
+            <span className="font-medium">{r.es_comodin ? 'Camión por asignar' : r.instalacion}</span>
+            <span className="text-gray-500">· {r.faena} · {r.tipo_servicio === 'calibracion' ? 'Calibración' : 'Mantención'}</span>
+            <span className="flex-1 text-orange-800">{r.por_reprogramar_motivo}</span>
+            {puedeEditar && (
+              <Button size="sm" variant="outline" className="h-7 text-orange-700" onClick={() => setReprog(r)}>
+                <CalendarClock className="mr-1 h-3.5 w-3.5" /> Reprogramar
+              </Button>
+            )}
+          </div>
+        ))}
+      </div>
+      {reprog && (
+        <ReprogramacionModal row={reprog} nombre={reprog.es_comodin ? 'Camión por asignar' : reprog.instalacion_tipo === 'camion' ? `Camión ${reprog.patente ?? reprog.instalacion}` : reprog.instalacion}
+                             limitarTrimestre onClose={() => setReprog(null)}
+                             onDone={() => { setReprog(null); qc.invalidateQueries({ queryKey: ['enex-reprogramaciones'] }); onCambio() }} />
+      )}
+    </CardContent></Card>
+  )
+}

@@ -4,9 +4,11 @@
 // (MIG590). Nada se escribe hasta confirmar: primero se ve qué fila de la
 // planilla cae en qué instalación y cuántos servicios se crean.
 //
-// Camiones: la planilla dice "CP2" (2 camiones ese día) sin patente. Se asignan
-// los camiones de la faena que aún no tienen calibración en el período, los de
-// calibración más antigua primero. La patente se puede cambiar después en la Gantt.
+// Camiones: la planilla dice "CP2" (2 camiones ese día) sin patente. [MIG651]
+// Van al «camión por asignar» de la faena: la patente la anota el supervisor en
+// terreno, con el camión que la operación entregue ese día. Sin camión por
+// asignar (faena sin migrar) se usa lo de antes: los camiones sin calibración
+// en el período, los de calibración más antigua primero.
 
 import { useMemo, useState } from 'react'
 import { FileSpreadsheet, Loader2, AlertTriangle, Plus } from 'lucide-react'
@@ -21,7 +23,7 @@ import { leerHojaPlanilla, emparejar, normalizarNombre, type HojaPlanilla } from
 import { hojaAMatriz } from '@/lib/enex-planilla-excel'
 
 type Hoja = HojaPlanilla & { nombre: string; faenaIds: string[] }
-type Item = { instalacion_id: string; tipo_servicio: TipoServicio; fecha: string; observacion: string | null }
+type Item = { instalacion_id: string; tipo_servicio: TipoServicio; fecha: string; observacion: string | null; cantidad?: number }
 
 function faenasDeHoja(nombre: string, faenas: EnexFaena[]): string[] {
   const n = normalizarNombre(nombre)
@@ -103,7 +105,18 @@ export function ImportarPlanillaModal({ faenas, instalaciones, hoy, onClose, onD
         if (f.esCamiones) {
           const fid = faenaCam[k]
           if (!fid) continue
-          const cola = instalaciones.filter((i) => i.tipo === 'camion' && i.faena_id === fid && !camionesUsados.has(i.id))
+          const comodin = instalaciones.find((i) => i.es_comodin && i.faena_id === fid)
+          if (comodin) {
+            for (const e of f.entradas) {
+              if (desdeHoy && e.fecha < hoy) { pasadas += e.camiones; continue }
+              // cantidad = total del día: reimportar no duplica.
+              items.push({ instalacion_id: comodin.id, tipo_servicio: 'calibracion', fecha: e.fecha, observacion: `Planilla ${e.codigo}`, cantidad: e.camiones })
+              n += e.camiones
+            }
+            porFila[k] = n
+            continue
+          }
+          const cola = instalaciones.filter((i) => i.tipo === 'camion' && !i.es_comodin && i.faena_id === fid && !camionesUsados.has(i.id))
             .sort((a, b) => (a.ultima_calibracion ?? '').localeCompare(b.ultima_calibracion ?? ''))
           for (const e of f.entradas) {
             if (desdeHoy && e.fecha < hoy) { pasadas += e.camiones; continue }
@@ -204,7 +217,7 @@ export function ImportarPlanillaModal({ faenas, instalaciones, hoy, onClose, onD
                                   <select value={faenaCam[k] ?? ''} onChange={(e) => setFaenaCam((p) => ({ ...p, [k]: e.target.value }))}
                                           className="w-full rounded border px-1.5 py-1">
                                     <option value="">— no importar —</option>
-                                    {faenas.map((fa) => <option key={fa.id} value={fa.id}>Camiones de {fa.nombre} ({instalaciones.filter((i) => i.tipo === 'camion' && i.faena_id === fa.id).length})</option>)}
+                                    {faenas.map((fa) => <option key={fa.id} value={fa.id}>Camiones de {fa.nombre} ({instalaciones.filter((i) => i.tipo === 'camion' && !i.es_comodin && i.faena_id === fa.id).length})</option>)}
                                   </select>
                                 ) : (
                                   <div className="flex items-center gap-1">

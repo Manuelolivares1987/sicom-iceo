@@ -28,7 +28,7 @@ function Fila({ r }: { r: EnexBandejaRow }) {
           : r.estado === 'error' ? <AlertTriangle className="h-3.5 w-3.5 text-red-600" />
           : <Clock className="h-3.5 w-3.5 text-amber-600" />}
         <p className="flex-1 truncate text-xs font-semibold text-gray-800">{r.instalacion ?? 'Servicio'}</p>
-        <span className="text-[10px] text-gray-500">{r.con_mandante ? 'Cierre' : 'Avance'}</span>
+        <span className="text-[10px] text-gray-500">{r.etiqueta ?? (r.con_mandante ? 'Cierre' : 'Avance')}</span>
       </div>
       <p className="mt-0.5 text-[11px] text-gray-600">
         {r.estado === 'enviando' ? 'Enviando' : r.estado === 'error' ? 'Falló el envío' : 'Esperando señal'}
