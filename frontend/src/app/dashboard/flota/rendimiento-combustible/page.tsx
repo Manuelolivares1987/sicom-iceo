@@ -73,14 +73,19 @@ export default function RendimientoCombustiblePage() {
   }, [rend, cargas, mes, mesAnt])
 
   const tot = useMemo(() => {
-    const t = filas.filter((f) => f.fuente === 'tarjeta')
+    const t = filas.filter((f) => f.fuente === 'tarjeta' && f.grupo === 'flota')
+    const ab = filas.filter((f) => f.grupo === 'abastecimiento')
     return {
       monto: t.reduce((s, f) => s + (f.monto ?? 0), 0),
       litros: t.reduce((s, f) => s + (f.litros ?? 0), 0),
       cargas: t.reduce((s, f) => s + (f.cargas ?? 0), 0),
+      abMonto: ab.reduce((s, f) => s + (f.monto ?? 0), 0),
+      abLitros: ab.reduce((s, f) => s + (f.litros ?? 0), 0),
       renault: filas.filter((f) => f.fuente === 'computador').reduce((s, f) => s + (f.monto ?? 0), 0),
     }
   }, [filas])
+  const flota = filas.filter((f) => f.grupo === 'flota')
+  const abastecimiento = filas.filter((f) => f.grupo === 'abastecimiento')
   const sospechosas = cargas.filter((c) => c.alertas.some((a) => !INFORMATIVAS.includes(a)))
 
   async function alElegirArchivo(e: React.ChangeEvent<HTMLInputElement>) {
@@ -146,62 +151,36 @@ export default function RendimientoCombustiblePage() {
       </header>
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <Kpi t="Gasto con tarjeta" v={pesos(tot.monto)} s={`${tot.cargas} cargas`} />
-        <Kpi t="Litros con tarjeta" v={n0(tot.litros)} s="L" />
+        <Kpi t="Flota con tarjeta" v={pesos(tot.monto)} s={`${n0(tot.litros)} L · ${tot.cargas} cargas`} />
+        <Kpi t="Abastecimiento (aljibes)" v={pesos(tot.abMonto)} s={`${n0(tot.abLitros)} L para llenar aljibes`} />
         <Kpi t="Renault (estimado)" v={pesos(tot.renault)} s="litros del computador × $/L diésel" />
         <Kpi t="Cargas para revisar" v={String(sospechosas.length)} s="ver abajo" alerta={sospechosas.length > 0} />
       </div>
 
       <Card>
-        <CardHeader><CardTitle className="text-base">Por vehículo</CardTitle></CardHeader>
+        <CardHeader><CardTitle className="text-base">Flota por vehículo</CardTitle></CardHeader>
         <CardContent className="overflow-x-auto p-0">
           {isLoading ? <div className="flex justify-center p-8"><Loader2 className="h-6 w-6 animate-spin text-blue-600" /></div>
-            : filas.length === 0 ? <p className="p-6 text-sm text-gray-500">Sin cargas ni datos del computador este mes. Suba el Excel de Aramco más abajo.</p>
-            : (
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 text-xs text-gray-600">
-                <tr>
-                  <th className="p-2 text-left">Patente</th><th className="p-2 text-left">Fuente</th>
-                  <th className="p-2 text-right">Cargas</th><th className="p-2 text-right">Litros</th><th className="p-2 text-right">$</th>
-                  <th className="p-2 text-right">Km GPS</th><th className="p-2 text-right">Km/L</th><th className="p-2 text-right">Mes ant.</th>
-                  <th className="p-2 text-right">$/km</th><th className="p-2 text-right">Alertas</th><th />
-                </tr>
-              </thead>
-              <tbody>
-                {filas.map((f) => {
-                  const k = f.fuente + f.patente
-                  const detalle = cargas.filter((c) => c.patente_ver === f.patente)
-                  return (
-                    <Fragment key={k}>
-                      <tr className={cn('border-t', f.fuente === 'tarjeta' && 'cursor-pointer hover:bg-gray-50')}
-                          onClick={() => f.fuente === 'tarjeta' && setAbierto(abierto === k ? null : k)}>
-                        <td className="p-2 font-medium">{f.patente}<div className="text-xs font-normal text-gray-500">{f.tipo ?? ''}</div></td>
-                        <td className="p-2 text-xs">{f.fuente === 'tarjeta' ? 'Tarjeta + GPS' : 'Computador Renault'}</td>
-                        <td className="p-2 text-right tabular-nums">{f.cargas ?? '—'}</td>
-                        <td className="p-2 text-right tabular-nums">{n1(f.litros)}</td>
-                        <td className="p-2 text-right tabular-nums">{f.monto_real ? pesos(f.monto) : <span className="text-gray-500">≈ {pesos(f.monto)}</span>}</td>
-                        <td className="p-2 text-right tabular-nums">{f.km_gps == null ? <span className="text-xs text-gray-400">sin GPS</span> : n0(f.km_gps)}</td>
-                        <td className="p-2 text-right font-semibold tabular-nums">{n1(f.km_l)}</td>
-                        <td className="p-2 text-right tabular-nums text-gray-500">{n1(f.km_l_ant)}</td>
-                        <td className="p-2 text-right tabular-nums">{f.costo_km == null ? '—' : pesos(f.costo_km)}</td>
-                        <td className="p-2 text-right">{f.alertas > 0 ? <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs font-semibold text-amber-800">{f.alertas}</span> : ''}</td>
-                        <td className="p-2 text-gray-400">{f.fuente === 'tarjeta' && (abierto === k ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />)}</td>
-                      </tr>
-                      {abierto === k && (
-                        <tr className="bg-gray-50/60"><td colSpan={11} className="p-2"><TablaCargas cargas={detalle} /></td></tr>
-                      )}
-                    </Fragment>
-                  )
-                })}
-              </tbody>
-            </table>
-          )}
+            : flota.length === 0 ? <p className="p-6 text-sm text-gray-500">Sin cargas ni datos del computador este mes. Suba el Excel de Aramco más abajo.</p>
+            : <TablaVehiculos filas={flota} cargas={cargas} abierto={abierto} setAbierto={setAbierto} />}
           <p className="border-t p-2 text-xs text-gray-500">
             Km/L en blanco: el mes tiene menos de 100 km medidos entre cargas con GPS. El GPS manda el odómetro una vez al día,
             así que una carga suelta puede dar un km/L raro; el del mes es el confiable.
           </p>
         </CardContent>
       </Card>
+
+      {abastecimiento.length > 0 && (
+        <Card>
+          <CardHeader><CardTitle className="text-base">Abastecimiento · aljibes de combustible</CardTitle></CardHeader>
+          <CardContent className="overflow-x-auto p-0">
+            <TablaVehiculos filas={abastecimiento} cargas={cargas} abierto={abierto} setAbierto={setAbierto} abastecimiento />
+            <p className="border-t p-2 text-xs text-gray-500">
+              Cargan con la tarjeta para llenar su estanque y abastecer a otros equipos: no se mide km/L.
+            </p>
+          </CardContent>
+        </Card>
+      )}
 
       {sospechosas.length > 0 && (
         <Card>
@@ -255,6 +234,56 @@ export default function RendimientoCombustiblePage() {
         </CardContent>
       </Card>
     </div>
+  )
+}
+
+type FilaVista = Awaited<ReturnType<typeof getRendimientoMes>>[number] & { km_l_ant: number | null; alertas: number }
+
+function TablaVehiculos({ filas, cargas, abierto, setAbierto, abastecimiento }: {
+  filas: FilaVista[]; cargas: Awaited<ReturnType<typeof getCargasTarjeta>>
+  abierto: string | null; setAbierto: (k: string | null) => void; abastecimiento?: boolean
+}) {
+  return (
+    <table className="w-full text-sm">
+      <thead className="bg-gray-50 text-xs text-gray-600">
+        <tr>
+          <th className="p-2 text-left">Patente</th><th className="p-2 text-left">Fuente</th>
+          <th className="p-2 text-right">Cargas</th><th className="p-2 text-right">Litros</th><th className="p-2 text-right">$</th>
+          {!abastecimiento && <><th className="p-2 text-right">Km GPS</th><th className="p-2 text-right">Km/L</th><th className="p-2 text-right">Mes ant.</th>
+            <th className="p-2 text-right">$/km</th></>}
+          <th className="p-2 text-right">Alertas</th><th />
+        </tr>
+      </thead>
+      <tbody>
+        {filas.map((f) => {
+          const k = f.fuente + f.patente
+          const detalle = cargas.filter((c) => c.patente_ver === f.patente)
+          return (
+            <Fragment key={k}>
+              <tr className={cn('border-t', f.fuente === 'tarjeta' && 'cursor-pointer hover:bg-gray-50')}
+                  onClick={() => f.fuente === 'tarjeta' && setAbierto(abierto === k ? null : k)}>
+                <td className="p-2 font-medium">{f.patente}<div className="text-xs font-normal text-gray-500">{f.tipo ?? ''}</div></td>
+                <td className="p-2 text-xs">{f.fuente === 'tarjeta' ? (abastecimiento ? 'Tarjeta' : 'Tarjeta + GPS') : 'Computador Renault'}</td>
+                <td className="p-2 text-right tabular-nums">{f.cargas ?? '—'}</td>
+                <td className="p-2 text-right tabular-nums">{n1(f.litros)}</td>
+                <td className="p-2 text-right tabular-nums">{f.monto_real ? pesos(f.monto) : <span className="text-gray-500">≈ {pesos(f.monto)}</span>}</td>
+                {!abastecimiento && <>
+                  <td className="p-2 text-right tabular-nums">{f.km_gps == null ? <span className="text-xs text-gray-400">sin GPS</span> : n0(f.km_gps)}</td>
+                  <td className="p-2 text-right font-semibold tabular-nums">{n1(f.km_l)}</td>
+                  <td className="p-2 text-right tabular-nums text-gray-500">{n1(f.km_l_ant)}</td>
+                  <td className="p-2 text-right tabular-nums">{f.costo_km == null ? '—' : pesos(f.costo_km)}</td>
+                </>}
+                <td className="p-2 text-right">{f.alertas > 0 ? <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs font-semibold text-amber-800">{f.alertas}</span> : ''}</td>
+                <td className="p-2 text-gray-400">{f.fuente === 'tarjeta' && (abierto === k ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />)}</td>
+              </tr>
+              {abierto === k && (
+                <tr className="bg-gray-50/60"><td colSpan={abastecimiento ? 7 : 11} className="p-2"><TablaCargas cargas={detalle} /></td></tr>
+              )}
+            </Fragment>
+          )
+        })}
+      </tbody>
+    </table>
   )
 }
 
