@@ -48,7 +48,9 @@ interface NavixyCounter {
 
 function tsNavixyToISO(s?: string): string | null {
   if (!s) return null;
-  // Navixy entrega "YYYY-MM-DD HH:MM:SS" en UTC. Convertir a ISO.
+  // OJO: Navixy entrega "YYYY-MM-DD HH:MM:SS" en hora de CHILE, no UTC: esto
+  // queda 3-4 h corrido. Desde MIG657 la RPC ignora este campo para Radicom y
+  // lee payload.gps.updated con fn_navixy_ts (America/Santiago).
   return s.replace(" ", "T") + "Z";
 }
 
