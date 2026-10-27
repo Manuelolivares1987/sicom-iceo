@@ -33,7 +33,7 @@ export function ReprogramacionModal({ row, nombre, limitarTrimestre = false, fec
   const [nuevaFecha, setNuevaFecha] = useState(fechaInicial)
   // Una reprogramación vale para el KPI si cae dentro del mismo trimestre contractual.
   const original = row.fecha_programada?.slice(0, 10) ?? ultimoDiaMes(row.periodo_anio, row.periodo_mes)
-  const tri = inicioTrimestreContractual(original)
+  const tri = inicioTrimestreContractual(original, row.faena_trimestre_ancla ?? 2)
   const finTrimestre = ventanaTrimestre(tri.anio, tri.mes).hasta
   const [nuevaHora, setNuevaHora] = useState('')
   const [firmaTec, setFirmaTec] = useState('')

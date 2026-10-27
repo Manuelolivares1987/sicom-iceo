@@ -15,6 +15,13 @@ export type EnexFaena = {
   pct_facturacion: number | null
   activo: boolean
   orden: number
+  // [MIG658] Universo del contrato por trimestre.
+  contrato_inst_combustible?: number | null
+  contrato_inst_lubricante?: number | null
+  contrato_camiones?: number | null
+  contrato_universo_nota?: string | null
+  // [MIG658] Mes en que parte el trimestre: 1 = calendario (Spence, Lomas), 2 = desde febrero (Centinela).
+  trimestre_ancla?: number | null
 }
 
 export type EnexInstalacion = {
@@ -91,9 +98,25 @@ export type EnexPanelRow = {
   // [MIG651] Cambio de programa en terreno.
   es_comodin?: boolean | null
   creada_en_terreno?: boolean | null
-  origen?: 'plan' | 'terreno' | null
+  origen?: 'plan' | 'terreno' | 'cambio_esm' | null
   por_reprogramar_at?: string | null
   por_reprogramar_motivo?: string | null
+  // [MIG658] Esta tarea la desplazó ESM (cambio de tarea).
+  cambio_tarea_id?: string | null
+  cambio_destino?: CambioDestino | null
+  cambio_fecha?: string | null
+  cambio_solicitante?: string | null
+  cambio_motivo?: string | null
+  cambio_nueva_fecha?: string | null
+  cambio_adc_nombre?: string | null
+  cambio_adc_url?: string | null
+  cambio_evidencia_url?: string | null
+  justificada?: boolean | null
+  // [MIG658] Esta tarea se hizo en reemplazo de otra.
+  reemplaza_cambio_id?: string | null
+  reemplaza_instalacion?: string | null
+  reemplaza_tipo_servicio?: TipoServicio | null
+  faena_trimestre_ancla?: number | null
 }
 
 export type EnexKpi = {
@@ -1116,6 +1139,61 @@ export async function getPanelVentana(meses: { anio: number; mes: number }[], fa
 
 export async function moverProgramacion(programacionId: string, fecha: string) {
   const { error } = await supabase.rpc('rpc_enex_mover_programacion', { p_programacion_id: programacionId, p_fecha: fecha })
+  if (error) throw error
+}
+
+// ── [MIG658] Cambio de tarea por instrucción de ESM ─────────────────────────
+// ESM saca una tarea programada y pide otra. La desplazada se reprograma dentro
+// del trimestre, o sale del KPI solo con el correo del ADC (KPI V8, Consid. 1).
+export type CambioDestino = 'reprogramada' | 'pendiente_adc' | 'justificada_adc'
+export const CAMBIO_DESTINO_TXT: Record<CambioDestino, string> = {
+  reprogramada: 'Reprogramada', pendiente_adc: 'Esperando correo del ADC', justificada_adc: 'Justificada por ADC (fuera del KPI)',
+}
+export type CambioReemplazo = { programacion_id: string } | { instalacion_id: string; tipo_servicio: TipoServicio } | { patente: string }
+
+export async function registrarCambioTarea(p: {
+  programacionId: string; solicitante: string; motivo: string; destino: CambioDestino
+  nuevaFecha?: string | null; evidenciaUrl?: string | null; adcNombre?: string | null; adcUrl?: string | null
+  reemplazos: CambioReemplazo[]
+}) {
+  const { data, error } = await supabase.rpc('rpc_enex_cambio_tarea', {
+    p_programacion_id: p.programacionId, p_solicitante: p.solicitante, p_motivo: p.motivo, p_destino: p.destino,
+    p_nueva_fecha: p.nuevaFecha ?? null, p_evidencia_url: p.evidenciaUrl ?? null,
+    p_adc_nombre: p.adcNombre ?? null, p_adc_url: p.adcUrl ?? null, p_reemplazos: p.reemplazos,
+  })
+  if (error) throw error
+  return data as { success: boolean; cambio_id: string; reemplazos: number }
+}
+
+export async function cambiarDestinoCambio(p: { cambioId: string; destino: CambioDestino; nuevaFecha?: string | null; adcNombre?: string | null; adcUrl?: string | null }) {
+  const { error } = await supabase.rpc('rpc_enex_cambio_tarea_destino', {
+    p_cambio_id: p.cambioId, p_destino: p.destino, p_nueva_fecha: p.nuevaFecha ?? null,
+    p_adc_nombre: p.adcNombre ?? null, p_adc_url: p.adcUrl ?? null,
+  })
+  if (error) throw error
+}
+
+export async function anularCambioTarea(cambioId: string) {
+  const { data, error } = await supabase.rpc('rpc_enex_cambio_tarea_anular', { p_cambio_id: cambioId })
+  if (error) throw error
+  return data as { success: boolean; reemplazos_borrados: number }
+}
+
+/** Correo del ADC o captura del pedido (PDF, imagen, .eml/.msg) → documentos/enex-cambios-tarea/. */
+export async function subirArchivoCambio(file: File): Promise<string> {
+  const ext = (file.name.split('.').pop() ?? 'bin').toLowerCase().replace(/[^a-z0-9]/g, '') || 'bin'
+  const path = `enex-cambios-tarea/${new Date().getFullYear()}/${Date.now()}_${Math.floor(Math.random() * 1e6)}.${ext}`
+  const { error } = await supabase.storage.from('documentos').upload(path, file, {
+    contentType: file.type || 'application/octet-stream', upsert: false,
+  })
+  if (error) throw error
+  return supabase.storage.from('documentos').getPublicUrl(path).data.publicUrl
+}
+
+export async function guardarUniversoFaena(faenaId: string, u: { combustible: number | null; lubricante: number | null; camiones: number | null }) {
+  const { error } = await supabase.rpc('rpc_enex_faena_universo', {
+    p_faena_id: faenaId, p_combustible: u.combustible, p_lubricante: u.lubricante, p_camiones: u.camiones,
+  })
   if (error) throw error
 }
 

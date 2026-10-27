@@ -12,7 +12,7 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  CalendarRange, ChevronLeft, ChevronRight, FileSpreadsheet, Upload, Building2, FileText, AlertTriangle, CalendarClock,
+  CalendarRange, ChevronLeft, ChevronRight, FileSpreadsheet, Upload, Building2, FileText, AlertTriangle, CalendarClock, Replace,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -20,15 +20,17 @@ import { Spinner } from '@/components/ui/spinner'
 import { useRequireAuth } from '@/hooks/use-require-auth'
 import {
   getFaenas, getInstalaciones, getPanelVentana, mundoDeLinea, MESES,
-  type EnexPanelRow, type EnexInstalacion, type EnexFaena,
+  CAMBIO_DESTINO_TXT, type EnexPanelRow, type EnexInstalacion, type EnexFaena,
 } from '@/lib/services/enex'
 import {
-  ventanaTrimestre, ventanaDesde, inicioTrimestreContractual, calcularAvance, estadoProg, codigoCelda, isoDe, sumarDias, fechaDeIso, FERIADOS_CL,
+  ventanaDesde, trimestreContrato, etiquetaTrimestre, calcularAvance, estadoProg, codigoCelda, isoDe, sumarDias, fechaDeIso, FERIADOS_CL,
+  type Ventana,
 } from '@/lib/enex-avance'
-import { TarjetasAvance, CurvaSEnex, TablaFaenas } from '@/components/enex/planificacion/avance-enex'
+import { TarjetasAvance, CurvaSEnex, TablaFaenas, TablaContratos } from '@/components/enex/planificacion/avance-enex'
 import { GanttEnex, LEYENDA_ESTADO } from '@/components/enex/planificacion/gantt-enex'
 import { ImportarPlanillaModal } from '@/components/enex/planificacion/importar-planilla-modal'
 import { ReprogramacionModal } from '@/components/enex/reprogramacion-modal'
+import { CambioTareaModal, GestionarCambioModal, nombreProg } from '@/components/enex/cambio-tarea-modal'
 
 const ROLES_GESTION = ['administrador', 'subgerente_operaciones', 'jefe_operaciones', 'supervisor', 'planificador', 'jefe_mantenimiento']
 type Mundo = 'todos' | 'combustible' | 'lubricante'
@@ -38,15 +40,39 @@ export default function EnexPlanificacionPage() {
   const qc = useQueryClient()
   // La fecha se fija tras montar (la página se prerenderiza en el build).
   const [hoy, setHoy] = useState('')
-  const [inicio, setInicio] = useState<{ anio: number; mes: number } | null>(null)
-  useEffect(() => { const h = isoDe(new Date()); setHoy(h); setInicio(inicioTrimestreContractual(h)) }, [])
+  // Fecha de referencia: cada contrato muestra SU trimestre que la contiene (MIG658:
+  // Spence y Lomas = calendario; Centinela = Feb-Abr … Nov-Ene).
+  const [ref, setRef] = useState('')
+  useEffect(() => { const h = isoDe(new Date()); setHoy(h); setRef(h) }, [])
   const [faenaSel, setFaenaSel] = useState<string>('todas')
   const [mundo, setMundo] = useState<Mundo>('todos')
   const [importar, setImportar] = useState(false)
   const [horizonte, setHorizonte] = useState<3 | 6 | 12>(6)
   const puedeEditar = !!perfil?.rol && ROLES_GESTION.includes(perfil.rol)
 
-  const ventana = useMemo(() => (inicio ? ventanaTrimestre(inicio.anio, inicio.mes) : null), [inicio])
+  const { data: faenas = [] } = useQuery({ queryKey: ['enex-faenas'], queryFn: getFaenas, staleTime: 5 * 60_000 })
+  const faenasVista = useMemo(() => faenas.filter((f) => faenaSel === 'todas' || f.id === faenaSel), [faenas, faenaSel])
+  const trimestres = useMemo(() => new Map<string, Ventana>(
+    ref ? faenas.map((f) => [f.id, trimestreContrato(ref, f.trimestre_ancla ?? 2)]) : []), [faenas, ref])
+  // Con varias faenas la ventana abarca los trimestres de todas (p. ej. Ago-Dic);
+  // cada programación se cuenta solo dentro del trimestre de su contrato.
+  const ventana = useMemo(() => {
+    if (!ref) return null
+    const vs = faenasVista.map((f) => trimestres.get(f.id)).filter((v): v is Ventana => !!v)
+    if (vs.length === 0) vs.push(trimestreContrato(ref))
+    const desde = vs.map((v) => v.desde).sort()[0]
+    const hasta = vs.map((v) => v.hasta).sort()[vs.length - 1]
+    const [y1, m1] = desde.split('-').map(Number), [y2, m2] = hasta.split('-').map(Number)
+    return ventanaDesde(desde, (y2 - y1) * 12 + m2 - m1 + 1)
+  }, [ref, faenasVista, trimestres])
+  const etiquetas = useMemo(() => {
+    const g = new Map<string, string[]>()
+    for (const f of faenasVista) {
+      const v = trimestres.get(f.id); if (!v) continue
+      const e = etiquetaTrimestre(v); g.set(e, [...(g.get(e) ?? []), f.nombre])
+    }
+    return Array.from(g.entries())
+  }, [faenasVista, trimestres])
   // La Gantt mira hacia adelante: en el trimestre en curso parte el lunes de la semana pasada y
   // sigue `horizonte` meses. Si se navega a otro trimestre, parte al inicio de ese trimestre.
   // El avance, la curva S y el KPI siguen midiéndose sobre el trimestre contractual.
@@ -57,7 +83,6 @@ export default function EnexPlanificacionPage() {
     return ventanaDesde(enCurso ? lunes : ventana.desde, horizonte)
   }, [ventana, hoy, horizonte])
 
-  const { data: faenas = [] } = useQuery({ queryKey: ['enex-faenas'], queryFn: getFaenas, staleTime: 5 * 60_000 })
   const { data: instalaciones = [], refetch: refetchInst } = useQuery({
     queryKey: ['enex-inst', 'todas'], queryFn: () => getInstalaciones(), staleTime: 60_000,
   })
@@ -78,28 +103,29 @@ export default function EnexPlanificacionPage() {
   }
 
   const enMundo = (linea: string | null) => mundo === 'todos' || mundoDeLinea(linea) === mundo
-  const rows = useMemo(() => panel.filter((r) => (faenaSel === 'todas' || r.faena_id === faenaSel) && enMundo(r.linea)),
+  const enSuTrimestre = (r: EnexPanelRow) => {
+    const v = trimestres.get(r.faena_id)
+    return !v || v.meses.some((m) => m.anio === r.periodo_anio && m.mes === r.periodo_mes)
+  }
+  const rows = useMemo(() => panel.filter((r) => (faenaSel === 'todas' || r.faena_id === faenaSel) && enMundo(r.linea) && enSuTrimestre(r)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [panel, faenaSel, mundo])
+    [panel, faenaSel, mundo, trimestres])
   const rowsGantt = useMemo(() => panelGantt.filter((r) => (faenaSel === 'todas' || r.faena_id === faenaSel) && enMundo(r.linea)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [panelGantt, faenaSel, mundo])
   const instVista = useMemo(() => instalaciones.filter((i) => (faenaSel === 'todas' || i.faena_id === faenaSel) && enMundo(i.linea)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [instalaciones, faenaSel, mundo])
-  const faenasVista = useMemo(() => faenas.filter((f) => faenaSel === 'todas' || f.id === faenaSel), [faenas, faenaSel])
   const avance = useMemo(() => calcularAvance(rows, hoy), [rows, hoy])
 
+  // De trimestre en trimestre (cada contrato salta al suyo).
   function mover(delta: number) {
-    if (!inicio) return
-    let m = inicio.mes + delta, a = inicio.anio
-    while (m < 1) { m += 12; a-- }
-    while (m > 12) { m -= 12; a++ }
-    setInicio({ anio: a, mes: m })
+    if (!ref) return
+    const [y, m] = ref.split('-').map(Number)
+    setRef(isoDe(new Date(y, m - 1 + delta * 3, 15)))
   }
 
   if (!ventana || !ventanaGantt || !hoy) return <div className="flex justify-center p-10"><Spinner /></div>
-  const m0 = ventana.meses[0], m2 = ventana.meses[2]
 
   return (
     <div className="space-y-4">
@@ -128,13 +154,17 @@ export default function EnexPlanificacionPage() {
 
       {/* Filtros en una fila */}
       <div className="flex flex-wrap items-center gap-2">
-        <button onClick={() => mover(-1)} className="rounded-lg border px-2 py-1.5 hover:bg-gray-50" aria-label="Mes anterior"><ChevronLeft className="h-4 w-4" /></button>
-        <span className="min-w-[170px] text-center text-sm font-semibold capitalize">
-          {MESES[m0.mes - 1].slice(0, 3)} {m0.anio !== m2.anio ? m0.anio : ''} – {MESES[m2.mes - 1].slice(0, 3)} {m2.anio}
+        <button onClick={() => mover(-1)} className="rounded-lg border px-2 py-1.5 hover:bg-gray-50" aria-label="Trimestre anterior"><ChevronLeft className="h-4 w-4" /></button>
+        <span className="min-w-[170px] text-center text-sm font-semibold">
+          {etiquetas.length <= 1 ? (etiquetas[0]?.[0] ?? etiquetaTrimestre(ventana)) : (
+            <span className="flex flex-col text-xs leading-tight">
+              {etiquetas.map(([e, ns]) => <span key={e}>{e} <span className="font-normal text-gray-500">· {ns.join(', ')}</span></span>)}
+            </span>
+          )}
         </span>
-        <button onClick={() => mover(1)} className="rounded-lg border px-2 py-1.5 hover:bg-gray-50" aria-label="Mes siguiente"><ChevronRight className="h-4 w-4" /></button>
-        <button onClick={() => setInicio(inicioTrimestreContractual(hoy))} className="rounded-lg border px-2 py-1.5 text-xs hover:bg-gray-50"
-                title="Trimestre contractual ENEX (Feb-Abr, May-Jul, Ago-Oct, Nov-Ene)">Trimestre actual</button>
+        <button onClick={() => mover(1)} className="rounded-lg border px-2 py-1.5 hover:bg-gray-50" aria-label="Trimestre siguiente"><ChevronRight className="h-4 w-4" /></button>
+        <button onClick={() => setRef(hoy)} className="rounded-lg border px-2 py-1.5 text-xs hover:bg-gray-50"
+                title="El trimestre en curso de cada contrato: Spence y Lomas calendario (Oct-Dic); Centinela Feb-Abr, May-Jul, Ago-Oct, Nov-Ene">Trimestre actual</button>
         <select value={faenaSel} onChange={(e) => setFaenaSel(e.target.value)} className="rounded-lg border px-2 py-1.5 text-sm">
           <option value="todas">Todas las faenas</option>
           {faenas.map((f) => <option key={f.id} value={f.id}>{f.nombre}</option>)}
@@ -149,6 +179,18 @@ export default function EnexPlanificacionPage() {
       </div>
 
       <TarjetasAvance a={avance} />
+
+      <Card><CardContent className="p-0">
+        <div className="border-b px-3 py-2">
+          <h2 className="text-sm font-semibold">Avance por contrato · cada uno en su trimestre</h2>
+          <p className="text-[11px] text-gray-500">
+            % de avance = ejecutado ÷ lo que el contrato exige en el trimestre (instalación de combustible = mantención + calibración,
+            truck shop = mantención, camión = calibración), menos lo justificado por el ADC. «Por programar» es lo que el contrato pide y aún no está en la Gantt.
+          </p>
+        </div>
+        <TablaContratos rows={rows} faenas={faenasVista} trimestres={trimestres} mundo={mundo} puedeEditar={puedeEditar}
+                        onCambio={() => { qc.invalidateQueries({ queryKey: ['enex-faenas'] }) }} />
+      </CardContent></Card>
 
       <div className="grid gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2"><CardContent className="p-3">
@@ -169,7 +211,8 @@ export default function EnexPlanificacionPage() {
         </CardContent></Card>
       )}
 
-      <NoSeHizoEnTerreno rows={rowsGantt} puedeEditar={puedeEditar} onCambio={invalidar} />
+      <NoSeHizoEnTerreno rows={rowsGantt} instalaciones={instalaciones} puedeEditar={puedeEditar} onCambio={invalidar} />
+      <EsperanCorreoAdc rows={rows} puedeEditar={puedeEditar} onCambio={invalidar} />
 
       <Card><CardContent className="p-0">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b px-3 py-2">
@@ -214,6 +257,7 @@ export default function EnexPlanificacionPage() {
 const MUESTRA: Record<string, string> = {
   programada: 'bg-blue-100 ring-1 ring-blue-300', hoy: 'bg-blue-600', cumplida: 'bg-green-600',
   sin_firma: 'bg-amber-300', atrasada: 'bg-red-500', no_realizada: 'bg-red-100 ring-1 ring-red-300',
+  justificada: 'bg-gray-100 ring-1 ring-gray-300',
 }
 
 // Mirada hacia adelante: atrasados por reprogramar + los próximos 14 días.
@@ -348,8 +392,11 @@ async function exportarExcel(rows: EnexPanelRow[], instalaciones: EnexInstalacio
 
 // [MIG651] Lo que la cuadrilla no hizo porque ESM pidió otra cosa: espera
 // fecha nueva. Sigue contando como programado (el KPI no se maquilla).
-function NoSeHizoEnTerreno({ rows, puedeEditar, onCambio }: { rows: EnexPanelRow[]; puedeEditar: boolean; onCambio: () => void }) {
+function NoSeHizoEnTerreno({ rows, instalaciones, puedeEditar, onCambio }: {
+  rows: EnexPanelRow[]; instalaciones: EnexInstalacion[]; puedeEditar: boolean; onCambio: () => void
+}) {
   const [reprog, setReprog] = useState<EnexPanelRow | null>(null)
+  const [cambio, setCambio] = useState<EnexPanelRow | null>(null)
   const qc = useQueryClient()
   const pend = rows.filter((r) => r.por_reprogramar_motivo && !r.ejecucion_id)
     .sort((a, b) => (a.fecha_programada ?? '').localeCompare(b.fecha_programada ?? ''))
@@ -359,7 +406,10 @@ function NoSeHizoEnTerreno({ rows, puedeEditar, onCambio }: { rows: EnexPanelRow
       <p className="flex items-center gap-1.5 text-sm font-semibold text-orange-900">
         <AlertTriangle className="h-4 w-4" /> No se hizo en terreno — falta fecha nueva ({pend.length})
       </p>
-      <p className="text-[11px] text-gray-500">El supervisor lo marcó desde el teléfono (cambio de programa). «Reprogramar» deja el registro y el PDF para ESM.</p>
+      <p className="text-[11px] text-gray-500">
+        El supervisor lo marcó desde el teléfono. Si fue la misma tarea otro día: «Reprogramar» (registro y PDF para ESM).
+        Si ESM la sacó y pidió otra: «Cambio de tarea (ESM)».
+      </p>
       <div className="mt-2 divide-y rounded border">
         {pend.map((r) => (
           <div key={r.programacion_id} className="flex flex-wrap items-center gap-2 px-2 py-1.5 text-xs">
@@ -372,14 +422,58 @@ function NoSeHizoEnTerreno({ rows, puedeEditar, onCambio }: { rows: EnexPanelRow
                 <CalendarClock className="mr-1 h-3.5 w-3.5" /> Reprogramar
               </Button>
             )}
+            {puedeEditar && !r.es_comodin && (
+              <Button size="sm" variant="outline" className="h-7 text-violet-700" onClick={() => setCambio(r)}
+                      title="ESM sacó la tarea y pidió otra: anota qué se hizo en su lugar">
+                <Replace className="mr-1 h-3.5 w-3.5" /> Cambio de tarea (ESM)
+              </Button>
+            )}
           </div>
         ))}
       </div>
+      {cambio && (
+        <CambioTareaModal row={cambio} rows={rows} instalaciones={instalaciones}
+                          onClose={() => setCambio(null)}
+                          onDone={() => { setCambio(null); qc.invalidateQueries({ queryKey: ['enex-inst'] }); onCambio() }} />
+      )}
       {reprog && (
         <ReprogramacionModal row={reprog} nombre={reprog.es_comodin ? 'Camión por asignar' : reprog.instalacion_tipo === 'camion' ? `Camión ${reprog.patente ?? reprog.instalacion}` : reprog.instalacion}
                              limitarTrimestre onClose={() => setReprog(null)}
                              onDone={() => { setReprog(null); qc.invalidateQueries({ queryKey: ['enex-reprogramaciones'] }); onCambio() }} />
       )}
+    </CardContent></Card>
+  )
+}
+
+
+// [MIG658] Tareas que ESM cambió y no cupieron en el trimestre: siguen contando
+// como atrasadas hasta adjuntar el correo de autorización del ADC.
+function EsperanCorreoAdc({ rows, puedeEditar, onCambio }: { rows: EnexPanelRow[]; puedeEditar: boolean; onCambio: () => void }) {
+  const [sel, setSel] = useState<EnexPanelRow | null>(null)
+  const pend = rows.filter((r) => r.cambio_destino === 'pendiente_adc' && !r.ejecucion_id)
+    .sort((a, b) => (a.cambio_fecha ?? '').localeCompare(b.cambio_fecha ?? ''))
+  if (pend.length === 0) return null
+  return (
+    <Card className="border-violet-300"><CardContent className="p-3">
+      <p className="flex items-center gap-1.5 text-sm font-semibold text-violet-900">
+        <Replace className="h-4 w-4" /> Cambios de tarea esperando el correo del ADC ({pend.length})
+      </p>
+      <p className="text-[11px] text-gray-500">Mientras no llegue el correo, cuentan como atrasadas en el KPI (KPI V8, consideración 1).</p>
+      <div className="mt-2 divide-y rounded border">
+        {pend.map((r) => (
+          <div key={r.programacion_id} className="flex flex-wrap items-center gap-2 px-2 py-1.5 text-xs">
+            <span className="w-20 tabular-nums text-gray-500">{r.cambio_fecha ? `${r.cambio_fecha.slice(8, 10)}/${r.cambio_fecha.slice(5, 7)}` : 's/f'}</span>
+            <span className="font-medium">{nombreProg(r)}</span>
+            <span className="text-gray-500">· {r.faena} · {r.tipo_servicio === 'calibracion' ? 'Calibración' : 'Mantención'}</span>
+            <span className="flex-1 text-violet-800">{r.cambio_solicitante}: {r.cambio_motivo}</span>
+            <span className="text-[10px] text-gray-400">{r.cambio_destino ? CAMBIO_DESTINO_TXT[r.cambio_destino] : ''}</span>
+            {puedeEditar && (
+              <Button size="sm" variant="outline" className="h-7 text-violet-700" onClick={() => setSel(r)}>Adjuntar correo / reprogramar</Button>
+            )}
+          </div>
+        ))}
+      </div>
+      {sel && <GestionarCambioModal row={sel} onClose={() => setSel(null)} onDone={() => { setSel(null); onCambio() }} />}
     </CardContent></Card>
   )
 }

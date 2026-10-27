@@ -8,9 +8,14 @@ import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ReferenceLine,
 } from 'recharts'
 import { AlertTriangle, TrendingUp, TrendingDown, Table2, LineChart as LineIcon } from 'lucide-react'
-import { MESES, type EnexFaena, type EnexPanelRow } from '@/lib/services/enex'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Modal, ModalFooter } from '@/components/ui/modal'
+import { useToast } from '@/contexts/toast-context'
+import { MESES, guardarUniversoFaena, type EnexFaena, type EnexPanelRow } from '@/lib/services/enex'
 import {
-  calcularAvance, curvaS, tramoMulta, ultimoDiaMes, type Avance, type Ventana,
+  calcularAvance, curvaS, tramoMulta, ultimoDiaMes, avanceContrato, CATEGORIA_TXT, etiquetaTrimestre,
+  type Avance, type Ventana, type UniversoContrato,
 } from '@/lib/enex-avance'
 
 const fmt = (n: number | null | undefined) => (n == null ? '—' : `${n.toLocaleString('es-CL', { maximumFractionDigits: 1 })}%`)
@@ -192,6 +197,133 @@ export function TablaFaenas({ rows, faenas, ventana, hoy, onElegir }: {
         </tbody>
       </table>
     </div>
+  )
+}
+
+// ── [MIG658] Avance por contrato: contra el universo del contrato ──────────
+/** % de avance del trimestre de cada contrato medido contra lo que el contrato exige, no contra lo cargado en SICOM. */
+export function TablaContratos({ rows, faenas, trimestres, mundo, puedeEditar, onCambio }: {
+  rows: EnexPanelRow[]; faenas: EnexFaena[]
+  /** Trimestre de cada contrato (MIG658: no es el mismo para todos). */
+  trimestres: Map<string, Ventana>
+  mundo: 'todos' | 'combustible' | 'lubricante'
+  puedeEditar: boolean; onCambio: () => void
+}) {
+  const [editar, setEditar] = useState<EnexFaena | null>(null)
+  const filas = useMemo(() => faenas.map((f) => {
+    const definido = f.contrato_inst_combustible != null || f.contrato_inst_lubricante != null || f.contrato_camiones != null
+    const u: UniversoContrato = definido ? {
+      combustible: mundo === 'lubricante' ? 0 : f.contrato_inst_combustible ?? 0,
+      lubricante: mundo === 'combustible' ? 0 : f.contrato_inst_lubricante ?? 0,
+      camiones: mundo === 'lubricante' ? 0 : f.contrato_camiones ?? 0,
+    } : { combustible: null, lubricante: null, camiones: null }
+    return { f, definido, c: avanceContrato(rows.filter((r) => r.faena_id === f.id), u) }
+  }), [rows, faenas, mundo])
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b text-[11px] uppercase tracking-wide text-gray-500">
+            <th className="p-2 text-left">Contrato</th>
+            <th className="p-2 text-right" title="Tareas que el contrato exige en el trimestre">Universo</th>
+            <th className="p-2 text-right">Programado</th>
+            <th className="p-2 text-right">Por programar</th>
+            <th className="p-2 text-right">Ejecutado</th>
+            <th className="p-2 text-right">Firmado</th>
+            <th className="p-2 text-right" title="Cambiadas por ESM con correo del ADC: fuera del KPI">Justif. ADC</th>
+            <th className="p-2 text-left">% avance del contrato</th>
+            <th className="p-2 text-right" title="Firmado ÷ programado vigente">KPI</th>
+          </tr>
+        </thead>
+        <tbody>
+          {filas.map(({ f, definido, c }) => {
+            const t = tramoMulta(c.pctKpi)
+            return (
+              <tr key={f.id} className="border-b align-top hover:bg-gray-50/60">
+                <td className="p-2">
+                  <div className="font-medium text-gray-800">{f.nombre}</div>
+                  {trimestres.get(f.id) && (
+                    <div className="text-[10px] font-semibold text-blue-700">
+                      Trimestre {etiquetaTrimestre(trimestres.get(f.id)!)} · cierra el {trimestres.get(f.id)!.hasta.slice(8, 10)}/{trimestres.get(f.id)!.hasta.slice(5, 7)}
+                    </div>
+                  )}
+                  {definido ? (
+                    <div className="text-[10px] text-gray-500">
+                      {c.categorias.map((k) => `${CATEGORIA_TXT[k.cat]} ${k.programadas}/${k.universo}`).join(' · ')}
+                    </div>
+                  ) : <div className="max-w-xs text-[10px] text-gray-400">{f.contrato_universo_nota ?? 'Universo sin definir'}</div>}
+                  {puedeEditar && <button onClick={() => setEditar(f)} className="text-[10px] text-blue-600 hover:underline">editar universo</button>}
+                </td>
+                <td className="p-2 text-right tabular-nums">{c.universo ?? '—'}</td>
+                <td className="p-2 text-right tabular-nums">{c.programadas}</td>
+                <td className="p-2 text-right tabular-nums">
+                  {c.porProgramar > 0 ? <span className="font-semibold text-red-700">{c.porProgramar}</span> : definido ? '0' : '—'}
+                </td>
+                <td className="p-2 text-right tabular-nums">{c.ejecutadas}</td>
+                <td className="p-2 text-right tabular-nums">{c.cumplidas}</td>
+                <td className="p-2 text-right tabular-nums">
+                  {c.justificadas}
+                  {c.pendientesAdc > 0 && <div className="text-[10px] text-violet-700">{c.pendientesAdc} esperan correo</div>}
+                </td>
+                <td className="p-2">
+                  {c.pctAvance == null ? <span className="text-gray-300">—</span> : (
+                    <div className="flex items-center gap-2">
+                      <div className="h-2 w-28 overflow-hidden rounded bg-gray-200" role="img" aria-label={`Avance ${fmt(c.pctAvance)}`}>
+                        <div className="h-full bg-blue-600" style={{ width: `${Math.min(100, c.pctAvance)}%` }} />
+                      </div>
+                      <span className="font-semibold tabular-nums">{fmt(c.pctAvance)}</span>
+                    </div>
+                  )}
+                </td>
+                <td className="p-2 text-right">
+                  <div className={`font-semibold tabular-nums ${colorPct(c.pctKpi)}`}>{fmt(c.pctKpi)}</div>
+                  {t.pct > 0 && <div className={`mt-0.5 inline-block rounded px-1 text-[10px] font-semibold ${t.revision ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-800'}`}>{t.etiqueta}</div>}
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+      {editar && <UniversoModal faena={editar} onClose={() => setEditar(null)} onDone={() => { setEditar(null); onCambio() }} />}
+    </div>
+  )
+}
+
+function UniversoModal({ faena, onClose, onDone }: { faena: EnexFaena; onClose: () => void; onDone: () => void }) {
+  const toast = useToast()
+  const [v, setV] = useState({
+    combustible: faena.contrato_inst_combustible ?? null, lubricante: faena.contrato_inst_lubricante ?? null, camiones: faena.contrato_camiones ?? null,
+  })
+  const [busy, setBusy] = useState(false)
+  const num = (s: string) => (s === '' ? null : Math.max(0, Math.floor(Number(s))))
+  async function guardar() {
+    setBusy(true)
+    try { await guardarUniversoFaena(faena.id, v); toast.success('Universo guardado'); onDone() }
+    catch (e) { toast.error((e as Error).message) } finally { setBusy(false) }
+  }
+  const tareas = (v.combustible ?? 0) * 2 + (v.lubricante ?? 0) + (v.camiones ?? 0)
+  const campos = [['combustible', 'Inst. combustible', 'mant. + calib.'], ['lubricante', 'Truck shop', 'mantención'], ['camiones', 'Camiones', 'calibración']] as const
+  return (
+    <Modal open onClose={onClose} title={`Universo del contrato · ${faena.nombre}`}>
+      <div className="space-y-3">
+        {faena.contrato_universo_nota && <p className="text-xs text-gray-500">{faena.contrato_universo_nota}</p>}
+        <div className="grid grid-cols-3 gap-2">
+          {campos.map(([k, l, s]) => (
+            <div key={k}>
+              <label className="text-xs font-medium">{l}</label>
+              <Input type="number" min={0} value={v[k] ?? ''} onChange={(e) => setV((p) => ({ ...p, [k]: num(e.target.value) }))} />
+              <p className="text-[10px] text-gray-500">{s}</p>
+            </div>
+          ))}
+        </div>
+        <p className="text-sm">Tareas por trimestre: <b>{tareas}</b></p>
+      </div>
+      <ModalFooter>
+        <Button variant="outline" onClick={onClose}>Cancelar</Button>
+        <Button disabled={busy} onClick={guardar}>Guardar</Button>
+      </ModalFooter>
+    </Modal>
   )
 }
 

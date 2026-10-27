@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   ventanaTrimestre, inicioTrimestreContractual, calcularAvance, curvaS, codigoCelda,
-  interpretarCodigo, leerHojaPlanilla, emparejar, tramoMulta, type ProgAvance,
+  interpretarCodigo, leerHojaPlanilla, emparejar, tramoMulta, avanceContrato, estadoProg, trimestreContrato, etiquetaTrimestre, type ProgAvance,
 } from '@/lib/enex-avance'
 
 const prog = (id: string, fecha: string | null, estado: ProgAvance['estado'] = null, fechaEj: string | null = null, mes = 8): ProgAvance => ({
@@ -16,6 +16,16 @@ describe('ventanas', () => {
     expect(inicioTrimestreContractual('2027-01-20')).toEqual({ anio: 2026, mes: 11 })
     expect(inicioTrimestreContractual('2026-12-05')).toEqual({ anio: 2026, mes: 11 })
     expect(inicioTrimestreContractual('2026-02-01')).toEqual({ anio: 2026, mes: 2 })
+  })
+  it('trimestre por contrato: Spence y Lomas calendario, Centinela desde febrero (MIG658)', () => {
+    expect(inicioTrimestreContractual('2026-10-27', 1)).toEqual({ anio: 2026, mes: 10 })
+    expect(inicioTrimestreContractual('2026-09-30', 1)).toEqual({ anio: 2026, mes: 7 })
+    expect(inicioTrimestreContractual('2027-01-10', 1)).toEqual({ anio: 2027, mes: 1 })
+    expect(inicioTrimestreContractual('2026-10-27', 2)).toEqual({ anio: 2026, mes: 8 })
+    expect(inicioTrimestreContractual('2026-11-02', 2)).toEqual({ anio: 2026, mes: 11 })
+    expect(etiquetaTrimestre(trimestreContrato('2026-10-27', 1))).toBe('Oct-Dic 2026')
+    expect(etiquetaTrimestre(trimestreContrato('2027-01-15', 2))).toBe('Nov-Ene 2026')
+    expect(trimestreContrato('2026-10-27', 1).hasta).toBe('2026-12-31')
   })
   it('ventana de tres meses cruza el año', () => {
     const v = ventanaTrimestre(2026, 11)
@@ -69,6 +79,50 @@ describe('avance', () => {
     expect(c[iHoy].proyectado).toBe(37.5)     // 2 hechas + la de hoy
     expect(c[c.length - 1].proyectado).toBe(75)
     expect(c[iHoy - 1].proyectado).toBeNull()
+  })
+})
+
+describe('cambio de tarea ESM y universo del contrato (MIG658)', () => {
+  const hoy = '2026-10-27'
+  type R = ProgAvance & { instalacion_tipo: string; linea: string | null; cambio_destino?: string | null }
+  const r = (id: string, tipo: string, fecha: string, extra: Partial<R> = {}): R =>
+    ({ ...prog(id, fecha), instalacion_tipo: tipo, linea: 'combustible', ...extra })
+  // Lomas Combustibles, Ago-Oct: 3 instalaciones (mant+calib) + 4 camiones = 10.
+  const lomas: R[] = [
+    r('eessM', 'eess', '2026-10-26', { justificada: true, cambio_destino: 'justificada_adc' }),
+    r('eessC', 'eess', '2026-10-26', { cambio_destino: 'pendiente_adc' }),
+    r('cam1', 'camion', '2026-10-26', { estado: 'ejecutada', fecha_ejecucion: '2026-10-26' }),
+    r('cam2', 'camion', '2026-10-26', { estado: 'cumplida', cumplida: true, fecha_ejecucion: '2026-10-26' }),
+    r('brM', 'petrolera', '2026-10-27'),
+    r('brC', 'petrolera', '2026-10-30'),
+  ]
+  const u = { combustible: 3, lubricante: 0, camiones: 4 }
+  it('lo justificado por el ADC no cuenta; lo pendiente del correo sí', () => {
+    expect(estadoProg(lomas[0], hoy)).toBe('justificada')
+    expect(estadoProg(lomas[1], hoy)).toBe('atrasada')
+    const a = calcularAvance(lomas, hoy)
+    expect(a.total).toBe(5)
+    expect(a.ejecutadas).toBe(2)
+    expect(a.atrasadas).toBe(1)
+  })
+  it('avance contra el universo: 2 hechas de 10 − 1 justificada', () => {
+    const c = avanceContrato(lomas, u)
+    expect(c.universo).toBe(10)
+    expect(c.justificadas).toBe(1)
+    expect(c.programadas).toBe(5)
+    expect(c.ejecutadas).toBe(2)
+    expect(c.cumplidas).toBe(1)
+    expect(c.pendientesAdc).toBe(1)
+    expect(c.pctAvance).toBe(22.2)            // 2 ÷ 9
+    expect(c.pctKpi).toBe(20)                 // 1 ÷ 5
+    // instalaciones: 6 − 1 justificada − 3 programadas = 2 · camiones: 4 − 2 = 2
+    expect(c.porProgramar).toBe(4)
+    expect(c.categorias.find((x) => x.cat === 'camiones')?.porProgramar).toBe(2)
+  })
+  it('recobros no llevan el avance sobre 100 % y sin universo no hay %', () => {
+    const cams = [1, 2, 3, 4, 5].map((i) => r(`c${i}`, 'camion', '2026-10-01', { estado: 'ejecutada' }))
+    expect(avanceContrato(cams, { combustible: 0, lubricante: 0, camiones: 4 }).pctAvance).toBe(100)
+    expect(avanceContrato(cams, { combustible: null, lubricante: null, camiones: null }).pctAvance).toBeNull()
   })
 })
 

@@ -12,6 +12,8 @@
 //     en su día. Lo atrasado y lo no realizado NO suman: hay que reprogramarlo.
 //   · Proyectado según ritmo: cierre si se sigue al ritmo actual
 //     (SPI = ejecutado ÷ plan a la fecha).
+//   · [MIG658] Justificada: ESM la cambió por otra tarea y el ADC lo autorizó
+//     por correo (Consideración 1 del KPI V8). No cuenta en ningún %.
 
 export type ProgAvance = {
   programacion_id: string
@@ -21,9 +23,13 @@ export type ProgAvance = {
   fecha_ejecucion: string | null
   estado: 'ejecutada' | 'cumplida' | 'no_realizada' | null
   cumplida: boolean
+  justificada?: boolean | null
 }
 
-export type EstadoProg = 'cumplida' | 'sin_firma' | 'no_realizada' | 'atrasada' | 'hoy' | 'programada'
+export type EstadoProg = 'justificada' | 'cumplida' | 'sin_firma' | 'no_realizada' | 'atrasada' | 'hoy' | 'programada'
+
+/** Lo que cuenta para el KPI: todo menos lo justificado por el ADC. */
+export const enKpi = <T extends ProgAvance>(rows: T[]): T[] => rows.filter((r) => !r.justificada)
 
 const pad = (n: number) => String(n).padStart(2, '0')
 export const isoDe = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
@@ -57,14 +63,30 @@ export function ventanaDesde(desde: string, nMeses: number): Ventana {
   return { desde, hasta: ultimoDiaMes(ult.anio, ult.mes), meses }
 }
 
-/** Trimestre contractual ENEX anclado en febrero (Feb-Abr, May-Jul, Ago-Oct, Nov-Ene), como fn_enex_trimestre_key. */
-export function inicioTrimestreContractual(iso: string): { anio: number; mes: number } {
+/**
+ * Primer mes del trimestre del contrato que contiene la fecha, como fn_enex_trimestre_inicio.
+ * [MIG658] El trimestre depende del contrato (enex_faenas.trimestre_ancla):
+ *   ancla 2 = Centinela: Feb-Abr, May-Jul, Ago-Oct, Nov-Ene (por omisión, como antes).
+ *   ancla 1 = Spence y Lomas: trimestre calendario (Ene-Mar … Oct-Dic).
+ */
+export function inicioTrimestreContractual(iso: string, ancla = 2): { anio: number; mes: number } {
   const [y, m] = iso.split('-').map(Number)
-  const off = (m - 2 + 12) % 12          // meses desde febrero
-  const mesIni = ((m - 1 - (off % 3)) + 12) % 12 + 1
-  const anio = mesIni > m ? y - 1 : y    // Nov-Ene: enero pertenece al trimestre que partió en noviembre
+  const off = (m - ancla + 12) % 3        // meses desde el inicio del trimestre
+  const mesIni = ((m - 1 - off) + 12) % 12 + 1
+  const anio = mesIni > m ? y - 1 : y     // Nov-Ene: enero pertenece al trimestre que partió en noviembre
   return { anio, mes: mesIni }
 }
+
+/** Ventana del trimestre del contrato que contiene la fecha. */
+export function trimestreContrato(iso: string, ancla = 2): Ventana {
+  const t = inicioTrimestreContractual(iso, ancla)
+  return ventanaTrimestre(t.anio, t.mes)
+}
+
+const MES_CORTO_TRI = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
+/** «Oct-Dic 2026», «Nov-Ene 2026» (como fn_enex_trimestre_label). */
+export const etiquetaTrimestre = (v: Ventana) =>
+  `${MES_CORTO_TRI[v.meses[0].mes - 1]}-${MES_CORTO_TRI[v.meses[2].mes - 1]} ${v.meses[0].anio}`
 
 /** Día al que pesa una programación en el plan: su fecha o, si no tiene, el último día de su mes. */
 export const fechaPlan = (r: ProgAvance) => r.fecha_programada?.slice(0, 10) ?? ultimoDiaMes(r.periodo_anio, r.periodo_mes)
@@ -73,6 +95,7 @@ const ejecutada = (r: ProgAvance) => r.cumplida || r.estado === 'ejecutada' || r
 const fechaReal = (r: ProgAvance) => r.fecha_ejecucion?.slice(0, 10) ?? fechaPlan(r)
 
 export function estadoProg(r: ProgAvance, hoy: string): EstadoProg {
+  if (r.justificada) return 'justificada'
   if (r.cumplida || r.estado === 'cumplida') return 'cumplida'
   if (r.estado === 'ejecutada') return 'sin_firma'
   if (r.estado === 'no_realizada') return 'no_realizada'
@@ -102,7 +125,8 @@ export type Avance = {
 
 const pct = (n: number, d: number) => (d > 0 ? Math.round((n / d) * 1000) / 10 : null)
 
-export function calcularAvance(rows: ProgAvance[], hoy: string): Avance {
+export function calcularAvance(todas: ProgAvance[], hoy: string): Avance {
+  const rows = enKpi(todas)
   let planHoy = 0, cumplidas = 0, ejecutadas = 0, sinFirma = 0, atrasadas = 0, noRealizadas = 0, futuras = 0
   for (const r of rows) {
     if (fechaPlan(r) <= hoy) planHoy++
@@ -135,7 +159,8 @@ export type PuntoCurva = { fecha: string; plan: number; real: number | null; pro
  * Curva S diaria del período: plan acumulado, real (ejecutado) acumulado hasta
  * hoy y, desde hoy, la proyección = real de hoy + lo pendiente que sigue en el plan.
  */
-export function curvaS(rows: ProgAvance[], desde: string, hasta: string, hoy: string): PuntoCurva[] {
+export function curvaS(todas: ProgAvance[], desde: string, hasta: string, hoy: string): PuntoCurva[] {
+  const rows = enKpi(todas)
   const total = rows.length
   if (total === 0) return []
   const planDia = new Map<string, number>()
@@ -170,6 +195,65 @@ export function curvaS(rows: ProgAvance[], desde: string, hasta: string, hoy: st
     })
   }
   return out
+}
+
+// ── [MIG658] Avance contra el universo del contrato ─────────────────────────
+// El % de avance de cada contrato se mide contra lo que el contrato exige por
+// trimestre, no contra lo cargado en SICOM (si falta programar, el % no se infla).
+// Instalación de combustible = mantención + calibración · truck shop = mantención ·
+// camión = calibración.
+export type UniversoContrato = { combustible: number | null; lubricante: number | null; camiones: number | null }
+export type CategoriaContrato = 'combustible' | 'lubricante' | 'camiones'
+export const CATEGORIA_TXT: Record<CategoriaContrato, string> = {
+  combustible: 'Instalaciones de combustible', lubricante: 'Truck shop (lubricantes)', camiones: 'Camiones',
+}
+const TAREAS_POR: Record<CategoriaContrato, number> = { combustible: 2, lubricante: 1, camiones: 1 }
+
+type ProgContrato = ProgAvance & { instalacion_tipo: string; linea: string | null; cambio_destino?: string | null }
+
+export const categoriaDe = (r: { instalacion_tipo: string; linea: string | null }): CategoriaContrato =>
+  r.instalacion_tipo === 'camion' ? 'camiones' : r.linea === 'lubricante' ? 'lubricante' : 'combustible'
+
+export type AvanceContrato = {
+  universo: number | null
+  categorias: { cat: CategoriaContrato; universo: number; programadas: number; ejecutadas: number; justificadas: number; porProgramar: number }[]
+  programadas: number       // vigentes (sin las justificadas)
+  ejecutadas: number
+  cumplidas: number
+  justificadas: number
+  pendientesAdc: number     // cambiadas por ESM, esperando el correo del ADC
+  porProgramar: number
+  pctAvance: number | null  // ejecutadas ÷ (universo − justificadas)
+  pctKpi: number | null     // cumplidas ÷ programadas vigentes
+}
+
+export function avanceContrato(rows: ProgContrato[], u: UniversoContrato): AvanceContrato {
+  const cats: CategoriaContrato[] = ['combustible', 'lubricante', 'camiones']
+  const definido = u.combustible != null || u.lubricante != null || u.camiones != null
+  const categorias = cats.map((cat) => {
+    const rc = rows.filter((r) => categoriaDe(r) === cat)
+    const justificadas = rc.filter((r) => r.justificada).length
+    const vig = rc.filter((r) => !r.justificada)
+    const universo = (u[cat] ?? 0) * TAREAS_POR[cat]
+    const ejecutadas = vig.filter((r) => r.cumplida || r.estado === 'ejecutada' || r.estado === 'cumplida').length
+    return { cat, universo, programadas: vig.length, ejecutadas, justificadas,
+             porProgramar: Math.max(0, universo - justificadas - vig.length) }
+  }).filter((c) => c.universo > 0 || c.programadas > 0 || c.justificadas > 0)
+  const vig = enKpi(rows)
+  const justificadas = rows.length - vig.length
+  const ejecutadas = vig.filter((r) => r.cumplida || r.estado === 'ejecutada' || r.estado === 'cumplida').length
+  const cumplidas = vig.filter((r) => r.cumplida || r.estado === 'cumplida').length
+  const universo = definido ? categorias.reduce((s, c) => s + c.universo, 0) : null
+  // Lo hecho por sobre el universo (recobros) no lleva el avance sobre 100 %.
+  const ejecDentro = categorias.reduce((s, c) => s + (definido ? Math.min(c.ejecutadas, Math.max(0, c.universo - c.justificadas)) : c.ejecutadas), 0)
+  const base = universo == null ? null : universo - justificadas
+  return {
+    universo, categorias, programadas: vig.length, ejecutadas, cumplidas, justificadas,
+    pendientesAdc: rows.filter((r) => r.cambio_destino === 'pendiente_adc' && !r.estado).length,
+    porProgramar: definido ? categorias.reduce((s, c) => s + c.porProgramar, 0) : 0,
+    pctAvance: base == null ? null : base > 0 ? pct(ejecDentro, base) : null,
+    pctKpi: pct(cumplidas, vig.length),
+  }
 }
 
 /** Tramo de multa del contrato para un % de cumplimiento (≥96 0 %, 90-95 10 %, 80-89 20 %, <80 revisión). */
