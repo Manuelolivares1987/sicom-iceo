@@ -298,6 +298,10 @@ const navGroups: NavGroup[] = [
       { label: 'Costo por faena y equipo', href: '/dashboard/flota/costos', icon: Wallet, module: 'flota', badge: 'NUEVO',
         roles: ['administrador', 'gerencia', 'subgerente_operaciones', 'jefe_operaciones', 'jefe_mantenimiento'],
         tooltip: 'Franke, Romeral, Calama y cada equipo: gasto, $/equipo-día y $/hora' },
+      // [MIG659] Tarjeta Aramco + GPS (camionetas) y computador Renault: km/L y $/km.
+      { label: 'Rendimiento combustible', href: '/dashboard/flota/rendimiento-combustible', icon: Fuel, module: 'flota', badge: 'NUEVO',
+        roles: ['administrador', 'gerencia', 'subgerente_operaciones', 'jefe_operaciones', 'jefe_mantenimiento'],
+        tooltip: 'Km/L y $/km por vehículo: tarjeta Aramco cruzada con el GPS, Renault con su computador' },
       { label: 'Informes Recepción', href: '/dashboard/flota/recepcion', icon: FileText, module: 'flota' },
       { label: 'Jornada', href: '/dashboard/flota/jornada', icon: Timer, module: 'flota' },
       { label: 'Mapa GPS', href: '/dashboard/flota/mapa', icon: Satellite, module: 'flota', badge: 'Nuevo' },
