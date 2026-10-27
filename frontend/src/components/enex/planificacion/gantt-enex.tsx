@@ -8,17 +8,18 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { ChevronDown, ChevronRight, Loader2, Trash2, CalendarClock, Truck, Redo2, MapPin } from 'lucide-react'
+import { ChevronDown, ChevronRight, Loader2, Trash2, CalendarClock, Truck, Redo2, MapPin, Replace } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Modal, ModalFooter } from '@/components/ui/modal'
 import { useToast } from '@/contexts/toast-context'
 import { ReprogramacionModal } from '@/components/enex/reprogramacion-modal'
+import { CambioTareaModal, GestionarCambioModal } from '@/components/enex/cambio-tarea-modal'
 import {
   programarLote, moverProgramacion, desprogramar, getReprogramaciones, TIPO_INSTALACION_LABEL,
   getFaenasConLugares, getLugarItems, getActividadesTrimestre, setActividadesTrimestre,
   type EnexFaena, type EnexInstalacion, type EnexPanelRow, type TipoServicio,
-  type EnexLugarItem, type EnexActividadTrimestre,
+  type EnexLugarItem, type EnexActividadTrimestre, CAMBIO_DESTINO_TXT,
 } from '@/lib/services/enex'
 import {
   codigoCelda, estadoProg, sumarDias, fechaDeIso, FERIADOS_CL, type EstadoProg, type Ventana,
@@ -29,7 +30,7 @@ const DOW = ['d', 'l', 'm', 'x', 'j', 'v', 's']
 const MES_CORTO = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
 
 // Peor estado manda en la celda (lo que pide acción primero).
-const PRIORIDAD: EstadoProg[] = ['atrasada', 'no_realizada', 'hoy', 'programada', 'sin_firma', 'cumplida']
+const PRIORIDAD: EstadoProg[] = ['atrasada', 'no_realizada', 'hoy', 'programada', 'sin_firma', 'cumplida', 'justificada']
 const ESTILO: Record<EstadoProg, string> = {
   atrasada: 'bg-red-500 text-white',
   no_realizada: 'bg-red-100 text-red-700 line-through',
@@ -37,10 +38,13 @@ const ESTILO: Record<EstadoProg, string> = {
   programada: 'bg-blue-100 text-blue-800 ring-1 ring-inset ring-blue-300',
   sin_firma: 'bg-amber-300 text-amber-950',
   cumplida: 'bg-green-600 text-white',
+  // [MIG658] ESM la cambió y el ADC lo autorizó: fuera del KPI.
+  justificada: 'bg-gray-100 text-gray-400 line-through ring-1 ring-inset ring-gray-300',
 }
 export const LEYENDA_ESTADO: [EstadoProg, string][] = [
   ['programada', 'Programado'], ['hoy', 'Toca hoy'], ['cumplida', 'Cumplido (firma mandante)'],
   ['sin_firma', 'Hecho, falta firma'], ['atrasada', 'Atrasado'], ['no_realizada', 'No realizado'],
+  ['justificada', 'Justificado por ADC (fuera del KPI)'],
 ]
 
 // [MIG651] Zona de Lomas Lubricantes (Instalaciones exteriores · Sala de
@@ -359,6 +363,9 @@ export function GanttEnex({ rows, faenas, instalaciones, ventana, hoy, puedeEdit
                     const rp = rs.filter((r) => reprogDe.has(r.programacion_id)).map((r) => reprogDe.get(r.programacion_id) || 's/f')
                     // [MIG651] «No se hizo» en terreno (pedido ESM): falta fecha nueva.
                     const noHecho = rs.filter((r) => r.por_reprogramar_motivo && !r.ejecucion_id)
+                    // [MIG658] Cambio de tarea: desplazada por ESM / hecha en reemplazo de otra.
+                    const desplazadas = rs.filter((r) => r.cambio_tarea_id)
+                    const reemplazos = rs.filter((r) => r.reemplaza_cambio_id)
                     return (
                       <td key={d} className={`border-b border-r p-0.5 ${fondo}`}
                           onDragOver={(e) => { if (arrastre?.filaKey === fila.key) e.preventDefault() }}
@@ -369,11 +376,14 @@ export function GanttEnex({ rows, faenas, instalaciones, ventana, hoy, puedeEdit
                           onDragEnd={() => setArrastre(null)}
                           onClick={() => setSel({ modo: 'detalle', fila, fecha: d, rows: rs })}
                           title={tooltipCelda(rs, hoy, instPorId) + (rp.length ? `\nReprogramado (fecha original ${rp.join(', ')})` : '')
-                                 + (noHecho.length ? `\nNo se hizo en terreno: ${noHecho[0].por_reprogramar_motivo} — falta fecha nueva` : '')}
-                          className={`relative block h-5 w-full rounded text-[9px] font-bold leading-5 ${noHecho.length === rs.length ? 'bg-orange-100 text-orange-800 line-through ring-1 ring-inset ring-orange-400' : ESTILO[peor]}`}>
+                                 + (noHecho.length ? `\nNo se hizo en terreno: ${noHecho[0].por_reprogramar_motivo} — falta fecha nueva` : '')
+                                 + (desplazadas.length ? `\nCambio de tarea (ESM): ${desplazadas[0].cambio_motivo} — ${desplazadas[0].cambio_destino ? CAMBIO_DESTINO_TXT[desplazadas[0].cambio_destino] : ''}` : '')
+                                 + (reemplazos.length ? `\nEn reemplazo de ${reemplazos[0].reemplaza_instalacion ?? 'otra tarea'} (pedido ESM)` : '')}
+                          className={`relative block h-5 w-full rounded text-[9px] font-bold leading-5 ${noHecho.length === rs.length ? 'bg-orange-100 text-orange-800 line-through ring-1 ring-inset ring-orange-400' : ESTILO[peor]} ${reemplazos.length ? 'ring-2 ring-inset ring-violet-500' : ''}`}>
                           {codigo}
                           {noHecho.length > 0 && <span className="absolute -left-0.5 -top-1 rounded-sm bg-orange-600 px-0.5 text-[7px] leading-[9px] text-white">NH</span>}
                           {rp.length > 0 && <span className="absolute -right-0.5 -top-1 rounded-sm bg-orange-500 px-0.5 text-[7px] leading-[9px] text-white">RP</span>}
+                          {desplazadas.length > 0 && noHecho.length === 0 && <span className="absolute -left-0.5 -top-1 rounded-sm bg-violet-600 px-0.5 text-[7px] leading-[9px] text-white">CT</span>}
                         </button>
                       </td>
                     )
@@ -406,6 +416,7 @@ export function GanttEnex({ rows, faenas, instalaciones, ventana, hoy, puedeEdit
       )}
       {sel?.modo === 'detalle' && (
         <DetalleModal fila={sel.fila} fecha={sel.fecha} rows={sel.rows} hoy={hoy} puedeEditar={puedeEditar} reprogDe={reprogDe}
+                      todas={rows} instalaciones={instalaciones}
                       onProgramarOtro={sel.fecha ? () => setSel({ modo: 'programar', fila: sel.fila, fecha: sel.fecha! }) : undefined}
                       onClose={() => setSel(null)} onDone={() => { setSel(null); onCambio() }} />
       )}
@@ -431,6 +442,7 @@ function semanaIso(dt: Date): number {
 
 const ESTADO_TXT: Record<EstadoProg, string> = {
   programada: 'programado', hoy: 'toca hoy', cumplida: 'cumplido', sin_firma: 'hecho, falta firma', atrasada: 'ATRASADO', no_realizada: 'no realizado',
+  justificada: 'justificado por ADC (fuera del KPI)',
 }
 const SERV_TXT: Record<TipoServicio, string> = { mantencion: 'Mantención', calibracion: 'Calibración' }
 
@@ -546,16 +558,24 @@ function ProgramarModal({ fila, fecha, rows, onClose, onDone }: {
 }
 
 // ── Detalle de una celda: mover o quitar ────────────────────────────────────
-function DetalleModal({ fila, fecha, rows, hoy, puedeEditar, reprogDe, onProgramarOtro, onClose, onDone }: {
+function DetalleModal({ fila, fecha, rows, hoy, puedeEditar, reprogDe, todas, instalaciones, onProgramarOtro, onClose, onDone }: {
   fila: FilaServicio; fecha: string | null; rows: EnexPanelRow[]; hoy: string; puedeEditar: boolean
-  reprogDe: Map<string, string>; onProgramarOtro?: () => void; onClose: () => void; onDone: () => void
+  reprogDe: Map<string, string>; todas: EnexPanelRow[]; instalaciones: EnexInstalacion[]
+  onProgramarOtro?: () => void; onClose: () => void; onDone: () => void
 }) {
   const toast = useToast()
   const [busy, setBusy] = useState<string | null>(null)
   const [nuevas, setNuevas] = useState<Record<string, string>>({})
   const [reprog, setReprog] = useState<EnexPanelRow | null>(null)
+  const [cambio, setCambio] = useState<EnexPanelRow | null>(null)
+  const [gestionar, setGestionar] = useState<EnexPanelRow | null>(null)
   const qc = useQueryClient()
 
+  if (cambio) {
+    return <CambioTareaModal row={cambio} rows={todas} instalaciones={instalaciones}
+                             onClose={() => setCambio(null)} onDone={() => { qc.invalidateQueries({ queryKey: ['enex-inst'] }); onDone() }} />
+  }
+  if (gestionar) return <GestionarCambioModal row={gestionar} onClose={() => setGestionar(null)} onDone={onDone} />
   if (reprog) {
     return <ReprogramacionModal row={reprog} nombre={reprog.instalacion_tipo === 'camion' ? `Camión ${reprog.patente ?? reprog.instalacion}` : reprog.instalacion}
                                 limitarTrimestre fechaInicial={nuevas[reprog.programacion_id] ?? ''}
@@ -608,6 +628,12 @@ function DetalleModal({ fila, fecha, rows, hoy, puedeEditar, reprogDe, onProgram
                           title="Reprogramación formal (registro + PDF para ESM), dentro del trimestre">
                     <Redo2 className="mr-1 h-3.5 w-3.5" /> Reprogramar
                   </Button>
+                  {!r.cambio_tarea_id && (
+                    <Button size="sm" variant="outline" className="text-violet-700" disabled={busy !== null} onClick={() => setCambio(r)}
+                            title="ESM sacó esta tarea y pidió otra (no es reprogramación)">
+                      <Replace className="mr-1 h-3.5 w-3.5" /> Cambio de tarea (ESM)
+                    </Button>
+                  )}
                   <Button size="sm" variant="outline" className="text-red-600" disabled={busy !== null} onClick={() => quitar(r)}>
                     <Trash2 className="mr-1 h-3.5 w-3.5" /> Quitar
                   </Button>
@@ -618,13 +644,25 @@ function DetalleModal({ fila, fecha, rows, hoy, puedeEditar, reprogDe, onProgram
                   <b>No se hizo en terreno:</b> {r.por_reprogramar_motivo}. Ponle fecha nueva con «Mover» o «Reprogramar».
                 </p>
               )}
+              {r.cambio_tarea_id && (
+                <div className="mt-1 flex flex-wrap items-center gap-2 rounded bg-violet-50 px-2 py-1 text-[11px] text-violet-900">
+                  <span className="flex-1"><b>Cambio de tarea (ESM)</b> · {r.cambio_solicitante}: {r.cambio_motivo} · <b>{r.cambio_destino ? CAMBIO_DESTINO_TXT[r.cambio_destino] : ''}</b></span>
+                  {puedeEditar && <Button size="sm" variant="outline" className="h-6 text-[11px]" onClick={() => setGestionar(r)}>Gestionar</Button>}
+                </div>
+              )}
+              {r.reemplaza_cambio_id && (
+                <p className="mt-1 rounded bg-violet-50 px-2 py-1 text-[11px] text-violet-900">
+                  Hecha <b>en reemplazo de {r.reemplaza_instalacion ?? 'otra tarea'}</b> por pedido de ESM: cuenta como tarea del contrato.
+                </p>
+              )}
               {r.prog_observacion && <p className="mt-1 text-[11px] text-gray-500">{r.prog_observacion}</p>}
             </div>
           )
         })}
         <p className="text-[11px] text-gray-400">
           «Mover» cambia la fecha sin dejar registro (ajuste de plan). «Reprogramar» deja el registro firmado para ESM
-          y la celda queda marcada RP; la nueva fecha debe caer dentro del trimestre. La ejecución se registra en «Control & KPI».
+          y la celda queda marcada RP; la nueva fecha debe caer dentro del trimestre. «Cambio de tarea (ESM)» es cuando ESM saca la
+          tarea y pide otra: se anota qué se hizo en su lugar y la celda queda CT. La ejecución se registra en «Control & KPI».
         </p>
       </div>
       <ModalFooter>
