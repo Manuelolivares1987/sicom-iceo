@@ -154,7 +154,11 @@ export function MapaFlota({ posiciones }: { posiciones: PosicionFlota[] }) {
               )}
               <div>Velocidad: <b>{p.velocidad_kmh != null ? `${p.velocidad_kmh.toFixed(0)} km/h` : '—'}</b></div>
               <div>Motor: <b>{p.ignicion == null ? '—' : (p.ignicion ? 'Encendido' : 'Apagado')}</b></div>
-              <div>Ultimo reporte: <b>{formatHaceMin(p.minutos_desde_reporte)}</b></div>
+              <div>
+                Posición de las{' '}
+                <b>{p.ts_gps ? new Date(p.ts_gps).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' }) : '—'}</b>{' '}
+                ({formatHaceMin(p.minutos_desde_reporte)})
+              </div>
               <hr style={{ margin: '6px 0', border: 'none', borderTop: '1px solid #E5E7EB' }} />
               <div>Odometro: <b>{p.odometro_km != null ? `${p.odometro_km.toFixed(0)} km` : '—'}</b></div>
               <div>Horometro: <b>{p.horometro_hrs != null ? `${p.horometro_hrs.toFixed(1)} h` : '—'}</b></div>

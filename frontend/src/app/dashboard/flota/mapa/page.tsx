@@ -162,7 +162,7 @@ export default function MapaFlotaPage() {
             </h1>
             <p className="text-sm text-muted-foreground">
               {ultimoFetch
-                ? `Actualizado ${ultimoFetch.toLocaleTimeString('es-CL')} — refresca cada 60s`
+                ? `Radicom entrega posiciones cada 5 min (Renault cada 15) · pantalla leída a las ${ultimoFetch.toLocaleTimeString('es-CL')}`
                 : 'Cargando posiciones...'}
             </p>
           </div>
