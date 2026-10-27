@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   ventanaTrimestre, inicioTrimestreContractual, calcularAvance, curvaS, codigoCelda,
-  interpretarCodigo, leerHojaPlanilla, emparejar, tramoMulta, avanceContrato, estadoProg, type ProgAvance,
+  interpretarCodigo, leerHojaPlanilla, emparejar, tramoMulta, avanceContrato, estadoProg, trimestreContrato, etiquetaTrimestre, type ProgAvance,
 } from '@/lib/enex-avance'
 
 const prog = (id: string, fecha: string | null, estado: ProgAvance['estado'] = null, fechaEj: string | null = null, mes = 8): ProgAvance => ({
@@ -16,6 +16,16 @@ describe('ventanas', () => {
     expect(inicioTrimestreContractual('2027-01-20')).toEqual({ anio: 2026, mes: 11 })
     expect(inicioTrimestreContractual('2026-12-05')).toEqual({ anio: 2026, mes: 11 })
     expect(inicioTrimestreContractual('2026-02-01')).toEqual({ anio: 2026, mes: 2 })
+  })
+  it('trimestre por contrato: Spence y Lomas calendario, Centinela desde febrero (MIG658)', () => {
+    expect(inicioTrimestreContractual('2026-10-27', 1)).toEqual({ anio: 2026, mes: 10 })
+    expect(inicioTrimestreContractual('2026-09-30', 1)).toEqual({ anio: 2026, mes: 7 })
+    expect(inicioTrimestreContractual('2027-01-10', 1)).toEqual({ anio: 2027, mes: 1 })
+    expect(inicioTrimestreContractual('2026-10-27', 2)).toEqual({ anio: 2026, mes: 8 })
+    expect(inicioTrimestreContractual('2026-11-02', 2)).toEqual({ anio: 2026, mes: 11 })
+    expect(etiquetaTrimestre(trimestreContrato('2026-10-27', 1))).toBe('Oct-Dic 2026')
+    expect(etiquetaTrimestre(trimestreContrato('2027-01-15', 2))).toBe('Nov-Ene 2026')
+    expect(trimestreContrato('2026-10-27', 1).hasta).toBe('2026-12-31')
   })
   it('ventana de tres meses cruza el año', () => {
     const v = ventanaTrimestre(2026, 11)

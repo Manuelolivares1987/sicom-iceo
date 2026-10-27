@@ -26,7 +26,7 @@ export const nombreProg = (r: EnexPanelRow) =>
 
 function finTrimestreDe(r: EnexPanelRow) {
   const original = r.cambio_fecha ?? r.fecha_programada?.slice(0, 10) ?? ultimoDiaMes(r.periodo_anio, r.periodo_mes)
-  const t = inicioTrimestreContractual(original)
+  const t = inicioTrimestreContractual(original, r.faena_trimestre_ancla ?? 2)
   return ventanaTrimestre(t.anio, t.mes).hasta
 }
 

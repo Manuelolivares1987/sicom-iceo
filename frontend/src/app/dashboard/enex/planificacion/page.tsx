@@ -23,7 +23,8 @@ import {
   CAMBIO_DESTINO_TXT, type EnexPanelRow, type EnexInstalacion, type EnexFaena,
 } from '@/lib/services/enex'
 import {
-  ventanaTrimestre, ventanaDesde, inicioTrimestreContractual, calcularAvance, estadoProg, codigoCelda, isoDe, sumarDias, fechaDeIso, FERIADOS_CL,
+  ventanaDesde, trimestreContrato, etiquetaTrimestre, calcularAvance, estadoProg, codigoCelda, isoDe, sumarDias, fechaDeIso, FERIADOS_CL,
+  type Ventana,
 } from '@/lib/enex-avance'
 import { TarjetasAvance, CurvaSEnex, TablaFaenas, TablaContratos } from '@/components/enex/planificacion/avance-enex'
 import { GanttEnex, LEYENDA_ESTADO } from '@/components/enex/planificacion/gantt-enex'
@@ -39,15 +40,39 @@ export default function EnexPlanificacionPage() {
   const qc = useQueryClient()
   // La fecha se fija tras montar (la página se prerenderiza en el build).
   const [hoy, setHoy] = useState('')
-  const [inicio, setInicio] = useState<{ anio: number; mes: number } | null>(null)
-  useEffect(() => { const h = isoDe(new Date()); setHoy(h); setInicio(inicioTrimestreContractual(h)) }, [])
+  // Fecha de referencia: cada contrato muestra SU trimestre que la contiene (MIG658:
+  // Spence y Lomas = calendario; Centinela = Feb-Abr … Nov-Ene).
+  const [ref, setRef] = useState('')
+  useEffect(() => { const h = isoDe(new Date()); setHoy(h); setRef(h) }, [])
   const [faenaSel, setFaenaSel] = useState<string>('todas')
   const [mundo, setMundo] = useState<Mundo>('todos')
   const [importar, setImportar] = useState(false)
   const [horizonte, setHorizonte] = useState<3 | 6 | 12>(6)
   const puedeEditar = !!perfil?.rol && ROLES_GESTION.includes(perfil.rol)
 
-  const ventana = useMemo(() => (inicio ? ventanaTrimestre(inicio.anio, inicio.mes) : null), [inicio])
+  const { data: faenas = [] } = useQuery({ queryKey: ['enex-faenas'], queryFn: getFaenas, staleTime: 5 * 60_000 })
+  const faenasVista = useMemo(() => faenas.filter((f) => faenaSel === 'todas' || f.id === faenaSel), [faenas, faenaSel])
+  const trimestres = useMemo(() => new Map<string, Ventana>(
+    ref ? faenas.map((f) => [f.id, trimestreContrato(ref, f.trimestre_ancla ?? 2)]) : []), [faenas, ref])
+  // Con varias faenas la ventana abarca los trimestres de todas (p. ej. Ago-Dic);
+  // cada programación se cuenta solo dentro del trimestre de su contrato.
+  const ventana = useMemo(() => {
+    if (!ref) return null
+    const vs = faenasVista.map((f) => trimestres.get(f.id)).filter((v): v is Ventana => !!v)
+    if (vs.length === 0) vs.push(trimestreContrato(ref))
+    const desde = vs.map((v) => v.desde).sort()[0]
+    const hasta = vs.map((v) => v.hasta).sort()[vs.length - 1]
+    const [y1, m1] = desde.split('-').map(Number), [y2, m2] = hasta.split('-').map(Number)
+    return ventanaDesde(desde, (y2 - y1) * 12 + m2 - m1 + 1)
+  }, [ref, faenasVista, trimestres])
+  const etiquetas = useMemo(() => {
+    const g = new Map<string, string[]>()
+    for (const f of faenasVista) {
+      const v = trimestres.get(f.id); if (!v) continue
+      const e = etiquetaTrimestre(v); g.set(e, [...(g.get(e) ?? []), f.nombre])
+    }
+    return Array.from(g.entries())
+  }, [faenasVista, trimestres])
   // La Gantt mira hacia adelante: en el trimestre en curso parte el lunes de la semana pasada y
   // sigue `horizonte` meses. Si se navega a otro trimestre, parte al inicio de ese trimestre.
   // El avance, la curva S y el KPI siguen midiéndose sobre el trimestre contractual.
@@ -58,7 +83,6 @@ export default function EnexPlanificacionPage() {
     return ventanaDesde(enCurso ? lunes : ventana.desde, horizonte)
   }, [ventana, hoy, horizonte])
 
-  const { data: faenas = [] } = useQuery({ queryKey: ['enex-faenas'], queryFn: getFaenas, staleTime: 5 * 60_000 })
   const { data: instalaciones = [], refetch: refetchInst } = useQuery({
     queryKey: ['enex-inst', 'todas'], queryFn: () => getInstalaciones(), staleTime: 60_000,
   })
@@ -79,28 +103,29 @@ export default function EnexPlanificacionPage() {
   }
 
   const enMundo = (linea: string | null) => mundo === 'todos' || mundoDeLinea(linea) === mundo
-  const rows = useMemo(() => panel.filter((r) => (faenaSel === 'todas' || r.faena_id === faenaSel) && enMundo(r.linea)),
+  const enSuTrimestre = (r: EnexPanelRow) => {
+    const v = trimestres.get(r.faena_id)
+    return !v || v.meses.some((m) => m.anio === r.periodo_anio && m.mes === r.periodo_mes)
+  }
+  const rows = useMemo(() => panel.filter((r) => (faenaSel === 'todas' || r.faena_id === faenaSel) && enMundo(r.linea) && enSuTrimestre(r)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [panel, faenaSel, mundo])
+    [panel, faenaSel, mundo, trimestres])
   const rowsGantt = useMemo(() => panelGantt.filter((r) => (faenaSel === 'todas' || r.faena_id === faenaSel) && enMundo(r.linea)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [panelGantt, faenaSel, mundo])
   const instVista = useMemo(() => instalaciones.filter((i) => (faenaSel === 'todas' || i.faena_id === faenaSel) && enMundo(i.linea)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [instalaciones, faenaSel, mundo])
-  const faenasVista = useMemo(() => faenas.filter((f) => faenaSel === 'todas' || f.id === faenaSel), [faenas, faenaSel])
   const avance = useMemo(() => calcularAvance(rows, hoy), [rows, hoy])
 
+  // De trimestre en trimestre (cada contrato salta al suyo).
   function mover(delta: number) {
-    if (!inicio) return
-    let m = inicio.mes + delta, a = inicio.anio
-    while (m < 1) { m += 12; a-- }
-    while (m > 12) { m -= 12; a++ }
-    setInicio({ anio: a, mes: m })
+    if (!ref) return
+    const [y, m] = ref.split('-').map(Number)
+    setRef(isoDe(new Date(y, m - 1 + delta * 3, 15)))
   }
 
   if (!ventana || !ventanaGantt || !hoy) return <div className="flex justify-center p-10"><Spinner /></div>
-  const m0 = ventana.meses[0], m2 = ventana.meses[2]
 
   return (
     <div className="space-y-4">
@@ -129,13 +154,17 @@ export default function EnexPlanificacionPage() {
 
       {/* Filtros en una fila */}
       <div className="flex flex-wrap items-center gap-2">
-        <button onClick={() => mover(-1)} className="rounded-lg border px-2 py-1.5 hover:bg-gray-50" aria-label="Mes anterior"><ChevronLeft className="h-4 w-4" /></button>
-        <span className="min-w-[170px] text-center text-sm font-semibold capitalize">
-          {MESES[m0.mes - 1].slice(0, 3)} {m0.anio !== m2.anio ? m0.anio : ''} – {MESES[m2.mes - 1].slice(0, 3)} {m2.anio}
+        <button onClick={() => mover(-1)} className="rounded-lg border px-2 py-1.5 hover:bg-gray-50" aria-label="Trimestre anterior"><ChevronLeft className="h-4 w-4" /></button>
+        <span className="min-w-[170px] text-center text-sm font-semibold">
+          {etiquetas.length <= 1 ? (etiquetas[0]?.[0] ?? etiquetaTrimestre(ventana)) : (
+            <span className="flex flex-col text-xs leading-tight">
+              {etiquetas.map(([e, ns]) => <span key={e}>{e} <span className="font-normal text-gray-500">· {ns.join(', ')}</span></span>)}
+            </span>
+          )}
         </span>
-        <button onClick={() => mover(1)} className="rounded-lg border px-2 py-1.5 hover:bg-gray-50" aria-label="Mes siguiente"><ChevronRight className="h-4 w-4" /></button>
-        <button onClick={() => setInicio(inicioTrimestreContractual(hoy))} className="rounded-lg border px-2 py-1.5 text-xs hover:bg-gray-50"
-                title="Trimestre contractual ENEX (Feb-Abr, May-Jul, Ago-Oct, Nov-Ene)">Trimestre actual</button>
+        <button onClick={() => mover(1)} className="rounded-lg border px-2 py-1.5 hover:bg-gray-50" aria-label="Trimestre siguiente"><ChevronRight className="h-4 w-4" /></button>
+        <button onClick={() => setRef(hoy)} className="rounded-lg border px-2 py-1.5 text-xs hover:bg-gray-50"
+                title="El trimestre en curso de cada contrato: Spence y Lomas calendario (Oct-Dic); Centinela Feb-Abr, May-Jul, Ago-Oct, Nov-Ene">Trimestre actual</button>
         <select value={faenaSel} onChange={(e) => setFaenaSel(e.target.value)} className="rounded-lg border px-2 py-1.5 text-sm">
           <option value="todas">Todas las faenas</option>
           {faenas.map((f) => <option key={f.id} value={f.id}>{f.nombre}</option>)}
@@ -153,13 +182,13 @@ export default function EnexPlanificacionPage() {
 
       <Card><CardContent className="p-0">
         <div className="border-b px-3 py-2">
-          <h2 className="text-sm font-semibold">Avance por contrato · trimestre {MESES[m0.mes - 1].slice(0, 3)}–{MESES[m2.mes - 1].slice(0, 3)}</h2>
+          <h2 className="text-sm font-semibold">Avance por contrato · cada uno en su trimestre</h2>
           <p className="text-[11px] text-gray-500">
             % de avance = ejecutado ÷ lo que el contrato exige en el trimestre (instalación de combustible = mantención + calibración,
             truck shop = mantención, camión = calibración), menos lo justificado por el ADC. «Por programar» es lo que el contrato pide y aún no está en la Gantt.
           </p>
         </div>
-        <TablaContratos rows={rows} faenas={faenasVista} mundo={mundo} puedeEditar={puedeEditar}
+        <TablaContratos rows={rows} faenas={faenasVista} trimestres={trimestres} mundo={mundo} puedeEditar={puedeEditar}
                         onCambio={() => { qc.invalidateQueries({ queryKey: ['enex-faenas'] }) }} />
       </CardContent></Card>
 

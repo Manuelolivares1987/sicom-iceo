@@ -14,7 +14,7 @@ import { Modal, ModalFooter } from '@/components/ui/modal'
 import { useToast } from '@/contexts/toast-context'
 import { MESES, guardarUniversoFaena, type EnexFaena, type EnexPanelRow } from '@/lib/services/enex'
 import {
-  calcularAvance, curvaS, tramoMulta, ultimoDiaMes, avanceContrato, CATEGORIA_TXT,
+  calcularAvance, curvaS, tramoMulta, ultimoDiaMes, avanceContrato, CATEGORIA_TXT, etiquetaTrimestre,
   type Avance, type Ventana, type UniversoContrato,
 } from '@/lib/enex-avance'
 
@@ -202,8 +202,11 @@ export function TablaFaenas({ rows, faenas, ventana, hoy, onElegir }: {
 
 // ── [MIG658] Avance por contrato: contra el universo del contrato ──────────
 /** % de avance del trimestre de cada contrato medido contra lo que el contrato exige, no contra lo cargado en SICOM. */
-export function TablaContratos({ rows, faenas, mundo, puedeEditar, onCambio }: {
-  rows: EnexPanelRow[]; faenas: EnexFaena[]; mundo: 'todos' | 'combustible' | 'lubricante'
+export function TablaContratos({ rows, faenas, trimestres, mundo, puedeEditar, onCambio }: {
+  rows: EnexPanelRow[]; faenas: EnexFaena[]
+  /** Trimestre de cada contrato (MIG658: no es el mismo para todos). */
+  trimestres: Map<string, Ventana>
+  mundo: 'todos' | 'combustible' | 'lubricante'
   puedeEditar: boolean; onCambio: () => void
 }) {
   const [editar, setEditar] = useState<EnexFaena | null>(null)
@@ -240,6 +243,11 @@ export function TablaContratos({ rows, faenas, mundo, puedeEditar, onCambio }: {
               <tr key={f.id} className="border-b align-top hover:bg-gray-50/60">
                 <td className="p-2">
                   <div className="font-medium text-gray-800">{f.nombre}</div>
+                  {trimestres.get(f.id) && (
+                    <div className="text-[10px] font-semibold text-blue-700">
+                      Trimestre {etiquetaTrimestre(trimestres.get(f.id)!)} · cierra el {trimestres.get(f.id)!.hasta.slice(8, 10)}/{trimestres.get(f.id)!.hasta.slice(5, 7)}
+                    </div>
+                  )}
                   {definido ? (
                     <div className="text-[10px] text-gray-500">
                       {c.categorias.map((k) => `${CATEGORIA_TXT[k.cat]} ${k.programadas}/${k.universo}`).join(' · ')}

@@ -25,7 +25,142 @@
 --   3. rpc_enex_cambio_tarea / _destino / _anular.
 --   4. v_enex_panel_mensual (+ columnas al final) y v_enex_kpi_mensual (descuenta
 --      las justificadas). /m/enex NO cambia.
+--   0. (Manuel, 27-10) El trimestre NO es igual para todos los contratos:
+--      Spence, Lomas Combustibles y Lomas Lubricantes = trimestre calendario
+--      (Jul-Sep cerró en septiembre; ahora Oct-Dic). Centinela (y DES, que va
+--      dentro) = Feb-Abr, May-Jul, Ago-Oct, Nov-Ene. Hasta hoy todo SICOM usaba el
+--      de Centinela: los recobros de Spence/Lomas cruzaban trimestres.
 -- ============================================================================
+
+-- ── 0. Trimestre por contrato ──────────────────────────────────────────────
+ALTER TABLE enex_faenas
+    ADD COLUMN IF NOT EXISTS trimestre_ancla SMALLINT NOT NULL DEFAULT 2 CHECK (trimestre_ancla BETWEEN 1 AND 3);
+COMMENT ON COLUMN enex_faenas.trimestre_ancla IS
+  'MIG658: mes en que parte el trimestre del contrato. 1 = Ene-Mar/Abr-Jun/Jul-Sep/Oct-Dic (Spence, Lomas). 2 = Feb-Abr/May-Jul/Ago-Oct/Nov-Ene (Centinela).';
+UPDATE enex_faenas SET trimestre_ancla = 1 WHERE codigo IN ('SPENCE', 'LB_COMB', 'LB_LUB');
+UPDATE enex_faenas SET trimestre_ancla = 2 WHERE codigo IN ('CENTINELA', 'NCEN_DES');
+
+-- Primer día del trimestre que contiene la fecha, según el ancla del contrato.
+CREATE OR REPLACE FUNCTION fn_enex_trimestre_inicio(p_fecha DATE, p_ancla INTEGER)
+RETURNS DATE LANGUAGE sql IMMUTABLE AS $$
+    SELECT (date_trunc('month', p_fecha)
+            - make_interval(months => (EXTRACT(MONTH FROM p_fecha)::int - coalesce(p_ancla, 2) + 12) % 3))::date
+$$;
+
+CREATE OR REPLACE FUNCTION fn_enex_fin_trimestre(p_fecha DATE, p_ancla INTEGER)
+RETURNS DATE LANGUAGE sql IMMUTABLE AS $$
+    SELECT (fn_enex_trimestre_inicio(p_fecha, p_ancla) + INTERVAL '3 months' - INTERVAL '1 day')::date
+$$;
+
+-- Clave comparable (aaaamm del primer mes). La versión de 1 argumento (ancla febrero) se mantiene.
+CREATE OR REPLACE FUNCTION fn_enex_trimestre_key(p_fecha DATE, p_ancla INTEGER)
+RETURNS INTEGER LANGUAGE sql IMMUTABLE AS $$
+    SELECT CASE WHEN p_fecha IS NULL THEN NULL ELSE
+        (EXTRACT(YEAR FROM fn_enex_trimestre_inicio(p_fecha, p_ancla))::int * 100
+         + EXTRACT(MONTH FROM fn_enex_trimestre_inicio(p_fecha, p_ancla))::int) END
+$$;
+
+-- «Oct-Dic 2026», «Nov-Ene 2026»: el nombre dice los meses, sin T1..T4 ambiguos.
+CREATE OR REPLACE FUNCTION fn_enex_trimestre_label(p_fecha DATE, p_ancla INTEGER)
+RETURNS TEXT LANGUAGE sql IMMUTABLE AS $$
+    SELECT CASE WHEN p_fecha IS NULL THEN NULL ELSE
+        (ARRAY['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'])[EXTRACT(MONTH FROM fn_enex_trimestre_inicio(p_fecha, p_ancla))::int]
+        || '-' ||
+        (ARRAY['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'])[EXTRACT(MONTH FROM fn_enex_fin_trimestre(p_fecha, p_ancla))::int]
+        || ' ' || EXTRACT(YEAR FROM fn_enex_trimestre_inicio(p_fecha, p_ancla))::text END
+$$;
+
+-- Recobros: 2.ª atención del mismo punto en el trimestre DE SU CONTRATO.
+CREATE OR REPLACE VIEW v_enex_recobros AS
+ WITH ej AS (
+         SELECT e.id AS ejecucion_id,
+            e.fecha_ejecucion,
+            e.estado,
+            e.ot_numero,
+            e.ejecutor,
+            e.created_at,
+            p.id AS programacion_id,
+            p.tipo_servicio,
+            i.id AS instalacion_id,
+            i.nombre AS instalacion,
+            i.tipo AS instalacion_tipo,
+            i.patente,
+            i.linea,
+            f.id AS faena_id,
+            f.codigo AS faena_codigo,
+            f.nombre AS faena,
+            fn_enex_trimestre_key(e.fecha_ejecucion, f.trimestre_ancla) AS trimestre_key,
+            fn_enex_trimestre_label(e.fecha_ejecucion, f.trimestre_ancla) AS trimestre,
+            row_number() OVER (PARTITION BY p.instalacion_id, p.tipo_servicio, (fn_enex_trimestre_key(e.fecha_ejecucion, f.trimestre_ancla))
+                               ORDER BY e.fecha_ejecucion, e.created_at) AS secuencia
+           FROM enex_ejecuciones e
+             JOIN enex_programaciones p ON p.id = e.programacion_id
+             JOIN enex_instalaciones i ON i.id = p.instalacion_id
+             JOIN enex_faenas f ON f.id = i.faena_id
+          WHERE e.estado = ANY (ARRAY['ejecutada'::text, 'cumplida'::text]) AND e.fecha_ejecucion IS NOT NULL
+        )
+ SELECT ejecucion_id, fecha_ejecucion, estado, ot_numero, ejecutor, created_at, programacion_id, tipo_servicio,
+    instalacion_id, instalacion, instalacion_tipo, patente, linea, faena_id, faena_codigo, faena,
+    trimestre_key, trimestre, secuencia, (secuencia > 1) AS es_recobro
+   FROM ej;
+
+CREATE OR REPLACE FUNCTION rpc_enex_recobro_check(p_instalacion_id uuid, p_tipo_servicio text, p_fecha date DEFAULT NULL::date, p_excluir_prog uuid DEFAULT NULL::uuid)
+RETURNS jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path TO 'public' AS $function$
+    WITH a AS (SELECT f.trimestre_ancla AS ancla FROM enex_instalaciones i JOIN enex_faenas f ON f.id = i.faena_id WHERE i.id = p_instalacion_id)
+    SELECT jsonb_build_object(
+        'previas', COUNT(e.id),
+        'es_recobro', COUNT(e.id) > 0,
+        'trimestre', fn_enex_trimestre_label(COALESCE(p_fecha, CURRENT_DATE), (SELECT ancla FROM a)))
+    FROM enex_ejecuciones e
+    JOIN enex_programaciones p ON p.id = e.programacion_id
+    WHERE p.instalacion_id = p_instalacion_id
+      AND p.tipo_servicio  = p_tipo_servicio
+      AND e.estado IN ('ejecutada','cumplida') AND e.fecha_ejecucion IS NOT NULL
+      AND fn_enex_trimestre_key(e.fecha_ejecucion, (SELECT ancla FROM a))
+          = fn_enex_trimestre_key(COALESCE(p_fecha, CURRENT_DATE), (SELECT ancla FROM a))
+      AND (p_excluir_prog IS NULL OR p.id <> p_excluir_prog);
+$function$;
+
+-- Teléfono: misma vista, solo cambia el trimestre con que se marca el recobro.
+CREATE OR REPLACE VIEW v_enex_terreno_pendientes AS
+ SELECT pr.id AS programacion_id,
+    pr.periodo_anio,
+    pr.periodo_mes,
+    pr.tipo_servicio,
+    pr.fecha_programada,
+    i.id AS instalacion_id,
+    i.nombre AS instalacion,
+    i.tipo AS instalacion_tipo,
+    i.patente,
+    i.linea,
+    f.id AS faena_id,
+    f.codigo AS faena_codigo,
+    f.nombre AS faena,
+    fn_enex_pauta_de_programacion(pr.id) AS pauta_id,
+    ( SELECT p.nombre FROM enex_pautas p WHERE p.id = fn_enex_pauta_de_programacion(pr.id)) AS pauta_nombre,
+    ( SELECT p.es_borrador FROM enex_pautas p WHERE p.id = fn_enex_pauta_de_programacion(pr.id)) AS pauta_borrador,
+    ( SELECT count(*) AS count FROM enex_pauta_items it
+       WHERE it.pauta_id = fn_enex_pauta_de_programacion(pr.id) AND it.activo) AS pauta_items,
+    e.id AS ejecucion_id,
+    e.estado,
+    e.firma_mandante_url,
+    (e.firma_mandante_url IS NOT NULL) AS cumplida,
+    (EXISTS ( SELECT 1
+           FROM enex_ejecuciones e2
+             JOIN enex_programaciones p2 ON p2.id = e2.programacion_id
+          WHERE p2.instalacion_id = pr.instalacion_id AND p2.tipo_servicio = pr.tipo_servicio AND p2.id <> pr.id
+            AND e2.estado = ANY (ARRAY['ejecutada'::text, 'cumplida'::text]) AND e2.fecha_ejecucion IS NOT NULL
+            AND fn_enex_trimestre_key(e2.fecha_ejecucion, f.trimestre_ancla)
+                = fn_enex_trimestre_key(COALESCE(pr.fecha_programada, make_date(pr.periodo_anio, pr.periodo_mes, 15)), f.trimestre_ancla)
+            AND NOT i.es_comodin)) AS es_recobro,
+    i.es_comodin,
+    pr.origen,
+    pr.por_reprogramar_at,
+    pr.por_reprogramar_motivo
+   FROM enex_programaciones pr
+     JOIN enex_instalaciones i ON i.id = pr.instalacion_id
+     JOIN enex_faenas f ON f.id = i.faena_id
+     LEFT JOIN enex_ejecuciones e ON e.programacion_id = pr.id;
 
 -- ── 1. Universo contractual por faena ──────────────────────────────────────
 ALTER TABLE enex_faenas
@@ -119,25 +254,21 @@ CREATE POLICY storage_enex_cambios_insert ON storage.objects FOR INSERT TO authe
     WITH CHECK (bucket_id = 'documentos' AND (storage.foldername(name))[1] = 'enex-cambios-tarea');
 
 
--- Fin del trimestre contractual (anclado en febrero) de una fecha.
-CREATE OR REPLACE FUNCTION fn_enex_fin_trimestre(p_fecha DATE)
-RETURNS DATE LANGUAGE sql IMMUTABLE AS $$
-    SELECT (date_trunc('month', p_fecha)
-            - make_interval(months => ((EXTRACT(MONTH FROM p_fecha)::int - 2 + 12) % 12) % 3)
-            + INTERVAL '3 months' - INTERVAL '1 day')::date
-$$;
-
-
 -- Aplica el destino a la tarea desplazada (común a crear y a cambiar destino).
 CREATE OR REPLACE FUNCTION fn_enex_cambio_aplicar_destino(
     p_prog_id UUID, p_fecha_original DATE, p_destino TEXT, p_nueva_fecha DATE)
 RETURNS VOID LANGUAGE plpgsql SET search_path TO 'public' AS $$
+DECLARE v_fin DATE;
 BEGIN
     IF p_destino = 'reprogramada' THEN
         IF p_nueva_fecha IS NULL THEN RAISE EXCEPTION 'Elige la nueva fecha'; END IF;
-        IF p_nueva_fecha > fn_enex_fin_trimestre(p_fecha_original) THEN
+        -- El trimestre es el del contrato de esa faena.
+        SELECT fn_enex_fin_trimestre(p_fecha_original, f.trimestre_ancla) INTO v_fin
+          FROM enex_programaciones p JOIN enex_instalaciones i ON i.id = p.instalacion_id JOIN enex_faenas f ON f.id = i.faena_id
+         WHERE p.id = p_prog_id;
+        IF p_nueva_fecha > v_fin THEN
             RAISE EXCEPTION 'Fuera del trimestre: la nueva fecha debe caer a más tardar el %. Si no cabe, déjala pendiente del correo del ADC.',
-                            to_char(fn_enex_fin_trimestre(p_fecha_original), 'DD-MM-YYYY');
+                            to_char(v_fin, 'DD-MM-YYYY');
         END IF;
         -- El trigger de MIG651 limpia la marca «no se hizo» al cambiar la fecha.
         UPDATE enex_programaciones SET fecha_programada = p_nueva_fecha WHERE id = p_prog_id;
@@ -378,7 +509,8 @@ CREATE OR REPLACE VIEW v_enex_panel_mensual AS
     -- [MIG658] esta tarea se hizo en reemplazo de otra
     p.cambio_tarea_id AS reemplaza_cambio_id,
     ri.nombre AS reemplaza_instalacion,
-    rp.tipo_servicio AS reemplaza_tipo_servicio
+    rp.tipo_servicio AS reemplaza_tipo_servicio,
+    f.trimestre_ancla AS faena_trimestre_ancla
    FROM enex_programaciones p
      JOIN enex_instalaciones i ON i.id = p.instalacion_id
      JOIN enex_faenas f ON f.id = i.faena_id
@@ -437,6 +569,7 @@ CREATE OR REPLACE VIEW v_enex_kpi_mensual AS
     justificadas
    FROM base b;
 
-SELECT codigo, contrato_inst_combustible c, contrato_inst_lubricante l, contrato_camiones cam,
+SELECT codigo, trimestre_ancla, fn_enex_trimestre_label(CURRENT_DATE, trimestre_ancla) AS trimestre_hoy,
+       contrato_inst_combustible c, contrato_inst_lubricante l, contrato_camiones cam,
        coalesce(contrato_inst_combustible, 0) * 2 + coalesce(contrato_inst_lubricante, 0) + coalesce(contrato_camiones, 0) AS tareas_trimestre
   FROM enex_faenas ORDER BY codigo;

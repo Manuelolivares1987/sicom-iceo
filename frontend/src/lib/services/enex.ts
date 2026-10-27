@@ -20,6 +20,8 @@ export type EnexFaena = {
   contrato_inst_lubricante?: number | null
   contrato_camiones?: number | null
   contrato_universo_nota?: string | null
+  // [MIG658] Mes en que parte el trimestre: 1 = calendario (Spence, Lomas), 2 = desde febrero (Centinela).
+  trimestre_ancla?: number | null
 }
 
 export type EnexInstalacion = {
@@ -114,6 +116,7 @@ export type EnexPanelRow = {
   reemplaza_cambio_id?: string | null
   reemplaza_instalacion?: string | null
   reemplaza_tipo_servicio?: TipoServicio | null
+  faena_trimestre_ancla?: number | null
 }
 
 export type EnexKpi = {

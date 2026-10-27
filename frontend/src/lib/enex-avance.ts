@@ -63,14 +63,30 @@ export function ventanaDesde(desde: string, nMeses: number): Ventana {
   return { desde, hasta: ultimoDiaMes(ult.anio, ult.mes), meses }
 }
 
-/** Trimestre contractual ENEX anclado en febrero (Feb-Abr, May-Jul, Ago-Oct, Nov-Ene), como fn_enex_trimestre_key. */
-export function inicioTrimestreContractual(iso: string): { anio: number; mes: number } {
+/**
+ * Primer mes del trimestre del contrato que contiene la fecha, como fn_enex_trimestre_inicio.
+ * [MIG658] El trimestre depende del contrato (enex_faenas.trimestre_ancla):
+ *   ancla 2 = Centinela: Feb-Abr, May-Jul, Ago-Oct, Nov-Ene (por omisión, como antes).
+ *   ancla 1 = Spence y Lomas: trimestre calendario (Ene-Mar … Oct-Dic).
+ */
+export function inicioTrimestreContractual(iso: string, ancla = 2): { anio: number; mes: number } {
   const [y, m] = iso.split('-').map(Number)
-  const off = (m - 2 + 12) % 12          // meses desde febrero
-  const mesIni = ((m - 1 - (off % 3)) + 12) % 12 + 1
-  const anio = mesIni > m ? y - 1 : y    // Nov-Ene: enero pertenece al trimestre que partió en noviembre
+  const off = (m - ancla + 12) % 3        // meses desde el inicio del trimestre
+  const mesIni = ((m - 1 - off) + 12) % 12 + 1
+  const anio = mesIni > m ? y - 1 : y     // Nov-Ene: enero pertenece al trimestre que partió en noviembre
   return { anio, mes: mesIni }
 }
+
+/** Ventana del trimestre del contrato que contiene la fecha. */
+export function trimestreContrato(iso: string, ancla = 2): Ventana {
+  const t = inicioTrimestreContractual(iso, ancla)
+  return ventanaTrimestre(t.anio, t.mes)
+}
+
+const MES_CORTO_TRI = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
+/** «Oct-Dic 2026», «Nov-Ene 2026» (como fn_enex_trimestre_label). */
+export const etiquetaTrimestre = (v: Ventana) =>
+  `${MES_CORTO_TRI[v.meses[0].mes - 1]}-${MES_CORTO_TRI[v.meses[2].mes - 1]} ${v.meses[0].anio}`
 
 /** Día al que pesa una programación en el plan: su fecha o, si no tiene, el último día de su mes. */
 export const fechaPlan = (r: ProgAvance) => r.fecha_programada?.slice(0, 10) ?? ultimoDiaMes(r.periodo_anio, r.periodo_mes)
