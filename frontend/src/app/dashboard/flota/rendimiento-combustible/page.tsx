@@ -189,6 +189,8 @@ export default function RendimientoCombustiblePage() {
         </Card>
       )}
 
+      <ComoSeCalcula />
+
       <Card>
         <CardHeader><CardTitle className="text-base">Cargar el Excel de Aramco Fleet</CardTitle></CardHeader>
         <CardContent className="space-y-3">
@@ -284,6 +286,83 @@ function TablaVehiculos({ filas, cargas, abierto, setAbierto, abastecimiento }: 
         })}
       </tbody>
     </table>
+  )
+}
+
+// Qué es cada columna y de dónde sale. Mantener al día con MIG659/660
+// (v_combustible_tarjeta_cargas y v_combustible_rendimiento_mes).
+function ComoSeCalcula() {
+  const Item = ({ t, children }: { t: string; children: React.ReactNode }) => (
+    <div><dt className="font-semibold text-gray-800">{t}</dt><dd className="text-gray-600">{children}</dd></div>
+  )
+  return (
+    <details className="rounded-xl border bg-white p-4 text-sm">
+      <summary className="cursor-pointer font-semibold text-gray-900">¿Cómo se calcula?</summary>
+      <div className="mt-4 space-y-5">
+        <section>
+          <h3 className="mb-2 font-semibold text-blue-700">De dónde salen los datos</h3>
+          <ul className="list-disc space-y-1 pl-5 text-gray-600">
+            <li><b>Tarjeta Aramco Fleet</b> (Excel de portaltarjetas.cl): fecha, patente, estación, litros y $ de cada carga.
+              El odómetro viene vacío en el portal (el chofer no lo digita), por eso los km salen del GPS.</li>
+            <li><b>GPS</b> (Radicom): odómetro una vez al día y posición cada hora.</li>
+            <li><b>Renault</b>: su computador (rFMS) informa los litros que gastó el motor; no usa tarjeta.</li>
+            <li>Fuera del análisis: la camioneta de gerencia (TCRB-71). Los aljibes de combustible van aparte, como abastecimiento.</li>
+          </ul>
+        </section>
+
+        <section>
+          <h3 className="mb-2 font-semibold text-blue-700">Cada carga</h3>
+          <dl className="grid gap-3 md:grid-cols-2">
+            <Item t="Fecha">Día y hora de la carga según Aramco (hora de Chile).</Item>
+            <Item t="Patente">La del Excel, cruzada con la ficha del vehículo en SICOM.</Item>
+            <Item t="Estación">La estación Aramco donde se cargó.</Item>
+            <Item t="Litros">«Volumen (L)» del Excel.</Item>
+            <Item t="$">«Total pago» del Excel: lo que se paga, ya con el descuento.</Item>
+            <Item t="Km desde anterior">
+              Odómetro GPS al cierre del día anterior a esta carga, menos el mismo dato de la carga anterior.
+              Dos cargas el mismo día dan 0. Queda vacío si el GPS lleva más de 3 días sin odómetro o si el vehículo no tiene GPS.
+            </Item>
+            <Item t="Km/L tramo">
+              Km desde anterior ÷ litros de esta carga (lleno a lleno: lo que se carga repone lo que se gastó desde la carga anterior).
+              El número gris es la mediana del vehículo, para comparar. Una carga suelta puede salir rara (llenado parcial,
+              odómetro diario); el del mes es el confiable.
+            </Item>
+            <Item t="GPS vs estación">
+              Distancia entre donde estaba el vehículo según el GPS (la lectura más cercana a la hora de la carga, hasta 90 min) y la estación.
+              La ubicación de la estación la aprende SICOM: es el punto medio de las cargas con GPS en esa estación (hacen falta 3).
+              El link abre el mapa con la posición GPS. «ver» = la estación aún no tiene ubicación aprendida; «—» = no hubo lectura GPS cerca de esa hora.
+            </Item>
+          </dl>
+        </section>
+
+        <section>
+          <h3 className="mb-2 font-semibold text-blue-700">Alertas</h3>
+          <dl className="grid gap-3 md:grid-cols-2">
+            <Item t={ALERTA_TXT.fuera_estacion}>Está a más de 5 km de la estación, más 1,2 km por cada minuto entre la lectura GPS y la carga (un vehículo en movimiento).</Item>
+            <Item t={ALERTA_TXT.sobre_estanque}>Más de 90 L en camioneta o furgón, o más de 450 L en camión. No aplica a los aljibes.</Item>
+            <Item t={ALERTA_TXT.sin_movimiento}>15 L o más cuando el GPS marcó menos de 5 km desde una carga de otro día.</Item>
+            <Item t={ALERTA_TXT.rendimiento_bajo}>Tramo de 150 km o más con un km/L bajo el 60 % de la mediana del vehículo (con al menos 4 tramos medidos).</Item>
+            <Item t={ALERTA_TXT.dos_cargas_dia}>Dos o más cargas de la misma patente el mismo día. Puede ser normal en viajes largos: mirar los km.</Item>
+            <Item t="Grises (informativas)">«{ALERTA_TXT.sin_gps}» y «{ALERTA_TXT.sin_ficha}»: falta un dato, no es sospecha.</Item>
+          </dl>
+        </section>
+
+        <section>
+          <h3 className="mb-2 font-semibold text-blue-700">Tabla por vehículo (el mes)</h3>
+          <dl className="grid gap-3 md:grid-cols-2">
+            <Item t="Cargas, Litros, $">Suma de las cargas del mes con la tarjeta.</Item>
+            <Item t="Km GPS">Km que recorrió en el mes según el odómetro GPS.</Item>
+            <Item t="Km/L">
+              Km de los tramos ÷ litros de esos mismos tramos. Solo cuentan las cargas con odómetro GPS en las dos puntas;
+              así un mes con días sin GPS no da un rendimiento falso. Queda en blanco con menos de 100 km medidos.
+            </Item>
+            <Item t="$/km">$ de esos tramos ÷ km de esos tramos.</Item>
+            <Item t="Mes ant.">El km/L del mes anterior, para ver si cambió.</Item>
+            <Item t="Renault">Litros y km de su computador. El $ es estimado (≈): litros × lo que costó el litro de diésel ese mes con la tarjeta.</Item>
+          </dl>
+        </section>
+      </div>
+    </details>
   )
 }
 
