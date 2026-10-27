@@ -136,6 +136,9 @@ export async function getImportaciones() {
   return (data ?? []) as Importacion[]
 }
 
+// [MIG660] Los aljibes de combustible cargan para abastecer a otros equipos.
+export type Grupo = 'flota' | 'abastecimiento'
+
 export type RendimientoMes = {
   fuente: 'tarjeta' | 'computador'
   activo_id: string | null
@@ -154,6 +157,7 @@ export type RendimientoMes = {
   km_medidos: number | null
   km_l: number | null
   costo_km: number | null
+  grupo: Grupo
 }
 export async function getRendimientoMes(desdeMes: string) {
   const { data, error } = await supabase.from('v_combustible_rendimiento_mes').select('*')
@@ -197,10 +201,11 @@ export type CargaTarjeta = {
   km_l_mediana: number | null
   dist_estacion_km: number | null
   alertas: Alerta[]
+  grupo: Grupo
 }
 export async function getCargasTarjeta(desde: string, hasta: string) {
   const { data, error } = await supabase.from('v_combustible_tarjeta_cargas')
-    .select('id, fecha_hora, patente, patente_ver, activo_id, tipo_vehiculo, tiene_gps, producto, estacion, comuna, rut_chofer, litros, pizarra_l, total_pago, gps_lat, gps_lng, gps_dif_min, odometro_gps, km_tramo, km_l_tramo, km_l_mediana, dist_estacion_km, alertas')
+    .select('id, fecha_hora, patente, patente_ver, activo_id, tipo_vehiculo, tiene_gps, producto, estacion, comuna, rut_chofer, litros, pizarra_l, total_pago, gps_lat, gps_lng, gps_dif_min, odometro_gps, km_tramo, km_l_tramo, km_l_mediana, dist_estacion_km, alertas, grupo')
     .gte('fecha_hora', desde).lt('fecha_hora', hasta)
     .order('fecha_hora', { ascending: false })
   if (error) throw error
