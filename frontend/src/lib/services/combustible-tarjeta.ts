@@ -166,6 +166,14 @@ export async function getRendimientoMes(desdeMes: string) {
   return (data ?? []) as RendimientoMes[]
 }
 
+// Fecha de la primera carga guardada: el mes en que parte el historial está incompleto.
+export async function getPrimeraCarga() {
+  const { data, error } = await supabase.from('combustible_tarjeta_cargas').select('fecha_hora')
+    .order('fecha_hora').limit(1).maybeSingle()
+  if (error) throw error
+  return (data?.fecha_hora as string | undefined)?.slice(0, 10) ?? null
+}
+
 export type Alerta = 'sin_ficha' | 'sin_gps' | 'fuera_estacion' | 'sobre_estanque' | 'sin_movimiento' | 'rendimiento_bajo' | 'dos_cargas_dia'
 export const ALERTA_TXT: Record<Alerta, string> = {
   sin_ficha: 'Patente no está en SICOM',
