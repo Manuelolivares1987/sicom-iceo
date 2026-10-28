@@ -34,8 +34,8 @@ const fechaHora = (s: string) => {
   const [, m, dd] = d.split('-')
   return `${dd}-${m} ${t?.slice(0, 5) ?? ''}`
 }
-// Lo que no es sospecha sino falta de dato no se pinta como alerta.
-const INFORMATIVAS: Alerta[] = ['sin_gps', 'sin_ficha']
+// Lo que no es sospecha sino falta de dato (o un viaje) no se pinta como alerta.
+const INFORMATIVAS: Alerta[] = ['sin_gps', 'sin_ficha', 'dos_cargas_dia']
 const MESES_VISTA = 12
 
 type Leido = { archivo: string; filas: FilaTarjeta[]; descartadas: number }
@@ -493,11 +493,25 @@ function ComoSeCalcula() {
           <h3 className="mb-2 font-semibold text-blue-700">Alertas</h3>
           <dl className="grid gap-3 md:grid-cols-2">
             <Item t={ALERTA_TXT.fuera_estacion}>Está a más de 5 km de la estación, más 1,2 km por cada minuto entre la lectura GPS y la carga (un vehículo en movimiento).</Item>
-            <Item t={ALERTA_TXT.sobre_estanque}>Más de 90 L en camioneta o furgón, o más de 450 L en camión. No aplica a los aljibes.</Item>
+            <Item t={ALERTA_TXT.sobre_estanque}>
+              Más que la capacidad del estanque de la ficha + 10 % (cuello de llenado). Sin dato en la ficha: 80 L camioneta o furgón,
+              450 L camión. No aplica a los aljibes.
+            </Item>
             <Item t={ALERTA_TXT.sin_movimiento}>15 L o más cuando el GPS marcó menos de 5 km desde una carga de otro día.</Item>
-            <Item t={ALERTA_TXT.rendimiento_bajo}>Tramo de 150 km o más con un km/L bajo el 60 % de la mediana del vehículo (con al menos 4 tramos medidos).</Item>
-            <Item t={ALERTA_TXT.dos_cargas_dia}>Dos o más cargas de la misma patente el mismo día. Puede ser normal en viajes largos: mirar los km.</Item>
-            <Item t="Grises (informativas)">«{ALERTA_TXT.sin_gps}» y «{ALERTA_TXT.sin_ficha}»: falta un dato, no es sospecha.</Item>
+            <Item t={ALERTA_TXT.rendimiento_bajo}>
+              En los 30 días que terminan en la carga, lo cargado supera lo que gastó andando (km GPS ÷ su km/L normal, +20 %) más un
+              estanque completo. El nivel del estanque nunca cambia más que su capacidad, así que esos litros no fueron a su motor.
+              No depende de la hora de la carga. Exige 20 días con km GPS. Detecta pérdidas desde ~100–160 L al mes; las menores se
+              ven en «Litros sin explicar».
+            </Item>
+            <Item t={ALERTA_TXT.litros_dia_excede}>
+              Dos o más cargas el mismo día que suman más de lo que cabe en el estanque más lo que gastó andando ese día
+              (km GPS del día ÷ km/L normal, +30 %). Se marca en la última carga del día.
+            </Item>
+            <Item t="Grises (informativas)">
+              «{ALERTA_TXT.dos_cargas_dia}» (casi siempre un viaje), «{ALERTA_TXT.sin_gps}» y «{ALERTA_TXT.sin_ficha}»: datos, no sospechas.
+              El km/L de cada tramo se muestra pero no alerta: con el odómetro diario, una carga en la tarde pasa sus km al tramo siguiente.
+            </Item>
           </dl>
         </section>
 

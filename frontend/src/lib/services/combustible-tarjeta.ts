@@ -175,14 +175,17 @@ export async function getPrimeraCarga() {
 }
 
 export type Alerta = 'sin_ficha' | 'sin_gps' | 'fuera_estacion' | 'sobre_estanque' | 'sin_movimiento' | 'rendimiento_bajo' | 'dos_cargas_dia'
+  | 'litros_dia_excede'
 export const ALERTA_TXT: Record<Alerta, string> = {
   sin_ficha: 'Patente no está en SICOM',
   sin_gps: 'Sin GPS: no hay km',
   fuera_estacion: 'El GPS no estaba en la estación',
   sobre_estanque: 'Más litros de los que caben',
   sin_movimiento: 'Cargó sin haberse movido',
-  rendimiento_bajo: 'Rendimiento muy bajo para este vehículo',
+  // [MIG662] regla de 30 días: cargó más de lo que gastó andando + un estanque
+  rendimiento_bajo: 'Cargó más de lo que explican sus km',
   dos_cargas_dia: 'Dos o más cargas el mismo día',
+  litros_dia_excede: 'En el día cargó más de lo que cabe y gastó',
 }
 
 export type CargaTarjeta = {
@@ -210,10 +213,16 @@ export type CargaTarjeta = {
   dist_estacion_km: number | null
   alertas: Alerta[]
   grupo: Grupo
+  capacidad_l: number | null
+  litros_dia: number | null
+  km_dia: number | null
+  litros_30d: number | null
+  km_30d: number | null
+  litros_sin_explicar_30d: number | null
 }
 export async function getCargasTarjeta(desde: string, hasta: string) {
   const { data, error } = await supabase.from('v_combustible_tarjeta_cargas')
-    .select('id, fecha_hora, patente, patente_ver, activo_id, tipo_vehiculo, tiene_gps, producto, estacion, comuna, rut_chofer, litros, pizarra_l, total_pago, gps_lat, gps_lng, gps_dif_min, odometro_gps, km_tramo, km_l_tramo, km_l_mediana, dist_estacion_km, alertas, grupo')
+    .select('id, fecha_hora, patente, patente_ver, activo_id, tipo_vehiculo, tiene_gps, producto, estacion, comuna, rut_chofer, litros, pizarra_l, total_pago, gps_lat, gps_lng, gps_dif_min, odometro_gps, km_tramo, km_l_tramo, km_l_mediana, dist_estacion_km, alertas, grupo, capacidad_l, litros_dia, km_dia, litros_30d, km_30d, litros_sin_explicar_30d')
     .gte('fecha_hora', desde).lt('fecha_hora', hasta)
     .order('fecha_hora', { ascending: false })
   if (error) throw error
