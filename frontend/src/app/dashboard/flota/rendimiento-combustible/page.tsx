@@ -335,7 +335,8 @@ function ListaRevision({ filas }: { filas: Revision[] }) {
               </div>
             </div>
             <ul className="min-w-0 flex-1 space-y-0.5 text-sm text-gray-700">
-              {r.motivos.filter((m) => m.nivel !== 'info').map((m) => <li key={m.texto}>{m.texto}</li>)}
+              {/* Lo explicado va en gris: es contexto (p. ej. cargó más pero anduvo más), no motivo. */}
+              {r.motivos.map((m) => <li key={m.texto} className={cn(m.nivel === 'info' && 'text-gray-500')}>{m.texto}</li>)}
             </ul>
             <div className="text-right text-xs tabular-nums text-gray-600">
               <p>{r.parcial ? '≈ ' : ''}{n0(r.litrosProy)} L{r.normalLitros != null && <> · normal {n0(r.normalLitros)}</>}</p>
