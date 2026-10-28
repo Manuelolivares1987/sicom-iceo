@@ -5,23 +5,26 @@
 // Renault: litros que informa su propio computador (rFMS); el $ es estimado con
 // el precio del diésel pagado ese mes con la tarjeta.
 // Tendencia de 12 meses, mapa de calor y revisión por vehículo: lib/combustible-tendencia.
+// [MIG663] Lo ya revisado (justificado) deja de contar como pendiente.
 
-import { Fragment, useMemo, useRef, useState } from 'react'
+import { createContext, Fragment, useContext, useMemo, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  AlertOctagon, AlertTriangle, ArrowDown, ArrowUp, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Fuel, Info, Loader2, Upload,
+  AlertOctagon, AlertTriangle, ArrowDown, ArrowUp, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Flag, Fuel, Info,
+  Loader2, Upload,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useRequireAuth } from '@/hooks/use-require-auth'
 import { useToast } from '@/contexts/toast-context'
 import { cn, errorMessage } from '@/lib/utils'
 import {
-  ALERTA_TXT, getCargasTarjeta, getImportaciones, getPrimeraCarga, getRendimientoMes, importarTarjeta, leerAramco,
-  type Alerta, type FilaTarjeta, type RendimientoMes, type ResultadoImportacion,
+  ALERTA_TXT, borrarRevision, getCargasTarjeta, getImportaciones, getPrimeraCarga, getRendimientoMes, getRevisiones, importarTarjeta,
+  leerAramco, revisarAlerta,
+  type Alerta, type CargaTarjeta, type EstadoRevision, type FilaTarjeta, type RendimientoMes, type ResultadoImportacion, type RevisionAlerta,
 } from '@/lib/services/combustible-tarjeta'
 import {
-  filaFlota, mapaCalor, mesIso, paraRevisar, rangoMeses, revisarVehiculos, serieFlota, sumarMes, valorBase, variacion,
-  type Base, type Revision,
+  filaFlota, litrosSinExplicar, mapaCalor, mesIso, paraRevisar, rangoMeses, revisarVehiculos, serieFlota, sumarMes, valorBase, variacion,
+  type Base, type RefVehiculo, type Revision, type SinExplicar,
 } from '@/lib/combustible-tendencia'
 import { GraficoKmL, GraficoLitros, MapaCalor, nombreMes } from './graficos'
 
@@ -37,6 +40,16 @@ const fechaHora = (s: string) => {
 // Lo que no es sospecha sino falta de dato (o un viaje) no se pinta como alerta.
 const INFORMATIVAS: Alerta[] = ['sin_gps', 'sin_ficha', 'dos_cargas_dia']
 const MESES_VISTA = 12
+const conAlerta = (c: CargaTarjeta) => c.alertas.some((a) => !INFORMATIVAS.includes(a))
+
+// Revisiones guardadas (MIG663), al alcance de las tablas sin pasarlas fila por fila.
+type Revisar = { cargaId?: string; patente?: string; mes?: string; estado: EstadoRevision; comentario: string }
+type CtxRev = {
+  porCarga: Map<string, RevisionAlerta>; porVehiculo: Map<string, RevisionAlerta>
+  guardar: (r: Revisar) => Promise<boolean>; borrar: (id: string) => Promise<void>
+}
+const RevCtx = createContext<CtxRev | null>(null)
+const claveVehiculo = (patente: string, mes: string) => `${patente}|${mes.slice(0, 10)}`
 
 type Leido = { archivo: string; filas: FilaTarjeta[]; descartadas: number }
 
@@ -68,6 +81,26 @@ export default function RendimientoCombustiblePage() {
   })
   const { data: importaciones = [] } = useQuery({ queryKey: ['comb-tarjeta-importaciones'], queryFn: getImportaciones })
   const { data: inicio = null } = useQuery({ queryKey: ['comb-tarjeta-importaciones', 'inicio'], queryFn: getPrimeraCarga })
+  const { data: revisadas = [] } = useQuery({ queryKey: ['comb-tarjeta-revisiones'], queryFn: getRevisiones })
+
+  const ctxRev = useMemo<CtxRev>(() => ({
+    porCarga: new Map(revisadas.filter((r) => r.carga_id).map((r) => [r.carga_id!, r])),
+    porVehiculo: new Map(revisadas.filter((r) => !r.carga_id).map((r) => [claveVehiculo(r.patente!, r.mes!), r])),
+    guardar: async (r) => {
+      try {
+        await revisarAlerta(r)
+        await qc.invalidateQueries({ queryKey: ['comb-tarjeta-revisiones'] })
+        toast.success(r.estado === 'justificada' ? 'Marcado como justificado.' : 'Escalado: queda visible para seguimiento.')
+        return true
+      } catch (err) { toast.error(errorMessage(err)); return false }
+    },
+    borrar: async (id) => {
+      try {
+        await borrarRevision(id)
+        await qc.invalidateQueries({ queryKey: ['comb-tarjeta-revisiones'] })
+      } catch (err) { toast.error(errorMessage(err)) }
+    },
+  }), [revisadas, qc, toast])
 
   // Hasta qué día hay cargas subidas: el mes de ese día está a medias y se proyecta al cierre.
   const corte = useMemo(() => {
@@ -75,17 +108,33 @@ export default function RendimientoCombustiblePage() {
     return h.length ? h[h.length - 1] : null
   }, [importaciones])
 
+  // Solo cuentan las cargas con alerta que nadie ha justificado.
+  const pendiente = (c: CargaTarjeta) => conAlerta(c) && ctxRev.porCarga.get(c.id)?.estado !== 'justificada'
   const alertasPorPatente = useMemo(() => {
     const m = new Map<string, number>()
-    for (const c of cargas) if (c.alertas.some((a) => !INFORMATIVAS.includes(a))) m.set(c.patente_ver, (m.get(c.patente_ver) ?? 0) + 1)
+    for (const c of cargas) if (conAlerta(c) && ctxRev.porCarga.get(c.id)?.estado !== 'justificada') m.set(c.patente_ver, (m.get(c.patente_ver) ?? 0) + 1)
     return m
-  }, [cargas])
+  }, [cargas, ctxRev])
+
+  // km/L normal y estanque de cada vehículo (vienen en cada carga): base de «litros sin explicar».
+  const sinExplicar = useMemo(() => {
+    const refs = new Map<string, RefVehiculo>()
+    for (const c of cargas) if (!refs.has(c.patente_ver)) refs.set(c.patente_ver, { kmL: c.km_l_mediana, capacidad: c.capacidad_l })
+    return litrosSinExplicar(rend, mes, refs)
+  }, [rend, mes, cargas])
 
   const serie = useMemo(() => serieFlota(rend, meses, corte, inicio), [rend, meses, corte, inicio])
   const calor = useMemo(() => mapaCalor(rend, meses, corte, inicio), [rend, meses, corte, inicio])
-  const revisiones = useMemo(() => revisarVehiculos(rend, mes, corte, alertasPorPatente, inicio),
-    [rend, mes, corte, alertasPorPatente, inicio])
-  const aRevisar = useMemo(() => paraRevisar(revisiones), [revisiones])
+  const revisiones = useMemo(() => revisarVehiculos(rend, mes, corte, alertasPorPatente, inicio, sinExplicar),
+    [rend, mes, corte, alertasPorPatente, inicio, sinExplicar])
+  const marcados = useMemo(() => paraRevisar(revisiones), [revisiones])
+  const aRevisar = marcados.filter((r) => ctxRev.porVehiculo.get(claveVehiculo(r.patente, mes))?.estado !== 'justificada')
+  const justificados = marcados.filter((r) => ctxRev.porVehiculo.get(claveVehiculo(r.patente, mes))?.estado === 'justificada')
+  const neto = useMemo(() => {
+    const v = Array.from(sinExplicar.values())
+    return { litros: v.reduce((s, x) => s + x.exceso, 0), esperados: v.reduce((s, x) => s + x.esperados, 0),
+      vehiculos: v.length, sospechosos: v.filter((x) => x.sospechoso).length }
+  }, [sinExplicar])
   const revPorPatente = useMemo(() => new Map(revisiones.map((r) => [r.patente, r])), [revisiones])
 
   const delMes = useMemo(() => rend.filter((r) => r.mes.slice(0, 10) === mes)
@@ -93,7 +142,9 @@ export default function RendimientoCombustiblePage() {
   const flota = delMes.filter((f) => f.fuente === 'tarjeta' && f.grupo === 'flota')
   const abastecimiento = delMes.filter((f) => f.grupo === 'abastecimiento')
   const renault = delMes.filter((f) => f.fuente === 'computador')
-  const sospechosas = cargas.filter((c) => c.alertas.some((a) => !INFORMATIVAS.includes(a)))
+  // Primero las que faltan por revisar.
+  const sospechosas = cargas.filter(conAlerta).sort((a, b) => Number(pendiente(b)) - Number(pendiente(a)))
+  const cargasPendientes = sospechosas.filter(pendiente).length
 
   const punto = serie.find((p) => p.mes === mes)
   const kpi = (clave: 'litrosProy' | 'montoProy' | 'kmL' | 'costoKm') => {
@@ -150,6 +201,7 @@ export default function RendimientoCombustiblePage() {
   const corteTxt = corte ? `${corte.slice(8, 10)}-${corte.slice(5, 7)}` : ''
 
   return (
+    <RevCtx.Provider value={ctxRev}>
     <div className="mx-auto max-w-6xl space-y-5 p-4">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
@@ -180,13 +232,20 @@ export default function RendimientoCombustiblePage() {
         </p>
       )}
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5">
         <Kpi t="Litros flota" v={`${parcial ? '≈ ' : ''}${n0(kL.v)} L`} s={parcial ? `${n0(punto?.litros)} L al ${corteTxt}` : `${punto?.cargas ?? 0} cargas`}
              d={kL.d} txtBase={txtBase} subirEsMalo />
         <Kpi t="Km/L flota" v={n1(kKm.v)} s={kCk.v == null ? 'sin km del GPS' : `${pesos(kCk.v)}/km`} d={kKm.d} txtBase={txtBase} />
         <Kpi t="$ flota" v={`${parcial ? '≈ ' : ''}${pesos(kM.v)}`} s={punto?.precioL ? `${pesos(punto.precioL)}/L` : '—'}
              d={kM.d} txtBase={txtBase} subirEsMalo />
-        <Kpi t="Vehículos para revisar" v={String(aRevisar.length)} s={`${sospechosas.length} cargas con alerta`} alerta={aRevisar.length > 0} />
+        <Kpi t="Litros vs lo que piden sus km"
+             v={neto.vehiculos ? `${neto.litros > 0 ? '+' : ''}${n0(neto.litros)} L` : '—'}
+             s={neto.vehiculos
+               ? `${neto.litros > 0 && punto?.precioL ? `≈ ${pesos(neto.litros * punto.precioL)} · ` : ''}${neto.vehiculos} vehículos con GPS`
+               : 'sin km GPS del mes completo'}
+             alerta={neto.sospechosos > 0} />
+        <Kpi t="Vehículos para revisar" v={String(aRevisar.length)}
+             s={`${cargasPendientes} de ${sospechosas.length} cargas con alerta sin revisar`} alerta={aRevisar.length > 0} />
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
@@ -223,8 +282,11 @@ export default function RendimientoCombustiblePage() {
         </CardHeader>
         <CardContent className="p-0">
           {aRevisar.length === 0
-            ? <p className="px-4 pb-4 text-sm text-gray-500">Ningún vehículo se sale de su normal este mes.</p>
-            : <ListaRevision filas={aRevisar} />}
+            ? <p className="px-4 pb-4 text-sm text-gray-500">
+                {justificados.length ? 'Todo lo marcado este mes ya está revisado.' : 'Ningún vehículo se sale de su normal este mes.'}
+              </p>
+            : <ListaRevision filas={aRevisar} mes={mes} />}
+          <Revisados filas={justificados} mes={mes} />
           <Explicados filas={revisiones.filter((r) => r.motivos.length > 0 && r.motivos.every((m) => m.nivel === 'info'))} />
         </CardContent>
       </Card>
@@ -234,9 +296,11 @@ export default function RendimientoCombustiblePage() {
         <CardContent className="overflow-x-auto p-0">
           {isLoading ? <Cargando />
             : flota.length === 0 ? <p className="p-6 text-sm text-gray-500">Sin cargas este mes. Suba el Excel de Aramco más abajo.</p>
-            : <TablaVehiculos filas={flota} cargas={cargas} rev={revPorPatente} alertas={alertasPorPatente} abierto={abierto} setAbierto={setAbierto} />}
+            : <TablaVehiculos filas={flota} cargas={cargas} rev={revPorPatente} sinExplicar={sinExplicar} alertas={alertasPorPatente}
+                              abierto={abierto} setAbierto={setAbierto} />}
           <p className="border-t p-2 text-xs text-gray-500">
-            Km/L en blanco: el mes tiene menos de 100 km medidos entre cargas con GPS. Clic en una fila para ver sus cargas.
+            Km/L en blanco: el mes tiene menos de 100 km medidos entre cargas con GPS. «Sin explicar» = litros del mes − km GPS ÷ su km/L
+            normal; el nivel del estanque lo mueve hasta ±1 estanque, por eso va en rojo solo si sobra más que eso. Clic en una fila para ver sus cargas.
           </p>
         </CardContent>
       </Card>
@@ -262,7 +326,10 @@ export default function RendimientoCombustiblePage() {
 
       {sospechosas.length > 0 && (
         <Card>
-          <CardHeader><CardTitle className="flex items-center gap-2 text-base"><AlertTriangle className="h-4 w-4 text-amber-600" /> Cargas con alerta</CardTitle></CardHeader>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base"><AlertTriangle className="h-4 w-4 text-amber-600" /> Cargas con alerta</CardTitle>
+            <p className="text-xs text-gray-500">{cargasPendientes} sin revisar. «Justificada» la saca de pendientes; «Escalar» la deja visible para seguimiento.</p>
+          </CardHeader>
           <CardContent className="overflow-x-auto p-0"><TablaCargas cargas={sospechosas} conPatente /></CardContent>
         </Card>
       )}
@@ -314,12 +381,13 @@ export default function RendimientoCombustiblePage() {
         </CardContent>
       </Card>
     </div>
+    </RevCtx.Provider>
   )
 }
 
 const Cargando = () => <div className="flex justify-center p-8"><Loader2 className="h-6 w-6 animate-spin text-blue-600" /></div>
 
-function ListaRevision({ filas }: { filas: Revision[] }) {
+function ListaRevision({ filas, mes }: { filas: Revision[]; mes: string }) {
   return (
     <ul className="divide-y">
       {filas.map((r) => {
@@ -342,10 +410,70 @@ function ListaRevision({ filas }: { filas: Revision[] }) {
               <p>{r.parcial ? '≈ ' : ''}{n0(r.litrosProy)} L{r.normalLitros != null && <> · normal {n0(r.normalLitros)}</>}</p>
               <p>{r.kmL != null ? `${n1(r.kmL)} km/L` : 'sin km/L'}{r.kmGps != null && ` · ${n0(r.kmGps)} km`}</p>
             </div>
+            <div className="basis-full pl-6 sm:pl-40"><ControlRevision patente={r.patente} mes={mes} /></div>
           </li>
         )
       })}
     </ul>
+  )
+}
+
+// Vehículos marcados que alguien ya justificó este mes: quedan a la vista, con quién y por qué.
+function Revisados({ filas, mes }: { filas: Revision[]; mes: string }) {
+  if (!filas.length) return null
+  return (
+    <div className="border-t px-4 py-2 text-xs text-gray-600">
+      <p className="mb-1 flex items-center gap-1 font-semibold text-gray-700"><CheckCircle2 className="h-3.5 w-3.5 text-green-600" /> Revisados</p>
+      {filas.map((r) => (
+        <div key={r.patente} className="flex flex-wrap items-baseline gap-x-2"><b>{r.patente}</b><ControlRevision patente={r.patente} mes={mes} /></div>
+      ))}
+    </div>
+  )
+}
+
+// Revisar una carga (cargaId) o un vehículo en el mes (patente + mes): muestra la revisión guardada o el formulario.
+function ControlRevision({ cargaId, patente, mes }: { cargaId?: string; patente?: string; mes?: string }) {
+  const ctx = useContext(RevCtx)!
+  const [abierto, setAbierto] = useState(false)
+  const [texto, setTexto] = useState('')
+  const [guardando, setGuardando] = useState(false)
+  const rev = cargaId ? ctx.porCarga.get(cargaId) : ctx.porVehiculo.get(claveVehiculo(patente!, mes!))
+  async function guardar(estado: EstadoRevision) {
+    setGuardando(true)
+    const ok = await ctx.guardar({ cargaId, patente, mes, estado, comentario: texto })
+    setGuardando(false)
+    if (ok) { setAbierto(false); setTexto('') }
+  }
+  if (rev && !abierto) {
+    const Icono = rev.estado === 'justificada' ? CheckCircle2 : Flag
+    return (
+      <span className="inline-flex flex-wrap items-baseline gap-x-1.5 text-xs" onClick={(e) => e.stopPropagation()}>
+        <span className={cn('inline-flex items-center gap-1 rounded px-1.5 py-0.5 font-medium',
+          rev.estado === 'justificada' ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800')}>
+          <Icono className="h-3 w-3" aria-hidden />{rev.estado === 'justificada' ? 'Justificada' : 'Escalada'}
+        </span>
+        <span className="text-gray-700">{rev.comentario}</span>
+        <span className="text-gray-400">· {rev.revisado_por ?? '—'}, {new Date(rev.created_at).toLocaleDateString('es-CL')}</span>
+        <button type="button" onClick={() => { setTexto(rev.comentario); setAbierto(true) }} className="text-blue-600 hover:underline">cambiar</button>
+        <button type="button" onClick={() => ctx.borrar(rev.id)} className="text-gray-500 hover:underline">deshacer</button>
+      </span>
+    )
+  }
+  if (!abierto) return (
+    <button type="button" onClick={(e) => { e.stopPropagation(); setAbierto(true) }}
+            className="rounded border px-2 py-0.5 text-xs text-gray-700 hover:bg-gray-50">Revisar</button>
+  )
+  return (
+    <div className="flex flex-wrap items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+      <input autoFocus value={texto} onChange={(e) => setTexto(e.target.value)} maxLength={300}
+             placeholder="Qué se revisó (p. ej. viaje a Copiapó, boleta pedida al chofer)"
+             className="min-w-[220px] flex-1 rounded border px-2 py-1 text-xs" />
+      <button type="button" disabled={guardando || texto.trim().length < 3} onClick={() => guardar('justificada')}
+              className="rounded bg-green-600 px-2 py-1 text-xs font-medium text-white hover:bg-green-700 disabled:opacity-40">Justificada</button>
+      <button type="button" disabled={guardando || texto.trim().length < 3} onClick={() => guardar('escalada')}
+              className="rounded bg-red-600 px-2 py-1 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-40">Escalar</button>
+      <button type="button" onClick={() => setAbierto(false)} className="px-1 text-xs text-gray-500 hover:underline">cancelar</button>
+    </div>
   )
 }
 
@@ -360,9 +488,9 @@ function Explicados({ filas }: { filas: Revision[] }) {
   )
 }
 
-function TablaVehiculos({ filas, cargas, rev, alertas, abierto, setAbierto, abastecimiento }: {
+function TablaVehiculos({ filas, cargas, rev, sinExplicar, alertas, abierto, setAbierto, abastecimiento }: {
   filas: RendimientoMes[]; cargas: Awaited<ReturnType<typeof getCargasTarjeta>>
-  rev?: Map<string, Revision>; alertas: Map<string, number>
+  rev?: Map<string, Revision>; sinExplicar?: Map<string, SinExplicar>; alertas: Map<string, number>
   abierto: string | null; setAbierto: (k: string | null) => void; abastecimiento?: boolean
 }) {
   return (
@@ -373,7 +501,8 @@ function TablaVehiculos({ filas, cargas, rev, alertas, abierto, setAbierto, abas
           <th className="p-2 text-right">Cargas</th><th className="p-2 text-right">Litros</th>
           {!abastecimiento && <th className="p-2 text-right" title="Litros del mes (proyectados si el mes está en curso) vs su normal">vs normal</th>}
           <th className="p-2 text-right">$</th>
-          {!abastecimiento && <><th className="p-2 text-right">Km GPS</th><th className="p-2 text-right">Km/L</th><th className="p-2 text-right">$/km</th></>}
+          {!abastecimiento && <><th className="p-2 text-right">Km GPS</th><th className="p-2 text-right">Km/L</th><th className="p-2 text-right">$/km</th>
+            <th className="p-2 text-right" title="Litros del mes − km GPS ÷ su km/L normal">Sin explicar</th></>}
           <th className="p-2 text-right">Alertas</th><th />
         </tr>
       </thead>
@@ -383,6 +512,7 @@ function TablaVehiculos({ filas, cargas, rev, alertas, abierto, setAbierto, abas
           const detalle = cargas.filter((c) => c.patente_ver === f.patente)
           const r = rev?.get(f.patente)
           const nAl = alertas.get(f.patente) ?? 0
+          const se = sinExplicar?.get(f.patente)
           return (
             <Fragment key={k}>
               <tr className="cursor-pointer border-t hover:bg-gray-50" onClick={() => setAbierto(abierto === k ? null : k)}>
@@ -399,12 +529,16 @@ function TablaVehiculos({ filas, cargas, rev, alertas, abierto, setAbierto, abas
                   <td className="p-2 text-right tabular-nums">{f.km_gps == null ? <span className="text-xs text-gray-400">sin GPS</span> : n0(f.km_gps)}</td>
                   <td className="p-2 text-right font-semibold tabular-nums">{n1(f.km_l)}</td>
                   <td className="p-2 text-right tabular-nums">{f.costo_km == null ? '—' : pesos(f.costo_km)}</td>
+                  <td className={cn('p-2 text-right tabular-nums', se?.sospechoso ? 'font-semibold text-red-700' : 'text-gray-600')}
+                      title={se ? `${n0(se.kmGps)} km ÷ ${n1(se.kmLRef)} km/L = ${n0(se.esperados)} L esperados` : 'Sin km GPS del mes completo'}>
+                    {se ? `${se.exceso > 0 ? '+' : ''}${n0(se.exceso)} L` : '—'}
+                  </td>
                 </>}
                 <td className="p-2 text-right">{nAl > 0 ? <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs font-semibold text-amber-800">{nAl}</span> : ''}</td>
                 <td className="p-2 text-gray-400">{abierto === k ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}</td>
               </tr>
               {abierto === k && (
-                <tr className="bg-gray-50/60"><td colSpan={abastecimiento ? 6 : 10} className="p-2"><TablaCargas cargas={detalle} /></td></tr>
+                <tr className="bg-gray-50/60"><td colSpan={abastecimiento ? 6 : 11} className="p-2"><TablaCargas cargas={detalle} /></td></tr>
               )}
             </Fragment>
           )
@@ -560,6 +694,27 @@ function ComoSeCalcula() {
             <Item t="Mirar (ámbar)">Cargó un 50 % o más sobre su normal y no hay km del GPS para confirmarlo; o tiene cargas con alerta.</Item>
             <Item t="Explicado">Cargó un 50 % o más, pero el km/L se mantiene: anduvo más. Se muestra aparte para que se vea que se miró.</Item>
             <Item t="Mes recién empezado">Con menos de ~10 días de datos no se juzga por litros: la proyección todavía es ruido.</Item>
+            <Item t="Revisar (rojo) · litros sin explicar">
+              Cargó en el mes más que lo que piden sus km GPS a su km/L normal (+20 %) más un estanque completo.
+            </Item>
+          </dl>
+        </section>
+
+        <section>
+          <h3 className="mb-2 font-semibold text-blue-700">Litros sin explicar y revisiones</h3>
+          <dl className="grid gap-3 md:grid-cols-2">
+            <Item t="Sin explicar (por vehículo)">
+              Litros del mes − km GPS del mes ÷ su km/L normal (la mediana de sus tramos). El nivel del estanque al inicio y al final del mes
+              lo mueve hasta ±1 estanque: un +40 L o un −30 L es normal. Solo se calcula si el vehículo ya tenía GPS el mes anterior.
+            </Item>
+            <Item t="Litros vs lo que piden sus km (flota)">
+              La suma de lo anterior. Entre varios vehículos el nivel de los estanques se compensa, así que un número grande y positivo
+              mes tras mes es la señal. El $ es esos litros × el $/L del mes.
+            </Item>
+            <Item t="Revisar una alerta">
+              «Justificada» (con el motivo) la saca de pendientes. «Escalar» la deja visible, marcada, para seguimiento. Queda quién lo
+              revisó y cuándo; «deshacer» la vuelve a pendiente. Se revisa una carga o un vehículo en el mes.
+            </Item>
           </dl>
         </section>
       </div>
@@ -598,6 +753,7 @@ function TablaCargas({ cargas, conPatente }: { cargas: Awaited<ReturnType<typeof
           <th className="p-1.5 text-left">Estación</th><th className="p-1.5 text-right">Litros</th><th className="p-1.5 text-right">$</th>
           <th className="p-1.5 text-right">Km desde anterior</th><th className="p-1.5 text-right">Km/L tramo</th>
           <th className="p-1.5 text-right" title="Distancia entre donde estaba el GPS y la estación">GPS vs estación</th><th className="p-1.5 text-left">Alertas</th>
+          <th className="p-1.5 text-left">Revisión</th>
         </tr>
       </thead>
       <tbody>
@@ -622,6 +778,7 @@ function TablaCargas({ cargas, conPatente }: { cargas: Awaited<ReturnType<typeof
                   INFORMATIVAS.includes(a) ? 'bg-gray-100 text-gray-600' : 'bg-amber-100 text-amber-800')}>{ALERTA_TXT[a]}</span>
               ))}
             </td>
+            <td className="p-1.5">{conAlerta(c) && <ControlRevision cargaId={c.id} />}</td>
           </tr>
         ))}
       </tbody>

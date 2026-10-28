@@ -228,3 +228,29 @@ export async function getCargasTarjeta(desde: string, hasta: string) {
   if (error) throw error
   return (data ?? []) as CargaTarjeta[]
 }
+
+// [MIG663] Revisión de alertas: por carga o por vehículo-mes. «justificada» sale de
+// pendientes; «escalada» sigue visible para seguimiento.
+export type EstadoRevision = 'justificada' | 'escalada'
+export type RevisionAlerta = {
+  id: string; carga_id: string | null; patente: string | null; mes: string | null
+  estado: EstadoRevision; comentario: string; created_at: string; revisado_por: string | null
+}
+export async function getRevisiones() {
+  const { data, error } = await supabase.from('v_combustible_tarjeta_revisiones')
+    .select('id, carga_id, patente, mes, estado, comentario, created_at, revisado_por')
+    .order('created_at', { ascending: false }).limit(2000)
+  if (error) throw error
+  return (data ?? []) as RevisionAlerta[]
+}
+export async function revisarAlerta(a: { cargaId?: string; patente?: string; mes?: string; estado: EstadoRevision; comentario: string }) {
+  const { error } = await supabase.rpc('rpc_combustible_tarjeta_revisar', {
+    p_carga_id: a.cargaId ?? null, p_patente: a.cargaId ? null : a.patente ?? null,
+    p_mes: a.cargaId ? null : a.mes ?? null, p_estado: a.estado, p_comentario: a.comentario,
+  })
+  if (error) throw error
+}
+export async function borrarRevision(id: string) {
+  const { error } = await supabase.rpc('rpc_combustible_tarjeta_revision_borrar', { p_id: id })
+  if (error) throw error
+}
