@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { RendimientoMes } from '@/lib/services/combustible-tarjeta'
 import {
-  factorMes, filaFlota, mapaCalor, mediana, paraRevisar, rangoMeses, revisarVehiculos, serieFlota, valorBase,
+  factorMes, filaFlota, litrosSinExplicar, mapaCalor, mediana, paraRevisar, rangoMeses, revisarVehiculos, serieFlota, valorBase,
 } from '@/lib/combustible-tendencia'
 
 // Patentes y cifras inventadas.
@@ -126,5 +126,27 @@ describe('revisión por vehículo', () => {
       fila('BBBB22', '2026-10-01', 200),
     ], '2026-10-01', '2026-10-31', new Map([['AAAA11', 2]]))
     expect(paraRevisar(rs).map((r) => r.patente)).toEqual(['BBBB22', 'AAAA11'])
+  })
+})
+
+describe('litros sin explicar', () => {
+  const refs = new Map([['AAAA11', { kmL: 12, capacidad: 80 }]])
+  const sep = fila('AAAA11', '2026-09-01', 300, { km_gps: 3600 })
+  it('lo esperado sale de los km GPS a su km/L normal', () => {
+    const se = litrosSinExplicar([sep, fila('AAAA11', '2026-10-01', 330, { km_gps: 3600 })], '2026-10-01', refs).get('AAAA11')!
+    expect(se.esperados).toBe(300)
+    expect(se.exceso).toBe(30)
+    expect(se.sospechoso).toBe(false) // cabe en el nivel del estanque
+  })
+  it('sospechoso si sobra más que un estanque + 20 %', () => {
+    const oct = fila('AAAA11', '2026-10-01', 460, { km_gps: 3600 })
+    const se = litrosSinExplicar([sep, oct], '2026-10-01', refs).get('AAAA11')!
+    expect(se.sospechoso).toBe(true) // 460 > 300 × 1,2 + 88
+    const [r] = revisarVehiculos([sep, oct], '2026-10-01', '2026-10-31', new Map(), null, new Map([['AAAA11', se]]))
+    expect(r.motivos[0]).toMatchObject({ nivel: 'alto' })
+    expect(r.motivos[0].texto).toContain('sobran 160 L')
+  })
+  it('sin GPS el mes anterior no se calcula (los km del mes estarían incompletos)', () => {
+    expect(litrosSinExplicar([fila('AAAA11', '2026-10-01', 460, { km_gps: 3600 })], '2026-10-01', refs).size).toBe(0)
   })
 })

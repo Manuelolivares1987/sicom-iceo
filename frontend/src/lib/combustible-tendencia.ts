@@ -147,6 +147,33 @@ export function filaFlota(serie: PuntoFlota[]): FilaCalor {
     celdas: Object.fromEntries(celdas.map((c) => [c.mes, c])) }
 }
 
+// ── Litros sin explicar (Fase 2) ──
+// Litros que el vehículo cargó en el mes menos los que piden sus km GPS a su km/L normal.
+// El nivel del estanque al inicio y al final del mes mueve esto hasta ±1 estanque, por eso
+// solo es sospecha si sobra más que un estanque lleno + 20 % (misma regla que la alerta de
+// 30 días de MIG662). Los km del mes solo valen si el vehículo ya tenía GPS el mes anterior.
+export type RefVehiculo = { kmL: number | null; capacidad: number | null }
+export type SinExplicar = {
+  litros: number; kmGps: number; kmLRef: number; esperados: number; exceso: number
+  capacidad: number; sospechoso: boolean
+}
+
+export function litrosSinExplicar(rend: RendimientoMes[], mes: string, refs: Map<string, RefVehiculo>): Map<string, SinExplicar> {
+  const ant = sumarMes(mes, -1)
+  const conGpsAnt = new Set(rend.filter((r) => esFlota(r) && delMes(r, ant) && r.km_gps != null).map((r) => r.patente))
+  const out = new Map<string, SinExplicar>()
+  for (const r of rend) {
+    if (!esFlota(r) || !delMes(r, mes) || !conGpsAnt.has(r.patente) || !(Number(r.km_gps) > 0)) continue
+    const ref = refs.get(r.patente)
+    if (!ref?.kmL || ref.kmL <= 0) continue
+    const litros = Number(r.litros ?? 0), kmGps = Number(r.km_gps), capacidad = ref.capacidad ?? 80
+    const esperados = kmGps / ref.kmL
+    out.set(r.patente, { litros, kmGps, kmLRef: ref.kmL, esperados, exceso: litros - esperados, capacidad,
+      sospechoso: litros > esperados * 1.2 + capacidad * 1.1 })
+  }
+  return out
+}
+
 // ── Revisión por vehículo del mes elegido ──
 export type Nivel = 'alto' | 'medio' | 'info'
 export type Motivo = { nivel: Nivel; texto: string }
@@ -154,7 +181,7 @@ export type Revision = {
   patente: string; tipo: string | null; parcial: boolean
   litrosProy: number; normalLitros: number | null; desvio: number | null
   kmGps: number | null; kmL: number | null; kmLNormal: number | null; kmLTipo: number | null
-  alertas: number; motivos: Motivo[]
+  alertas: number; sinExplicar: SinExplicar | null; motivos: Motivo[]
 }
 
 const pct = (x: number) => `${x > 0 ? '+' : ''}${Math.round(x * 100)} %`
@@ -164,6 +191,7 @@ const tipoDe = (t: string | null) => (t ?? '').toLowerCase().startsWith('furg') 
 
 export function revisarVehiculos(
   rend: RendimientoMes[], mes: string, corte: string | null, alertasPorPatente: Map<string, number>, inicio?: string | null,
+  sinExplicar: Map<string, SinExplicar> = new Map(),
 ): Revision[] {
   const k = factorMes(mes, corte)
   const delMesFlota = rend.filter((r) => esFlota(r) && delMes(r, mes))
@@ -182,6 +210,10 @@ export function revisarVehiculos(
     const alertas = alertasPorPatente.get(r.patente) ?? 0
 
     const motivos: Motivo[] = []
+    const se = sinExplicar.get(r.patente) ?? null
+    if (se?.sospechoso) motivos.push({ nivel: 'alto', texto:
+      `Cargó ${f0(se.litros)} L y sus ${f0(se.kmGps)} km a ${f1(se.kmLRef)} km/L piden ${f0(se.esperados)} L: `
+      + `sobran ${f0(se.exceso)} L, más de lo que explica un estanque lleno (${f0(se.capacidad)} L).` })
     const ref = kmLNormal ?? kmLTipo
     const kmLBajo = kmL != null && ref != null && kmL < 0.8 * ref
     if (desvio != null && desvio >= 0.5 && k <= PROYECCION_CONFIABLE) {
@@ -196,7 +228,7 @@ export function revisarVehiculos(
     }
     if (alertas > 0) motivos.push({ nivel: 'medio', texto: `${alertas} ${alertas === 1 ? 'carga' : 'cargas'} con alerta: ver el detalle.` })
     return { patente: r.patente, tipo: r.tipo, parcial: k > 1, litrosProy, normalLitros, desvio,
-      kmGps: r.km_gps, kmL, kmLNormal, kmLTipo, alertas, motivos }
+      kmGps: r.km_gps, kmL, kmLNormal, kmLTipo, alertas, sinExplicar: se, motivos }
   })
 }
 
