@@ -107,7 +107,7 @@ export function GraficoKmL({ serie, mes }: { serie: PuntoFlota[]; mes: string })
       </div>
       <p className="mt-1 text-xs text-gray-500">
         {conDato.length < 3
-          ? 'Los km del GPS existen desde septiembre de 2026: la línea se irá llenando mes a mes.'
+          ? 'Faltan meses con km GPS para dibujar la línea.'
           : 'Km de los tramos entre cargas ÷ litros de esos tramos.'}
       </p>
     </div>

@@ -299,7 +299,7 @@ export default function RendimientoCombustiblePage() {
             : <TablaVehiculos filas={flota} cargas={cargas} rev={revPorPatente} sinExplicar={sinExplicar} alertas={alertasPorPatente}
                               abierto={abierto} setAbierto={setAbierto} />}
           <p className="border-t p-2 text-xs text-gray-500">
-            Km/L en blanco: el mes tiene menos de 100 km medidos entre cargas con GPS. «Sin explicar» = litros del mes − km GPS ÷ su km/L
+            Km/L en blanco: el mes tiene menos de 2 tramos o 400 km medidos entre cargas con GPS. «Sin explicar» = litros del mes − km GPS ÷ su km/L
             normal; el nivel del estanque lo mueve hasta ±1 estanque, por eso va en rojo solo si sobra más que eso. Clic en una fila para ver sus cargas.
           </p>
         </CardContent>
@@ -653,10 +653,14 @@ function ComoSeCalcula() {
           <h3 className="mb-2 font-semibold text-blue-700">Tabla por vehículo (el mes)</h3>
           <dl className="grid gap-3 md:grid-cols-2">
             <Item t="Cargas, Litros, $">Suma de las cargas del mes con la tarjeta.</Item>
-            <Item t="Km GPS">Km que recorrió en el mes según el odómetro GPS.</Item>
+            <Item t="Km GPS">
+              Km que recorrió en el mes según el odómetro GPS. Desde mediados de septiembre de 2026 los registra SICOM; antes se
+              trajeron una vez desde la plataforma del GPS (Radicom/Navixy), que cuadra con SICOM en 0-1 %.
+            </Item>
             <Item t="Km/L">
               Km de los tramos ÷ litros de esos mismos tramos. Solo cuentan las cargas con odómetro GPS en las dos puntas;
-              así un mes con días sin GPS no da un rendimiento falso. Queda en blanco con menos de 100 km medidos.
+              así un mes con días sin GPS no da un rendimiento falso. Queda en blanco con menos de 2 tramos o 400 km medidos
+              (un tramo suelto depende de cuánto se llenó el estanque).
             </Item>
             <Item t="$/km">$ de esos tramos ÷ km de esos tramos.</Item>
             <Item t="vs normal">Litros del mes contra la mediana de sus 6 meses anteriores (hacen falta 3 con cargas).</Item>
@@ -676,7 +680,7 @@ function ComoSeCalcula() {
               El km/L no se proyecta (ya es un promedio).
             </Item>
             <Item t="vs mes anterior / vs prom. 3 meses">La variación de cada indicador contra el mes anterior o contra el promedio de los 3 meses anteriores con datos.</Item>
-            <Item t="Km/L de la flota">Suma de km medidos ÷ suma de litros de esos tramos, de todos los vehículos. Hay km del GPS desde septiembre de 2026.</Item>
+            <Item t="Km/L de la flota">Suma de km medidos ÷ suma de litros de esos tramos, de todos los vehículos. Hay km del GPS desde diciembre de 2025.</Item>
             <Item t="Mapa de calor">
               Cada celda = litros del mes. El color = cuánto se aleja de la mediana de los otros meses cerrados del mismo vehículo
               (hacen falta 3). El mes raro no entra en su propio normal. La primera fila es toda la flota, para comparar.
