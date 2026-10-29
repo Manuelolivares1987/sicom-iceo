@@ -54,6 +54,7 @@ import {
   Wallet,
   FileWarning,
   PackagePlus,
+  KeyRound,
 } from 'lucide-react'
 import { useNcPorDecidir } from '@/hooks/use-nc-por-decidir'
 import { cn } from '@/lib/utils'
@@ -302,6 +303,10 @@ const navGroups: NavGroup[] = [
       { label: 'Rendimiento combustible', href: '/dashboard/flota/rendimiento-combustible', icon: Fuel, module: 'flota', badge: 'NUEVO',
         roles: ['administrador', 'gerencia', 'subgerente_operaciones', 'jefe_operaciones', 'jefe_mantenimiento'],
         tooltip: 'Km/L y $/km por vehículo: tarjeta Aramco cruzada con el GPS, Renault con su computador' },
+      // [MIG665] Acta simple en terreno: fotos + llaves + firma de quien recibe.
+      { label: 'Entrega de unidades', href: '/dashboard/flota/entrega-unidades', icon: KeyRound, module: 'flota', badge: 'NUEVO',
+        roles: ['administrador', 'gerencia', 'subgerente_operaciones', 'jefe_operaciones', 'jefe_mantenimiento', 'planificador'],
+        tooltip: 'Entregar camiones al cliente: fotos, llaves y firma de quien recibe; un acta por camión' },
       { label: 'Informes Recepción', href: '/dashboard/flota/recepcion', icon: FileText, module: 'flota' },
       { label: 'Jornada', href: '/dashboard/flota/jornada', icon: Timer, module: 'flota' },
       { label: 'Mapa GPS', href: '/dashboard/flota/mapa', icon: Satellite, module: 'flota', badge: 'Nuevo' },
