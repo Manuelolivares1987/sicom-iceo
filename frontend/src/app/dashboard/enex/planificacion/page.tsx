@@ -73,14 +73,18 @@ export default function EnexPlanificacionPage() {
     }
     return Array.from(g.entries())
   }, [faenasVista, trimestres])
-  // La Gantt mira hacia adelante: en el trimestre en curso parte el lunes de la semana pasada y
-  // sigue `horizonte` meses. Si se navega a otro trimestre, parte al inicio de ese trimestre.
+  // La Gantt parte SIEMPRE al inicio del trimestre contractual (con varias faenas, el que
+  // empieza primero: Spence/Lomas Oct-Dic + Centinela Nov-Ene → desde octubre), para que lo
+  // ya hecho en el trimestre y sus informes sigan a la vista. En el trimestre en curso se
+  // extiende hasta hoy + `horizonte` meses y abre posicionada en la semana actual.
   // El avance, la curva S y el KPI siguen midiéndose sobre el trimestre contractual.
   const ventanaGantt = useMemo(() => {
     if (!ventana || !hoy) return null
     const enCurso = hoy >= ventana.desde && hoy <= ventana.hasta
-    const lunes = sumarDias(hoy, -7 - ((fechaDeIso(hoy).getDay() + 6) % 7))
-    return ventanaDesde(enCurso ? lunes : ventana.desde, horizonte)
+    const [y1, m1] = ventana.desde.split('-').map(Number), [y2, m2] = hoy.split('-').map(Number)
+    const hastaHoy = (y2 - y1) * 12 + m2 - m1
+    const n = Math.max(ventana.meses.length, enCurso ? hastaHoy + horizonte : horizonte)
+    return ventanaDesde(ventana.desde, n)
   }, [ventana, hoy, horizonte])
 
   const { data: instalaciones = [], refetch: refetchInst } = useQuery({
