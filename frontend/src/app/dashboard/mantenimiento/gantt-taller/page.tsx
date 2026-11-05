@@ -40,7 +40,7 @@ const COLOR_BARRA: Record<VistaBarra, string> = {
   plan: 'bg-white text-gray-900 border-2 border-gray-500',
 }
 const LEYENDA: { v: VistaBarra; t: string }[] = [
-  { v: 'ok', t: 'Cerrada con evidencia' }, { v: 'hoy', t: 'En curso' }, { v: 'falta', t: 'Falta evidencia' },
+  { v: 'ok', t: 'Cerrada con evidencia' }, { v: 'hoy', t: 'En curso o toca ahora' }, { v: 'falta', t: 'Falta evidencia' },
   { v: 'por_aprobar', t: 'Por aprobar' }, { v: 'atraso', t: 'Atrasada' }, { v: 'plan', t: 'Programada' },
 ]
 const DIAS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
@@ -304,7 +304,7 @@ function FilaCamion({ c, dias, hoy, puedePlanificar, onBarra, onCelda, onSoltar 
         <div className="pointer-events-none absolute inset-0 grid gap-1 p-1" style={{ gridTemplateColumns: `repeat(${dias.length},minmax(0,1fr))`, gridTemplateRows: `repeat(${carriles},minmax(0,1fr))` }}>
           {colocadas.map(({ barra, col, largo, carril, cortadaInicio }) => {
             const movible = puedePlanificar && barra.origen === 'actividad' && barra.estado === 'programada'
-            const txt = etiquetaEstadoBarra(barra.vista, barra.evidencia, barra.origen)
+            const txt = etiquetaEstadoBarra(barra.vista, barra.evidencia, barra.origen, barra.estado)
             return (
               <button
                 type="button" key={`${barra.origen}-${barra.id}`} draggable={movible}

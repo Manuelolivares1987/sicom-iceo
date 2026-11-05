@@ -105,7 +105,7 @@ export function papelCorto(tipo: string, etiqueta?: string | null): string {
   return cortos[tipo] ?? (etiqueta && etiqueta !== tipo ? etiqueta : tipo.replace(/_/g, ' '))
 }
 
-export function etiquetaEstadoBarra(vista: VistaBarra, evidencia?: string | null, origen?: string): string {
+export function etiquetaEstadoBarra(vista: VistaBarra, evidencia?: string | null, origen?: string, estado?: string): string {
   switch (vista) {
     case 'ok': return '✓ Evidencia OK'
     case 'por_aprobar': return 'Por aprobar'
@@ -113,7 +113,8 @@ export function etiquetaEstadoBarra(vista: VistaBarra, evidencia?: string | null
       if (origen === 'ot') return 'Falta cierre'
       return evidencia === 'certificado' ? 'Falta certif.' : 'Falta foto'
     case 'atraso': return '! Atrasada'
-    case 'hoy': return 'En curso'
+    // Una OT solo asignada no está «en curso»: nadie la ha partido.
+    case 'hoy': return estado === 'en_ejecucion' || estado === 'pausada' ? 'En curso' : 'Toca ahora'
     default: return ''
   }
 }
