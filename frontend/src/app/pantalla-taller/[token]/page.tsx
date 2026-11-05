@@ -39,7 +39,7 @@ const ESTILO_BARRA: Record<VistaBarra, React.CSSProperties> = {
 
 const LEYENDA: { v: VistaBarra; t: string }[] = [
   { v: 'ok', t: 'Cerrada con evidencia' },
-  { v: 'hoy', t: 'En curso' },
+  { v: 'hoy', t: 'En curso o toca ahora' },
   { v: 'falta', t: 'Falta evidencia' },
   { v: 'por_aprobar', t: 'Por aprobar' },
   { v: 'atraso', t: 'Atrasada' },
@@ -104,7 +104,7 @@ function Fila({ c, dias, hoyIdx, compacta }: { c: CamionGantt; dias: string[]; h
         ) : (
           <div style={{ position: 'absolute', inset: 0, padding: '6px 2px', display: 'grid', gap: 4, gridTemplateColumns: `repeat(${dias.length},minmax(0,1fr))`, gridTemplateRows: `repeat(${carriles},minmax(0,1fr))` }}>
             {colocadas.map(({ barra, col, largo, carril, cortadaInicio }) => {
-              const estadoTxt = etiquetaEstadoBarra(barra.vista, barra.evidencia, barra.origen)
+              const estadoTxt = etiquetaEstadoBarra(barra.vista, barra.evidencia, barra.origen, barra.estado)
               return (
                 <div key={`${barra.origen}-${barra.id}`} style={{ ...ESTILO_BARRA[barra.vista], gridColumn: `${col + 1} / span ${largo}`, gridRow: carril + 1, margin: '0 3px', padding: '0 2px', borderRadius: 6, display: 'flex', flexDirection: enLinea ? 'row' : 'column', gap: enLinea ? 6 : 0, alignItems: 'center', justifyContent: 'center', textAlign: 'center', minWidth: 0, overflow: 'hidden', alignSelf: apretada ? 'stretch' : 'center', height: apretada ? 'auto' : 124 }}>
                   <b style={{ fontSize: fsBarra, fontWeight: 800, lineHeight: 1.05, whiteSpace: 'nowrap' }}>

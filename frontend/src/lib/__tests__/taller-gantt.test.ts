@@ -58,6 +58,12 @@ describe('textos', () => {
     expect(papelCorto('revision_tecnica')).toBe('RT')
   })
 
+  it('una OT sin partir no dice que está en curso', () => {
+    expect(etiquetaEstadoBarra('hoy', null, 'ot', 'asignada')).toBe('Toca ahora')
+    expect(etiquetaEstadoBarra('hoy', null, 'ot', 'en_ejecucion')).toBe('En curso')
+    expect(etiquetaEstadoBarra('hoy', 'foto', 'actividad', 'programada')).toBe('Toca ahora')
+  })
+
   it('una OT terminada sin cierre no pide foto', () => {
     expect(etiquetaEstadoBarra('falta', null, 'ot')).toBe('Falta cierre')
     expect(etiquetaEstadoBarra('falta', 'foto', 'actividad')).toBe('Falta foto')
