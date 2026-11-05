@@ -19,6 +19,7 @@ import {
 import { useTallerTecnicos } from '@/hooks/use-taller-plan-semanal'
 import type { MecanicoOT } from '@/lib/offline/taller-mecanico-sync'
 import { MisOrdenesDeServicio } from './mis-os'
+import { MisActividades } from './mis-actividades'
 import { getOSAbiertas } from '@/lib/services/taller-os'
 import { CalendarDays } from 'lucide-react'
 import {
@@ -392,6 +393,9 @@ export default function MecanicoHomePage() {
           Se muestra sólo si la cuenta está vinculada a un técnico: con la
           cuenta compartida no hay a quién atribuirle el reloj, y un tiempo que
           no se puede atribuir no sirve para el bono. */}
+      {/* [MIG668] Lavado, RT y otros papeles que el planificador puso en el Gantt. */}
+      <MisActividades online={online} />
+
       <MisOrdenesDeServicio online={online} />
 
       {/* [07-09] Manuel: las OS se ven EN SU DÍA de la tira (tarjetas azules,

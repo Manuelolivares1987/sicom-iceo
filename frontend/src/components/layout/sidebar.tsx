@@ -36,8 +36,7 @@ import {
   Timer,
   HardHat,
   Briefcase,
-  CalendarClock,
-  CalendarRange,
+  CalendarClock, CalendarRange,
   Activity,
   Layers,
   QrCode,
@@ -191,6 +190,8 @@ const navGroups: NavGroup[] = [
           // tenía cómo mirar lo mismo que ve el operador en su teléfono.
           { label: 'Terreno (móvil)', href: '/m/taller', icon: Smartphone, module: 'mantenimiento',
             tooltip: 'Lo que ve el operador en su teléfono: sus OT, la pauta, el horómetro y el pedido de insumos' },
+          { label: 'Gantt del taller', href: '/dashboard/mantenimiento/gantt-taller', icon: CalendarRange, module: 'mantenimiento',
+            tooltip: 'Lavado, revisión técnica y lo que le toca a cada camión, con evidencia. Es lo que se ve en el televisor' },
           { label: 'Plan semanal', href: '/dashboard/mantenimiento/plan-semanal-taller', icon: CalendarClock, module: 'mantenimiento' },
           { label: 'No Conformidades', href: '/dashboard/mantenimiento/no-conformidades', icon: AlertTriangle, module: 'mantenimiento', contador: 'nc-por-decidir',
             tooltip: 'Hallazgos por planificar y repuestos que el operador pide aprobar' },
