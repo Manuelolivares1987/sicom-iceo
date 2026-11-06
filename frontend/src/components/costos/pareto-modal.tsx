@@ -71,6 +71,10 @@ function porMesCompania(clave: string, c: TotalesCompania | null | undefined, me
   return (deCompras ? c.comprado_total : c.consumido_total) / meses
 }
 
+// Comprar 2 al año no es «0 al mes»: bajo 10 unidades se muestra un decimal.
+const fmtPorMes = (v: number) =>
+  v.toLocaleString('es-CL', { maximumFractionDigits: v < 10 ? 1 : 0 })
+
 export function ParetoModal({ inicio, desde, hasta, conAdmin, onClose }: {
   inicio: PasoPareto; desde: string; hasta: string; conAdmin?: boolean; onClose: () => void
 }) {
@@ -215,20 +219,20 @@ export function ParetoModal({ inicio, desde, hasta, conAdmin, onClose }: {
                           {etiquetaItem(dim, it)}
                         </span>
                       </td>
-                      <td className="px-2 py-1 text-right font-medium">{fmtMM(it.total)}</td>
+                      <td className="whitespace-nowrap px-2 py-1 text-right font-medium">{fmtMM(it.total)}</td>
                       {unidades && <td className="px-2 py-1 text-right">{fmtNum(it.cantidad ?? 0)}</td>}
                       <td className="px-2 py-1 text-right">{fmtPct(it.pct)}</td>
                       <td className="px-2 py-1 text-right">{fmtPct(it.pct_acum)}</td>
                       {conCia ? (
                         <>
-                          <td className="border-l px-2 py-1 text-right">{unidades ? fmtNum(it.cia?.comprado_cantidad ?? 0) : fmtMM(it.cia?.comprado_total ?? 0)}</td>
-                          <td className="px-2 py-1 text-right">{unidades ? fmtNum(it.cia?.consumido_cantidad ?? 0) : fmtMM(it.cia?.consumido_total ?? 0)}</td>
-                          <td className="px-2 py-1 text-right font-medium">
-                            {(unidades ? fmtNum : fmtMM)(porMesCompania(it.clave, it.cia, meses, unidades))}
+                          <td className="whitespace-nowrap border-l px-2 py-1 text-right">{unidades ? fmtNum(it.cia?.comprado_cantidad ?? 0) : fmtMM(it.cia?.comprado_total ?? 0)}</td>
+                          <td className="whitespace-nowrap px-2 py-1 text-right">{unidades ? fmtNum(it.cia?.consumido_cantidad ?? 0) : fmtMM(it.cia?.consumido_total ?? 0)}</td>
+                          <td className="whitespace-nowrap px-2 py-1 text-right font-medium">
+                            {(unidades ? fmtPorMes : fmtMM)(porMesCompania(it.clave, it.cia, meses, unidades))}
                           </td>
                         </>
                       ) : <td className="px-2 py-1 text-right">{fmtNum(it.lineas)}</td>}
-                      <td className="px-2 py-1 text-right text-xs text-pillado-green-700">
+                      <td className="whitespace-nowrap px-2 py-1 text-right text-xs text-pillado-green-700">
                         ver {NOMBRE_DIM[SIGUIENTE[dim]].toLowerCase()} ›
                       </td>
                     </tr>
@@ -257,7 +261,7 @@ function BandaCompania({ c, clave }: { c: ResumenCompania; clave: string }) {
   const valor = (cant: number, total: number) =>
     c.unidades ? `${fmtNum(cant)} u · ${fmtClp(total)}` : fmtClp(total)
   const mes = porMesCompania(clave, c, c.meses, c.unidades)
-  const porMes = c.unidades ? `${fmtNum(mes)} u al mes` : `${fmtClp(mes)} al mes`
+  const porMes = c.unidades ? `${fmtPorMes(mes)} u al mes` : `${fmtClp(mes)} al mes`
   return (
     <div className="mb-3 rounded-lg border border-pillado-green-200 bg-pillado-green-50 px-3 py-2 text-sm">
       <p className="font-semibold text-gray-900">Toda la compañía{c.nombre ? ` · ${c.nombre}` : ''}, mismo período</p>
