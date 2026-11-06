@@ -9,7 +9,7 @@ import { ChevronRight, Target } from 'lucide-react'
 import { Modal } from '@/components/ui/modal'
 import { Spinner } from '@/components/ui/spinner'
 import {
-  getPareto, type DimensionPareto, type FiltrosPareto, type ItemPareto,
+  getPareto, type DimensionPareto, type FiltrosPareto, type ItemPareto, type ResumenCompania, type TotalesCompania,
 } from '@/lib/services/costos-operacion'
 import { fmtClp, fmtMM, fmtNum, fmtPct } from '@/lib/costos-operacion'
 import { useFuenteCostos } from '@/components/costos/fuente'
@@ -62,6 +62,15 @@ const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'o
 const etiquetaItem = (dim: DimensionPareto, it: ItemPareto) =>
   dim === 'mes' ? `${MESES[Number(it.clave.slice(5, 7)) - 1]} ${it.clave.slice(2, 4)}` : it.etiqueta
 
+// Los servicios no pasan por bodega y a veces se compra directo a la faena: si no hay
+// consumo que mirar, el promedio mensual sale de lo comprado.
+function porMesCompania(clave: string, c: TotalesCompania | null | undefined, meses: number, unidades: boolean) {
+  if (!c) return 0
+  const deCompras = clave.startsWith('SER') || c.consumido_total <= 0
+  if (unidades) return (deCompras ? c.comprado_cantidad : c.consumido_cantidad) / meses
+  return (deCompras ? c.comprado_total : c.consumido_total) / meses
+}
+
 export function ParetoModal({ inicio, desde, hasta, conAdmin, onClose }: {
   inicio: PasoPareto; desde: string; hasta: string; conAdmin?: boolean; onClose: () => void
 }) {
@@ -92,6 +101,9 @@ export function ParetoModal({ inicio, desde, hasta, conAdmin, onClose }: {
     setDim(p[p.length - 1].dimension)
   }
 
+  const conCia = dim === 'familia' || dim === 'producto'
+  const unidades = dim === 'producto'
+  const meses = data?.meses ?? 1
   const serie = (data?.items ?? []).map((it, i) => ({
     nombre: etiquetaItem(dim, it), total: Math.round(it.total), it, vital: i < (data?.vitales ?? 0),
   }))
@@ -126,6 +138,11 @@ export function ParetoModal({ inicio, desde, hasta, conAdmin, onClose }: {
       {isLoading && <div className="flex justify-center py-12"><Spinner /></div>}
       {error && <div className="text-sm text-red-700">{(error as Error).message}</div>}
 
+      {data?.compania && (
+        <BandaCompania c={data.compania}
+                       clave={paso.filtros.cod_prod ?? paso.filtros.familia ?? paso.filtros.grupo_prod ?? ''} />
+      )}
+
       {data && dim === 'linea' && <TablaLineas lineas={data.lineas ?? []} total={data.total} esOc={fuente === 'oc'} />}
 
       {data && dim !== 'linea' && (
@@ -159,13 +176,29 @@ export function ParetoModal({ inicio, desde, hasta, conAdmin, onClose }: {
           <div className="max-h-[38vh] overflow-auto">
             <table className="w-full text-sm">
               <thead className="sticky top-0 bg-gray-50 text-xs text-gray-600">
+                {conCia && (
+                  <tr>
+                    <th colSpan={unidades ? 6 : 5} />
+                    <th colSpan={3} className="border-l px-2 pt-1.5 text-center font-semibold text-gray-700">
+                      Toda la compañía {unidades ? '(unidades)' : '($)'}
+                    </th>
+                    <th />
+                  </tr>
+                )}
                 <tr>
                   <th className="px-2 py-1.5 text-left">#</th>
                   <th className="px-2 py-1.5 text-left">{NOMBRE_DIM[dim]}</th>
                   <th className="px-2 py-1.5 text-right">Gasto</th>
+                  {unidades && <th className="px-2 py-1.5 text-right">Cant.</th>}
                   <th className="px-2 py-1.5 text-right">%</th>
                   <th className="px-2 py-1.5 text-right">% acumulado</th>
-                  <th className="px-2 py-1.5 text-right">Líneas</th>
+                  {conCia ? (
+                    <>
+                      <th className="border-l px-2 py-1.5 text-right">Comprado</th>
+                      <th className="px-2 py-1.5 text-right">Consumido</th>
+                      <th className="px-2 py-1.5 text-right" title="Consumo de bodega ÷ meses del período. Servicios y lo que no pasa por bodega: lo comprado ÷ meses.">Por mes</th>
+                    </>
+                  ) : <th className="px-2 py-1.5 text-right">Líneas</th>}
                   <th className="px-2 py-1.5" />
                 </tr>
               </thead>
@@ -183,9 +216,18 @@ export function ParetoModal({ inicio, desde, hasta, conAdmin, onClose }: {
                         </span>
                       </td>
                       <td className="px-2 py-1 text-right font-medium">{fmtMM(it.total)}</td>
+                      {unidades && <td className="px-2 py-1 text-right">{fmtNum(it.cantidad ?? 0)}</td>}
                       <td className="px-2 py-1 text-right">{fmtPct(it.pct)}</td>
                       <td className="px-2 py-1 text-right">{fmtPct(it.pct_acum)}</td>
-                      <td className="px-2 py-1 text-right">{fmtNum(it.lineas)}</td>
+                      {conCia ? (
+                        <>
+                          <td className="border-l px-2 py-1 text-right">{unidades ? fmtNum(it.cia?.comprado_cantidad ?? 0) : fmtMM(it.cia?.comprado_total ?? 0)}</td>
+                          <td className="px-2 py-1 text-right">{unidades ? fmtNum(it.cia?.consumido_cantidad ?? 0) : fmtMM(it.cia?.consumido_total ?? 0)}</td>
+                          <td className="px-2 py-1 text-right font-medium">
+                            {(unidades ? fmtNum : fmtMM)(porMesCompania(it.clave, it.cia, meses, unidades))}
+                          </td>
+                        </>
+                      ) : <td className="px-2 py-1 text-right">{fmtNum(it.lineas)}</td>}
                       <td className="px-2 py-1 text-right text-xs text-pillado-green-700">
                         ver {NOMBRE_DIM[SIGUIENTE[dim]].toLowerCase()} ›
                       </td>
@@ -197,7 +239,7 @@ export function ParetoModal({ inicio, desde, hasta, conAdmin, onClose }: {
                     <td />
                     <td className="px-2 py-1">{data.resto.n} más</td>
                     <td className="px-2 py-1 text-right">{fmtMM(data.resto.total)}</td>
-                    <td colSpan={4} />
+                    <td colSpan={(unidades ? 1 : 0) + (conCia ? 6 : 4)} />
                   </tr>
                 )}
               </tbody>
@@ -206,6 +248,25 @@ export function ParetoModal({ inicio, desde, hasta, conAdmin, onClose }: {
         </>
       )}
     </Modal>
+  )
+}
+
+// El orden de magnitud para comprar: lo que mueve toda la compañía en el período,
+// aunque la vista esté filtrada a una faena o un equipo.
+function BandaCompania({ c, clave }: { c: ResumenCompania; clave: string }) {
+  const valor = (cant: number, total: number) =>
+    c.unidades ? `${fmtNum(cant)} u · ${fmtClp(total)}` : fmtClp(total)
+  const mes = porMesCompania(clave, c, c.meses, c.unidades)
+  const porMes = c.unidades ? `${fmtNum(mes)} u al mes` : `${fmtClp(mes)} al mes`
+  return (
+    <div className="mb-3 rounded-lg border border-pillado-green-200 bg-pillado-green-50 px-3 py-2 text-sm">
+      <p className="font-semibold text-gray-900">Toda la compañía{c.nombre ? ` · ${c.nombre}` : ''}, mismo período</p>
+      <p className="mt-0.5 flex flex-wrap gap-x-6 gap-y-0.5 text-gray-700">
+        <span>Comprado: <b>{valor(c.comprado_cantidad, c.comprado_total)}</b></span>
+        <span>Consumido: <b>{valor(c.consumido_cantidad, c.consumido_total)}</b></span>
+        <span>Promedio: <b>{porMes}</b></span>
+      </p>
+    </div>
   )
 }
 

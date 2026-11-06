@@ -274,10 +274,29 @@ export type ItemPareto = {
   lineas: number
   pct: number
   pct_acum: number
+  /** MIG669: solo por familia o producto. */
+  cia?: TotalesCompania | null
+}
+
+/** Toda la compañía en el mismo período: comprado (OC) y consumido (bodega). */
+export type TotalesCompania = {
+  comprado_total: number
+  comprado_cantidad: number
+  consumido_total: number
+  consumido_cantidad: number
+}
+
+export type ResumenCompania = TotalesCompania & {
+  nombre: string | null
+  /** Solo un producto se puede sumar en unidades; una familia mezcla unidades distintas. */
+  unidades: boolean
+  meses: number
 }
 
 export type ResultadoPareto = {
   dimension: DimensionPareto
+  compania?: ResumenCompania | null
+  meses?: number
   total: number
   n: number
   vitales: number
