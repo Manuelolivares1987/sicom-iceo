@@ -1,4 +1,5 @@
 -- 670 — Presupuesto de Operaciones 2027-2029 (Manuel 06-11-2026).
+-- destructivo-ok: los TRUNCATE solo vacían ppto_camion, ppto_visita y ppto_base, resultados propios de esta migración que fn_ppto_recalcular regenera completos.
 -- Construido desde los datos: OC de Softland (real por línea y camión), horómetro y ritmo de
 -- cada equipo, escalera de pautas y kits a precio Softland. No parte del Excel: lo contrasta.
 -- Los supuestos y programas se editan en la pantalla; el cálculo corre una sola vez por botón
