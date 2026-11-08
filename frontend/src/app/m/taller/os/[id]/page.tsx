@@ -14,6 +14,7 @@
 // La nota general va a las notas de la OT, que el jefe puede convertir en NC.
 
 import { useEffect, useRef, useState } from 'react'
+import { MotivoPausaModal } from '@/components/mantenimiento/motivo-pausa-modal'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -242,7 +243,12 @@ export default function OsDetallePage() {
   const [terminando, setTerminando] = useState(false)
   const [obs, setObs] = useState('')
   const empezar = useMutation({ mutationFn: () => iniciarOS(osId, tecnicoId!), onSuccess: refrescar })
-  const parar = useMutation({ mutationFn: () => pausarOS(osId, tecnicoId!), onSuccess: refrescar })
+  // [MIG672] Pausar pregunta por qué.
+  const [pausando, setPausando] = useState(false)
+  const parar = useMutation({
+    mutationFn: (p: { tipo: string; texto: string | null }) => pausarOS(osId, tecnicoId!, p.texto, p.tipo),
+    onSuccess: () => { setPausando(false); refrescar() },
+  })
   const terminar = useMutation({
     mutationFn: () => finalizarOS(osId, obs.trim() || null),
     onSuccess: () => { setTerminando(false); setObs(''); refrescar() },
@@ -266,6 +272,8 @@ export default function OsDetallePage() {
 
   return (
     <div className="p-3 space-y-3">
+      <MotivoPausaModal open={pausando} onClose={() => setPausando(false)} ocupado={parar.isPending}
+                        onElegir={(tipo, texto) => parar.mutate({ tipo, texto })} />
       <Link href={desdePanel ? `/dashboard/ordenes-trabajo/${os.ot_id}` : '/m/taller'}
             className="inline-flex items-center gap-1 text-sm text-gray-500">
         <ArrowLeft className="h-4 w-4" /> {desdePanel ? `Volver a la ${os.ot_folio}` : 'Taller'}
@@ -320,7 +328,7 @@ export default function OsDetallePage() {
         ) : (
           <div className="flex gap-2">
             {mia?.trabajando ? (
-              <button onClick={() => parar.mutate()} disabled={parar.isPending || !online}
+              <button onClick={() => setPausando(true)} disabled={parar.isPending || !online}
                       className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-orange-300 bg-white py-3 text-sm font-semibold text-orange-700 disabled:opacity-50">
                 <Pause className="h-4 w-4" /> Parar
               </button>

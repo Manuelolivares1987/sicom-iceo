@@ -26,6 +26,7 @@ import Link from 'next/link'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Play, Pause, CheckCircle2, ChevronRight, ChevronDown, Clock, AlertTriangle, WifiOff, CalendarDays } from 'lucide-react'
 import { Spinner } from '@/components/ui/spinner'
+import { MotivoPausaModal } from '@/components/mantenimiento/motivo-pausa-modal'
 import {
   getMisOS, getMiTecnicoId, getOSAbiertas, iniciarOS, pausarOS, finalizarOS,
   type MiOS, ESTADO_OS_LABEL,
@@ -93,9 +94,12 @@ export function MisOrdenesDeServicio({ online }: { online: boolean }) {
     mutationFn: (osId: string) => iniciarOS(osId, tecnicoId!),
     onSuccess: refrescar,
   })
+  // [MIG672] Pausar pregunta por qué: primero se elige la OS, luego el motivo.
+  const [pausando, setPausando] = useState<string | null>(null)
   const parar = useMutation({
-    mutationFn: (osId: string) => pausarOS(osId, tecnicoId!),
-    onSuccess: refrescar,
+    mutationFn: (p: { osId: string; tipo: string; texto: string | null }) =>
+      pausarOS(p.osId, tecnicoId!, p.texto, p.tipo),
+    onSuccess: () => { setPausando(null); refrescar() },
   })
   const terminar = useMutation({
     mutationFn: (p: { osId: string; obs: string }) => finalizarOS(p.osId, p.obs || null),
@@ -109,6 +113,8 @@ export function MisOrdenesDeServicio({ online }: { online: boolean }) {
 
   return (
     <section className="space-y-2">
+      <MotivoPausaModal open={!!pausando} onClose={() => setPausando(null)} ocupado={parar.isPending}
+                        onElegir={(tipo, texto) => pausando && parar.mutate({ osId: pausando, tipo, texto })} />
       <div className="flex items-baseline justify-between">
         <h2 className="text-sm font-bold text-gray-900">Mi trabajo</h2>
         <span className="text-[11px] text-gray-500">
@@ -149,7 +155,7 @@ export function MisOrdenesDeServicio({ online }: { online: boolean }) {
           observacion={observacion}
           onObservacion={setObservacion}
           onEmpezar={() => empezar.mutate(os.os_id)}
-          onParar={() => parar.mutate(os.os_id)}
+          onParar={() => setPausando(os.os_id)}
           onPedirTerminar={() => { setTerminando(os.os_id); setObservacion('') }}
           onCancelarTerminar={() => setTerminando(null)}
           onTerminar={() => terminar.mutate({ osId: os.os_id, obs: observacion })}

@@ -221,9 +221,12 @@ export async function iniciarOS(osId: string, tecnicoId: string) {
   return data as { success: boolean; ya_estaba?: boolean; aviso?: string | null }
 }
 
-export async function pausarOS(osId: string, tecnicoId: string, motivo?: string | null) {
+export async function pausarOS(
+  osId: string, tecnicoId: string, motivo?: string | null, motivoTipo?: string | null,
+) {
+  // [MIG672] motivoTipo = código de MOTIVOS_PAUSA (por qué se para el reloj).
   const { error } = await supabase.rpc('rpc_taller_os_pausar', {
-    p_os_id: osId, p_tecnico_id: tecnicoId, p_motivo: motivo ?? null,
+    p_os_id: osId, p_tecnico_id: tecnicoId, p_motivo: motivo ?? null, p_motivo_tipo: motivoTipo ?? null,
   })
   if (error) throw new Error(error.message)
 }

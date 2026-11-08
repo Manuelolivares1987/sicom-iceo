@@ -391,6 +391,8 @@ export async function queueTiming(
     tecnicoId?: string | null
     /** [MIG472] Por qué se cierra con tareas obligatorias sin hacer. */
     motivoPendientes?: string | null
+    /** [MIG672] Código del motivo de pausa. */
+    motivoTipo?: string | null
   },
 ): Promise<void> {
   const db = tallerDB()
@@ -405,6 +407,7 @@ export async function queueTiming(
     tecnico_id: opts?.tecnicoId ?? null,
     con_observaciones: opts?.conObservaciones ?? false, firma_blob_id: firmaBlobId,
     motivo_pendientes: opts?.motivoPendientes ?? null,
+    motivo_tipo: opts?.motivoTipo ?? null,
     sync_status: 'pending', retries: 0, last_error: null, created_at: new Date().toISOString(),
   }
   await db.pending.put(row)
@@ -552,7 +555,7 @@ export async function syncTallerPending(): Promise<{ ok: number; failed: number 
           await rpcIniciarEjecucion(p.ot_id, null, p.tecnico_id ?? null)
         }
       } else {
-        await rpcPausarEjecucionOT(p.ot_id, p.observaciones ?? null, p.tecnico_id ?? null)
+        await rpcPausarEjecucionOT(p.ot_id, p.observaciones ?? null, p.tecnico_id ?? null, p.motivo_tipo ?? null)
       }
       await db.pending.delete(p.local_id)
       ok++

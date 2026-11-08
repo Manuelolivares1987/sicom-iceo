@@ -946,9 +946,11 @@ export async function getTecnicosActivos(): Promise<TecnicoTallerLite[]> {
  * [MIG624] Cada mecánico tiene su reloj: con `tecnicoId` se pausa/reanuda sólo
  * el suyo. Sin él (el jefe desde el tablero) pausar detiene a toda la cuadrilla.
  */
-export async function rpcPausarEjecucionOT(otId: string, motivo?: string | null, tecnicoId?: string | null) {
+export async function rpcPausarEjecucionOT(
+  otId: string, motivo?: string | null, tecnicoId?: string | null, motivoTipo?: string | null,
+) {
   const { data, error } = await supabase.rpc('rpc_taller_pausar_ejecucion_ot', {
-    p_ot_id: otId, p_motivo: motivo ?? null, p_motivo_tipo: null, p_tecnico_id: tecnicoId ?? null,
+    p_ot_id: otId, p_motivo: motivo ?? null, p_motivo_tipo: motivoTipo ?? null, p_tecnico_id: tecnicoId ?? null,
   })
   if (error) throw error
   return data as { success: boolean; sin_ejecucion?: boolean }
