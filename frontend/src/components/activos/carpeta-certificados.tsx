@@ -231,6 +231,14 @@ export function CarpetaCertificados({ activoId, acciones }: {
           Sin NC abiertas: el equipo puede certificarse.
         </div>
       )}
+      {(ncInfo?.observaciones.length ?? 0) > 0 && (
+        <p className="text-[11px] text-amber-800">
+          👁 {ncInfo!.observaciones.length} observaci{ncInfo!.observaciones.length > 1 ? 'ones' : 'ón'} para la próxima OS
+          (no bloquea{ncInfo!.observaciones.length > 1 ? 'n' : ''} el certificado):{' '}
+          {ncInfo!.observaciones.slice(0, 3).map((n) => n.descripcion.replace(/^Observación: /, '')).join(' · ')}
+          {ncInfo!.observaciones.length > 3 ? ` y ${ncInfo!.observaciones.length - 3} más` : ''}
+        </p>
+      )}
       {(ncInfo?.archivadas ?? 0) > 0 && (
         <p className="text-[11px] text-gray-500">
           {ncInfo!.archivadas} NC guardada{ncInfo!.archivadas > 1 ? 's' : ''} en el historial no bloquea{ncInfo!.archivadas > 1 ? 'n' : ''} el certificado.

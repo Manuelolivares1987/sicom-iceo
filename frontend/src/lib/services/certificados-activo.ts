@@ -102,10 +102,10 @@ export type NcQueBloquea = {
  * están en la bandeja; las guardadas en el historial (MIG405) no, igual que en
  * la RPC. Se cuentan aparte para que no queden escondidas.
  */
-export async function getNcAbiertasActivo(activoId: string): Promise<{ abiertas: NcQueBloquea[]; archivadas: number }> {
+export async function getNcAbiertasActivo(activoId: string): Promise<{ abiertas: NcQueBloquea[]; archivadas: number; observaciones: NcQueBloquea[] }> {
   const [abiertas, archivadas] = await Promise.all([
     supabase.from('v_nc_recepcion')
-      .select('id, descripcion, severidad, estado_planificacion, origen, created_at, foto_url, ot_folio, os_folio')
+      .select('id, descripcion, severidad, estado_planificacion, origen, created_at, foto_url, ot_folio, os_folio, diferible')
       .eq('activo_id', activoId).eq('resuelto', false).is('archivado_at', null)
       .order('created_at'),
     supabase.from('no_conformidades')
@@ -113,7 +113,13 @@ export async function getNcAbiertasActivo(activoId: string): Promise<{ abiertas:
       .eq('activo_id', activoId).eq('resuelto', false).not('archivado_at', 'is', null),
   ])
   if (abiertas.error) throw abiertas.error
-  return { abiertas: (abiertas.data ?? []) as NcQueBloquea[], archivadas: archivadas.count ?? 0 }
+  // [MIG673] Las observaciones (NC diferibles) no bloquean: van a la próxima OS.
+  const todas = (abiertas.data ?? []) as (NcQueBloquea & { diferible?: boolean })[]
+  return {
+    abiertas: todas.filter((n) => !n.diferible),
+    observaciones: todas.filter((n) => n.diferible),
+    archivadas: archivadas.count ?? 0,
+  }
 }
 
 async function subirFirmaCertificado(dataUrl: string, quien: 'operador' | 'jefe'): Promise<string> {

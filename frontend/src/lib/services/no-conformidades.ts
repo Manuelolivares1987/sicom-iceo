@@ -51,6 +51,8 @@ export type NcRecepcion = {
   /** [MIG499] La OS que ya la está trabajando (una NC vive en UNA OS). */
   os_id: string | null
   os_folio: string | null
+  /** [MIG673] Nació de una observación: no bloquea el certificado. */
+  diferible?: boolean
 }
 
 // Quién paga el hallazgo (default_cobrable_enum, MIG54).

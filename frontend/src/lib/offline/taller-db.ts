@@ -39,6 +39,8 @@ export type TallerPending = {
   motivo_pendientes?: string | null
   /** [MIG672] Por qué se pausa (código de MOTIVOS_PAUSA). */
   motivo_tipo?: string | null
+  /** [MIG673] kind='item': OK con observación. */
+  observado?: boolean
   firma_blob_id?: string | null   // firma del técnico para finalizar
   // kind = 'recurso' (repuesto/material solicitado para reparar, MIG197)
   producto_id?: string | null

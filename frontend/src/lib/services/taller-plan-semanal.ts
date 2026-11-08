@@ -229,6 +229,10 @@ export type ChecklistV3Item = {
   arrastre: boolean
   arrastre_observacion: string | null
   arrastre_foto_url: string | null
+  /** [MIG673] OK con observación: abre una NC diferible (no bloquea el certificado). */
+  observado?: boolean
+  /** [MIG673] Momento del checklist: la observación sólo abre NC en la recepción. */
+  momento_uso?: string | null
 }
 
 export type TallerOTBacklog = {
