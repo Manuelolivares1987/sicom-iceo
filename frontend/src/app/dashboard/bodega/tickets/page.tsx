@@ -22,9 +22,25 @@ import {
   useCrearTicket, useEntregarTicket, useAnularTicket,
 } from '@/hooks/use-bodega-tickets'
 import {
-  getTicketByFolio, subirFirmaTicket, enviarItemACompra, asignarProductoItem,
-  type TicketEmitible, type BodegaTicket,
+  getTicketByFolio, subirFirmaTicket, enviarItemACompra, asignarProductoItem, getDisponibilidadVales,
+  type TicketEmitible, type BodegaTicket, type DisponibilidadVale,
 } from '@/lib/services/bodega-tickets'
+
+// [MIG675] ¿Alcanza el stock para este vale? El stock se reparte por orden de
+// llegada: si un vale anterior ya se llevó el último filtro, este lo dice antes
+// de que el mecánico llegue a la ventanilla.
+function DisponibilidadChip({ d }: { d?: DisponibilidadVale }) {
+  if (!d) return null
+  const cfg = {
+    completo: { cls: 'bg-green-100 text-green-800', txt: '✓ Stock completo' },
+    parcial: { cls: 'bg-amber-100 text-amber-800', txt: `◐ Stock parcial (${d.completas}/${d.lineas})` },
+    sin_stock: { cls: 'bg-red-100 text-red-700', txt: '✕ Sin stock' },
+  }[d.disponibilidad]
+  return (
+    <span title="Considera lo que ya pidieron los vales anteriores"
+          className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${cfg.cls}`}>{cfg.txt}</span>
+  )
+}
 import { buscarProductos } from '@/lib/services/ot-materiales'
 import { getSolicitudesBodega, atenderSolicitudBodega, type BodegaSolicitud } from '@/lib/services/bodega-solicitudes'
 import { enviarCorreoCompras } from '@/lib/services/correo-compras'
@@ -372,6 +388,7 @@ function DespacharTab() {
   const pendientes = useMemo(
     () => (todos ?? []).filter((t) => t.estado === 'emitido' || t.estado === 'parcial'),
     [todos])
+  const { data: dispVales } = useQuery({ queryKey: ['vales-disponibilidad'], queryFn: getDisponibilidadVales, staleTime: 15_000 })
 
   const { data: items, refetch: refetchItems } = useTicketItems(ticket?.id ?? null)
   const { data: bodegasAll } = useBodegasTaller()
@@ -554,6 +571,7 @@ function DespacharTab() {
                             días se ve igual que el de hoy y nadie sabe cuál
                             atender primero. */}
                         <EsperaChip desde={t.created_at} />
+                        <DisponibilidadChip d={dispVales?.[t.id]} />
                         {/* Un vale cuyos ítems no están en el catálogo no se
                             puede despachar: el stock no baja de un producto que
                             el sistema no sabe cuál es. Mejor saberlo antes de

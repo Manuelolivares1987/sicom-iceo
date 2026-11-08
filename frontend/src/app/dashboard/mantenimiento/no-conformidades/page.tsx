@@ -25,8 +25,11 @@ import {
 import { getNotasOTs, convertirNotaEnNc, type OTNota } from '@/lib/services/ot-notas'
 import {
   getInsumosNc, agregarInsumoNc, quitarInsumoNc, buscarInsumosConStock,
-  INSUMO_ESTADO, type ProductoConStock,
+  INSUMO_ESTADO, etiquetaStock, type ProductoConStock,
 } from '@/lib/services/nc-insumos'
+
+// [MIG675] Verde = queda; ámbar = está en el estante pero ya se lo pidió otro vale.
+const TONO_STOCK = { ok: 'bg-green-100 text-green-800', justo: 'bg-amber-100 text-amber-800', no: 'bg-red-100 text-red-700' } as const
 import { getTarifasHH } from '@/lib/services/informe-recepcion'
 import { getProductos } from '@/lib/services/inventario'
 import {
@@ -1189,8 +1192,8 @@ function InsumosNC({ ncId, puedeGestionar, otId }: {
             <div className="flex items-center gap-2 rounded border border-green-200 bg-green-50 px-2 py-1 text-xs">
               <span className="min-w-0 flex-1 font-medium text-green-800">{prod.nombre}</span>
               <span className={`whitespace-nowrap rounded px-1.5 py-0.5 text-[10px] font-semibold ${
-                prod.stock > 0 ? 'bg-green-200 text-green-900' : 'bg-red-100 text-red-700'}`}>
-                {prod.stock > 0 ? `${prod.stock} en bodega` : 'sin stock'}
+                TONO_STOCK[etiquetaStock(prod).tono]}`}>
+                {etiquetaStock(prod).texto}
               </span>
               <button type="button" onClick={() => { setProd(null); setQ('') }} className="text-[11px] text-green-700">cambiar</button>
             </div>
@@ -1207,8 +1210,8 @@ function InsumosNC({ ncId, puedeGestionar, otId }: {
                       <span className="min-w-0 flex-1 truncate">{r.nombre}</span>
                       {/* El stock a la vista: el jefe ya no adivina si hay */}
                       <span className={`whitespace-nowrap rounded px-1.5 py-0.5 text-[10px] font-semibold ${
-                        r.stock > 0 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-700'}`}>
-                        {r.stock > 0 ? `${r.stock} disp.` : 'sin stock'}
+                        TONO_STOCK[etiquetaStock(r).tono]}`}>
+                        {etiquetaStock(r).texto}
                       </span>
                     </button>
                   ))}

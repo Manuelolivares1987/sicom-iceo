@@ -101,6 +101,17 @@ export async function getTickets(estado?: EstadoTicket): Promise<BodegaTicket[]>
   return (data ?? []) as BodegaTicket[]
 }
 
+/** [MIG675] Semáforo por vale abierto: ¿alcanza el stock? (el más antiguo primero). */
+export type DisponibilidadVale = {
+  ticket_id: string; lineas: number; completas: number; parciales: number
+  sin_stock: number; sin_producto: number; disponibilidad: 'completo' | 'parcial' | 'sin_stock'
+}
+export async function getDisponibilidadVales(): Promise<Record<string, DisponibilidadVale>> {
+  const { data, error } = await supabase.from('v_bodega_ticket_disponibilidad').select('*')
+  if (error) throw error
+  return Object.fromEntries(((data ?? []) as DisponibilidadVale[]).map((d) => [d.ticket_id, d]))
+}
+
 export async function getTicketById(id: string): Promise<BodegaTicket | null> {
   const { data, error } = await supabase.from('v_bodega_ticket').select('*')
     .eq('id', id).maybeSingle()
