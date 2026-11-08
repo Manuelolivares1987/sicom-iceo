@@ -258,8 +258,15 @@ export default function NoConformidadesPage() {
 
   // Filtro por paso del ciclo: se aplica en pantalla, sin volver a consultar.
   const [paso, setPaso] = useState<PasoClave | null>(null)
-  const visibles = useMemo(
-    () => (paso ? equipos.filter((e) => e.paso === paso) : equipos), [equipos, paso])
+  // [MIG671] Llegada desde la carpeta de certificados con ?activo=<id>: el jefe
+  // viene a cerrar las NC de UN equipo, así que se muestra solo ese y abierto.
+  const [activoParam, setActivoParam] = useState(() =>
+    typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('activo') : null)
+  const visibles = useMemo(() => {
+    const base = activoParam ? equipos.filter((e) => e.activoId === activoParam) : equipos
+    return paso ? base.filter((e) => e.paso === paso) : base
+  }, [equipos, paso, activoParam])
+  const equipoParam = activoParam ? equipos.find((e) => e.activoId === activoParam) : undefined
   const conteoPaso = useMemo(() => {
     const c = {} as Record<PasoClave, number>
     for (const p of PASOS) c[p.k] = 0
@@ -277,9 +284,11 @@ export default function NoConformidadesPage() {
     if (autoAbierto || equipos.length === 0) return
     // Sólo el primero. Con tres, el peor caso son 81 hallazgos y 76 fotos en la
     // primera pintada — en un tablet de taller eso es una pantalla congelada.
-    setExpandido(Object.fromEntries(equipos.slice(0, 1).map((e) => [e.activoId, true])))
+    const primero = activoParam && equipos.some((e) => e.activoId === activoParam)
+      ? [activoParam] : equipos.slice(0, 1).map((e) => e.activoId)
+    setExpandido(Object.fromEntries(primero.map((id) => [id, true])))
     setAutoAbierto(true)
-  }, [equipos, autoAbierto])
+  }, [equipos, autoAbierto, activoParam])
 
   // [03-09] Atajo desde la OT: ?recobro=<activoId> abre el modal del informe
   // de recobro de ese equipo apenas cargan los datos.
@@ -371,6 +380,15 @@ export default function NoConformidadesPage() {
           )
         })}
       </div>
+      {activoParam && !isLoading && (
+        <p className="-mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+          {equipoParam
+            ? <>Mostrando solo <b>{equipoParam.patente}</b>: {equipoParam.ncs.length} NC por cerrar para poder emitir su certificado.</>
+            : <>Este equipo ya no tiene NC abiertas en la bandeja: vuelve a su ficha y emite el certificado.</>}
+          <button onClick={() => { setActivoParam(null); window.history.replaceState(null, '', window.location.pathname) }}
+                  className="ml-2 underline hover:text-gray-900">Ver todos los equipos</button>
+        </p>
+      )}
       {paso && (
         <p className="-mt-3 text-xs text-muted-foreground">
           Mostrando {visibles.length} equipo{visibles.length === 1 ? '' : 's'} en «{PASOS.find((p) => p.k === paso)?.label}»

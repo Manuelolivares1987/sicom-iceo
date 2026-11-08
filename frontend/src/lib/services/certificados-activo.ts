@@ -84,12 +84,36 @@ export async function getCertificadoById(id: string): Promise<ActivoCertificado 
 }
 
 /** NC abiertas del equipo — el gate para habilitar la emisión. */
-export async function getNcAbiertasActivo(activoId: string): Promise<number> {
-  const { count, error } = await supabase.from('no_conformidades')
-    .select('id', { count: 'exact', head: true })
-    .eq('activo_id', activoId).eq('resuelto', false)
-  if (error) throw error
-  return count ?? 0
+export type NcQueBloquea = {
+  id: string
+  descripcion: string
+  severidad: 'baja' | 'media' | 'alta' | 'critica'
+  estado_planificacion: string
+  origen: string
+  created_at: string
+  foto_url: string | null
+  ot_folio: string | null
+  os_folio: string | null
+}
+
+/**
+ * [MIG671] Las NC que bloquean el certificado, con nombre y apellido: antes era
+ * solo un número y el jefe no sabía cuáles atacar. Bloquean las abiertas que
+ * están en la bandeja; las guardadas en el historial (MIG405) no, igual que en
+ * la RPC. Se cuentan aparte para que no queden escondidas.
+ */
+export async function getNcAbiertasActivo(activoId: string): Promise<{ abiertas: NcQueBloquea[]; archivadas: number }> {
+  const [abiertas, archivadas] = await Promise.all([
+    supabase.from('v_nc_recepcion')
+      .select('id, descripcion, severidad, estado_planificacion, origen, created_at, foto_url, ot_folio, os_folio')
+      .eq('activo_id', activoId).eq('resuelto', false).is('archivado_at', null)
+      .order('created_at'),
+    supabase.from('no_conformidades')
+      .select('id', { count: 'exact', head: true })
+      .eq('activo_id', activoId).eq('resuelto', false).not('archivado_at', 'is', null),
+  ])
+  if (abiertas.error) throw abiertas.error
+  return { abiertas: (abiertas.data ?? []) as NcQueBloquea[], archivadas: archivadas.count ?? 0 }
 }
 
 async function subirFirmaCertificado(dataUrl: string, quien: 'operador' | 'jefe'): Promise<string> {
@@ -143,7 +167,10 @@ export async function emitirCertificado(params: {
     p_ot_id: params.otId ?? null,
   })
   if (error) throw error
-  return data as { success: boolean; certificado_id: string; numero: number }
+  // La RPC devolvía 'id' y aquí se leía 'certificado_id' → /certificado/undefined.
+  // MIG671 manda las dos; se lee cualquiera para no depender del orden de despliegue.
+  const r = data as { success: boolean; id?: string; certificado_id?: string; numero: number }
+  return { ...r, certificado_id: (r.certificado_id ?? r.id) as string }
 }
 
 /** Técnicos del catálogo del taller — para elegir al operador que firmó. */
