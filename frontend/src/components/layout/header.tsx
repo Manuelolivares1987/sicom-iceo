@@ -36,7 +36,11 @@ const accionDe: Record<string, string> = {
 // resolverse en pantallas distintas. Un papel sin vigencia (MIG413) cuelga de un
 // activo, pero mandarlo al mapa GPS no le sirve a nadie: se arregla en Control
 // documental.
-function rutaAlerta(entidadTipo: string | null, tipo?: string | null): string {
+function rutaAlerta(entidadTipo: string | null, tipo?: string | null, entidadId?: string | null): string {
+  // [MIG676] Las NC llegan agrupadas por equipo: se abre la bandeja con ese equipo.
+  if (tipo === 'no_conformidad' && entidadTipo === 'activo' && entidadId) {
+    return `/dashboard/mantenimiento/no-conformidades?activo=${entidadId}`
+  }
   switch (tipo) {
     case 'doc_sin_fecha':
     case 'doc_vencido':
@@ -101,10 +105,10 @@ export default function Header({ onMenuToggle }: HeaderProps) {
     critical: 'bg-red-500', warning: 'bg-amber-500', info: 'bg-blue-500',
   }
 
-  function abrirAlerta(id: string, entidadTipo: string | null, tipo?: string | null) {
+  function abrirAlerta(id: string, entidadTipo: string | null, tipo?: string | null, entidadId?: string | null) {
     marcarLeida.mutate(id)
     setShowNotif(false)
-    router.push(rutaAlerta(entidadTipo, tipo))
+    router.push(rutaAlerta(entidadTipo, tipo, entidadId))
   }
 
   const displayName = perfil?.nombre_completo ?? 'Usuario'
@@ -216,7 +220,7 @@ export default function Header({ onMenuToggle }: HeaderProps) {
                   visibles.slice(0, 30).map((a) => (
                     <button
                       key={a.id}
-                      onClick={() => abrirAlerta(a.id, a.entidad_tipo, a.tipo)}
+                      onClick={() => abrirAlerta(a.id, a.entidad_tipo, a.tipo, a.entidad_id)}
                       className="flex w-full items-start gap-2 border-b border-gray-50 px-4 py-2.5 text-left hover:bg-gray-50"
                     >
                       <span className={cn('mt-1.5 h-2 w-2 shrink-0 rounded-full', sevDot[a.severidad] ?? 'bg-gray-400')} />
