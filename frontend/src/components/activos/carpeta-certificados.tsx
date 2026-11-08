@@ -19,7 +19,22 @@ import {
   emitirCertificado, type CertificadoTipo,
 } from '@/lib/services/certificados-activo'
 import { getInformesRecepcionActivo } from '@/lib/services/informe-recepcion'
-import { FileText } from 'lucide-react'
+import { FileText, ArrowRight } from 'lucide-react'
+import Link from 'next/link'
+
+const SEV_CLS: Record<string, string> = {
+  critica: 'bg-red-600 text-white',
+  alta: 'bg-orange-500 text-white',
+  media: 'bg-amber-200 text-amber-900',
+  baja: 'bg-gray-200 text-gray-700',
+}
+// El paso en que está cada NC, dicho como en la bandeja.
+const ESTADO_NC_TXT: Record<string, string> = {
+  registrada: 'sin recursos',
+  con_recursos: 'con recursos, falta planificar',
+  planificada: 'planificada',
+  en_ejecucion: 'en ejecución',
+}
 
 type ActivoLite = {
   nombre: string | null
@@ -54,10 +69,12 @@ export function CarpetaCertificados({ activoId, acciones }: {
     queryKey: ['activo-certificados', activoId],
     queryFn: () => getCertificadosActivo(activoId),
   })
-  const { data: ncAbiertas } = useQuery({
+  const { data: ncInfo } = useQuery({
     queryKey: ['activo-nc-abiertas', activoId],
     queryFn: () => getNcAbiertasActivo(activoId),
   })
+  const ncLista = ncInfo?.abiertas ?? []
+  const ncAbiertas = ncLista.length
   const { data: tipos } = useQuery({ queryKey: ['certificado-tipos'], queryFn: getCertificadoTipos, staleTime: 300_000 })
   const { data: tecnicos } = useQuery({ queryKey: ['taller-tecnicos-cert'], queryFn: getTecnicosTaller, staleTime: 300_000 })
   const { data: activo } = useQuery({ queryKey: ['activo-lite-cert', activoId], queryFn: () => getActivoLite(activoId) })
@@ -97,7 +114,7 @@ export function CarpetaCertificados({ activoId, acciones }: {
   const [firmaOperador, setFirmaOperador] = useState('')
   const [firmaJefe, setFirmaJefe] = useState('')
 
-  const bloqueado = (ncAbiertas ?? 0) > 0
+  const bloqueado = ncAbiertas > 0
 
   function abrirModal() {
     const hoy = new Date().toISOString().slice(0, 10)
@@ -176,16 +193,49 @@ export function CarpetaCertificados({ activoId, acciones }: {
       </div>
 
       {bloqueado ? (
-        <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-          <AlertTriangle className="h-4 w-4 shrink-0" />
-          El equipo tiene <b>{ncAbiertas}</b> No Conformidad{(ncAbiertas ?? 0) > 1 ? 'es' : ''} abierta{(ncAbiertas ?? 0) > 1 ? 's' : ''} —
-          los certificados se habilitan cuando se resuelvan todas.
+        // [MIG671] Decir CUÁLES: con solo el número el jefe no sabía qué atacar.
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 shrink-0" />
+              <span>
+                Faltan <b>{ncAbiertas}</b> No Conformidad{ncAbiertas > 1 ? 'es' : ''} por cerrar
+                para habilitar los certificados:
+              </span>
+            </span>
+            <Link href={`/dashboard/mantenimiento/no-conformidades?activo=${activoId}`}
+                  className="inline-flex items-center gap-1 rounded-md bg-amber-600 px-2.5 py-1 font-medium text-white hover:bg-amber-700">
+              Cerrarlas en la bandeja <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
+          </div>
+          <ul className="mt-2 divide-y divide-amber-200/70 rounded-md border border-amber-200 bg-white">
+            {ncLista.map((nc) => (
+              <li key={nc.id} className="flex items-start gap-2 px-2.5 py-1.5">
+                <span className={`mt-0.5 shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase ${SEV_CLS[nc.severidad] ?? SEV_CLS.media}`}>
+                  {nc.severidad}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-gray-800">{nc.descripcion}</span>
+                  <span className="text-[11px] text-gray-500">
+                    {formatDate(nc.created_at)} · {ESTADO_NC_TXT[nc.estado_planificacion] ?? nc.estado_planificacion}
+                    {nc.os_folio ? ` · OS ${nc.os_folio}` : nc.ot_folio ? ` · OT ${nc.ot_folio}` : ''}
+                  </span>
+                </span>
+              </li>
+            ))}
+          </ul>
         </div>
       ) : (
         <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
           <CheckCircle2 className="h-4 w-4 shrink-0" />
           Sin NC abiertas: el equipo puede certificarse.
         </div>
+      )}
+      {(ncInfo?.archivadas ?? 0) > 0 && (
+        <p className="text-[11px] text-gray-500">
+          {ncInfo!.archivadas} NC guardada{ncInfo!.archivadas > 1 ? 's' : ''} en el historial no bloquea{ncInfo!.archivadas > 1 ? 'n' : ''} el certificado.
+          Si alguna era real, deshaz su lote en la bandeja de NC y volverá a contar.
+        </p>
       )}
 
       {isLoading ? (
