@@ -107,7 +107,7 @@ export async function getChecklistMecanico(otId: string): Promise<ChecklistV3Ite
 
   // Acumular pendientes por ítem (en orden cronológico).
   const acc = new Map<string, {
-    resultado?: string; observacion?: string | null; fotos_blob_ids?: string[]
+    resultado?: string; observacion?: string | null; observado?: boolean; fotos_blob_ids?: string[]
     mediciones?: MedicionItem; valor_numerico?: number | null
     firmas_blob_ids?: { campo: string; blob_id: string }[]
   }>()
@@ -116,6 +116,7 @@ export async function getChecklistMecanico(otId: string): Promise<ChecklistV3Ite
     const cur = acc.get(p.instance_item_id) ?? {}
     if (p.resultado !== undefined) cur.resultado = p.resultado
     if (p.observacion !== undefined) cur.observacion = p.observacion
+    if (p.observado !== undefined) cur.observado = p.observado
     // Fotos pendientes: nuevas (array) o legado (una sola).
     const nuevas = p.fotos_blob_ids?.length ? p.fotos_blob_ids : (p.foto_blob_id ? [p.foto_blob_id] : [])
     if (nuevas.length) cur.fotos_blob_ids = [...(cur.fotos_blob_ids ?? []), ...nuevas]
@@ -148,6 +149,7 @@ export async function getChecklistMecanico(otId: string): Promise<ChecklistV3Ite
       ...it,
       resultado: (a.resultado as ChecklistV3Item['resultado']) ?? it.resultado,
       observacion: a.observacion !== undefined ? a.observacion : it.observacion,
+      observado: a.observado !== undefined ? a.observado : it.observado,
       foto_url: fotos[0] ?? it.foto_url,
       foto_urls: fotos.length ? fotos : it.foto_urls,
       mediciones,
@@ -327,6 +329,8 @@ export async function queueItem(params: {
   instanceId: string
   resultado?: 'ok' | 'no_ok' | 'na'
   observacion?: string | null
+  /** [MIG673] OK con observación. */
+  observado?: boolean
   files?: (File | Blob)[]
   file?: File | null   // compat: una sola foto
   mediciones?: MedicionItem
@@ -355,6 +359,7 @@ export async function queueItem(params: {
     instance_item_id: params.instanceItemId, instance_id: params.instanceId,
     resultado: params.resultado,
     observacion: params.observacion,
+    observado: params.observado,
     fotos_blob_ids: fotosIds.length ? fotosIds : undefined,
     firmas_blob_ids: firmasIds.length ? firmasIds : undefined,
     mediciones: params.mediciones,
@@ -478,13 +483,13 @@ export async function syncTallerPending(): Promise<{ ok: number; failed: number 
           const prev = ((cur?.foto_urls as string[] | null) ?? []).filter(Boolean)
           const merged = [...prev, ...nuevasUrls]
           await actualizarItem(p.instance_item_id, {
-            resultado: p.resultado, observacion: p.observacion ?? undefined,
+            resultado: p.resultado, observacion: p.observacion ?? undefined, observado: p.observado,
             foto_urls: merged, foto_url: merged[0], mediciones,
             valor_numerico: p.valor_numerico,
           })
         } else {
           await actualizarItem(p.instance_item_id!, {
-            resultado: p.resultado, observacion: p.observacion ?? undefined, mediciones,
+            resultado: p.resultado, observacion: p.observacion ?? undefined, observado: p.observado, mediciones,
             valor_numerico: p.valor_numerico,
           })
         }

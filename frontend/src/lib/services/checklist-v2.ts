@@ -76,6 +76,8 @@ export const PRUEBA_LABELS: Record<PruebaTipo, string> = {
 
 export type ChecklistV2Item = {
   id: string                          // instance_item.id
+  /** [MIG673] OK con observación. */
+  observado?: boolean
   template_item_id: string
   bloque: BloqueChecklist
   orden: number
@@ -244,6 +246,7 @@ export async function actualizarItem(itemId: string, patch: Partial<ChecklistV2I
     cobrable_override: patch.cobrable_override,
     costo_estimado:    patch.costo_estimado,
     mediciones:        patch.mediciones,
+    observado:         patch.observado,
   }
   const body: Record<string, unknown> = { respondido_at: new Date().toISOString() }
   for (const [k, v] of Object.entries(allowed)) if (v !== undefined) body[k] = v

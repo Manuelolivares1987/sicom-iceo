@@ -638,7 +638,13 @@ export default function NoConformidadesPage() {
                             </div>
                           </div>
                         </td>
-                        <td className="p-2 text-center"><Badge variant={nc.severidad as any} className="text-[10px]">{nc.severidad}</Badge></td>
+                        <td className="p-2 text-center">
+                          {/* [MIG673] La observación no es una falla: no bloquea el certificado. */}
+                          {nc.diferible
+                            ? <span title="Observación del checklist: para la próxima OS, no bloquea el certificado"
+                                    className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800">👁 observación</span>
+                            : <Badge variant={nc.severidad as any} className="text-[10px]">{nc.severidad}</Badge>}
+                        </td>
                         <td className="p-2 text-center whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                           <RecobroMenu ncIds={[nc.id]} actual={nc.recobro} onDone={invalidar}
                                        titulo={`${RECOBRO_FUENTE_TXT[nc.recobro_fuente]}${nc.recobro_nota ? ` — «${nc.recobro_nota}»` : ''}`}>

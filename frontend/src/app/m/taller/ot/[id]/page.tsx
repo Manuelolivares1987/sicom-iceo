@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import {
   ArrowLeft, Camera, Check, X, Minus, Play, Pause, CheckCircle2, Loader2, WifiOff, AlertTriangle, Clock,
-  Package, Plus, Gauge, ChevronDown, StickyNote, Bot,
+  Package, Plus, Gauge, ChevronDown, StickyNote, Bot, Eye,
 } from 'lucide-react'
 import { Spinner } from '@/components/ui/spinner'
 import { Button } from '@/components/ui/button'
@@ -45,20 +45,27 @@ function bloqueLabel(b: string): string {
   return t.charAt(0).toUpperCase() + t.slice(1)
 }
 
-function ResultRadio({ value, disabled, sinNA, onChange }: {
-  value: string | null; disabled?: boolean; sinNA?: boolean; onChange: (v: 'ok' | 'no_ok' | 'na') => void
+type Respuesta = 'ok' | 'obs' | 'no_ok' | 'na'
+
+function ResultRadio({ value, observado, conObs, disabled, sinNA, onChange }: {
+  value: string | null; observado?: boolean; conObs?: boolean
+  disabled?: boolean; sinNA?: boolean; onChange: (v: Respuesta) => void
 }) {
   // [MIG545] En la entrega en arriendo no existe N/A: todo ítem del acta es
   // atingente (Manuel 2026-09-11). sinNA lo esconde; la BD además lo rechaza.
+  // [MIG673] «OBS» = funciona pero hay que mirarlo: queda OK y abre una NC
+  // diferible para la próxima OS, sin bloquear el certificado.
   const opts = ([
     { val: 'ok', label: 'OK', color: 'bg-green-500', icon: Check },
+    { val: 'obs', label: 'OBS', color: 'bg-amber-500', icon: Eye },
     { val: 'no_ok', label: 'NO OK', color: 'bg-red-500', icon: X },
     { val: 'na', label: 'N/A', color: 'bg-gray-400', icon: Minus },
-  ] as const).filter((o) => !(sinNA && o.val === 'na'))
+  ] as const).filter((o) => !(sinNA && o.val === 'na') && !(!conObs && o.val === 'obs'))
+  const actual: string | null = value === 'ok' && observado ? 'obs' : value
   return (
     <div className="flex gap-1.5">
       {opts.map((o) => {
-        const active = value === o.val
+        const active = actual === o.val
         const Icon = o.icon
         return (
           <button key={o.val} type="button" disabled={disabled} onClick={() => onChange(o.val)}
@@ -1140,8 +1147,16 @@ export default function MecanicoOTPage() {
     )
   }
 
-  function setResultado(it: ChecklistV3Item, v: 'ok' | 'no_ok' | 'na') {
-    marcar.mutate({ instanceItemId: it.instance_item_id, instanceId: it.instance_id, resultado: v })
+  function setResultado(it: ChecklistV3Item, v: Respuesta) {
+    // [MIG673] OBS se guarda como OK + marca; cualquier otra respuesta quita la marca.
+    if (v === 'obs') {
+      marcar.mutate({ instanceItemId: it.instance_item_id, instanceId: it.instance_id, resultado: 'ok', observado: true })
+      return
+    }
+    marcar.mutate({
+      instanceItemId: it.instance_item_id, instanceId: it.instance_id, resultado: v,
+      ...(it.observado ? { observado: false } : {}),
+    })
   }
   function saveObs(it: ChecklistV3Item) {
     const o = observations[it.instance_item_id]
@@ -1394,7 +1409,17 @@ export default function MecanicoOTPage() {
                   )}
 
                   {it.tipo_respuesta === 'ok_no_ok' ? (
-                    <div className="mt-2"><ResultRadio value={it.resultado} sinNA={esEntrega} onChange={(v) => setResultado(it, v)} /></div>
+                    <div className="mt-2">
+                      <ResultRadio value={it.resultado} observado={it.observado} sinNA={esEntrega}
+                                   conObs={it.momento_uso === 'recepcion_devolucion'}
+                                   onChange={(v) => setResultado(it, v)} />
+                      {it.observado && (
+                        <p className="mt-1 text-[11px] text-amber-700">
+                          Queda como NC para la próxima OS (no bloquea el certificado).
+                          {!(observations[it.instance_item_id] ?? it.observacion) && ' Escribe abajo qué observaste.'}
+                        </p>
+                      )}
+                    </div>
                   ) : (
                     <CapturaItem it={it} saving={marcar.isPending}
                       onGuardar={(p) => marcar.mutate({

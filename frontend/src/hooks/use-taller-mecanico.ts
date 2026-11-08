@@ -94,6 +94,8 @@ export function useMarcarItem(otId: string) {
     mutationFn: (p: {
       instanceItemId: string; instanceId: string
       resultado?: 'ok' | 'no_ok' | 'na'; observacion?: string | null
+      /** [MIG673] OK con observación. */
+      observado?: boolean
       file?: File | null; files?: (File | Blob)[]
       mediciones?: MedicionItem
       valor_numerico?: number | null
