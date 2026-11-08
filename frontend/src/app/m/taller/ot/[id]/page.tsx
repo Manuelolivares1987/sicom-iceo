@@ -10,6 +10,7 @@ import {
 import { Spinner } from '@/components/ui/spinner'
 import { Button } from '@/components/ui/button'
 import { Modal, ModalFooter } from '@/components/ui/modal'
+import { MotivoPausaModal } from '@/components/mantenimiento/motivo-pausa-modal'
 import { SignaturePad } from '@/components/ui/signature-pad'
 import { useAuth } from '@/contexts/auth-context'
 import { BLOQUE_LABELS } from '@/lib/services/checklist-v2'
@@ -1056,6 +1057,8 @@ export default function MecanicoOTPage() {
   }
   const [warnFoto, setWarnFoto] = useState(false)
   const [sinNombre, setSinNombre] = useState(false)
+  // [MIG672] Pausar pregunta por qué (un toque).
+  const [pidePausa, setPidePausa] = useState(false)
   const [prefillRecurso, setPrefillRecurso] = useState<RecursoPrefill | null>(null)
 
   /**
@@ -1102,8 +1105,14 @@ export default function MecanicoOTPage() {
     if (accion === 'iniciar' && !tecnicoId) { setSinNombre(true); return }
     setSinNombre(false)
     setWarnFoto(false)
+    if (accion === 'pausar') { setPidePausa(true); return }
     timing.reset()
     timing.mutate({ accion, userId, tecnicoId })
+  }
+  function pausarCon(motivoTipo: string, texto: string | null) {
+    setPidePausa(false)
+    timing.reset()
+    timing.mutate({ accion: 'pausar', userId, tecnicoId, motivoTipo, observaciones: texto })
   }
   // [MIG472] El backend contesta «faltan N tareas» en vez de negarse en seco.
   const pidePendientes = timing.isError && (timing.error as Error).name === 'PENDIENTES'
@@ -1224,7 +1233,7 @@ export default function MecanicoOTPage() {
         {otAbierta && yoTrabajando && (
           <button onClick={() => doTiming('pausar')} disabled={timing.isPending}
                   className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-amber-500 py-3 text-sm font-semibold text-white disabled:opacity-50">
-            <Pause className="h-4 w-4" /> Pausar (fin jornada)
+            <Pause className="h-4 w-4" /> Pausar
           </button>
         )}
         {(estado === 'en_ejecucion' || estado === 'pausada') && (
@@ -1260,6 +1269,8 @@ export default function MecanicoOTPage() {
           y el tiempo que se mide es el que después se reparte.
         </p>
       )}
+      <MotivoPausaModal open={pidePausa} onClose={() => setPidePausa(false)}
+                        onElegir={pausarCon} ocupado={timing.isPending} />
       {warnFoto && noOkSinFoto > 0 && (
         <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
           Hay {noOkSinFoto} hallazgo{noOkSinFoto > 1 ? 's' : ''} NO OK sin foto. Saca la foto de cada

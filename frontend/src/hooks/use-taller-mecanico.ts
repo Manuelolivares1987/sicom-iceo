@@ -118,9 +118,11 @@ export function useTimingMecanico(otId: string) {
       tecnicoId?: string | null
       /** [MIG472] Por qué se cierra con tareas obligatorias sin hacer. */
       motivoPendientes?: string | null
+      /** [MIG672] Código del motivo de pausa. */
+      motivoTipo?: string | null
     }) => queueTiming(otId, p.accion, p.userId, {
       observaciones: p.observaciones, conObservaciones: p.conObservaciones, firma: p.firma,
-      tecnicoId: p.tecnicoId, motivoPendientes: p.motivoPendientes,
+      tecnicoId: p.tecnicoId, motivoPendientes: p.motivoPendientes, motivoTipo: p.motivoTipo,
     }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: keyChecklist(otId) })
