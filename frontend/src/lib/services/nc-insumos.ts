@@ -64,6 +64,19 @@ export type ProductoConStock = {
   nombre: string
   unidad_medida: string | null
   stock: number
+  /** [MIG675] Pedido en vales abiertos que bodega aún no entrega. */
+  comprometido?: number
+  /** [MIG675] stock − comprometido: lo que de verdad queda para este pedido. */
+  disponible?: number
+}
+
+/** [MIG675] Etiqueta de stock: manda lo DISPONIBLE, no lo que hay en el estante. */
+export function etiquetaStock(p: ProductoConStock): { texto: string; tono: 'ok' | 'justo' | 'no' } {
+  const disp = p.disponible ?? p.stock
+  const comp = p.comprometido ?? 0
+  if (disp > 0) return { texto: comp > 0 ? `${disp} disp. (${p.stock} en bodega, ${comp} ya pedidos)` : `${disp} disp.`, tono: 'ok' }
+  if (p.stock > 0) return { texto: `${p.stock} en bodega, pero ya pedidos en otros vales`, tono: 'justo' }
+  return { texto: 'sin stock', tono: 'no' }
 }
 
 /** Busca en bodega mostrando cuánto queda: el jefe ya no adivina si hay. */
