@@ -186,3 +186,31 @@ export async function casosSimilares(activoId: string, texto: string, limit = 3)
   if (error) throw error
   return (data ?? []) as CasoSimilar[]
 }
+
+// ── [MIG677] El Copiloto dentro de la OT, sin IA ────────────────────────────
+export type AntecedentesOT = {
+  sintoma: string
+  casos: {
+    equipo: string; mismo_equipo: boolean; mismo_modelo: boolean; modelo: string | null
+    sintoma: string; causa: string | null; reparacion: string | null; validado: boolean; fecha: string | null
+  }[]
+  historial: { folio: string | null; fecha: string | null; tipo: string | null; trabajo: string; motivo: string | null }[]
+}
+
+/** Casos confirmados parecidos + historial del equipo, para la tarjeta de la OT. Sin IA. */
+export async function getAntecedentesOT(otId: string): Promise<AntecedentesOT> {
+  const { data, error } = await supabase.rpc('rpc_copiloto_antecedentes_ot', { p_ot_id: otId })
+  if (error) throw error
+  return data as AntecedentesOT
+}
+
+/** Al finalizar la OT: «qué encontré y qué hice» se vuelve un caso que el Copiloto cita. */
+export async function crearCasoDesdeOT(p: {
+  otId: string; sintoma: string; causa: string; reparacion: string
+}): Promise<string> {
+  const { data, error } = await supabase.rpc('rpc_copiloto_caso_desde_ot', {
+    p_ot_id: p.otId, p_sintoma: p.sintoma, p_causa: p.causa, p_reparacion: p.reparacion,
+  })
+  if (error) throw error
+  return data as string
+}

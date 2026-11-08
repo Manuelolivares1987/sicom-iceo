@@ -11,6 +11,8 @@ import { Spinner } from '@/components/ui/spinner'
 import { Button } from '@/components/ui/button'
 import { Modal, ModalFooter } from '@/components/ui/modal'
 import { MotivoPausaModal } from '@/components/mantenimiento/motivo-pausa-modal'
+import { AntecedentesOT } from '@/components/copiloto/antecedentes-ot'
+import { crearCasoDesdeOT } from '@/lib/services/copiloto'
 import { SignaturePad } from '@/components/ui/signature-pad'
 import { useAuth } from '@/contexts/auth-context'
 import { BLOQUE_LABELS } from '@/lib/services/checklist-v2'
@@ -1066,6 +1068,10 @@ export default function MecanicoOTPage() {
   const [sinNombre, setSinNombre] = useState(false)
   // [MIG672] Pausar pregunta por qué (un toque).
   const [pidePausa, setPidePausa] = useState(false)
+  // [MIG677] Al finalizar: «qué encontré y qué hice» alimenta al Copiloto.
+  const [casoSintoma, setCasoSintoma] = useState('')
+  const [casoCausa, setCasoCausa] = useState('')
+  const [casoHecho, setCasoHecho] = useState('')
   const [prefillRecurso, setPrefillRecurso] = useState<RecursoPrefill | null>(null)
 
   /**
@@ -1132,6 +1138,13 @@ export default function MecanicoOTPage() {
     // que no aparezca dentro del modal como "No se pudo finalizar".
     timing.reset()
     setFirma(''); setConObs(false); setObsFin(''); setFinalizar(true)
+    // [MIG677] El borrador sale de la misma OT: lo que salió NO OK u observado.
+    setCasoSintoma(visibles
+      .filter((i) => i.resultado === 'no_ok' || i.observado)
+      .slice(0, 5)
+      .map((i) => `${i.descripcion}${(observations[i.instance_item_id] ?? i.observacion) ? ` (${observations[i.instance_item_id] ?? i.observacion})` : ''}`)
+      .join('; '))
+    setCasoCausa(''); setCasoHecho('')
   }
   function confirmFinalizar() {
     if (!firma) return
@@ -1143,7 +1156,16 @@ export default function MecanicoOTPage() {
         // sin hacer. Sin motivo, el sistema vuelve a preguntar.
         motivoPendientes: motivoPend.trim() || null,
       },
-      { onSuccess: () => { setFinalizar(false); setMotivoPend('') } },
+      {
+        onSuccess: () => {
+          setFinalizar(false); setMotivoPend('')
+          // [MIG677] Nunca bloquea el cierre: si falla o no hay señal, la OT queda igual.
+          if (online && casoCausa.trim().length >= 5 && casoHecho.trim().length >= 5) {
+            crearCasoDesdeOT({ otId, sintoma: casoSintoma.trim(), causa: casoCausa.trim(), reparacion: casoHecho.trim() })
+              .catch((e) => console.warn('[copiloto] caso desde OT no se guardó', e))
+          }
+        },
+      },
     )
   }
 
@@ -1184,6 +1206,11 @@ export default function MecanicoOTPage() {
       </div>
 
       <PendientesSubida otId={otId} items={items ?? []} />
+
+      {ot?.activo_id && (
+        <AntecedentesOT otId={otId} activoId={ot.activo_id} online={online}
+                        equipo={ot.activo_patente ?? ot.activo_codigo ?? ''} />
+      )}
 
       {/* Cabecera */}
       <div className="rounded-xl border border-gray-200 bg-white p-3">
@@ -1538,6 +1565,23 @@ export default function MecanicoOTPage() {
             {conObs && (
               <textarea value={obsFin} onChange={(e) => setObsFin(e.target.value)} rows={2}
                         placeholder="Observaciones…" className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
+            )}
+            {/* [MIG677] Lo que aprende el Copiloto. Opcional y sin formularios:
+                el síntoma ya viene de la OT; basta una línea de causa y otra de lo hecho. */}
+            {casoSintoma && (
+              <div className="rounded-lg border border-indigo-200 bg-indigo-50/60 px-3 py-2.5">
+                <p className="text-xs font-semibold text-indigo-900">Para el próximo mecánico (opcional)</p>
+                <p className="mt-1 text-[11px] text-indigo-800">Falla: {casoSintoma}</p>
+                <input value={casoCausa} onChange={(e) => setCasoCausa(e.target.value)}
+                       placeholder="¿Cuál fue la causa? Ej: arnés rozado detrás del tablero"
+                       className="mt-1.5 w-full rounded-lg border border-indigo-200 px-2.5 py-1.5 text-sm" />
+                <input value={casoHecho} onChange={(e) => setCasoHecho(e.target.value)}
+                       placeholder="¿Qué hiciste? Ej: reparé arnés y cambié fusible F12"
+                       className="mt-1.5 w-full rounded-lg border border-indigo-200 px-2.5 py-1.5 text-sm" />
+                <p className="mt-1 text-[10px] text-indigo-700">
+                  Si lo dejas escrito, el Copiloto se lo muestra al próximo que tenga esta falla.
+                </p>
+              </div>
             )}
             <SignaturePad label="Firma del técnico (obligatoria)" onCapture={setFirma} />
 

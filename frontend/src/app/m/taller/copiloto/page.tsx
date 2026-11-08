@@ -141,9 +141,12 @@ function CopilotoInner() {
   const equipoLabel = params.get('equipo')
   const convParam = params.get('c')
   const online = useNetworkStatus()
+  // [MIG677] «Diagnosticar con IA» desde la OT llega con la pregunta armada.
+  // Queda escrita, NO se envía sola: cada consulta cuesta, la decide el mecánico.
+  const preguntaParam = params.get('q')
 
   const [mensajes, setMensajes] = useState<Mensaje[]>([])
-  const [input, setInput] = useState('')
+  const [input, setInput] = useState(() => preguntaParam ?? '')
   const [adjuntos, setAdjuntos] = useState<Adjunto[]>([])
   const [enviando, setEnviando] = useState(false)
   const [estado, setEstado] = useState<string | null>(null)
