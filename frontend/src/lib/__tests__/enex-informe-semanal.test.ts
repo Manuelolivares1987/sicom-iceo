@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { armarInformeSemanal, lunesDe, lunesSemanaAnterior, numeroSemana } from '@/lib/enex-informe-semanal'
-import { asuntoInforme, htmlInformeSemanal } from '@/lib/email/enex-informe-semanal'
+import { asuntoInforme, htmlInformeSemanal, htmlParaPegar } from '@/lib/email/enex-informe-semanal'
 import type { EnexFaena, EnexPanelRow, EnexReprogramacion } from '@/lib/services/enex'
 
 const faena = { id: 'F', nombre: 'Centinela', trimestre_ancla: 2, contrato_inst_combustible: 11, contrato_inst_lubricante: 3, contrato_camiones: 20 } as EnexFaena
@@ -93,5 +93,10 @@ describe('informe semanal ENEX', () => {
     expect(html).not.toContain('javascript:')
     expect(html.toLowerCase()).not.toContain('multa')
     expect(asuntoInforme(i)).toContain('Semana 45')
+    const pegar = htmlParaPegar(i)
+    expect(pegar).toContain('Cumplimiento por faena')
+    expect(pegar).toContain('Observaciones de los operadores')
+    expect(pegar).not.toContain('<img src=x>')
+    expect(pegar.toLowerCase()).not.toContain('multa')
   })
 })

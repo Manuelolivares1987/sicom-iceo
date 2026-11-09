@@ -5,7 +5,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, ChevronLeft, ChevronRight, Loader2, Send } from 'lucide-react'
+import { AlertTriangle, ChevronLeft, ChevronRight, Copy, Loader2, Send } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
@@ -16,7 +16,7 @@ import { sumarDias, trimestreContrato } from '@/lib/enex-avance'
 import {
   armarInformeSemanal, fechaCorta, hoyIso, lunesSemanaAnterior, mesesNecesarios, numeroSemana, type InformeSemanal, type PautaLugarFaena,
 } from '@/lib/enex-informe-semanal'
-import { htmlInformeSemanal } from '@/lib/email/enex-informe-semanal'
+import { asuntoInforme, htmlInformeSemanal, htmlParaPegar } from '@/lib/email/enex-informe-semanal'
 import {
   getActividadesTrimestre, getEnviosInformeSemanal, getFaenas, getFaenasConLugares, getHallazgosDeEjecuciones, getLugarItems,
   getPanelVentana, getReprogramacionesDesde, sincronizarTrimestre,
@@ -94,6 +94,34 @@ export default function InformeSemanalPage() {
   }, [armado, comentario, textos, excluidas])
 
   const vista = useMemo(() => (informe ? htmlInformeSemanal(informe) : ''), [informe])
+  const paraPegar = useMemo(() => (informe ? htmlParaPegar(informe) : ''), [informe])
+
+  async function copiarCorreo() {
+    const caja = document.createElement('div')
+    caja.innerHTML = paraPegar
+    try {
+      await navigator.clipboard.write([new ClipboardItem({
+        'text/html': new Blob([paraPegar], { type: 'text/html' }),
+        'text/plain': new Blob([caja.innerText || caja.textContent || ''], { type: 'text/plain' }),
+      })])
+    } catch {
+      // Navegador sin ClipboardItem: se selecciona el contenido y se copia.
+      caja.style.cssText = 'position:fixed;left:-9999px;top:0'
+      document.body.appendChild(caja)
+      const r = document.createRange(); r.selectNodeContents(caja)
+      const s = window.getSelection(); s?.removeAllRanges(); s?.addRange(r)
+      const ok = document.execCommand('copy')
+      s?.removeAllRanges(); caja.remove()
+      if (!ok) { toast.error('No se pudo copiar. Selecciona la vista previa y usa Ctrl+C.'); return }
+    }
+    toast.success('Correo copiado. Pégalo en Outlook con Ctrl+V.')
+  }
+
+  async function copiarAsunto() {
+    if (!informe) return
+    try { await navigator.clipboard.writeText(asuntoInforme(informe)); toast.success('Asunto copiado') }
+    catch { toast.error('No se pudo copiar el asunto') }
+  }
   const listaPara = separar(para), listaCopia = separar(copia)
   const correosOk = listaPara.length > 0 && [...listaPara, ...listaCopia].every((x) => EMAIL.test(x))
   const totalObs = armado?.faenas.reduce((n, f) => n + f.observaciones.length, 0) ?? 0
@@ -129,7 +157,7 @@ export default function InformeSemanalPage() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold text-gray-900">Informe semanal a ENEX</h1>
-          <p className="text-sm text-gray-500">Revisa el borrador, ajusta las observaciones y envíalo. Nada sale sin tu confirmación.</p>
+          <p className="text-sm text-gray-500">Revisa el borrador, ajusta las observaciones y cópialo a tu correo.</p>
         </div>
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" aria-label="Semana anterior" onClick={() => setLunes(sumarDias(lunes, -7))}><ChevronLeft className="h-4 w-4" /></Button>
@@ -172,7 +200,18 @@ export default function InformeSemanalPage() {
               )))}
             </CardContent></Card>
 
-            <Card><CardContent className="space-y-3 p-4">
+            <Card><CardContent className="space-y-2 p-4">
+              <h2 className="text-sm font-semibold">Copiar para Outlook</h2>
+              <p className="text-xs text-gray-500">Copia con las observaciones ya editadas y pega con Ctrl+V en un correo nuevo.</p>
+              <div className="flex flex-wrap gap-2">
+                <Button onClick={copiarCorreo}><Copy className="mr-2 h-4 w-4" /> Copiar correo</Button>
+                <Button variant="outline" onClick={copiarAsunto}><Copy className="mr-2 h-4 w-4" /> Copiar asunto</Button>
+              </div>
+            </CardContent></Card>
+
+            <details className="rounded-lg border bg-white"><summary className="cursor-pointer p-4 text-sm font-semibold">Enviar desde SICOM (puede llegar a spam)</summary>
+            <div className="space-y-3 p-4 pt-0">
+              <iframe title="Vista previa del envío desde SICOM" srcDoc={vista} sandbox="" className="h-80 w-full rounded border" />
               <label className="block text-sm font-semibold">Para
                 <input value={para} onChange={(e) => { setPara(e.target.value); setConfirmar(false) }} className="mt-1 w-full rounded border p-2 text-sm font-normal" placeholder="correo@enex.cl, otro@esmax.cl" />
               </label>
@@ -190,11 +229,11 @@ export default function InformeSemanalPage() {
                       <Button variant="outline" disabled={enviando} onClick={() => setConfirmar(false)}>Cancelar</Button>
                     </div>
                   </div>}
-            </CardContent></Card>
+            </div></details>
           </div>
 
           <Card className="overflow-hidden"><CardContent className="p-0">
-            <iframe title="Vista previa del correo" srcDoc={vista} sandbox="" className="h-[80vh] w-full border-0" />
+            <iframe title="Vista previa del correo" srcDoc={`<!doctype html><meta charset="utf-8"><body style="margin:16px">${paraPegar}</body>`} sandbox="" className="h-[80vh] w-full border-0" />
           </CardContent></Card>
         </div>
       )}

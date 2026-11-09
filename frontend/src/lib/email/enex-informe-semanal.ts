@@ -18,6 +18,41 @@ const TONO = {
 export const asuntoInforme = (i: InformeSemanal) =>
   `Informe semanal de cumplimiento ENEX · Semana ${i.semana.numero} (${fechaCorta(i.semana.desde)} al ${fechaCorta(i.semana.hasta)}) · Pillado`
 
+/**
+ * Versión para copiar y pegar en Outlook: tablas con borde y etiquetas clásicas,
+ * que sobreviven al pegado. Sin cáscara de correo: la firma la pone quien envía.
+ */
+export function htmlParaPegar(i: InformeSemanal): string {
+  const FUENTE_P = 'font-family:Calibri,Arial,sans-serif;font-size:11pt;color:#1f2937'
+  const tabla = (cols: string[], filas: string[][]) => `
+    <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;border-color:#c9d6cc;${FUENTE_P}">
+      <tr bgcolor="${MARCA.verdeOscuro}">${cols.map((c) => `<th align="left" bgcolor="${MARCA.verdeOscuro}"><font color="#ffffff"><b>${c}</b></font></th>`).join('')}</tr>
+      ${filas.map((f) => `<tr>${f.map((c) => `<td valign="top">${c}</td>`).join('')}</tr>`).join('')}
+    </table>`
+  const anio = i.semana.hasta.slice(0, 4)
+  const actividad = i.faenas.flatMap((f) => f.actividad.map((a) => [
+    esc(f.nombre), fechaCorta(a.fecha_plan), esc(a.instalacion), `${esc(a.servicio)}${a.ot ? ` · OT ${esc(a.ot)}` : ''}`,
+    a.fecha_ejecucion ? fechaCorta(a.fecha_ejecucion) : '—', esc(a.estado),
+  ]))
+  const observaciones = i.faenas.flatMap((f) => f.observaciones.map((o) => [
+    fechaCorta(o.fecha), `${esc(f.nombre)} · ${esc(o.instalacion)} — ${esc(o.servicio)}`,
+    `${o.tipo === 'hallazgo' ? `<b>Hallazgo: ${esc(o.item)}.</b> ` : ''}${esc(o.texto).replace(/\n/g, '<br>')}`,
+  ]))
+  return `<div style="${FUENTE_P}">
+    <p>Estimados:</p>
+    <p>Junto con saludar, informamos el cumplimiento del contrato de mantenimiento correspondiente a la <b>semana ${i.semana.numero} (${fechaCorta(i.semana.desde)} al ${fechaCorta(i.semana.hasta)} de ${anio})</b>.</p>
+    ${i.comentario.trim() ? `<p>${esc(i.comentario).replace(/\n/g, '<br>')}</p>` : ''}
+    <p><b>1. Cumplimiento por faena</b></p>
+    ${tabla(['Faena', 'Semana', 'Acumulado trimestre', 'Trimestre'], i.faenas.map((f) => [
+      esc(f.nombre), `<b>${f.semana.comprometidas === 0 ? 'Sin trabajos' : pct(f.semana.pct)}</b>`, `<b>${pct(f.trimestre.pctAvance)}</b>`, esc(f.trimestre.etiqueta),
+    ]))}
+    ${actividad.length ? `<p><b>2. Actividad de la semana</b></p>${tabla(['Faena', 'Fecha', 'Instalación', 'Servicio', 'Ejecutada', 'Estado'], actividad)}` : ''}
+    ${observaciones.length ? `<p><b>3. Observaciones de los operadores</b></p>${tabla(['Fecha', 'Instalación', 'Observación'], observaciones)}` : ''}
+    <p>Quedamos atentos a cualquier consulta.</p>
+    <p>Saludos cordiales,</p>
+  </div>`
+}
+
 /** Cumplimiento por faena en porcentajes: lo primero que se lee. Lomas va separada en combustibles y lubricantes. */
 function resumenPorFaena(i: InformeSemanal): string {
   const filas = i.faenas.map((f, n) => {
