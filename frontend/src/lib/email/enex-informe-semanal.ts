@@ -18,6 +18,20 @@ const TONO = {
 export const asuntoInforme = (i: InformeSemanal) =>
   `Informe semanal de cumplimiento ENEX · Semana ${i.semana.numero} (${fechaCorta(i.semana.desde)} al ${fechaCorta(i.semana.hasta)}) · Pillado`
 
+/** Cumplimiento por faena en porcentajes: lo primero que se lee. Lomas va separada en combustibles y lubricantes. */
+function resumenPorFaena(i: InformeSemanal): string {
+  const filas = i.faenas.map((f, n) => {
+    const z = n % 2 === 1
+    return `<tr>
+      ${celda(`<b>${esc(f.nombre)}</b>`, z)}
+      ${celda(`<b>${f.semana.comprometidas === 0 ? 'Sin trabajos' : pct(f.semana.pct)}</b>`, z, 'text-align:right')}
+      ${celda(`<b>${pct(f.trimestre.pctAvance)}</b><br><span style="color:#6b7280;font-size:11px">${esc(f.trimestre.etiqueta)}</span>`, z, 'text-align:right')}
+    </tr>`
+  }).join('')
+  return `${seccionTitulo('Cumplimiento por faena', MARCA.verdeOscuro, MARCA.verdeClaro)}
+    ${tablaAbrir(['Faena', 'Semana', 'Acumulado trimestre'], [1, 2])}${filas}${tablaCerrar}`
+}
+
 export function htmlInformeSemanal(i: InformeSemanal): string {
   const cuerpo = i.faenas.map((f) => {
     const filas = f.actividad.map((a, n) => {
@@ -42,15 +56,20 @@ export function htmlInformeSemanal(i: InformeSemanal): string {
     }).join('')
 
     const s = f.semana, t = f.trimestre
-    const trimestre = t.universo != null
-      ? `Trimestre ${esc(t.etiqueta)}: <b>${pct(t.pctAvance)}</b> de avance (${t.ejecutadas} de ${t.universo} tareas del contrato) · ${pct(t.pctFirmado)} con firma del mandante sobre lo programado`
-      : `Trimestre ${esc(t.etiqueta)}: ${t.ejecutadas} ejecutadas de ${t.programadas} programadas · ${pct(t.pctFirmado)} con firma del mandante`
+    const trimestre = t.unidad === 'actividades'
+      ? `Acumulado trimestre ${esc(t.etiqueta)}: <b>${pct(t.pctAvance)}</b> (${t.ejecutadas} de ${t.universo} actividades de la pauta)`
+      : t.universo != null
+      ? `Acumulado trimestre ${esc(t.etiqueta)}: <b>${pct(t.pctAvance)}</b> (${t.ejecutadas} de ${t.universo} tareas del contrato) · ${pct(t.pctFirmado)} con firma del mandante sobre lo programado`
+      : `Acumulado trimestre ${esc(t.etiqueta)}: <b>${pct(t.pctAvance)}</b> (${t.ejecutadas} de ${t.programadas} programadas) · ${pct(t.pctFirmado)} con firma del mandante`
+    const semana = s.comprometidas === 0
+      ? 'Semana: sin trabajos comprometidos.'
+      : `Semana: <b>${pct(s.pct)}</b> de cumplimiento (${s.ejecutadas} de ${s.comprometidas} ${s.unidad})${s.unidad === 'servicios' ? ` · ${s.firmadas} con firma` : ''} · ${s.reprogramadas} reprogramadas · ${s.pendientes} pendientes`
 
     return `
       ${seccionTitulo(esc(f.nombre), MARCA.verdeOscuro, MARCA.verdeClaro)}
-      <p style="margin:0 0 4px;font-size:13px">Semana: <b>${pct(s.pct)}</b> de cumplimiento (${s.ejecutadas} de ${s.comprometidas}) · ${s.firmadas} con firma · ${s.reprogramadas} reprogramadas · ${s.pendientes} pendientes${s.adicionales ? ` · ${s.adicionales} de otras semanas` : ''}</p>
+      <p style="margin:0 0 4px;font-size:13px">${semana}${s.adicionales ? ` · ${s.adicionales} de otras semanas` : ''}</p>
       <p style="margin:0 0 10px;font-size:13px">${trimestre}</p>
-      ${tablaAbrir(['Fecha', 'Instalación / servicio', 'Ejecutada', 'Estado'])}${filas}${tablaCerrar}
+      ${filas ? `${tablaAbrir(['Fecha', 'Instalación / servicio', 'Ejecutada', 'Estado'])}${filas}${tablaCerrar}` : ''}
       ${obs ? `<p style="margin:16px 0 6px;font-size:13px"><b>Observaciones de los operadores</b></p>
       ${tablaAbrir(['Fecha', 'Instalación', 'Observación'])}${obs}${tablaCerrar}` : ''}`
   }).join('')
@@ -64,7 +83,7 @@ export function htmlInformeSemanal(i: InformeSemanal): string {
       { n: i.totales.firmadas, label: 'Con firma', color: '#374151', fondo: '#f3f4f6' },
       { n: i.totales.reprogramadas, label: 'Reprogramadas', color: MARCA.ambar, fondo: MARCA.ambarFondo },
     ],
-    cuerpo: `${i.comentario.trim() ? `<p style="margin:18px 0 0;font-size:14px;line-height:21px">${esc(i.comentario).replace(/\n/g, '<br>')}</p>` : ''}${cuerpo}`,
+    cuerpo: `${i.comentario.trim() ? `<p style="margin:18px 0 0;font-size:14px;line-height:21px">${esc(i.comentario).replace(/\n/g, '<br>')}</p>` : ''}${resumenPorFaena(i)}${cuerpo}`,
     pie: 'Informe preparado por Pillado Empresas desde SICOM. Para consultas, responda este correo.',
   })
 }
