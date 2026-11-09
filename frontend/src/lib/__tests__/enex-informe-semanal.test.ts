@@ -60,6 +60,30 @@ describe('informe semanal ENEX', () => {
     expect(o[1].texto).toBe('Sin comentario del técnico.')
   })
 
+  it('informa todas las faenas en %, con Lomas separada y lubricantes por actividad', () => {
+    const comb = { id: 'C', nombre: 'Lomas Bayas — Combustibles', trimestre_ancla: 1, contrato_inst_combustible: 3, contrato_camiones: 4 } as EnexFaena
+    const lub = { id: 'L', nombre: 'Lomas Bayas — Lubricantes', trimestre_ancla: 1 } as EnexFaena
+    const des = { id: 'D', nombre: 'Nueva Centinela (DES)', trimestre_ancla: 2 } as EnexFaena
+    const li = (id: string) => ({ lugar_item_id: id, area: 'TS1' }) as never
+    const ac = (id: string, estado: string, fecha_plan: string | null, fecha_ejecucion: string | null = null) => ({ lugar_item_id: id, estado, fecha_plan, fecha_ejecucion }) as never
+    const i = armarInformeSemanal({
+      lunes: '2026-11-02', hoy: '2026-11-09', faenas: [faena, comb, lub, des], reprogs: [], hallazgos: [],
+      rows: [row('A', { estado: 'cumplida', fecha_ejecucion: '2026-11-04', firma_mandante_url: 'x' }), row('O', { faena_id: 'C', fecha_programada: '2026-10-28', periodo_mes: 10, estado: 'cumplida', fecha_ejecucion: '2026-10-28', firma_mandante_url: 'x' })],
+      pautaLugar: { L: { items: [li('a'), li('b'), li('c'), li('d')], acts: [ac('a', 'ejecutada', '2026-11-03', '2026-11-03'), ac('b', 'planificada', '2026-11-05')] } },
+    })
+    expect(i.faenas.map((f) => f.nombre)).toEqual(['Centinela', 'Lomas Bayas — Combustibles', 'Lomas Bayas — Lubricantes'])
+    const c = i.faenas[1], l = i.faenas[2]
+    expect(c.semana.comprometidas).toBe(0)
+    expect(c.trimestre.pctAvance).toBe(10)
+    expect(l.semana).toMatchObject({ unidad: 'actividades', comprometidas: 2, ejecutadas: 1, pct: 50 })
+    expect(l.trimestre).toMatchObject({ unidad: 'actividades', universo: 4, pctAvance: 25 })
+    expect(i.totales.comprometidas).toBe(1)
+    const html = htmlInformeSemanal(i)
+    expect(html).toContain('Cumplimiento por faena')
+    expect(html).toContain('Lomas Bayas — Lubricantes')
+    expect(html).toContain('Sin trabajos')
+  })
+
   it('el correo escapa lo que escribe el operador y no muestra multas', () => {
     const i = armar([row('<b>X</b>', { estado: 'cumplida', fecha_ejecucion: '2026-11-04', ejecucion_id: 'e', ejec_observacion: '"><img src=x>' })])
     i.faenas[0].observaciones[0].foto = 'javascript:alert(1)'

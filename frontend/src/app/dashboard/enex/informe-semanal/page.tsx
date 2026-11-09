@@ -12,13 +12,14 @@ import { Spinner } from '@/components/ui/spinner'
 import { useRequireAuth } from '@/hooks/use-require-auth'
 import { useToast } from '@/contexts/toast-context'
 import { supabase } from '@/lib/supabase'
-import { sumarDias } from '@/lib/enex-avance'
+import { sumarDias, trimestreContrato } from '@/lib/enex-avance'
 import {
-  armarInformeSemanal, fechaCorta, hoyIso, lunesSemanaAnterior, mesesNecesarios, numeroSemana, type InformeSemanal,
+  armarInformeSemanal, fechaCorta, hoyIso, lunesSemanaAnterior, mesesNecesarios, numeroSemana, type InformeSemanal, type PautaLugarFaena,
 } from '@/lib/enex-informe-semanal'
 import { htmlInformeSemanal } from '@/lib/email/enex-informe-semanal'
 import {
-  getEnviosInformeSemanal, getFaenas, getHallazgosDeEjecuciones, getPanelVentana, getReprogramacionesDesde,
+  getActividadesTrimestre, getEnviosInformeSemanal, getFaenas, getFaenasConLugares, getHallazgosDeEjecuciones, getLugarItems,
+  getPanelVentana, getReprogramacionesDesde, sincronizarTrimestre,
 } from '@/lib/services/enex'
 
 const separar = (s: string) => s.split(/[,;\n]/).map((x) => x.trim()).filter(Boolean)
@@ -52,7 +53,16 @@ export default function InformeSemanalPage() {
       const eids = rows.filter((r) => r.fecha_ejecucion && r.fecha_ejecucion.slice(0, 10) >= lunes && r.fecha_ejecucion.slice(0, 10) <= hasta)
         .map((r) => r.ejecucion_id).filter(Boolean) as string[]
       const [reprogs, hallazgos] = await Promise.all([getReprogramacionesDesde(lunes), getHallazgosDeEjecuciones(eids)])
-      return { faenas, rows, reprogs, hallazgos }
+      // Lomas Lubricantes se mide por actividad de la pauta por lugar, como en su pantalla.
+      const conLugares = await getFaenasConLugares()
+      const pautaLugar: Record<string, PautaLugarFaena> = {}
+      await Promise.all(faenas.filter((f) => conLugares.includes(f.id)).map(async (f) => {
+        const trimestre = trimestreContrato(lunes, f.trimestre_ancla ?? 2).desde
+        try { await sincronizarTrimestre(f.id, trimestre) } catch { /* se informa lo guardado */ }
+        const items = await getLugarItems(f.id)
+        pautaLugar[f.id] = { items, acts: await getActividadesTrimestre(items.map((i) => i.lugar_item_id), trimestre) }
+      }))
+      return { faenas, rows, reprogs, hallazgos, pautaLugar }
     },
   })
 

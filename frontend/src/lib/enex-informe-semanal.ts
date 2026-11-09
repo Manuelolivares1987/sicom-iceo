@@ -8,7 +8,11 @@
 import {
   avanceContrato, etiquetaTrimestre, fechaDeIso, fechaPlan, isoDe, sumarDias, trimestreContrato,
 } from '@/lib/enex-avance'
-import type { EnexFaena, EnexPanelRow, EnexReprogramacion } from '@/lib/services/enex'
+import { avancePorArea } from '@/lib/enex-pauta-lugar'
+import type { EnexActividadTrimestre, EnexFaena, EnexLugarItem, EnexPanelRow, EnexReprogramacion } from '@/lib/services/enex'
+
+/** Pauta por lugar (Lomas Lubricantes): ahí el avance se mide por actividad, no por servicio. */
+export type PautaLugarFaena = { items: EnexLugarItem[]; acts: EnexActividadTrimestre[] }
 
 export type HallazgoItem = {
   ejecucion_id: string
@@ -45,8 +49,8 @@ export type ObservacionSemana = {
 export type FaenaSemana = {
   faena_id: string
   nombre: string
-  semana: { comprometidas: number; ejecutadas: number; firmadas: number; reprogramadas: number; pendientes: number; adicionales: number; pct: number | null; pctFirmado: number | null }
-  trimestre: { etiqueta: string; universo: number | null; ejecutadas: number; cumplidas: number; programadas: number; pctAvance: number | null; pctFirmado: number | null }
+  semana: { unidad: 'servicios' | 'actividades'; comprometidas: number; ejecutadas: number; firmadas: number; reprogramadas: number; pendientes: number; adicionales: number; pct: number | null; pctFirmado: number | null }
+  trimestre: { etiqueta: string; universo: number | null; ejecutadas: number; cumplidas: number; programadas: number; pctAvance: number | null; pctFirmado: number | null; unidad: 'servicios' | 'actividades' }
   actividad: FilaSemana[]
   observaciones: ObservacionSemana[]
 }
@@ -90,6 +94,7 @@ export function armarInformeSemanal(p: {
   rows: EnexPanelRow[]
   reprogs: EnexReprogramacion[]
   hallazgos: HallazgoItem[]
+  pautaLugar?: Record<string, PautaLugarFaena>
 }): InformeSemanal {
   const desde = p.lunes, hasta = sumarDias(p.lunes, 6)
   const enSemana = (f?: string | null) => !!f && f.slice(0, 10) >= desde && f.slice(0, 10) <= hasta
@@ -147,7 +152,6 @@ export function armarInformeSemanal(p: {
         estado, tono, ot: r.ot_numero,
       })
     }
-    if (actividad.length === 0) continue
     actividad.sort((a, b) => a.fecha_plan.localeCompare(b.fecha_plan) || a.instalacion.localeCompare(b.instalacion))
 
     // Observaciones de lo hecho en la semana.
@@ -180,15 +184,29 @@ export function armarInformeSemanal(p: {
       camiones: f.contrato_camiones ?? null,
     })
 
-    faenas.push({
-      faena_id: f.id, nombre: f.nombre,
-      semana: { comprometidas, ejecutadas, firmadas, reprogramadas, pendientes, adicionales, pct: pct(ejecutadas, comprometidas), pctFirmado: pct(firmadas, comprometidas) },
-      trimestre: { etiqueta: etiquetaTrimestre(v), universo: a.universo, ejecutadas: a.ejecutadas, cumplidas: a.cumplidas, programadas: a.programadas, pctAvance: a.pctAvance, pctFirmado: a.pctKpi },
-      actividad, observaciones,
-    })
+    const lugar = p.pautaLugar?.[f.id]
+    // Sin plan, sin contrato y sin actividad (DES va dentro de Centinela): no se informa.
+    if (actividad.length === 0 && a.universo == null && a.programadas === 0 && !lugar?.items.length) continue
+
+    let semana: FaenaSemana['semana'] = { unidad: 'servicios', comprometidas, ejecutadas, firmadas, reprogramadas, pendientes, adicionales, pct: pct(ejecutadas, comprometidas), pctFirmado: pct(firmadas, comprometidas) }
+    let trimestre: FaenaSemana['trimestre'] = { etiqueta: etiquetaTrimestre(v), universo: a.universo, ejecutadas: a.ejecutadas, cumplidas: a.cumplidas, programadas: a.programadas, pctAvance: a.pctAvance ?? pct(a.ejecutadas, a.programadas), pctFirmado: a.pctKpi, unidad: 'servicios' }
+
+    if (lugar?.items.length) {
+      const av = avancePorArea(lugar.items, lugar.acts, p.hoy).total
+      trimestre = { ...trimestre, universo: av.total, ejecutadas: av.ejecutadas, pctAvance: av.pctReal, unidad: 'actividades' }
+      if (comprometidas === 0) {
+        const planSemana = lugar.acts.filter((x) => x.estado !== 'no_aplica' && (enSemana(x.fecha_plan) || (x.estado === 'ejecutada' && enSemana(x.fecha_ejecucion))))
+        const hechas = planSemana.filter((x) => x.estado === 'ejecutada').length
+        const rep = planSemana.filter((x) => x.estado === 'reprogramada').length
+        semana = { unidad: 'actividades', comprometidas: planSemana.length, ejecutadas: hechas, firmadas: 0, reprogramadas: rep, pendientes: planSemana.length - hechas - rep, adicionales, pct: pct(hechas, planSemana.length), pctFirmado: null }
+      }
+    }
+
+    faenas.push({ faena_id: f.id, nombre: f.nombre, semana, trimestre, actividad, observaciones })
   }
 
-  const s = (k: 'comprometidas' | 'ejecutadas' | 'firmadas' | 'reprogramadas') => faenas.reduce((t, f) => t + f.semana[k], 0)
+  // Las actividades de pauta no se suman con los servicios: son unidades distintas.
+  const s = (k: 'comprometidas' | 'ejecutadas' | 'firmadas' | 'reprogramadas') => faenas.filter((f) => f.semana.unidad === 'servicios').reduce((t, f) => t + f.semana[k], 0)
   return {
     semana: { desde, hasta, numero: numeroSemana(desde) },
     comentario: '',
