@@ -1228,6 +1228,45 @@ export async function getItemsDeEjecuciones(ejecucionIds: string[]): Promise<Ene
   return (data ?? []) as EnexItemEjecutado[]
 }
 
+// [MIG679] Puntos de pauta malos o fuera de tolerancia, para el informe semanal.
+export async function getHallazgosDeEjecuciones(ejecucionIds: string[]) {
+  if (ejecucionIds.length === 0) return []
+  const { data, error } = await supabase.from('v_enex_ejecucion_items')
+    .select('ejecucion_id,pauta_item_id,descripcion,observacion,foto_url,foto_antes_url,foto_despues_url')
+    .in('ejecucion_id', ejecucionIds)
+    .or('resultado.in.(no_ok,no),dentro_tolerancia.eq.false')
+    .limit(2000)
+  if (error) throw error
+  return (data ?? []).map((h) => ({
+    ejecucion_id: h.ejecucion_id as string, pauta_item_id: h.pauta_item_id as string,
+    descripcion: h.descripcion as string | null, observacion: h.observacion as string | null,
+    foto: (h.foto_url ?? h.foto_antes_url ?? h.foto_despues_url ?? null) as string | null,
+  }))
+}
+
+// [MIG679] Reprogramaciones con fecha original desde ese día (incluye las re-reprogramaciones posteriores).
+export async function getReprogramacionesDesde(desde: string): Promise<EnexReprogramacion[]> {
+  const { data, error } = await supabase.from('v_enex_reprogramaciones').select('*').gte('fecha_original', desde).limit(1000)
+  if (error) throw error
+  return (data ?? []) as EnexReprogramacion[]
+}
+
+export type EnvioInformeSemanal = {
+  id: string; semana_inicio: string; destinatarios: string[]; copia: string[]
+  estado: 'enviando' | 'enviado' | 'error'; enviado_at: string | null; created_at: string
+}
+
+// [MIG679] Envíos de la semana y, si no hay, el último, para reutilizar los destinatarios.
+export async function getEnviosInformeSemanal(lunes: string): Promise<EnvioInformeSemanal[]> {
+  const { data, error } = await supabase.from('enex_informes_semanales')
+    .select('id,semana_inicio,destinatarios,copia,estado,enviado_at,created_at')
+    .order('created_at', { ascending: false }).limit(50)
+  if (error) throw error
+  const todos = (data ?? []) as EnvioInformeSemanal[]
+  const deSemana = todos.filter((e) => e.semana_inicio === lunes)
+  return deSemana.length > 0 ? deSemana : todos.filter((e) => e.estado === 'enviado').slice(0, 1).map((e) => ({ ...e, estado: 'error' as const }))
+}
+
 export async function getRequerimientosDeEjecuciones(ejecucionIds: string[]): Promise<EnexRequerimiento[]> {
   if (ejecucionIds.length === 0) return []
   const { data, error } = await supabase.from('v_enex_requerimientos').select('*').in('ejecucion_id', ejecucionIds)
