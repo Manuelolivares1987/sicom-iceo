@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { Download, Package } from 'lucide-react'
@@ -32,6 +32,20 @@ export function ConsumosInsumos() {
   const [orden, setOrden] = useState<Orden>('monto')
   const [detalle, setDetalle] = useState<FilaInsumo | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
+  const menuFamilias = useRef<HTMLDetailsElement>(null)
+  const cerrarMenuFamilias = () => menuFamilias.current?.removeAttribute('open')
+  useEffect(() => {
+    const alClic = (e: MouseEvent) => {
+      if (menuFamilias.current && !menuFamilias.current.contains(e.target as Node)) cerrarMenuFamilias()
+    }
+    const alTecla = (e: KeyboardEvent) => { if (e.key === 'Escape') cerrarMenuFamilias() }
+    document.addEventListener('mousedown', alClic)
+    document.addEventListener('keydown', alTecla)
+    return () => {
+      document.removeEventListener('mousedown', alClic)
+      document.removeEventListener('keydown', alTecla)
+    }
+  }, [])
   const periodo = periodos.find((p) => p.id === periodoId) ?? periodos[0]
 
   const { data, isLoading, error } = useQuery({
@@ -95,12 +109,15 @@ export function ConsumosInsumos() {
           <option value="bodega">Consumo (salidas de bodega)</option>
           <option value="oc">Compras (OC aprobadas)</option>
         </select>
-        <details className="relative">
+        <details ref={menuFamilias} className="relative">
           <summary className={`${control} cursor-pointer list-none`}>
             {familiasSel.length === 0 ? 'Todas las familias' : familiasSel.length === 1 ? familiasSel[0] : `${familiasSel.length} familias`} ▾
           </summary>
           <div className="absolute z-20 mt-1 max-h-72 w-64 overflow-y-auto rounded-md border border-gray-200 bg-white p-2 shadow-lg">
-            <button type="button" className="mb-1 text-xs font-medium text-pillado-green-700 hover:underline" onClick={() => setFamiliasSel([])}>Limpiar selección</button>
+            <div className="mb-1 flex items-center justify-between">
+              <button type="button" className="text-xs font-medium text-pillado-green-700 hover:underline" onClick={() => setFamiliasSel([])}>Limpiar selección</button>
+              <button type="button" className="rounded bg-pillado-green-600 px-2 py-0.5 text-xs font-medium text-white hover:bg-pillado-green-700" onClick={cerrarMenuFamilias}>Listo</button>
+            </div>
             {familias.map((f) => (
               <label key={f} className="flex cursor-pointer items-center gap-2 rounded px-1 py-1 text-sm hover:bg-gray-50">
                 <input type="checkbox" checked={familiasSel.includes(f)}
