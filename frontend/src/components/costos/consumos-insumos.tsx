@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Modal } from '@/components/ui/modal'
 import { fmtClp, fmtMM } from '@/lib/costos-operacion'
-import { armarFilaInsumo, filaParaProveedor, periodosInsumo, type FilaInsumo } from '@/lib/insumos-consumo'
+import { armarFilaInsumo, periodosInsumo, type FilaInsumo } from '@/lib/insumos-consumo'
 import { getConsumoInsumos, getDetalleInsumo, type FuenteInsumo } from '@/lib/services/insumos-consumo'
 
 // ============================================================================
@@ -27,7 +27,7 @@ export function ConsumosInsumos() {
   const [periodoId, setPeriodoId] = useState(periodos[0].id)
   const [fuente, setFuente] = useState<FuenteInsumo>('bodega')
   const [texto, setTexto] = useState('')
-  const [familia, setFamilia] = useState('')
+  const [familiasSel, setFamiliasSel] = useState<string[]>([])
   const [alcance, setAlcance] = useState<Alcance>('todos')
   const [orden, setOrden] = useState<Orden>('monto')
   const [detalle, setDetalle] = useState<FilaInsumo | null>(null)
@@ -44,11 +44,11 @@ export function ConsumosInsumos() {
   const filas = useMemo(() => {
     const q = texto.trim().toLowerCase()
     return filasBase
-      .filter((f) => !familia || f.familia === familia)
+      .filter((f) => !familiasSel.length || familiasSel.includes(f.familia))
       .filter((f) => alcance === 'todos' || (alcance === 'pauta' ? f.con_pauta : !f.cod_prod))
       .filter((f) => !q || f.descripcion.toLowerCase().includes(q) || (f.cod_prod ?? '').toLowerCase().includes(q) || (f.proveedor ?? '').toLowerCase().includes(q))
       .sort((a, b) => (Number(b[orden]) || 0) - (Number(a[orden]) || 0))
-  }, [filasBase, familia, alcance, texto, orden])
+  }, [filasBase, familiasSel, alcance, texto, orden])
 
   const totalMonto = filas.reduce((s, f) => s + f.monto, 0)
   const totalProyectado = filas.reduce((s, f) => s + (f.monto_proyectado ?? 0), 0)
@@ -57,26 +57,8 @@ export function ConsumosInsumos() {
   const exportar = async (paraProveedor: boolean) => {
     setMsg(null)
     try {
-      const ExcelJS = (await import('exceljs')).default
-      const wb = new ExcelJS.Workbook()
-      const ws = wb.addWorksheet('Volúmenes')
-      ws.columns = [
-        { header: 'Código', key: 'codigo', width: 16 }, { header: 'Insumo', key: 'insumo', width: 56 }, { header: 'Familia', key: 'familia', width: 26 },
-        { header: 'Unidad', key: 'unidad', width: 9 }, { header: `Acumulado (${periodo.label})`, key: 'acumulado', width: 20 },
-        { header: 'Promedio mensual', key: 'promedio', width: 16 }, { header: 'Proyección 12 meses', key: 'proyeccion', width: 18 }, { header: 'Base proyección', key: 'base', width: 20 },
-        ...(paraProveedor ? [] : [
-          { header: 'Pauta 2027', key: 'p27', width: 12 }, { header: 'Pauta 2028', key: 'p28', width: 12 }, { header: 'Pauta 2029', key: 'p29', width: 12 },
-          { header: 'Gasto período', key: 'monto', width: 15 }, { header: 'Precio promedio', key: 'precio', width: 15 }, { header: 'Proyección $', key: 'mp', width: 15 },
-          { header: 'Proveedor principal', key: 'prov', width: 34 },
-        ]),
-      ]
-      ws.getRow(1).font = { bold: true }
-      ws.views = [{ state: 'frozen', ySplit: 1 }]
-      for (const f of filas) {
-        ws.addRow({ ...filaParaProveedor(f), ...(paraProveedor ? {} : { p27: f.pauta_2027, p28: f.pauta_2028, p29: f.pauta_2029, monto: f.monto, precio: f.precio, mp: f.monto_proyectado, prov: f.proveedor }) })
-      }
-      for (const k of ['acumulado', 'promedio', 'proyeccion']) ws.getColumn(k).numFmt = '#,##0.0'
-      const buf = await wb.xlsx.writeBuffer()
+      const { excelInsumos } = await import('@/lib/export/insumos-excel')
+      const buf = await excelInsumos(filas, paraProveedor, periodo.label)
       const url = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }))
       const a = document.createElement('a')
       a.href = url
@@ -113,10 +95,21 @@ export function ConsumosInsumos() {
           <option value="bodega">Consumo (salidas de bodega)</option>
           <option value="oc">Compras (OC aprobadas)</option>
         </select>
-        <select aria-label="Familia" className={control} value={familia} onChange={(e) => setFamilia(e.target.value)}>
-          <option value="">Todas las familias</option>
-          {familias.map((f) => <option key={f} value={f}>{f}</option>)}
-        </select>
+        <details className="relative">
+          <summary className={`${control} cursor-pointer list-none`}>
+            {familiasSel.length === 0 ? 'Todas las familias' : familiasSel.length === 1 ? familiasSel[0] : `${familiasSel.length} familias`} ▾
+          </summary>
+          <div className="absolute z-20 mt-1 max-h-72 w-64 overflow-y-auto rounded-md border border-gray-200 bg-white p-2 shadow-lg">
+            <button type="button" className="mb-1 text-xs font-medium text-pillado-green-700 hover:underline" onClick={() => setFamiliasSel([])}>Limpiar selección</button>
+            {familias.map((f) => (
+              <label key={f} className="flex cursor-pointer items-center gap-2 rounded px-1 py-1 text-sm hover:bg-gray-50">
+                <input type="checkbox" checked={familiasSel.includes(f)}
+                       onChange={() => setFamiliasSel((s) => (s.includes(f) ? s.filter((x) => x !== f) : [...s, f]))} />
+                {f}
+              </label>
+            ))}
+          </div>
+        </details>
         <select aria-label="Alcance" className={control} value={alcance} onChange={(e) => setAlcance(e.target.value as Alcance)}>
           <option value="todos">Todos los insumos</option>
           <option value="pauta">Solo los que están en pauta</option>
@@ -164,7 +157,7 @@ export function ConsumosInsumos() {
                         <td className="px-2 py-2 text-right tabular-nums">{fmtQ(f.promedio)}</td>
                         <td className="px-2 py-2 text-right tabular-nums">
                           <span className="font-semibold text-gray-900">{fmtQ(f.proyeccion)}</span>
-                          <div className={`text-[11px] ${f.base === 'pauta' ? 'text-pillado-green-700' : 'text-gray-500'}`}>{f.base === 'pauta' ? 'Pauta' : 'Promedio'}</div>
+                          <div className={`text-[11px] ${f.base === 'pauta' ? 'text-pillado-green-700' : 'text-gray-500'}`}>{f.base === 'pauta' ? 'Pauta' : 'Promedio'}{f.provisorio ? ' · Provisorio' : ''}</div>
                         </td>
                         <td className="px-2 py-2 text-right tabular-nums text-gray-600">{fmtQ(f.pauta_2027)}</td>
                         <td className="px-2 py-2 text-right tabular-nums text-gray-600">{fmtQ(f.pauta_2028)}</td>

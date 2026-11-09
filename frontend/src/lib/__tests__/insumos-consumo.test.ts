@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest'
+import ExcelJS from 'exceljs'
+import { excelInsumos } from '@/lib/export/insumos-excel'
 import { armarFilaInsumo, filaParaProveedor, periodosInsumo, type InsumoConsumo } from '@/lib/insumos-consumo'
 
 const base = {
@@ -27,6 +29,19 @@ describe('consumos por insumo', () => {
   it('sin pauta sigue el promedio; sin historia usa el precio de referencia', () => {
     expect(armarFilaInsumo(base, 12)).toMatchObject({ base: 'promedio', proyeccion: 240 })
     expect(armarFilaInsumo({ ...base, acumulado: 0, monto: 0, con_pauta: true, pauta_12m: 10 }, 12).precio).toBe(1500)
+  })
+
+  it('el Excel para proveedores no trae columnas internas y avisa lo provisorio', async () => {
+    const buf = await excelInsumos([armarFilaInsumo({ ...base, con_pauta: true, pauta_12m: 100, provisorio: true }, 12)], true, 'Últimos 12 meses')
+    const wb = new ExcelJS.Workbook()
+    await wb.xlsx.load(buf as unknown as ArrayBuffer)
+    const ws = wb.getWorksheet('Volúmenes')!
+    const texto = JSON.stringify([ws.getRow(1).values, ws.getRow(2).values])
+    expect(texto).toContain('Proyección 12 meses')
+    expect(texto).toContain('Referencial')
+    expect(texto).not.toContain('Proveedor SA')
+    expect(texto).not.toContain('Precio')
+    expect(texto).not.toContain('480000')
   })
 
   it('al proveedor no le llegan precios, montos ni proveedores actuales', () => {
