@@ -5,10 +5,12 @@ import { useRequireAuth } from '@/hooks/use-require-auth'
 import { PanelCostosOperacion } from '@/components/costos/panel-costos'
 import { InformeMensualCostos } from '@/components/costos/informe-mensual'
 import { PresupuestoOperaciones } from '@/components/costos/presupuesto'
+import { ConsumosInsumos } from '@/components/costos/consumos-insumos'
 
 const PESTANAS = [
   { id: 'costos', label: 'Costos reales' },
   { id: 'presupuesto', label: 'Presupuesto' },
+  { id: 'insumos', label: 'Consumos por insumo' },
 ] as const
 
 // Costos de Operación (Gerencia). El panel vive en components/costos/panel-costos.tsx
@@ -36,7 +38,7 @@ export default function CostosOperacionPage() {
             titulo="Costos de Operación"
             descripcion="Compras aprobadas (OC) o consumo de bodega de Softland, por equipo, faena y familia. Sin combustible de reventa." />
         </>
-      ) : <PresupuestoOperaciones />}
+      ) : pestana === 'presupuesto' ? <PresupuestoOperaciones /> : <ConsumosInsumos />}
     </>
   )
 }
