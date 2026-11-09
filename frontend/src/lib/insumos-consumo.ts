@@ -13,6 +13,8 @@ export type InsumoConsumo = {
   precio_ref: number | null
   camiones: number
   con_pauta: boolean
+  /** Hay litros por confirmar en la placa del camión. */
+  provisorio: boolean
   pauta_12m: number | null
   pauta_2027: number | null
   pauta_2028: number | null
@@ -69,4 +71,5 @@ export const filaParaProveedor = (f: FilaInsumo) => ({
   promedio: f.promedio,
   proyeccion: f.proyeccion,
   base: f.base === 'pauta' ? 'Pauta de mantención' : 'Promedio histórico',
+  condicion: f.provisorio ? 'Referencial, sujeto a confirmación' : 'Estimado',
 })
