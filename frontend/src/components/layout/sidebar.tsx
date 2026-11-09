@@ -259,6 +259,8 @@ const navGroups: NavGroup[] = [
         tooltip: 'Gantt del trimestre por instalación y día (como la planilla), con % de avance real, planificado y proyectado' },
       { label: 'Pauta trimestral por lugar', href: '/dashboard/enex/pauta-trimestral', icon: ClipboardList, badge: 'Nuevo',
         tooltip: 'Lomas Bayas Lubricantes: 33 actividades por Truck Shop por lugar y fecha (x / P / RP / n/a) con % de avance real y proyectado' },
+      { label: 'Informe semanal', href: '/dashboard/enex/informe-semanal', icon: FileText, badge: 'Nuevo',
+        tooltip: 'Cumplimiento de la semana y del trimestre con las observaciones de los operadores, para revisar y enviar a ENEX' },
       { label: 'Informe trimestral', href: '/dashboard/enex/informe-trimestral', icon: FileText, badge: 'Nuevo',
         tooltip: 'Consolidado del trimestre desde los informes de servicio: cumplimiento, cobertura de pauta, hallazgos y requerimientos (PDF)' },
       { label: 'Informes (PDF)', href: '/dashboard/enex/informes', icon: FileText, badge: 'Nuevo',
