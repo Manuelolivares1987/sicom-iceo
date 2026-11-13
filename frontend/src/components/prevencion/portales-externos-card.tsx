@@ -11,7 +11,8 @@
 
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Link2, Copy, Check, EyeOff, Eye, Ban, Users, Truck, UserCheck } from 'lucide-react'
+import { Link2, Copy, Check, EyeOff, Eye, Ban, Users, Truck, UserCheck, Settings, Loader2 } from 'lucide-react'
+import { Modal } from '@/components/ui/modal'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Spinner } from '@/components/ui/spinner'
 import { supabase } from '@/lib/supabase'
@@ -32,6 +33,11 @@ type Portal = {
   expira_at: string | null
   usos: number
   last_used_at: string | null
+  // [MIG688] Portal del mandante: faenas SICOM, contratos ENEX y pestañas.
+  faena_ids: string[] | null
+  enex_faena_codigos: string[] | null
+  ver_prevencion: boolean
+  ver_operaciones: boolean
 }
 
 type Acceso = {
@@ -54,13 +60,14 @@ export function PortalesExternosCard() {
   const qc = useQueryClient()
   const [revelado, setRevelado] = useState<Record<string, boolean>>({})
   const [copiado, setCopiado] = useState<string | null>(null)
+  const [editando, setEditando] = useState<Portal | null>(null)
 
   const { data: portales, isLoading } = useQuery({
     queryKey: ['portales-prevencion'],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('portales_prevencion')
-        .select('id, token, nombre, cliente, faena_codigo, activo_ids, ver_archivos_personal, requiere_identificacion, emails_autorizados, activo, expira_at, usos, last_used_at')
+        .select('id, token, nombre, cliente, faena_codigo, activo_ids, ver_archivos_personal, requiere_identificacion, emails_autorizados, activo, expira_at, usos, last_used_at, faena_ids, enex_faena_codigos, ver_prevencion, ver_operaciones')
         .order('created_at', { ascending: false })
       if (error) throw error
       return (data ?? []) as Portal[]
@@ -174,6 +181,10 @@ export function PortalesExternosCard() {
                       : 'Sin identificación'}
                   </span>
                   <span>
+                    {[p.ver_prevencion && 'Prevención', p.ver_operaciones && 'Operaciones'].filter(Boolean).join(' + ') || 'Sin pestañas'}
+                    {(p.enex_faena_codigos?.length ?? 0) > 0 && ` · informes ENEX ${p.enex_faena_codigos!.join(', ')}`}
+                  </span>
+                  <span>
                     {p.usos} consulta{p.usos === 1 ? '' : 's'}
                     {p.last_used_at ? ` · última ${new Date(p.last_used_at).toLocaleDateString('es-CL')}` : ''}
                   </span>
@@ -228,6 +239,12 @@ export function PortalesExternosCard() {
                     Copiar link
                   </button>
                   <button
+                    onClick={() => setEditando(p)}
+                    className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-2 py-1 text-[11px] font-semibold text-gray-600 hover:bg-gray-50"
+                  >
+                    <Settings className="h-3.5 w-3.5" /> Configurar
+                  </button>
+                  <button
                     onClick={() => revocar.mutate({ id: p.id, activo: !p.activo })}
                     disabled={revocar.isPending}
                     className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-2 py-1 text-[11px] font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-50"
@@ -241,6 +258,120 @@ export function PortalesExternosCard() {
           })
         )}
       </CardContent>
+      {editando && <EditarPortal p={editando} onCerrar={() => setEditando(null)} />}
     </Card>
+  )
+}
+
+// [MIG688] Configurar un portal: quién entra y qué ve. El alcance queda en la
+// fila del portal (la base nunca acepta filtros desde la página pública).
+function EditarPortal({ p, onCerrar }: { p: Portal; onCerrar: () => void }) {
+  const toast = useToast()
+  const qc = useQueryClient()
+  const [correos, setCorreos] = useState((p.emails_autorizados ?? []).join('\n'))
+  const [faenaIds, setFaenaIds] = useState<string[]>(p.faena_ids ?? [])
+  const [enex, setEnex] = useState<string[]>(p.enex_faena_codigos ?? [])
+  const [verPrev, setVerPrev] = useState(p.ver_prevencion)
+  const [verOps, setVerOps] = useState(p.ver_operaciones)
+  const [verArchivos, setVerArchivos] = useState(p.ver_archivos_personal)
+
+  const { data: faenas } = useQuery({
+    queryKey: ['portal-cfg-faenas'],
+    queryFn: async () => {
+      const [{ data: tf }, { data: f }] = await Promise.all([
+        supabase.from('prevencion_faena_tipos').select('faena_id'),
+        supabase.from('faenas').select('id, nombre').order('nombre'),
+      ])
+      const con = new Set((tf ?? []).map((x: any) => x.faena_id))
+      return (f ?? []).filter((x: any) => con.has(x.id) || (p.faena_ids ?? []).includes(x.id)) as { id: string, nombre: string }[]
+    },
+  })
+  const { data: faenasEnex } = useQuery({
+    queryKey: ['portal-cfg-enex'],
+    queryFn: async () => {
+      const { data } = await supabase.from('enex_faenas').select('codigo, nombre').eq('activo', true).order('orden')
+      return (data ?? []) as { codigo: string, nombre: string }[]
+    },
+  })
+
+  const guardar = useMutation({
+    mutationFn: async () => {
+      const lista = Array.from(new Set(correos.split(/[\s,;]+/).map((c) => c.trim().toLowerCase()).filter(Boolean)))
+      const malo = lista.find((c) => !/^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i.test(c))
+      if (malo) throw new Error(`Correo no válido: ${malo}`)
+      const { error } = await supabase.from('portales_prevencion').update({
+        emails_autorizados: lista, faena_ids: faenaIds, enex_faena_codigos: enex,
+        ver_prevencion: verPrev, ver_operaciones: verOps, ver_archivos_personal: verArchivos,
+        updated_at: new Date().toISOString(),
+      }).eq('id', p.id)
+      if (error) throw error
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['portales-prevencion'] })
+      toast.success('Portal actualizado')
+      onCerrar()
+    },
+    onError: (e) => toast.error(errorMessage(e, 'No se pudo guardar')),
+  })
+
+  const toggle = (arr: string[], set: (v: string[]) => void, v: string) =>
+    set(arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v])
+
+  return (
+    <Modal open onClose={onCerrar} title={`Configurar · ${p.nombre}`} className="max-w-[560px]">
+      <div className="space-y-4 text-sm">
+        <div>
+          <p className="mb-1 font-medium text-gray-700">Correos del mandante autorizados (uno por línea)</p>
+          <textarea value={correos} onChange={(e) => setCorreos(e.target.value)} rows={4}
+            placeholder="nombre.apellido@minera.cl"
+            className="w-full rounded-lg border border-gray-300 px-3 py-2 font-mono text-xs" />
+          <p className="text-[11px] text-gray-500">
+            Además entran los destinatarios internos de Prevención. Cada ingreso queda registrado y dura{' '}
+            {12} horas.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          <label className="flex items-center gap-2"><input type="checkbox" checked={verPrev} onChange={(e) => setVerPrev(e.target.checked)} /> Pestaña Prevención</label>
+          <label className="flex items-center gap-2"><input type="checkbox" checked={verOps} onChange={(e) => setVerOps(e.target.checked)} /> Pestaña Operaciones</label>
+          <label className="col-span-2 flex items-center gap-2">
+            <input type="checkbox" checked={verArchivos} onChange={(e) => setVerArchivos(e.target.checked)} />
+            Permitir descargar respaldos de exámenes del personal (datos de salud)
+          </label>
+        </div>
+
+        <div>
+          <p className="mb-1 font-medium text-gray-700">Faenas: inspecciones, actividades e indicadores</p>
+          <div className="flex flex-wrap gap-1.5">
+            {(faenas ?? []).map((f) => (
+              <button key={f.id} type="button" onClick={() => toggle(faenaIds, setFaenaIds, f.id)}
+                className={`rounded-full border px-2.5 py-1 text-xs ${faenaIds.includes(f.id) ? 'border-gray-900 bg-gray-900 text-white' : 'border-gray-300 text-gray-700'}`}>
+                {f.nombre}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <p className="mb-1 font-medium text-gray-700">Contratos ENEX: informes de calibración y mantención</p>
+          <div className="flex flex-wrap gap-1.5">
+            {(faenasEnex ?? []).map((f) => (
+              <button key={f.codigo} type="button" onClick={() => toggle(enex, setEnex, f.codigo)}
+                className={`rounded-full border px-2.5 py-1 text-xs ${enex.includes(f.codigo) ? 'border-gray-900 bg-gray-900 text-white' : 'border-gray-300 text-gray-700'}`}>
+                {f.nombre}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2">
+          <button onClick={onCerrar} className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-600">Cancelar</button>
+          <button onClick={() => guardar.mutate()} disabled={guardar.isPending}
+            className="inline-flex items-center gap-1 rounded-lg bg-gray-900 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50">
+            {guardar.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />} Guardar
+          </button>
+        </div>
+      </div>
+    </Modal>
   )
 }
