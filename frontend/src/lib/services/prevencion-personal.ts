@@ -355,6 +355,9 @@ export async function eliminarExamen(examenId: string) {
 
 export type ActualizarPersonaInput = {
   personalId: string
+  rut?: string
+  nombres?: string
+  apellidos?: string | null
   faenaCodigo?: string | null
   cargo?: string | null
   activo?: boolean
@@ -368,6 +371,9 @@ export type ActualizarPersonaInput = {
  */
 export async function actualizarPersona(i: ActualizarPersonaInput) {
   const patch: Record<string, unknown> = {}
+  if (i.rut !== undefined) patch.rut = normalizarRutPersonal(i.rut)
+  if (i.nombres !== undefined) patch.nombres = i.nombres.trim()
+  if (i.apellidos !== undefined) patch.apellidos = i.apellidos?.trim() || null
   if (i.faenaCodigo !== undefined) patch.faena_codigo = i.faenaCodigo || null
   if (i.cargo !== undefined) patch.cargo = i.cargo || null
   if (i.activo !== undefined) patch.activo = i.activo
@@ -378,4 +384,56 @@ export async function actualizarPersona(i: ActualizarPersonaInput) {
     .update(patch)
     .eq('id', i.personalId)
   if (error) throw error
+}
+
+
+// ── [MIG685] Alta de personas y RUT ─────────────────────────────────────────
+// El RUT es la llave natural del control documental: sin puntos, con guion y
+// DV en mayúscula ("12345678-K"). El personal de Calama entró con un RUT
+// provisorio (PEND-CAL-xx) que se reemplaza por el real desde la pantalla.
+
+export function rutPersonalValido(rut: string): boolean {
+  const n = rut.replace(/[^0-9kK]/g, '').toUpperCase()
+  if (n.length < 8) return false
+  const cuerpo = n.slice(0, -1); const dv = n.slice(-1)
+  let s = 0; let m = 2
+  for (const c of cuerpo.split('').reverse()) { s += Number(c) * m; m = m === 7 ? 2 : m + 1 }
+  const r = 11 - (s % 11)
+  return (r === 11 ? '0' : r === 10 ? 'K' : String(r)) === dv
+}
+
+export function normalizarRutPersonal(rut: string): string {
+  const n = rut.replace(/[^0-9kK]/g, '').toUpperCase()
+  if (n.length < 2) return rut.trim()
+  return `${n.slice(0, -1)}-${n.slice(-1)}`
+}
+
+export type CrearPersonaInput = {
+  rut: string
+  nombres: string
+  apellidos?: string | null
+  cargo?: string | null
+  faenaCodigo: string
+  empresa?: string | null
+}
+
+/**
+ * Alta de una persona. Si su faena tiene requisitos (CALAMA), la base le crea
+ * los ítems «sin dato» al insertar (trigger MIG685): queda NO HABILITADA hasta
+ * que se carguen sus respaldos.
+ */
+export async function crearPersona(i: CrearPersonaInput) {
+  if (!rutPersonalValido(i.rut)) throw new Error('El RUT no es válido (revise el dígito verificador).')
+  const { error } = await supabase.from('prevencion_personal').insert({
+    rut: normalizarRutPersonal(i.rut),
+    nombres: i.nombres.trim(),
+    apellidos: i.apellidos?.trim() || null,
+    cargo: i.cargo?.trim() || null,
+    faena_codigo: i.faenaCodigo.trim().toUpperCase(),
+    empresa: i.empresa?.trim() || 'Pillado y Compañía Limitada',
+  })
+  if (error) {
+    if (error.code === '23505') throw new Error('Ya existe una persona con ese RUT.')
+    throw error
+  }
 }

@@ -15,8 +15,10 @@ import { usePermissions } from '@/hooks/use-permissions'
 import {
   useControlDocumental, useActualizarExamen,
   useRenovarExamen, useHistorialExamen, abrirRespaldo, useEnviarReporte,
-  useGestionExamen, useActualizarPersona, useTiposExamen,
+  useGestionExamen, useActualizarPersona, useTiposExamen, useCrearPersona,
 } from '@/hooks/use-prevencion-personal'
+import { rutPersonalValido } from '@/lib/services/prevencion-personal'
+import { Modal } from '@/components/ui/modal'
 import type { PersonaControl, ExamenPersona, EstadoExamen } from '@/lib/services/prevencion-personal'
 
 // ============================================================================
@@ -388,6 +390,12 @@ function AgregarItem({ p, faena }: { p: PersonaControl, faena: string | null }) 
   const [editandoPersona, setEditandoPersona] = useState(false)
   const [faenaEd, setFaenaEd] = useState(p.faena_codigo ?? '')
   const [cargoEd, setCargoEd] = useState(p.cargo ?? '')
+  // [MIG685] El personal de Calama entró con RUT provisorio (PEND-CAL-xx).
+  const rutProvisorio = p.rut.startsWith('PEND-')
+  const [rutEd, setRutEd] = useState(rutProvisorio ? '' : p.rut)
+  const [nombresEd, setNombresEd] = useState(p.nombres ?? '')
+  const [apellidosEd, setApellidosEd] = useState(p.apellidos ?? '')
+  const [errLocal, setErrLocal] = useState<string | null>(null)
   const { data: tipos } = useTiposExamen()
   const gestion = useGestionExamen(faena)
   const actualizar = useActualizarPersona(faena)
@@ -402,7 +410,7 @@ function AgregarItem({ p, faena }: { p: PersonaControl, faena: string | null }) 
           <button onClick={() => setAbierto((v) => !v)}
             className="text-[11px] font-medium text-blue-700 underline">
             <Plus className="mr-0.5 inline h-3 w-3" />
-            Agregar examen o licencia ({faltantes.length} disponible{faltantes.length === 1 ? '' : 's'})
+            Agregar examen, licencia o curso ({faltantes.length} disponible{faltantes.length === 1 ? '' : 's'})
           </button>
         )}
         <button onClick={() => setEditandoPersona((v) => !v)}
@@ -428,6 +436,23 @@ function AgregarItem({ p, faena }: { p: PersonaControl, faena: string | null }) 
 
       {editandoPersona && (
         <div className="space-y-2 rounded-md border border-blue-300 bg-blue-50/60 p-2">
+          <div className="grid gap-2 sm:grid-cols-3">
+            <label className="block">
+              <span className="text-[10px] uppercase text-muted-foreground">
+                RUT{rutProvisorio && <b className="ml-1 text-amber-700">(provisorio: ingrese el real)</b>}
+              </span>
+              <Input value={rutEd} onChange={(e) => setRutEd(e.target.value)}
+                placeholder="12345678-9" className="h-8 text-sm" />
+            </label>
+            <label className="block">
+              <span className="text-[10px] uppercase text-muted-foreground">Nombres</span>
+              <Input value={nombresEd} onChange={(e) => setNombresEd(e.target.value)} className="h-8 text-sm" />
+            </label>
+            <label className="block">
+              <span className="text-[10px] uppercase text-muted-foreground">Apellidos</span>
+              <Input value={apellidosEd} onChange={(e) => setApellidosEd(e.target.value)} className="h-8 text-sm" />
+            </label>
+          </div>
           <div className="grid gap-2 sm:grid-cols-2">
             <label className="block">
               <span className="text-[10px] uppercase text-muted-foreground">Faena</span>
@@ -454,11 +479,23 @@ function AgregarItem({ p, faena }: { p: PersonaControl, faena: string | null }) 
                 Cancelar
               </Button>
               <Button size="sm" variant="primary" disabled={actualizar.isPending}
-                onClick={() => actualizar.mutate({
-                  personalId: p.personal_id,
-                  faenaCodigo: faenaEd.trim().toUpperCase() || null,
-                  cargo: cargoEd.trim() || null,
-                }, { onSuccess: () => setEditandoPersona(false) })}>
+                onClick={() => {
+                  setErrLocal(null)
+                  const rutCambia = rutEd.trim() !== '' && rutEd.trim() !== p.rut
+                  if (rutCambia && !rutPersonalValido(rutEd)) {
+                    setErrLocal('El RUT no es válido (revise el dígito verificador).')
+                    return
+                  }
+                  if (!nombresEd.trim()) { setErrLocal('El nombre no puede quedar vacío.'); return }
+                  actualizar.mutate({
+                    personalId: p.personal_id,
+                    ...(rutCambia ? { rut: rutEd } : {}),
+                    nombres: nombresEd,
+                    apellidos: apellidosEd || null,
+                    faenaCodigo: faenaEd.trim().toUpperCase() || null,
+                    cargo: cargoEd.trim() || null,
+                  }, { onSuccess: () => setEditandoPersona(false) })
+                }}>
                 <Save className="mr-1 h-3.5 w-3.5" />
                 {actualizar.isPending ? 'Guardando…' : 'Guardar'}
               </Button>
@@ -468,9 +505,12 @@ function AgregarItem({ p, faena }: { p: PersonaControl, faena: string | null }) 
             Al cambiar la faena, esta persona pasa a aparecer en el reporte de
             esa faena y en el correo de sus destinatarios.
           </p>
-          {(actualizar.error || gestion.agregar.error) && (
+          {(errLocal || actualizar.error || gestion.agregar.error) && (
             <div className="rounded bg-red-100 px-2 py-1 text-[11px] text-red-800">
-              {((actualizar.error ?? gestion.agregar.error) as Error).message}
+              {errLocal
+                ?? ((actualizar.error as any)?.code === '23505'
+                  ? 'Ya existe otra persona con ese RUT.'
+                  : ((actualizar.error ?? gestion.agregar.error) as Error).message)}
             </div>
           )}
         </div>
@@ -493,7 +533,9 @@ function FilaPersona({ p, faena }: { p: PersonaControl, faena: string | null }) 
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-semibold">{p.nombres} {p.apellidos}</span>
-            <span className="text-xs text-muted-foreground">{p.rut}</span>
+            {p.rut.startsWith('PEND-')
+              ? <span className="rounded bg-amber-100 px-1.5 text-[10px] font-semibold text-amber-800">RUT pendiente</span>
+              : <span className="text-xs text-muted-foreground">{p.rut}</span>}
           </div>
           <div className="truncate text-[11px] text-muted-foreground">
             {p.empresa}{p.faena_codigo && <> · {p.faena_codigo}</>}
@@ -658,6 +700,55 @@ function EnviarReporteModal({ faena, faenas, onCerrar }: {
   )
 }
 
+/**
+ * [MIG685] Alta de una persona. Si su faena tiene requisitos (CALAMA: cursos
+ * del aula virtual Centinela, diploma Pillado, licencias del conductor), la
+ * base le crea esos ítems «sin dato» y queda NO HABILITADA hasta cargarlos.
+ */
+function NuevaPersonaModal({ faenaInicial, onCerrar }: { faenaInicial: string | null, onCerrar: () => void }) {
+  const crear = useCrearPersona()
+  const [rut, setRut] = useState('')
+  const [nombres, setNombres] = useState('')
+  const [apellidos, setApellidos] = useState('')
+  const [cargo, setCargo] = useState('')
+  const [faenaCod, setFaenaCod] = useState(faenaInicial ?? '')
+  const [err, setErr] = useState<string | null>(null)
+
+  const guardar = () => {
+    setErr(null)
+    if (!rutPersonalValido(rut)) return setErr('El RUT no es válido (revise el dígito verificador).')
+    if (!nombres.trim()) return setErr('Ingrese el nombre.')
+    if (!faenaCod.trim()) return setErr('Indique la faena (ej: CALAMA, ROMERAL).')
+    crear.mutate({ rut, nombres, apellidos, cargo, faenaCodigo: faenaCod },
+      { onSuccess: onCerrar, onError: (e: any) => setErr(e?.message ?? 'No se pudo crear') })
+  }
+
+  return (
+    <Modal open onClose={onCerrar} title="Nueva persona en el control documental">
+      <div className="space-y-3">
+        <div className="grid gap-2 sm:grid-cols-2">
+          <Input label="RUT" value={rut} onChange={(e) => setRut(e.target.value)} placeholder="12345678-9" />
+          <Input label="Faena" value={faenaCod} onChange={(e) => setFaenaCod(e.target.value.toUpperCase())} placeholder="CALAMA" />
+          <Input label="Nombres" value={nombres} onChange={(e) => setNombres(e.target.value)} />
+          <Input label="Apellidos" value={apellidos} onChange={(e) => setApellidos(e.target.value)} />
+          <Input label="Cargo" value={cargo} onChange={(e) => setCargo(e.target.value)} placeholder="Técnico, conductor…" />
+        </div>
+        <p className="text-[11px] text-muted-foreground">
+          En CALAMA se le crean solos los documentos que exige la inspección de terreno (cursos del aula
+          virtual Centinela, diploma Pillado y licencias de conductor). Quedan «sin dato» hasta cargar cada respaldo.
+        </p>
+        {err && <div className="rounded bg-red-100 px-2 py-1 text-[12px] text-red-800">{err}</div>}
+        <div className="flex justify-end gap-2">
+          <Button variant="outline" onClick={onCerrar}>Cancelar</Button>
+          <Button onClick={guardar} disabled={crear.isPending}>
+            <Save className="mr-1 h-4 w-4" />{crear.isPending ? 'Guardando…' : 'Crear persona'}
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
 export default function ControlDocumentalPersonalPage() {
   useRequireAuth()
   // [MIG385] Acá la faena se identifica por código de prevención («ROMERAL»),
@@ -670,6 +761,7 @@ export default function ControlDocumentalPersonalPage() {
   const [q, setQ] = useState('')
   const [soloProblemas, setSoloProblemas] = useState(false)
   const [enviando, setEnviando] = useState(false)
+  const [creando, setCreando] = useState(false)
 
   const { data, isLoading, error } = useControlDocumental(faena)
 
@@ -705,11 +797,19 @@ export default function ControlDocumentalPersonalPage() {
             Un examen sin registro cuenta como incumplimiento, no como conforme.
           </p>
         </div>
-        <Button variant="primary" onClick={() => setEnviando(true)}>
-          <Mail className="mr-1.5 h-4 w-4" />
-          Enviar reporte por correo
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={() => setCreando(true)}>
+            <Plus className="mr-1.5 h-4 w-4" />
+            Nueva persona
+          </Button>
+          <Button variant="primary" onClick={() => setEnviando(true)}>
+            <Mail className="mr-1.5 h-4 w-4" />
+            Enviar reporte por correo
+          </Button>
+        </div>
       </div>
+
+      {creando && <NuevaPersonaModal faenaInicial={faena} onCerrar={() => setCreando(false)} />}
 
       {enviando && (
         <EnviarReporteModal

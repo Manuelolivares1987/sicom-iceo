@@ -7,7 +7,8 @@ import {
   getUrlFirmadaExamen,
   enviarReporteDocumental,
   marcarNoAplica, marcarAplica, agregarExamen, eliminarExamen,
-  actualizarPersona, getTiposExamen,
+  actualizarPersona, getTiposExamen, crearPersona,
+  type CrearPersonaInput,
   type ActualizarExamenInput,
   type RenovarExamenInput,
   type EnviarReporteInput,
@@ -116,6 +117,18 @@ export function useActualizarPersona(faena?: string | null) {
     mutationFn: (input: ActualizarPersonaInput) => actualizarPersona(input),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['prevencion-control-documental', faena ?? 'todas'] })
+    },
+  })
+}
+
+/** [MIG685] Alta de una persona en el control documental. */
+export function useCrearPersona() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: CrearPersonaInput) => crearPersona(input),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['prevencion-control-documental'] })
+      qc.invalidateQueries({ queryKey: ['prev-habilitacion'] })
     },
   })
 }
