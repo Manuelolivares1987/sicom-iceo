@@ -400,6 +400,12 @@ const navGroups: NavGroup[] = [
       { label: 'Control documental personal', href: '/dashboard/prevencion/personal',
         icon: ShieldAlert, module: 'prevencion', badge: 'Nuevo',
         tooltip: 'Exámenes ocupacionales y licencias con vencimiento — requerido por auditoría' },
+      // [MIG685] Inspección de terreno APR (documento prevención Calama
+      // 12-11-26): 8 etapas con foto o verificación contra el control
+      // documental, desviaciones y habilitación de la cuadrilla.
+      { label: 'Inspecciones de terreno APR', href: '/dashboard/prevencion/inspecciones',
+        icon: ClipboardCheck, module: 'prevencion', badge: 'Nuevo',
+        tooltip: 'Traslado, ingreso, documentos, ejecución y término del trabajo — cumplimiento, desviaciones y habilitación de la cuadrilla' },
       // El Gemba de prevención vive acá, no en Operación: son sus dos
       // checklists (caminata diaria e inspección planificada mensual) y el
       // prevencionista no tiene por qué entrar al menú de taller para hacerlos.

@@ -11,7 +11,7 @@
 
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
-import { CheckCircle2, ChevronRight, ClipboardList, HardHat, Leaf, Loader2, Paperclip, Pencil, Plus, ShieldCheck, Trash2, Users } from 'lucide-react'
+import { CheckCircle2, ChevronRight, ClipboardCheck, ClipboardList, HardHat, Leaf, Loader2, Paperclip, Pencil, Plus, ShieldCheck, Trash2, Users } from 'lucide-react'
 import { useAuth } from '@/contexts/auth-context'
 import { useExigirSesion } from '@/hooks/use-exigir-sesion'
 import { SinSesionOffline } from '@/components/enex/sin-sesion-offline'
@@ -183,6 +183,19 @@ export default function PrevencionMobileHome() {
               <p className="text-xs opacity-70">Quién cargó, qué falta y generar los documentos</p>
             </div>
             <ChevronRight className="h-5 w-5 shrink-0 opacity-60" />
+          </Link>
+        )}
+
+        {/* [MIG685] Inspección de terreno APR: la registra prevención. */}
+        {!!perfil?.rol && ROLES_CONTROL.includes(perfil.rol) && (
+          <Link href="/m/prevencion/inspeccion"
+                className="flex w-full items-center gap-3 rounded-xl border-2 border-pillado-green-600 bg-pillado-green-500 p-4 text-white active:scale-[0.99]">
+            <ClipboardCheck className="h-6 w-6 shrink-0" />
+            <div className="min-w-0 flex-1 text-left">
+              <p className="text-base font-bold">Inspección de terreno APR</p>
+              <p className="text-xs opacity-80">Traslado · ingreso · documentos · ejecución · cierre — funciona sin señal</p>
+            </div>
+            <ChevronRight className="h-5 w-5 shrink-0 opacity-70" />
           </Link>
         )}
 

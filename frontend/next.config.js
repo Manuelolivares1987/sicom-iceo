@@ -31,7 +31,7 @@ const withPWA = require('@ducanh2912/next-pwa').default({
   workboxOptions: {
     disableDevLogs: true,
     runtimeCaching: [
-      // App de terreno ENEX: tiene que abrir sin señal días después de la
+      // Apps de terreno ENEX y Prevención (inspección APR, MIG685): tienen que abrir sin señal días después de la
       // última conexión. La regla general de páginas guarda 32 por 1 día y
       // espera a la red sin límite, así que al día siguiente en faena (o con
       // antena sin datos) caía en /offline teniendo todo descargado.
@@ -40,7 +40,7 @@ const withPWA = require('@ducanh2912/next-pwa').default({
       // página para todos los servicios.
       {
         urlPattern: ({ request, url, sameOrigin }) =>
-          sameOrigin && url.pathname.startsWith('/m/enex') && request.headers.get('RSC') !== '1',
+          sameOrigin && (url.pathname.startsWith('/m/enex') || url.pathname.startsWith('/m/prevencion')) && request.headers.get('RSC') !== '1',
         handler: 'NetworkFirst',
         options: {
           cacheName: 'enex-terreno-paginas',
@@ -57,7 +57,7 @@ const withPWA = require('@ducanh2912/next-pwa').default({
       // prefetch se dejan a la regla general.
       {
         urlPattern: ({ request, url, sameOrigin }) =>
-          sameOrigin && url.pathname.startsWith('/m/enex') &&
+          sameOrigin && (url.pathname.startsWith('/m/enex') || url.pathname.startsWith('/m/prevencion')) &&
           request.headers.get('RSC') === '1' && !request.headers.get('Next-Router-Prefetch'),
         handler: 'NetworkFirst',
         options: {
