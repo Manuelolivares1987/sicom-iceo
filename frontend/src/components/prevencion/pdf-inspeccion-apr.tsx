@@ -243,14 +243,22 @@ async function aDataUrl(url: string): Promise<string | null> {
 }
 
 /** Arma el PDF de la inspección y lo descarga. */
-export async function descargarPdfInspeccion(id: string, faenaNombre: string) {
-  const d = await getInspeccionDetalle(id)
+/**
+ * Arma y descarga el PDF a partir del detalle ya leído. `urlsFotos` recibe las
+ * rutas y devuelve URLs firmadas (interno: Supabase directo; portal del
+ * mandante: el servidor, que valida el alcance).
+ */
+export async function descargarPdfDesdeDetalle(
+  d: InspeccionDetalle,
+  faenaNombre: string,
+  urlsFotos: (paths: string[]) => Promise<Record<string, string>>,
+) {
   const logo = await aDataUrl(`${window.location.origin}/images/logo_pillado_empresas.png`)
   const fotos = new Map<string, string>()
-  const paths = d.items.flatMap((i) => i.evidencias.map((e) => e.path))
-  await Promise.all(paths.map(async (p) => {
-    const u = await urlEvidencia(p)
-    const data = u ? await aDataUrl(u) : null
+  const paths = d.items.flatMap((i) => (i.evidencias ?? []).map((e) => e.path))
+  const urls = paths.length ? await urlsFotos(paths) : {}
+  await Promise.all(Object.entries(urls).map(async ([p, u]) => {
+    const data = await aDataUrl(u)
     if (data) fotos.set(p, data)
   }))
   const blob = await pdf(<InformeDoc d={d} faena={faenaNombre} logo={logo} fotos={fotos} />).toBlob()
@@ -259,4 +267,14 @@ export async function descargarPdfInspeccion(id: string, faenaNombre: string) {
   a.download = `Inspeccion_APR_${d.fecha}_${faenaNombre.replace(/[^A-Za-z0-9]+/g, '_')}.pdf`
   document.body.appendChild(a); a.click(); a.remove()
   setTimeout(() => URL.revokeObjectURL(a.href), 10_000)
+}
+
+/** Arma el PDF de la inspección (uso interno) y lo descarga. */
+export async function descargarPdfInspeccion(id: string, faenaNombre: string) {
+  const d = await getInspeccionDetalle(id)
+  await descargarPdfDesdeDetalle(d, faenaNombre, async (paths) => {
+    const out: Record<string, string> = {}
+    await Promise.all(paths.map(async (p) => { const u = await urlEvidencia(p); if (u) out[p] = u }))
+    return out
+  })
 }

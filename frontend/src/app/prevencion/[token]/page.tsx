@@ -33,6 +33,9 @@ import { cn, formatDate } from '@/lib/utils'
 import { supabase } from '@/lib/supabase'
 import { TIPO_DOC_LABEL } from '@/lib/services/taller-planificacion'
 import { estadoFlotaLabel, estadoFlotaColor } from '@/lib/estado-flota'
+import { MESES, getConfigPortal } from '@/components/portal-mandante/portal-mandante-api'
+import { PrevencionGestion } from '@/components/portal-mandante/prevencion-gestion'
+import { OperacionesInformes } from '@/components/portal-mandante/operaciones-informes'
 
 // ── Tipos del RPC ──────────────────────────────────────────────────────────
 type DocEquipo = {
@@ -186,85 +189,50 @@ function Seccion({ n, id, titulo, bajada, children }: {
 }
 
 
-// ── El menú (MIG379) ───────────────────────────────────────────────────────
-// El portal es una sola página larga: tres secciones, y con 15 personas la de
-// personal se va lejos. Esto la deja a un toque, y de paso dice de cuánto se
-// está hablando antes de bajar.
-function MenuPortal({ equipos, personas, porRegularizar }: {
-  equipos: number; personas: number; porRegularizar: number
+// ── Barra de pestañas y período (MIG688) ────────────────────────────────────
+// Reemplaza al menú de anclas de MIG379: el portal ahora tiene dos mundos
+// (Prevención y Operaciones) y cada uno se lee por mes.
+type Pestana = 'prevencion' | 'operaciones'
+
+function BarraPortal({ pestana, onPestana, verPrev, verOps, anio, mes, onPeriodo, porRegularizar }: {
+  pestana: Pestana; onPestana: (p: Pestana) => void
+  verPrev: boolean; verOps: boolean
+  anio: number; mes: number; onPeriodo: (anio: number, mes: number) => void
+  porRegularizar: number
 }) {
-  const [activa, setActiva] = useState('estado')
-
-  // La sección activa se sigue con el scroll, no con el click: si alguien baja
-  // a mano, el menú tiene que acompañarlo igual.
-  useEffect(() => {
-    const ids = ['estado', 'equipos', 'personal']
-    const obs = new IntersectionObserver(
-      (entries) => {
-        const visible = entries
-          .filter((e) => e.isIntersecting)
-          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0]
-        if (visible) setActiva(visible.target.id)
-      },
-      { rootMargin: '-72px 0px -60% 0px', threshold: 0 },
-    )
-    ids.forEach((id) => {
-      const el = document.getElementById(id)
-      if (el) obs.observe(el)
-    })
-    return () => obs.disconnect()
-  }, [])
-
-  // Se calcula el destino y se usa window.scrollTo en vez de scrollIntoView:
-  // con reduced-motion —o en un navegador que ignore el smooth— scrollIntoView
-  // se queda sin hacer nada y el menú no lleva a ninguna parte. Además así el
-  // alto del propio menú se descuenta acá, sin depender de un scroll-margin.
-  const ir = (id: string) => {
-    const el = document.getElementById(id)
-    if (!el) return
-    const alto = document.querySelector('nav')?.getBoundingClientRect().height ?? 0
-    const destino = Math.max(0, el.getBoundingClientRect().top + window.scrollY - alto - 8)
-    window.scrollTo({ top: destino, behavior: 'smooth' })
-    // Si el navegador ignoró la animación y no se movió, se salta de una.
-    window.setTimeout(() => {
-      if (Math.abs(window.scrollY - destino) > 4) window.scrollTo(0, destino)
-    }, 400)
-    setActiva(id)
+  const mover = (d: number) => {
+    const f = new Date(anio, mes - 1 + d, 1)
+    onPeriodo(f.getFullYear(), f.getMonth() + 1)
   }
-
-  const items: { id: string; texto: string; dato?: string }[] = [
-    { id: 'estado', texto: 'Estado', dato: porRegularizar > 0 ? String(porRegularizar) : undefined },
-    { id: 'equipos', texto: 'Equipos', dato: String(equipos) },
-    { id: 'personal', texto: 'Personal', dato: String(personas) },
-  ]
-
+  const ahora = new Date()
+  const esActual = anio === ahora.getFullYear() && mes === ahora.getMonth() + 1
   return (
     <nav className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur print:hidden">
-      <div className="mx-auto flex max-w-4xl gap-1 px-6 py-2">
-        {items.map((it) => (
-          <button
-            key={it.id}
-            onClick={() => ir(it.id)}
-            className={cn(
-              'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition',
-              activa === it.id
-                ? 'bg-slate-800 text-white'
-                : 'text-slate-500 hover:bg-slate-100',
-            )}
-          >
-            {it.texto}
-            {it.dato && (
-              <span className={cn(
-                'rounded px-1.5 text-[10px] tabular-nums',
-                activa === it.id ? 'bg-white/20' : 'bg-slate-200 text-slate-600',
-                it.id === 'estado' && porRegularizar > 0 && activa !== it.id
-                  ? 'bg-red-100 text-red-700' : '',
-              )}>
-                {it.dato}
-              </span>
+      <div className="mx-auto flex max-w-4xl flex-wrap items-center gap-2 px-6 py-2">
+        {verPrev && (
+          <button onClick={() => onPestana('prevencion')}
+            className={cn('flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition',
+              pestana === 'prevencion' ? 'bg-slate-800 text-white' : 'text-slate-500 hover:bg-slate-100')}>
+            Prevención
+            {porRegularizar > 0 && (
+              <span className={cn('rounded px-1.5 text-[10px] tabular-nums',
+                pestana === 'prevencion' ? 'bg-white/20' : 'bg-red-100 text-red-700')}>{porRegularizar}</span>
             )}
           </button>
-        ))}
+        )}
+        {verOps && (
+          <button onClick={() => onPestana('operaciones')}
+            className={cn('rounded-lg px-3 py-1.5 text-xs font-semibold transition',
+              pestana === 'operaciones' ? 'bg-slate-800 text-white' : 'text-slate-500 hover:bg-slate-100')}>
+            Operaciones
+          </button>
+        )}
+        <div className="ml-auto flex items-center gap-1 text-xs">
+          <button onClick={() => mover(-1)} className="rounded px-2 py-1 text-slate-500 hover:bg-slate-100">‹</button>
+          <span className="min-w-[110px] text-center font-semibold text-slate-700">{MESES[mes - 1]} {anio}</span>
+          <button onClick={() => mover(1)} disabled={esActual}
+            className="rounded px-2 py-1 text-slate-500 hover:bg-slate-100 disabled:opacity-30">›</button>
+        </div>
       </div>
     </nav>
   )
@@ -689,6 +657,11 @@ function FilaPersona({
 export default function PortalPrevencionPage() {
   const token = useParams()?.token as string
   const [sesion, setSesion] = useState<Sesion | null | undefined>(undefined)
+  const [pestana, setPestana] = useState<Pestana>('prevencion')
+  const [periodo, setPeriodo] = useState(() => {
+    const d = new Date()
+    return { anio: d.getFullYear(), mes: d.getMonth() + 1 }
+  })
 
   // Un refresco dentro de la misma pestaña no obliga a identificarse de nuevo.
   useEffect(() => {
@@ -711,6 +684,21 @@ export default function PortalPrevencionPage() {
     staleTime: 60_000,
     retry: false,
   })
+
+  // [MIG688] Qué pestañas tiene este portal y de qué faenas.
+  const { data: config } = useQuery({
+    queryKey: ['portal-mandante-config', token, sesion?.acceso_id],
+    queryFn: () => getConfigPortal(token, sesion!.acceso_id),
+    enabled: !!token && !!sesion?.acceso_id && !!data,
+    staleTime: 5 * 60_000,
+    retry: false,
+  })
+  const verPrev = config?.ver_prevencion ?? true
+  const verOps = config?.ver_operaciones ?? false
+  const tieneEnex = (config?.faenas_enex?.length ?? 0) > 0
+  useEffect(() => {
+    if (config && !config.ver_prevencion && config.ver_operaciones) setPestana('operaciones')
+  }, [config])
 
   const resumen = useMemo(() => {
     if (!data) return null
@@ -823,13 +811,19 @@ export default function PortalPrevencionPage() {
         </div>
       </header>
 
-      <MenuPortal
-        equipos={resumen?.equipos ?? 0}
-        personas={resumen?.personas ?? 0}
-        porRegularizar={resumen?.eqBasicos ?? 0}
+      <BarraPortal
+        pestana={pestana}
+        onPestana={setPestana}
+        verPrev={verPrev}
+        verOps={verOps}
+        anio={periodo.anio}
+        mes={periodo.mes}
+        onPeriodo={(anio, mes) => setPeriodo({ anio, mes })}
+        porRegularizar={(resumen?.eqBasicos ?? 0) + (resumen?.pePendientes ?? 0)}
       />
 
       <main className="mx-auto max-w-4xl space-y-8 px-6 py-6">
+        {pestana === 'prevencion' && (<>
         {/* ── 1. La conclusión primero ── */}
         <Seccion n={1} id="estado" titulo="Estado de cumplimiento">
           <div
@@ -887,9 +881,15 @@ export default function PortalPrevencionPage() {
           )}
         </Seccion>
 
-        {/* ── 2. Equipos ── */}
+        </>)}
+
+        {pestana === 'operaciones' && (<>
+        {tieneEnex && (
+          <OperacionesInformes token={token} acceso={sesion.acceso_id} anio={periodo.anio} mes={periodo.mes} />
+        )}
+        {/* ── Equipos ── */}
         <Seccion
-          n={2}
+          n={tieneEnex ? 2 : 1}
           id="equipos"
           titulo="Equipos en faena"
           bajada="Para cada equipo: la documentación que lo habilita a circular y operar, y lo que se le ha hecho."
@@ -905,9 +905,12 @@ export default function PortalPrevencionPage() {
           )}
         </Seccion>
 
-        {/* ── 3. Personal ── */}
+        </>)}
+
+        {pestana === 'prevencion' && (<>
+        {/* ── 2. Personal ── */}
         <Seccion
-          n={3}
+          n={2}
           id="personal"
           titulo="Personal acreditado"
           bajada="Exámenes ocupacionales y licencias internas. Se informa vigencia y estado; no se entregan resultados clínicos."
@@ -928,6 +931,15 @@ export default function PortalPrevencionPage() {
             )}
           </div>
         </Seccion>
+
+        {/* ── 3. Gestión preventiva del mes (MIG688) ── */}
+        {(config?.faenas?.length ?? 0) > 0 && (
+          <Seccion n={3} id="gestion" titulo="Gestión preventiva del mes"
+                   bajada={`${MESES[periodo.mes - 1]} ${periodo.anio} · ${config!.faenas.map((f) => f.nombre).join(', ')}`}>
+            <PrevencionGestion token={token} acceso={sesion.acceso_id} anio={periodo.anio} mes={periodo.mes} />
+          </Seccion>
+        )}
+        </>)}
 
         {/* ── Pie ── */}
         <footer className="space-y-2 border-t border-slate-200 pt-4 text-[10px] leading-relaxed text-slate-400">
