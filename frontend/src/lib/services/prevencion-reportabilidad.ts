@@ -54,6 +54,14 @@ export interface PrevencionRegistro {
   revision_observacion?: string | null
   // [MIG686] Generado por una inspección APR: se mantiene solo, no se edita.
   inspeccion_id?: string | null
+  // [MIG689] Capacitación que acredita un curso del control documental.
+  curso_codigo?: string | null
+  curso_vence?: string | null
+  asistentes_personal_ids?: string[] | null
+  curso_acreditado_at?: string | null
+  curso_acreditados?: number | null
+  // [MIG689] ART del supervisor de la tarea de esa inspección (cuenta una).
+  art_de_inspeccion_id?: string | null
 }
 
 export interface GestionMensualFila {
@@ -220,9 +228,44 @@ export function createRegistro(reg: {
   asistentes?: number | null
   // [MIG556] Faenas con nómina: quiénes asistieron a la charla/actividad.
   asistentes_nombres?: string[] | null
+  // [MIG689]
+  asistentes_personal_ids?: string[] | null
+  curso_codigo?: string | null
+  curso_vence?: string | null
+  art_de_inspeccion_id?: string | null
   evidencias: EvidenciaArchivo[]
 }) {
   return supabase.from('prevencion_registros').insert(reg).select().single()
+}
+
+// [MIG689] Cursos que una capacitación puede dejar acreditados en la ficha
+// de los asistentes (control documental).
+export interface CursoAcreditable {
+  codigo: string
+  nombre: string
+  categoria: string
+  orden: number
+}
+
+export function getCursosAcreditables() {
+  return supabase.from('v_prevencion_cursos_acreditables').select('*').order('orden')
+}
+
+// [MIG689] Inspecciones APR del día en la faena: el supervisor que sube la
+// ART de esa misma tarea la vincula y en el mes cuenta una sola.
+export interface InspeccionDelDia {
+  id: string
+  trabajo: string
+  inspector_nombre: string | null
+  lugar: string | null
+  ya_vinculada: boolean
+}
+
+export function getInspeccionesDelDia(faenaId: string, fecha: string) {
+  return supabase.rpc('fn_prevencion_inspecciones_del_dia', {
+    p_faena_id: faenaId,
+    p_fecha: fecha,
+  })
 }
 
 export function cerrarRegistro(id: string, observacion?: string) {

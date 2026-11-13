@@ -29,7 +29,7 @@ import { useAuth } from '@/contexts/auth-context'
 import { cn } from '@/lib/utils'
 import { RegistroTerrenoForm } from '@/components/prevencion/registro-terreno-form'
 import {
-  useActividadTipos,
+  useActividadTipos, useCursosAcreditables,
   useAmbientalMes, useCerrarRegistro, useConsolidadoMes, useDesmarcarEnvio,
   useDotacionDetalleMes,
   useDotacionMensual, useFaenaConfig, useFaenasPrevencion, useIndicadoresAnio,
@@ -336,6 +336,9 @@ function TabRegistros({ faenaId, anio, mes, puedeAdmin, faenas }: {
   const revisar = useMarcarRevision()
   const [revisandoId, setRevisandoId] = useState<string | null>(null)
   const [obsRevision, setObsRevision] = useState('')
+  // [MIG689] Nombre del curso que acredita una capacitación.
+  const { data: cursos } = useCursosAcreditables()
+  const cursoNombre = useMemo(() => new Map((cursos ?? []).map((c) => [c.codigo, c.nombre])), [cursos])
 
   const confirmarRevision = async () => {
     if (!revisandoId) return
@@ -473,6 +476,22 @@ function TabRegistros({ faenaId, anio, mes, puedeAdmin, faenas }: {
                       {(r.asistentes_nombres?.length ?? 0) > 0 && (
                         <p className="text-xs text-gray-600">
                           <b>Asistieron:</b> {r.asistentes_nombres!.join(', ')}
+                        </p>
+                      )}
+                      {/* [MIG689] La capacitación acredita el curso en la ficha. */}
+                      {r.curso_codigo && (
+                        <p className={cn('rounded px-2 py-1 text-xs',
+                          r.curso_acreditado_at ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-800')}>
+                          <b>Curso:</b> {cursoNombre.get(r.curso_codigo) ?? r.curso_codigo}
+                          {r.curso_vence ? ` (vence ${r.curso_vence})` : ' (no vence)'} ·{' '}
+                          {r.curso_acreditado_at
+                            ? `acreditado en el control documental (${r.curso_acreditados ?? 0} ficha(s) actualizada(s))`
+                            : 'se acredita a los asistentes al marcar «revisado»'}
+                        </p>
+                      )}
+                      {r.art_de_inspeccion_id && (
+                        <p className="rounded bg-sky-50 px-2 py-1 text-xs text-sky-800">
+                          ART de una tarea inspeccionada por el APR: reemplaza a la ART automática de la inspección (cuenta una).
                         </p>
                       )}
                       {r.descripcion && <p className="whitespace-pre-wrap">{r.descripcion}</p>}

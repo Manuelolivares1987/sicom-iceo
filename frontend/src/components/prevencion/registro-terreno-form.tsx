@@ -17,11 +17,18 @@ import { useToast } from '@/hooks/use-toast'
 import {
   useActividadTipos,
   useCreateRegistro,
+  useCursosAcreditables,
+  useInspeccionesDelDia,
   useFaenasPrevencion,
   useFaenaTipos,
   usePersonalFaena,
 } from '@/hooks/use-prevencion-reportabilidad'
 import { subirEvidencia, type EvidenciaArchivo } from '@/lib/services/prevencion-reportabilidad'
+import { useAuth } from '@/contexts/auth-context'
+
+// Mismos roles que fn_prevencion_reporta_puede_admin: lo que ellos cargan
+// acredita el curso al guardar; lo del supervisor, al revisarlo Prevención.
+const ROLES_ADMIN_PREV = ['administrador', 'prevencionista', 'jefe_operaciones', 'subgerente_operaciones']
 
 function hoyISO(): string {
   const d = new Date()
@@ -59,6 +66,15 @@ export function RegistroTerrenoForm({
   const [archivos, setArchivos] = useState<File[]>([])
   const [subiendo, setSubiendo] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
+  // [MIG689] Curso que acredita la capacitación (vacío = no acredita).
+  const { perfil } = useAuth()
+  const esAdminPrev = !!perfil?.rol && ROLES_ADMIN_PREV.includes(perfil.rol)
+  const { data: cursos } = useCursosAcreditables()
+  const [cursoCodigo, setCursoCodigo] = useState('')
+  const [cursoVence, setCursoVence] = useState('')
+  // [MIG689] ART de una tarea ya inspeccionada: '' = sin responder,
+  // 'otra' = otra tarea, o el id de la inspección.
+  const [artInspeccion, setArtInspeccion] = useState('')
 
   const tipoSel = useMemo(
     () => (tipos ?? []).find((t: any) => t.codigo === tipoCodigo),
@@ -69,6 +85,9 @@ export function RegistroTerrenoForm({
   const titulosOpciones: string[] = (tipoSel as any)?.titulos_opciones ?? []
   const nomina = faenaId ? (nominas?.get(faenaId) ?? []) : []
   const conNomina = esCapacitacion && nomina.length > 0
+  const esArt = tipoCodigo === 'ART'
+  const { data: inspeccionesDia } = useInspeccionesDelDia(faenaId, fecha, esArt)
+  const hayInspecciones = esArt && (inspeccionesDia?.length ?? 0) > 0
 
   const toggleAsistente = (nombre: string) => {
     setAsistentesMarcados((prev) => {
@@ -88,6 +107,8 @@ export function RegistroTerrenoForm({
 
   const elegirTipo = (codigo: string) => {
     setTipoCodigo(codigo)
+    setArtInspeccion('')
+    if (codigo !== 'CAPACITACION' && codigo !== 'CHARLA') { setCursoCodigo(''); setCursoVence('') }
     // Al cambiar de tipo, un título que era del catálogo anterior no vale.
     const opciones = (tipos ?? []).find((t: any) => t.codigo === codigo)?.titulos_opciones
     if (opciones?.length && !opciones.includes(titulo)) setTitulo('')
@@ -95,6 +116,7 @@ export function RegistroTerrenoForm({
 
   const elegirFaena = (id: string) => {
     setFaenaId(id)
+    setArtInspeccion('')
     // Un tipo que la faena nueva no ofrece se limpia (y su título de catálogo).
     const permitidos = faenaTipos?.get(id)
     if (tipoCodigo && permitidos?.size && !permitidos.has(tipoCodigo)) {
@@ -107,6 +129,12 @@ export function RegistroTerrenoForm({
     if (!faenaId) return toast.error('Elija la faena')
     if (!tipoCodigo) return toast.error('Elija el tipo de actividad')
     if (!titulo.trim()) return toast.error('Escriba un título: es lo que se lee en el consolidado')
+    if (hayInspecciones && !artInspeccion) {
+      return toast.error('Indique si la ART es de la tarea que inspeccionó Prevención ese día')
+    }
+    if (conNomina && cursoCodigo && asistentesMarcados.size === 0) {
+      return toast.error('Marque a los asistentes: a ellos se les acredita el curso')
+    }
 
     setSubiendo(true)
     try {
@@ -137,13 +165,25 @@ export function RegistroTerrenoForm({
           : (asistentes ? Number(asistentes) : null),
         asistentes_nombres: conNomina && asistentesMarcados.size > 0
           ? Array.from(asistentesMarcados) : null,
+        asistentes_personal_ids: conNomina && asistentesMarcados.size > 0
+          ? Array.from(new Set(nomina.filter((p) => asistentesMarcados.has(p.nombre)).map((p) => p.id)))
+          : null,
+        curso_codigo: conNomina && cursoCodigo ? cursoCodigo : null,
+        curso_vence: conNomina && cursoCodigo && cursoVence ? cursoVence : null,
+        art_de_inspeccion_id: hayInspecciones && artInspeccion && artInspeccion !== 'otra'
+          ? artInspeccion : null,
         evidencias,
       })
 
-      toast.success('Registro guardado')
+      toast.success(conNomina && cursoCodigo
+        ? (esAdminPrev
+            ? 'Registro guardado y curso acreditado a los asistentes'
+            : 'Registro guardado: el curso se acredita cuando Prevención lo revise')
+        : 'Registro guardado')
       setTitulo(''); setDescripcion(''); setArea('')
       setDuracion(''); setAsistentes(''); setArchivos([]); setQuedaAbierto(false)
       setAsistentesMarcados(new Set())
+      setCursoCodigo(''); setCursoVence(''); setArtInspeccion('')
       onGuardado?.()
     } catch (e: any) {
       toast.error(e?.message ?? 'No se pudo guardar el registro')
@@ -200,10 +240,46 @@ export function RegistroTerrenoForm({
 
       <div className="grid grid-cols-2 gap-3">
         <Input label="Fecha" type="date" value={fecha} max={hoyISO()}
-               onChange={(e) => setFecha(e.target.value)} />
+               onChange={(e) => { setFecha(e.target.value); setArtInspeccion('') }} />
         <Input label="Área / sector" value={area} placeholder="Ej: taller, rajo…"
                onChange={(e) => setArea(e.target.value)} />
       </div>
+
+      {hayInspecciones && (
+        <div className="rounded-lg border border-sky-200 bg-sky-50 p-3">
+          <p className="mb-2 text-sm font-medium text-sky-900">
+            Prevención inspeccionó ese día en esta faena. ¿Esta ART es de esa tarea?
+          </p>
+          <div className="space-y-1.5">
+            {inspeccionesDia!.map((i) => (
+              <label key={i.id}
+                     className={'flex items-start gap-2.5 rounded-lg border bg-white px-3 py-2 text-sm ' +
+                       (i.ya_vinculada ? 'border-gray-200 text-gray-400' : 'border-sky-200 text-gray-900')}>
+                <input type="radio" name="art-inspeccion" className="mt-0.5 h-4 w-4"
+                       disabled={i.ya_vinculada}
+                       checked={artInspeccion === i.id}
+                       onChange={() => setArtInspeccion(i.id)} />
+                <span>
+                  <span className="font-medium">Sí: {i.trabajo}</span>
+                  <span className="block text-xs text-gray-500">
+                    {[i.lugar, i.inspector_nombre ? 'APR ' + i.inspector_nombre : null].filter(Boolean).join(' · ')}
+                    {i.ya_vinculada && ' · ya tiene su ART cargada'}
+                  </span>
+                </span>
+              </label>
+            ))}
+            <label className="flex items-center gap-2.5 rounded-lg border border-sky-200 bg-white px-3 py-2 text-sm text-gray-900">
+              <input type="radio" name="art-inspeccion" className="h-4 w-4"
+                     checked={artInspeccion === 'otra'}
+                     onChange={() => setArtInspeccion('otra')} />
+              <span className="font-medium">No, es otra tarea</span>
+            </label>
+          </div>
+          <p className="mt-2 text-xs text-sky-800">
+            Si es la misma tarea, en el informe del mes cuenta una sola ART (la suya).
+          </p>
+        </div>
+      )}
 
       {titulosOpciones.length > 0 ? (
         <Select
@@ -240,6 +316,29 @@ export function RegistroTerrenoForm({
                      onChange={(e) => setAsistentes(e.target.value)} />
             )}
           </div>
+          {conNomina && (cursos?.length ?? 0) > 0 && (
+            <div className="space-y-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3">
+              <Select
+                label="¿Acredita un curso del control documental?"
+                value={cursoCodigo}
+                onChange={(e) => setCursoCodigo(e.target.value)}
+                options={[{ value: '', label: 'No acredita curso' },
+                  ...cursos!.map((c) => ({ value: c.codigo, label: c.nombre }))]}
+              />
+              {cursoCodigo && (
+                <>
+                  <Input label="Vence (vacío = no vence)" type="date" value={cursoVence}
+                         min={fecha} onChange={(e) => setCursoVence(e.target.value)} />
+                  <p className="text-xs text-emerald-800">
+                    {esAdminPrev
+                      ? 'Al guardar, los asistentes marcados quedan con este curso vigente en su ficha.'
+                      : 'Los asistentes quedan con el curso vigente cuando Prevención revise este registro.'}
+                    {' '}Si alguien ya tiene una acreditación más nueva, no se toca.
+                  </p>
+                </>
+              )}
+            </div>
+          )}
           {conNomina && (
             <div>
               <label className="mb-1.5 block text-sm font-medium text-gray-700">

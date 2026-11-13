@@ -42,7 +42,36 @@ import {
   type IndicadoresFila,
   type MonitoreoSupervisor,
   type PrevencionRegistro,
+  getCursosAcreditables,
+  type CursoAcreditable,
+  getInspeccionesDelDia,
+  type InspeccionDelDia,
 } from '@/lib/services/prevencion-reportabilidad'
+
+// [MIG689] Cursos que una capacitación puede acreditar.
+export function useCursosAcreditables() {
+  return useQuery({
+    queryKey: ['prev-repo-cursos-acreditables'],
+    queryFn: async () => {
+      const { data, error } = await getCursosAcreditables()
+      if (error) throw error
+      return (data ?? []) as CursoAcreditable[]
+    },
+  })
+}
+
+// [MIG689] Inspecciones APR del día en la faena (para vincular la ART).
+export function useInspeccionesDelDia(faenaId: string, fecha: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ['prev-repo-insp-dia', faenaId, fecha],
+    enabled: enabled && !!faenaId && !!fecha,
+    queryFn: async () => {
+      const { data, error } = await getInspeccionesDelDia(faenaId, fecha)
+      if (error) throw error
+      return (data ?? []) as InspeccionDelDia[]
+    },
+  })
+}
 
 // Claves compartidas para invalidar en bloque cuando cambia un registro:
 // el consolidado, el listado y «mis registros» muestran lo mismo desde
