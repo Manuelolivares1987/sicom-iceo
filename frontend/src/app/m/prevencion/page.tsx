@@ -217,6 +217,21 @@ export default function PrevencionMobileHome() {
           </button>
         )}
 
+        {/* [MIG687] Entrega de EPP con firma del trabajador. */}
+        {puedeCrear && (
+          <Link href="/m/prevencion/epp"
+                className="flex w-full items-center gap-3 rounded-xl border-2 border-orange-500 bg-white p-4 active:scale-[0.99]">
+            <div className="grid h-12 w-12 shrink-0 place-items-center rounded-lg bg-orange-500 text-white">
+              <HardHat className="h-6 w-6" />
+            </div>
+            <div className="min-w-0 flex-1 text-left">
+              <p className="text-base font-bold text-gray-900">Entrega de EPP</p>
+              <p className="text-xs text-gray-500">Elementos, talla y firma del trabajador</p>
+            </div>
+            <ChevronRight className="h-5 w-5 shrink-0 text-gray-400" />
+          </Link>
+        )}
+
         {puedeCrear && (
           <button
             onClick={() => setSubidaOpen(true)}

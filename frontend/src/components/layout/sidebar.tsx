@@ -403,6 +403,10 @@ const navGroups: NavGroup[] = [
       // [MIG685] Inspección de terreno APR (documento prevención Calama
       // 12-11-26): 8 etapas con foto o verificación contra el control
       // documental, desviaciones y habilitación de la cuadrilla.
+      // [MIG687] Registro de entrega de EPP con firma (DS 44 art. 13).
+      { label: 'Entregas de EPP', href: '/dashboard/prevencion/epp',
+        icon: HardHat, module: 'prevencion', badge: 'Nuevo',
+        tooltip: 'Qué EPP recibió cada trabajador, con su firma e instrucción de uso — comprobante PDF' },
       { label: 'Inspecciones de terreno APR', href: '/dashboard/prevencion/inspecciones',
         icon: ClipboardCheck, module: 'prevencion', badge: 'Nuevo',
         tooltip: 'Traslado, ingreso, documentos, ejecución y término del trabajo — cumplimiento, desviaciones y habilitación de la cuadrilla' },
