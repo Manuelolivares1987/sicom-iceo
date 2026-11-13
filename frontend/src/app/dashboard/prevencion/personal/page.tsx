@@ -19,6 +19,7 @@ import {
 } from '@/hooks/use-prevencion-personal'
 import { rutPersonalValido } from '@/lib/services/prevencion-personal'
 import { Modal } from '@/components/ui/modal'
+import { supabase } from '@/lib/supabase'
 import type { PersonaControl, ExamenPersona, EstadoExamen } from '@/lib/services/prevencion-personal'
 
 // ============================================================================
@@ -395,6 +396,14 @@ function AgregarItem({ p, faena }: { p: PersonaControl, faena: string | null }) 
   const [rutEd, setRutEd] = useState(rutProvisorio ? '' : p.rut)
   const [nombresEd, setNombresEd] = useState(p.nombres ?? '')
   const [apellidosEd, setApellidosEd] = useState(p.apellidos ?? '')
+  // [MIG686] La ficha del tablero no trae el sexo: se lee al abrir la edición
+  // y solo se envía si ya se leyó (así nunca pisa una «F» con el valor por defecto).
+  const [sexoEd, setSexoEd] = useState<'M' | 'F' | null>(null)
+  useEffect(() => {
+    if (!editandoPersona || sexoEd) return
+    supabase.from('prevencion_personal').select('sexo').eq('id', p.personal_id).single()
+      .then(({ data }) => { if (data?.sexo) setSexoEd(data.sexo as 'M' | 'F') })
+  }, [editandoPersona, sexoEd, p.personal_id])
   const [errLocal, setErrLocal] = useState<string | null>(null)
   const { data: tipos } = useTiposExamen()
   const gestion = useGestionExamen(faena)
@@ -464,6 +473,16 @@ function AgregarItem({ p, faena }: { p: PersonaControl, faena: string | null }) 
               <Input value={cargoEd} onChange={(e) => setCargoEd(e.target.value)}
                 className="h-8 text-sm" />
             </label>
+            <label className="block">
+              <span className="text-[10px] uppercase text-muted-foreground">Sexo</span>
+              <select value={sexoEd ?? ''} disabled={!sexoEd}
+                onChange={(e) => setSexoEd(e.target.value as 'M' | 'F')}
+                className="h-8 w-full rounded-lg border border-gray-300 px-2 text-sm">
+                {!sexoEd && <option value="">Cargando…</option>}
+                <option value="M">Hombre</option>
+                <option value="F">Mujer</option>
+              </select>
+            </label>
           </div>
           <div className="flex flex-wrap items-center justify-between gap-2">
             {/* Desactivar en vez de borrar: quien ya no trabaja sale de los
@@ -492,6 +511,7 @@ function AgregarItem({ p, faena }: { p: PersonaControl, faena: string | null }) 
                     ...(rutCambia ? { rut: rutEd } : {}),
                     nombres: nombresEd,
                     apellidos: apellidosEd || null,
+                    ...(sexoEd ? { sexo: sexoEd } : {}),
                     faenaCodigo: faenaEd.trim().toUpperCase() || null,
                     cargo: cargoEd.trim() || null,
                   }, { onSuccess: () => setEditandoPersona(false) })
@@ -503,7 +523,9 @@ function AgregarItem({ p, faena }: { p: PersonaControl, faena: string | null }) 
           </div>
           <p className="text-[10px] text-muted-foreground">
             Al cambiar la faena, esta persona pasa a aparecer en el reporte de
-            esa faena y en el correo de sus destinatarios.
+            esa faena, en el correo de sus destinatarios y en la nómina de
+            charlas de sus faenas. «Marcar como ya no vigente» la saca también
+            de la nómina.
           </p>
           {(errLocal || actualizar.error || gestion.agregar.error) && (
             <div className="rounded bg-red-100 px-2 py-1 text-[11px] text-red-800">
@@ -711,6 +733,7 @@ function NuevaPersonaModal({ faenaInicial, onCerrar }: { faenaInicial: string | 
   const [nombres, setNombres] = useState('')
   const [apellidos, setApellidos] = useState('')
   const [cargo, setCargo] = useState('')
+  const [sexo, setSexo] = useState<'M' | 'F'>('M')
   const [faenaCod, setFaenaCod] = useState(faenaInicial ?? '')
   const [err, setErr] = useState<string | null>(null)
 
@@ -719,7 +742,7 @@ function NuevaPersonaModal({ faenaInicial, onCerrar }: { faenaInicial: string | 
     if (!rutPersonalValido(rut)) return setErr('El RUT no es válido (revise el dígito verificador).')
     if (!nombres.trim()) return setErr('Ingrese el nombre.')
     if (!faenaCod.trim()) return setErr('Indique la faena (ej: CALAMA, ROMERAL).')
-    crear.mutate({ rut, nombres, apellidos, cargo, faenaCodigo: faenaCod },
+    crear.mutate({ rut, nombres, apellidos, cargo, sexo, faenaCodigo: faenaCod },
       { onSuccess: onCerrar, onError: (e: any) => setErr(e?.message ?? 'No se pudo crear') })
   }
 
@@ -732,10 +755,19 @@ function NuevaPersonaModal({ faenaInicial, onCerrar }: { faenaInicial: string | 
           <Input label="Nombres" value={nombres} onChange={(e) => setNombres(e.target.value)} />
           <Input label="Apellidos" value={apellidos} onChange={(e) => setApellidos(e.target.value)} />
           <Input label="Cargo" value={cargo} onChange={(e) => setCargo(e.target.value)} placeholder="Técnico, conductor…" />
+          <label className="block">
+            <span className="mb-1.5 block text-sm font-medium text-gray-700">Sexo</span>
+            <select value={sexo} onChange={(e) => setSexo(e.target.value as 'M' | 'F')}
+              className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm">
+              <option value="M">Hombre</option>
+              <option value="F">Mujer</option>
+            </select>
+          </label>
         </div>
         <p className="text-[11px] text-muted-foreground">
           En CALAMA se le crean solos los documentos que exige la inspección de terreno (cursos del aula
           virtual Centinela, diploma Pillado y licencias de conductor). Quedan «sin dato» hasta cargar cada respaldo.
+          También pasa a la nómina de charlas de las faenas de Calama: no hay que darla de alta dos veces.
         </p>
         {err && <div className="rounded bg-red-100 px-2 py-1 text-[12px] text-red-800">{err}</div>}
         <div className="flex justify-end gap-2">
