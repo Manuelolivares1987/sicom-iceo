@@ -358,6 +358,7 @@ export type ActualizarPersonaInput = {
   rut?: string
   nombres?: string
   apellidos?: string | null
+  sexo?: 'M' | 'F'
   faenaCodigo?: string | null
   cargo?: string | null
   activo?: boolean
@@ -374,6 +375,7 @@ export async function actualizarPersona(i: ActualizarPersonaInput) {
   if (i.rut !== undefined) patch.rut = normalizarRutPersonal(i.rut)
   if (i.nombres !== undefined) patch.nombres = i.nombres.trim()
   if (i.apellidos !== undefined) patch.apellidos = i.apellidos?.trim() || null
+  if (i.sexo !== undefined) patch.sexo = i.sexo
   if (i.faenaCodigo !== undefined) patch.faena_codigo = i.faenaCodigo || null
   if (i.cargo !== undefined) patch.cargo = i.cargo || null
   if (i.activo !== undefined) patch.activo = i.activo
@@ -415,6 +417,7 @@ export type CrearPersonaInput = {
   cargo?: string | null
   faenaCodigo: string
   empresa?: string | null
+  sexo?: 'M' | 'F'
 }
 
 /**
@@ -431,6 +434,7 @@ export async function crearPersona(i: CrearPersonaInput) {
     cargo: i.cargo?.trim() || null,
     faena_codigo: i.faenaCodigo.trim().toUpperCase(),
     empresa: i.empresa?.trim() || 'Pillado y Compañía Limitada',
+    sexo: i.sexo ?? 'M',
   })
   if (error) {
     if (error.code === '23505') throw new Error('Ya existe una persona con ese RUT.')

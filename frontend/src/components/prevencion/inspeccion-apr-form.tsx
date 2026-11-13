@@ -719,6 +719,10 @@ export function InspeccionAprForm({ inicial, onPdf, volver }: {
               <div className="rounded-xl border border-blue-200 bg-blue-50 p-3 text-[12px] text-blue-900">
                 <p className="flex items-center gap-1 font-bold"><CheckCircle2 className="h-4 w-4" /> Último envío {new Date(b.ultimo_envio.at).toLocaleString('es-CL')}</p>
                 Estado: {b.ultimo_envio.estado.replaceAll('_', ' ')} · Resultado: {b.ultimo_envio.resultado.replaceAll('_', ' ')}
+                <span className="mt-1 block text-[11px] text-blue-800/80">
+                  Ya cuenta en la reportabilidad del mes como «Inspección» (y «ART» si fotografió la ART):
+                  no hay que cargarla de nuevo.
+                </span>
               </div>
             )}
             {b.servidor_id && onPdf && (

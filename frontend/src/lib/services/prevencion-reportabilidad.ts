@@ -52,6 +52,8 @@ export interface PrevencionRegistro {
   revisado_por?: string | null
   revisado_at?: string | null
   revision_observacion?: string | null
+  // [MIG686] Generado por una inspección APR: se mantiene solo, no se edita.
+  inspeccion_id?: string | null
 }
 
 export interface GestionMensualFila {
@@ -314,6 +316,8 @@ export async function upsertDotacionDiaria(fila: {
 }
 
 // [MIG555] Nómina de subida por faena (Calama: se marca QUIÉN subió).
+// [MIG686] Sale del control documental (v_prevencion_nomina_faena): quien se
+// da de alta o se desactiva ahí aparece o desaparece aquí. Una sola lista.
 export interface PersonalFaena {
   id: string
   faena_id: string
@@ -325,7 +329,7 @@ export interface PersonalFaena {
 
 export function getPersonalFaena() {
   return supabase
-    .from('prevencion_personal_faena')
+    .from('v_prevencion_nomina_faena')
     .select('*')
     .eq('activo', true)
     .order('orden')

@@ -50,8 +50,9 @@ export default function PrevencionMobileHome() {
   const [obsCierre, setObsCierre] = useState('')
   // [MIG561] Corrección: el supervisor edita o borra lo suyo (abierto o <24 h).
   const [editando, setEditando] = useState<PrevencionRegistro | null>(null)
-  const puedeCorregir = (r: PrevencionRegistro) =>
-    r.estado === 'abierto' || Date.now() - new Date(r.created_at).getTime() < 24 * 3600 * 1000
+  // [MIG686] Lo que generó una inspección APR se corrige desde la inspección.
+  const puedeCorregir = (r: PrevencionRegistro) => !r.inspeccion_id && (
+    r.estado === 'abierto' || Date.now() - new Date(r.created_at).getTime() < 24 * 3600 * 1000)
 
   // [MIG553] Subidas a faena: personas que subieron → HH = 8 × personas.
   const { data: faenas, isPending: cargandoFaenas, isError: errorFaenas, refetch: recargarFaenas } = useFaenasPrevencion()
