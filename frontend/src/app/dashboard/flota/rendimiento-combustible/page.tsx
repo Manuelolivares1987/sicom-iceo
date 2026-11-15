@@ -41,6 +41,8 @@ const fechaHora = (s: string) => {
 const INFORMATIVAS: Alerta[] = ['sin_gps', 'sin_ficha', 'dos_cargas_dia']
 const MESES_VISTA = 12
 const conAlerta = (c: CargaTarjeta) => c.alertas.some((a) => !INFORMATIVAS.includes(a))
+// [MIG691] Cerrada = justificada (en pantalla o por correo) o aceptada por jefatura; rechazada vuelve a pendiente.
+const cerrada = (estado: string | undefined) => estado === 'justificada' || estado === 'aceptada'
 
 // Revisiones guardadas (MIG663), al alcance de las tablas sin pasarlas fila por fila.
 type Revisar = { cargaId?: string; patente?: string; mes?: string; estado: EstadoRevision; comentario: string }
@@ -109,10 +111,10 @@ export default function RendimientoCombustiblePage() {
   }, [importaciones])
 
   // Solo cuentan las cargas con alerta que nadie ha justificado.
-  const pendiente = (c: CargaTarjeta) => conAlerta(c) && ctxRev.porCarga.get(c.id)?.estado !== 'justificada'
+  const pendiente = (c: CargaTarjeta) => conAlerta(c) && !cerrada(ctxRev.porCarga.get(c.id)?.estado)
   const alertasPorPatente = useMemo(() => {
     const m = new Map<string, number>()
-    for (const c of cargas) if (conAlerta(c) && ctxRev.porCarga.get(c.id)?.estado !== 'justificada') m.set(c.patente_ver, (m.get(c.patente_ver) ?? 0) + 1)
+    for (const c of cargas) if (conAlerta(c) && !cerrada(ctxRev.porCarga.get(c.id)?.estado)) m.set(c.patente_ver, (m.get(c.patente_ver) ?? 0) + 1)
     return m
   }, [cargas, ctxRev])
 
@@ -389,6 +391,8 @@ export default function RendimientoCombustiblePage() {
   )
 }
 
+const ESTADO_REV_TXT: Record<string, string> = { justificada: 'Justificada', aceptada: 'Aceptada', escalada: 'Escalada', rechazada: 'Rechazada' }
+
 const Cargando = () => <div className="flex justify-center p-8"><Loader2 className="h-6 w-6 animate-spin text-blue-600" /></div>
 
 function ListaRevision({ filas, mes }: { filas: Revision[]; mes: string }) {
@@ -449,12 +453,13 @@ function ControlRevision({ cargaId, patente, mes }: { cargaId?: string; patente?
     if (ok) { setAbierto(false); setTexto('') }
   }
   if (rev && !abierto) {
-    const Icono = rev.estado === 'justificada' ? CheckCircle2 : Flag
+    const ok = cerrada(rev.estado)
+    const Icono = ok ? CheckCircle2 : Flag
     return (
       <span className="inline-flex flex-wrap items-baseline gap-x-1.5 text-xs" onClick={(e) => e.stopPropagation()}>
         <span className={cn('inline-flex items-center gap-1 rounded px-1.5 py-0.5 font-medium',
-          rev.estado === 'justificada' ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800')}>
-          <Icono className="h-3 w-3" aria-hidden />{rev.estado === 'justificada' ? 'Justificada' : 'Escalada'}
+          ok ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800')}>
+          <Icono className="h-3 w-3" aria-hidden />{ESTADO_REV_TXT[rev.estado] ?? rev.estado}
         </span>
         <span className="text-gray-700">{rev.comentario}</span>
         <span className="text-gray-400">· {rev.revisado_por ?? '—'}, {new Date(rev.created_at).toLocaleDateString('es-CL')}</span>

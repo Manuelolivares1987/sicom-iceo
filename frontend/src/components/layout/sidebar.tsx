@@ -306,6 +306,10 @@ const navGroups: NavGroup[] = [
       { label: 'Rendimiento combustible', href: '/dashboard/flota/rendimiento-combustible', icon: Fuel, module: 'flota', badge: 'NUEVO',
         roles: ['administrador', 'gerencia', 'subgerente_operaciones', 'jefe_operaciones', 'jefe_mantenimiento'],
         tooltip: 'Km/L y $/km por vehículo: tarjeta Aramco cruzada con el GPS, Renault con su computador' },
+      // [MIG691] Tablero ejecutivo del control de combustible (directorio).
+      { label: 'Control combustible', href: '/dashboard/flota/control-combustible', icon: Fuel, module: 'flota', badge: 'NUEVO',
+        roles: ['administrador', 'gerencia', 'subgerente_operaciones', 'jefe_operaciones', 'jefe_mantenimiento'],
+        tooltip: 'Tablero para directorio: gasto, cobertura, diferencias y su justificación por operación' },
       // [MIG665] Acta simple en terreno: fotos + llaves + firma de quien recibe.
       { label: 'Entrega de unidades', href: '/dashboard/flota/entrega-unidades', icon: KeyRound, module: 'flota', badge: 'NUEVO',
         roles: ['administrador', 'gerencia', 'subgerente_operaciones', 'jefe_operaciones', 'jefe_mantenimiento', 'planificador'],
