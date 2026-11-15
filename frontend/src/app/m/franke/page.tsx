@@ -9,7 +9,7 @@
 // ============================================================================
 
 import Link from 'next/link'
-import { ClipboardList, ChevronRight, Fuel, ArrowLeftRight, Gauge, CalendarDays, ScanBarcode } from 'lucide-react'
+import { ClipboardList, ChevronRight, Fuel, ArrowLeftRight, Gauge, CalendarDays, ScanBarcode, MessagesSquare } from 'lucide-react'
 import { useAuth } from '@/contexts/auth-context'
 import { useExigirSesion } from '@/hooks/use-exigir-sesion'
 import { SinSesionOffline } from '@/components/enex/sin-sesion-offline'
@@ -19,6 +19,14 @@ import { Spinner } from '@/components/ui/spinner'
 // contra un error de permisos que él no puede resolver, y a la tercera vez deja
 // de abrir la app. Es más barato no mostrar el botón.
 const ACCESOS = [
+  // [MIG696] Primero: es lo que se abre todos los días. Sin señal funciona igual.
+  {
+    href: '/m/franke/bitacora',
+    icono: MessagesSquare,
+    titulo: 'Bitácora del turno',
+    bajada: 'Novedades, pendientes y «leído y entendido» entre supervisores · sin señal',
+    roles: ['supervisor', 'jefe_operaciones', 'administrador'],
+  },
   {
     href: '/m/franke/pauta',
     icono: ClipboardList,
@@ -92,6 +100,10 @@ export default function FrankeMobileHome() {
       </header>
 
       <main className="space-y-3 px-4 py-5">
+        {/* [MIG696] La difusión es la mitad del problema: la guía siempre a mano. */}
+        <Link href="/m/franke/guia" className="block rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">
+          <b>¿Cómo se usa?</b> Guía corta · todo funciona sin señal →
+        </Link>
         {mios.map((a) => (
           <Link key={a.href} href={a.href}
                 className="flex items-center gap-3 rounded-xl border-2 border-gray-200 bg-white p-4 active:scale-[0.99]">

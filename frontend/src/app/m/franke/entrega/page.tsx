@@ -34,11 +34,13 @@ import { SinSesionOffline } from '@/components/enex/sin-sesion-offline'
 import { cn, errorMessage } from '@/lib/utils'
 import { FAENA_FRANKE, getFaenaId } from '@/lib/services/faena-pauta'
 import {
-  abrirEntrega, firmarEntrega, recibirEntrega, subirFirma, periodoSugerido,
+  periodoSugerido,
   ESTADOS_EQUIPO,
   type EntregaAbierta, type EquipoEntrega, type RespuestaPendiente,
   type EstadoEquipoEntrega,
 } from '@/lib/services/faena-entrega'
+// [MIG696] Sin señal: abrir usa lo guardado; las dos firmas quedan en cola.
+import { abrirEntregaOffline, firmarOffline, recibirOffline } from '@/lib/offline/faena-entrega-offline'
 
 const miles = (n: number | null | undefined) =>
   n == null || Number.isNaN(Number(n)) ? '—' : Number(n).toLocaleString('es-CL', { maximumFractionDigits: 0 })
@@ -77,15 +79,22 @@ export default function EntregaTurnoPage() {
   const [firma, setFirma] = useState<string | null>(null)
   const [reparos, setReparos] = useState('')
 
-  useEffect(() => { getFaenaId(FAENA_FRANKE).then(setFaenaId).catch(() => {}) }, [])
+  const [sinSenal, setSinSenal] = useState<string | null>(null)
+  useEffect(() => {
+    getFaenaId(FAENA_FRANKE)
+      .then((f) => { setFaenaId(f); if (f) try { localStorage.setItem('sicom-franke-faena-id', f) } catch { /* nada */ } })
+      .catch(() => { try { setFaenaId(localStorage.getItem('sicom-franke-faena-id')) } catch { /* nada */ } })
+  }, [])
 
   const abrir = useCallback(async () => {
     if (!faenaId) return
     setCargando(true); setFirma(null)
     try {
-      const d = await abrirEntrega({
+      const r = await abrirEntregaOffline({
         faenaId, desde, hasta, turnoSaliente: saliente, turnoEntrante: entrante,
       })
+      const d = r.data
+      setSinSenal(r.sin_senal ? r.guardada_at : null)
       setDatos(d)
       setEquipos(d.equipos ?? [])
       const e = d.entrega
@@ -117,11 +126,9 @@ export default function EntregaTurnoPage() {
     setGuardando(true)
     try {
       const blob = await (await fetch(firma)).blob()
-      const url = await subirFirma(blob)
-      const r = await firmarEntrega({
+      const env = await firmarOffline({
         entregaId: datos.entrega_id,
         nombre: perfil?.nombre_completo ?? 'Supervisor',
-        firmaUrl: url,
         equipos,
         pendientes: Object.values(respuestas),
         stockFisico: conteoHecho && stockFisico ? Number(stockFisico) : null,
@@ -131,7 +138,14 @@ export default function EntregaTurnoPage() {
         inventarioCerrado: invCerrado,
         inventarioObservacion: invObs || null,
         observacion: obs || null,
-      })
+      }, blob)
+      if (env.rechazo) { toast.error(`No se aceptó la entrega: ${env.rechazo}`); return }
+      if (!env.enviado) {
+        toast.success('Entrega firmada y guardada en el teléfono. Sube sola cuando vuelva la señal.')
+        await abrir()
+        return
+      }
+      const r = env.resultado as { comparable: boolean; diferencia: number | null; stock_fisico: number | null; stock_teorico: number | null; por_que_no_comparable: string | null }
       // Sin inicial verificado no hay diferencia que mostrar. Un cero ahí sería
       // una pérdida inventada, y es la que después alguien tiene que explicar.
       if (r.comparable && r.diferencia != null) {
@@ -153,14 +167,14 @@ export default function EntregaTurnoPage() {
     setGuardando(true)
     try {
       const blob = await (await fetch(firma)).blob()
-      const url = await subirFirma(blob)
-      await recibirEntrega({
+      const env = await recibirOffline({
         entregaId: datos.entrega_id,
         nombre: perfil?.nombre_completo ?? 'Supervisor',
-        firmaUrl: url,
         reparos: reparos || null,
-      })
-      toast.success(reparos
+      }, blob)
+      if (env.rechazo) { toast.error(`No se aceptó la recepción: ${env.rechazo}`); return }
+      if (!env.enviado) toast.success('Recepción firmada y guardada en el teléfono. Sube sola cuando vuelva la señal.')
+      else toast.success(reparos
         ? 'Turno recibido con reparos. El reparo quedó como pendiente con dueño.'
         : 'Turno recibido.')
       await abrir()
@@ -195,6 +209,12 @@ export default function EntregaTurnoPage() {
           )}
         </div>
       </header>
+      {sinSenal && (
+        <p className="mx-4 mt-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
+          Sin señal: se muestra la entrega guardada en el teléfono el {new Date(sinSenal).toLocaleString('es-CL', { dateStyle: 'short', timeStyle: 'short' })}.
+          Las firmas quedan guardadas y suben solas cuando vuelva la señal.
+        </p>
+      )}
 
       <main className="space-y-4 px-4 py-4">
         {/* ── El periodo ──────────────────────────────────────────────── */}

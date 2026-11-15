@@ -385,6 +385,10 @@ const navGroups: NavGroup[] = [
       // [MIG692] Bodega de faena con lector: stock, mínimos, alertas, etiquetas y combustible.
       { label: 'Bodega Franke', href: '/dashboard/bodega/franke', icon: Package, extendedModule: 'bodega', badge: 'Nuevo',
         tooltip: 'Agua, repuestos y EPP de Franke: stock con mínimos, alertas, movimientos, etiquetas para el lector, y el combustible de la faena' },
+      // [MIG696] ¿Se comunican los supervisores? Bitácora, acuses, pendientes y entregas.
+      { label: 'Comunicación de turno', href: '/dashboard/faena/comunicacion-franke', icon: ArrowLeftRight, badge: 'Nuevo',
+        roles: ['administrador', 'gerencia', 'subgerente_operaciones', 'jefe_operaciones', 'jefe_mantenimiento'],
+        tooltip: 'Franke: quién escribe en la bitácora, quién lee lo crítico, pendientes abiertos y entregas de turno' },
       { label: 'Entrega de turno', href: '/m/franke/entrega', icon: ArrowLeftRight, extendedModule: 'bodega', badge: 'Nuevo',
         tooltip: 'Cambio de turno 7×7 de Franke: camiones, litros, pendientes y bodega, con firma de quien entrega y de quien recibe' },
       { label: 'Informe de gestión', href: '/dashboard/combustible/franke/informe', icon: FileText, extendedModule: 'bodega', badge: 'Nuevo',
