@@ -304,7 +304,7 @@ const navGroups: NavGroup[] = [
         tooltip: 'Franke, Romeral, Calama y cada equipo: gasto, $/equipo-día y $/hora' },
       // [MIG659] Tarjeta Aramco + GPS (camionetas) y computador Renault: km/L y $/km.
       { label: 'Rendimiento combustible', href: '/dashboard/flota/rendimiento-combustible', icon: Fuel, module: 'flota', badge: 'NUEVO',
-        roles: ['administrador', 'gerencia', 'subgerente_operaciones', 'jefe_operaciones', 'jefe_mantenimiento'],
+        roles: ['administrador', 'gerencia', 'subgerente_operaciones', 'jefe_operaciones', 'jefe_mantenimiento', 'bodeguero', 'operador_abastecimiento'],
         tooltip: 'Km/L y $/km por vehículo: tarjeta Aramco cruzada con el GPS, Renault con su computador' },
       // [MIG691] Tablero ejecutivo del control de combustible (directorio).
       { label: 'Control combustible', href: '/dashboard/flota/control-combustible', icon: Fuel, module: 'flota', badge: 'NUEVO',
@@ -359,6 +359,11 @@ const navGroups: NavGroup[] = [
         tooltip: 'Llegó una factura o guía: proveedor, documento, productos → stock. Sin orden de compra' },
       { label: 'Panel Bodega', href: '/dashboard/inventario', icon: Package, extendedModule: 'bodega',
         tooltip: 'Stock, compras, salidas, combustible y reportes — todo en un solo panel' },
+      // [MIG694] Bodega también ve el consolidado de combustible y las transacciones de la tarjeta.
+      { label: 'Consolidado combustible', href: '/dashboard/comercial/combustible-consolidado', icon: Fuel, extendedModule: 'bodega',
+        tooltip: 'Stock en vivo de los estanques de Coquimbo y ventas/despachos por cliente (lo mismo que ve Comercial)' },
+      { label: 'Transacciones tarjeta', href: '/dashboard/flota/rendimiento-combustible', icon: Fuel, extendedModule: 'bodega', badge: 'Nuevo',
+        tooltip: 'Cargas de la tarjeta Aramco cruzadas con el GPS: diferencias que hay que justificar' },
       { label: 'Pedidos a bodega', href: '/dashboard/bodega/tickets', icon: Ticket, extendedModule: 'bodega', badge: 'Nuevo',
         tooltip: 'Todo el pedido del taller en un lugar: vales por despachar (con fotos), solicitudes de material e historial' },
       { label: 'Seguimiento repuestos', href: '/dashboard/bodega/seguimiento-repuestos', icon: ShoppingCart, extendedModule: 'bodega', badge: 'Nuevo',
