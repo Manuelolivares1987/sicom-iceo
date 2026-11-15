@@ -25,6 +25,16 @@ type Resumen = {
   criticas_sin_acuse: { texto: string; autor: string | null; fecha_hora: string; faltan: string[] | null }[]
   pendientes: { titulo: string; prioridad: string; vence: string | null; responsable_turno: string | null; equipo: string | null; creado_nombre: string | null; dias: number; vencido: boolean | null }[]
   cerrados_24h: number
+  entrega_miercoles: {
+    hoy_es_miercoles: boolean
+    miercoles: string
+    entrega: null | {
+      estado: 'abierta' | 'entregada' | 'recibida'; declarada: boolean; litros: number | null
+      terceros_hubo: boolean | null; seguridad_sin_novedad: boolean | null; entrega: string | null; recibe: string | null
+      camiones: { patente: string | null; fisico: number; teorico: number | null; metodo: string }[] | null
+      terceros: { empresa: string; litros: number; autorizado_por: string }[] | null
+    }
+  }
   bodega_bajo_minimo: string[]
 }
 
@@ -62,6 +72,37 @@ export async function POST(req: Request) {
     lineas: [],
   }))
 
+  // [MIG697] El cambio de turno es los miércoles: ese día se recuerda; desde el
+  // jueves, si la entrega no quedó firmada y recibida, va arriba como escalamiento.
+  const em = r.entrega_miercoles
+  const e = em?.entrega
+  const entregaItems: ItemSimple[] = []
+  let entregaTitulo = ''
+  let entregaNota = ''
+  if (em) {
+    const dia = new Date(`${em.miercoles}T12:00:00`).toLocaleDateString('es-CL', { day: 'numeric', month: 'long' })
+    if (em.hoy_es_miercoles) {
+      entregaTitulo = 'Hoy miércoles es cambio de turno'
+      entregaNota = 'La entrega debe quedar firmada por quien sale y por quien entra, con los litros de cada camión, si se abasteció a otra empresa y las novedades de seguridad.'
+    } else if (!e || e.estado !== 'recibida') {
+      entregaTitulo = `Entrega de turno del miércoles ${dia}: ${!e ? 'NO SE HIZO' : e.estado === 'abierta' ? 'abierta, sin firmar' : 'firmada, falta que la reciban'}`
+      entregaNota = 'Sin entrega firmada y recibida, el turno que entró no sabe con cuántos litros quedaron los camiones.'
+    } else {
+      entregaTitulo = `Entrega del miércoles ${dia}: firmada por ${e.entrega ?? '—'} y recibida por ${e.recibe ?? '—'}`
+    }
+    if (e?.camiones?.length) {
+      entregaItems.push({ titulo: `Litros que quedaron: ${Math.round(e.litros ?? 0).toLocaleString('es-CL')} L`, lineas: e.camiones.map((c) => ({
+        texto: `${c.patente ?? '—'}: ${Math.round(c.fisico).toLocaleString('es-CL')} L (${c.metodo})${c.teorico != null ? ` · sistema ${Math.round(c.teorico).toLocaleString('es-CL')} L` : ''}`,
+        alerta: c.teorico != null && Math.abs(c.fisico - c.teorico) > 200,
+      })) })
+    }
+    if (e) {
+      entregaItems.push({ titulo: e.terceros_hubo ? 'Se abasteció a otras empresas' : e.terceros_hubo === false ? 'Sin abastecimiento a otras empresas' : 'Abastecimiento a otras empresas: sin declarar',
+        lineas: (e.terceros ?? []).map((t) => ({ texto: `${t.empresa}: ${Math.round(t.litros).toLocaleString('es-CL')} L · autorizó ${t.autorizado_por}`, alerta: true })) })
+      entregaItems.push({ titulo: e.seguridad_sin_novedad ? 'Seguridad: sin novedad' : e.seguridad_sin_novedad === false ? 'Seguridad: hubo novedad (ver bitácora)' : 'Seguridad: sin declarar', lineas: [] })
+    }
+  }
+
   const titulo = `Franke · bitácora del turno · ${new Date().toLocaleDateString('es-CL', { timeZone: 'America/Santiago', weekday: 'long', day: 'numeric', month: 'long' })}`
   const { html, text } = correoSimple({
     titulo,
@@ -71,6 +112,7 @@ export async function POST(req: Request) {
       r.bodega_bajo_minimo.length ? `Bodega bajo el mínimo: ${r.bodega_bajo_minimo.join(', ')}.` : '',
     ].filter(Boolean),
     secciones: [
+      ...(entregaTitulo ? [{ titulo: entregaTitulo, nota: entregaNota || undefined, items: entregaItems.length ? entregaItems : [{ titulo: em?.hoy_es_miercoles ? 'Abra la entrega en /m/franke/entrega (funciona sin señal si la abrió ayer con señal).' : 'Abra la entrega en /m/franke/entrega.', lineas: [] }] }] : []),
       { titulo: 'Críticas sin leer (más de 12 horas)', nota: 'Quien falta debe abrir la bitácora y marcar «leído y entendido».', items: sinLeer },
       { titulo: 'Novedades de las últimas 24 horas', items: novedades },
       { titulo: `Pendientes abiertos (${r.pendientes.length})`, items: pendientes },
