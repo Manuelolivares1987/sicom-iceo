@@ -37,7 +37,7 @@ import {
   periodoSugerido,
   ESTADOS_EQUIPO,
   type EntregaAbierta, type EquipoEntrega, type RespuestaPendiente,
-  type EstadoEquipoEntrega,
+  type EstadoEquipoEntrega, type ContextoEntrega, type TerceroEntrega,
 } from '@/lib/services/faena-entrega'
 // [MIG696] Sin señal: abrir usa lo guardado; las dos firmas quedan en cola.
 import { abrirEntregaOffline, firmarOffline, recibirOffline } from '@/lib/offline/faena-entrega-offline'
@@ -80,6 +80,14 @@ export default function EntregaTurnoPage() {
   const [reparos, setReparos] = useState('')
 
   const [sinSenal, setSinSenal] = useState<string | null>(null)
+  // [MIG697] Miércoles: litros por camión, otras empresas, seguridad, entrega verbal.
+  const [ctx, setCtx] = useState<ContextoEntrega | null>(null)
+  const [litrosCam, setLitrosCam] = useState<Record<string, { litros: string; metodo: string }>>({})
+  const [tercerosHubo, setTercerosHubo] = useState<boolean | null>(null)
+  const [terceros, setTerceros] = useState<TerceroEntrega[]>([])
+  const [segSinNov, setSegSinNov] = useState<boolean | null>(null)
+  const [segDetalle, setSegDetalle] = useState('')
+  const [verbal, setVerbal] = useState<string>('presencial')
   useEffect(() => {
     getFaenaId(FAENA_FRANKE)
       .then((f) => { setFaenaId(f); if (f) try { localStorage.setItem('sicom-franke-faena-id', f) } catch { /* nada */ } })
@@ -95,6 +103,14 @@ export default function EntregaTurnoPage() {
       })
       const d = r.data
       setSinSenal(r.sin_senal ? r.guardada_at : null)
+      const c = r.contexto
+      setCtx(c)
+      setLitrosCam(Object.fromEntries((c?.camiones ?? []).map((k) => [k.estanque_id, { litros: k.fisico != null ? String(k.fisico) : '', metodo: k.metodo ?? 'cuentalitros' }])))
+      setTercerosHubo(c?.terceros_hubo ?? null)
+      setTerceros(c?.terceros ?? [])
+      setSegSinNov(c?.seguridad_sin_novedad ?? null)
+      setSegDetalle(c?.seguridad_detalle ?? '')
+      setVerbal(c?.verbal_modo ?? 'presencial')
       setDatos(d)
       setEquipos(d.equipos ?? [])
       const e = d.entrega
@@ -123,6 +139,22 @@ export default function EntregaTurnoPage() {
 
   const firmarLaEntrega = async () => {
     if (!datos || !firma) { toast.error('Falta la firma de quien entrega.'); return }
+    const camiones = (ctx?.camiones ?? []).map((k) => ({ estanque_id: k.estanque_id, litros: Number(litrosCam[k.estanque_id]?.litros), metodo: litrosCam[k.estanque_id]?.metodo ?? 'cuentalitros', patente: k.patente }))
+    if (camiones.length === 0) { toast.error('Abra la entrega con señal para traer los camiones.'); return }
+    const faltan = camiones.filter((k) => !litrosCam[k.estanque_id]?.litros || Number.isNaN(k.litros))
+    if (faltan.length) { toast.error(`Falta con cuántos litros queda: ${faltan.map((k) => k.patente).join(', ')}.`); return }
+    if (tercerosHubo === null) { toast.error('Responda si se abasteció a otra empresa.'); return }
+    const tercerosOk = terceros.filter((t) => t.empresa.trim() && t.litros > 0 && t.autorizado_por.trim())
+    if (tercerosHubo && tercerosOk.length === 0) { toast.error('Agregue cada abastecimiento a otra empresa (empresa, litros, quién autorizó).'); return }
+    if (segSinNov === null) { toast.error('Responda la sección de seguridad.'); return }
+    if (segSinNov === false && segDetalle.trim().length < 10) { toast.error('Describa la novedad de seguridad.'); return }
+    const totalLitros = camiones.reduce((a, k) => a + k.litros, 0)
+    const declaracion = {
+      entregaId: datos.entrega_id,
+      camiones: camiones.map(({ estanque_id, litros, metodo }) => ({ estanque_id, litros, metodo })),
+      tercerosHubo, terceros: tercerosHubo ? tercerosOk : [],
+      seguridadSinNovedad: segSinNov, seguridadDetalle: segSinNov ? null : segDetalle.trim(), verbalModo: verbal,
+    }
     setGuardando(true)
     try {
       const blob = await (await fetch(firma)).blob()
@@ -131,14 +163,14 @@ export default function EntregaTurnoPage() {
         nombre: perfil?.nombre_completo ?? 'Supervisor',
         equipos,
         pendientes: Object.values(respuestas),
-        stockFisico: conteoHecho && stockFisico ? Number(stockFisico) : null,
+        stockFisico: totalLitros,
         ticket: ticket || null,
-        conteoHecho,
-        conteoOmitidoMotivo: conteoHecho ? null : conteoMotivo,
+        conteoHecho: true,
+        conteoOmitidoMotivo: null,
         inventarioCerrado: invCerrado,
         inventarioObservacion: invObs || null,
         observacion: obs || null,
-      }, blob)
+      }, blob, declaracion)
       if (env.rechazo) { toast.error(`No se aceptó la entrega: ${env.rechazo}`); return }
       if (!env.enviado) {
         toast.success('Entrega firmada y guardada en el teléfono. Sube sola cuando vuelva la señal.')
@@ -341,53 +373,118 @@ export default function EntregaTurnoPage() {
               </div>
             </section>
 
-            {/* ── 2. Los litros ────────────────────────────────────────── */}
-            <section className="space-y-3 rounded-xl border border-gray-200 bg-white p-4">
-              <p className="flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-gray-500">
-                <Fuel className="h-4 w-4" /> 2 · Cuántos litros quedan
+            {/* ── 2. Los litros por camión (MIG697) ───────────────────── */}
+            <section className="space-y-3 rounded-xl border-2 border-gray-900 bg-white p-4">
+              <p className="flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-gray-700">
+                <Fuel className="h-4 w-4" /> 2 · Con cuántos litros queda cada camión
               </p>
-              <div className="flex gap-2">
-                <button disabled={yaEntregada} onClick={() => setConteoHecho(true)}
-                        className={cn('h-12 flex-1 rounded-xl border-2 text-sm font-bold',
-                                      conteoHecho ? 'border-emerald-600 bg-emerald-600 text-white'
-                                                  : 'border-gray-300 bg-white text-gray-500')}>
-                  Se hizo el conteo
-                </button>
-                <button disabled={yaEntregada} onClick={() => setConteoHecho(false)}
-                        className={cn('h-12 flex-1 rounded-xl border-2 text-sm font-bold',
-                                      !conteoHecho ? 'border-red-600 bg-red-600 text-white'
-                                                   : 'border-gray-300 bg-white text-gray-500')}>
-                  No se hizo
-                </button>
-              </div>
+              {(ctx?.camiones ?? []).length === 0 && <p className="text-sm text-gray-500">Abra la entrega con señal para traer los camiones.</p>}
+              {(ctx?.camiones ?? []).map((k) => {
+                const v = litrosCam[k.estanque_id] ?? { litros: '', metodo: 'cuentalitros' }
+                const dif = v.litros !== '' && k.teorico != null ? Number(v.litros) - k.teorico : null
+                return (
+                  <div key={k.estanque_id} className="rounded-lg border p-3">
+                    <div className="flex items-baseline justify-between">
+                      <p className="font-bold text-gray-900">{k.patente ?? k.nombre}</p>
+                      <p className="text-xs text-gray-500">sistema: {miles(k.teorico)} L · cap. {miles(k.capacidad)} L</p>
+                    </div>
+                    <div className="mt-2 flex gap-2">
+                      <input value={v.litros} disabled={yaEntregada} inputMode="numeric" placeholder="Litros"
+                             onChange={(e) => setLitrosCam((m) => ({ ...m, [k.estanque_id]: { ...v, litros: e.target.value.replace(/[^\d]/g, '') } }))}
+                             className="h-14 min-w-0 flex-1 rounded-xl border-2 border-gray-300 px-3 text-right text-2xl font-bold tabular-nums disabled:bg-gray-100" />
+                      <select value={v.metodo} disabled={yaEntregada}
+                              onChange={(e) => setLitrosCam((m) => ({ ...m, [k.estanque_id]: { ...v, metodo: e.target.value } }))}
+                              className="h-14 rounded-xl border-2 border-gray-300 px-2 text-sm">
+                        <option value="cuentalitros">Cuentalitros</option>
+                        <option value="varilla">Varilla</option>
+                        <option value="estimado">Estimado</option>
+                      </select>
+                    </div>
+                    {dif != null && k.estimable !== false && Math.abs(dif) >= 1 && (
+                      <p className={cn('mt-1 text-xs font-semibold', Math.abs(dif) > 200 ? 'text-red-700' : 'text-gray-600')}>
+                        {dif > 0 ? '+' : ''}{miles(dif)} L contra lo que calcula el sistema{Math.abs(dif) > 200 ? ' · explíquelo en la observación' : ''}
+                      </p>
+                    )}
+                  </div>
+                )
+              })}
+              {(ctx?.camiones ?? []).length > 0 && (
+                <p className="text-right text-sm font-bold text-gray-800">
+                  Total: {miles(Object.values(litrosCam).reduce((a, x) => a + (Number(x.litros) || 0), 0))} L
+                </p>
+              )}
+              <label className="block">
+                <span className="text-sm font-semibold text-gray-800">N° de ticket del trasvasije de conteo (si se hizo)</span>
+                <input value={ticket} disabled={yaEntregada} inputMode="numeric" onChange={(e) => setTicket(e.target.value)} placeholder="21706"
+                       className="mt-1 h-12 w-full rounded-xl border-2 border-gray-300 px-3 text-lg font-bold tabular-nums disabled:bg-gray-100" />
+              </label>
+            </section>
 
-              {conteoHecho ? (
-                <>
-                  <label className="block">
-                    <span className="text-sm font-semibold text-gray-800">Litros según el trasvasije de conteo</span>
-                    <input value={stockFisico} disabled={yaEntregada} inputMode="numeric"
-                           onChange={(e) => setStockFisico(e.target.value.replace(/[^\d]/g, ''))}
-                           placeholder="0"
-                           className="mt-1 h-16 w-full rounded-xl border-2 border-gray-300 px-4 text-right text-3xl font-bold tabular-nums disabled:bg-gray-100" />
-                  </label>
-                  <label className="block">
-                    <span className="text-sm font-semibold text-gray-800">N° de ticket del trasvasije</span>
-                    <input value={ticket} disabled={yaEntregada} inputMode="numeric"
-                           onChange={(e) => setTicket(e.target.value)} placeholder="21706"
-                           className="mt-1 h-12 w-full rounded-xl border-2 border-gray-300 px-3 text-lg font-bold tabular-nums disabled:bg-gray-100" />
-                  </label>
-                </>
-              ) : (
-                <label className="block">
-                  <span className="text-sm font-semibold text-red-800">¿Por qué no se hizo?</span>
-                  <input value={conteoMotivo} disabled={yaEntregada}
-                         onChange={(e) => setConteoMotivo(e.target.value)}
-                         placeholder="El camión de reemplazo no llegó a tiempo"
-                         className="mt-1 h-12 w-full rounded-xl border-2 border-red-300 px-3 text-sm disabled:bg-gray-100" />
-                  <span className="mt-1 block text-xs text-red-700">
-                    En julio no se hizo y se supo un mes después, en el informe al mandante.
-                  </span>
-                </label>
+            {/* ── 2b. Otras empresas (MIG697) ──────────────────────────── */}
+            <section className="space-y-3 rounded-xl border-2 border-gray-900 bg-white p-4">
+              <p className="text-sm font-bold uppercase tracking-wide text-gray-700">2b · ¿Se abasteció a otra empresa (no Cenizas)?</p>
+              {ctx && (ctx.ventas_registradas.length > 0 || ctx.despachos_sin_equipo.length > 0) && (
+                <div className="rounded-lg bg-amber-50 p-2 text-xs text-amber-900">
+                  <b>El sistema registra en el periodo:</b>
+                  {ctx.ventas_registradas.map((v, i) => <span key={`v${i}`} className="block">• Venta {v.fecha.slice(0, 10)}: {v.cliente ?? '—'} {v.equipo ?? ''} · {miles(v.litros)} L</span>)}
+                  {ctx.despachos_sin_equipo.map((d, i) => <span key={`d${i}`} className="block">• Despacho {d.fecha} a «{d.equipo ?? 'sin equipo'}» · {miles(d.litros)} L (equipo fuera del listado)</span>)}
+                </div>
+              )}
+              <div className="flex gap-2">
+                <button disabled={yaEntregada} onClick={() => setTercerosHubo(false)}
+                        className={cn('h-12 flex-1 rounded-xl border-2 text-sm font-bold', tercerosHubo === false ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-gray-300 bg-white text-gray-600')}>No</button>
+                <button disabled={yaEntregada}
+                        onClick={() => { setTercerosHubo(true); if (terceros.length === 0) setTerceros([{ fecha: null, empresa: '', equipo: null, litros: 0, desde_camion: null, autorizado_por: '', documento: null, nota: null }]) }}
+                        className={cn('h-12 flex-1 rounded-xl border-2 text-sm font-bold', tercerosHubo === true ? 'border-amber-600 bg-amber-600 text-white' : 'border-gray-300 bg-white text-gray-600')}>Sí</button>
+              </div>
+              {tercerosHubo && (
+                <div className="space-y-2">
+                  {terceros.map((t, i) => {
+                    const set = (patch: Partial<TerceroEntrega>) => setTerceros((l) => l.map((x, j) => (j === i ? { ...x, ...patch } : x)))
+                    return (
+                      <div key={i} className="space-y-1.5 rounded-lg border p-2">
+                        <div className="grid grid-cols-2 gap-1.5">
+                          <input value={t.empresa} disabled={yaEntregada} onChange={(e) => set({ empresa: e.target.value })} placeholder="Empresa" className="rounded-lg border px-2 py-2 text-sm" />
+                          <input value={t.equipo ?? ''} disabled={yaEntregada} onChange={(e) => set({ equipo: e.target.value })} placeholder="Patente / equipo" className="rounded-lg border px-2 py-2 text-sm" />
+                          <input value={t.litros || ''} disabled={yaEntregada} inputMode="numeric" onChange={(e) => set({ litros: Number(e.target.value.replace(/[^\d]/g, '')) })} placeholder="Litros" className="rounded-lg border px-2 py-2 text-sm" />
+                          <select value={t.desde_camion ?? ''} disabled={yaEntregada} onChange={(e) => set({ desde_camion: e.target.value || null })} className="rounded-lg border px-2 py-2 text-sm">
+                            <option value="">Desde camión…</option>
+                            {(ctx?.camiones ?? []).map((k) => <option key={k.estanque_id} value={k.patente ?? ''}>{k.patente}</option>)}
+                          </select>
+                          <input type="date" value={t.fecha ?? ''} disabled={yaEntregada} onChange={(e) => set({ fecha: e.target.value || null })} className="rounded-lg border px-2 py-1.5 text-sm" />
+                          <input value={t.documento ?? ''} disabled={yaEntregada} onChange={(e) => set({ documento: e.target.value })} placeholder="Ticket / guía" className="rounded-lg border px-2 py-2 text-sm" />
+                        </div>
+                        <input value={t.autorizado_por} disabled={yaEntregada} onChange={(e) => set({ autorizado_por: e.target.value })} placeholder="Quién lo autorizó (nombre y cargo)" className="w-full rounded-lg border px-2 py-2 text-sm" />
+                      </div>
+                    )
+                  })}
+                  {!yaEntregada && (
+                    <button onClick={() => setTerceros((l) => [...l, { fecha: null, empresa: '', equipo: null, litros: 0, desde_camion: null, autorizado_por: '', documento: null, nota: null }])}
+                            className="w-full rounded-lg border border-dashed py-2 text-sm text-gray-600">+ Otro abastecimiento</button>
+                  )}
+                </div>
+              )}
+            </section>
+
+            {/* ── 2c. Seguridad (MIG697) ───────────────────────────────── */}
+            <section className="space-y-3 rounded-xl border-2 border-gray-900 bg-white p-4">
+              <p className="text-sm font-bold uppercase tracking-wide text-gray-700">2c · Seguridad en el turno</p>
+              {ctx && ctx.novedades_seguridad.length > 0 && (
+                <div className="rounded-lg bg-red-50 p-2 text-xs text-red-900">
+                  <b>En la bitácora de la semana:</b>
+                  {ctx.novedades_seguridad.map((n, i) => <span key={i} className="block">• {new Date(n.fecha_hora).toLocaleDateString('es-CL')}: {n.texto}</span>)}
+                </div>
+              )}
+              <div className="flex gap-2">
+                <button disabled={yaEntregada} onClick={() => setSegSinNov(true)}
+                        className={cn('h-12 flex-1 rounded-xl border-2 text-sm font-bold', segSinNov === true ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-gray-300 bg-white text-gray-600')}>Sin novedad</button>
+                <button disabled={yaEntregada} onClick={() => setSegSinNov(false)}
+                        className={cn('h-12 flex-1 rounded-xl border-2 text-sm font-bold', segSinNov === false ? 'border-red-600 bg-red-600 text-white' : 'border-gray-300 bg-white text-gray-600')}>Hubo novedad</button>
+              </div>
+              {segSinNov === false && (
+                <textarea value={segDetalle} disabled={yaEntregada} onChange={(e) => setSegDetalle(e.target.value)} rows={3}
+                          placeholder="Qué pasó: incidente, casi accidente, condición insegura, exigencia del mandante…"
+                          className="w-full rounded-xl border-2 border-red-300 px-3 py-2 text-sm" />
               )}
             </section>
 
@@ -478,6 +575,19 @@ export default function EntregaTurnoPage() {
                      placeholder="Lo consumido, lo repuesto, lo que falta"
                      className="h-12 w-full rounded-lg border-2 border-gray-300 px-3 text-sm disabled:bg-gray-100" />
             </section>
+
+            {/* ── Entrega verbal (MIG697) ──────────────────────────────── */}
+            {!yaEntregada && (
+              <section className="rounded-xl border border-gray-200 bg-white p-4">
+                <p className="text-sm font-bold text-gray-700">¿Cómo conversaron la entrega?</p>
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  {[['presencial', 'En persona'], ['llamada', 'Por teléfono'], ['video', 'Videollamada'], ['no_se_pudo', 'No se pudo']].map(([v, t]) => (
+                    <button key={v} onClick={() => setVerbal(v)}
+                            className={cn('h-10 rounded-lg border-2 text-sm font-semibold', verbal === v ? 'border-gray-900 bg-gray-900 text-white' : 'border-gray-300 text-gray-600')}>{t}</button>
+                  ))}
+                </div>
+              </section>
+            )}
 
             {/* ── Firmas ───────────────────────────────────────────────── */}
             {!yaEntregada && (

@@ -273,13 +273,20 @@ export async function subirFirma(blob: Blob): Promise<string> {
   return supabase.storage.from('evidencias-verificacion').getPublicUrl(path).data.publicUrl
 }
 
-/** El domingo de la semana 7×7 que termina hoy o antes. */
+/**
+ * [MIG697] El cambio de turno de Franke es los MIÉRCOLES. El periodo que se
+ * entrega va de miércoles a miércoles. Lun-mar sugiere el miércoles que viene
+ * (para abrirla el día antes, con señal); mié-dom, el miércoles más reciente.
+ */
 export function periodoSugerido(hoy = new Date()): { desde: string; hasta: string } {
   const iso = (d: Date) =>
     `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  const dow = hoy.getDay()            // 0 dom … 3 mié … 6 sáb
   const hasta = new Date(hoy)
-  const desde = new Date(hoy)
-  desde.setDate(desde.getDate() - 6)
+  if (dow === 1 || dow === 2) hasta.setDate(hoy.getDate() + (3 - dow))
+  else hasta.setDate(hoy.getDate() - ((dow - 3 + 7) % 7))
+  const desde = new Date(hasta)
+  desde.setDate(hasta.getDate() - 7)
   return { desde: iso(desde), hasta: iso(hasta) }
 }
 
@@ -387,4 +394,50 @@ export async function getStatusCamiones(
   })
   if (error) throw error
   return (data ?? { hay_ciclo: false }) as StatusCamiones
+}
+
+// ── [MIG697] Entrega de los miércoles: litros por camión, terceros, seguridad ──
+export type CamionEntrega = {
+  estanque_id: string; patente: string | null; nombre: string; capacidad: number | null
+  teorico: number | null; estimable: boolean | null
+  fisico: number | null; metodo: 'cuentalitros' | 'varilla' | 'estimado' | null; nota: string | null
+}
+export type TerceroEntrega = {
+  fecha: string | null; empresa: string; equipo: string | null; litros: number
+  desde_camion: string | null; autorizado_por: string; documento: string | null; nota: string | null
+}
+export type ContextoEntrega = {
+  camiones: CamionEntrega[]
+  terceros_hubo: boolean | null
+  terceros: TerceroEntrega[]
+  ventas_registradas: { fecha: string; cliente: string | null; equipo: string | null; litros: number }[]
+  despachos_sin_equipo: { fecha: string; equipo: string | null; litros: number; camion: string | null }[]
+  seguridad_sin_novedad: boolean | null
+  seguridad_detalle: string | null
+  novedades_seguridad: { fecha_hora: string; autor: string | null; severidad: string; texto: string }[]
+  verbal_modo: 'presencial' | 'llamada' | 'video' | 'no_se_pudo' | null
+}
+export type DeclaracionEntrega = {
+  entregaId: string
+  camiones: { estanque_id: string; litros: number; metodo: string; nota?: string | null }[]
+  tercerosHubo: boolean
+  terceros: TerceroEntrega[]
+  seguridadSinNovedad: boolean
+  seguridadDetalle: string | null
+  verbalModo: string | null
+}
+
+export async function getContextoEntrega(entregaId: string) {
+  const { data, error } = await supabase.rpc('rpc_faena_entrega_contexto', { p_entrega_id: entregaId })
+  if (error) throw error
+  return data as ContextoEntrega
+}
+
+export async function declararEntrega(d: DeclaracionEntrega) {
+  const { data, error } = await supabase.rpc('rpc_faena_entrega_declarar', {
+    p_entrega_id: d.entregaId, p_camiones: d.camiones, p_terceros_hubo: d.tercerosHubo, p_terceros: d.terceros,
+    p_seguridad_sin_novedad: d.seguridadSinNovedad, p_seguridad_detalle: d.seguridadDetalle, p_verbal_modo: d.verbalModo,
+  })
+  if (error) throw error
+  return data as { ok: boolean; litros_total: number }
 }

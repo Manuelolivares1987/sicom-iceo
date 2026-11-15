@@ -12,7 +12,8 @@
 
 import Dexie, { type Table } from 'dexie'
 import {
-  abrirEntrega, firmarEntrega, recibirEntrega, subirFirma, type EntregaAbierta,
+  abrirEntrega, declararEntrega, firmarEntrega, getContextoEntrega, recibirEntrega, subirFirma,
+  type ContextoEntrega, type DeclaracionEntrega, type EntregaAbierta,
 } from '@/lib/services/faena-entrega'
 
 type ParamsFirmar = Omit<Parameters<typeof firmarEntrega>[0], 'firmaUrl'>
@@ -26,6 +27,8 @@ export type OpEntrega = {
   ultimo_error?: string | null
   firma: Blob
   params: ParamsFirmar | ParamsRecibir
+  /** [MIG697] Litros por camión, terceros y seguridad: se declaran antes de firmar. */
+  declaracion?: DeclaracionEntrega
 }
 type CacheRow = { key: string; value: unknown; updated_at: string }
 
@@ -52,21 +55,25 @@ const esRechazo = (e: unknown) => !!e && typeof e === 'object' && 'code' in e &&
 const mensaje = (e: unknown) => (e instanceof Error ? e.message : typeof e === 'object' && e && 'message' in e ? String((e as { message: unknown }).message) : String(e))
 const K = (faenaId: string) => `entrega:${faenaId}`
 
+type Guardada = { entrega: EntregaAbierta; contexto: ContextoEntrega | null }
+
 export async function abrirEntregaOffline(p: Parameters<typeof abrirEntrega>[0]):
-  Promise<{ data: EntregaAbierta; guardada_at: string; sin_senal: boolean }> {
+  Promise<{ data: EntregaAbierta; contexto: ContextoEntrega | null; guardada_at: string; sin_senal: boolean }> {
   if (isOnline()) {
     try {
       const d = await conTimeout(abrirEntrega(p), 15000)
+      const contexto = await conTimeout(getContextoEntrega(d.entrega_id), 15000).catch(() => null)
       const ahora = new Date().toISOString()
-      await db().cache.put({ key: K(p.faenaId), value: d, updated_at: ahora })
-      return { data: aplicarCola(d, await db().pending.toArray()), guardada_at: ahora, sin_senal: false }
+      await db().cache.put({ key: K(p.faenaId), value: { entrega: d, contexto } satisfies Guardada, updated_at: ahora })
+      return { data: aplicarCola(d, await db().pending.toArray()), contexto, guardada_at: ahora, sin_senal: false }
     } catch (e) {
       if (esRechazo(e)) throw e
     }
   }
   const row = await db().cache.get(K(p.faenaId))
-  if (!row) throw new Error('Sin señal y sin entrega guardada en este teléfono. Ábrala una vez con señal (ideal: el día antes del cambio).')
-  return { data: aplicarCola(row.value as EntregaAbierta, await db().pending.toArray()), guardada_at: row.updated_at, sin_senal: true }
+  if (!row) throw new Error('Sin señal y sin entrega guardada en este teléfono. Ábrala una vez con señal (ideal: el martes, antes del cambio del miércoles).')
+  const g = row.value as Guardada
+  return { data: aplicarCola(g.entrega, await db().pending.toArray()), contexto: g.contexto, guardada_at: row.updated_at, sin_senal: true }
 }
 
 /** Lo firmado sin señal se ve como firmado. */
@@ -81,16 +88,16 @@ function aplicarCola(d: EntregaAbierta, cola: OpEntrega[]): EntregaAbierta {
   return { ...d, entrega: e }
 }
 
-export async function firmarOffline(params: ParamsFirmar, firma: Blob) {
-  return encolar('firmar', params, firma)
+export async function firmarOffline(params: ParamsFirmar, firma: Blob, declaracion: DeclaracionEntrega) {
+  return encolar('firmar', params, firma, declaracion)
 }
 export async function recibirOffline(params: ParamsRecibir, firma: Blob) {
   return encolar('recibir', params, firma)
 }
 
-async function encolar(tipo: OpEntrega['tipo'], params: OpEntrega['params'], firma: Blob):
+async function encolar(tipo: OpEntrega['tipo'], params: OpEntrega['params'], firma: Blob, declaracion?: DeclaracionEntrega):
   Promise<{ enviado: boolean; rechazo?: string; resultado?: unknown }> {
-  const op: OpEntrega = { local_id: nuevoId(), tipo, created_at: new Date().toISOString(), sync_status: 'pending', intentos: 0, firma, params }
+  const op: OpEntrega = { local_id: nuevoId(), tipo, created_at: new Date().toISOString(), sync_status: 'pending', intentos: 0, firma, params, declaracion }
   await db().pending.put(op)
   if (!isOnline()) return { enviado: false }
   return subirUna(op)
@@ -98,6 +105,8 @@ async function encolar(tipo: OpEntrega['tipo'], params: OpEntrega['params'], fir
 
 async function subirUna(o: OpEntrega): Promise<{ enviado: boolean; rechazo?: string; resultado?: unknown }> {
   try {
+    // La declaración va primero: el servidor no deja firmar sin ella (MIG697).
+    if (o.tipo === 'firmar' && o.declaracion) await conTimeout(declararEntrega(o.declaracion), 20000)
     const firmaUrl = await conTimeout(subirFirma(o.firma), 30000)
     const resultado = o.tipo === 'firmar'
       ? await conTimeout(firmarEntrega({ ...(o.params as ParamsFirmar), firmaUrl }), 20000)

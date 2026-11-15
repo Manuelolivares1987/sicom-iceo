@@ -32,9 +32,12 @@ const PASOS = [
     ],
   },
   {
-    icono: ArrowLeftRight, titulo: 'Entrega de turno (cada cambio 7×7)', href: '/m/franke/entrega',
+    icono: ArrowLeftRight, titulo: 'Entrega de turno (todos los miércoles)', href: '/m/franke/entrega',
     texto: [
-      'El día antes del cambio, con señal, abra la entrega: queda guardada para el día del cambio.',
+      'El cambio de turno es el MIÉRCOLES. El martes, con señal, abra la entrega: queda guardada para el miércoles.',
+      'Lo primero es el combustible: con cuántos litros queda CADA camión (cuentalitros, varilla o estimado).',
+      'Declare si se abasteció a otra empresa (no Cenizas): empresa, equipo, litros y quién lo autorizó. Si no hubo, marque «No».',
+      'Seguridad: «sin novedad» o qué pasó. Sin estas tres respuestas no se puede firmar.',
       'El que entra lee primero «Resumen 7 días» en la bitácora; después conversan en persona o por teléfono.',
       'Firma el que entrega y firma el que recibe. Sin señal las firmas quedan guardadas y suben solas.',
     ],
