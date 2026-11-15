@@ -377,6 +377,9 @@ const navGroups: NavGroup[] = [
         tooltip: 'Cierre de volumen y de imputación, excepciones y CECO por confirmar — faena Romeral' },
       { label: 'Combustible Franke', href: '/dashboard/combustible/franke', icon: Fuel, extendedModule: 'bodega',
         tooltip: 'Camiones petroleros, cargas, trasvasije y cuadre diario — faena Franke' },
+      // [MIG692] Bodega de faena con lector: stock, mínimos, alertas, etiquetas y combustible.
+      { label: 'Bodega Franke', href: '/dashboard/bodega/franke', icon: Package, extendedModule: 'bodega', badge: 'Nuevo',
+        tooltip: 'Agua, repuestos y EPP de Franke: stock con mínimos, alertas, movimientos, etiquetas para el lector, y el combustible de la faena' },
       { label: 'Entrega de turno', href: '/m/franke/entrega', icon: ArrowLeftRight, extendedModule: 'bodega', badge: 'Nuevo',
         tooltip: 'Cambio de turno 7×7 de Franke: camiones, litros, pendientes y bodega, con firma de quien entrega y de quien recibe' },
       { label: 'Informe de gestión', href: '/dashboard/combustible/franke/informe', icon: FileText, extendedModule: 'bodega', badge: 'Nuevo',

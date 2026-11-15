@@ -9,7 +9,7 @@
 // ============================================================================
 
 import Link from 'next/link'
-import { ClipboardList, ChevronRight, Fuel, ArrowLeftRight, Gauge, CalendarDays } from 'lucide-react'
+import { ClipboardList, ChevronRight, Fuel, ArrowLeftRight, Gauge, CalendarDays, ScanBarcode } from 'lucide-react'
 import { useAuth } from '@/contexts/auth-context'
 import { useExigirSesion } from '@/hooks/use-exigir-sesion'
 import { SinSesionOffline } from '@/components/enex/sin-sesion-offline'
@@ -41,6 +41,14 @@ const ACCESOS = [
     titulo: 'Carga del camión',
     bajada: 'Lo que entra por el surtidor, contra lo que recibió el camión',
     roles: ['supervisor', 'planificador', 'jefe_operaciones', 'administrador'],
+  },
+  // [MIG692] Bodega de faena con lector: sacar, recibir y contar.
+  {
+    href: '/m/franke/bodega',
+    icono: ScanBarcode,
+    titulo: 'Bodega',
+    bajada: 'Agua, repuestos y EPP con el lector · sacar, recibir, contar',
+    roles: ['supervisor', 'jefe_operaciones', 'bodeguero', 'administrador'],
   },
   {
     href: '/m/franke/entrega',
