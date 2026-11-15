@@ -254,3 +254,54 @@ export async function borrarRevision(id: string) {
   const { error } = await supabase.rpc('rpc_combustible_tarjeta_revision_borrar', { p_id: id })
   if (error) throw error
 }
+
+// [MIG690] Sincronización automática con la API de Aramco Fleet (cada hora, en la base).
+export type LlamadaApi = {
+  id: number; operacion: 'transacciones' | 'tarjetas'; estado: 'pendiente' | 'ok' | 'error'
+  desde: string | null; hasta: string | null; creada_at: string; procesada_at: string | null
+  resultado: { filas?: number; nuevas?: number; enlazadas?: number; tarjetas?: number; error?: string } | null
+}
+export async function getLlamadasApi() {
+  const { data, error } = await supabase.from('combustible_tarjeta_api_llamadas')
+    .select('id, operacion, estado, desde, hasta, creada_at, procesada_at, resultado')
+    .order('id', { ascending: false }).limit(30)
+  if (error) throw error
+  return (data ?? []) as LlamadaApi[]
+}
+
+export type TarjetaAramco = {
+  tarjeta: string; patente: string | null; activo_id: string | null; tipo_limite: string | null
+  limite_monto: number | null; consumo_monto: number | null; limite_volumen: number | null; consumo_volumen: number | null
+  vista_at: string
+}
+export async function getTarjetasAramco() {
+  const { data, error } = await supabase.from('combustible_tarjeta_tarjetas')
+    .select('tarjeta, patente, activo_id, tipo_limite, limite_monto, consumo_monto, limite_volumen, consumo_volumen, vista_at')
+    .order('consumo_monto', { ascending: false })
+  if (error) throw error
+  return (data ?? []).map((t) => ({
+    ...t,
+    limite_monto: t.limite_monto == null ? null : Number(t.limite_monto),
+    consumo_monto: t.consumo_monto == null ? null : Number(t.consumo_monto),
+    limite_volumen: t.limite_volumen == null ? null : Number(t.limite_volumen),
+    consumo_volumen: t.consumo_volumen == null ? null : Number(t.consumo_volumen),
+  })) as TarjetaAramco[]
+}
+
+/** Pide los últimos 3 días a Aramco y espera la respuesta (pg_net la trae en segundos). */
+export async function sincronizarAramco(): Promise<{ nuevas: number; error?: string }> {
+  const { data, error } = await supabase.rpc('rpc_combustible_tarjeta_sincronizar')
+  if (error) throw error
+  if (!data?.encolada) throw new Error(data?.motivo ?? 'No se pudo consultar a Aramco.')
+  for (let i = 0; i < 6; i++) {
+    await new Promise((r) => setTimeout(r, 2500))
+    const { data: out, error: e2 } = await supabase.rpc('rpc_combustible_tarjeta_procesar')
+    if (e2) throw e2
+    const hecho = (out ?? []) as { ok?: { nuevas?: number }; error?: string }[]
+    if (hecho.length > 0) {
+      const err = hecho.find((h) => h.error)?.error
+      return { nuevas: hecho.reduce((s, h) => s + (h.ok?.nuevas ?? 0), 0), error: err }
+    }
+  }
+  return { nuevas: 0, error: 'Aramco no respondió aún; el proceso automático lo recogerá en unos minutos.' }
+}

@@ -11,14 +11,14 @@ import { createContext, Fragment, useContext, useMemo, useRef, useState } from '
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   AlertOctagon, AlertTriangle, ArrowDown, ArrowUp, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Flag, Fuel, Info,
-  Loader2, Upload,
+  Loader2, RefreshCw, Upload,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useRequireAuth } from '@/hooks/use-require-auth'
 import { useToast } from '@/contexts/toast-context'
 import { cn, errorMessage } from '@/lib/utils'
 import {
-  ALERTA_TXT, borrarRevision, getCargasTarjeta, getImportaciones, getPrimeraCarga, getRendimientoMes, getRevisiones, importarTarjeta,
+  ALERTA_TXT, borrarRevision, getCargasTarjeta, getImportaciones, getLlamadasApi, getTarjetasAramco, sincronizarAramco, getPrimeraCarga, getRendimientoMes, getRevisiones, importarTarjeta,
   leerAramco, revisarAlerta,
   type Alerta, type CargaTarjeta, type EstadoRevision, type FilaTarjeta, type RendimientoMes, type ResultadoImportacion, type RevisionAlerta,
 } from '@/lib/services/combustible-tarjeta'
@@ -336,9 +336,13 @@ export default function RendimientoCombustiblePage() {
 
       <ComoSeCalcula />
 
-      <Card>
-        <CardHeader><CardTitle className="text-base">Cargar el Excel de Aramco Fleet</CardTitle></CardHeader>
-        <CardContent className="space-y-3">
+      <SincronizacionAramco />
+
+      <details className="group rounded-xl border bg-white">
+        <summary className="cursor-pointer select-none px-6 py-4 text-sm font-semibold text-gray-700">
+          Respaldo: cargar el Excel de Aramco Fleet a mano <span className="font-normal text-gray-500">(solo si la sincronización falla)</span>
+        </summary>
+        <div className="space-y-3 px-6 pb-6">
           <p className="text-sm text-gray-600">
             En portaltarjetas.cl: <b>Transacciones</b> → ícono de exportar → <b>Excel</b> → clip de arriba → descargar
             «transacciones.xlsx». Se puede subir el mismo archivo varias veces: las cargas ya subidas no se duplican.
@@ -372,14 +376,14 @@ export default function RendimientoCombustiblePage() {
           )}
           {importaciones.length > 0 && (
             <div className="text-xs text-gray-500">
-              <p className="font-semibold text-gray-600">Últimas cargas de archivo</p>
+              <p className="font-semibold text-gray-600">Últimas cargas (archivo o API)</p>
               {importaciones.map((i) => (
                 <p key={i.id}>{new Date(i.created_at).toLocaleString('es-CL', { dateStyle: 'short', timeStyle: 'short' })} · {i.archivo} · {i.nuevas} nuevas de {i.filas}</p>
               ))}
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </details>
     </div>
     </RevCtx.Provider>
   )
@@ -787,5 +791,91 @@ function TablaCargas({ cargas, conPatente }: { cargas: Awaited<ReturnType<typeof
         ))}
       </tbody>
     </table>
+  )
+}
+
+// [MIG690] La tarjeta llega sola desde la API de Aramco: cada hora se piden los
+// últimos 3 días. El botón adelanta la consulta. Tarjetas: límite y consumo del período.
+function SincronizacionAramco() {
+  const qc = useQueryClient()
+  const toast = useToast()
+  const [sincronizando, setSincronizando] = useState(false)
+  const { data: llamadas = [] } = useQuery({ queryKey: ['comb-tarjeta-api'], queryFn: getLlamadasApi, refetchInterval: 5 * 60_000 })
+  const { data: tarjetas = [] } = useQuery({ queryKey: ['comb-tarjeta-tarjetas'], queryFn: getTarjetasAramco })
+  const ultimaOk = llamadas.find((l) => l.operacion === 'transacciones' && l.estado === 'ok')
+  const ultima = llamadas.find((l) => l.operacion === 'transacciones' && l.estado !== 'pendiente')
+  const conError = ultima?.estado === 'error'
+  const sinLimite = tarjetas.filter((t) => !(t.limite_monto ?? 0) && !(t.limite_volumen ?? 0)).length
+
+  async function sincronizar() {
+    setSincronizando(true)
+    try {
+      const r = await sincronizarAramco()
+      if (r.error) toast.error(r.error)
+      else toast.success(r.nuevas > 0 ? `${r.nuevas} cargas nuevas desde Aramco.` : 'Al día: no hay cargas nuevas.')
+      for (const k of ['comb-tarjeta-api', 'comb-rendimiento-mes', 'comb-tarjeta-cargas', 'comb-tarjeta-importaciones']) {
+        qc.invalidateQueries({ queryKey: [k] })
+      }
+    } catch (err) {
+      toast.error(errorMessage(err))
+    } finally {
+      setSincronizando(false)
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
+        <div>
+          <CardTitle className="flex items-center gap-2 text-base">
+            {conError ? <AlertTriangle className="h-4 w-4 text-red-600" /> : <CheckCircle2 className="h-4 w-4 text-green-600" />}
+            Sincronización automática con Aramco Fleet
+          </CardTitle>
+          <p className="mt-1 text-xs text-gray-500">
+            Cada hora SICOM consulta a Aramco las cargas de los últimos 3 días. Ya no hace falta bajar el Excel.
+            {ultimaOk && <> Última consulta correcta: <b>{new Date(ultimaOk.procesada_at ?? ultimaOk.creada_at).toLocaleString('es-CL', { dateStyle: 'short', timeStyle: 'short' })}</b>.</>}
+          </p>
+          {conError && <p className="mt-1 text-xs text-red-700">Última consulta con error: {ultima?.resultado?.error}</p>}
+        </div>
+        <button onClick={sincronizar} disabled={sincronizando}
+                className="flex shrink-0 items-center gap-2 rounded-lg border bg-white px-3 py-2 text-sm font-medium hover:bg-gray-50 disabled:opacity-50">
+          <RefreshCw className={cn('h-4 w-4', sincronizando && 'animate-spin')} />
+          {sincronizando ? 'Consultando…' : 'Sincronizar ahora'}
+        </button>
+      </CardHeader>
+      {tarjetas.length > 0 && (
+        <CardContent className="space-y-2">
+          <p className="text-xs text-gray-500">
+            Tarjetas activas: consumo del período según Aramco.
+            {sinLimite > 0 && <> <b className="text-amber-700">{sinLimite} de {tarjetas.length} sin límite configurado</b> en el portal.</>}
+          </p>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="text-left text-xs text-gray-500">
+                <tr><th className="py-1 pr-3">Patente</th><th className="pr-3">Tarjeta</th><th className="pr-3 text-right">Consumo L</th>
+                  <th className="pr-3 text-right">Consumo $</th><th className="pr-3 text-right">Límite</th></tr>
+              </thead>
+              <tbody className="divide-y">
+                {tarjetas.map((t) => {
+                  const lim = t.limite_monto ? pesos(t.limite_monto) : t.limite_volumen ? `${n0(t.limite_volumen)} L` : null
+                  const uso = t.limite_monto ? (t.consumo_monto ?? 0) / t.limite_monto : t.limite_volumen ? (t.consumo_volumen ?? 0) / t.limite_volumen : null
+                  return (
+                    <tr key={t.tarjeta}>
+                      <td className="py-1 pr-3 font-medium">{t.patente ?? '—'}{!t.activo_id && <span className="ml-1 text-xs text-amber-700">(no está en SICOM)</span>}</td>
+                      <td className="pr-3 text-gray-500">{t.tarjeta}</td>
+                      <td className="pr-3 text-right">{n0(t.consumo_volumen)}</td>
+                      <td className="pr-3 text-right">{pesos(t.consumo_monto)}</td>
+                      <td className={cn('pr-3 text-right', uso != null && uso >= 0.9 ? 'font-semibold text-red-700' : 'text-gray-600')}>
+                        {lim ? <>{lim}{uso != null && ` · ${Math.round(uso * 100)} %`}</> : <span className="text-gray-400">sin límite</span>}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      )}
+    </Card>
   )
 }
