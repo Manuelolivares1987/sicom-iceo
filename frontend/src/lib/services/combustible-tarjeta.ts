@@ -174,7 +174,7 @@ export async function getPrimeraCarga() {
   return (data?.fecha_hora as string | undefined)?.slice(0, 10) ?? null
 }
 
-export type Alerta = 'sin_ficha' | 'sin_gps' | 'fuera_estacion' | 'sobre_estanque' | 'sin_movimiento' | 'rendimiento_bajo' | 'dos_cargas_dia'
+export type Alerta = 'sin_ficha' | 'sin_gps' | 'fuera_estacion' | 'sobre_estanque' | 'sin_movimiento' | 'rendimiento_bajo' | 'dos_cargas_dia' | 'fuera_horario'
   | 'litros_dia_excede'
 export const ALERTA_TXT: Record<Alerta, string> = {
   sin_ficha: 'Patente no está en SICOM',
@@ -186,6 +186,8 @@ export const ALERTA_TXT: Record<Alerta, string> = {
   rendimiento_bajo: 'Cargó más de lo que explican sus km',
   dos_cargas_dia: 'Dos o más cargas el mismo día',
   litros_dia_excede: 'En el día cargó más de lo que cabe y gastó',
+  // [MIG691] horario normal: lunes a viernes 07:00-19:00
+  fuera_horario: 'Cargó fuera de horario (L-V 07:00-19:00)',
 }
 
 export type CargaTarjeta = {
@@ -234,7 +236,7 @@ export async function getCargasTarjeta(desde: string, hasta: string) {
 export type EstadoRevision = 'justificada' | 'escalada'
 export type RevisionAlerta = {
   id: string; carga_id: string | null; patente: string | null; mes: string | null
-  estado: EstadoRevision; comentario: string; created_at: string; revisado_por: string | null
+  estado: EstadoRevision | 'aceptada' | 'rechazada'; comentario: string; created_at: string; revisado_por: string | null
 }
 export async function getRevisiones() {
   const { data, error } = await supabase.from('v_combustible_tarjeta_revisiones')
