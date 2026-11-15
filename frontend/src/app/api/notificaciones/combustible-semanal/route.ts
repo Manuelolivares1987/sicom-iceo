@@ -112,7 +112,7 @@ export async function POST(req: Request) {
         recordatorio ? '' : `Semana: ${n1(litros)} L · $${n0(pago)} en ${r.vehiculos.length} vehículo${r.vehiculos.length === 1 ? '' : 's'}.`,
       ].filter(Boolean),
       secciones: [
-        { titulo: 'Diferencias por justificar', nota: 'Horario normal de carga: lunes a viernes de 07:00 a 19:00.', items: pendientes.map(difItem) },
+        { titulo: 'Diferencias por justificar', nota: 'Horario normal de carga: lunes a viernes de 04:00 a 19:00.', items: pendientes.map(difItem) },
         { titulo: 'Justificadas, esperando validación de jefatura', items: porValidar.map(difItem) },
         ...(recordatorio ? [] : [{ titulo: 'Consumo de la semana por vehículo', items: vehiculos }]),
       ],

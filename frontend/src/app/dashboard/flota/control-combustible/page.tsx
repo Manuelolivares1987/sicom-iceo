@@ -151,7 +151,7 @@ export default function ControlCombustiblePage() {
 
       {/* 3. Diferencias */}
       <Bloque numero={3} titulo="Diferencias detectadas y su justificación"
-              nota="Diferencia = carga fuera de horario (L-V 07:00-19:00), lejos de la estación según GPS, sobre la capacidad del estanque, sin movimiento, o litros que no explican los km. Cada operación recibe un reporte semanal y debe justificar.">
+              nota="Diferencia = carga fuera de horario (L-V 04:00-19:00), lejos de la estación según GPS, sobre la capacidad del estanque, sin movimiento, o litros que no explican los km. Cada operación recibe un reporte semanal y debe justificar.">
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           <Kpi titulo="Detectadas desde sept-2026" valor={String(todas.length)} />
           <Kpi titulo="Cerradas" valor={String(cerradas.length)} sub={tasaCierre != null ? `${pct(tasaCierre)} del total` : undefined} estado={cerradas.length === todas.length ? 'ok' : undefined} />
@@ -215,7 +215,7 @@ export default function ControlCombustiblePage() {
             <dt className="text-gray-500">Objetivo</dt><dd>Detectar uso indebido de las tarjetas de combustible y desviaciones de rendimiento.</dd>
             <dt className="text-gray-500">Alcance</dt><dd>{tarjetasBajoControl.length} tarjetas Aramco Fleet de vehículos livianos. Fuera: tarjetas de uso personal de jefatura y camiones que cargan en faena.</dd>
             <dt className="text-gray-500">Cómo funciona</dt><dd>Cada hora se descargan las transacciones de Aramco y se cruzan con la posición y los km del GPS (Navixy/Radicom).</dd>
-            <dt className="text-gray-500">Umbrales</dt><dd>Carga &gt; 110 % del estanque · L-V 07:00-19:00 · distancia a la estación · 30 días: litros ≤ km ÷ km/L normal × 1,2 + 1 estanque.</dd>
+            <dt className="text-gray-500">Umbrales</dt><dd>Carga &gt; 110 % del estanque · L-V 04:00-19:00 · distancia a la estación · 30 días: litros ≤ km ÷ km/L normal × 1,2 + 1 estanque.</dd>
             <dt className="text-gray-500">Frecuencia</dt><dd>Detección continua; reporte semanal (lunes) y recordatorio (jueves) por operación.</dd>
             <dt className="text-gray-500">Responsables</dt>
             <dd>{Array.from(new Set(destinatarios.filter((x) => x.responsable).map((x) => `${x.operacion}: ${x.nombre ?? x.email}`))).join(' · ')} justifican; jefatura valida (acepta o rechaza).</dd>

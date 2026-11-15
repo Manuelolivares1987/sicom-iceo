@@ -186,8 +186,8 @@ export const ALERTA_TXT: Record<Alerta, string> = {
   rendimiento_bajo: 'Cargó más de lo que explican sus km',
   dos_cargas_dia: 'Dos o más cargas el mismo día',
   litros_dia_excede: 'En el día cargó más de lo que cabe y gastó',
-  // [MIG691] horario normal: lunes a viernes 07:00-19:00
-  fuera_horario: 'Cargó fuera de horario (L-V 07:00-19:00)',
+  // [MIG691] horario normal: lunes a viernes 04:00-19:00
+  fuera_horario: 'Cargó fuera de horario (L-V 04:00-19:00)',
 }
 
 export type CargaTarjeta = {

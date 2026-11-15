@@ -63,7 +63,7 @@ export default function JustificarCombustiblePage() {
         <h1 className="text-xl font-bold text-gray-900">Semana del {fecha(rep.semana_desde)} al {fecha(rep.semana_hasta)}</h1>
         <p className="text-sm text-gray-600">
           Cada carga de la tarjeta Aramco se compara con el GPS del vehículo. Las diferencias deben justificarse: qué pasó y quién cargó.
-          Horario normal de carga: lunes a viernes de 07:00 a 19:00.
+          Horario normal de carga: lunes a viernes de 04:00 a 19:00.
         </p>
       </header>
 
