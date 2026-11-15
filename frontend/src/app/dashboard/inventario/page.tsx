@@ -38,6 +38,7 @@ import {
 } from 'lucide-react'
 import { QuickActionsGrid } from '@/components/ui/quick-actions-grid'
 import { ProyeccionStockCard } from '@/components/combustible/proyeccion-stock-card'
+import { StockEstanquesCoquimbo } from '@/components/combustible/stock-estanques-coquimbo'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -293,8 +294,21 @@ export default function InventarioPage() {
         ]}
       />
 
+      {/* [MIG694] Stock en vivo de Coquimbo, el mismo que ve Comercial. */}
+      <StockEstanquesCoquimbo />
+
       {/* Proyeccion de stock combustible: demanda real MYG + LISSET */}
       <ProyeccionStockCard compacto />
+
+      <QuickActionsGrid
+        title="Combustible: ventas y tarjeta"
+        cols={3}
+        actions={[
+          { label: 'Consolidado combustible', description: 'Ventas y despachos por cliente, patente y día', href: '/dashboard/comercial/combustible-consolidado', icon: Fuel, accent: 'amber' },
+          { label: 'Transacciones tarjeta Aramco', description: 'Cargas de camionetas cruzadas con el GPS', href: '/dashboard/flota/rendimiento-combustible', icon: Gauge, accent: 'blue', badge: 'Nuevo' },
+          { label: 'Bodega Franke', description: 'Stock de faena, alertas y combustible de Franke', href: '/dashboard/bodega/franke', icon: Briefcase, accent: 'slate', badge: 'Nuevo' },
+        ]}
+      />
 
       <QuickActionsGrid
         title="Control y reportes"

@@ -32,6 +32,9 @@ import {
 import {
   sincronizar as sincronizarDespachos, pendientesCount as despachosPendientes,
 } from '@/lib/offline/combustible-faena-offline'
+import {
+  sincronizar as sincronizarBodega, pendientesCount as bodegaPendientes,
+} from '@/lib/offline/bodega-faena-offline'
 
 export function SincronizadorFranke() {
   const online = useNetworkStatus()
@@ -44,7 +47,7 @@ export function SincronizadorFranke() {
 
   const contar = useCallback(async () => {
     try {
-      setPendientes((await pautasPendientes()) + (await despachosPendientes()))
+      setPendientes((await pautasPendientes()) + (await despachosPendientes()) + (await bodegaPendientes()))
     } catch { /* IndexedDB no disponible: no es motivo para romper la pantalla */ }
   }, [])
 
@@ -53,8 +56,10 @@ export function SincronizadorFranke() {
     enCurso.current = true
     setSubiendo(true)
     try {
-      const [a, b] = await Promise.all([sincronizarPautas(), sincronizarDespachos()])
-      const ok = a.ok + b.ok
+      // [MIG694] La bodega de faena también sube su cola desde acá.
+      const [a, b, c] = await Promise.all([sincronizarPautas(), sincronizarDespachos(), sincronizarBodega()])
+      const ok = a.ok + b.ok + c.ok
+      if (c.rechazadas > 0) toast.error(`${c.rechazadas} registro(s) de bodega no se aceptaron: revíselos en Bodega.`)
       if (ok > 0 && avisar) {
         toast.success(`Volvió la señal: se subieron ${ok} registro(s) que estaban esperando.`)
       }
