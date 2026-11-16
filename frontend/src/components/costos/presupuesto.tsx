@@ -16,6 +16,7 @@ import {
   getVisitasPpto, guardarProgramaPpto, guardarSupuestoPpto, recalcularPpto,
   type LineaPpto, type ProgramaPpto, type ResumenPpto, type SupuestoPpto,
 } from '@/lib/services/presupuesto'
+import { BaseComercial, FranjaComercial } from '@/components/costos/presupuesto-comercial'
 
 // ============================================================================
 // Pestaña de presupuesto (MIG670): real 2023-2026 y proyección 2027-2029.
@@ -25,9 +26,10 @@ const COLOR_BLOQUE: Record<string, string> = {
   A: '#059669', B: '#2563EB', C: '#D97706', D: '#7C3AED', E: '#DB2777',
 }
 const ANIOS_PPTO = [2027, 2028, 2029] as const
-type Vista = 'resumen' | 'camiones' | 'visitas' | 'real' | 'supuestos'
+type Vista = 'resumen' | 'comercial' | 'camiones' | 'visitas' | 'real' | 'supuestos'
 const VISTAS: { id: Vista; label: string }[] = [
   { id: 'resumen', label: 'Resumen' },
+  { id: 'comercial', label: 'Base comercial' },
   { id: 'camiones', label: 'Por camión' },
   { id: 'visitas', label: 'Próximas mantenciones' },
   { id: 'real', label: 'Real vs presupuesto' },
@@ -87,6 +89,7 @@ export function PresupuestoOperaciones() {
       </div>
 
       {vista === 'resumen' && <Resumen data={data} />}
+      {vista === 'comercial' && <BaseComercial />}
       {vista === 'camiones' && <Camiones />}
       {vista === 'visitas' && <Visitas />}
       {vista === 'real' && <RealVs hoy={data.hoy} />}
@@ -142,6 +145,8 @@ function Resumen({ data }: { data: ResumenPpto }) {
           </CardContent></Card>
         ))}
       </div>
+
+      <FranjaComercial />
 
       <Card>
         <CardHeader className="pb-2"><CardTitle className="text-base">Gasto real y presupuesto por bloque</CardTitle></CardHeader>
@@ -477,7 +482,10 @@ function Supuestos({ data }: { data: ResumenPpto }) {
   const [editando, setEditando] = useState<(Omit<ProgramaPpto, 'id'> & { id: number | null }) | null>(null)
   const [nombreVersion, setNombreVersion] = useState('')
   const [aviso, setAviso] = useState<string | null>(null)
-  const refrescar = () => qc.invalidateQueries({ queryKey: ['ppto-resumen'] })
+  const refrescar = () => {
+    qc.invalidateQueries({ queryKey: ['ppto-resumen'] })
+    qc.invalidateQueries({ queryKey: ['ppto-comercial'] })
+  }
   const fallo = (e: Error) => setAviso(e.message)
   const pideRecalculo = 'Guardado. Toca «Recalcular con datos de hoy» para que entre al presupuesto.'
 

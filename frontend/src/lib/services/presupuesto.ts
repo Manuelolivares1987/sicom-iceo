@@ -21,7 +21,34 @@ export type LineaPpto = {
   ppto: Record<AnioPpto, number>
 }
 
-export type SupuestoPpto = { clave: string; nombre: string; valor: number; unidad: 'pct' | 'clp' | 'horas' | 'h/d'; nota: string | null }
+export type SupuestoPpto = { clave: string; nombre: string; valor: number; unidad: 'pct' | 'clp' | 'horas' | 'h/d' | 'UF'; nota: string | null }
+
+// Base comercial (MIG698): 13 UF por mes arrendado frente a la mantención de SICOM, 2027.
+export type ComercialPpto = {
+  uf: number
+  uf_mes: number
+  cuota: number
+  meses_total: number
+  lineas: { codigo: string; nombre: string; metodo: string; grupo: 'mantencion' | 'aparte' | 'excluido'; monto: number }[]
+  meses: { mes: number; camiones: number; comercial: number; sicom: number }[]
+  camiones: {
+    patente: string
+    codigo: string | null
+    tipo: string | null
+    area: string
+    fuente: 'excel' | 'contrato' | null
+    modelo: string | null
+    anio_fab: number | null
+    meses: number
+    lista: number[]
+    ingreso: number
+    comercial: number
+    preventivo: number
+    correctivo: number
+    neumaticos: number
+    mayores: number
+  }[]
+}
 
 export type ProgramaPpto = {
   id: number
@@ -103,7 +130,8 @@ export const getResumenPpto = () => llamar<ResumenPpto>('rpc_ppto_resumen')
 export const getCamionesPpto = () => llamar<CamionPpto[]>('rpc_ppto_camiones')
 export const getVisitasPpto = (anio: number) => llamar<VisitaPpto[]>('rpc_ppto_visitas', { p_anio: anio })
 export const getDetalleLineaPpto = (linea: string) => llamar<DetalleLineaPpto>('rpc_ppto_detalle_linea', { p_linea: linea })
-export const getRealVsPpto = (anio: number) => llamar<RealVsPpto>('rpc_ppto_real_vs', { p_anio: anio })
+export const getComercialPpto = () => llamar<ComercialPpto>('rpc_ppto_comercial')
+export const getRealVsPpto =(anio: number) => llamar<RealVsPpto>('rpc_ppto_real_vs', { p_anio: anio })
 
 export const recalcularPpto = () => llamar('rpc_ppto_recalcular')
 export const guardarSupuestoPpto = (clave: string, valor: number) =>
