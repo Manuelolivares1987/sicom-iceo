@@ -12,11 +12,12 @@ import { Modal } from '@/components/ui/modal'
 import { MESES, fmtFecha } from '@/components/costos/comunes'
 import { fmtClp, fmtMM, fmtNum } from '@/lib/costos-operacion'
 import {
-  borrarProgramaPpto, congelarPpto, getCamionesPpto, getDetalleLineaPpto, getRealVsPpto, getResumenPpto,
+  borrarProgramaPpto, congelarPpto, getDetalleLineaPpto, getRealVsPpto, getResumenPpto,
   getVisitasPpto, guardarProgramaPpto, guardarSupuestoPpto, recalcularPpto,
   type LineaPpto, type ProgramaPpto, type ResumenPpto, type SupuestoPpto,
 } from '@/lib/services/presupuesto'
 import { BaseComercial, FranjaComercial } from '@/components/costos/presupuesto-comercial'
+import { PresupuestoPorCamion } from '@/components/costos/presupuesto-camiones'
 
 // ============================================================================
 // Pestaña de presupuesto (MIG670): real 2023-2026 y proyección 2027-2029.
@@ -90,7 +91,7 @@ export function PresupuestoOperaciones() {
 
       {vista === 'resumen' && <Resumen data={data} />}
       {vista === 'comercial' && <BaseComercial />}
-      {vista === 'camiones' && <Camiones />}
+      {vista === 'camiones' && <PresupuestoPorCamion />}
       {vista === 'visitas' && <Visitas />}
       {vista === 'real' && <RealVs hoy={data.hoy} />}
       {vista === 'supuestos' && <Supuestos data={data} />}
@@ -284,62 +285,6 @@ function DetalleLinea({ linea, onClose }: { linea: LineaPpto; onClose: () => voi
         </>
       )}
     </Modal>
-  )
-}
-
-function Camiones() {
-  const { data, isLoading } = useQuery({ queryKey: ['ppto-camiones'], queryFn: getCamionesPpto })
-  if (isLoading) return <p className="text-sm text-gray-500">Cargando…</p>
-  const filas = data ?? []
-  return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-base">Mantención por camión, en millones de pesos</CardTitle>
-        <p className="text-xs text-gray-500">
-          Real: lo cargado directo al camión. El presupuesto del año incluye preventivo por pauta, correctivo, neumáticos y reparaciones mayores.
-        </p>
-      </CardHeader>
-      <CardContent className="overflow-x-auto p-0">
-        <table className="w-full min-w-[1080px] text-sm">
-          <thead className="bg-gray-50 text-xs text-gray-500">
-            <tr>
-              <th className="px-3 py-2 text-left">Camión</th><th className="px-2 py-2 text-right">Horómetro</th>
-              <th className="px-2 py-2 text-right">h/día</th><th className="px-2 py-2 text-right">Real 2025</th>
-              <th className="px-2 py-2 text-right">Real 2026</th><th className="border-l px-2 py-2 text-right">Prev. 2027</th>
-              <th className="px-2 py-2 text-right">Correct. 2027</th><th className="px-2 py-2 text-right">Neum. 2027</th>
-              <th className="px-2 py-2 text-right">Mayores 2027</th>
-              {ANIOS_PPTO.map((a) => <th key={a} className="bg-pillado-green-50 px-2 py-2 text-right text-pillado-green-800">PPTO {a}</th>)}
-              <th className="border-l px-2 py-2 text-right" title="Visitas de pauta 2027 / 2028 / 2029">Visitas</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filas.map((c) => (
-              <tr key={c.patente} className="border-t hover:bg-gray-50">
-                <td className="whitespace-nowrap px-3 py-1.5">
-                  <span className="font-medium text-gray-900">{c.patente}</span>
-                  <span className="ml-1.5 text-xs text-gray-500">{c.modelo}{c.anio_fab ? ` · ${c.anio_fab}` : ''}</span>
-                </td>
-                <td className="px-2 py-1.5 text-right">{fmtNum(c.horometro ?? 0)}</td>
-                <td className="px-2 py-1.5 text-right" title={c.ritmo_fuente ?? ''}>
-                  {(c.ritmo ?? 0).toLocaleString('es-CL', { maximumFractionDigits: 1 })}{c.ritmo_fuente?.startsWith('Sin dato') && <span className="text-amber-600"> *</span>}
-                </td>
-                <td className="px-2 py-1.5 text-right text-gray-600">{fmtM(c.real_2025)}</td>
-                <td className="px-2 py-1.5 text-right text-gray-600">{fmtM(c.real_2026)}</td>
-                <td className="border-l px-2 py-1.5 text-right">{fmtM(c.preventivo)}</td>
-                <td className="px-2 py-1.5 text-right">{fmtM(c.correctivo)}</td>
-                <td className="px-2 py-1.5 text-right">{fmtM(c.neumaticos)}</td>
-                <td className="px-2 py-1.5 text-right">{fmtM(c.mayores)}</td>
-                <td className="px-2 py-1.5 text-right font-medium">{fmtM(c.total_2027)}</td>
-                <td className="px-2 py-1.5 text-right">{fmtM(c.total_2028)}</td>
-                <td className="px-2 py-1.5 text-right">{fmtM(c.total_2029)}</td>
-                <td className="whitespace-nowrap border-l px-2 py-1.5 text-right text-gray-600">{c.con_pauta ? `${c.visitas_2027} / ${c.visitas_2028} / ${c.visitas_2029}` : 'Sin pauta'}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        <p className="border-t px-3 py-2 text-xs text-gray-500">* Sin dato de horas: se usa el ritmo promedio de los camiones del mismo modelo o un supuesto.</p>
-      </CardContent>
-    </Card>
   )
 }
 

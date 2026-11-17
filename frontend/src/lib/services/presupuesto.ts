@@ -131,6 +131,67 @@ export const getCamionesPpto = () => llamar<CamionPpto[]>('rpc_ppto_camiones')
 export const getVisitasPpto = (anio: number) => llamar<VisitaPpto[]>('rpc_ppto_visitas', { p_anio: anio })
 export const getDetalleLineaPpto = (linea: string) => llamar<DetalleLineaPpto>('rpc_ppto_detalle_linea', { p_linea: linea })
 export const getComercialPpto = () => llamar<ComercialPpto>('rpc_ppto_comercial')
+
+// Por camión agrupado (MIG702): familia, contrato de servicio y base del proyectado 2027.
+export type VisitaResumenPpto = { tipo: 'pauta' | 'componente' | 'anual'; nivel: string; n: number; costo: number; kit: number }
+export type CamionDetallePpto = {
+  patente: string
+  codigo: string | null
+  nombre: string | null
+  modelo: string | null
+  anio_fab: number | null
+  familia: string
+  contrato: string | null
+  faena: string | null
+  estado_comercial: string | null
+  real: Record<'2023' | '2024' | '2025' | '2026', number>
+  real_neumaticos?: Record<'2023' | '2024' | '2025' | '2026', number>
+  tipo_equipamiento?: string | null
+  operacion?: string | null
+  tc8_vence?: string | null
+  preventivo: number
+  correctivo: number
+  neumaticos: number
+  mayores: number
+  /** Certificaciones por vencimiento 2027 (TC8 y pluma, línea B4). */
+  certificaciones: number
+  total_2028: number
+  total_2029: number
+  base: {
+    con_pauta: boolean
+    grupo_kit: string | null
+    intervalo_horas: number | null
+    horometro: number
+    ritmo: number
+    ritmo_fuente: string | null
+    ritmo_18m: number | null
+    ritmo_mejor_mes: number | null
+    mejor_mes: string | null
+    horas_2027: number
+    visitas: VisitaResumenPpto[]
+    correctivo_base: number
+    edad_equivalente: number | null
+    factor_edad: number | null
+    piso_correctivo: number | null
+    neumatico_base: number
+    neumatico_piso: number | null
+    mayores: { descripcion: string; monto: number }[]
+    certificaciones: { anio: number; descripcion: string; monto: number }[]
+    partidas_correctivo: { descripcion: string; monto: number }[]
+  }
+}
+export const getCamionesDetallePpto = () => llamar<CamionDetallePpto[]>('rpc_ppto_camiones_detalle')
+
+// Excel con fórmulas (MIG705): supuestos, curva de edad, costo de cada kit y totales por línea.
+export type ParametrosExcelPpto = {
+  fecha_calculo: string | null
+  supuestos: Record<string, number>
+  curva: { edad: number; factor: number }[]
+  kits: { grupo_kit: string; nivel: string; costo: number; fl: number }[]
+  intervalos: Record<string, number>
+  lineas: { codigo: string; nombre: string; bloque: string; '2027': number; '2027_equipos': number; '2028': number; '2029': number }[]
+}
+export const getParametrosExcelPpto = () => llamar<ParametrosExcelPpto>('rpc_ppto_parametros_excel')
 export const getRealVsPpto =(anio: number) => llamar<RealVsPpto>('rpc_ppto_real_vs', { p_anio: anio })
 
 export const recalcularPpto = () => llamar('rpc_ppto_recalcular')
