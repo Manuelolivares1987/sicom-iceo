@@ -115,6 +115,27 @@ describe('informe semanal ENEX', () => {
     expect(htmlParaPegar(i)).toContain('3. Reprogramaciones acumuladas del trimestre')
   })
 
+  it('separa el cambio de tarea (se trabajó en otra cosa) de la reprogramación (no se pudo trabajar)', () => {
+    const i = armarInformeSemanal({
+      lunes: '2026-10-26', hoy: '2026-11-16', faenas: [faena], hallazgos: [],
+      rows: [row('V', { fecha_programada: '2026-12-01', periodo_mes: 12 }), row('X', { fecha_programada: '2026-12-02', periodo_mes: 12 })],
+      reprogs: [
+        rep({ id: 'cambio:1', programacion_id: 'V', fecha_original: '2026-10-26', nueva_fecha: '2026-12-01', responsable: 'operaciones_esm',
+          causa: 'Cambio de tarea pedido por ESM', descripcion: 'ESM pidió calibrar SKOL-82 en lugar de la EESS', origen: 'cambio_tarea' }),
+        rep({ id: '2', programacion_id: 'X', fecha_original: '2026-10-27', nueva_fecha: '2026-12-02', responsable: 'mandante' }),
+      ],
+    })
+    // Centinela: el trimestre de octubre es Ago-Oct (ancla 2).
+    const r = i.faenas[0].reprogramaciones
+    expect(r).toMatchObject({ total: 2, sinTrabajo: 1, cambiosTarea: 1 })
+    expect(r.lista.map((x) => x.tipo)).toEqual(['Cambio de tarea', 'Reprogramación'])
+    expect(r.lista[0].detalle).toContain('SKOL-82')
+    expect(i.faenas[0].actividad.find((a) => a.programacion_id === 'V')!.estado).toBe('Cambio de tarea pedido por ESM, pasa al 01-12')
+    const pegar = htmlParaPegar(i)
+    expect(pegar).toContain('No se pudo trabajar')
+    expect(pegar).toContain('Cambio de tarea</b>: ESM pidió calibrar SKOL-82')
+  })
+
   it('el correo escapa lo que escribe el operador y no muestra multas', () => {
     const i = armar([row('<b>X</b>', { estado: 'cumplida', fecha_ejecucion: '2026-11-04', ejecucion_id: 'e', ejec_observacion: '"><img src=x>' })])
     i.faenas[0].observaciones[0].foto = 'javascript:alert(1)'

@@ -653,6 +653,8 @@ export type EnexReprogramacion = {
   pdf_url: string | null
   creado_por_nombre: string | null
   created_at: string
+  /** cambio_tarea = se fue y se hizo otro trabajo a pedido de ESM (MIG658); no es lo mismo que no poder trabajar. */
+  origen?: 'formulario' | 'cambio_tarea'
 }
 
 export async function reprogramar(p: {
@@ -1274,7 +1276,7 @@ export async function getCambiosReprogramadosDesde(desde: string): Promise<EnexR
     fecha_original: c.fecha, hora_original: null, semana: null, trimestre: null,
     responsable: 'operaciones_esm', causa: 'Cambio de tarea pedido por ESM', descripcion: c.motivo,
     nueva_fecha: c.nueva_fecha, nueva_hora: null, firma_tecnico_url: null, firma_esm_url: null, firma_mandante_url: null, pdf_url: null,
-    creado_por_nombre: null, created_at: c.created_at,
+    creado_por_nombre: null, created_at: c.created_at, origen: 'cambio_tarea' as const,
   }))
 }
 

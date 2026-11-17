@@ -15,7 +15,9 @@ const TONO = {
   info: ['#374151', '#f3f4f6'],
 } as const
 
-const repsDe = (f: InformeSemanal['faenas'][number]) => f.reprogramaciones ?? { total: 0, porResponsable: [], ejecutadas: 0, pendientes: 0, sinFecha: 0, lista: [] }
+const repsDe = (f: InformeSemanal['faenas'][number]) => f.reprogramaciones ?? { total: 0, sinTrabajo: 0, cambiosTarea: 0, porResponsable: [], ejecutadas: 0, pendientes: 0, sinFecha: 0, lista: [] }
+const tipoTxt = (r: { tipo?: string; detalle?: string | null }) =>
+  r.tipo === 'Cambio de tarea' ? `<b>Cambio de tarea</b>${r.detalle ? `: ${esc(r.detalle)}` : ''}` : 'No se pudo trabajar'
 const porResponsableTxt = (f: InformeSemanal['faenas'][number]) =>
   repsDe(f).porResponsable.map((x) => `${esc(x.responsable)} ${x.n}`).join(' · ') || '—'
 const pendientesTxt = (f: InformeSemanal['faenas'][number]) => {
@@ -45,7 +47,7 @@ export function htmlParaPegar(i: InformeSemanal): string {
   const conReprog = i.faenas.filter((f) => repsDe(f).total > 0)
   const detalleReprog = conReprog.flatMap((f) => repsDe(f).lista.map((r) => [
     esc(f.nombre), fechaCorta(r.fecha_original), `${esc(r.instalacion)} — ${esc(r.servicio)}`,
-    `${esc(r.responsable)}${r.causa ? ` · ${esc(r.causa)}` : ''}`, esc(r.estado),
+    tipoTxt(r), `${esc(r.responsable)}${r.causa ? ` · ${esc(r.causa)}` : ''}`, esc(r.estado),
   ]))
   const observaciones = i.faenas.flatMap((f) => f.observaciones.map((o) => [
     fechaCorta(o.fecha), `${esc(f.nombre)} · ${esc(o.instalacion)} — ${esc(o.servicio)}`,
@@ -61,9 +63,9 @@ export function htmlParaPegar(i: InformeSemanal): string {
     ]))}
     ${actividad.length ? `<p><b>2. Actividad de la semana</b></p>${tabla(['Faena', 'Fecha', 'Instalación', 'Servicio', 'Ejecutada', 'Estado'], actividad)}` : ''}
     <p><b>3. Reprogramaciones acumuladas del trimestre</b></p>
-    ${conReprog.length ? `${tabla(['Faena', 'Trimestre', 'Acumuladas', 'Responsable', 'Ya ejecutadas', 'Pendientes'], conReprog.map((f) => [
-      esc(f.nombre), esc(f.trimestre.etiqueta), `<b>${repsDe(f).total}</b>`, porResponsableTxt(f), String(repsDe(f).ejecutadas), pendientesTxt(f),
-    ]))}<p></p>${tabla(['Faena', 'Fecha original', 'Instalación', 'Responsable / causa', 'Estado hoy'], detalleReprog)}` : '<p>Sin reprogramaciones en el trimestre a la fecha.</p>'}
+    ${conReprog.length ? `${tabla(['Faena', 'Trimestre', 'Acumuladas', 'No se pudo trabajar', 'Cambio de tarea', 'Responsable', 'Ya ejecutadas', 'Pendientes'], conReprog.map((f) => [
+      esc(f.nombre), esc(f.trimestre.etiqueta), `<b>${repsDe(f).total}</b>`, String(repsDe(f).sinTrabajo ?? repsDe(f).total), String(repsDe(f).cambiosTarea ?? 0), porResponsableTxt(f), String(repsDe(f).ejecutadas), pendientesTxt(f),
+    ]))}<p>«Cambio de tarea»: el equipo fue a faena y, a pedido de ESM, hizo otro trabajo en lugar del programado.</p>${tabla(['Faena', 'Fecha original', 'Instalación', 'Tipo', 'Responsable / causa', 'Estado hoy'], detalleReprog)}` : '<p>Sin reprogramaciones en el trimestre a la fecha.</p>'}
     ${observaciones.length ? `<p><b>4. Observaciones de los operadores</b></p>${tabla(['Fecha', 'Instalación', 'Observación'], observaciones)}` : ''}
     <p>Quedamos atentos a cualquier consulta.</p>
     <p>Saludos cordiales,</p>
@@ -114,7 +116,7 @@ export function htmlInformeSemanal(i: InformeSemanal): string {
       const [c, b] = TONO[r.tono]
       return `<tr>
         ${celda(fechaCorta(r.fecha_original), z)}
-        ${celda(`<b>${esc(r.instalacion)}</b><br>${esc(r.servicio)}`, z)}
+        ${celda(`<b>${esc(r.instalacion)}</b><br>${esc(r.servicio)}<br><span style="font-size:12px">${tipoTxt(r)}</span>`, z)}
         ${celda(`${esc(r.responsable)}${r.causa ? `<br><span style="color:#6b7280">${esc(r.causa)}</span>` : ''}`, z)}
         ${celda(chipEstado(esc(r.estado), c, b), z)}
       </tr>`
@@ -135,7 +137,7 @@ export function htmlInformeSemanal(i: InformeSemanal): string {
       <p style="margin:0 0 4px;font-size:13px">${semana}${s.adicionales ? ` · ${s.adicionales} de otras semanas` : ''}</p>
       <p style="margin:0 0 10px;font-size:13px">${trimestre}</p>
       ${filas ? `${tablaAbrir(['Fecha', 'Instalación / servicio', 'Ejecutada', 'Estado'])}${filas}${tablaCerrar}` : ''}
-      ${filasReprog ? `<p style="margin:16px 0 6px;font-size:13px"><b>Reprogramaciones acumuladas del trimestre ${esc(t.etiqueta)}: ${rp.total}</b> (${porResponsableTxt(f)}) · ${rp.ejecutadas} ya ejecutadas · ${pendientesTxt(f)} pendientes</p>
+      ${filasReprog ? `<p style="margin:16px 0 6px;font-size:13px"><b>Reprogramaciones acumuladas del trimestre ${esc(t.etiqueta)}: ${rp.total}</b>${rp.cambiosTarea ? ` (${rp.sinTrabajo} sin poder trabajar · ${rp.cambiosTarea} por cambio de tarea pedido por ESM)` : ''} · ${porResponsableTxt(f)} · ${rp.ejecutadas} ya ejecutadas · ${pendientesTxt(f)} pendientes</p>
       ${tablaAbrir(['Fecha original', 'Instalación / servicio', 'Responsable / causa', 'Estado hoy'])}${filasReprog}${tablaCerrar}` : ''}
       ${obs ? `<p style="margin:16px 0 6px;font-size:13px"><b>Observaciones de los operadores</b></p>
       ${tablaAbrir(['Fecha', 'Instalación', 'Observación'])}${obs}${tablaCerrar}` : ''}`
