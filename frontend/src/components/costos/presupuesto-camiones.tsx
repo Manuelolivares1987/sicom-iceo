@@ -19,7 +19,7 @@ type Camion = CamionDetallePpto
 type Grupo = { clave: string; titulo: string; nota?: string; filas: Camion[] }
 
 const fmtM = (v: number) => (v / 1e6).toLocaleString('es-CL', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
-const total27 = (c: Camion) => c.preventivo + c.correctivo + c.neumaticos + c.mayores + (c.certificaciones ?? 0)
+const total27 = (c: Camion) => c.preventivo + c.correctivo + (c.equipamiento ?? 0) + c.neumaticos + c.mayores + (c.certificaciones ?? 0)
 const sumar = (fs: Camion[], f: (c: Camion) => number) => fs.reduce((a, c) => a + f(c), 0)
 const ORDEN_CONTRATO = ['Romeral', 'Franke', 'Calama ENEX']
 const fmtH = (v: number) => v.toLocaleString('es-CL', { maximumFractionDigits: 1 })
@@ -95,6 +95,7 @@ export function PresupuestoPorCamion() {
         <td className={`border-l bg-pillado-green-50 px-2 py-1.5 text-right font-semibold text-pillado-green-800`}>{fmtM(sumar(fs, total27))}</td>
         <td className={cls}>{fmtM(sumar(fs, (c) => c.preventivo))}</td>
         <td className={cls}>{fmtM(sumar(fs, (c) => c.correctivo))}</td>
+        <td className={cls}>{fmtM(sumar(fs, (c) => c.equipamiento ?? 0))}</td>
         <td className={cls}>{fmtM(sumar(fs, (c) => c.neumaticos))}</td>
         <td className={cls}>{fmtM(sumar(fs, (c) => c.mayores))}</td>
         <td className={cls}>{fmtM(sumar(fs, (c) => c.certificaciones ?? 0))}</td>
@@ -113,7 +114,7 @@ export function PresupuestoPorCamion() {
         </div>
         {errorExcel && <p className="text-xs text-red-600">No se pudo armar el Excel: {errorExcel}</p>}
         <p className="text-xs text-gray-500">
-          Real: lo cargado directo al equipo en Softland (2026 hasta hoy). Proyectado 2027 = preventivo por pauta + correctivo + neumáticos + reparaciones mayores + certificaciones por vencimiento (TC8 y pluma).
+          Real: lo cargado directo al equipo en Softland (2026 hasta hoy). Proyectado 2027 = preventivo por pauta + correctivo del camión + mantención del equipamiento (aljibe, pluma) + neumáticos + reparaciones mayores + certificaciones por vencimiento (TC8 y pluma). Cada compra se clasifica por lo que dice su factura.
           Toca un equipo para ver en qué se basa su proyectado. No incluye los repuestos y talleres sin patente.
         </p>
       </CardHeader>
@@ -124,7 +125,7 @@ export function PresupuestoPorCamion() {
               <th className="px-3 py-2 text-left">Equipo</th>
               <th className={th}>2023</th><th className={th}>2024</th><th className={th}>2025</th><th className={th}>2026 a hoy</th>
               <th className="border-l bg-pillado-green-50 px-2 py-2 text-right text-pillado-green-800">Proyectado 2027</th>
-              <th className={th}>Preventivo</th><th className={th}>Correctivo</th><th className={th}>Neumáticos</th><th className={th}>Overhaul / mayores</th><th className={th} title="TC8 y certificación de pluma">TC8 y cert.</th>
+              <th className={th}>Preventivo</th><th className={th}>Correctivo camión</th><th className={th} title="Aljibe de combustible o agua, pluma, compresor">Equipamiento</th><th className={th}>Neumáticos</th><th className={th}>Overhaul / mayores</th><th className={th} title="TC8 y certificación de pluma">TC8 y cert.</th>
               <th className="px-3 py-2 text-left">Base del proyectado</th>
             </tr>
           </thead>
@@ -234,6 +235,11 @@ function DetalleBase({ c }: { c: Camion }) {
           <p>Cumplió el {Math.round(b.cumplimiento_pauta * 100)} % de la pauta en 2025-2026 ({(b.preventivas_hechas_anio ?? 0).toLocaleString('es-CL', { maximumFractionDigits: 1 })} preventivas al año): si en 2027 se cumple, el correctivo baja un {Math.round((b.reduccion_correctivo ?? 0) * (1 - b.cumplimiento_pauta) * 100)} %.</p>
         )}
         {b.piso_correctivo != null && <p>Piso de camión joven: al menos {fmtClp(b.piso_correctivo)}.</p>}
+        <p className="text-gray-500">Más IPC 2027.</p>
+      </div>
+      <div>
+        <p className="mb-1 font-semibold text-gray-900">Equipamiento 2027 (aljibe, pluma): {fmtClp(c.equipamiento ?? 0)}</p>
+        <p>Promedio real de los últimos 24 meses de lo que las facturas muestran como equipamiento: {fmtClp(b.equipamiento_base ?? 0)} al año.</p>
         {(b.partidas_correctivo ?? []).map((x, i) => <p key={i}>+ {x.descripcion}: {fmtClp(x.monto)} (proveedores de la grúa, 2026 llevado a 12 meses, sobre lo que ya trae el promedio).</p>)}
         <p className="text-gray-500">Más IPC 2027.</p>
       </div>

@@ -11,8 +11,8 @@ import { getComposicionEquipoPpto, type ComposicionEquipoPpto } from '@/lib/serv
 // anteriores y con Comercial.
 // ============================================================================
 
-const COMPONENTES: { k: 'A1' | 'A2' | 'A3' | 'A4' | 'B4'; nombre: string }[] = [
-  { k: 'A1', nombre: 'Preventivo' }, { k: 'A2', nombre: 'Correctivo' }, { k: 'A3', nombre: 'Neumáticos' },
+const COMPONENTES: { k: 'A1' | 'A2' | 'A6' | 'A3' | 'A4' | 'B4'; nombre: string }[] = [
+  { k: 'A1', nombre: 'Preventivo' }, { k: 'A2', nombre: 'Correctivo camión' }, { k: 'A6', nombre: 'Equipamiento (aljibe, pluma)' }, { k: 'A3', nombre: 'Neumáticos' },
   { k: 'A4', nombre: 'Overhaul / mayores' }, { k: 'B4', nombre: 'TC8 y certificaciones' },
 ]
 const fmtM = (v: number) => (v / 1e6).toLocaleString('es-CL', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
@@ -22,6 +22,7 @@ export function ComposicionEquipo({ patente }: { patente: string }) {
   const { data, isLoading } = useQuery({ queryKey: ['ppto-composicion', patente], queryFn: () => getComposicionEquipoPpto(patente) })
   const [verCompras, setVerCompras] = useState(false)
   const [verNeu, setVerNeu] = useState(false)
+  const [verEqu, setVerEqu] = useState(false)
   if (isLoading) return <p className="text-xs text-gray-500">Cargando composición…</p>
   if (!data) return null
   const d: ComposicionEquipoPpto = data
@@ -81,7 +82,8 @@ export function ComposicionEquipo({ patente }: { patente: string }) {
         <p className="mb-1 font-semibold text-gray-900">¿Qué se toma como correctivo?</p>
         <p className="mb-1">
           Compras cargadas al equipo entre el {fechaCorta(d.ventana_desde)} y el {fechaCorta(d.corte)} (24 meses), de menos de $2,5 MM cada una,
-          sin filtros, lubricantes ni neumáticos. Base anual: <b>{fmtClp(baseAnual)}</b> (pesos 2026, antes del ajuste por edad e IPC).
+          separadas por sistema según el detalle de su factura. No entra lo que es pauta (aceites, filtros, servicio de mantención), neumáticos,
+          equipamiento ni lo que no es mantención. Base anual: <b>{fmtClp(baseAnual)}</b> (pesos 2026, antes del ajuste por edad e IPC).
         </p>
         <table className="w-full border text-xs">
           <tbody>
@@ -131,6 +133,44 @@ export function ComposicionEquipo({ patente }: { patente: string }) {
               </tbody>
             </table>
           </div>
+        )}
+        {(d.salio_del_correctivo ?? []).length > 0 && (
+          <>
+            <p className="mb-1 mt-4 font-semibold text-gray-900">Salió del correctivo (la factura mostró que es otra cosa), 24 meses</p>
+            <table className="w-full border text-xs">
+              <tbody>
+                {(d.salio_del_correctivo ?? []).map((x, i) => (
+                  <tr key={i} className="border-t">
+                    <td className="px-2 py-1">{x.categoria === 'Equipamiento' ? `Equipamiento: ${x.sistema}` : x.categoria === 'No es mantención' ? `No es mantención: ${x.sistema}` : `${x.categoria}: ${x.sistema}`} <span className="text-gray-400">({x.n}) → {x.linea}</span></td>
+                    <td className="px-2 py-1 text-right">{fmtClp(x.monto)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </>
+        )}
+        {(d.equipamiento_categorias ?? []).length > 0 && (
+          <>
+            <p className="mb-1 mt-4 font-semibold text-gray-900">Mantención del equipamiento, 24 meses</p>
+            <table className="w-full border text-xs">
+              <tbody>
+                {(d.equipamiento_categorias ?? []).map((x) => (
+                  <tr key={x.categoria} className="border-t">
+                    <td className="px-2 py-1">{x.categoria} <span className="text-gray-400">({x.n})</span></td>
+                    <td className="px-2 py-1 text-right">{fmtClp(x.monto)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <button type="button" className="mt-1 text-pillado-green-700 underline" onClick={() => setVerEqu(!verEqu)}>
+              {verEqu ? 'Ocultar compras del equipamiento' : `Ver las ${(d.equipamiento_compras ?? []).length} compras del equipamiento`}
+            </button>
+            {verEqu && (
+              <ul className="mt-1 max-h-48 list-disc overflow-auto pl-4">
+                {(d.equipamiento_compras ?? []).map((x, i) => <li key={i}>{fechaCorta(x.fecha)} · {x.proveedor} · {x.descripcion}: {fmtClp(x.monto)}</li>)}
+              </ul>
+            )}
+          </>
         )}
         {verNeu && (
           <ul className="mt-1 max-h-40 list-disc overflow-auto pl-4">

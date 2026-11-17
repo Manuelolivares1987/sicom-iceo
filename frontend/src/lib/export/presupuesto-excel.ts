@@ -49,7 +49,12 @@ export async function exportarPresupuestoExcel(p: ParametrosExcelPpto, camiones:
     'Celdas AMARILLAS: datos que puedes cambiar. Todo lo demás son fórmulas.',
     'TRAZABILIDAD: los montos históricos salen de la hoja «Compras» (cada línea de Softland / OS que usa el presupuesto). Filtra «Compras» por patente y línea para ver qué compras forman cada número.',
     '   Monto pesos 2026 = monto × (1 + IPC histórico)^(2026 − año). «Mes cerrado» = Sí si la compra es anterior al fin de la ventana (último mes cerrado).',
-    '   Correctivo base 24m = suma de compras línea A2 de los últimos 24 meses cerrados en pesos 2026 ÷ 2; en equipos con pauta se restan las de categoría «Mantención preventiva» (ya van en el preventivo).',
+    '   ¿Por qué ÷ 2? Son 24 meses de compras: dividir por 2 da el promedio de UN año, que es lo que se presupuesta (neumáticos: 36 meses ÷ 3).',
+    '   Correctivo camión base 24m = suma de compras línea A2 de los últimos 24 meses cerrados en pesos 2026 ÷ 2; en equipos con pauta se restan las sin clasificar de categoría «Mantención preventiva».',
+    'CLASIFICACIÓN POR FACTURA: cada línea de OC de mantención se cruzó con la factura XML del proveedor (referencia a la OC o mismo proveedor, monto y fecha) y se partió ítem por ítem:',
+    '   Pauta (aceites, filtros, servicio de mantención) → A1 preventivo, NO al correctivo (ya la compra el kit) · Correctivo camión por sistema → A2 · Equipamiento (aljibe, pluma, compresor) → A6 por patente',
+    '   Neumáticos → A3 · Certificación → B2 · No es mantención: lavado → C7, insumos de taller → C1, tecnología → B3, accesorios → C8, resto → C6. «Sin detalle» = la factura no dice qué se hizo: queda como correctivo camión.',
+    '   Columnas Sistema, Qué dice la factura, Cómo se clasificó y Línea original de la hoja Compras muestran cada decisión. La hoja «Por sistema» suma el correctivo y el equipamiento de cada equipo por sistema.',
     '   Neumáticos base = compras A3 de 36 meses ÷ 3. Preventivo sin pauta = compras A1 de 24 meses ÷ 2. Real por año = suma de compras A* del año (pesos de cada año).',
     '   Ritmo = manual si existe; si no, el mayor entre promedio 18 meses y el mejor mes de la hoja «Horas GPS» (máx. 14 h/día); si no hay GPS, el de respaldo.',
     '   Cumplimiento de la pauta = preventivas de la hoja «Preventivas registradas» ÷ años ÷ las que pide la pauta (ritmo × 365 ÷ intervalo).',
@@ -228,19 +233,21 @@ export async function exportarPresupuestoExcel(p: ParametrosExcelPpto, camiones:
   // Compras: cada línea de Softland / OS que usa el presupuesto.
   const wc = wb.addWorksheet('Compras')
   wc.getRow(1).values = ['Patente', 'Fecha', 'Año', 'Línea', 'Categoría (correctivo)', 'Proveedor / origen', 'Folio / OC', 'Código', 'Descripción',
-    'Monto (pesos del año)', 'Factor a pesos 2026', 'Monto pesos 2026', 'Mes cerrado', 'Gasto único ≥ $10 MM', 'Mantención de pluma Calama']
+    'Monto (pesos del año)', 'Factor a pesos 2026', 'Monto pesos 2026', 'Mes cerrado', 'Gasto único ≥ $10 MM', 'Mantención de pluma Calama',
+    'Sistema', 'Qué dice la factura', 'Cómo se clasificó', 'Línea original de la OC']
   encabezado(wc)
-  ;[10, 11, 6, 6, 30, 30, 11, 14, 46, 14, 9, 14, 8, 9, 9].forEach((w, i) => { wc.getColumn(i + 1).width = w })
+  ;[10, 11, 6, 6, 22, 30, 11, 14, 40, 14, 9, 14, 8, 9, 9, 26, 60, 26, 9].forEach((w, i) => { wc.getColumn(i + 1).width = w })
   compras.forEach((x, i) => {
     const r = i + 2
     const row = wc.getRow(r)
     row.values = [x[0], fechaExcel(x[1]), { formula: `YEAR(B${r})` }, x[2], x[3], x[4], x[5] == null ? null : String(x[5]), x[6], x[7], Number(x[8]),
       { formula: `(1+${ref.ipch})^(2026-C${r})` }, { formula: `J${r}*K${r}` }, { formula: `IF(B${r}<=${ref.fin},"Sí","No")` },
-      { formula: `IF(AND(J${r}>=10000000,OR(${UNICAS.map((l) => `D${r}="${l}"`).join(',')})),"Sí","No")` }, x[9] ? 'Sí' : 'No']
+      { formula: `IF(AND(J${r}>=10000000,OR(${UNICAS.map((l) => `D${r}="${l}"`).join(',')})),"Sí","No")` }, x[9] ? 'Sí' : 'No',
+      x[10] ?? null, x[11] ?? null, x[12] ?? null, x[13] ?? null]
     row.getCell(2).numFmt = 'dd-mm-yyyy'; row.getCell(10).numFmt = CLP; row.getCell(11).numFmt = '0.0000'; row.getCell(12).numFmt = CLP
   })
   wc.views = [{ state: 'frozen', ySplit: 1 }]
-  wc.autoFilter = { from: 'A1', to: 'O1' }
+  wc.autoFilter = { from: 'A1', to: 'S1' }
 
   // Horas GPS por mes completo.
   const wg = wb.addWorksheet('Horas GPS')
@@ -299,9 +306,9 @@ export async function exportarPresupuestoExcel(p: ParametrosExcelPpto, camiones:
     { h: 'Días al 1-ene-2027', w: 9 }, { h: 'Días al 31-dic-2027', w: 9 }, { h: 'Horas inicio 2027', w: 11 }, { h: 'Horas fin 2027', w: 11 },
     ...NIVELES.map((n) => ({ h: `Visitas ${n}`, w: 8 })), { h: 'Servicio anual', w: 8 },
     { h: 'Preventivo 24m sin pauta (pesos 2026)', w: 13 }, { h: 'PREVENTIVO 2027', w: 13 },
-    { h: 'Correctivo base 24m (pesos 2026)', w: 13 }, { h: 'Edad equivalente 2027', w: 9 }, { h: 'Edad de la ventana medida', w: 9 },
+    { h: 'Correctivo camión base 24m (pesos 2026)', w: 13 }, { h: 'Edad equivalente 2027', w: 9 }, { h: 'Edad de la ventana medida', w: 9 },
     { h: 'Curva 2027', w: 8 }, { h: 'Curva ventana', w: 8 }, { h: 'Factor de edad (tope 1,5)', w: 8 }, { h: 'Piso camión joven', w: 12 },
-    { h: 'Ajuste pluma 2027', w: 12 }, { h: 'CORRECTIVO 2027', w: 13 },
+    { h: 'Ajuste pluma 2027 (va en equipamiento)', w: 12 }, { h: 'CORRECTIVO CAMIÓN 2027', w: 13 },
     { h: 'NEUMÁTICOS 2027 (hoja Neumáticos)', w: 13 }, { h: 'MAYORES 2027 (overhaul y componentes)', w: 13 },
     { h: 'TC8 vence', w: 11 }, { h: 'TC8 2027', w: 11 }, { h: 'Certifica pluma (1/0)', w: 8 }, { h: 'Cert. pluma 2027', w: 11 },
     { h: 'TOTAL 2027', w: 14 }, { h: 'SICOM 2027', w: 14 }, { h: 'Diferencia', w: 11 },
@@ -309,6 +316,7 @@ export async function exportarPresupuestoExcel(p: ParametrosExcelPpto, camiones:
     { h: 'Ritmo promedio 18 meses (GPS)', w: 9 }, { h: 'Ritmo mejor mes (hoja Horas GPS)', w: 9 }, { h: 'Ritmo manual', w: 8 },
     { h: 'Ritmo de respaldo (sin GPS)', w: 9 }, { h: 'Cumplimiento: se mide desde', w: 11 },
     { h: 'Preventivas registradas en el período', w: 10 }, { h: 'La pauta pide al año', w: 9 },
+    { h: 'Equipamiento base 24m (pesos 2026)', w: 13 }, { h: 'EQUIPAMIENTO 2027 (aljibe, pluma)', w: 13 },
   ]
   wq.getRow(1).values = cols.map((c) => c.h)
   cols.forEach((c, i) => { wq.getColumn(i + 1).width = c.w })
@@ -319,7 +327,7 @@ export async function exportarPresupuestoExcel(p: ParametrosExcelPpto, camiones:
     kit: 11, int: 12, hor: 13, rit: 14, ori: 15, d0: 16, d1: 17, hi: 18, hf: 19,
     v0: 20, anual: 27, pbase: 28, prev: 29, cbase: 30, e27: 31, ew: 32, ct: 33, cw: 34, fac: 35, piso: 36, aplu: 37, corr: 38,
     neu: 39, may: 40, tc8v: 41, tc8: 42, plf: 43, plc: 44, tot: 45, sic: 46, dif: 47, cump: 48,
-    r18: 49, rmm: 50, rman: 51, rres: 52, desde: 53, hech: 54, pide: 55,
+    r18: 49, rmm: 50, rman: 51, rres: 52, desde: 53, hech: 54, pide: 55, equb: 56, equ: 57,
   }
   const L = Object.fromEntries(Object.entries(C).map(([k, v]) => [k, col(v)])) as Record<keyof typeof C, string>
   const f27 = (sup.ipc_2027 ?? 0.035) + 1
@@ -359,8 +367,8 @@ export async function exportarPresupuestoExcel(p: ParametrosExcelPpto, camiones:
       set('rit', Number(b.ritmo), '0.00', true)
       set('ori', b.ritmo_fuente)
     }
-    set('d0', F(`DATE(2027,1,1)-${ref.fecha}`), '0')
-    set('d1', F(`DATE(2027,12,31)-${ref.fecha}`), '0')
+    set('d0', F(`DATE(2027,1,1)-INT(${ref.fecha})`), '0')
+    set('d1', F(`DATE(2027,12,31)-INT(${ref.fecha})`), '0')
     set('hi', F(`${L.hor}${r}+${L.rit}${r}*(${L.d0}${r}-1)`), '#,##0')
     set('hf', F(`${L.hor}${r}+${L.rit}${r}*${L.d1}${r}`), '#,##0')
     const ok = `AND(${L.kit}${r}<>"",${L.rit}${r}>=0.1)`
@@ -385,7 +393,8 @@ export async function exportarPresupuestoExcel(p: ParametrosExcelPpto, camiones:
     set('piso', F(`IF(AND(${L.kit}${r}<>"",${L.e27}${r}<6),${ref.cmad}*${L.ct}${r}*0.5,0)`), CLP)
     if (T) {
       const plu26 = `SUMIFS(${cr('L')},${cr('A')},${P},${cr('O')},"Sí",${cr('B')},">="&DATE(2026,1,1),${cr('M')},"Sí")*365/(INT(${ref.fin})-DATE(2026,1,1)+1)`
-      set('aplu', F(`MAX(${plu26}-${sumaCompras(P, 'A2', ref.i24, `,${cr('O')},"Sí"`)}/2,0)*${ref.f27}`), CLP)
+      set('aplu', F(`MAX(${plu26}-${sumaCompras(P, 'A6', ref.i24, `,${cr('O')},"Sí"`)}/2,0)*${ref.f27}`), CLP)
+      set('equb', F(`${sumaCompras(P, 'A6', ref.i24)}/2`), CLP)
       set('desde', fechaExcel(te?.desde) ?? new Date(2025, 0, 1), 'dd-mm-yyyy', true)
       set('hech', F(`COUNTIFS('Preventivas registradas'!$A$2:$A$${regN},${P},'Preventivas registradas'!$B$2:$B$${regN},">="&${L.desde}${r},'Preventivas registradas'!$B$2:$B$${regN},"<="&${ref.fin})`), '0')
       set('pide', F(`IF(${L.kit}${r}="","",MAX(${L.rit}${r},0)*365.25/${L.int}${r})`), '0.0')
@@ -393,8 +402,10 @@ export async function exportarPresupuestoExcel(p: ParametrosExcelPpto, camiones:
     } else {
       set('aplu', Math.round(ajustePluma), CLP, true)
       set('cump', Number(b.cumplimiento_pauta ?? 1), '0%', true)
+      set('equb', Number(b.equipamiento_base ?? 0), CLP, true)
     }
-    set('corr', F(`IF(${L.kit}${r}<>"",MAX(${L.cbase}${r}*${L.fac}${r}*(1-${ref.redu}*(1-${L.cump}${r})),${L.piso}${r}),${L.cbase}${r})*${ref.f27}+${L.aplu}${r}`), CLP)
+    set('corr', F(`IF(${L.kit}${r}<>"",MAX(${L.cbase}${r}*${L.fac}${r}*(1-${ref.redu}*(1-${L.cump}${r})),${L.piso}${r}),${L.cbase}${r})*${ref.f27}`), CLP)
+    set('equ', F(`${L.equb}${r}*${ref.f27}+${L.aplu}${r}`), CLP)
     set('neu', F(`Neumáticos!L${r}`), CLP)
     if (T) set('may', F(`SUMIFS(Mayores!$H$2:$H$${mayN},Mayores!$A$2:$A$${mayN},${P})`), CLP)
     else set('may', Number(c.mayores), CLP, true)
@@ -402,8 +413,8 @@ export async function exportarPresupuestoExcel(p: ParametrosExcelPpto, camiones:
     set('tc8', F(`IF(AND(${L.tc8v}${r}<>"",YEAR(${L.tc8v}${r})<=2027),${ref.tc8}*${ref.f27},0)`), CLP)
     set('plf', certPluma, '0', true)
     set('plc', F(`${L.plf}${r}*${ref.pluma}*${ref.f27}`), CLP)
-    set('tot', F(`${L.prev}${r}+${L.corr}${r}+${L.neu}${r}+${L.may}${r}+${L.tc8}${r}+${L.plc}${r}`), CLP)
-    set('sic', Math.round(Number(c.preventivo) + Number(c.correctivo) + Number(c.neumaticos) + Number(c.mayores) + certTotal), CLP)
+    set('tot', F(`${L.prev}${r}+${L.corr}${r}+${L.equ}${r}+${L.neu}${r}+${L.may}${r}+${L.tc8}${r}+${L.plc}${r}`), CLP)
+    set('sic', Math.round(Number(c.preventivo) + Number(c.correctivo) + Number(c.equipamiento ?? 0) + Number(c.neumaticos) + Number(c.mayores) + certTotal), CLP)
     set('dif', F(`${L.tot}${r}-${L.sic}${r}`), CLP)
     wq.getCell(r, C.tot).font = { bold: true }
   })
@@ -411,11 +422,47 @@ export async function exportarPresupuestoExcel(p: ParametrosExcelPpto, camiones:
   const tr = n + 1
   wq.getCell(tr, 1).value = 'TOTAL (respeta el filtro)'
   wq.getRow(tr).font = { bold: true }
-  for (const k of ['r23', 'r24', 'r25', 'r26', 'prev', 'corr', 'neu', 'may', 'tc8', 'plc', 'tot', 'sic', 'dif'] as const) {
+  for (const k of ['r23', 'r24', 'r25', 'r26', 'prev', 'corr', 'equ', 'neu', 'may', 'tc8', 'plc', 'tot', 'sic', 'dif'] as const) {
     const cell = wq.getCell(tr, C[k]); cell.value = { formula: `SUBTOTAL(9,${L[k]}2:${L[k]}${n})` }; cell.numFmt = CLP
   }
   wq.views = [{ state: 'frozen', xSplit: 2, ySplit: 1 }]
-  wq.autoFilter = { from: 'A1', to: `${col(C.pide)}1` }
+  wq.autoFilter = { from: 'A1', to: `${col(C.equ)}1` }
+
+  // ── Por sistema (MIG710) ───────────────────────────────────────────────────
+  if (T) {
+    const SIS_CAMION = ['Motor', 'Transmisión y embrague', 'Suspensión, dirección y ejes', 'Frenos y aire', 'Eléctrico', 'Aire acondicionado',
+      'Cabina y carrocería', 'Diagnóstico', 'Traslado por falla', 'Otros repuestos', 'Servicio / reparación sin detalle']
+    const SIS_EQUIPO = ['Aljibe combustible', 'Aljibe agua', 'Pluma / grúa', 'Compresor auxiliar']
+    const wsis = wb.addWorksheet('Por sistema')
+    const cab = ['Patente', 'Grupo', ...SIS_CAMION.map((s) => `Camión: ${s}`), 'Sin clasificar (sin factura)', 'Mantención preventiva sin clasificar (se resta con pauta)',
+      'TOTAL CORRECTIVO CAMIÓN (= base Equipos)', ...SIS_EQUIPO.map((s) => `Equipamiento: ${s}`), 'TOTAL EQUIPAMIENTO (= base Equipos)']
+    wsis.getRow(1).values = cab
+    encabezado(wsis)
+    wsis.getColumn(1).width = 11; wsis.getColumn(2).width = 22
+    for (let i = 3; i <= cab.length; i++) wsis.getColumn(i).width = 12
+    const s24 = (pat: string, linea: string, crit: string) => `SUMIFS(${cr('L')},${cr('A')},${pat},${cr('D')},"${linea}",${cr('B')},">="&${ref.i24},${cr('M')},"Sí"${crit})/2`
+    ordenados.forEach((_, i) => {
+      const r = i + 2
+      const P = `$A${r}`
+      wsis.getCell(r, 1).value = { formula: `Equipos!${L.pat}${r}` }
+      wsis.getCell(r, 2).value = { formula: `Equipos!${L.grupo}${r}` }
+      let c0 = 3
+      SIS_CAMION.forEach((s) => { const c = wsis.getCell(r, c0++); c.value = { formula: s24(P, 'A2', `,${cr('P')},"${s}"`) }; c.numFmt = CLP })
+      const cSin = wsis.getCell(r, c0++); cSin.value = { formula: `${s24(P, 'A2', `,${cr('P')},""`)}-${col(c0)}${r}` }; cSin.numFmt = CLP
+      const cPrev = wsis.getCell(r, c0++); cPrev.value = { formula: `IF(Equipos!${L.kit}${r}<>"",${s24(P, 'A2', `,${cr('P')},"",${cr('E')},"${CAT_PREV}"`)},0)` }; cPrev.numFmt = CLP
+      const cTot = wsis.getCell(r, c0++); cTot.value = { formula: `SUM(${col(3)}${r}:${col(c0 - 3)}${r})` }; cTot.numFmt = CLP; cTot.font = { bold: true }
+      const e0 = c0
+      SIS_EQUIPO.forEach((s) => { const c = wsis.getCell(r, c0++); c.value = { formula: s24(P, 'A6', `,${cr('P')},"${s}"`) }; c.numFmt = CLP })
+      const eTot = wsis.getCell(r, c0++); eTot.value = { formula: `SUM(${col(e0)}${r}:${col(c0 - 2)}${r})` }; eTot.numFmt = CLP; eTot.font = { bold: true }
+    })
+    wsis.getCell(tr, 1).value = 'TOTAL (respeta el filtro)'
+    wsis.getRow(tr).font = { bold: true }
+    for (let c = 3; c <= cab.length; c++) {
+      const cell = wsis.getCell(tr, c); cell.value = { formula: `SUBTOTAL(9,${col(c)}2:${col(c)}${n})` }; cell.numFmt = CLP
+    }
+    wsis.views = [{ state: 'frozen', xSplit: 2, ySplit: 1 }]
+    wsis.autoFilter = { from: 'A1', to: `${col(cab.length)}1` }
+  }
 
   // ── Neumáticos ────────────────────────────────────────────────────────────
   const wn = wb.addWorksheet('Neumáticos')
@@ -459,7 +506,7 @@ export async function exportarPresupuestoExcel(p: ParametrosExcelPpto, camiones:
   ;[8, 42, 24, 16, 16, 16, 16, 12, 16, 16].forEach((w, i) => { wr.getColumn(i + 1).width = w })
   const sumaEq = (k: keyof typeof C) => `SUM(Equipos!${L[k]}2:${L[k]}${n})`
   const formulaEquipos: Record<string, string> = {
-    A1: sumaEq('prev'), A2: sumaEq('corr'), A3: sumaEq('neu'), A4: sumaEq('may'), B4: `${sumaEq('tc8')}+${sumaEq('plc')}`,
+    A1: sumaEq('prev'), A2: sumaEq('corr'), A6: sumaEq('equ'), A3: sumaEq('neu'), A4: sumaEq('may'), B4: `${sumaEq('tc8')}+${sumaEq('plc')}`,
   }
   const filasLinea = p.lineas
   const rCont = filasLinea.findIndex((l) => l.codigo === 'E3') + 2
