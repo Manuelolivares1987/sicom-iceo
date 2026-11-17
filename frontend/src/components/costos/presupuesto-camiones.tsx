@@ -6,7 +6,8 @@ import { ChevronDown, ChevronRight, Download } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { fmtClp, fmtNum } from '@/lib/costos-operacion'
-import { getCamionesDetallePpto, getParametrosExcelPpto, type CamionDetallePpto } from '@/lib/services/presupuesto'
+import { getCamionesDetallePpto, getKitItemsPpto, getParametrosExcelPpto, type CamionDetallePpto } from '@/lib/services/presupuesto'
+import { ComposicionEquipo } from '@/components/costos/presupuesto-composicion'
 
 // ============================================================================
 // Presupuesto por camión (MIG702): primero los contratos de servicio de Pillado,
@@ -46,8 +47,10 @@ export function PresupuestoPorCamion() {
     if (!data) return
     setBajando(true); setErrorExcel(null)
     try {
-      const [{ exportarPresupuestoExcel }, parametros] = await Promise.all([import('@/lib/export/presupuesto-excel'), getParametrosExcelPpto()])
-      const blob = await exportarPresupuestoExcel(parametros, data)
+      const [{ exportarPresupuestoExcel }, parametros, kitItems] = await Promise.all([
+        import('@/lib/export/presupuesto-excel'), getParametrosExcelPpto(), getKitItemsPpto(),
+      ])
+      const blob = await exportarPresupuestoExcel(parametros, data, { kitItems })
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
@@ -121,7 +124,7 @@ export function PresupuestoPorCamion() {
               <th className="px-3 py-2 text-left">Equipo</th>
               <th className={th}>2023</th><th className={th}>2024</th><th className={th}>2025</th><th className={th}>2026 a hoy</th>
               <th className="border-l bg-pillado-green-50 px-2 py-2 text-right text-pillado-green-800">Proyectado 2027</th>
-              <th className={th}>Preventivo</th><th className={th}>Correctivo</th><th className={th}>Neumáticos</th><th className={th}>Mayores</th><th className={th} title="TC8 y certificación de pluma">Certif.</th>
+              <th className={th}>Preventivo</th><th className={th}>Correctivo</th><th className={th}>Neumáticos</th><th className={th}>Overhaul / mayores</th><th className={th} title="TC8 y certificación de pluma">TC8 y cert.</th>
               <th className="px-3 py-2 text-left">Base del proyectado</th>
             </tr>
           </thead>
@@ -161,7 +164,7 @@ export function PresupuestoPorCamion() {
                           </tr>
                           {abierto === c.patente && (
                             <tr className="border-t bg-pillado-green-50/40">
-                              <td colSpan={12} className="px-9 py-3"><DetalleBase c={c} /></td>
+                              <td colSpan={12} className="space-y-4 px-9 py-3"><DetalleBase c={c} /><ComposicionEquipo patente={c.patente} /></td>
                             </tr>
                           )}
                         </Fragment>
@@ -226,6 +229,9 @@ function DetalleBase({ c }: { c: Camion }) {
           <p>Ajuste por edad: ×{b.factor_edad.toLocaleString('es-CL')} (edad equivalente {b.edad_equivalente?.toLocaleString('es-CL')} años: la mayor entre años de fabricación y horas ÷ 2.500).</p>
         ) : (
           <p>Sin ajuste por edad: la curva se midió en camiones pesados.</p>
+        )}
+        {b.con_pauta && b.cumplimiento_pauta != null && b.cumplimiento_pauta < 1 && (b.reduccion_correctivo ?? 0) > 0 && (
+          <p>Cumplió el {Math.round(b.cumplimiento_pauta * 100)} % de la pauta en 2025-2026 ({(b.preventivas_hechas_anio ?? 0).toLocaleString('es-CL', { maximumFractionDigits: 1 })} preventivas al año): si en 2027 se cumple, el correctivo baja un {Math.round((b.reduccion_correctivo ?? 0) * (1 - b.cumplimiento_pauta) * 100)} %.</p>
         )}
         {b.piso_correctivo != null && <p>Piso de camión joven: al menos {fmtClp(b.piso_correctivo)}.</p>}
         {(b.partidas_correctivo ?? []).map((x, i) => <p key={i}>+ {x.descripcion}: {fmtClp(x.monto)} (proveedores de la grúa, 2026 llevado a 12 meses, sobre lo que ya trae el promedio).</p>)}

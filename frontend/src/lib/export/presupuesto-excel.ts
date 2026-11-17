@@ -10,7 +10,7 @@
 // ============================================================================
 
 import ExcelJS from 'exceljs'
-import type { CamionDetallePpto, ParametrosExcelPpto } from '@/lib/services/presupuesto'
+import type { CamionDetallePpto, KitItemPpto, ParametrosExcelPpto } from '@/lib/services/presupuesto'
 
 const CLP = '"$"#,##0'
 const VERDE = 'FF15803D'
@@ -27,7 +27,7 @@ function encabezado(ws: ExcelJS.Worksheet, fila = 1) {
 const dato = (c: ExcelJS.Cell) => { c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: AMARILLO } } }
 const col = (n: number) => { let s = ''; let x = n; while (x > 0) { const m = (x - 1) % 26; s = String.fromCharCode(65 + m) + s; x = Math.floor((x - 1) / 26) } return s }
 
-export async function exportarPresupuestoExcel(p: ParametrosExcelPpto, camiones: CamionDetallePpto[]): Promise<Blob> {
+export async function exportarPresupuestoExcel(p: ParametrosExcelPpto, camiones: CamionDetallePpto[], extra?: { kitItems?: KitItemPpto[] }): Promise<Blob> {
   const wb = new ExcelJS.Workbook()
   wb.creator = 'SICOM-Pillado'
   wb.created = new Date()
@@ -42,12 +42,14 @@ export async function exportarPresupuestoExcel(p: ParametrosExcelPpto, camiones:
     '',
     'Celdas AMARILLAS: datos que puedes cambiar. Todo lo demás son fórmulas.',
     'Supuestos: IPC, piso de correctivo y neumáticos, umbral del servicio anual, costo del TC8 y de la certificación de pluma, curva de edad.',
-    'Kits: costo de cada nivel de pauta por modelo (kit completo y la parte de filtros y lubricantes, que es la que entra al preventivo).',
+    'Kits: costo de cada nivel de pauta por modelo, sumado desde «Kits detalle» (kit completo y la parte de filtros y lubricantes, que es la que entra al preventivo).',
+    'Kits detalle: cada ítem del kit con su cantidad, precio de referencia, precio real de Softland y PRECIO USADO (editable); la observación marca precios sin compra o en otra unidad (balde).',
+    'Preventivas hechas: por equipo, lo que pide la pauta, las visitas del presupuesto, las preventivas registradas (OS 2025-2026 + OT SICOM) y el gasto real en preventivo.',
     'Escalera: costo de filtros y lubricantes por nivel; si un modelo no tiene un nivel, toma el nivel anterior (el mayor absorbe a los menores).',
     'Equipos: una fila por equipo. Horas 2027 = horómetro + ritmo × días. Visitas por nivel: múltiplos de (intervalo × 2^n) que caen en 2027',
     '   (SL cada intervalo, SM1 cada 2, SM2 cada 4, SM3 cada 8, SM4 cada 16, SM5 cada 32, SM6 cada 64).',
     '   Servicio anual si el ritmo está bajo el umbral. Equipos sin pauta: su preventivo real de 24 meses.',
-    '   Correctivo = promedio real 24 meses × factor de edad (curva 2027 ÷ curva de la ventana medida, tope 1,5), con piso de camión joven; + ajuste de pluma.',
+    '   Correctivo = promedio real 24 meses × factor de edad (curva 2027 ÷ curva de la ventana medida, tope 1,5) × (1 − baja por cumplir la pauta × lo que faltaba cumplir), con piso de camión joven; + ajuste de pluma.',
     '   Neumáticos: hoja Neumáticos. TC8: si vence en 2027 o antes. Certificación de pluma: 1 = sí.',
     'Neumáticos: real por año, promedio de 36 meses y piso para camión con uso (ritmo ≥ 1 h/día y 2 o más años de edad equivalente).',
     'Resumen: total por línea; las líneas de equipos suman la hoja Equipos y el resto (sin patente, flota, estructura) va como dato.',
@@ -78,6 +80,7 @@ export async function exportarPresupuestoExcel(p: ParametrosExcelPpto, camiones:
     ['tc8', 'Costo de renovar un TC8', sup.costo_tc8 ?? 840000, CLP],
     ['pluma', 'Certificación anual de una pluma', sup.costo_cert_pluma ?? 550000, CLP],
     ['cont', 'Contingencia (sobre todo menos combustible)', sup.contingencia ?? 0.03, '0.0%'],
+    ['redu', 'Baja del correctivo si se cumple la pauta (× lo que faltaba cumplir)', sup.reduccion_correctivo_pauta ?? 0.2, '0%'],
   ]
   const ref: Record<string, string> = {}
   filasSup.forEach(([k, nombre, valor, fmt, calc], i) => {
@@ -100,22 +103,62 @@ export async function exportarPresupuestoExcel(p: ParametrosExcelPpto, camiones:
   const curvaRango = `Supuestos!$B$${curvaIni + 1}:$B$${curvaIni + curva.length}`
   const maxEdad = Math.max(...curva.map((x) => x.edad), 0)
 
-  // ── Kits ──────────────────────────────────────────────────────────────────
+  // ── Kits (suma de Kits detalle) ───────────────────────────────────────────
   const wk = wb.addWorksheet('Kits')
+  const wd = wb.addWorksheet('Kits detalle')
+  const items = extra?.kitItems ?? []
+  const itN = items.length + 1
   wk.columns = [
     { header: 'Grupo kit', key: 'g', width: 22 }, { header: 'Intervalo (h)', key: 'i', width: 12 },
     { header: 'Nivel', key: 'n', width: 10 }, { header: 'Costo kit completo', key: 'c', width: 18 },
     { header: 'Filtros y lubricantes (entra al preventivo)', key: 'fl', width: 22 },
   ]
   encabezado(wk)
-  p.kits.forEach((k) => {
-    const r = wk.addRow({ g: k.grupo_kit, i: p.intervalos[k.grupo_kit] ?? null, n: k.nivel, c: Number(k.costo), fl: Number(k.fl) })
+  p.kits.forEach((k, i) => {
+    const r = wk.addRow({ g: k.grupo_kit, i: p.intervalos[k.grupo_kit] ?? null, n: k.nivel })
+    const fila = i + 2
+    const rng = (c: string) => `'Kits detalle'!$${c}$2:$${c}$${itN}`
+    if (items.length) {
+      r.getCell('c').value = { formula: `SUMIFS(${rng('M')},${rng('A')},A${fila},${rng('B')},C${fila})` }
+      r.getCell('fl').value = { formula: `SUMIFS(${rng('M')},${rng('A')},A${fila},${rng('B')},C${fila},${rng('N')},"Sí")` }
+    } else {
+      r.getCell('c').value = Number(k.costo); r.getCell('fl').value = Number(k.fl)
+      dato(r.getCell('c')); dato(r.getCell('fl'))
+    }
     r.getCell('c').numFmt = CLP; r.getCell('fl').numFmt = CLP
-    dato(r.getCell('c')); dato(r.getCell('fl'))
   })
   wk.views = [{ state: 'frozen', ySplit: 1 }]
   wk.autoFilter = { from: 'A1', to: 'E1' }
   const kitN = p.kits.length + 1
+
+  // ── Kits detalle: cada ítem con su precio ─────────────────────────────────
+  wd.getRow(1).values = ['Grupo kit', 'Nivel', 'Ítem', 'Cantidad', 'Unidad', 'Código Softland', 'Última compra en Softland', 'Fecha última compra',
+    'Precio de referencia (por unidad del kit)', 'Precio Softland (por unidad de compra)', 'Hoy usa precio real', 'PRECIO USADO', 'Subtotal',
+    'Filtros y lubricantes', 'Observación']
+  encabezado(wd)
+  ;[18, 8, 38, 9, 7, 15, 36, 11, 14, 14, 9, 13, 13, 9, 46].forEach((w, i) => { wd.getColumn(i + 1).width = w })
+  items.forEach((it, i) => {
+    const r = i + 2
+    const ref = Number(it.precio_ref)
+    const soft = it.precio_softland == null ? null : Number(it.precio_softland)
+    const obs = soft == null
+      ? 'Sin compras en Softland en 18 meses: se usa la referencia.'
+      : !it.usa_precio_real && soft > ref * 2
+        ? 'Softland compra en otra unidad (balde, caja): su precio no es comparable por unidad del kit.'
+        : !it.usa_precio_real && soft < ref * 0.5
+          ? 'Precio Softland muy bajo frente a la referencia: revisar unidad o producto.'
+          : it.provisorio ? 'Ítem provisorio en la pauta.' : ''
+    const vals: ExcelJS.CellValue[] = [it.grupo_kit, it.nivel, it.item, Number(it.cantidad), it.unidad, it.cod_softland, it.descripcion_softland,
+      it.ultima_compra ? new Date(`${it.ultima_compra}T12:00:00`) : null, ref, soft, it.usa_precio_real ? 'Sí' : 'No',
+      it.usa_precio_real && soft != null ? soft : ref, { formula: `D${r}*L${r}` }, it.fil_lub ? 'Sí' : 'No', obs]
+    vals.forEach((v, j) => { wd.getCell(r, j + 1).value = v })
+    wd.getCell(r, 8).numFmt = 'dd-mm-yyyy'
+    ;[9, 10, 12, 13].forEach((c) => { wd.getCell(r, c).numFmt = CLP })
+    dato(wd.getCell(r, 4)); dato(wd.getCell(r, 12)); dato(wd.getCell(r, 14))
+    if (obs && !obs.startsWith('Ítem')) wd.getCell(r, 15).font = { color: { argb: 'FFB45309' } }
+  })
+  wd.views = [{ state: 'frozen', xSplit: 3, ySplit: 1 }]
+  wd.autoFilter = { from: 'A1', to: 'O1' }
 
   // ── Escalera (nivel efectivo con absorción) ───────────────────────────────
   const we = wb.addWorksheet('Escalera')
@@ -157,6 +200,7 @@ export async function exportarPresupuestoExcel(p: ParametrosExcelPpto, camiones:
     { h: 'NEUMÁTICOS 2027 (hoja Neumáticos)', w: 13 }, { h: 'MAYORES 2027 (overhaul y componentes)', w: 13 },
     { h: 'TC8 vence', w: 11 }, { h: 'TC8 2027', w: 11 }, { h: 'Certifica pluma (1/0)', w: 8 }, { h: 'Cert. pluma 2027', w: 11 },
     { h: 'TOTAL 2027', w: 14 }, { h: 'SICOM 2027', w: 14 }, { h: 'Diferencia', w: 11 },
+    { h: 'Cumplimiento de la pauta 2025-2026 (0 a 1)', w: 12 },
   ]
   wq.getRow(1).values = cols.map((c) => c.h)
   cols.forEach((c, i) => { wq.getColumn(i + 1).width = c.w })
@@ -166,7 +210,7 @@ export async function exportarPresupuestoExcel(p: ParametrosExcelPpto, camiones:
     grupo: 1, pat: 2, cod: 3, mod: 4, anio: 5, faena: 6, r23: 7, r24: 8, r25: 9, r26: 10,
     kit: 11, int: 12, hor: 13, rit: 14, ori: 15, d0: 16, d1: 17, hi: 18, hf: 19,
     v0: 20, anual: 27, pbase: 28, prev: 29, cbase: 30, e27: 31, ew: 32, ct: 33, cw: 34, fac: 35, piso: 36, aplu: 37, corr: 38,
-    neu: 39, may: 40, tc8v: 41, tc8: 42, plf: 43, plc: 44, tot: 45, sic: 46, dif: 47,
+    neu: 39, may: 40, tc8v: 41, tc8: 42, plf: 43, plc: 44, tot: 45, sic: 46, dif: 47, cump: 48,
   }
   const L = Object.fromEntries(Object.entries(C).map(([k, v]) => [k, col(v)])) as Record<keyof typeof C, string>
   const f27 = (sup.ipc_2027 ?? 0.035) + 1
@@ -214,7 +258,8 @@ export async function exportarPresupuestoExcel(p: ParametrosExcelPpto, camiones:
     set('fac', F(`MIN(${L.ct}${r}/${L.cw}${r},1.5)`), '0.00')
     set('piso', F(`IF(AND(${L.kit}${r}<>"",${L.e27}${r}<6),${ref.cmad}*${L.ct}${r}*0.5,0)`), CLP)
     set('aplu', Math.round(ajustePluma), CLP, true)
-    set('corr', F(`IF(${L.kit}${r}<>"",MAX(${L.cbase}${r}*${L.fac}${r},${L.piso}${r}),${L.cbase}${r})*${ref.f27}+${L.aplu}${r}`), CLP)
+    set('cump', Number(b.cumplimiento_pauta ?? 1), '0%', true)
+    set('corr', F(`IF(${L.kit}${r}<>"",MAX(${L.cbase}${r}*${L.fac}${r}*(1-${ref.redu}*(1-${L.cump}${r})),${L.piso}${r}),${L.cbase}${r})*${ref.f27}+${L.aplu}${r}`), CLP)
     set('neu', F(`Neumáticos!L${r}`), CLP)
     set('may', Number(c.mayores), CLP, true)
     set('tc8v', c.tc8_vence ? new Date(`${c.tc8_vence}T12:00:00`) : null, 'dd-mm-yyyy', true)
@@ -234,7 +279,7 @@ export async function exportarPresupuestoExcel(p: ParametrosExcelPpto, camiones:
     const cell = wq.getCell(tr, C[k]); cell.value = { formula: `SUBTOTAL(9,${L[k]}2:${L[k]}${n})` }; cell.numFmt = CLP
   }
   wq.views = [{ state: 'frozen', xSplit: 2, ySplit: 1 }]
-  wq.autoFilter = { from: 'A1', to: `${col(C.dif)}1` }
+  wq.autoFilter = { from: 'A1', to: `${col(C.cump)}1` }
 
   // ── Neumáticos ────────────────────────────────────────────────────────────
   const wn = wb.addWorksheet('Neumáticos')
@@ -305,6 +350,41 @@ export async function exportarPresupuestoExcel(p: ParametrosExcelPpto, camiones:
     const cell = wr.getCell(`${cl}${rt}`); cell.value = { formula: `SUM(${cl}2:${cl}${rt - 1})` }; cell.numFmt = CLP
   })
   wr.views = [{ state: 'frozen', ySplit: 1 }]
+
+  // ── Preventivas hechas: pauta contra lo registrado y lo gastado ───────────
+  const wh = wb.addWorksheet('Preventivas hechas')
+  wh.getRow(1).values = ['Patente', 'Grupo', 'Grupo kit', 'Ritmo (h/día)', 'Intervalo (h)', 'La pauta pide al año', 'Visitas PPTO 2027',
+    'Preventivas registradas 2025', 'Preventivas registradas 2026 a la fecha', '% hecho 2025',
+    'Real preventivo 2023', 'Real preventivo 2024', 'Real preventivo 2025', 'Real preventivo 2026 a la fecha', 'PPTO preventivo 2027', 'Real total mantención 2025']
+  encabezado(wh)
+  ;[11, 22, 18, 9, 9, 10, 10, 12, 12, 9, 13, 13, 13, 13, 13, 14].forEach((w, i) => { wh.getColumn(i + 1).width = w })
+  ordenados.forEach((c, i) => {
+    const r = i + 2
+    const ph: Record<string, number> = c.preventivas_hechas ?? {}
+    const rp: Record<string, number> = c.real_preventivo ?? {}
+    const visitas = [...NIVELES.map((_, j) => `Equipos!${col(C.v0 + j)}${r}`), `Equipos!${L.anual}${r}`].join('+')
+    const vals: ExcelJS.CellValue[] = [
+      { formula: `Equipos!${L.pat}${r}` }, { formula: `Equipos!${L.grupo}${r}` }, { formula: `IF(Equipos!${L.kit}${r}="","",Equipos!${L.kit}${r})` },
+      { formula: `Equipos!${L.rit}${r}` }, { formula: `Equipos!${L.int}${r}` },
+      { formula: `IF(E${r}="","",D${r}*365/E${r})` }, { formula: visitas },
+      Number(ph['2025'] ?? 0), Number(ph['2026'] ?? 0), { formula: `IF(OR(F${r}="",F${r}=0),"",H${r}/F${r})` },
+      Number(rp['2023'] ?? 0), Number(rp['2024'] ?? 0), Number(rp['2025'] ?? 0), Number(rp['2026'] ?? 0),
+      { formula: `Equipos!${L.prev}${r}` }, { formula: `Equipos!${L.r25}${r}` },
+    ]
+    vals.forEach((v, j) => { wh.getCell(r, j + 1).value = v })
+    wh.getCell(r, 4).numFmt = '0.0'; wh.getCell(r, 6).numFmt = '0.0'; wh.getCell(r, 7).numFmt = '0'
+    wh.getCell(r, 10).numFmt = '0%'
+    ;[11, 12, 13, 14, 15, 16].forEach((cc) => { wh.getCell(r, cc).numFmt = CLP })
+  })
+  wh.getCell(tr, 1).value = 'TOTAL (respeta el filtro)'
+  wh.getRow(tr).font = { bold: true }
+  ;['F', 'G', 'H', 'I', 'K', 'L', 'M', 'N', 'O', 'P'].forEach((cl) => {
+    const cell = wh.getCell(`${cl}${tr}`); cell.value = { formula: `SUBTOTAL(9,${cl}2:${cl}${n})` }
+    cell.numFmt = ['F', 'G', 'H', 'I'].includes(cl) ? '0' : CLP
+  })
+  wh.getCell(`J${tr}`).value = { formula: `IF(F${tr}=0,"",H${tr}/F${tr})` }; wh.getCell(`J${tr}`).numFmt = '0%'
+  wh.views = [{ state: 'frozen', xSplit: 1, ySplit: 1 }]
+  wh.autoFilter = { from: 'A1', to: 'P1' }
 
   const buf = await wb.xlsx.writeBuffer()
   return new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
