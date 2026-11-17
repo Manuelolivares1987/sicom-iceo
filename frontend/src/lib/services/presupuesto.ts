@@ -131,6 +131,45 @@ export const getCamionesPpto = () => llamar<CamionPpto[]>('rpc_ppto_camiones')
 export const getVisitasPpto = (anio: number) => llamar<VisitaPpto[]>('rpc_ppto_visitas', { p_anio: anio })
 export const getDetalleLineaPpto = (linea: string) => llamar<DetalleLineaPpto>('rpc_ppto_detalle_linea', { p_linea: linea })
 export const getComercialPpto = () => llamar<ComercialPpto>('rpc_ppto_comercial')
+
+// Por camión agrupado (MIG702): familia, contrato de servicio y base del proyectado 2027.
+export type VisitaResumenPpto = { tipo: 'pauta' | 'componente' | 'anual'; nivel: string; n: number; costo: number; kit: number }
+export type CamionDetallePpto = {
+  patente: string
+  codigo: string | null
+  nombre: string | null
+  modelo: string | null
+  anio_fab: number | null
+  familia: string
+  contrato: string | null
+  faena: string | null
+  estado_comercial: string | null
+  real: Record<'2023' | '2024' | '2025' | '2026', number>
+  preventivo: number
+  correctivo: number
+  neumaticos: number
+  mayores: number
+  total_2028: number
+  total_2029: number
+  base: {
+    con_pauta: boolean
+    grupo_kit: string | null
+    intervalo_horas: number | null
+    horometro: number
+    ritmo: number
+    ritmo_fuente: string | null
+    horas_2027: number
+    visitas: VisitaResumenPpto[]
+    correctivo_base: number
+    edad_equivalente: number | null
+    factor_edad: number | null
+    piso_correctivo: number | null
+    neumatico_base: number
+    neumatico_piso: number | null
+    mayores: { descripcion: string; monto: number }[]
+  }
+}
+export const getCamionesDetallePpto = () => llamar<CamionDetallePpto[]>('rpc_ppto_camiones_detalle')
 export const getRealVsPpto =(anio: number) => llamar<RealVsPpto>('rpc_ppto_real_vs', { p_anio: anio })
 
 export const recalcularPpto = () => llamar('rpc_ppto_recalcular')
