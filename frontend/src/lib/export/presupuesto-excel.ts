@@ -49,7 +49,7 @@ export async function exportarPresupuestoExcel(p: ParametrosExcelPpto, camiones:
     'Equipos: una fila por equipo. Horas 2027 = horómetro + ritmo × días. Visitas por nivel: múltiplos de (intervalo × 2^n) que caen en 2027',
     '   (SL cada intervalo, SM1 cada 2, SM2 cada 4, SM3 cada 8, SM4 cada 16, SM5 cada 32, SM6 cada 64).',
     '   Servicio anual si el ritmo está bajo el umbral. Equipos sin pauta: su preventivo real de 24 meses.',
-    '   Correctivo = promedio real 24 meses × factor de edad (curva 2027 ÷ curva de la ventana medida, tope 1,5), con piso de camión joven; + ajuste de pluma.',
+    '   Correctivo = promedio real 24 meses × factor de edad (curva 2027 ÷ curva de la ventana medida, tope 1,5) × (1 − baja por cumplir la pauta × lo que faltaba cumplir), con piso de camión joven; + ajuste de pluma.',
     '   Neumáticos: hoja Neumáticos. TC8: si vence en 2027 o antes. Certificación de pluma: 1 = sí.',
     'Neumáticos: real por año, promedio de 36 meses y piso para camión con uso (ritmo ≥ 1 h/día y 2 o más años de edad equivalente).',
     'Resumen: total por línea; las líneas de equipos suman la hoja Equipos y el resto (sin patente, flota, estructura) va como dato.',
@@ -80,6 +80,7 @@ export async function exportarPresupuestoExcel(p: ParametrosExcelPpto, camiones:
     ['tc8', 'Costo de renovar un TC8', sup.costo_tc8 ?? 840000, CLP],
     ['pluma', 'Certificación anual de una pluma', sup.costo_cert_pluma ?? 550000, CLP],
     ['cont', 'Contingencia (sobre todo menos combustible)', sup.contingencia ?? 0.03, '0.0%'],
+    ['redu', 'Baja del correctivo si se cumple la pauta (× lo que faltaba cumplir)', sup.reduccion_correctivo_pauta ?? 0.2, '0%'],
   ]
   const ref: Record<string, string> = {}
   filasSup.forEach(([k, nombre, valor, fmt, calc], i) => {
@@ -199,6 +200,7 @@ export async function exportarPresupuestoExcel(p: ParametrosExcelPpto, camiones:
     { h: 'NEUMÁTICOS 2027 (hoja Neumáticos)', w: 13 }, { h: 'MAYORES 2027 (overhaul y componentes)', w: 13 },
     { h: 'TC8 vence', w: 11 }, { h: 'TC8 2027', w: 11 }, { h: 'Certifica pluma (1/0)', w: 8 }, { h: 'Cert. pluma 2027', w: 11 },
     { h: 'TOTAL 2027', w: 14 }, { h: 'SICOM 2027', w: 14 }, { h: 'Diferencia', w: 11 },
+    { h: 'Cumplimiento de la pauta 2025-2026 (0 a 1)', w: 12 },
   ]
   wq.getRow(1).values = cols.map((c) => c.h)
   cols.forEach((c, i) => { wq.getColumn(i + 1).width = c.w })
@@ -208,7 +210,7 @@ export async function exportarPresupuestoExcel(p: ParametrosExcelPpto, camiones:
     grupo: 1, pat: 2, cod: 3, mod: 4, anio: 5, faena: 6, r23: 7, r24: 8, r25: 9, r26: 10,
     kit: 11, int: 12, hor: 13, rit: 14, ori: 15, d0: 16, d1: 17, hi: 18, hf: 19,
     v0: 20, anual: 27, pbase: 28, prev: 29, cbase: 30, e27: 31, ew: 32, ct: 33, cw: 34, fac: 35, piso: 36, aplu: 37, corr: 38,
-    neu: 39, may: 40, tc8v: 41, tc8: 42, plf: 43, plc: 44, tot: 45, sic: 46, dif: 47,
+    neu: 39, may: 40, tc8v: 41, tc8: 42, plf: 43, plc: 44, tot: 45, sic: 46, dif: 47, cump: 48,
   }
   const L = Object.fromEntries(Object.entries(C).map(([k, v]) => [k, col(v)])) as Record<keyof typeof C, string>
   const f27 = (sup.ipc_2027 ?? 0.035) + 1
@@ -256,7 +258,8 @@ export async function exportarPresupuestoExcel(p: ParametrosExcelPpto, camiones:
     set('fac', F(`MIN(${L.ct}${r}/${L.cw}${r},1.5)`), '0.00')
     set('piso', F(`IF(AND(${L.kit}${r}<>"",${L.e27}${r}<6),${ref.cmad}*${L.ct}${r}*0.5,0)`), CLP)
     set('aplu', Math.round(ajustePluma), CLP, true)
-    set('corr', F(`IF(${L.kit}${r}<>"",MAX(${L.cbase}${r}*${L.fac}${r},${L.piso}${r}),${L.cbase}${r})*${ref.f27}+${L.aplu}${r}`), CLP)
+    set('cump', Number(b.cumplimiento_pauta ?? 1), '0%', true)
+    set('corr', F(`IF(${L.kit}${r}<>"",MAX(${L.cbase}${r}*${L.fac}${r}*(1-${ref.redu}*(1-${L.cump}${r})),${L.piso}${r}),${L.cbase}${r})*${ref.f27}+${L.aplu}${r}`), CLP)
     set('neu', F(`Neumáticos!L${r}`), CLP)
     set('may', Number(c.mayores), CLP, true)
     set('tc8v', c.tc8_vence ? new Date(`${c.tc8_vence}T12:00:00`) : null, 'dd-mm-yyyy', true)
@@ -276,7 +279,7 @@ export async function exportarPresupuestoExcel(p: ParametrosExcelPpto, camiones:
     const cell = wq.getCell(tr, C[k]); cell.value = { formula: `SUBTOTAL(9,${L[k]}2:${L[k]}${n})` }; cell.numFmt = CLP
   }
   wq.views = [{ state: 'frozen', xSplit: 2, ySplit: 1 }]
-  wq.autoFilter = { from: 'A1', to: `${col(C.dif)}1` }
+  wq.autoFilter = { from: 'A1', to: `${col(C.cump)}1` }
 
   // ── Neumáticos ────────────────────────────────────────────────────────────
   const wn = wb.addWorksheet('Neumáticos')

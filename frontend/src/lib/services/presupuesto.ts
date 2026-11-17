@@ -172,6 +172,9 @@ export type CamionDetallePpto = {
     horas_2027: number
     visitas: VisitaResumenPpto[]
     correctivo_base: number
+    cumplimiento_pauta?: number
+    preventivas_hechas_anio?: number
+    reduccion_correctivo?: number
     edad_equivalente: number | null
     factor_edad: number | null
     piso_correctivo: number | null

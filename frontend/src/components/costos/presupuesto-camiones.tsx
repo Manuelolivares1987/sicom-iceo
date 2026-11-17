@@ -230,6 +230,9 @@ function DetalleBase({ c }: { c: Camion }) {
         ) : (
           <p>Sin ajuste por edad: la curva se midió en camiones pesados.</p>
         )}
+        {b.con_pauta && b.cumplimiento_pauta != null && b.cumplimiento_pauta < 1 && (b.reduccion_correctivo ?? 0) > 0 && (
+          <p>Cumplió el {Math.round(b.cumplimiento_pauta * 100)} % de la pauta en 2025-2026 ({(b.preventivas_hechas_anio ?? 0).toLocaleString('es-CL', { maximumFractionDigits: 1 })} preventivas al año): si en 2027 se cumple, el correctivo baja un {Math.round((b.reduccion_correctivo ?? 0) * (1 - b.cumplimiento_pauta) * 100)} %.</p>
+        )}
         {b.piso_correctivo != null && <p>Piso de camión joven: al menos {fmtClp(b.piso_correctivo)}.</p>}
         {(b.partidas_correctivo ?? []).map((x, i) => <p key={i}>+ {x.descripcion}: {fmtClp(x.monto)} (proveedores de la grúa, 2026 llevado a 12 meses, sobre lo que ya trae el promedio).</p>)}
         <p className="text-gray-500">Más IPC 2027.</p>
