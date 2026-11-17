@@ -55,6 +55,8 @@ export async function exportarPresupuestoExcel(p: ParametrosExcelPpto, camiones:
     '   Pauta (aceites, filtros, servicio de mantención) → A1 preventivo, NO al correctivo (ya la compra el kit) · Correctivo camión por sistema → A2 · Equipamiento (aljibe, pluma, compresor) → A6 por patente',
     '   Neumáticos → A3 · Certificación → B2 · No es mantención: lavado → C7, insumos de taller → C1, tecnología → B3, accesorios → C8, resto → C6. «Sin detalle» = la factura no dice qué se hizo: queda como correctivo camión.',
     '   Columnas Sistema, Qué dice la factura, Cómo se clasificó y Línea original de la hoja Compras muestran cada decisión. La hoja «Por sistema» suma el correctivo y el equipamiento de cada equipo por sistema.',
+    'Hoja «Cómo afecta cada ajuste»: qué es la edad equivalente, la curva, el factor de edad, el piso y el ajuste de pluma, y cuánto sube o baja cada uno el correctivo de cada equipo, en pesos.',
+    'Hoja «Otros gastos por camión»: lavado, autopistas, seguros y permisos, GPS, certificaciones, combustible, etc. cargados a cada patente (promedio anual de 24 meses).',
     '   Neumáticos base = compras A3 de 36 meses ÷ 3. Preventivo sin pauta = compras A1 de 24 meses ÷ 2. Real por año = suma de compras A* del año (pesos de cada año).',
     '   Ritmo = manual si existe; si no, el mayor entre promedio 18 meses y el mejor mes de la hoja «Horas GPS» (máx. 14 h/día); si no hay GPS, el de respaldo.',
     '   Cumplimiento de la pauta = preventivas de la hoja «Preventivas registradas» ÷ años ÷ las que pide la pauta (ritmo × 365 ÷ intervalo).',
@@ -462,6 +464,130 @@ export async function exportarPresupuestoExcel(p: ParametrosExcelPpto, camiones:
     }
     wsis.views = [{ state: 'frozen', xSplit: 2, ySplit: 1 }]
     wsis.autoFilter = { from: 'A1', to: `${col(cab.length)}1` }
+  }
+
+  // ── Cómo afecta cada ajuste (efecto en pesos, equipo por equipo) ──────────
+  {
+    const wa = wb.addWorksheet('Cómo afecta cada ajuste')
+    const def: [string, string, string, string][] = [
+      ['Correctivo camión base 24m', 'Lo que el equipo gastó en correctivo del camión en los últimos 24 meses cerrados, en pesos 2026, ÷ 2 (= promedio de un año). Sale de la hoja Compras.', 'Es el punto de partida.', 'Si un equipo gastó $8 MM en 24 meses → base $4 MM al año.'],
+      ['Edad equivalente 2027', 'La mayor entre su edad por año de fabricación (2027 − año) y su edad por uso: horas que tendrá a mitad de 2027 ÷ horas de un año de edad (Supuestos).', 'No cambia el monto por sí sola: elige el punto de la curva de edad para 2027.', 'Camión 2022 con 20.000 h: por año = 5; por uso = 20.000 ÷ 2.500 = 8 → edad equivalente 8.'],
+      ['Edad de la ventana medida', 'La misma medida, pero a mitad del período en que se midió el gasto real (mediados de 2025), con las horas de un año atrás.', 'Elige el punto de la curva en que estaba el equipo cuando se midió su base.', 'El mismo camión a mediados de 2025: edad 3,5 por año, 7 por uso → 7.'],
+      ['Curva 2027 / Curva ventana', 'Factor de la curva de edad (tabla en Supuestos): cuánto correctivo gasta un camión de esa edad comparado con uno nuevo.', 'Se usan juntas para el factor de edad.', 'Curva de 8 años = 1,8; de 7 años = 1,6.'],
+      ['Factor de edad (tope 1,5)', 'Curva 2027 ÷ curva ventana. Cuánto más gastará en 2027 que cuando se midió, por envejecer. Tope 1,5 para no exagerar. Solo equipos con pauta (la curva se midió en camiones pesados); camionetas y equipos sin pauta = 1.', 'MULTIPLICA el correctivo base. > 1 lo sube, < 1 lo baja.', '1,8 ÷ 1,6 = 1,125 → correctivo +12,5 %.'],
+      ['Baja por cumplir la pauta', 'Supuesto «Baja del correctivo si se cumple la pauta» × lo que el equipo NO cumplió de su pauta en 2025-2026.', 'BAJA el correctivo: un equipo sin preventivas baja el 20 %, uno al día no baja.', 'Cumplió 30 % → baja 20 % × 70 % = 14 %.'],
+      ['Piso camión joven', 'Equipos con pauta y edad equivalente < 6: correctivo de un pesado maduro (Supuestos) × curva 2027 × 0,5.', 'Si el correctivo calculado queda bajo el piso, SUBE hasta el piso (un camión nuevo con poco historial no puede quedar en cero).', 'Maduro $5,5 MM × curva 0,5 × 0,5 = piso $1,375 MM.'],
+      ['IPC 2027', 'Lleva los pesos 2026 a pesos 2027 (Supuestos).', 'SUBE todo en el % del IPC.', '3,5 % → × 1,035.'],
+      ['Ajuste pluma 2027 (va en equipamiento)', 'Solo camiones pluma de Calama: si lo gastado en 2026 con los proveedores de la grúa, llevado a 12 meses, supera el promedio de 24 meses, se suma la diferencia.', 'SUBE el equipamiento (no el correctivo del camión).', 'Gastó $3 MM en 10 meses de 2026 → $3,6 MM al año; promedio 24m $2 MM → ajuste $1,6 MM.'],
+    ]
+    wa.getRow(1).values = ['Columna', 'Qué es', 'En qué afecta', 'Ejemplo']
+    encabezado(wa)
+    ;[30, 70, 45, 45].forEach((w, i) => { wa.getColumn(i + 1).width = w })
+    for (let c = 5; c <= 19; c++) wa.getColumn(c).width = 14
+    def.forEach((d, i) => {
+      const r = wa.getRow(i + 2); r.values = d; r.alignment = { wrapText: true, vertical: 'top' }
+      r.getCell(1).font = { bold: true }
+    })
+    const r0 = def.length + 4
+    wa.getCell(r0 - 1, 1).value = 'Efecto de cada ajuste por equipo (pesos). Correctivo 2027 = base × factor de edad × (1 − baja por pauta) → piso si queda abajo → × IPC.'
+    wa.getCell(r0 - 1, 1).font = { bold: true }
+    const cab = ['Patente', 'Grupo', 'Con pauta', 'Correctivo base 24m', 'Factor de edad', 'Efecto edad', 'Cumplimiento pauta', 'Efecto baja por pauta',
+      'Subtotal', 'Piso camión joven', 'Efecto piso', 'Antes de IPC', 'Efecto IPC', 'CORRECTIVO CAMIÓN 2027', 'Cuadra con Equipos',
+      'Equipamiento base 24m', 'Ajuste pluma', 'Efecto IPC equipamiento', 'EQUIPAMIENTO 2027']
+    wa.getRow(r0).values = cab
+    encabezado(wa, r0)
+    ordenados.forEach((_, i) => {
+      const r = r0 + 1 + i, e = i + 2
+      const E = (k: keyof typeof C) => `Equipos!${L[k]}${e}`
+      const kit = `${E('kit')}<>""`
+      const v: ExcelJS.CellValue[] = [
+        { formula: E('pat') }, { formula: E('grupo') }, { formula: `IF(${kit},"Sí","No")` },
+        { formula: E('cbase') },
+        { formula: `IF(${kit},${E('fac')},1)` },
+        { formula: `D${r}*(E${r}-1)` },
+        { formula: `IF(${kit},${E('cump')},1)` },
+        { formula: `IF(${kit},-D${r}*E${r}*${ref.redu}*(1-G${r}),0)` },
+        { formula: `D${r}+F${r}+H${r}` },
+        { formula: `IF(${kit},${E('piso')},0)` },
+        { formula: `MAX(J${r}-I${r},0)` },
+        { formula: `I${r}+K${r}` },
+        { formula: `L${r}*(${ref.f27}-1)` },
+        { formula: `L${r}+M${r}` },
+        { formula: `IF(ABS(N${r}-${E('corr')})<1,"Sí","REVISAR")` },
+        { formula: E('equb') }, { formula: E('aplu') },
+        { formula: `P${r}*(${ref.f27}-1)` },
+        { formula: `P${r}+Q${r}+R${r}` },
+      ]
+      v.forEach((x, j) => { wa.getCell(r, j + 1).value = x })
+      ;[4, 6, 8, 9, 10, 11, 12, 13, 14, 16, 17, 18, 19].forEach((c) => { wa.getCell(r, c).numFmt = CLP })
+      wa.getCell(r, 5).numFmt = '0.00'; wa.getCell(r, 7).numFmt = '0%'
+      wa.getCell(r, 14).font = { bold: true }; wa.getCell(r, 19).font = { bold: true }
+    })
+    const rt = r0 + ordenados.length + 1
+    wa.getCell(rt, 1).value = 'TOTAL'
+    wa.getRow(rt).font = { bold: true }
+    ;[4, 6, 8, 9, 11, 12, 13, 14, 16, 17, 18, 19].forEach((c) => {
+      const cell = wa.getCell(rt, c); cell.value = { formula: `SUM(${col(c)}${r0 + 1}:${col(c)}${rt - 1})` }; cell.numFmt = CLP
+    })
+    wa.views = [{ state: 'frozen', ySplit: 1 }]
+  }
+
+  // ── Otros gastos cargados al camión (no mantención) ───────────────────────
+  if (T) {
+    const wo = wb.addWorksheet('Otros gastos por camión')
+    // [concepto, [línea, sistema (null = cualquiera, '' = sin sistema)][]]
+    const conceptos: [string, [string, string | null][]][] = [
+      ['Lavado', [['C7', 'Lavado']]],
+      ['Autopistas y peajes', [['C6', 'Autopistas / peajes']]],
+      ['Estacionamiento y alimentación', [['C6', 'Estacionamiento / alimentación']]],
+      ['Laminado / estética', [['C6', 'Laminado / estética']]],
+      ['Otros servicios generales', [['C6', '']]],
+      ['Insumos de taller y ferretería', [['C1', null]]],
+      ['Seguros, permisos y revisión técnica', [['B1', null]]],
+      ['Certificaciones', [['B2', null]]],
+      ['TC8 y declaraciones SEC', [['B4', null]]],
+      ['GPS (mensualidad)', [['B3', '']]],
+      ['Tecnología (ADAS, cámaras, TPMS)', [['B3', 'Tecnología (ADAS, cámaras, TPMS)']]],
+      ['Equipos menores y accesorios', [['C8', null]]],
+      ['Alojamiento y traslado de personal', [['C4', null]]],
+      ['EPP, adhesivos y señalética', [['C2', null], ['C7', '']]],
+      ['Combustible', [['D1', null]]],
+      ['Arriendos, asesorías y proyectos', [['C3', null], ['C5', null], ['E1', null]]],
+    ]
+    const cab = ['Patente', 'Grupo', ...conceptos.map(([c]) => c), 'TOTAL OTROS GASTOS (promedio anual)', 'Sin combustible', 'Real 2025 (pesos del año)', 'Real 2026 a la fecha', 'Mantención 2027 (Equipos)']
+    wo.getRow(1).values = cab
+    encabezado(wo)
+    wo.getColumn(1).width = 11; wo.getColumn(2).width = 22
+    for (let i = 3; i <= cab.length; i++) wo.getColumn(i).width = 12
+    const crit = (lin: string, sis: string | null) => `,${cr('D')},"${lin}"${sis === null ? '' : `,${cr('P')},"${sis}"`}`
+    ordenados.forEach((_, i) => {
+      const r = i + 2
+      const P = `$A${r}`
+      wo.getCell(r, 1).value = { formula: `Equipos!${L.pat}${r}` }
+      wo.getCell(r, 2).value = { formula: `Equipos!${L.grupo}${r}` }
+      conceptos.forEach(([, partes], j) => {
+        const f = partes.map(([lin, sis]) => `SUMIFS(${cr('L')},${cr('A')},${P},${cr('B')},">="&${ref.i24},${cr('M')},"Sí"${crit(lin, sis)})`).join('+')
+        const c = wo.getCell(r, 3 + j); c.value = { formula: `(${f})/2` }; c.numFmt = CLP
+      })
+      const cT = 3 + conceptos.length
+      const tot = wo.getCell(r, cT); tot.value = { formula: `SUM(${col(3)}${r}:${col(cT - 1)}${r})` }; tot.numFmt = CLP; tot.font = { bold: true }
+      const iComb = conceptos.findIndex(([c]) => c === 'Combustible') + 3
+      const sc = wo.getCell(r, cT + 1); sc.value = { formula: `${col(cT)}${r}-${col(iComb)}${r}` }; sc.numFmt = CLP
+      const anio = (y: number) => conceptos.flatMap(([, partes]) => partes).map(([lin, sis]) =>
+        `SUMIFS(${cr('J')},${cr('A')},${P},${cr('C')},${y}${crit(lin, sis)})`).join('+')
+      const r25 = wo.getCell(r, cT + 2); r25.value = { formula: anio(2025) }; r25.numFmt = CLP
+      const r26 = wo.getCell(r, cT + 3); r26.value = { formula: anio(2026) }; r26.numFmt = CLP
+      const m27 = wo.getCell(r, cT + 4); m27.value = { formula: `Equipos!${L.tot}${r}` }; m27.numFmt = CLP
+    })
+    wo.getCell(tr, 1).value = 'TOTAL (respeta el filtro)'
+    wo.getRow(tr).font = { bold: true }
+    for (let c = 3; c <= cab.length; c++) {
+      const cell = wo.getCell(tr, c); cell.value = { formula: `SUBTOTAL(9,${col(c)}2:${col(c)}${n})` }; cell.numFmt = CLP
+    }
+    const nota = wo.getCell(tr + 2, 1)
+    nota.value = 'Promedio anual de los últimos 24 meses cerrados, en pesos 2026 (hoja Compras ÷ 2). Estos gastos se presupuestan por línea (no por camión) en el Resumen; aquí se ven por patente para saber cuánto pesa cada uno.'
+    wo.views = [{ state: 'frozen', xSplit: 2, ySplit: 1 }]
+    wo.autoFilter = { from: 'A1', to: `${col(cab.length)}1` }
   }
 
   // ── Neumáticos ────────────────────────────────────────────────────────────
