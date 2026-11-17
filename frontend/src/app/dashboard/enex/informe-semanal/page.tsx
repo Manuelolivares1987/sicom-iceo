@@ -19,7 +19,7 @@ import {
 import { asuntoInforme, htmlInformeSemanal, htmlParaPegar } from '@/lib/email/enex-informe-semanal'
 import {
   getActividadesTrimestre, getEnviosInformeSemanal, getFaenas, getFaenasConLugares, getHallazgosDeEjecuciones, getLugarItems,
-  getPanelVentana, getReprogramacionesDesde, sincronizarTrimestre,
+  getCambiosReprogramadosDesde, getPanelVentana, getReprogramacionesDesde, sincronizarTrimestre,
 } from '@/lib/services/enex'
 
 const separar = (s: string) => s.split(/[,;\n]/).map((x) => x.trim()).filter(Boolean)
@@ -54,7 +54,12 @@ export default function InformeSemanalPage() {
         .map((r) => r.ejecucion_id).filter(Boolean) as string[]
       // Desde el inicio del trimestre más antiguo: el informe lleva el acumulado de reprogramaciones.
       const desdeTri = faenas.reduce((m, f) => { const d = trimestreContrato(lunes, f.trimestre_ancla ?? 2).desde; return d < m ? d : m }, lunes)
-      const [reprogs, hallazgos] = await Promise.all([getReprogramacionesDesde(desdeTri), getHallazgosDeEjecuciones(eids)])
+      const [formales, cambios, hallazgos] = await Promise.all([
+        getReprogramacionesDesde(desdeTri), getCambiosReprogramadosDesde(desdeTri), getHallazgosDeEjecuciones(eids),
+      ])
+      // Un cambio de tarea «reprogramada» también es reprogramación, salvo que ya tenga su formulario ese mismo día.
+      const yaFormal = new Set(formales.map((r) => `${r.programacion_id}|${r.fecha_original?.slice(0, 10)}`))
+      const reprogs = [...formales, ...cambios.filter((c) => !yaFormal.has(`${c.programacion_id}|${c.fecha_original?.slice(0, 10)}`))]
       // Lomas Lubricantes se mide por actividad de la pauta por lugar, como en su pantalla.
       const conLugares = await getFaenasConLugares()
       const pautaLugar: Record<string, PautaLugarFaena> = {}

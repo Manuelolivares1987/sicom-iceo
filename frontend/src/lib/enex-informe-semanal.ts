@@ -47,6 +47,10 @@ export type ObservacionSemana = {
 }
 
 export type ReprogAcumulada = {
+  /** Reprogramación = no se pudo trabajar · Cambio de tarea = se trabajó en otra cosa pedida por ESM. */
+  tipo: 'Reprogramación' | 'Cambio de tarea'
+  /** En el cambio de tarea, qué se hizo en su lugar. */
+  detalle: string | null
   fecha_original: string
   instalacion: string
   servicio: string
@@ -60,6 +64,10 @@ export type ReprogAcumulada = {
 
 export type ReprogramacionesTrimestre = {
   total: number
+  /** No se pudo trabajar. */
+  sinTrabajo: number
+  /** Se trabajó en otra tarea a pedido de ESM. */
+  cambiosTarea: number
   porResponsable: { responsable: string; n: number }[]
   ejecutadas: number
   pendientes: number
@@ -159,7 +167,10 @@ export function armarInformeSemanal(p: {
       else if (r.cumplida || r.estado === 'cumplida') { estado = r.firma_mandante_url ? 'Ejecutada y firmada' : 'Ejecutada, falta firma'; tono = 'ok' }
       else if (r.estado === 'ejecutada') { estado = 'Ejecutada, falta firma'; tono = 'ok' }
       else if (reprogDeSemana.has(r.programacion_id)) {
-        estado = rep?.nueva_fecha ? `Reprogramada al ${fechaCorta(rep.nueva_fecha)}` : 'Reprogramada, fecha por coordinar'
+        const cambio = rep?.origen === 'cambio_tarea'
+        estado = rep?.nueva_fecha
+          ? `${cambio ? 'Cambio de tarea pedido por ESM, pasa' : 'Reprogramada'} al ${fechaCorta(rep.nueva_fecha)}`
+          : cambio ? 'Cambio de tarea pedido por ESM, fecha por coordinar' : 'Reprogramada, fecha por coordinar'
         tono = 'alerta'
       } else if (r.estado === 'no_realizada') { estado = 'No realizada'; tono = 'alerta' }
       else if (plan < p.hoy) { estado = 'Pendiente'; tono = 'alerta' }
@@ -239,7 +250,10 @@ export function armarInformeSemanal(p: {
         estado = nueva < p.hoy ? `Atrasada (era el ${fechaCorta(nueva)})` : `Programada al ${fechaCorta(nueva)}`
         tono = nueva < p.hoy ? 'alerta' : 'info'
       }
+      const esCambio = r.origen === 'cambio_tarea'
       lista.push({
+        tipo: esCambio ? 'Cambio de tarea' : 'Reprogramación',
+        detalle: esCambio ? (r.descripcion ?? null) : null,
         fecha_original: fo,
         instalacion: r.instalacion ?? row?.instalacion ?? '—',
         servicio: row ? SERVICIO[row.tipo_servicio] : r.actividad === 'calibracion' ? 'Calibración' : r.actividad === 'mantencion' ? 'Mantención' : (r.actividad ?? '—'),
@@ -252,6 +266,8 @@ export function armarInformeSemanal(p: {
     lista.sort((a, b) => a.fecha_original.localeCompare(b.fecha_original) || a.instalacion.localeCompare(b.instalacion))
     const reprogramaciones: ReprogramacionesTrimestre = {
       total: lista.length,
+      sinTrabajo: lista.filter((x) => x.tipo === 'Reprogramación').length,
+      cambiosTarea: lista.filter((x) => x.tipo === 'Cambio de tarea').length,
       porResponsable: Array.from(conteo, ([responsable, n]) => ({ responsable, n }))
         .sort((a, b) => ORDEN_RESPONSABLE.indexOf(a.responsable) - ORDEN_RESPONSABLE.indexOf(b.responsable)),
       ejecutadas: repEjecutadas,
