@@ -133,7 +133,10 @@ describe('informe semanal ENEX', () => {
     expect(i.faenas[0].actividad.find((a) => a.programacion_id === 'V')!.estado).toBe('Cambio de tarea pedido por ESM, pasa al 01-12')
     const pegar = htmlParaPegar(i)
     expect(pegar).toContain('No se pudo trabajar')
-    expect(pegar).toContain('Cambio de tarea</b>: ESM pidió calibrar SKOL-82')
+    expect(pegar).toContain('«Cambio de tarea»: el equipo fue a faena')
+    // Ejecutivo: solo el resumen por faena, sin la tabla de detalle de cada reprogramación.
+    expect(pegar).not.toContain('Fecha original')
+    expect(htmlInformeSemanal(i)).not.toContain('Fecha original')
   })
 
   it('el correo escapa lo que escribe el operador y no muestra multas', () => {
