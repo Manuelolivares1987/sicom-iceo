@@ -17,7 +17,7 @@ type Camion = CamionDetallePpto
 type Grupo = { clave: string; titulo: string; nota?: string; filas: Camion[] }
 
 const fmtM = (v: number) => (v / 1e6).toLocaleString('es-CL', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
-const total27 = (c: Camion) => c.preventivo + c.correctivo + c.neumaticos + c.mayores
+const total27 = (c: Camion) => c.preventivo + c.correctivo + c.neumaticos + c.mayores + (c.certificaciones ?? 0)
 const sumar = (fs: Camion[], f: (c: Camion) => number) => fs.reduce((a, c) => a + f(c), 0)
 const ORDEN_CONTRATO = ['Romeral', 'Franke', 'Calama ENEX']
 const fmtH = (v: number) => v.toLocaleString('es-CL', { maximumFractionDigits: 1 })
@@ -72,6 +72,7 @@ export function PresupuestoPorCamion() {
         <td className={cls}>{fmtM(sumar(fs, (c) => c.correctivo))}</td>
         <td className={cls}>{fmtM(sumar(fs, (c) => c.neumaticos))}</td>
         <td className={cls}>{fmtM(sumar(fs, (c) => c.mayores))}</td>
+        <td className={cls}>{fmtM(sumar(fs, (c) => c.certificaciones ?? 0))}</td>
       </>
     )
   }
@@ -81,7 +82,7 @@ export function PresupuestoPorCamion() {
       <CardHeader className="pb-2">
         <CardTitle className="text-base">Mantención por equipo, en millones de pesos</CardTitle>
         <p className="text-xs text-gray-500">
-          Real: lo cargado directo al equipo en Softland (2026 hasta hoy). Proyectado 2027 = preventivo por pauta + correctivo + neumáticos + reparaciones mayores.
+          Real: lo cargado directo al equipo en Softland (2026 hasta hoy). Proyectado 2027 = preventivo por pauta + correctivo + neumáticos + reparaciones mayores + certificaciones por vencimiento (TC8 y pluma).
           Toca un equipo para ver en qué se basa su proyectado. No incluye los repuestos y talleres sin patente.
         </p>
       </CardHeader>
@@ -92,7 +93,7 @@ export function PresupuestoPorCamion() {
               <th className="px-3 py-2 text-left">Equipo</th>
               <th className={th}>2023</th><th className={th}>2024</th><th className={th}>2025</th><th className={th}>2026 a hoy</th>
               <th className="border-l bg-pillado-green-50 px-2 py-2 text-right text-pillado-green-800">Proyectado 2027</th>
-              <th className={th}>Preventivo</th><th className={th}>Correctivo</th><th className={th}>Neumáticos</th><th className={th}>Mayores</th>
+              <th className={th}>Preventivo</th><th className={th}>Correctivo</th><th className={th}>Neumáticos</th><th className={th}>Mayores</th><th className={th} title="TC8 y certificación de pluma">Certif.</th>
               <th className="px-3 py-2 text-left">Base del proyectado</th>
             </tr>
           </thead>
@@ -132,7 +133,7 @@ export function PresupuestoPorCamion() {
                           </tr>
                           {abierto === c.patente && (
                             <tr className="border-t bg-pillado-green-50/40">
-                              <td colSpan={11} className="px-9 py-3"><DetalleBase c={c} /></td>
+                              <td colSpan={12} className="px-9 py-3"><DetalleBase c={c} /></td>
                             </tr>
                           )}
                         </Fragment>
@@ -199,6 +200,7 @@ function DetalleBase({ c }: { c: Camion }) {
           <p>Sin ajuste por edad: la curva se midió en camiones pesados.</p>
         )}
         {b.piso_correctivo != null && <p>Piso de camión joven: al menos {fmtClp(b.piso_correctivo)}.</p>}
+        {(b.partidas_correctivo ?? []).map((x, i) => <p key={i}>+ {x.descripcion}: {fmtClp(x.monto)} (proveedores de la grúa, 2026 llevado a 12 meses, sobre lo que ya trae el promedio).</p>)}
         <p className="text-gray-500">Más IPC 2027.</p>
       </div>
       <div>
@@ -214,7 +216,13 @@ function DetalleBase({ c }: { c: Camion }) {
         ) : (
           <p>Ninguna en 2027 para este equipo.</p>
         )}
-        <p className="mt-2 text-gray-500">Proyectado 2028: {fmtClp(c.total_2028)} · 2029: {fmtClp(c.total_2029)}</p>
+        {(b.certificaciones ?? []).length > 0 && (
+          <>
+            <p className="mb-1 mt-3 font-semibold text-gray-900">Certificaciones por vencimiento</p>
+            <ul className="list-disc pl-4">{b.certificaciones.map((x, i) => <li key={i}>{x.anio} · {x.descripcion}: {fmtClp(x.monto)}</li>)}</ul>
+          </>
+        )}
+        <p className="mt-2 text-gray-500">Mantención proyectada 2028: {fmtClp(c.total_2028)} · 2029: {fmtClp(c.total_2029)}</p>
       </div>
     </div>
   )

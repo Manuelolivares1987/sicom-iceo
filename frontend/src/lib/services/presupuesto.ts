@@ -149,6 +149,8 @@ export type CamionDetallePpto = {
   correctivo: number
   neumaticos: number
   mayores: number
+  /** Certificaciones por vencimiento 2027 (TC8 y pluma, línea B4). */
+  certificaciones: number
   total_2028: number
   total_2029: number
   base: {
@@ -170,6 +172,8 @@ export type CamionDetallePpto = {
     neumatico_base: number
     neumatico_piso: number | null
     mayores: { descripcion: string; monto: number }[]
+    certificaciones: { anio: number; descripcion: string; monto: number }[]
+    partidas_correctivo: { descripcion: string; monto: number }[]
   }
 }
 export const getCamionesDetallePpto = () => llamar<CamionDetallePpto[]>('rpc_ppto_camiones_detalle')
