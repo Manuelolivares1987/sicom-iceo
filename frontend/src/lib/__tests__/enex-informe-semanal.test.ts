@@ -84,6 +84,37 @@ describe('informe semanal ENEX', () => {
     expect(html).toContain('Sin trabajos')
   })
 
+  it('acumula las reprogramaciones del trimestre hasta el cierre de la semana', () => {
+    // Semana 46 (09-11): trimestre Nov-Ene de Centinela.
+    const i = armarInformeSemanal({
+      lunes: '2026-11-09', hoy: '2026-11-16', faenas: [faena], hallazgos: [],
+      rows: [
+        row('R1', { fecha_programada: '2026-12-07', periodo_mes: 12 }),
+        row('R2', { fecha_programada: '2026-11-05', estado: 'cumplida', cumplida: true, fecha_ejecucion: '2026-11-05' }),
+        row('R3', { fecha_programada: '2026-11-04' }),
+        row('R4', { fecha_programada: '2026-12-02', periodo_mes: 12 }),
+      ],
+      reprogs: [
+        rep({ id: '1', programacion_id: 'R1', fecha_original: '2026-11-06', nueva_fecha: '2026-12-07', responsable: 'operaciones_esm', causa: 'prioridad_operacional' }),
+        rep({ id: '2', programacion_id: 'R2', fecha_original: '2026-11-04', nueva_fecha: '2026-11-05', responsable: 'mandante' }),
+        rep({ id: '3', programacion_id: 'R3', fecha_original: '2026-11-04', nueva_fecha: null, responsable: null }),
+        rep({ id: '4', programacion_id: 'R4', fecha_original: '2026-11-11', nueva_fecha: '2026-12-02', responsable: 'operaciones_esm' }),
+        // De otro trimestre y posterior a la semana: no cuentan.
+        rep({ id: '5', programacion_id: 'R4', fecha_original: '2026-10-20', nueva_fecha: '2026-11-11', responsable: 'pillado', created_at: '2026-10-20' }),
+        rep({ id: '6', programacion_id: 'R1', fecha_original: '2026-11-18', nueva_fecha: '2026-12-07', responsable: 'pillado', created_at: '2026-11-17' }),
+      ],
+    })
+    const r = i.faenas[0].reprogramaciones
+    expect(r).toMatchObject({ total: 4, ejecutadas: 1, pendientes: 3, sinFecha: 1 })
+    expect(r.porResponsable).toEqual([
+      { responsable: 'Mandante', n: 1 }, { responsable: 'Operaciones ESM', n: 2 }, { responsable: 'Sin indicar', n: 1 },
+    ])
+    expect(r.lista.map((x) => x.estado)).toEqual(['Ejecutada el 05-11', 'Sin fecha nueva', 'Programada al 07-12', 'Programada al 02-12'])
+    expect(i.totales.reprogTrimestre).toBe(4)
+    expect(htmlInformeSemanal(i)).toContain('Reprogramaciones acumuladas del trimestre')
+    expect(htmlParaPegar(i)).toContain('3. Reprogramaciones acumuladas del trimestre')
+  })
+
   it('el correo escapa lo que escribe el operador y no muestra multas', () => {
     const i = armar([row('<b>X</b>', { estado: 'cumplida', fecha_ejecucion: '2026-11-04', ejecucion_id: 'e', ejec_observacion: '"><img src=x>' })])
     i.faenas[0].observaciones[0].foto = 'javascript:alert(1)'

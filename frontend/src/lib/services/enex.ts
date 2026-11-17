@@ -629,6 +629,7 @@ export const REPROG_CAUSA: Record<string, string> = {
 export type EnexReprogramacion = {
   id: string
   programacion_id: string | null
+  faena_id?: string | null
   faena: string | null
   instalacion: string | null
   patente: string | null
