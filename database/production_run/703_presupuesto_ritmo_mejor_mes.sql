@@ -1,4 +1,5 @@
 -- 703 — Presupuesto: ritmo de horas = el mayor entre el promedio de 18 meses y el mejor mes de GPS (Manuel 17-11-2026).
+-- destructivo-ok: los TRUNCATE de fn_ppto_recalcular solo vacían ppto_camion, ppto_visita y ppto_base, resultados propios que la función regenera completos (igual que MIG670).
 -- Antes se promediaba el último mes de GPS con los 18 meses: un mes flojo (DJKL-18 bajó a 1,4 h/día)
 -- movía todo el año. Ahora nunca se proyecta por debajo de la historia del equipo; si un mes reciente
 -- fue más intenso, manda ese. Sin historial: promedio del modelo; el último mes solo si no hay nada más.

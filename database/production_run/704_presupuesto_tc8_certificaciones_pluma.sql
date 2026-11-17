@@ -1,4 +1,5 @@
 -- 704 — TC8, certificaciones y pluma en el presupuesto (Manuel 17-11-2026).
+-- destructivo-ok: los TRUNCATE de fn_ppto_recalcular solo vacían ppto_camion, ppto_visita y ppto_base, resultados propios que la función regenera completos (igual que MIG670).
 --   1. El TC8 vence por ley a 5 años: los 2 marcados «no caduca» (SVBJ-57, TRST-57) pasan a emisión + 60 meses
 --      (estándar ya verificado en certificado_vigencia_estandar con los TC8 INTECIL de Esmax).
 --   2. Línea nueva B4 «Certificaciones por vencimiento»: TC8 a $840.000 (última inspección, Manuel) en el año
