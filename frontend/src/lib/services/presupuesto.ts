@@ -146,6 +146,8 @@ export type CamionDetallePpto = {
   estado_comercial: string | null
   real: Record<'2023' | '2024' | '2025' | '2026', number>
   real_neumaticos?: Record<'2023' | '2024' | '2025' | '2026', number>
+  real_preventivo?: Record<'2023' | '2024' | '2025' | '2026', number>
+  preventivas_hechas?: Record<'2025' | '2026', number>
   tipo_equipamiento?: string | null
   operacion?: string | null
   tc8_vence?: string | null
@@ -192,6 +194,14 @@ export type ParametrosExcelPpto = {
   lineas: { codigo: string; nombre: string; bloque: string; '2027': number; '2027_equipos': number; '2028': number; '2029': number }[]
 }
 export const getParametrosExcelPpto = () => llamar<ParametrosExcelPpto>('rpc_ppto_parametros_excel')
+
+// Ítems de cada kit con su precio (MIG707).
+export type KitItemPpto = {
+  grupo_kit: string; nivel: string; item: string; cantidad: number; unidad: string | null; cod_softland: string | null
+  precio_ref: number; precio_softland: number | null; descripcion_softland: string | null; ultima_compra: string | null
+  usa_precio_real: boolean; fil_lub: boolean; provisorio: boolean | null
+}
+export const getKitItemsPpto = () => llamar<KitItemPpto[]>('rpc_ppto_kit_items')
 
 // Composición de un equipo (MIG706): real por componente y qué forma su correctivo y su overhaul.
 type Anual = Record<string, number | null>

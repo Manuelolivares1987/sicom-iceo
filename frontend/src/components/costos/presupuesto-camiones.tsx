@@ -6,7 +6,7 @@ import { ChevronDown, ChevronRight, Download } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { fmtClp, fmtNum } from '@/lib/costos-operacion'
-import { getCamionesDetallePpto, getParametrosExcelPpto, type CamionDetallePpto } from '@/lib/services/presupuesto'
+import { getCamionesDetallePpto, getKitItemsPpto, getParametrosExcelPpto, type CamionDetallePpto } from '@/lib/services/presupuesto'
 import { ComposicionEquipo } from '@/components/costos/presupuesto-composicion'
 
 // ============================================================================
@@ -47,8 +47,10 @@ export function PresupuestoPorCamion() {
     if (!data) return
     setBajando(true); setErrorExcel(null)
     try {
-      const [{ exportarPresupuestoExcel }, parametros] = await Promise.all([import('@/lib/export/presupuesto-excel'), getParametrosExcelPpto()])
-      const blob = await exportarPresupuestoExcel(parametros, data)
+      const [{ exportarPresupuestoExcel }, parametros, kitItems] = await Promise.all([
+        import('@/lib/export/presupuesto-excel'), getParametrosExcelPpto(), getKitItemsPpto(),
+      ])
+      const blob = await exportarPresupuestoExcel(parametros, data, { kitItems })
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
