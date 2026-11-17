@@ -145,6 +145,10 @@ export type CamionDetallePpto = {
   faena: string | null
   estado_comercial: string | null
   real: Record<'2023' | '2024' | '2025' | '2026', number>
+  real_neumaticos?: Record<'2023' | '2024' | '2025' | '2026', number>
+  tipo_equipamiento?: string | null
+  operacion?: string | null
+  tc8_vence?: string | null
   preventivo: number
   correctivo: number
   neumaticos: number
@@ -177,6 +181,17 @@ export type CamionDetallePpto = {
   }
 }
 export const getCamionesDetallePpto = () => llamar<CamionDetallePpto[]>('rpc_ppto_camiones_detalle')
+
+// Excel con fórmulas (MIG705): supuestos, curva de edad, costo de cada kit y totales por línea.
+export type ParametrosExcelPpto = {
+  fecha_calculo: string | null
+  supuestos: Record<string, number>
+  curva: { edad: number; factor: number }[]
+  kits: { grupo_kit: string; nivel: string; costo: number; fl: number }[]
+  intervalos: Record<string, number>
+  lineas: { codigo: string; nombre: string; bloque: string; '2027': number; '2027_equipos': number; '2028': number; '2029': number }[]
+}
+export const getParametrosExcelPpto = () => llamar<ParametrosExcelPpto>('rpc_ppto_parametros_excel')
 export const getRealVsPpto =(anio: number) => llamar<RealVsPpto>('rpc_ppto_real_vs', { p_anio: anio })
 
 export const recalcularPpto = () => llamar('rpc_ppto_recalcular')

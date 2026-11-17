@@ -2,10 +2,11 @@
 
 import { Fragment, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { ChevronDown, ChevronRight } from 'lucide-react'
+import { ChevronDown, ChevronRight, Download } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { fmtClp, fmtNum } from '@/lib/costos-operacion'
-import { getCamionesDetallePpto, type CamionDetallePpto } from '@/lib/services/presupuesto'
+import { getCamionesDetallePpto, getParametrosExcelPpto, type CamionDetallePpto } from '@/lib/services/presupuesto'
 
 // ============================================================================
 // Presupuesto por camión (MIG702): primero los contratos de servicio de Pillado,
@@ -38,6 +39,27 @@ export function PresupuestoPorCamion() {
   const { data, isLoading, error } = useQuery({ queryKey: ['ppto-camiones-detalle'], queryFn: getCamionesDetallePpto })
   const [abierto, setAbierto] = useState<string | null>(null)
   const [cerrados, setCerrados] = useState<Set<string>>(new Set())
+  const [bajando, setBajando] = useState(false)
+  const [errorExcel, setErrorExcel] = useState<string | null>(null)
+
+  async function descargarExcel() {
+    if (!data) return
+    setBajando(true); setErrorExcel(null)
+    try {
+      const [{ exportarPresupuestoExcel }, parametros] = await Promise.all([import('@/lib/export/presupuesto-excel'), getParametrosExcelPpto()])
+      const blob = await exportarPresupuestoExcel(parametros, data)
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `Presupuesto mantencion 2027 por equipo (${new Date().toISOString().slice(0, 10)}).xlsx`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (e) {
+      setErrorExcel((e as Error).message)
+    } finally {
+      setBajando(false)
+    }
+  }
 
   const secciones = useMemo(() => {
     const fs = data ?? []
@@ -80,7 +102,13 @@ export function PresupuestoPorCamion() {
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-base">Mantención por equipo, en millones de pesos</CardTitle>
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <CardTitle className="text-base">Mantención por equipo, en millones de pesos</CardTitle>
+          <Button variant="outline" size="sm" disabled={bajando} onClick={descargarExcel}>
+            <Download className="mr-1.5 h-4 w-4" />{bajando ? 'Armando Excel…' : 'Descargar Excel con fórmulas'}
+          </Button>
+        </div>
+        {errorExcel && <p className="text-xs text-red-600">No se pudo armar el Excel: {errorExcel}</p>}
         <p className="text-xs text-gray-500">
           Real: lo cargado directo al equipo en Softland (2026 hasta hoy). Proyectado 2027 = preventivo por pauta + correctivo + neumáticos + reparaciones mayores + certificaciones por vencimiento (TC8 y pluma).
           Toca un equipo para ver en qué se basa su proyectado. No incluye los repuestos y talleres sin patente.
