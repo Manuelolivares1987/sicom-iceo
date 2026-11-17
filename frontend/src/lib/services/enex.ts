@@ -1252,6 +1252,32 @@ export async function getReprogramacionesDesde(desde: string): Promise<EnexRepro
   return (data ?? []) as EnexReprogramacion[]
 }
 
+/**
+ * Cambios de tarea (MIG658) con destino «reprogramada», en la forma de una reprogramación:
+ * la tarea se movió a pedido de ESM aunque no tenga el formulario de reprogramación.
+ */
+export async function getCambiosReprogramadosDesde(desde: string): Promise<EnexReprogramacion[]> {
+  const { data, error } = await supabase
+    .from('enex_cambios_tarea')
+    .select('id, programacion_id, fecha, motivo, nueva_fecha, solicitante_esm, created_at, enex_programaciones!enex_cambios_tarea_programacion_id_fkey(tipo_servicio, enex_instalaciones(nombre, faena_id))')
+    .eq('destino', 'reprogramada').gte('fecha', desde).limit(1000)
+  if (error) throw error
+  type Fila = {
+    id: string; programacion_id: string; fecha: string; motivo: string | null; nueva_fecha: string | null; solicitante_esm: string | null; created_at: string
+    enex_programaciones: { tipo_servicio: string; enex_instalaciones: { nombre: string; faena_id: string } | null } | null
+  }
+  return ((data ?? []) as unknown as Fila[]).map((c) => ({
+    id: `cambio:${c.id}`, programacion_id: c.programacion_id,
+    faena_id: c.enex_programaciones?.enex_instalaciones?.faena_id ?? null, faena: null,
+    instalacion: c.enex_programaciones?.enex_instalaciones?.nombre ?? null, patente: null, tipo_activo: null,
+    actividad: c.enex_programaciones?.tipo_servicio ?? null, hora_ingreso: null, supervisor_esm: c.solicitante_esm, tecnicos_pillado: null,
+    fecha_original: c.fecha, hora_original: null, semana: null, trimestre: null,
+    responsable: 'operaciones_esm', causa: 'Cambio de tarea pedido por ESM', descripcion: c.motivo,
+    nueva_fecha: c.nueva_fecha, nueva_hora: null, firma_tecnico_url: null, firma_esm_url: null, firma_mandante_url: null, pdf_url: null,
+    creado_por_nombre: null, created_at: c.created_at,
+  }))
+}
+
 export type EnvioInformeSemanal = {
   id: string; semana_inicio: string; destinatarios: string[]; copia: string[]
   estado: 'enviando' | 'enviado' | 'error'; enviado_at: string | null; created_at: string
