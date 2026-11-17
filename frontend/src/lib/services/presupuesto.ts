@@ -206,6 +206,25 @@ export type KitItemPpto = {
 }
 export const getKitItemsPpto = () => llamar<KitItemPpto[]>('rpc_ppto_kit_items')
 
+// [MIG709] Datos de origen para que el Excel rehaga el cálculo con fórmulas.
+export interface TrazaExcelPpto {
+  fin: string
+  ipc_historico: number
+  seguro_cuota: number
+  /** [patente, fecha, línea, categoría correctivo, proveedor, folio, código, descripción, monto, es pluma Calama] */
+  compras: [string | null, string, string, string | null, string | null, string | number | null, string | null, string | null, number, boolean][]
+  /** [patente, mes, horas] */
+  gps: [string, string, number][]
+  equipos: Record<string, { ritmo_18m: number | null; ritmo_manual: number | null; ritmo_respaldo: number | null; desde: string }>
+  /** [patente, fecha, fuente, número] */
+  preventivas: [string, string, string, string][]
+  /** [patente, tipo, descripción, gatillo, grupo kit, nivel, horas, monto] */
+  mayores: [string, string, string, string | null, string | null, string | null, number | null, number | null][]
+  /** [descripción, origen, monto] */
+  opex: [string, string | null, number][]
+}
+export const getTrazaExcelPpto = () => llamar<TrazaExcelPpto>('rpc_ppto_excel_trazable')
+
 // Composición de un equipo (MIG706): real por componente y qué forma su correctivo y su overhaul.
 type Anual = Record<string, number | null>
 export type ComposicionEquipoPpto = {
