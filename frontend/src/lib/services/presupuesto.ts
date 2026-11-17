@@ -155,6 +155,8 @@ export type CamionDetallePpto = {
   correctivo: number
   neumaticos: number
   mayores: number
+  /** [MIG710] Mantención del equipamiento 2027 (aljibe, pluma), línea A6. */
+  equipamiento?: number
   /** Certificaciones por vencimiento 2027 (TC8 y pluma, línea B4). */
   certificaciones: number
   total_2028: number
@@ -179,6 +181,7 @@ export type CamionDetallePpto = {
     factor_edad: number | null
     piso_correctivo: number | null
     neumatico_base: number
+    equipamiento_base?: number
     neumatico_piso: number | null
     mayores: { descripcion: string; monto: number }[]
     certificaciones: { anio: number; descripcion: string; monto: number }[]
@@ -206,16 +209,38 @@ export type KitItemPpto = {
 }
 export const getKitItemsPpto = () => llamar<KitItemPpto[]>('rpc_ppto_kit_items')
 
+// [MIG709] Datos de origen para que el Excel rehaga el cálculo con fórmulas.
+export interface TrazaExcelPpto {
+  fin: string
+  ipc_historico: number
+  seguro_cuota: number
+  /** [patente, fecha, línea, categoría, proveedor, folio, código, descripción OC, monto, es pluma Calama, sistema, texto factura, regla, línea original] */
+  compras: [string | null, string, string, string | null, string | null, string | number | null, string | null, string | null, number, boolean, string | null, string | null, string | null, string | null][]
+  /** [patente, mes, horas] */
+  gps: [string, string, number][]
+  equipos: Record<string, { ritmo_18m: number | null; ritmo_manual: number | null; ritmo_respaldo: number | null; desde: string }>
+  /** [patente, fecha, fuente, número] */
+  preventivas: [string, string, string, string][]
+  /** [patente, tipo, descripción, gatillo, grupo kit, nivel, horas, monto] */
+  mayores: [string, string, string, string | null, string | null, string | null, number | null, number | null][]
+  /** [descripción, origen, monto] */
+  opex: [string, string | null, number][]
+}
+export const getTrazaExcelPpto = () => llamar<TrazaExcelPpto>('rpc_ppto_excel_trazable')
+
 // Composición de un equipo (MIG706): real por componente y qué forma su correctivo y su overhaul.
 type Anual = Record<string, number | null>
 export type ComposicionEquipoPpto = {
   corte: string
   ventana_desde: string
   ipc_historico: number
-  real: Record<'A1' | 'A2' | 'A3' | 'A4' | 'B4', Anual>
-  ppto: Partial<Record<'A1' | 'A2' | 'A3' | 'A4' | 'B4', Anual>> | null
+  real: Record<'A1' | 'A2' | 'A6' | 'A3' | 'A4' | 'B4', Anual>
+  ppto: Partial<Record<'A1' | 'A2' | 'A6' | 'A3' | 'A4' | 'B4', Anual>> | null
   correctivo_categorias: { categoria: string; excluida: boolean; monto: number; monto_2026: number; n: number }[]
   correctivo_compras: { fecha: string; categoria: string; excluida: boolean; proveedor: string | null; descripcion: string | null; folio: string | null; monto: number }[]
+  equipamiento_categorias?: { categoria: string; monto: number; monto_2026: number; n: number }[]
+  equipamiento_compras?: { fecha: string; categoria: string; proveedor: string | null; descripcion: string | null; folio: string | null; monto: number }[]
+  salio_del_correctivo?: { linea: string; categoria: string | null; sistema: string; monto: number; n: number }[]
   overhaul_2027: { anio: number; descripcion: string; monto: number; gatillo: string | null }[]
   overhaul_historia: { fecha: string; proveedor: string | null; descripcion: string | null; monto: number }[]
   neumaticos_compras: { fecha: string; proveedor: string | null; descripcion: string | null; monto: number }[]
