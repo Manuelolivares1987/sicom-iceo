@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { fmtClp, fmtNum } from '@/lib/costos-operacion'
 import { getCamionesDetallePpto, getParametrosExcelPpto, type CamionDetallePpto } from '@/lib/services/presupuesto'
+import { ComposicionEquipo } from '@/components/costos/presupuesto-composicion'
 
 // ============================================================================
 // Presupuesto por camión (MIG702): primero los contratos de servicio de Pillado,
@@ -121,7 +122,7 @@ export function PresupuestoPorCamion() {
               <th className="px-3 py-2 text-left">Equipo</th>
               <th className={th}>2023</th><th className={th}>2024</th><th className={th}>2025</th><th className={th}>2026 a hoy</th>
               <th className="border-l bg-pillado-green-50 px-2 py-2 text-right text-pillado-green-800">Proyectado 2027</th>
-              <th className={th}>Preventivo</th><th className={th}>Correctivo</th><th className={th}>Neumáticos</th><th className={th}>Mayores</th><th className={th} title="TC8 y certificación de pluma">Certif.</th>
+              <th className={th}>Preventivo</th><th className={th}>Correctivo</th><th className={th}>Neumáticos</th><th className={th}>Overhaul / mayores</th><th className={th} title="TC8 y certificación de pluma">TC8 y cert.</th>
               <th className="px-3 py-2 text-left">Base del proyectado</th>
             </tr>
           </thead>
@@ -161,7 +162,7 @@ export function PresupuestoPorCamion() {
                           </tr>
                           {abierto === c.patente && (
                             <tr className="border-t bg-pillado-green-50/40">
-                              <td colSpan={12} className="px-9 py-3"><DetalleBase c={c} /></td>
+                              <td colSpan={12} className="space-y-4 px-9 py-3"><DetalleBase c={c} /><ComposicionEquipo patente={c.patente} /></td>
                             </tr>
                           )}
                         </Fragment>

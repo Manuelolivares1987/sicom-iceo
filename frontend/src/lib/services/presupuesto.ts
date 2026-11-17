@@ -192,6 +192,23 @@ export type ParametrosExcelPpto = {
   lineas: { codigo: string; nombre: string; bloque: string; '2027': number; '2027_equipos': number; '2028': number; '2029': number }[]
 }
 export const getParametrosExcelPpto = () => llamar<ParametrosExcelPpto>('rpc_ppto_parametros_excel')
+
+// Composición de un equipo (MIG706): real por componente y qué forma su correctivo y su overhaul.
+type Anual = Record<string, number | null>
+export type ComposicionEquipoPpto = {
+  corte: string
+  ventana_desde: string
+  ipc_historico: number
+  real: Record<'A1' | 'A2' | 'A3' | 'A4' | 'B4', Anual>
+  ppto: Partial<Record<'A1' | 'A2' | 'A3' | 'A4' | 'B4', Anual>> | null
+  correctivo_categorias: { categoria: string; excluida: boolean; monto: number; monto_2026: number; n: number }[]
+  correctivo_compras: { fecha: string; categoria: string; excluida: boolean; proveedor: string | null; descripcion: string | null; folio: string | null; monto: number }[]
+  overhaul_2027: { anio: number; descripcion: string; monto: number; gatillo: string | null }[]
+  overhaul_historia: { fecha: string; proveedor: string | null; descripcion: string | null; monto: number }[]
+  neumaticos_compras: { fecha: string; proveedor: string | null; descripcion: string | null; monto: number }[]
+}
+export const getComposicionEquipoPpto = (patente: string) =>
+  llamar<ComposicionEquipoPpto | null>('rpc_ppto_equipo_composicion', { p_patente: patente })
 export const getRealVsPpto =(anio: number) => llamar<RealVsPpto>('rpc_ppto_real_vs', { p_anio: anio })
 
 export const recalcularPpto = () => llamar('rpc_ppto_recalcular')
