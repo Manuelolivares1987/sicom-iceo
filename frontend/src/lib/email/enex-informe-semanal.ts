@@ -15,6 +15,14 @@ const TONO = {
   info: ['#374151', '#f3f4f6'],
 } as const
 
+const repsDe = (f: InformeSemanal['faenas'][number]) => f.reprogramaciones ?? { total: 0, porResponsable: [], ejecutadas: 0, pendientes: 0, sinFecha: 0, lista: [] }
+const porResponsableTxt = (f: InformeSemanal['faenas'][number]) =>
+  repsDe(f).porResponsable.map((x) => `${esc(x.responsable)} ${x.n}`).join(' · ') || '—'
+const pendientesTxt = (f: InformeSemanal['faenas'][number]) => {
+  const r = repsDe(f)
+  return `${r.pendientes}${r.sinFecha ? ` (${r.sinFecha} sin fecha)` : ''}`
+}
+
 export const asuntoInforme = (i: InformeSemanal) =>
   `Informe semanal de cumplimiento ENEX · Semana ${i.semana.numero} (${fechaCorta(i.semana.desde)} al ${fechaCorta(i.semana.hasta)}) · Pillado`
 
@@ -34,6 +42,11 @@ export function htmlParaPegar(i: InformeSemanal): string {
     esc(f.nombre), fechaCorta(a.fecha_plan), esc(a.instalacion), `${esc(a.servicio)}${a.ot ? ` · OT ${esc(a.ot)}` : ''}`,
     a.fecha_ejecucion ? fechaCorta(a.fecha_ejecucion) : '—', esc(a.estado),
   ]))
+  const conReprog = i.faenas.filter((f) => repsDe(f).total > 0)
+  const detalleReprog = conReprog.flatMap((f) => repsDe(f).lista.map((r) => [
+    esc(f.nombre), fechaCorta(r.fecha_original), `${esc(r.instalacion)} — ${esc(r.servicio)}`,
+    `${esc(r.responsable)}${r.causa ? ` · ${esc(r.causa)}` : ''}`, esc(r.estado),
+  ]))
   const observaciones = i.faenas.flatMap((f) => f.observaciones.map((o) => [
     fechaCorta(o.fecha), `${esc(f.nombre)} · ${esc(o.instalacion)} — ${esc(o.servicio)}`,
     `${o.tipo === 'hallazgo' ? `<b>Hallazgo: ${esc(o.item)}.</b> ` : ''}${esc(o.texto).replace(/\n/g, '<br>')}`,
@@ -47,7 +60,11 @@ export function htmlParaPegar(i: InformeSemanal): string {
       esc(f.nombre), `<b>${f.semana.comprometidas === 0 ? 'Sin trabajos' : pct(f.semana.pct)}</b>`, `<b>${pct(f.trimestre.pctAvance)}</b>`, esc(f.trimestre.etiqueta),
     ]))}
     ${actividad.length ? `<p><b>2. Actividad de la semana</b></p>${tabla(['Faena', 'Fecha', 'Instalación', 'Servicio', 'Ejecutada', 'Estado'], actividad)}` : ''}
-    ${observaciones.length ? `<p><b>3. Observaciones de los operadores</b></p>${tabla(['Fecha', 'Instalación', 'Observación'], observaciones)}` : ''}
+    <p><b>3. Reprogramaciones acumuladas del trimestre</b></p>
+    ${conReprog.length ? `${tabla(['Faena', 'Trimestre', 'Acumuladas', 'Responsable', 'Ya ejecutadas', 'Pendientes'], conReprog.map((f) => [
+      esc(f.nombre), esc(f.trimestre.etiqueta), `<b>${repsDe(f).total}</b>`, porResponsableTxt(f), String(repsDe(f).ejecutadas), pendientesTxt(f),
+    ]))}<p></p>${tabla(['Faena', 'Fecha original', 'Instalación', 'Responsable / causa', 'Estado hoy'], detalleReprog)}` : '<p>Sin reprogramaciones en el trimestre a la fecha.</p>'}
+    ${observaciones.length ? `<p><b>4. Observaciones de los operadores</b></p>${tabla(['Fecha', 'Instalación', 'Observación'], observaciones)}` : ''}
     <p>Quedamos atentos a cualquier consulta.</p>
     <p>Saludos cordiales,</p>
   </div>`
@@ -61,10 +78,11 @@ function resumenPorFaena(i: InformeSemanal): string {
       ${celda(`<b>${esc(f.nombre)}</b>`, z)}
       ${celda(`<b>${f.semana.comprometidas === 0 ? 'Sin trabajos' : pct(f.semana.pct)}</b>`, z, 'text-align:right')}
       ${celda(`<b>${pct(f.trimestre.pctAvance)}</b><br><span style="color:#6b7280;font-size:11px">${esc(f.trimestre.etiqueta)}</span>`, z, 'text-align:right')}
+      ${celda(`<b>${repsDe(f).total}</b>${repsDe(f).total ? `<br><span style="color:#6b7280;font-size:11px">${repsDe(f).pendientes} pendientes</span>` : ''}`, z, 'text-align:right')}
     </tr>`
   }).join('')
   return `${seccionTitulo('Cumplimiento por faena', MARCA.verdeOscuro, MARCA.verdeClaro)}
-    ${tablaAbrir(['Faena', 'Semana', 'Acumulado trimestre'], [1, 2])}${filas}${tablaCerrar}`
+    ${tablaAbrir(['Faena', 'Semana', 'Acumulado trimestre', 'Reprog. trimestre'], [1, 2, 3])}${filas}${tablaCerrar}`
 }
 
 export function htmlInformeSemanal(i: InformeSemanal): string {
@@ -90,6 +108,18 @@ export function htmlInformeSemanal(i: InformeSemanal): string {
       </tr>`
     }).join('')
 
+    const rp = repsDe(f)
+    const filasReprog = rp.lista.map((r, n) => {
+      const z = n % 2 === 1
+      const [c, b] = TONO[r.tono]
+      return `<tr>
+        ${celda(fechaCorta(r.fecha_original), z)}
+        ${celda(`<b>${esc(r.instalacion)}</b><br>${esc(r.servicio)}`, z)}
+        ${celda(`${esc(r.responsable)}${r.causa ? `<br><span style="color:#6b7280">${esc(r.causa)}</span>` : ''}`, z)}
+        ${celda(chipEstado(esc(r.estado), c, b), z)}
+      </tr>`
+    }).join('')
+
     const s = f.semana, t = f.trimestre
     const trimestre = t.unidad === 'actividades'
       ? `Acumulado trimestre ${esc(t.etiqueta)}: <b>${pct(t.pctAvance)}</b> (${t.ejecutadas} de ${t.universo} actividades de la pauta)`
@@ -105,6 +135,8 @@ export function htmlInformeSemanal(i: InformeSemanal): string {
       <p style="margin:0 0 4px;font-size:13px">${semana}${s.adicionales ? ` · ${s.adicionales} de otras semanas` : ''}</p>
       <p style="margin:0 0 10px;font-size:13px">${trimestre}</p>
       ${filas ? `${tablaAbrir(['Fecha', 'Instalación / servicio', 'Ejecutada', 'Estado'])}${filas}${tablaCerrar}` : ''}
+      ${filasReprog ? `<p style="margin:16px 0 6px;font-size:13px"><b>Reprogramaciones acumuladas del trimestre ${esc(t.etiqueta)}: ${rp.total}</b> (${porResponsableTxt(f)}) · ${rp.ejecutadas} ya ejecutadas · ${pendientesTxt(f)} pendientes</p>
+      ${tablaAbrir(['Fecha original', 'Instalación / servicio', 'Responsable / causa', 'Estado hoy'])}${filasReprog}${tablaCerrar}` : ''}
       ${obs ? `<p style="margin:16px 0 6px;font-size:13px"><b>Observaciones de los operadores</b></p>
       ${tablaAbrir(['Fecha', 'Instalación', 'Observación'])}${obs}${tablaCerrar}` : ''}`
   }).join('')
@@ -116,7 +148,8 @@ export function htmlInformeSemanal(i: InformeSemanal): string {
       { n: pct(i.totales.pct), label: 'Cumplimiento', color: MARCA.verdeOscuro, fondo: MARCA.verdeClaro },
       { n: `${i.totales.ejecutadas}/${i.totales.comprometidas}`, label: 'Ejecutadas', color: '#374151', fondo: '#f3f4f6' },
       { n: i.totales.firmadas, label: 'Con firma', color: '#374151', fondo: '#f3f4f6' },
-      { n: i.totales.reprogramadas, label: 'Reprogramadas', color: MARCA.ambar, fondo: MARCA.ambarFondo },
+      { n: i.totales.reprogramadas, label: 'Reprog. semana', color: MARCA.ambar, fondo: MARCA.ambarFondo },
+      { n: i.totales.reprogTrimestre ?? 0, label: 'Reprog. trimestre', color: MARCA.ambar, fondo: MARCA.ambarFondo },
     ],
     cuerpo: `${i.comentario.trim() ? `<p style="margin:18px 0 0;font-size:14px;line-height:21px">${esc(i.comentario).replace(/\n/g, '<br>')}</p>` : ''}${resumenPorFaena(i)}${cuerpo}`,
     pie: 'Informe preparado por Pillado Empresas desde SICOM. Para consultas, responda este correo.',

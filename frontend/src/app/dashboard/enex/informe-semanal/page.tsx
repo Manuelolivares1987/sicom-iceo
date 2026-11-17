@@ -52,7 +52,9 @@ export default function InformeSemanalPage() {
       const hasta = sumarDias(lunes, 6)
       const eids = rows.filter((r) => r.fecha_ejecucion && r.fecha_ejecucion.slice(0, 10) >= lunes && r.fecha_ejecucion.slice(0, 10) <= hasta)
         .map((r) => r.ejecucion_id).filter(Boolean) as string[]
-      const [reprogs, hallazgos] = await Promise.all([getReprogramacionesDesde(lunes), getHallazgosDeEjecuciones(eids)])
+      // Desde el inicio del trimestre más antiguo: el informe lleva el acumulado de reprogramaciones.
+      const desdeTri = faenas.reduce((m, f) => { const d = trimestreContrato(lunes, f.trimestre_ancla ?? 2).desde; return d < m ? d : m }, lunes)
+      const [reprogs, hallazgos] = await Promise.all([getReprogramacionesDesde(desdeTri), getHallazgosDeEjecuciones(eids)])
       // Lomas Lubricantes se mide por actividad de la pauta por lugar, como en su pantalla.
       const conLugares = await getFaenasConLugares()
       const pautaLugar: Record<string, PautaLugarFaena> = {}

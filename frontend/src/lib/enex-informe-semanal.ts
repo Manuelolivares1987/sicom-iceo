@@ -46,11 +46,34 @@ export type ObservacionSemana = {
   foto: string | null
 }
 
+export type ReprogAcumulada = {
+  fecha_original: string
+  instalacion: string
+  servicio: string
+  responsable: string
+  causa: string | null
+  nueva_fecha: string | null
+  /** Hoy: ejecutada, programada para la nueva fecha, atrasada o sin fecha. */
+  estado: string
+  tono: 'ok' | 'alerta' | 'info'
+}
+
+export type ReprogramacionesTrimestre = {
+  total: number
+  porResponsable: { responsable: string; n: number }[]
+  ejecutadas: number
+  pendientes: number
+  sinFecha: number
+  lista: ReprogAcumulada[]
+}
+
 export type FaenaSemana = {
   faena_id: string
   nombre: string
   semana: { unidad: 'servicios' | 'actividades'; comprometidas: number; ejecutadas: number; firmadas: number; reprogramadas: number; pendientes: number; adicionales: number; pct: number | null; pctFirmado: number | null }
   trimestre: { etiqueta: string; universo: number | null; ejecutadas: number; cumplidas: number; programadas: number; pctAvance: number | null; pctFirmado: number | null; unidad: 'servicios' | 'actividades' }
+  /** Reprogramaciones acumuladas en el trimestre del contrato, hasta el cierre de la semana. */
+  reprogramaciones: ReprogramacionesTrimestre
   actividad: FilaSemana[]
   observaciones: ObservacionSemana[]
 }
@@ -58,12 +81,21 @@ export type FaenaSemana = {
 export type InformeSemanal = {
   semana: { desde: string; hasta: string; numero: number }
   comentario: string
-  totales: { comprometidas: number; ejecutadas: number; firmadas: number; reprogramadas: number; pct: number | null }
+  totales: { comprometidas: number; ejecutadas: number; firmadas: number; reprogramadas: number; pct: number | null; reprogTrimestre: number }
   faenas: FaenaSemana[]
 }
 
 const pct = (n: number, d: number) => (d > 0 ? Math.round((n / d) * 1000) / 10 : null)
 const SERVICIO = { mantencion: 'Mantención', calibracion: 'Calibración' } as const
+// Mismas etiquetas que el formulario de reprogramación (REPROG_RESPONSABLE / REPROG_CAUSA en services/enex).
+export const RESPONSABLE_REPROG: Record<string, string> = {
+  mandante: 'Mandante', operaciones_esm: 'Operaciones ESM', pillado: 'PILLADO', cliente: 'Cliente', otro: 'Otro',
+}
+export const CAUSA_REPROG: Record<string, string> = {
+  equipo_no_disponible: 'Equipo/Camión no disponible', prioridad_operacional: 'Prioridad operacional',
+  emergencia: 'Emergencia', falta_autorizacion: 'Falta autorización', otro: 'Otro',
+}
+const ORDEN_RESPONSABLE = ['Mandante', 'Cliente', 'Operaciones ESM', 'PILLADO', 'Otro', 'Sin indicar']
 export const fechaCorta = (iso: string) => `${iso.slice(8, 10)}-${iso.slice(5, 7)}`
 
 export function lunesDe(iso: string): string {
@@ -108,6 +140,7 @@ export function armarInformeSemanal(p: {
     if (enSemana(r.fecha_original)) reprogDeSemana.add(r.programacion_id)
   }
 
+  const porProg = new Map(p.rows.map((r) => [r.programacion_id, r]))
   const faenas: FaenaSemana[] = []
   for (const f of p.faenas) {
     const delaFaena = p.rows.filter((r) => r.faena_id === f.id)
@@ -184,6 +217,49 @@ export function armarInformeSemanal(p: {
       camiones: f.contrato_camiones ?? null,
     })
 
+    // Reprogramaciones acumuladas del trimestre del contrato, hasta el domingo de la semana.
+    const lista: ReprogAcumulada[] = []
+    const conteo = new Map<string, number>()
+    let repEjecutadas = 0, repSinFecha = 0
+    for (const r of p.reprogs) {
+      const fo = r.fecha_original?.slice(0, 10)
+      if (!fo || fo < v.desde || fo > hasta) continue
+      const row = r.programacion_id ? porProg.get(r.programacion_id) : undefined
+      if ((r.faena_id ?? row?.faena_id) !== f.id) continue
+      const responsable = (r.responsable && RESPONSABLE_REPROG[r.responsable]) || 'Sin indicar'
+      conteo.set(responsable, (conteo.get(responsable) ?? 0) + 1)
+      const ultima = r.programacion_id ? ultimaReprog.get(r.programacion_id) : undefined
+      let estado: string, tono: ReprogAcumulada['tono']
+      if (row && hecha(row)) {
+        estado = row.fecha_ejecucion ? `Ejecutada el ${fechaCorta(row.fecha_ejecucion.slice(0, 10))}` : 'Ejecutada'; tono = 'ok'; repEjecutadas++
+      } else if (!(ultima ?? r).nueva_fecha) {
+        estado = 'Sin fecha nueva'; tono = 'alerta'; repSinFecha++
+      } else {
+        const nueva = row ? fechaPlan(row) : (ultima ?? r).nueva_fecha!.slice(0, 10)
+        estado = nueva < p.hoy ? `Atrasada (era el ${fechaCorta(nueva)})` : `Programada al ${fechaCorta(nueva)}`
+        tono = nueva < p.hoy ? 'alerta' : 'info'
+      }
+      lista.push({
+        fecha_original: fo,
+        instalacion: r.instalacion ?? row?.instalacion ?? '—',
+        servicio: row ? SERVICIO[row.tipo_servicio] : r.actividad === 'calibracion' ? 'Calibración' : r.actividad === 'mantencion' ? 'Mantención' : (r.actividad ?? '—'),
+        responsable,
+        causa: r.causa ? (CAUSA_REPROG[r.causa] ?? r.causa) : null,
+        nueva_fecha: r.nueva_fecha?.slice(0, 10) ?? null,
+        estado, tono,
+      })
+    }
+    lista.sort((a, b) => a.fecha_original.localeCompare(b.fecha_original) || a.instalacion.localeCompare(b.instalacion))
+    const reprogramaciones: ReprogramacionesTrimestre = {
+      total: lista.length,
+      porResponsable: Array.from(conteo, ([responsable, n]) => ({ responsable, n }))
+        .sort((a, b) => ORDEN_RESPONSABLE.indexOf(a.responsable) - ORDEN_RESPONSABLE.indexOf(b.responsable)),
+      ejecutadas: repEjecutadas,
+      pendientes: lista.length - repEjecutadas,
+      sinFecha: repSinFecha,
+      lista,
+    }
+
     const lugar = p.pautaLugar?.[f.id]
     // Sin plan, sin contrato y sin actividad (DES va dentro de Centinela): no se informa.
     if (actividad.length === 0 && a.universo == null && a.programadas === 0 && !lugar?.items.length) continue
@@ -202,7 +278,7 @@ export function armarInformeSemanal(p: {
       }
     }
 
-    faenas.push({ faena_id: f.id, nombre: f.nombre, semana, trimestre, actividad, observaciones })
+    faenas.push({ faena_id: f.id, nombre: f.nombre, semana, trimestre, reprogramaciones, actividad, observaciones })
   }
 
   // Las actividades de pauta no se suman con los servicios: son unidades distintas.
@@ -210,7 +286,7 @@ export function armarInformeSemanal(p: {
   return {
     semana: { desde, hasta, numero: numeroSemana(desde) },
     comentario: '',
-    totales: { comprometidas: s('comprometidas'), ejecutadas: s('ejecutadas'), firmadas: s('firmadas'), reprogramadas: s('reprogramadas'), pct: pct(s('ejecutadas'), s('comprometidas')) },
+    totales: { comprometidas: s('comprometidas'), ejecutadas: s('ejecutadas'), firmadas: s('firmadas'), reprogramadas: s('reprogramadas'), pct: pct(s('ejecutadas'), s('comprometidas')), reprogTrimestre: faenas.reduce((t, f) => t + f.reprogramaciones.total, 0) },
     faenas,
   }
 }
