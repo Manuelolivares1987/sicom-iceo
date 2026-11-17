@@ -158,6 +158,9 @@ export type CamionDetallePpto = {
     horometro: number
     ritmo: number
     ritmo_fuente: string | null
+    ritmo_18m: number | null
+    ritmo_mejor_mes: number | null
+    mejor_mes: string | null
     horas_2027: number
     visitas: VisitaResumenPpto[]
     correctivo_base: number

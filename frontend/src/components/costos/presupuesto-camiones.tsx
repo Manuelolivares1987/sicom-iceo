@@ -20,6 +20,18 @@ const fmtM = (v: number) => (v / 1e6).toLocaleString('es-CL', { minimumFractionD
 const total27 = (c: Camion) => c.preventivo + c.correctivo + c.neumaticos + c.mayores
 const sumar = (fs: Camion[], f: (c: Camion) => number) => fs.reduce((a, c) => a + f(c), 0)
 const ORDEN_CONTRATO = ['Romeral', 'Franke', 'Calama ENEX']
+const fmtH = (v: number) => v.toLocaleString('es-CL', { maximumFractionDigits: 1 })
+const MES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
+
+/** Regla (MIG703): el mayor entre el promedio de 18 meses y el mejor mes completo de GPS. */
+function origenRitmo(b: CamionDetallePpto['base']): string {
+  const larga = b.ritmo_18m != null ? `promedio 18 meses ${fmtH(b.ritmo_18m)} h/día` : 'sin lecturas de 18 meses'
+  const mes = b.ritmo_mejor_mes != null && b.mejor_mes
+    ? `mejor mes GPS ${fmtH(b.ritmo_mejor_mes)} h/día (${MES[Number(b.mejor_mes.slice(5, 7)) - 1]} ${b.mejor_mes.slice(0, 4)})`
+    : 'sin mes completo de GPS'
+  return `Se toma el mayor entre ${larga} y ${mes}.`
+}
+
 const NIVEL_TIPO: Record<string, string> = { pauta: 'Pauta', componente: 'Componente', anual: 'Servicio anual' }
 
 export function PresupuestoPorCamion() {
@@ -164,7 +176,8 @@ function DetalleBase({ c }: { c: Camion }) {
         {b.con_pauta ? (
           <>
             <p>Pauta del fabricante ({b.grupo_kit}) cada {fmtNum(b.intervalo_horas ?? 0)} h.</p>
-            <p>Horómetro {fmtNum(b.horometro)} h, ritmo {b.ritmo.toLocaleString('es-CL', { maximumFractionDigits: 2 })} h/día ({b.ritmo_fuente}): unas {fmtNum(b.horas_2027)} h en 2027.</p>
+            <p>Horómetro {fmtNum(b.horometro)} h, ritmo {fmtH(b.ritmo)} h/día ({b.ritmo_fuente}): unas {fmtNum(b.horas_2027)} h en 2027.</p>
+            <p className="text-gray-500">{origenRitmo(b)}</p>
             <ul className="mt-1 list-disc pl-4">
               {pautas.map((v) => (
                 <li key={`${v.tipo}${v.nivel}`}>{NIVEL_TIPO[v.tipo]} {v.tipo === 'anual' ? '' : v.nivel} × {v.n}: {fmtClp(v.costo)} <span className="text-gray-500">(kit completo {fmtClp(v.kit)})</span></li>
