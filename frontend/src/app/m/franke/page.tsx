@@ -57,7 +57,7 @@ const ACCESOS = [
     titulo: 'Bodega',
     bajada: 'Agua, repuestos y EPP con el lector · sacar, recibir, contar',
     // [MIG712] el mecánico de faena saca repuestos/filtros a su camión
-    roles: ['supervisor', 'tecnico_mantenimiento', 'jefe_operaciones', 'bodeguero', 'administrador'],
+    roles: ['supervisor', 'tecnico_mantenimiento', 'operador_taller', 'jefe_operaciones', 'bodeguero', 'administrador'],
   },
   {
     href: '/m/franke/entrega',
