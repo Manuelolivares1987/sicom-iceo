@@ -1,4 +1,5 @@
 import { createClient, type User as SupabaseUser } from '@supabase/supabase-js'
+import { reportarExitoRed, reportarFalloRed } from '@/lib/conectividad'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
@@ -13,9 +14,44 @@ if (typeof window !== 'undefined' && (!supabaseUrl || !supabaseAnonKey)) {
   )
 }
 
+/**
+ * [19-11-2026] Ninguna llamada a Supabase puede esperar para siempre.
+ * Con señal a medias el navegador deja la petición abierta minutos: la
+ * pantalla queda en «Cargando…» y el código offline de cada app (que sabe
+ * usar lo guardado cuando la consulta FALLA) nunca se entera. Con límite, la
+ * consulta falla a tiempo y cada app cae a lo que tiene en el teléfono.
+ * Fotos y PDF (Storage) y las funciones (Copiloto) tienen más margen.
+ */
+function limitePara(url: string): number {
+  if (url.includes('/storage/v1/')) return 300_000
+  if (url.includes('/functions/v1/')) return 150_000
+  if (url.includes('/auth/v1/')) return 20_000
+  return 60_000
+}
+
+export function fetchConLimite(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
+  const ctrl = new AbortController()
+  const t = setTimeout(() => ctrl.abort(), limitePara(url))
+  const externo = init?.signal
+  if (externo) {
+    if (externo.aborted) ctrl.abort()
+    else externo.addEventListener('abort', () => ctrl.abort(), { once: true })
+  }
+  return fetch(input, { ...init, signal: ctrl.signal })
+    .then((r) => { reportarExitoRed(); return r })
+    .catch((e) => {
+      // Lo cancelado por la propia pantalla no es un problema de señal.
+      if (!externo?.aborted) reportarFalloRed()
+      throw e
+    })
+    .finally(() => clearTimeout(t))
+}
+
 export const supabase = createClient(
   supabaseUrl || 'https://placeholder.supabase.co',
-  supabaseAnonKey || 'placeholder-key'
+  supabaseAnonKey || 'placeholder-key',
+  { global: { fetch: fetchConLimite } },
 )
 
 /**
