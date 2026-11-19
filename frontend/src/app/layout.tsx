@@ -3,6 +3,7 @@ import './globals.css'
 import { QueryProvider } from '@/contexts/query-provider'
 import { AuthProvider } from '@/contexts/auth-context'
 import { ToastProvider } from '@/contexts/toast-context'
+import { RecuperacionChunks } from '@/components/layout/recuperacion-chunks'
 
 export const metadata: Metadata = {
   title: 'SICOM-ICEO | Pillado Empresas',
@@ -51,6 +52,7 @@ export default function RootLayout({
   return (
     <html lang="es">
       <body>
+        <RecuperacionChunks />
         <QueryProvider>
           <AuthProvider>
             <ToastProvider>{children}</ToastProvider>
