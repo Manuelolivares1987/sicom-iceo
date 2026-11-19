@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import { EXTRAS_POR_FAENA } from '@/lib/faena-acotada'
 import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
@@ -574,6 +575,10 @@ export default function Sidebar({ collapsed, onToggle, onClose }: SidebarProps) 
       { label: 'Plan de mantención', href: '/dashboard/mantenimiento/plan-semanal-taller', icon: CalendarClock },
       { label: 'Personal acreditado', href: '/dashboard/prevencion/personal', icon: Users },
     )
+    // [MIG714] Lo propio de la faena (Franke: bodega, copiloto del taller, mis OTs).
+    for (const x of EXTRAS_POR_FAENA[faenaSolo.codigo] ?? []) {
+      items.push({ label: x.label, href: x.href, icon: x.icono === 'bodega' ? Package : x.icono === 'copiloto' ? Bot : ClipboardList })
+    }
 
     if (faenaSolo.app_movil) {
       items.push({ label: 'Vista de terreno', href: faenaSolo.app_movil, icon: Smartphone })
