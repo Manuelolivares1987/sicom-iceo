@@ -72,6 +72,33 @@ const withPWA = require('@ducanh2912/next-pwa').default({
           }],
         },
       },
+      // [19-11-2026] Las reglas por defecto «pages» y «pages-rsc» esperan a la
+      // red SIN límite: con señal a medias, cambiar de pantalla (o el guard que
+      // manda a cada uno a su faena) quedaba colgado para siempre. Mismo
+      // cacheName = reemplazan a las del plugin; a los 8 s se usa lo guardado.
+      // Solo documentos y payload RSC: el resto de los archivos sigue con sus
+      // reglas de siempre.
+      {
+        urlPattern: ({ request, url, sameOrigin }) =>
+          sameOrigin && !url.pathname.startsWith('/api/') &&
+          request.headers.get('RSC') === '1' && !request.headers.get('Next-Router-Prefetch'),
+        handler: 'NetworkFirst',
+        options: {
+          cacheName: 'pages-rsc',
+          networkTimeoutSeconds: 8,
+          expiration: { maxEntries: 32, maxAgeSeconds: 24 * 60 * 60 },
+        },
+      },
+      {
+        urlPattern: ({ request, url, sameOrigin }) =>
+          sameOrigin && !url.pathname.startsWith('/api/') && request.mode === 'navigate',
+        handler: 'NetworkFirst',
+        options: {
+          cacheName: 'pages',
+          networkTimeoutSeconds: 8,
+          expiration: { maxEntries: 32, maxAgeSeconds: 24 * 60 * 60 },
+        },
+      },
       {
         urlPattern: /^https:\/\/[a-z0-9-]+\.supabase\.co\/(rest|auth|functions|realtime|graphql)\//i,
         handler: 'NetworkOnly',

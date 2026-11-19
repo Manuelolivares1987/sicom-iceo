@@ -37,7 +37,8 @@ interface AuthContextValue {
    *  servidor (típicamente, sin señal). Se trabaja con lo descargado. */
   sesionSinValidar: boolean
   signIn: (email: string, password: string) => Promise<void>
-  signOut: () => Promise<void>
+  /** false si el usuario decidió no salir (tenía trabajo sin enviar). */
+  signOut: () => Promise<boolean>
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined)
@@ -57,6 +58,24 @@ function leerPerfilCache(userId: string): UsuarioPerfil | null {
 
 function guardarPerfilCache(p: UsuarioPerfil): void {
   try { localStorage.setItem(PERFIL_CACHE_KEY, JSON.stringify(p)) } catch { /* noop */ }
+}
+
+/** Registros sin enviar en las bases offline que el logout borra (Calama y Taller). */
+async function contarPendientesOffline(): Promise<number> {
+  if (typeof window === 'undefined') return 0
+  let total = 0
+  try {
+    const { calamaDB } = await import('@/lib/offline/calama-db')
+    const db = calamaDB()
+    total += await db.sync_queue.where('status').anyOf('pending', 'error').count()
+  } catch { /* sin base o ilegible */ }
+  try {
+    const { tallerDB } = await import('@/lib/offline/taller-db')
+    const db = tallerDB()
+    total += await db.pending.count()
+    total += await db.pendingPlan.count()
+  } catch { /* sin base o ilegible */ }
+  return total
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -248,14 +267,44 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
+  // [19-11-2026] Cerrar sesión = SOLO este teléfono (scope 'local').
+  //  - Antes era 'global': salir en un equipo mataba la sesión en todos (el
+  //    supervisor que cerraba en el PC dejaba al mismo usuario fuera en el
+  //    teléfono de faena), y cada «Cerrar sesión» de alguien pegado en la
+  //    ruedita lo dejaba peor.
+  //  - Sin señal tampoco falla: auth-js borra la sesión local antes de avisar
+  //    al servidor, y ese aviso no puede frenar la salida (se corta a los 4 s).
+  //  - Si hay trabajo sin enviar en las bases offline, se pregunta antes de
+  //    borrarlo: perder una jornada entera por un toque es peor que preguntar.
   const signOut = useCallback(async () => {
     setError(null)
-    const { error: authError } = await supabase.auth.signOut()
 
-    if (authError) {
-      setError('Error al cerrar sesión.')
-      throw authError
+    const pendientes = await contarPendientesOffline()
+    if (pendientes > 0 && typeof window !== 'undefined') {
+      const seguir = window.confirm(
+        `Hay ${pendientes} registro(s) guardados sin señal que todavía no se envían.\n\n` +
+        'Si cierra sesión ahora se pierden. Conéctese a la red y espere a que se envíen.\n\n' +
+        '¿Cerrar sesión igual?',
+      )
+      if (!seguir) return false
     }
+
+    try {
+      await Promise.race([
+        supabase.auth.signOut({ scope: 'local' }),
+        new Promise((r) => setTimeout(r, 4000)),
+      ])
+    } catch (e) {
+      // La sesión local ya se borró; lo que falló es avisar al servidor.
+      console.warn('[auth] signOut: no se pudo avisar al servidor', e)
+    }
+    // Por si el aviso quedó colgado antes de borrar: nunca dejar sesión guardada.
+    try {
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const k = localStorage.key(i)
+        if (k && k.startsWith('sb-') && k.includes('-auth-token')) localStorage.removeItem(k)
+      }
+    } catch { /* noop */ }
 
     setUser(null)
     setPerfil(null)
@@ -273,6 +322,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { clearTallerDB } = await import('@/lib/offline/taller-db')
       await clearTallerDB()
     } catch { /* noop */ }
+    return true
   }, [])
 
   return (

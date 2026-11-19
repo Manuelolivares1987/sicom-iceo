@@ -25,8 +25,7 @@ export function SalidaTerrenoPrevencion() {
   const router = useRouter()
 
   const salir = async () => {
-    try { await signOut() } catch { /* la sesión local igual se limpia abajo */ }
-    router.replace('/login')
+    if (await signOut()) router.replace('/login')
   }
 
   const tienePanel = perfil?.rol !== 'supervisor' || !!faenaExclusiva()?.panel_web
