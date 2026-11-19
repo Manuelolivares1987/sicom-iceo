@@ -25,7 +25,7 @@ export default function PortalLoginPage() {
       if (errLogin) { setError(errLogin.message); return }
       const esPortal = await esUsuarioPortal()
       if (!esPortal) {
-        await supabase.auth.signOut()
+        await supabase.auth.signOut({ scope: 'local' })
         setError('Este usuario no tiene acceso al portal cliente. Si eres usuario de Pillado, entra por /dashboard.')
         return
       }

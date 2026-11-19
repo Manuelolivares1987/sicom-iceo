@@ -145,8 +145,7 @@ export default function MecanicoHomePage() {
   }
 
   async function salir() {
-    try { await signOut() } catch { /* noop */ }
-    router.replace('/login')
+    if (await signOut()) router.replace('/login')
   }
 
   // Nombres del selector "Soy:" del operador (catálogo real; MECANICOS de respaldo).
