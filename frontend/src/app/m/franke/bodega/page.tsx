@@ -13,7 +13,9 @@
 // está en la cola. Igual que la pauta del mecánico.
 //
 //   Sacar   → repuesto/filtro/lubricante exige camión; agua/EPP va a la operación.
-//   Recibir → lo que llega (envío desde Coquimbo, compra local).
+//   Recibir → primero los envíos de Coquimbo en camino (se confirman, MIG712);
+//             lo demás (compra local) con el lector.
+//   El mecánico (MIG712) solo ve «Sacar».
 //   Contar  → inventario físico; lo aprueba administración.
 // ============================================================================
 
@@ -33,6 +35,7 @@ import {
   ajustePendiente, buscarEnCatalogo, descartarOperacion, getCatalogo, guardarOperacion, pendientesBodega,
   type Catalogo, type OperacionPendiente, type TipoOperacion,
 } from '@/lib/offline/bodega-faena-offline'
+import { EnviosPorRecibir } from '@/components/bodega/envios-por-recibir'
 
 type Modo = 'sacar' | 'recibir' | 'contar'
 type Linea = ProductoLector & { cantidad: number }
@@ -66,7 +69,7 @@ export default function BodegaFrankePage() {
   const [equipo, setEquipo] = useState('')
   const [motivo, setMotivo] = useState('')
   const [entregadoA, setEntregadoA] = useState('')
-  const [origen, setOrigen] = useState('Envío desde bodega Coquimbo')
+  const [origen, setOrigen] = useState('Compra local')
   const [documento, setDocumento] = useState('')
   const [completo, setCompleto] = useState(false)
   const [uuid, setUuid] = useState(nuevoUuid)
@@ -117,6 +120,9 @@ export default function BodegaFrankePage() {
     else setOpciones(r)
   }
 
+  // [MIG712] catálogos guardados antes de MIG712 no traen puede_sacar
+  const puedeSacar = !!cat && (cat.puede_sacar ?? cat.puede_operar)
+  const modosVisibles = cat && !cat.puede_operar ? MODOS.filter((m) => m.id === 'sacar') : MODOS
   const exigeEquipo = lineas.some((l) => l.exige_equipo)
   const faltaStock = modo === 'sacar' ? lineas.filter((l) => l.cantidad > stockDe(l)) : []
   const modoInfo = MODOS.find((m) => m.id === modo)!
@@ -209,8 +215,18 @@ export default function BodegaFrankePage() {
           </div>
         )}
 
-        <div className="mx-4 mt-3 grid grid-cols-3 gap-2">
-          {MODOS.map((m) => (
+        {!puedeSacar && (
+          <p className="mx-4 mt-3 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+            Su usuario puede ver la bodega pero no sacar de ella. Pida al administrador que lo agregue como responsable.
+          </p>
+        )}
+        {cat && !cat.puede_operar && puedeSacar && (
+          <p className="mx-4 mt-3 rounded-xl border border-gray-200 bg-white p-3 text-xs text-gray-600">
+            Usted saca repuestos y filtros para su camión. Recibir y contar lo hace el supervisor de turno.
+          </p>
+        )}
+        <div className={cn('mx-4 mt-3 grid gap-2', modosVisibles.length === 1 ? 'grid-cols-1' : 'grid-cols-3')}>
+          {modosVisibles.map((m) => (
             <button key={m.id} onClick={() => { setModo(m.id); setLineas([]); setUuid(nuevoUuid()) }}
                     className={cn('flex flex-col items-center gap-1 rounded-xl border-2 py-3 text-sm font-semibold',
                       modo === m.id ? `${m.color} border-transparent text-white` : 'border-gray-200 bg-white text-gray-700')}>
@@ -218,6 +234,10 @@ export default function BodegaFrankePage() {
             </button>
           ))}
         </div>
+
+        {modo === 'recibir' && cat.puede_operar && (
+          <EnviosPorRecibir bodegaId={cat.bodega_id} online={online} onRecibido={() => void cargarCatalogo(true)} />
+        )}
 
         <form onSubmit={alLeer} className="mx-4 mt-3">
           <label className="flex items-center gap-2 rounded-xl border-2 border-gray-900 bg-white px-3 py-3 focus-within:ring-2 focus-within:ring-gray-900">

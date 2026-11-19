@@ -357,6 +357,9 @@ const navGroups: NavGroup[] = [
         tooltip: 'Pedir útiles, tóner, insumos de aseo o cualquier artículo que no venga de un hallazgo ni de una orden de trabajo' },
       { label: 'Ingresar mercadería', href: '/dashboard/bodega/ingreso', icon: PackagePlus, extendedModule: 'bodega', badge: 'Nuevo',
         tooltip: 'Llegó una factura o guía: proveedor, documento, productos → stock. Sin orden de compra' },
+      // [MIG712] Coquimbo despacha a la faena; la faena confirma lo que llegó.
+      { label: 'Enviar a faena', href: '/dashboard/bodega/envios', icon: Truck, extendedModule: 'bodega', badge: 'Nuevo',
+        tooltip: 'Armar el envío a Franke (con lo que le falta para 30 días de consumo); sale de Coquimbo y la faena confirma la recepción' },
       { label: 'Panel Bodega', href: '/dashboard/inventario', icon: Package, extendedModule: 'bodega',
         tooltip: 'Stock, compras, salidas, combustible y reportes — todo en un solo panel' },
       // [MIG694] Bodega también ve el consolidado de combustible y las transacciones de la tarjeta.

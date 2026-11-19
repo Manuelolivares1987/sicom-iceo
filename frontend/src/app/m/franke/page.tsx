@@ -56,7 +56,8 @@ const ACCESOS = [
     icono: ScanBarcode,
     titulo: 'Bodega',
     bajada: 'Agua, repuestos y EPP con el lector · sacar, recibir, contar',
-    roles: ['supervisor', 'jefe_operaciones', 'bodeguero', 'administrador'],
+    // [MIG712] el mecánico de faena saca repuestos/filtros a su camión
+    roles: ['supervisor', 'tecnico_mantenimiento', 'jefe_operaciones', 'bodeguero', 'administrador'],
   },
   {
     href: '/m/franke/entrega',
