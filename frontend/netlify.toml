@@ -4,3 +4,17 @@
 
 [[plugins]]
   package = "@netlify/plugin-nextjs"
+
+# [19-11-2026] El service worker y el manifest nunca se cachean: si el CDN o el
+# navegador guardan un sw.js viejo, el teléfono sigue con el build anterior
+# (chunks que ya no existen) y queda en la ruedita.
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate"
+    Service-Worker-Allowed = "/"
+
+[[headers]]
+  for = "/manifest.json"
+  [headers.values]
+    Cache-Control = "no-cache"
