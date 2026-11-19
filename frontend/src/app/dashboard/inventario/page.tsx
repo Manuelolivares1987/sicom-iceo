@@ -307,6 +307,7 @@ export default function InventarioPage() {
           { label: 'Consolidado combustible', description: 'Ventas y despachos por cliente, patente y día', href: '/dashboard/comercial/combustible-consolidado', icon: Fuel, accent: 'amber' },
           { label: 'Transacciones tarjeta Aramco', description: 'Cargas de camionetas cruzadas con el GPS', href: '/dashboard/flota/rendimiento-combustible', icon: Gauge, accent: 'blue', badge: 'Nuevo' },
           { label: 'Bodega Franke', description: 'Stock de faena, alertas y combustible de Franke', href: '/dashboard/bodega/franke', icon: Briefcase, accent: 'slate', badge: 'Nuevo' },
+          { label: 'Enviar a faena', description: 'Despachar a Franke lo que le falta; la faena confirma', href: '/dashboard/bodega/envios', icon: Truck, accent: 'green', badge: 'Nuevo' },
         ]}
       />
 

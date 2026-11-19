@@ -42,6 +42,8 @@ export type Catalogo = {
   bodega_id: string
   generado_at: string
   puede_operar: boolean
+  /** [MIG712] el mecánico solo saca (no recibe ni cuenta). Catálogos viejos: = puede_operar. */
+  puede_sacar: boolean
   productos: ProductoLector[]
   equipos: { id: string; patente: string; tipo: string }[]
 }
@@ -84,9 +86,9 @@ async function bajarCatalogo(codigoBodega: string): Promise<Catalogo> {
   if (eb) throw eb
   const { data, error } = await supabase.rpc('rpc_bodega_faena_catalogo', { p_bodega_id: b.id })
   if (error) throw error
-  const d = data as { generado_at: string; puede_operar: boolean; productos: FilaCat[]; equipos: Catalogo['equipos'] }
+  const d = data as { generado_at: string; puede_operar: boolean; puede_sacar?: boolean; productos: FilaCat[]; equipos: Catalogo['equipos'] }
   return {
-    bodega_id: b.id, generado_at: d.generado_at, puede_operar: d.puede_operar, equipos: d.equipos,
+    bodega_id: b.id, generado_at: d.generado_at, puede_operar: d.puede_operar, puede_sacar: d.puede_sacar ?? d.puede_operar, equipos: d.equipos,
     productos: d.productos.map(([id, codigo, barras, nombre, categoria, unidad, stock, minimo]) => ({
       producto_id: id, codigo, codigo_barras: barras, nombre, categoria, unidad, stock: Number(stock ?? 0),
       minimo: minimo == null ? null : Number(minimo), maximo: null,

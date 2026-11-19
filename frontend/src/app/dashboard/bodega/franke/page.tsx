@@ -14,12 +14,13 @@
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, CheckCircle2, ClipboardCheck, Fuel, Package, Printer, ScanBarcode, Search, XCircle } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, ClipboardCheck, Fuel, Package, Printer, RefreshCw, ScanBarcode, Search, Truck, XCircle } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useRequireAuth } from '@/hooks/use-require-auth'
 import { useToast } from '@/contexts/toast-context'
 import { cn, errorMessage } from '@/lib/utils'
 import { BODEGA_FRANKE, fijarMinimo, getBodegaPorCodigo, getPanelBodega, type EstadoStock, type FilaStock } from '@/lib/services/bodega-faena'
+import { getEnvios, recalcularMinimos } from '@/lib/services/bodega-envios'
 
 const fmt = (n: number | null | undefined, d = 2) => (n == null ? '—' : Number(n).toLocaleString('es-CL', { maximumFractionDigits: d }))
 const pesos = (n: number | null | undefined) => (n == null ? '—' : '$' + Math.round(Number(n)).toLocaleString('es-CL'))
@@ -41,6 +42,23 @@ export default function PanelBodegaFrankePage() {
   const { data: panel, isLoading, error } = useQuery({
     queryKey: ['bodega-panel', bodega?.id], queryFn: () => getPanelBodega(bodega!.id), enabled: !!bodega?.id,
   })
+
+  const qc = useQueryClient()
+  const toast = useToast()
+  const [recalculando, setRecalculando] = useState(false)
+  const { data: envios } = useQuery({
+    queryKey: ['bodega-envios', bodega?.id, 'en-camino'], queryFn: () => getEnvios(bodega!.id, true), enabled: !!bodega?.id,
+  })
+  const enCamino = (envios ?? []).filter((e) => e.estado === 'en_camino' && e.destino.id === bodega?.id).length
+  async function recalcular() {
+    if (!bodega) return
+    setRecalculando(true)
+    try {
+      const r = await recalcularMinimos(bodega.id)
+      toast.success(`Mínimos = ${r.dias} días de consumo (${r.fuente === 'auto_sicom' ? 'salidas de esta bodega' : 'historial Softland de la faena'}, ${r.ventana_dias} días): ${r.productos_calculados} productos. Los fijados a mano no se tocan.`)
+      qc.invalidateQueries({ queryKey: ['bodega-panel'] })
+    } catch (e) { toast.error(errorMessage(e)) } finally { setRecalculando(false) }
+  }
 
   const stock = useMemo(() => {
     const t = filtro.trim().toLowerCase()
@@ -71,6 +89,9 @@ export default function PanelBodegaFrankePage() {
               <Printer className="h-4 w-4" /> Etiquetas
             </Link>
           )}
+          <Link href="/dashboard/bodega/envios" className="flex items-center gap-2 rounded-lg border bg-white px-3 py-2 text-sm font-medium hover:bg-gray-50">
+            <Truck className="h-4 w-4" /> Envíos desde Coquimbo{enCamino ? ` (${enCamino} en camino)` : ''}
+          </Link>
         </div>
       </header>
 
@@ -115,10 +136,23 @@ export default function PanelBodegaFrankePage() {
 
       {pestana === 'stock' && panel && (
         <div className="space-y-2">
-          <label className="flex max-w-sm items-center gap-2 rounded-lg border bg-white px-3 py-2">
-            <Search className="h-4 w-4 text-gray-400" />
-            <input value={filtro} onChange={(e) => setFiltro(e.target.value)} placeholder="Buscar producto" className="w-full text-sm outline-none" />
-          </label>
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="flex max-w-sm flex-1 items-center gap-2 rounded-lg border bg-white px-3 py-2">
+              <Search className="h-4 w-4 text-gray-400" />
+              <input value={filtro} onChange={(e) => setFiltro(e.target.value)} placeholder="Buscar producto" className="w-full text-sm outline-none" />
+            </label>
+            {panel.puede_operar && (
+              <button onClick={() => void recalcular()} disabled={recalculando}
+                      className="flex items-center gap-2 rounded-lg border bg-white px-3 py-2 text-sm font-medium hover:bg-gray-50 disabled:opacity-50">
+                <RefreshCw className={cn('h-4 w-4', recalculando && 'animate-spin')} /> Recalcular mínimos (15 días)
+              </button>
+            )}
+          </div>
+          <p className="text-xs text-gray-500">
+            Mínimo = 15 días de consumo; máximo = 30 días (lo que pide reponer «Enviar a faena»). Se calcula solo cada semana: mientras la bodega tenga menos
+            de 60 días de salidas propias se usa lo que Coquimbo despachó a los CECO de Franke en Softland (180 días). Si cambia un mínimo a mano, queda fijo;
+            póngalo en 0 sin máximo para que vuelva a calcularse. Productos de uso esporádico (menos de media unidad en 15 días) quedan sin mínimo.
+          </p>
           <div className="overflow-x-auto rounded-xl border bg-white">
             <table className="w-full text-sm">
               <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
