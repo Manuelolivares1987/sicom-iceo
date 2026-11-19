@@ -1,5 +1,6 @@
 import SugerenciaWidget from '@/components/sugerencias/sugerencia-widget'
 import { VolverAlPanel } from '@/components/layout/volver-al-panel'
+import { GuardFaenaMovil } from '@/components/layout/guard-faena-movil'
 import { EnexSyncAgent } from '@/components/enex/sync-agent'
 
 export default function EnexMobileLayout({ children }: { children: React.ReactNode }) {
@@ -12,6 +13,8 @@ export default function EnexMobileLayout({ children }: { children: React.ReactNo
           reporta mejoras/errores al instante desde la app. */}
       <SugerenciaWidget />
       <VolverAlPanel />
+      {/* [MIG714] quien está acotado a su faena no entra a otras apps */}
+      <GuardFaenaMovil />
     </div>
   )
 }

@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect } from 'react'
+import { rutaWebPermitida, type FaenaAcotada } from '@/lib/faena-acotada'
 import { useRouter, usePathname } from 'next/navigation'
 import AppShell from '@/components/layout/app-shell'
 import { useRequireAuth } from '@/hooks/use-require-auth'
@@ -126,15 +127,8 @@ export default function DashboardLayout({
  */
 function rutaPermitidaEnFaena(
   pathname: string,
-  faena: { panel_web?: string | null; app_movil: string | null },
+  faena: FaenaAcotada,
 ): boolean {
-  const permitidas = [
-    faena.panel_web ?? null,
-    '/dashboard/activos',
-    '/dashboard/ordenes-trabajo',
-    '/dashboard/mantenimiento/plan-semanal-taller',
-    '/dashboard/prevencion/personal',
-  ].filter((r): r is string => !!r)
-
-  return permitidas.some((r) => pathname === r || pathname.startsWith(`${r}/`))
+  // [MIG714] lista única con extras por faena (Franke: bodega, copiloto, mis OTs)
+  return rutaWebPermitida(pathname, faena)
 }

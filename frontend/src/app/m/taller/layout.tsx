@@ -4,6 +4,7 @@ import { useRequireAuth } from '@/hooks/use-require-auth'
 import { Spinner } from '@/components/ui/spinner'
 import SugerenciaWidget from '@/components/sugerencias/sugerencia-widget'
 import { VolverAlPanel } from '@/components/layout/volver-al-panel'
+import { GuardFaenaMovil } from '@/components/layout/guard-faena-movil'
 
 export default function MobileTallerLayout({ children }: { children: React.ReactNode }) {
   const { loading } = useRequireAuth()
@@ -22,6 +23,8 @@ export default function MobileTallerLayout({ children }: { children: React.React
       {/* Ampolleta de sugerencias: el operador reporta errores/mejoras al instante */}
       <SugerenciaWidget />
       <VolverAlPanel />
+      {/* [MIG714] quien está acotado a su faena no entra a otras apps */}
+      <GuardFaenaMovil />
     </div>
   )
 }
