@@ -31,7 +31,11 @@ const withPWA = require('@ducanh2912/next-pwa').default({
   workboxOptions: {
     disableDevLogs: true,
     runtimeCaching: [
-      // Apps de terreno ENEX, Prevención (inspección APR, MIG685) y Franke (pauta, despacho,
+      // [19-11-2026] TODAS las apps de terreno (/m/*): taller, Romeral y Calama
+      // tenían la regla general (1 día) y al día siguiente sin señal caían en
+      // /offline. La precarga (components/layout/precarga-terreno.tsx) llena
+      // esta caché con las pantallas de la app de cada usuario.
+      // Antes: apps de terreno ENEX, Prevención (inspección APR, MIG685) y Franke (pauta, despacho,
       // bodega con lector — MIG694): tienen que abrir sin señal días después de la
       // última conexión. La regla general de páginas guarda 32 por 1 día y
       // espera a la red sin límite, así que al día siguiente en faena (o con
@@ -41,12 +45,12 @@ const withPWA = require('@ducanh2912/next-pwa').default({
       // página para todos los servicios.
       {
         urlPattern: ({ request, url, sameOrigin }) =>
-          sameOrigin && (url.pathname.startsWith('/m/enex') || url.pathname.startsWith('/m/prevencion') || url.pathname.startsWith('/m/franke')) && request.headers.get('RSC') !== '1',
+          sameOrigin && url.pathname.startsWith('/m/') && request.headers.get('RSC') !== '1',
         handler: 'NetworkFirst',
         options: {
           cacheName: 'enex-terreno-paginas',
           networkTimeoutSeconds: 4,
-          expiration: { maxEntries: 40, maxAgeSeconds: 30 * 24 * 60 * 60 },
+          expiration: { maxEntries: 80, maxAgeSeconds: 30 * 24 * 60 * 60 },
           plugins: [{
             // Con punto y coma: el plugin copia la función al service worker
             // en una sola línea.
@@ -58,13 +62,13 @@ const withPWA = require('@ducanh2912/next-pwa').default({
       // prefetch se dejan a la regla general.
       {
         urlPattern: ({ request, url, sameOrigin }) =>
-          sameOrigin && (url.pathname.startsWith('/m/enex') || url.pathname.startsWith('/m/prevencion') || url.pathname.startsWith('/m/franke')) &&
+          sameOrigin && url.pathname.startsWith('/m/') &&
           request.headers.get('RSC') === '1' && !request.headers.get('Next-Router-Prefetch'),
         handler: 'NetworkFirst',
         options: {
           cacheName: 'enex-terreno-rsc',
           networkTimeoutSeconds: 4,
-          expiration: { maxEntries: 40, maxAgeSeconds: 30 * 24 * 60 * 60 },
+          expiration: { maxEntries: 80, maxAgeSeconds: 30 * 24 * 60 * 60 },
           plugins: [{
             // Con punto y coma: el plugin copia la función al service worker
             // en una sola línea.
@@ -110,6 +114,11 @@ const withPWA = require('@ducanh2912/next-pwa').default({
 
 const nextConfig = {
   trailingSlash: true,
+  // Versión del build (Netlify da COMMIT_REF): la precarga de terreno se rehace
+  // con cada versión nueva.
+  env: {
+    NEXT_PUBLIC_BUILD_ID: (process.env.COMMIT_REF || String(Date.now())).slice(0, 12),
+  },
   images: {
     unoptimized: true,
   },

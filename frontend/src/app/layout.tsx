@@ -4,6 +4,8 @@ import { QueryProvider } from '@/contexts/query-provider'
 import { AuthProvider } from '@/contexts/auth-context'
 import { ToastProvider } from '@/contexts/toast-context'
 import { RecuperacionChunks } from '@/components/layout/recuperacion-chunks'
+import { ConectividadInit } from '@/components/layout/conectividad-init'
+import { PrecargaTerreno } from '@/components/layout/precarga-terreno'
 
 export const metadata: Metadata = {
   title: 'SICOM-ICEO | Pillado Empresas',
@@ -53,8 +55,10 @@ export default function RootLayout({
     <html lang="es">
       <body>
         <RecuperacionChunks />
+        <ConectividadInit />
         <QueryProvider>
           <AuthProvider>
+            <PrecargaTerreno />
             <ToastProvider>{children}</ToastProvider>
           </AuthProvider>
         </QueryProvider>
