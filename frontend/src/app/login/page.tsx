@@ -1,11 +1,11 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import Image from 'next/image'
-import { useRouter } from 'next/navigation'
 import { Eye, EyeOff, LogIn } from 'lucide-react'
 import { useAuth } from '@/contexts/auth-context'
+import { RedireccionSegura } from '@/components/layout/redireccion-segura'
 
 interface LoginForm {
   email: string
@@ -20,14 +20,13 @@ interface LoginForm {
  * aceptan rutas internas.
  */
 function destinoTrasEntrar(): string {
-  if (typeof window === 'undefined') return '/dashboard'
+  if (typeof window === 'undefined') return '/dashboard/'
   const next = new URLSearchParams(window.location.search).get('next')
   if (next && next.startsWith('/') && !next.startsWith('//')) return next
-  return '/dashboard'
+  return '/dashboard/'
 }
 
 export default function LoginPage() {
-  const router = useRouter()
   const { signIn, isAuthenticated, loading: authLoading } = useAuth()
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -38,21 +37,22 @@ export default function LoginPage() {
     formState: { errors, isSubmitting },
   } = useForm<LoginForm>()
 
-  // Redirect if already authenticated
-  useEffect(() => {
-    if (!authLoading && isAuthenticated) {
-      router.replace(destinoTrasEntrar())
-    }
-  }, [authLoading, isAuthenticated, router])
 
   const onSubmit = async (data: LoginForm) => {
     setError(null)
     try {
       await signIn(data.email, data.password)
-      router.push(destinoTrasEntrar())
+      // [19-11-2026] Navegación completa y no router.push: con señal de faena
+      // la navegación interna podía no llegar nunca y dejaba el login a medias.
+      window.location.replace(destinoTrasEntrar())
     } catch {
       setError('Credenciales inválidas. Verifique su correo y contraseña.')
     }
+  }
+
+  // Ya con sesión: a su pantalla, con la redirección que no se queda pegada.
+  if (!authLoading && isAuthenticated) {
+    return <RedireccionSegura destino={destinoTrasEntrar()} />
   }
 
   // Don't render form while checking auth state

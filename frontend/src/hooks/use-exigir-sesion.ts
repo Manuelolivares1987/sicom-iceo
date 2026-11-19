@@ -25,7 +25,12 @@ export function useExigirSesion(): {
     // Sin conexión el login tampoco carga ni valida: se queda en la pantalla
     // con un aviso claro en vez de rebotar a un formulario inservible.
     if (typeof navigator !== 'undefined' && !navigator.onLine) return
-    router.replace(`/login?next=${encodeURIComponent(pathname || '/')}`)
+    const destino = `/login/?next=${encodeURIComponent(pathname || '/')}`
+    router.replace(destino)
+    // [19-11-2026] Si la navegación interna no llega (señal débil, build viejo),
+    // el navegador sí: antes la pantalla quedaba en su spinner para siempre.
+    const t = setTimeout(() => window.location.replace(destino), 3000)
+    return () => clearTimeout(t)
   }, [loading, isAuthenticated, pathname, router])
 
   return { verificando: loading || (!isAuthenticated && !sinSesionOffline), sinSesionOffline }
