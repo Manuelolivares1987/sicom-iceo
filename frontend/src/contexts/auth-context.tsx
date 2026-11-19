@@ -129,7 +129,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const r = await supabase
         .from('usuarios_perfil')
-        .select('*, faena:faenas(id, codigo, nombre, app_movil, panel_web)')
+        .select('*, faena:faenas!usuarios_perfil_faena_id_fkey(id, codigo, nombre, app_movil, panel_web)')
         .eq('id', userId)
         .maybeSingle()
       data = r.data

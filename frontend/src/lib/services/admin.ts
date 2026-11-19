@@ -3,7 +3,7 @@ import { supabase } from '@/lib/supabase'
 export async function getUsuarios() {
   const { data, error } = await supabase
     .from('usuarios_perfil')
-    .select('*, faena:faenas(nombre)')
+    .select('*, faena:faenas!usuarios_perfil_faena_id_fkey(nombre)')
     .order('nombre_completo')
   return { data, error }
 }
