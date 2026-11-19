@@ -94,7 +94,7 @@ function programar(ms?: number) {
   if (timer) clearTimeout(timer)
   timer = null
   if (document.visibilityState === 'hidden') return
-  timer = setTimeout(() => { void sondear() }, ms ?? (enLinea ? SONDEO_CON_RED_MS : SONDEO_SIN_RED_MS))
+  timer = setTimeout(() => { void sondear() }, ms ?? (enLinea && fallas === 0 ? SONDEO_CON_RED_MS : SONDEO_SIN_RED_MS))
 }
 
 /** El cliente de Supabase avisa: llegó una respuesta (hay red). */
