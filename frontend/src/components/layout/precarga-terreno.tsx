@@ -68,14 +68,30 @@ export function PrecargaTerreno() {
       if (conn?.saveData) return
       const urls = Array.from(apps).flatMap((app) => PANTALLAS[app].map((p) => (p ? `${app}/${p}/` : `${app}/`)))
       let ok = 0
+      // [19-11-2026] El precache ya no trae todos los JS (para que las
+      // actualizaciones bajen livianas): de cada pantalla se piden también sus
+      // scripts y estilos, y el service worker los guarda 30 días.
+      const recursos = new Set<string>()
       for (const u of urls) {
         if (cancelado || !estaEnLinea()) return
         try {
           const r = await fetch(u, { credentials: 'same-origin', cache: 'no-store' })
-          if (r.ok) ok += 1
+          if (r.ok) {
+            ok += 1
+            const html = await r.text()
+            for (const m of Array.from(html.matchAll(/(?:src|href)="(\/_next\/static\/[^"]+\.(?:js|css))"/g))) recursos.add(m[1])
+          }
         } catch { /* se reintenta otro día / con señal */ }
       }
-      if (ok === urls.length) {
+      let recursosOk = 0
+      for (const u of Array.from(recursos)) {
+        if (cancelado || !estaEnLinea()) return
+        try {
+          const r = await fetch(u, { credentials: 'same-origin' })
+          if (r.ok) recursosOk += 1
+        } catch { /* idem */ }
+      }
+      if (ok === urls.length && recursosOk === recursos.size) {
         try { localStorage.setItem(CLAVE, firma) } catch { /* sin storage */ }
       }
     }

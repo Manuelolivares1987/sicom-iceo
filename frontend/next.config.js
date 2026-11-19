@@ -28,9 +28,42 @@ const withPWA = require('@ducanh2912/next-pwa').default({
   // sigue con la regla por defecto. Las apps de terreno guardan su trabajo
   // sin señal en IndexedDB, no en esta caché.
   extendDefaultRuntimeCaching: true,
+  // [19-11-2026] plantillas/pdf.worker (1,2 MB) solo lo usa el panel de oficina.
+  publicExcludes: ['!noprecache/**', '!plantillas/**'],
   workboxOptions: {
     disableDevLogs: true,
+    // [19-11-2026] Precache MÍNIMO. Para actualizarse, el teléfono debe bajar
+    // TODO el precache (eran 443 archivos, 15 MB) y si UNO falla con mala
+    // señal descarta la versión nueva y se queda con la vieja — así el
+    // teléfono de Yohan siguió con el build que se colgaba aunque el arreglo
+    // ya estaba en producción. Ahora se precarga solo el arranque (framework,
+    // CSS, layout raíz, login, /offline y las apps de terreno /m/*); el resto
+    // (panel de oficina) se guarda al usarse (regla next-static-js-assets) y
+    // PrecargaTerreno baja los JS de la app de cada usuario.
+    manifestTransforms: [
+      async (entries) => {
+        const esencial = (url) =>
+          !/\/_next\/static\//.test(url) ||                         // public (iconos, manifest, offline)
+          /\/static\/css\//.test(url) ||
+          /\/static\/media\//.test(url) ||
+          /\/static\/[^/]+\/_(build|ssg)Manifest\.js$/.test(url) ||
+          /\/static\/chunks\/(framework|main|main-app|webpack|polyfills)[-.]/.test(url) ||
+          /\/static\/chunks\/app\/(m\/|offline\/|login\/|layout-|page-|error-|global-error-|_not-found\/)/.test(url)
+        return { manifest: entries.filter((e) => esencial(e.url)), warnings: [] }
+      },
+    ],
     runtimeCaching: [
+      // [19-11-2026] Los JS de Next tienen hash en el nombre: nunca cambian.
+      // CacheFirst 30 días y 400 entradas (antes 1 día / 64): lo que se abrió
+      // una vez abre sin señal, y no se re-descarga en cada visita.
+      {
+        urlPattern: /\/_next\/static.+\.js$/i,
+        handler: 'CacheFirst',
+        options: {
+          cacheName: 'next-static-js-assets',
+          expiration: { maxEntries: 400, maxAgeSeconds: 30 * 24 * 60 * 60 },
+        },
+      },
       // [19-11-2026] TODAS las apps de terreno (/m/*): taller, Romeral y Calama
       // tenían la regla general (1 día) y al día siguiente sin señal caían en
       // /offline. La precarga (components/layout/precarga-terreno.tsx) llena
