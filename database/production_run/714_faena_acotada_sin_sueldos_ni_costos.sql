@@ -22,7 +22,8 @@
 --   3. Sueldos/bono: política RESTRICTIVA fn_puede_ver_remuneraciones(); las vistas
 --      del bono e incentivos devuelven 0 filas a quien no corresponde.
 --   4. Costos: quien está acotado a su faena no los ve (vistas + informe de costos).
---   5. Los 3 supervisores y 2 mecánicos de Franke quedan acotados a su faena
+--   5. Marco Díaz pasa de Coquimbo a Franke (lugar de Hernán): sale del taller y del
+--      bono desde hoy; Hernán deja la bodega. Los 6 de Franke quedan acotados a su faena
 --      (menú y rutas: Franke, bodega, copiloto, OTs y equipos de Franke).
 -- Rollback: database/rollback/714_faena_acotada_sin_sueldos_ni_costos.sql
 -- ============================================================================
@@ -83,9 +84,31 @@ DROP POLICY IF EXISTS mig714_irc_acotado ON public.informe_recepcion_costos;
 CREATE POLICY mig714_irc_acotado ON public.informe_recepcion_costos AS RESTRICTIVE FOR SELECT TO authenticated
     USING (NOT public.fn_usuario_acotado());
 
--- ── Franke: los 5 acotados a su faena ───────────────────────────────────────
+-- ── Movimiento de personal (Manuel 18-11): Marco Díaz pasa a Franke en lugar de Hernán ──
+-- Marco: deja el taller de Coquimbo (sale de la lista de técnicos y del bono desde hoy)
+-- y queda como mecánico de faena Franke, turno A (el de Hernán), con la misma app que Yohan.
+-- Sus 4 OT abiertas de Coquimbo NO se reasignan acá: las reparte el jefe de taller.
+UPDATE public.usuarios_perfil
+   SET faena_id = (SELECT id FROM faenas WHERE codigo = 'FAE-FRANCKE'),
+       rol = 'tecnico_mantenimiento', cargo = 'Mecánico de faena · turno A', updated_at = NOW()
+ WHERE email = 'marco.diaz@sicom-iceo.cl';
+UPDATE public.taller_tecnicos
+   SET activo = false, participa_en_bono = false, motivo_sin_bono = 'Trasladado a faena Franke el 18-11-2026', updated_at = NOW()
+ WHERE usuario_perfil_id = (SELECT id FROM usuarios_perfil WHERE email = 'marco.diaz@sicom-iceo.cl');
+UPDATE public.taller_tecnico_cargo SET hasta = (NOW() AT TIME ZONE 'America/Santiago')::date
+ WHERE hasta IS NULL
+   AND tecnico_id IN (SELECT t.id FROM taller_tecnicos t JOIN usuarios_perfil u ON u.id = t.usuario_perfil_id
+                       WHERE u.email = 'marco.diaz@sicom-iceo.cl');
+UPDATE public.bodega_responsables SET nombre = 'Marco Díaz (mecánico Franke, solo sacar)'
+ WHERE email = 'marco.diaz@sicom-iceo.cl' AND bodega_id = (SELECT id FROM bodegas WHERE codigo = 'BOD-FRK-F01');
+-- Hernán deja la bodega de Franke (su cuenta queda como está).
+UPDATE public.bodega_responsables SET activo = false
+ WHERE email = 'hcortes@pillado.cl' AND bodega_id = (SELECT id FROM bodegas WHERE codigo = 'BOD-FRK-F01');
+
+-- ── Franke: acotados a su faena ─────────────────────────────────────────────
 UPDATE public.usuarios_perfil SET solo_su_faena = true
- WHERE email IN ('jsimon@pillado.cl', 'mespinosa@pillado.cl', 'earqueros@pillado.cl', 'hcortes@pillado.cl', 'yrondon@pillado.cl')
+ WHERE email IN ('jsimon@pillado.cl', 'mespinosa@pillado.cl', 'earqueros@pillado.cl', 'hcortes@pillado.cl', 'yrondon@pillado.cl',
+                 'marco.diaz@sicom-iceo.cl')
    AND faena_id = (SELECT id FROM faenas WHERE codigo = 'FAE-FRANCKE');
 
 DO $$
@@ -93,6 +116,10 @@ DECLARE v_n INT;
 BEGIN
     SELECT count(*) INTO v_n FROM usuarios_perfil u JOIN faenas f ON f.id = u.faena_id
      WHERE f.codigo = 'FAE-FRANCKE' AND u.solo_su_faena;
-    IF v_n < 5 THEN RAISE EXCEPTION 'MIG714: solo % usuarios de Franke quedaron acotados', v_n; END IF;
+    IF v_n < 6 THEN RAISE EXCEPTION 'MIG714: solo % usuarios de Franke quedaron acotados', v_n; END IF;
+    IF NOT EXISTS (SELECT 1 FROM usuarios_perfil u JOIN faenas f ON f.id = u.faena_id
+                    WHERE u.email = 'marco.diaz@sicom-iceo.cl' AND f.codigo = 'FAE-FRANCKE' AND u.rol = 'tecnico_mantenimiento') THEN
+        RAISE EXCEPTION 'MIG714: Marco Díaz no quedó en Franke';
+    END IF;
     RAISE NOTICE 'MIG714 OK: % usuarios de Franke acotados; sueldos, bono y costos cerrados', v_n;
 END $$;

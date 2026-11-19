@@ -154,3 +154,12 @@ UPDATE public.usuarios_perfil SET solo_su_faena = false
  WHERE email IN ('jsimon@pillado.cl','mespinosa@pillado.cl','earqueros@pillado.cl','hcortes@pillado.cl','yrondon@pillado.cl');
 DROP FUNCTION IF EXISTS public.fn_usuario_acotado();
 DROP FUNCTION IF EXISTS public.fn_puede_ver_remuneraciones();
+-- Movimiento de personal: Marco vuelve al taller de Coquimbo, Hernán vuelve a la bodega
+UPDATE public.usuarios_perfil SET faena_id = NULL, rol = 'operador_taller', cargo = 'Mecánico A', solo_su_faena = false
+ WHERE email = 'marco.diaz@sicom-iceo.cl';
+UPDATE public.taller_tecnicos SET activo = true, participa_en_bono = true, motivo_sin_bono = NULL
+ WHERE usuario_perfil_id = (SELECT id FROM usuarios_perfil WHERE email = 'marco.diaz@sicom-iceo.cl');
+UPDATE public.taller_tecnico_cargo SET hasta = NULL
+ WHERE tecnico_id IN (SELECT t.id FROM taller_tecnicos t JOIN usuarios_perfil u ON u.id = t.usuario_perfil_id WHERE u.email = 'marco.diaz@sicom-iceo.cl')
+   AND desde = '2026-08-24';
+UPDATE public.bodega_responsables SET activo = true WHERE email = 'hcortes@pillado.cl';
