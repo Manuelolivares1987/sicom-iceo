@@ -12,6 +12,7 @@ import {
 import { useQueryClient } from '@tanstack/react-query'
 import type { User } from '@supabase/supabase-js'
 import { supabase, leerSesionPersistida } from '@/lib/supabase'
+import { EVENTO_CONECTIVIDAD } from '@/lib/conectividad'
 import type { UsuarioPerfil } from '@/types/database'
 
 /** Lo que se espera a que la red valide la sesión antes de arrancar con la
@@ -36,6 +37,11 @@ interface AuthContextValue {
   /** Hay sesión guardada en el equipo pero no se pudo revalidar contra el
    *  servidor (típicamente, sin señal). Se trabaja con lo descargado. */
   sesionSinValidar: boolean
+  /** [19-11-2026] Estado del perfil del usuario conectado. 'cargando' mientras
+   *  no llega; 'error' si la consulta falló y no hay copia en el equipo (se
+   *  reintenta solo); 'sin_perfil' si la cuenta no tiene fila en usuarios_perfil. */
+  perfilEstado: 'cargando' | 'listo' | 'error' | 'sin_perfil'
+  reintentarPerfil: () => void
   signIn: (email: string, password: string) => Promise<void>
   /** false si el usuario decidió no salir (tenía trabajo sin enviar). */
   signOut: () => Promise<boolean>
@@ -85,6 +91,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [sesionSinValidar, setSesionSinValidar] = useState(false)
+  const [perfilEstado, setPerfilEstado] = useState<'cargando' | 'listo' | 'error' | 'sin_perfil'>('cargando')
 
   // Cuando cambia QUIÉN está conectado, lo consultado antes no vale. Las
   // consultas de React Query viven 5 minutos como "frescas" y sobreviven al
@@ -110,28 +117,45 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Primero lo último conocido: en terreno el perfil (rol, nombre) tiene que
     // estar disponible de inmediato aunque la consulta no llegue nunca.
     const cacheado = leerPerfilCache(userId)
-    if (cacheado) setPerfil(cacheado)
+    if (cacheado) { setPerfil(cacheado); setPerfilEstado('listo') }
+    else setPerfilEstado('cargando')
 
     // Se trae la faena junto al perfil porque de ella sale la app de terreno a
     // la que aterriza la gente de faena (MIG361). Sin esto, todo operador de
     // combustible caía en /m/romeral — que era cierto mientras Romeral fuera la
     // única faena con app, y dejó de serlo con Franke.
-    const { data, error: perfilError } = await supabase
-      .from('usuarios_perfil')
-      .select('*, faena:faenas(id, codigo, nombre, app_movil, panel_web)')
-      .eq('id', userId)
-      .maybeSingle()
+    let data: unknown = null
+    let perfilError: { message: string } | null = null
+    try {
+      const r = await supabase
+        .from('usuarios_perfil')
+        .select('*, faena:faenas(id, codigo, nombre, app_movil, panel_web)')
+        .eq('id', userId)
+        .maybeSingle()
+      data = r.data
+      perfilError = r.error
+    } catch (e) {
+      // Red cortada / límite de tiempo: mismo camino que un error de la consulta.
+      perfilError = { message: e instanceof Error ? e.message : String(e) }
+    }
 
     if (perfilError) {
       console.error('Error fetching perfil:', perfilError.message)
       // Sin conexión (o error transitorio): usar el último perfil conocido.
-      setPerfil(leerPerfilCache(userId))
+      // Sin copia en el equipo queda en 'error' y se reintenta (ver abajo):
+      // antes quedaba en null para siempre y el panel mostraba el menú
+      // general sin filtrar por faena (Yohan, Franke, 19-11-2026).
+      const c = leerPerfilCache(userId)
+      setPerfil(c)
+      setPerfilEstado(c ? 'listo' : 'error')
     } else if (!data) {
       console.warn('No se encontró perfil para el usuario. Cree un registro en usuarios_perfil.')
       setPerfil(null)
+      setPerfilEstado('sin_perfil')
     } else {
       setPerfil(data as UsuarioPerfil)
       guardarPerfilCache(data as UsuarioPerfil)
+      setPerfilEstado('listo')
     }
 
     // Cargar rol Calama desde calama_roles_proyecto (puede no existir tabla en algunos entornos).
@@ -226,6 +250,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setSesionSinValidar(false)
         setPerfil(null)
         setRolCalama(null)
+        setPerfilEstado('cargando')
       }
     })
 
@@ -253,6 +278,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       window.removeEventListener('online', reanudar)
     }
   }, [])
+
+  // [19-11-2026] Perfil que no llegó: reintentar solo (3 s, 6 s, 12 s… hasta
+  // 30 s) y apenas vuelva la conexión real. Sin esto, una sola consulta
+  // perdida con mala señal dejaba la sesión sin perfil hasta cerrar y volver.
+  const [intentoPerfil, setIntentoPerfil] = useState(0)
+  const reintentarPerfil = useCallback(() => {
+    if (user?.id) void fetchPerfil(user.id)
+  }, [user?.id, fetchPerfil])
+  useEffect(() => {
+    if (!user?.id || perfilEstado !== 'error') return
+    const espera = Math.min(3000 * 2 ** intentoPerfil, 30_000)
+    const t = setTimeout(() => {
+      setIntentoPerfil((n) => n + 1)
+      void fetchPerfil(user.id)
+    }, espera)
+    const alVolver = (e: Event) => {
+      if ((e as CustomEvent<{ enLinea: boolean }>).detail?.enLinea) void fetchPerfil(user.id)
+    }
+    window.addEventListener(EVENTO_CONECTIVIDAD, alVolver)
+    return () => { clearTimeout(t); window.removeEventListener(EVENTO_CONECTIVIDAD, alVolver) }
+  }, [user?.id, perfilEstado, intentoPerfil, fetchPerfil])
+  useEffect(() => { if (perfilEstado === 'listo') setIntentoPerfil(0) }, [perfilEstado])
 
   const signIn = useCallback(async (email: string, password: string) => {
     setError(null)
@@ -310,6 +357,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setPerfil(null)
     setRolCalama(null)
     setSesionSinValidar(false)
+    setPerfilEstado('cargando')
 
     // Limpia BD offline de Calama y Taller + perfil cacheado: nunca dejar
     // datos del operador en un dispositivo despues del logout.
@@ -335,6 +383,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         error,
         isAuthenticated: !!user,
         sesionSinValidar,
+        perfilEstado,
+        reintentarPerfil,
         signIn,
         signOut,
       }}

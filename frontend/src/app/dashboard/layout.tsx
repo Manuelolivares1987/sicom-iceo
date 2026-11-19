@@ -3,6 +3,7 @@
 import { rutaWebPermitida, type FaenaAcotada } from '@/lib/faena-acotada'
 import { usePathname } from 'next/navigation'
 import { RedireccionSegura } from '@/components/layout/redireccion-segura'
+import { PerfilPendiente } from '@/components/layout/perfil-pendiente'
 import AppShell from '@/components/layout/app-shell'
 import { useRequireAuth } from '@/hooks/use-require-auth'
 import { usePermissions } from '@/hooks/use-permissions'
@@ -14,7 +15,7 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode
 }) {
-  const { loading } = useRequireAuth()
+  const { loading, user } = useRequireAuth()
   const { perfil } = useAuth()
   const { esOperadorCalamaSolo, esSupervisorCalamaSolo, esOperadorTallerSolo, faenaExclusiva,
           esOperadorCombustibleSolo } = usePermissions()
@@ -71,6 +72,12 @@ export default function DashboardLayout({
       </div>
     )
   }
+
+  // [19-11-2026] Con sesión pero sin perfil no hay menú que mostrar: el general
+  // no es el de la persona (a Yohan, de Franke, le salía Contrato ENEX).
+  // Sin sesión: al login, sin quedar pegado si la navegación interna no llega.
+  if (!user) return <RedireccionSegura destino={`/login/?next=${encodeURIComponent(pathname || '/dashboard/')}`} />
+  if (!perfil) return <PerfilPendiente />
 
   const destino = destinoGuard()
   // Nunca redirigir a la misma pantalla: eso era otra ruedita eterna posible
