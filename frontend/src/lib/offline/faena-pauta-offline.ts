@@ -22,6 +22,7 @@
 // no falla, se queda colgada. Por eso todo lo que sale a la red lleva techo de
 // tiempo — es la misma lección que costó el «Cargando…» eterno de ENEX.
 // ============================================================================
+import { haySesionServidor } from '@/lib/supabase'
 import Dexie, { type Table } from 'dexie'
 import { compressImage } from '@/lib/image/compress'
 import { estaEnLinea } from '@/lib/conectividad'
@@ -216,6 +217,8 @@ export async function sincronizar(): Promise<{
   ok: number; error: number
   ultimo?: Awaited<ReturnType<typeof guardarPauta>>
 }> {
+  // [20-11-2026] Sin sesión válida no se sube: el servidor lo rechazaría como anónimo.
+  if (!haySesionServidor()) return { ok: 0, error: 0 }
   if (!isOnline()) return { ok: 0, error: 0 }
   const cola = await pautaDB().pending.orderBy('created_at').toArray()
   let ok = 0, error = 0

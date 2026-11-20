@@ -96,3 +96,36 @@ function decodificarBase64(b64: string): string {
   const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0))
   return new TextDecoder().decode(bytes)
 }
+
+
+/**
+ * [20-11-2026] ¿Hay una sesión que el servidor pueda aceptar? (token guardado
+ * con refresh_token). Sin esto, las colas sin señal subían como anónimo cuando
+ * la sesión se había perdido, el servidor respondía «No autorizado» y el
+ * registro quedaba marcado «rechazado» para siempre. Sin sesión, se espera.
+ */
+export function haySesionServidor(): boolean {
+  return leerSesionPersistida() !== null
+}
+
+// Identidad del equipo: quién trabaja en este teléfono. Sobrevive a que la
+// sesión se pierda por mala señal (como WhatsApp: el teléfono sigue siendo de
+// esa persona). Solo se borra con «Cerrar sesión».
+const IDENTIDAD_KEY = 'sicom-identidad-equipo'
+
+export function guardarIdentidadEquipo(u: SupabaseUser): void {
+  try { localStorage.setItem(IDENTIDAD_KEY, JSON.stringify({ user: u, at: Date.now() })) } catch { /* noop */ }
+}
+
+export function leerIdentidadEquipo(): SupabaseUser | null {
+  try {
+    const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(IDENTIDAD_KEY) : null
+    if (!raw) return null
+    const j = JSON.parse(raw) as { user?: SupabaseUser }
+    return j?.user?.id ? j.user : null
+  } catch { return null }
+}
+
+export function borrarIdentidadEquipo(): void {
+  try { localStorage.removeItem(IDENTIDAD_KEY) } catch { /* noop */ }
+}

@@ -4,6 +4,7 @@
 // - Overlay: aplica lo pendiente sobre la cache para que la UI refleje lo local.
 // - Sync: sube fotos y aplica los cambios contra Supabase al reconectar.
 
+import { haySesionServidor } from '@/lib/supabase'
 import { supabase } from '@/lib/supabase'
 import { getChecklistV3OT, type ChecklistV3Item } from '@/lib/services/taller-plan-semanal'
 import { actualizarItem, subirFotoItem } from '@/lib/services/checklist-v2'
@@ -446,6 +447,8 @@ export async function queueTiming(
 
 // ── Sync ─────────────────────────────────────────────────────────────────────
 export async function syncTallerPending(): Promise<{ ok: number; failed: number }> {
+  // [20-11-2026] Sin sesión válida no se sube: el servidor lo rechazaría como anónimo.
+  if (!haySesionServidor()) return { ok: 0, failed: 0 }
   if (!isOnline()) return { ok: 0, failed: 0 }
   const db = tallerDB()
   const items = (await db.pending.toArray()).sort((a, b) => a.created_at.localeCompare(b.created_at))

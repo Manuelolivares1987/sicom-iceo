@@ -5,6 +5,7 @@
 //   - syncCalamaPending: sube blobs (fotos/firmas) a Storage y luego llama
 //     RPCs (idempotentes via client_uuid).
 
+import { haySesionServidor } from '@/lib/supabase'
 import { supabase } from '@/lib/supabase'
 import { calamaDB } from './calama-db'
 import { genClientUuid } from '@/lib/services/calama-jornada'
@@ -384,6 +385,8 @@ const RPC_BY_TIPO: Record<string, string> = {
 }
 
 export async function syncCalamaPending(): Promise<SyncResult> {
+  // [20-11-2026] Sin sesión válida no se sube: el servidor lo rechazaría como anónimo.
+  if (!haySesionServidor()) return { ok: 0, err: 0, errors: [{ tipo: 'system', local_id: '', mensaje: 'Sin sesión: se sube al volver a entrar' }] }
   const db = calamaDB()
   if (typeof navigator !== 'undefined' && !navigator.onLine) {
     return { ok: 0, err: 0, errors: [{ tipo: 'system', local_id: '', mensaje: 'Sin conexion' }] }

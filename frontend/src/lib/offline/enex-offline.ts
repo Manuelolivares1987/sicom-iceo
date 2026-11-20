@@ -3,6 +3,7 @@
 // - Cola de ejecuciones (resultados + fotos + firmas) que sube al reconectar.
 // - Overlay: refleja lo pendiente sobre la cache para la UI.
 
+import { haySesionServidor } from '@/lib/supabase'
 import {
   getTerrenoPendientes, getPautaItems, ejecutarPauta, getEjecucionItems, getPendientePorId,
   subirEvidenciaEnex, subirFirmaEnex, getPlanTareasDia, guardarRepuestosEnex,
@@ -393,6 +394,8 @@ function blobIdsDe(p: EnexPending): string[] {
 }
 
 async function enviarCola(): Promise<SyncResult> {
+  // [20-11-2026] Sin sesión válida no se sube: el servidor lo rechazaría como anónimo.
+  if (!haySesionServidor()) return { ok: 0, failed: 0 }
   const db = enexDB()
   // [MIG651] Primero los cambios de programa: el servicio nuevo y la patente
   // tienen que existir en el servidor antes que su ejecución.

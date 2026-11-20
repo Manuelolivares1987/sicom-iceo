@@ -11,7 +11,9 @@ import {
 } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import type { User } from '@supabase/supabase-js'
-import { supabase, leerSesionPersistida } from '@/lib/supabase'
+import {
+  supabase, leerSesionPersistida, guardarIdentidadEquipo, leerIdentidadEquipo, borrarIdentidadEquipo,
+} from '@/lib/supabase'
 import { EVENTO_CONECTIVIDAD } from '@/lib/conectividad'
 import type { UsuarioPerfil } from '@/types/database'
 
@@ -37,6 +39,10 @@ interface AuthContextValue {
   /** Hay sesión guardada en el equipo pero no se pudo revalidar contra el
    *  servidor (típicamente, sin señal). Se trabaja con lo descargado. */
   sesionSinValidar: boolean
+  /** [20-11-2026] La sesión del servidor se perdió (mala señal, token rechazado)
+   *  pero el teléfono sigue siendo de esta persona: se trabaja con lo guardado y
+   *  las colas esperan. Volver a entrar con señal la restablece. */
+  sesionPerdida: boolean
   /** [19-11-2026] Estado del perfil del usuario conectado. 'cargando' mientras
    *  no llega; 'error' si la consulta falló y no hay copia en el equipo (se
    *  reintenta solo); 'sin_perfil' si la cuenta no tiene fila en usuarios_perfil. */
@@ -81,6 +87,17 @@ async function contarPendientesOffline(): Promise<number> {
     total += await db.pending.count()
     total += await db.pendingPlan.count()
   } catch { /* sin base o ilegible */ }
+  // [20-11-2026] Franke y ENEX también: antes «Cerrar sesión» no avisaba de lo
+  // que quedaba sin subir en la faena y el siguiente usuario lo heredaba.
+  const contadores: Array<() => Promise<number>> = [
+    async () => (await import('@/lib/offline/faena-pauta-offline')).pendientesCount(),
+    async () => (await import('@/lib/offline/combustible-faena-offline')).pendientesCount(),
+    async () => (await import('@/lib/offline/bodega-faena-offline')).pendientesCount(),
+    async () => (await import('@/lib/offline/faena-bitacora-offline')).pendientesCount(),
+    async () => (await import('@/lib/offline/faena-entrega-offline')).pendientesCount(),
+    async () => (await import('@/lib/offline/enex-offline')).getEnexPendingCount(),
+  ]
+  for (const c of contadores) { try { total += await c() } catch { /* sin base */ } }
   return total
 }
 
@@ -91,6 +108,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [sesionSinValidar, setSesionSinValidar] = useState(false)
+  const [sesionPerdida, setSesionPerdida] = useState(false)
+  // true mientras corre «Cerrar sesión»: ese SIGNED_OUT sí es una salida real.
+  const cerrando = useRef(false)
   const [perfilEstado, setPerfilEstado] = useState<'cargando' | 'listo' | 'error' | 'sin_perfil'>('cargando')
 
   // Cuando cambia QUIÉN está conectado, lo consultado antes no vale. Las
@@ -188,11 +208,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // terreno se quedaba en "Cargando…" eterno. Ahora, si no responde a tiempo,
     // se arranca con la sesión guardada en el teléfono.
     let resuelto = false
+
+    // [20-11-2026] Como WhatsApp: si el teléfono ya conoce a la persona (sesión
+    // guardada o identidad del equipo) y su perfil, la app se abre YA, sin
+    // esperar a la red. La validación con el servidor sigue por detrás.
+    {
+      const local = leerSesionPersistida()
+      const u0 = local?.user ?? leerIdentidadEquipo()
+      const p0 = u0 ? leerPerfilCache(u0.id) : null
+      if (u0 && p0) {
+        setUser(u0); setPerfil(p0); setPerfilEstado('listo')
+        setSesionSinValidar(true); setSesionPerdida(!local)
+        setLoading(false)
+      }
+    }
+
     const arrancar = (u: User | null, desdeCache: boolean) => {
       setUser(u)
       if (resuelto) return
       resuelto = true
       setSesionSinValidar(desdeCache)
+      if (u) guardarIdentidadEquipo(u)
+      if (u && !desdeCache) setSesionPerdida(false)
       // El perfil tampoco puede frenar el arranque: si la consulta se cuelga,
       // se sigue con el perfil cacheado y ya se completará cuando responda.
       if (u) {
@@ -207,7 +244,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const conCache = () => {
       const local = leerSesionPersistida()
-      arrancar(local?.user ?? null, !!local)
+      if (local) { arrancar(local.user, true); return }
+      // Sin sesión guardada pero con identidad del equipo: la sesión se perdió,
+      // no la persona. Se sigue con lo guardado y se pide volver a entrar.
+      const respaldo = leerIdentidadEquipo()
+      if (respaldo) setSesionPerdida(true)
+      arrancar(respaldo, !!respaldo)
     }
 
     const timer = setTimeout(() => {
@@ -242,9 +284,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (local) { setUser(local.user); setSesionSinValidar(true); return }
       }
 
+      // [20-11-2026] Un SIGNED_OUT que nadie pidió (auth-js borró la sesión porque
+      // el servidor rechazó la renovación: respuesta perdida, portal cautivo…)
+      // NO saca a la persona de la app: sigue trabajando con lo guardado.
+      if (!currentUser && !cerrando.current) {
+        const respaldo = leerIdentidadEquipo()
+        if (respaldo) { setUser(respaldo); setSesionSinValidar(true); setSesionPerdida(true); return }
+      }
+
       setUser(currentUser)
       if (currentUser) {
         setSesionSinValidar(false)
+        setSesionPerdida(false)
+        guardarIdentidadEquipo(currentUser)
         fetchPerfil(currentUser.id)
       } else {
         setSesionSinValidar(false)
@@ -309,7 +361,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     })
 
     if (authError) {
-      setError('Credenciales inválidas. Verifique su correo y contraseña.')
+      // [20-11-2026] Sin red no es «credenciales inválidas»: decirlo así hacía
+      // que la gente cambiara la clave o creyera que la habían bloqueado.
+      const sinRed = authError.name === 'AuthRetryableFetchError' || !authError.status || authError.status >= 500
+      setError(sinRed
+        ? 'No hay conexión con el servidor. Busque señal o wifi e intente de nuevo; su clave está bien.'
+        : 'Credenciales inválidas. Verifique su correo y contraseña.')
       throw authError
     }
   }, [])
@@ -336,6 +393,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!seguir) return false
     }
 
+    cerrando.current = true
+    borrarIdentidadEquipo()
     try {
       await Promise.race([
         supabase.auth.signOut({ scope: 'local' }),
@@ -357,7 +416,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setPerfil(null)
     setRolCalama(null)
     setSesionSinValidar(false)
+    setSesionPerdida(false)
     setPerfilEstado('cargando')
+    cerrando.current = false
 
     // Limpia BD offline de Calama y Taller + perfil cacheado: nunca dejar
     // datos del operador en un dispositivo despues del logout.
@@ -383,6 +444,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         error,
         isAuthenticated: !!user,
         sesionSinValidar,
+        sesionPerdida,
         perfilEstado,
         reintentarPerfil,
         signIn,

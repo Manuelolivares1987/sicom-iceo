@@ -10,6 +10,7 @@
 //     del layout). Las RPCs del servidor son las de siempre.
 // ============================================================================
 
+import { haySesionServidor } from '@/lib/supabase'
 import Dexie, { type Table } from 'dexie'
 import {
   abrirEntrega, declararEntrega, firmarEntrega, getContextoEntrega, recibirEntrega, subirFirma,
@@ -128,6 +129,8 @@ export async function pendientesCount(): Promise<number> { return db().pending.w
 export async function descartarEntrega(localId: string) { await db().pending.delete(localId) }
 
 export async function sincronizar(): Promise<{ ok: number; error: number; rechazadas: number }> {
+  // [20-11-2026] Sin sesión válida no se sube: el servidor lo rechazaría como anónimo.
+  if (!haySesionServidor()) return { ok: 0, error: 0, rechazadas: 0 }
   if (!isOnline()) return { ok: 0, error: 0, rechazadas: 0 }
   const cola = await db().pending.where('sync_status').equals('pending').sortBy('created_at')
   let ok = 0, error = 0, rechazadas = 0

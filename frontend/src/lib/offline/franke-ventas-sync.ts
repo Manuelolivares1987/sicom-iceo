@@ -2,6 +2,7 @@
 // Patron Calama: online-first -> si falla por red, encola local; sync al
 // reconectar. Idempotente via client_uuid (dedup en rpc_registrar_venta_franke).
 
+import { haySesionServidor } from '@/lib/supabase'
 import { frankeDB, type LocalVentaFranke, type LocalBlobVF } from './franke-ventas-db'
 import { supabase } from '@/lib/supabase'
 import { uploadBlobEvidenciaCombustible } from '@/lib/services/combustible'
@@ -124,6 +125,8 @@ async function enqueueVenta(client_uuid: string, v: VentaFrankeInput) {
 }
 
 export async function syncFrankePending(): Promise<{ ok: number; err: number }> {
+  // [20-11-2026] Sin sesión válida no se sube: el servidor lo rechazaría como anónimo.
+  if (!haySesionServidor()) return { ok: 0, err: 0 }
   if (!isOnline()) return { ok: 0, err: 0 }
   const db = frankeDB()
   const pend = await db.ventas.where('sync_status').anyOf(['pending', 'error']).toArray()

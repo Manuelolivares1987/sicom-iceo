@@ -1,4 +1,28 @@
 /** @type {import('next').NextConfig} */
+const fs = require('fs')
+const path = require('path')
+
+// Versión del build (Netlify da COMMIT_REF). La usan la app (precarga, avisos)
+// y el service worker (nombre de las cachés de terreno y revisión de las páginas).
+const BUILD_ID = (process.env.COMMIT_REF || String(Date.now())).slice(0, 12)
+
+// [20-11-2026] Páginas fijas de la app de terreno (/m/**, sin [id]): se guardan
+// ENTERAS en el teléfono junto con todos sus JS, como una app instalada.
+function rutasTerreno() {
+  const raiz = path.join(__dirname, 'src', 'app')
+  const out = ['/m/', '/login/']
+  const recorrer = (dir) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (!e.isDirectory() || /[[(]/.test(e.name)) continue
+      const d = path.join(dir, e.name)
+      if (fs.existsSync(path.join(d, 'page.tsx'))) out.push('/' + path.relative(raiz, d).split(path.sep).join('/') + '/')
+      recorrer(d)
+    }
+  }
+  recorrer(path.join(raiz, 'm'))
+  return Array.from(new Set(out))
+}
+
 const withPWA = require('@ducanh2912/next-pwa').default({
   dest: 'public',
   disable: process.env.NODE_ENV === 'development',
@@ -32,6 +56,15 @@ const withPWA = require('@ducanh2912/next-pwa').default({
   publicExcludes: ['!noprecache/**', '!plantillas/**', '!reparar/**'],
   workboxOptions: {
     disableDevLogs: true,
+    // [20-11-2026] Actualización «como WhatsApp»: la versión nueva se baja ENTERA
+    // en segundo plano y queda esperando; se aplica al próximo arranque de la app
+    // (components/layout/actualizacion-app.tsx), nunca a mitad de un formulario.
+    // Antes (skipWaiting) tomaba el control al instante y mezclaba versiones.
+    skipWaiting: false,
+    // Las páginas guardadas se encuentran aunque lleven parámetros (?p=…&a=…).
+    // `_rsc` NO va acá: esa es la navegación interna y tiene su propia regla.
+    ignoreURLParametersMatching: [/^utm_/, /^fbclid$/, /^turno$/, /^p$/, /^a$/, /^id$/, /^fecha$/, /^next$/, /^v$/, /^source$/],
+    additionalManifestEntries: rutasTerreno().map((url) => ({ url, revision: BUILD_ID })),
     // [19-11-2026] Precache MÍNIMO. Para actualizarse, el teléfono debe bajar
     // TODO el precache (eran 443 archivos, 15 MB) y si UNO falla con mala
     // señal descarta la versión nueva y se queda con la vieja — así el
@@ -41,15 +74,37 @@ const withPWA = require('@ducanh2912/next-pwa').default({
     // (panel de oficina) se guarda al usarse (regla next-static-js-assets) y
     // PrecargaTerreno baja los JS de la app de cada usuario.
     manifestTransforms: [
-      async (entries) => {
+      async (entries, compilation) => {
+        // [20-11-2026] TODOS los JS que usan las páginas de terreno (sacados del
+        // app-build-manifest de este mismo build): sin esto el teléfono tenía
+        // el HTML guardado pero no los chunks compartidos, y quedaba en la ruedita.
+        let terreno = null
+        try {
+          const a = compilation && compilation.getAsset && compilation.getAsset('app-build-manifest.json')
+          if (a) {
+            const pages = JSON.parse(a.source.source().toString()).pages
+            terreno = new Set()
+            for (const [ruta, archivos] of Object.entries(pages)) {
+              if (/^\/(m\/|login\/|offline\/|_not-found\/|page$|layout$)/.test(ruta)) for (const f of archivos) terreno.add('/_next/' + f)
+            }
+          }
+        } catch (e) { console.warn('[pwa] sin app-build-manifest:', e && e.message) }
+        console.log(`[pwa] precache terreno: ${terreno ? terreno.size + ' archivos' : 'NO DISPONIBLE (se usa el mínimo)'}`)
         const esencial = (url) =>
+          (terreno && terreno.has(url)) ||
           !/\/_next\/static\//.test(url) ||                         // public (iconos, manifest, offline)
           /\/static\/css\//.test(url) ||
           /\/static\/media\//.test(url) ||
           /\/static\/[^/]+\/_(build|ssg)Manifest\.js$/.test(url) ||
           /\/static\/chunks\/(framework|main|main-app|webpack|polyfills)[-.]/.test(url) ||
           /\/static\/chunks\/app\/(m\/|offline\/|login\/|layout-|page-|error-|global-error-|_not-found\/)/.test(url)
-        return { manifest: entries.filter((e) => esencial(e.url)), warnings: [] }
+        // Archivos con hash en el nombre: la revisión es el propio nombre (no el
+        // build). Así una versión nueva baja solo lo que cambió; antes la revisión
+        // era el build y cada deploy re-bajaba todo. (null no sirve: el plugin lo
+        // reemplaza por el build.)
+        const manifest = entries.filter((e) => esencial(e.url))
+          .map((e) => (/\/_next\/static\//.test(e.url) && !/_(build|ssg)Manifest/.test(e.url) ? { ...e, revision: e.url } : e))
+        return { manifest, warnings: [] }
       },
     ],
     runtimeCaching: [
@@ -81,7 +136,7 @@ const withPWA = require('@ducanh2912/next-pwa').default({
           sameOrigin && url.pathname.startsWith('/m/') && request.headers.get('RSC') !== '1',
         handler: 'NetworkFirst',
         options: {
-          cacheName: 'enex-terreno-paginas',
+          cacheName: `terreno-paginas-${BUILD_ID}`,
           networkTimeoutSeconds: 4,
           expiration: { maxEntries: 80, maxAgeSeconds: 30 * 24 * 60 * 60 },
           plugins: [{
@@ -99,7 +154,7 @@ const withPWA = require('@ducanh2912/next-pwa').default({
           request.headers.get('RSC') === '1' && !request.headers.get('Next-Router-Prefetch'),
         handler: 'NetworkFirst',
         options: {
-          cacheName: 'enex-terreno-rsc',
+          cacheName: `terreno-rsc-${BUILD_ID}`,
           networkTimeoutSeconds: 4,
           expiration: { maxEntries: 80, maxAgeSeconds: 30 * 24 * 60 * 60 },
           plugins: [{
@@ -150,7 +205,7 @@ const nextConfig = {
   // Versión del build (Netlify da COMMIT_REF): la precarga de terreno se rehace
   // con cada versión nueva.
   env: {
-    NEXT_PUBLIC_BUILD_ID: (process.env.COMMIT_REF || String(Date.now())).slice(0, 12),
+    NEXT_PUBLIC_BUILD_ID: BUILD_ID,
   },
   images: {
     unoptimized: true,

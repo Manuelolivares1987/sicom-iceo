@@ -324,7 +324,7 @@ export default function FrankePautaAgendaPage() {
                   <div className="flex flex-wrap gap-2">
                     {niveles.map((a) => (
                       <Link key={a.pauta_id}
-                            href={`/m/franke/pauta/${a.pauta_id}/${a.activo_id}?turno=${encodeURIComponent(turno)}`}
+                            href={`/m/franke/pauta/revisar/?p=${a.pauta_id}&a=${a.activo_id}&turno=${encodeURIComponent(turno)}`}
                             className="rounded-lg border-2 border-gray-300 px-3 py-2 text-sm font-semibold text-gray-800 active:bg-gray-100">
                         {nivelCorto(a)}
                       </Link>
@@ -395,7 +395,7 @@ function Tarjeta({ a, turno }: { a: PautaAgenda; turno: string }) {
 
   return (
     <Link
-      href={`/m/franke/pauta/${a.pauta_id}/${a.activo_id}?turno=${encodeURIComponent(turno)}`}
+      href={`/m/franke/pauta/revisar/?p=${a.pauta_id}&a=${a.activo_id}&turno=${encodeURIComponent(turno)}`}
       className={cn(
         'flex items-center gap-3 rounded-xl border-2 bg-white p-4 transition active:scale-[0.99]',
         hecha ? 'border-emerald-300' : noAplica ? 'border-gray-300' : 'border-gray-200',

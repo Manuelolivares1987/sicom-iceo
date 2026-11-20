@@ -13,6 +13,7 @@
 // la persona decide descartarla.
 // ============================================================================
 
+import { haySesionServidor } from '@/lib/supabase'
 import Dexie, { type Table } from 'dexie'
 import { supabase } from '@/lib/supabase'
 import {
@@ -186,6 +187,8 @@ export async function descartarOperacion(localId: string) {
 
 /** Sube la cola en orden. Las rechazadas no se reintentan solas. */
 export async function sincronizar(): Promise<{ ok: number; error: number; rechazadas: number }> {
+  // [20-11-2026] Sin sesión válida no se sube: el servidor lo rechazaría como anónimo.
+  if (!haySesionServidor()) return { ok: 0, error: 0, rechazadas: 0 }
   if (!isOnline()) return { ok: 0, error: 0, rechazadas: 0 }
   const cola = await bodegaDB().pending.where('sync_status').equals('pending').sortBy('created_at')
   let ok = 0, error = 0, rechazadas = 0

@@ -13,6 +13,7 @@
 // pantalla de terreno en producción.
 // ============================================================================
 
+import { haySesionServidor } from '@/lib/supabase'
 import Dexie, { type Table } from 'dexie'
 import {
   getPuntosMedicion, getCierreAnterior, guardarCierre, subirFotoMedicion,
@@ -302,6 +303,8 @@ export async function firmarEnElTelefono(
 export async function sincronizarPendientes(): Promise<{
   subidos: number; firmados: number; errores: string[]
 }> {
+  // [20-11-2026] Sin sesión válida no se sube: el servidor lo rechazaría como anónimo.
+  if (!haySesionServidor()) return { subidos: 0, firmados: 0, errores: [] }
   const cola = await borradoresPendientes()
   let subidos = 0
   let firmados = 0
@@ -381,6 +384,8 @@ export async function recepcionesPendientes() {
 /** Sube las recepciones que estén esperando. El RPC es idempotente por
  *  client_uuid, así que reintentar no duplica. */
 export async function sincronizarRecepciones(): Promise<{ subidas: number; errores: string[] }> {
+  // [20-11-2026] Sin sesión válida no se sube: el servidor lo rechazaría como anónimo.
+  if (!haySesionServidor()) return { subidas: 0, errores: [] }
   const lista = await colaRecepciones()
   if (!lista.length) return { subidas: 0, errores: [] }
 
