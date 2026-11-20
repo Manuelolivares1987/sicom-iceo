@@ -19,7 +19,7 @@ export function PantallaAlmacenamientoBloqueado() {
         <li style={paso}>Vuelva a abrir SICOM.</li>
       </ol>
       <a href="/instalar/" style={{ display: 'block', marginTop: 20, padding: 14, borderRadius: 10, background: '#111827', color: '#fff', fontSize: 15, fontWeight: 600, textAlign: 'center', textDecoration: 'none' }}>
-        Mejor: instalar la app SICOM Terreno (no depende de Chrome)
+        Mejor: instalar la app SICOM (no depende de Chrome)
       </a>
       <button type="button" onClick={() => window.location.reload()}
               style={{ marginTop: 20, width: '100%', padding: 14, borderRadius: 10, border: 0, background: '#16a34a', color: '#fff', fontSize: 15, fontWeight: 600 }}>

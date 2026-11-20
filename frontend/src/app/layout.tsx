@@ -9,6 +9,7 @@ import { PrecargaTerreno } from '@/components/layout/precarga-terreno'
 import { TerrenoGlobal } from '@/components/layout/terreno-global'
 import { ActualizacionApp } from '@/components/layout/actualizacion-app'
 import { GuardaAlmacenamiento } from '@/components/layout/guarda-almacenamiento'
+import { PuenteApp } from '@/components/layout/puente-app'
 
 export const metadata: Metadata = {
   title: 'SICOM-ICEO | Pillado Empresas',
@@ -60,6 +61,7 @@ export default function RootLayout({
         <RecuperacionChunks />
         <ConectividadInit />
         <ActualizacionApp />
+        <PuenteApp />
         <GuardaAlmacenamiento>
         <QueryProvider>
           <AuthProvider>
