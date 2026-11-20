@@ -12,7 +12,7 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  CalendarRange, ChevronLeft, ChevronRight, FileSpreadsheet, Upload, Building2, FileText, AlertTriangle, CalendarClock, Replace,
+  CalendarRange, ChevronLeft, ChevronRight, FileSpreadsheet, Upload, Building2, FileText, AlertTriangle, CalendarClock, Replace, Mail,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -31,6 +31,7 @@ import { GanttEnex, LEYENDA_ESTADO } from '@/components/enex/planificacion/gantt
 import { ImportarPlanillaModal } from '@/components/enex/planificacion/importar-planilla-modal'
 import { ReprogramacionModal } from '@/components/enex/reprogramacion-modal'
 import { CambioTareaModal, GestionarCambioModal, nombreProg } from '@/components/enex/cambio-tarea-modal'
+import { CorreoPlanModal } from '@/components/enex/planificacion/correo-plan-modal'
 
 const ROLES_GESTION = ['administrador', 'subgerente_operaciones', 'jefe_operaciones', 'supervisor', 'planificador', 'jefe_mantenimiento']
 type Mundo = 'todos' | 'combustible' | 'lubricante'
@@ -47,6 +48,7 @@ export default function EnexPlanificacionPage() {
   const [faenaSel, setFaenaSel] = useState<string>('todas')
   const [mundo, setMundo] = useState<Mundo>('todos')
   const [importar, setImportar] = useState(false)
+  const [correo, setCorreo] = useState(false)
   const [horizonte, setHorizonte] = useState<3 | 6 | 12>(6)
   const puedeEditar = !!perfil?.rol && ROLES_GESTION.includes(perfil.rol)
 
@@ -150,6 +152,10 @@ export default function EnexPlanificacionPage() {
           <Button variant="outline" disabled={rowsGantt.length === 0} onClick={() => exportarExcel(rowsGantt, instVista, faenasVista, ventanaGantt.desde, ventanaGantt.hasta)}>
             <FileSpreadsheet className="mr-1 h-4 w-4" /> Exportar Excel
           </Button>
+          <Button variant="outline" disabled={faenas.length === 0} onClick={() => setCorreo(true)}
+                  title="Plan de la semana con sus actividades, como correo para ESM">
+            <Mail className="mr-1 h-4 w-4" /> Correo a ESM
+          </Button>
           {puedeEditar && (
             <Button onClick={() => setImportar(true)}><Upload className="mr-1 h-4 w-4" /> Importar planilla</Button>
           )}
@@ -248,6 +254,11 @@ export default function EnexPlanificacionPage() {
         <GanttEnex rows={rowsGantt} faenas={faenasVista} instalaciones={instVista} ventana={ventanaGantt} hoy={hoy}
                    puedeEditar={puedeEditar} onCambio={invalidar} />
       </CardContent></Card>
+
+      {correo && (
+        <CorreoPlanModal faenas={faenas} faenaInicial={faenaSel === 'todas' ? null : faenaSel} hoy={hoy}
+                         firmaInicial={perfil?.nombre_completo ?? ''} onClose={() => setCorreo(false)} />
+      )}
 
       {importar && (
         <ImportarPlanillaModal faenas={faenas} instalaciones={instalaciones} hoy={hoy}
