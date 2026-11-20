@@ -18,6 +18,7 @@
 import { useEffect } from 'react'
 import { useAuth } from '@/contexts/auth-context'
 import { estaEnLinea, EVENTO_CONECTIVIDAD } from '@/lib/conectividad'
+import { supabase } from '@/lib/supabase'
 
 const PANTALLAS: Record<string, string[]> = {
   '/m/franke': ['', 'pauta', 'bitacora', 'bodega', 'despacho', 'carga', 'entrega', 'turno', 'guia'],
@@ -67,6 +68,18 @@ export function PrecargaTerreno() {
       const conn = (navigator as { connection?: { saveData?: boolean } }).connection
       if (conn?.saveData) return
       const urls = Array.from(apps).flatMap((app) => PANTALLAS[app].map((p) => (p ? `${app}/${p}/` : `${app}/`)))
+      // [MIG721] Las pantallas de cada pauta × equipo de Franke (SL…SM4 y las
+      // diarias) son una URL por combinación: sin visitarlas antes no abrían
+      // sin señal. Se bajan todas las de la agenda de la faena.
+      if (apps.has('/m/franke') && perfil.faena_id) {
+        try {
+          const { data } = await supabase.from('v_faena_pauta_agenda')
+            .select('pauta_id, activo_id').eq('faena_id', perfil.faena_id)
+          for (const r of (data ?? []) as { pauta_id: string; activo_id: string }[]) {
+            urls.push(`/m/franke/pauta/${r.pauta_id}/${r.activo_id}/`)
+          }
+        } catch { /* sin agenda: se bajan las fijas */ }
+      }
       let ok = 0
       // [19-11-2026] El precache ya no trae todos los JS (para que las
       // actualizaciones bajen livianas): de cada pantalla se piden también sus

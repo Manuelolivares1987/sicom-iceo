@@ -26,8 +26,9 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { CloudOff, CloudUpload } from 'lucide-react'
 import { useToast } from '@/contexts/toast-context'
 import { useNetworkStatus } from '@/hooks/use-calama-offline'
+import { getFaenaId } from '@/lib/services/faena-pauta'
 import {
-  sincronizar as sincronizarPautas, pendientesCount as pautasPendientes,
+  sincronizar as sincronizarPautas, pendientesCount as pautasPendientes, refrescarSiViejo,
 } from '@/lib/offline/faena-pauta-offline'
 import {
   sincronizar as sincronizarDespachos, pendientesCount as despachosPendientes,
@@ -80,6 +81,14 @@ export function SincronizadorFranke() {
   useEffect(() => {
     if (online) void subir(true)
   }, [online, subir])
+
+  // [MIG721] Las pautas del teléfono al día: con señal y si lo bajado tiene
+  // más de 6 h, se vuelve a bajar en silencio (no reemplaza lo que el
+  // mecánico tiene a medio llenar: eso vive en su borrador).
+  useEffect(() => {
+    if (!online) return
+    void getFaenaId().then((id) => (id ? refrescarSiViejo(id) : false)).catch(() => undefined)
+  }, [online])
 
   useEffect(() => {
     // El teléfono en el bolsillo con la pantalla apagada no dispara «online»:
