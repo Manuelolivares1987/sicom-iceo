@@ -15,6 +15,7 @@ import { useAuth } from '@/contexts/auth-context'
 import { useExigirSesion } from '@/hooks/use-exigir-sesion'
 import { SinSesionOffline } from '@/components/enex/sin-sesion-offline'
 import { Spinner } from '@/components/ui/spinner'
+import { EsperandoSesion } from '@/components/layout/esperando-sesion'
 
 // Cada rol ve lo suyo y nada más. Un mecánico que toca «Entrega de turno» choca
 // contra un error de permisos que él no puede resolver, y a la tercera vez deja
@@ -96,7 +97,7 @@ export default function FrankeMobileHome() {
   const router = useRouter()
 
   if (verificando) {
-    return <div className="flex min-h-screen items-center justify-center bg-gray-50"><Spinner className="h-8 w-8" /></div>
+    return <EsperandoSesion />
   }
   if (sinSesionOffline) return <SinSesionOffline />
 

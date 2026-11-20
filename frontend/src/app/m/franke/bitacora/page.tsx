@@ -33,6 +33,7 @@ import {
   colaBitacora, conCola, descartar, getBitacora, guardarFotoLocal, registrar,
   type Bitacora, type Categoria, type Novedad, type OpBitacora, type Pendiente, type Severidad,
 } from '@/lib/offline/faena-bitacora-offline'
+import { EsperandoSesion } from '@/components/layout/esperando-sesion'
 
 type Pestana = 'leer' | 'novedades' | 'pendientes' | 'resumen'
 const CATEGORIAS: { id: Categoria; texto: string }[] = [
@@ -103,7 +104,7 @@ export default function BitacoraFrankePage() {
     } catch (e) { toast.error(errorMessage(e)); return false }
   }
 
-  if (verificando) return <div className="flex min-h-screen items-center justify-center"><Spinner className="h-8 w-8" /></div>
+  if (verificando) return <EsperandoSesion />
   if (sinSesionOffline) return <SinSesionOffline />
 
   return (

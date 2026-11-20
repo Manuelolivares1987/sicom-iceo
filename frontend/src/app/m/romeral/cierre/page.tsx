@@ -56,6 +56,7 @@ import {
   guardarFotoLocal, getFotoLocal, esFotoLocal,
   type BorradorCierre,
 } from '@/lib/offline/combustible-cierre-offline'
+import { EsperandoSesion } from '@/components/layout/esperando-sesion'
 
 const hoyISO = () => {
   const d = new Date()
@@ -552,7 +553,7 @@ export default function CierreRomeralPage() {
 
   // ── Estados de carga ──────────────────────────────────────────────────────
   if (verificando) {
-    return <div className="flex min-h-screen items-center justify-center bg-gray-50"><Spinner className="h-8 w-8" /></div>
+    return <EsperandoSesion />
   }
   if (sinSesionOffline) return <SinSesionOffline />
 

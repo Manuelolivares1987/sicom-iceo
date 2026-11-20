@@ -36,6 +36,7 @@ import {
   type Catalogo, type OperacionPendiente, type TipoOperacion,
 } from '@/lib/offline/bodega-faena-offline'
 import { EnviosPorRecibir } from '@/components/bodega/envios-por-recibir'
+import { EsperandoSesion } from '@/components/layout/esperando-sesion'
 
 type Modo = 'sacar' | 'recibir' | 'contar'
 type Linea = ProductoLector & { cantidad: number }
@@ -163,7 +164,7 @@ export default function BodegaFrankePage() {
     } catch (err) { toast.error(errorMessage(err)) }
   }
 
-  if (verificando) return <div className="flex min-h-screen items-center justify-center"><Spinner className="h-8 w-8" /></div>
+  if (verificando) return <EsperandoSesion />
   if (sinSesionOffline) return <SinSesionOffline />
 
   return (

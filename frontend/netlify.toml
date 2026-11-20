@@ -14,6 +14,12 @@
     Cache-Control = "no-cache, no-store, must-revalidate"
     Service-Worker-Allowed = "/"
 
+# Link de reparación por WhatsApp: siempre fresco.
+[[headers]]
+  for = "/reparar/*"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate"
+
 [[headers]]
   for = "/manifest.json"
   [headers.values]

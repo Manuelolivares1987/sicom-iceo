@@ -29,7 +29,7 @@ const withPWA = require('@ducanh2912/next-pwa').default({
   // sin señal en IndexedDB, no en esta caché.
   extendDefaultRuntimeCaching: true,
   // [19-11-2026] plantillas/pdf.worker (1,2 MB) solo lo usa el panel de oficina.
-  publicExcludes: ['!noprecache/**', '!plantillas/**'],
+  publicExcludes: ['!noprecache/**', '!plantillas/**', '!reparar/**'],
   workboxOptions: {
     disableDevLogs: true,
     // [19-11-2026] Precache MÍNIMO. Para actualizarse, el teléfono debe bajar
