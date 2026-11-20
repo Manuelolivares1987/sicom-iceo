@@ -1,5 +1,6 @@
 import 'fake-indexeddb/auto'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import * as B from '@/lib/offline/bandeja'
 
 let enLinea = true
 let conSesion = true
@@ -9,7 +10,6 @@ vi.mock('@/lib/supabase', () => ({
   leerSesionPersistida: () => ({ user: { id: 'u1' } }),
 }))
 
-const B = await import('@/lib/offline/bandeja')
 
 const errorPg = (code: string, message: string) => Object.assign(new Error(message), { code })
 
