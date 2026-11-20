@@ -28,6 +28,7 @@ import {
   ChevronDown, Package, CloudOff,
 } from 'lucide-react'
 import { Spinner } from '@/components/ui/spinner'
+import { SignaturePad } from '@/components/ui/signature-pad'
 import { useToast } from '@/contexts/toast-context'
 import { useAuth } from '@/contexts/auth-context'
 import { useExigirSesion } from '@/hooks/use-exigir-sesion'
@@ -188,6 +189,7 @@ export default function EjecutarPautaPage() {
     if (!r) return false
     if (i.tipo_respuesta === 'ok_nok') return !!r.resultado
     if (i.tipo_respuesta === 'numero') return !!r.valor && r.valor.trim() !== ''
+    if (i.tipo_respuesta === 'firma') return !!r.fotoUrl || !!r.fotoBlob
     return !!r.texto && r.texto.trim() !== ''
   }
 
@@ -198,6 +200,10 @@ export default function EjecutarPautaPage() {
   const sinFoto = hallazgos.filter(
     (i) => i.foto_si_nok && !estado[i.id]?.fotoUrl && !estado[i.id]?.fotoBlob)
   const repuestos = hallazgos.map((i) => i.repuesto).filter(Boolean) as string[]
+  // [MIG721] El registro, igual que en el taller de Coquimbo: la foto del
+  // tablero, la foto de cada trabajo hecho y la firma. Sin eso no se cierra.
+  const sinRegistro = items.filter((i) => i.foto_obligatoria && i.tipo_respuesta !== 'firma'
+    && contestado(i) && !estado[i.id]?.fotoUrl && !estado[i.id]?.fotoBlob)
 
   // Lo que la pauta pide y de ahí sale para todos lados: hoy este número se
   // escribe tres veces en tres planillas.
@@ -239,7 +245,7 @@ export default function EjecutarPautaPage() {
   // La foto queda en el teléfono y sube con la pauta. Subirla de inmediato
   // parecía mejor, pero deja al mecánico esperando una barra frente al camión y
   // falla justo cuando no hay antena — que es cuando la foto importa.
-  const tomarFoto = async (itemId: string, file: File) => {
+  const tomarFoto = async (itemId: string, file: File | Blob) => {
     setSubiendo(itemId)
     try {
       set(itemId, { fotoPreview: URL.createObjectURL(file) })
@@ -256,6 +262,11 @@ export default function EjecutarPautaPage() {
     if (cerrar && faltan.length > 0) {
       toast.error(`Falta contestar ${faltan.length} ítem(s). El primero: ${faltan[0].texto}`)
       setAbierto(faltan[0].bloque)
+      return
+    }
+    if (cerrar && sinRegistro.length > 0) {
+      toast.error(`Falta la foto de: ${sinRegistro.map((i) => i.texto).join(' · ')}`)
+      setAbierto(sinRegistro[0].bloque)
       return
     }
     if (cerrar && sinFoto.length > 0) {
@@ -537,9 +548,10 @@ function ItemFila({
   /** Lo que está mal con lo tecleado, si algo lo está. */
   aviso?: string | null
   onSet: (p: Partial<Estado[string]>) => void
-  onFoto: (f: File) => void
+  onFoto: (f: File | Blob) => void
 }) {
   const nok = valor?.resultado === 'nok'
+  const conFoto = !!(valor?.fotoUrl || valor?.fotoPreview)
 
   return (
     <div className="space-y-2.5 px-4 py-3.5">
@@ -606,6 +618,57 @@ function ItemFila({
             <X className="h-5 w-5" /> NO OK
           </button>
         </div>
+      )}
+
+      {/* [MIG721] Firma de quien ejecuta: viaja como foto (sube sola sin señal). */}
+      {item.tipo_respuesta === 'firma' && (
+        conFoto ? (
+          <div className="relative">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={valor?.fotoUrl ?? valor?.fotoPreview} alt="firma"
+                 className="h-28 w-full rounded-lg border-2 border-emerald-300 bg-white object-contain" />
+            {!bloqueado && (
+              <button onClick={() => onSet({ fotoUrl: undefined, fotoPreview: undefined, fotoBlob: undefined, resultado: undefined })}
+                      className="absolute right-2 top-2 rounded-full bg-white/95 px-2 py-1 text-xs font-semibold text-gray-700 shadow">
+                Firmar de nuevo
+              </button>
+            )}
+          </div>
+        ) : !bloqueado && (
+          <SignaturePad label="Firme con el dedo"
+                        onCapture={(dataUrl) => {
+                          void fetch(dataUrl).then((r) => r.blob()).then((b) => { onSet({ resultado: 'ok' }); onFoto(b) })
+                        }} />
+        )
+      )}
+
+      {/* [MIG721] Foto de lo realizado / del tablero: se pide siempre, no solo si NO OK. */}
+      {item.foto_obligatoria && item.tipo_respuesta !== 'firma' && !nok && (
+        conFoto ? (
+          <div className="relative">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={valor?.fotoUrl ?? valor?.fotoPreview} alt="registro"
+                 className="h-32 w-full rounded-lg border-2 border-emerald-300 object-cover" />
+            {subiendo && (
+              <div className="absolute inset-0 grid place-items-center rounded-lg bg-black/40">
+                <Spinner className="h-6 w-6 text-white" />
+              </div>
+            )}
+            {!bloqueado && !subiendo && (
+              <button onClick={() => onSet({ fotoUrl: undefined, fotoPreview: undefined, fotoBlob: undefined })}
+                      aria-label="Quitar foto"
+                      className="absolute right-2 top-2 rounded-full bg-white/95 p-2 text-red-600 shadow">
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+        ) : !bloqueado && (
+          <label className="flex h-12 cursor-pointer items-center justify-center gap-2 rounded-lg border-2 border-dashed border-emerald-500 bg-emerald-50 text-sm font-bold text-emerald-800">
+            <Camera className="h-5 w-5" /> {item.tipo_respuesta === 'numero' ? 'Foto del tablero' : 'Foto de lo realizado'}
+            <input type="file" accept="image/*" capture="environment" className="hidden"
+                   onChange={(e) => { const f = e.target.files?.[0]; if (f) onFoto(f) }} />
+          </label>
+        )
       )}
 
       {nok && (
