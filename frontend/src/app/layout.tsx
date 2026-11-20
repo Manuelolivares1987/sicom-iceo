@@ -6,6 +6,8 @@ import { ToastProvider } from '@/contexts/toast-context'
 import { RecuperacionChunks } from '@/components/layout/recuperacion-chunks'
 import { ConectividadInit } from '@/components/layout/conectividad-init'
 import { PrecargaTerreno } from '@/components/layout/precarga-terreno'
+import { TerrenoGlobal } from '@/components/layout/terreno-global'
+import { ActualizacionApp } from '@/components/layout/actualizacion-app'
 
 export const metadata: Metadata = {
   title: 'SICOM-ICEO | Pillado Empresas',
@@ -56,9 +58,11 @@ export default function RootLayout({
       <body>
         <RecuperacionChunks />
         <ConectividadInit />
+        <ActualizacionApp />
         <QueryProvider>
           <AuthProvider>
             <PrecargaTerreno />
+            <TerrenoGlobal />
             <ToastProvider>{children}</ToastProvider>
           </AuthProvider>
         </QueryProvider>

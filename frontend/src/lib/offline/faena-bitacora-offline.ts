@@ -10,6 +10,7 @@
 // El servidor es idempotente por client_uuid: reintentar nunca duplica.
 // ============================================================================
 
+import { haySesionServidor } from '@/lib/supabase'
 import Dexie, { type Table } from 'dexie'
 import { supabase } from '@/lib/supabase'
 import { compressImage } from '@/lib/image/compress'
@@ -216,6 +217,8 @@ export async function descartar(localId: string) {
  * pendiente suba (su id local no existe en el servidor): se salta y reintenta.
  */
 export async function sincronizar(): Promise<{ ok: number; error: number; rechazadas: number }> {
+  // [20-11-2026] Sin sesión válida no se sube: el servidor lo rechazaría como anónimo.
+  if (!haySesionServidor()) return { ok: 0, error: 0, rechazadas: 0 }
   if (!isOnline()) return { ok: 0, error: 0, rechazadas: 0 }
   const cola = await db().pending.where('sync_status').equals('pending').sortBy('created_at')
   const localesPend = new Set(cola.filter((o) => o.tipo === 'pendiente').map((o) => o.local_id))

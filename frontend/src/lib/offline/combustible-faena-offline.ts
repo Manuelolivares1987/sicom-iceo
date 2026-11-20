@@ -7,6 +7,7 @@
 // Cada despacho lleva un client_uuid: si el envío se reintenta, el servidor
 // devuelve el mismo registro en vez de duplicar el litraje.
 
+import { haySesionServidor } from '@/lib/supabase'
 import Dexie, { type Table } from 'dexie'
 import {
   getCatalogoFaena, registrarDespacho, getDespachosDia, subirFotoMedidor,
@@ -202,6 +203,8 @@ export async function pendientesDelDia(fecha: string): Promise<DespachoPendiente
  * Nunca borra sin confirmación del servidor.
  */
 export async function sincronizar(): Promise<{ ok: number; failed: number }> {
+  // [20-11-2026] Sin sesión válida no se sube: el servidor lo rechazaría como anónimo.
+  if (!haySesionServidor()) return { ok: 0, failed: 0 }
   if (!isOnline()) return { ok: 0, failed: 0 }
   const cola = await combDB().pending.toArray()
   let ok = 0, failed = 0
@@ -348,6 +351,8 @@ export async function descartarMovimiento(localId: string) {
  * que el servidor confirma.
  */
 export async function sincronizarMovimientos(): Promise<{ ok: number; failed: number }> {
+  // [20-11-2026] Sin sesión válida no se sube: el servidor lo rechazaría como anónimo.
+  if (!haySesionServidor()) return { ok: 0, failed: 0 }
   if (!isOnline()) return { ok: 0, failed: 0 }
   const cola = await combDB().movimientos.toArray()
   let ok = 0, failed = 0

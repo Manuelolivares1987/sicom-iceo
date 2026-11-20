@@ -23,11 +23,12 @@ function destinoTrasEntrar(): string {
   if (typeof window === 'undefined') return '/dashboard/'
   const next = new URLSearchParams(window.location.search).get('next')
   if (next && next.startsWith('/') && !next.startsWith('//')) return next
-  return '/dashboard/'
+  // [20-11-2026] El lanzador /m/ manda a cada uno a su app (o al panel).
+  return '/m/'
 }
 
 export default function LoginPage() {
-  const { signIn, isAuthenticated, loading: authLoading } = useAuth()
+  const { signIn, isAuthenticated, sesionPerdida, loading: authLoading } = useAuth()
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -45,13 +46,20 @@ export default function LoginPage() {
       // [19-11-2026] Navegación completa y no router.push: con señal de faena
       // la navegación interna podía no llegar nunca y dejaba el login a medias.
       window.location.replace(destinoTrasEntrar())
-    } catch {
-      setError('Credenciales inválidas. Verifique su correo y contraseña.')
+    } catch (e) {
+      // [20-11-2026] Sin red no es «credenciales inválidas».
+      const err = e as { name?: string; status?: number }
+      const sinRed = err?.name === 'AuthRetryableFetchError' || !err?.status || err.status >= 500
+      setError(sinRed
+        ? 'No hay conexión con el servidor. Busque señal o wifi e intente de nuevo; su clave está bien.'
+        : 'Credenciales inválidas. Verifique su correo y contraseña.')
     }
   }
 
   // Ya con sesión: a su pantalla, con la redirección que no se queda pegada.
-  if (!authLoading && isAuthenticated) {
+  // Con la sesión perdida (identidad del equipo, sin token) sí se muestra el
+  // formulario: es justamente para volver a entrar.
+  if (!authLoading && isAuthenticated && !sesionPerdida) {
     return <RedireccionSegura destino={destinoTrasEntrar()} />
   }
 

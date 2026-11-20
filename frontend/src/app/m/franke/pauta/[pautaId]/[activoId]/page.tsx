@@ -71,8 +71,11 @@ export default function EjecutarPautaPage() {
   const online = useNetworkStatus()
   const toast = useToast()
 
-  const pautaId = params.pautaId
-  const activoId = params.activoId
+  // [20-11-2026] También como página fija /m/franke/pauta/revisar/?p=&a= (queda
+  // guardada en el teléfono completa); la ruta con [pautaId]/[activoId] sigue
+  // sirviendo para los links viejos.
+  const pautaId = params?.pautaId ?? search.get('p') ?? ''
+  const activoId = params?.activoId ?? search.get('a') ?? ''
   const turno = search.get('turno') || 'Día'
   const fecha = hoyISO()
 

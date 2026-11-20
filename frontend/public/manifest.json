@@ -2,7 +2,7 @@
   "name": "SICOM-ICEO | Pillado Empresas",
   "short_name": "SICOM",
   "description": "Sistema Integral de Control Operacional - Pillado Empresas",
-  "start_url": "/dashboard/",
+  "start_url": "/m/",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",

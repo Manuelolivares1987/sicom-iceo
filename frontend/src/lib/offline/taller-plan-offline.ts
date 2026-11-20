@@ -9,6 +9,7 @@
 // Usa la misma BD Dexie del taller (sicom-taller-terreno) pero una tabla de
 // pendientes propia (pendingPlan) para no interferir con la app del mecánico.
 
+import { haySesionServidor } from '@/lib/supabase'
 import { supabase } from '@/lib/supabase'
 import {
   getPlanSemanalById, getDiasPlanSemanal, getJornadasPlanSemanal, getKpiSemanal,
@@ -217,6 +218,8 @@ async function resolverEjecucionActiva(otId: string): Promise<string | null> {
 }
 
 export async function syncTallerPlanPending(): Promise<{ ok: number; failed: number }> {
+  // [20-11-2026] Sin sesión válida no se sube: el servidor lo rechazaría como anónimo.
+  if (!haySesionServidor()) return { ok: 0, failed: 0 }
   if (!isOnline()) return { ok: 0, failed: 0 }
   const db = tallerDB()
   const rows = (await db.pendingPlan.toArray()).sort((a, b) => a.created_at.localeCompare(b.created_at))

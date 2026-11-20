@@ -34,6 +34,9 @@ const db = { pending: tabla('local_id'), blobs: tabla('blob_id'), drafts: tabla(
 let seq = 0
 vi.mock('@/lib/offline/enex-db', () => ({ enexDB: () => db, newId: () => `id${++seq}` }))
 
+// La cola solo sube con sesión válida (20-11-2026): acá se simula que la hay.
+vi.mock('@/lib/supabase', () => ({ haySesionServidor: () => true, supabase: {} }))
+
 const subirEvidenciaEnex = vi.fn()
 const ejecutarPauta = vi.fn()
 const guardarRepuestosEnex = vi.fn()
