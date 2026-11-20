@@ -15,6 +15,7 @@ import { useToast } from '@/hooks/use-toast'
 import { leerBorrador, type BorradorInspeccion } from '@/lib/offline/inspeccion-apr-db'
 import { InspeccionAprForm } from '@/components/prevencion/inspeccion-apr-form'
 import { descargarPdfInspeccion } from '@/components/prevencion/pdf-inspeccion-apr'
+import { EsperandoSesion } from '@/components/layout/esperando-sesion'
 
 function Editor() {
   const id = useSearchParams().get('id')
@@ -55,7 +56,7 @@ function Editor() {
 
 export default function EditarInspeccionPage() {
   const { verificando, sinSesionOffline } = useExigirSesion()
-  if (verificando) return <div className="flex min-h-screen items-center justify-center"><Spinner className="h-8 w-8" /></div>
+  if (verificando) return <EsperandoSesion />
   if (sinSesionOffline) return <SinSesionOffline />
   return (
     <Suspense fallback={<div className="flex min-h-screen items-center justify-center"><Spinner className="h-8 w-8" /></div>}>

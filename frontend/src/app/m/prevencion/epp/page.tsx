@@ -14,6 +14,7 @@ import { useToast } from '@/hooks/use-toast'
 import { EppEntregaForm } from '@/components/prevencion/epp-entrega-form'
 import { descargarComprobanteEpp } from '@/components/prevencion/pdf-comprobante-epp'
 import { MOTIVO_EPP, getEntregasEpp } from '@/lib/services/prevencion-epp'
+import { EsperandoSesion } from '@/components/layout/esperando-sesion'
 
 export default function EppMovilPage() {
   const { verificando, sinSesionOffline } = useExigirSesion()
@@ -26,7 +27,7 @@ export default function EppMovilPage() {
     queryFn: () => getEntregasEpp({ soloMias: true, limit: 30 }),
   })
 
-  if (verificando) return <div className="flex min-h-screen items-center justify-center"><Spinner className="h-8 w-8" /></div>
+  if (verificando) return <EsperandoSesion />
   if (sinSesionOffline) return <SinSesionOffline />
 
   return (

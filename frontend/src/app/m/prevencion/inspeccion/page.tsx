@@ -31,6 +31,7 @@ import {
 } from '@/lib/offline/inspeccion-apr-db'
 import { avanceBorrador } from '@/components/prevencion/inspeccion-apr-form'
 import { descargarPdfInspeccion } from '@/components/prevencion/pdf-inspeccion-apr'
+import { EsperandoSesion } from '@/components/layout/esperando-sesion'
 
 const ROLES_APR = ['administrador', 'prevencionista', 'jefe_operaciones', 'subgerente_operaciones']
 
@@ -62,7 +63,7 @@ export default function InspeccionAprHome() {
 
   useEffect(() => { listarBorradores().then(setBorradores).catch(() => setBorradores([])) }, [])
 
-  if (verificando) return <div className="flex min-h-screen items-center justify-center"><Spinner className="h-8 w-8" /></div>
+  if (verificando) return <EsperandoSesion />
   if (sinSesionOffline) return <SinSesionOffline />
 
   const preparar = async () => {

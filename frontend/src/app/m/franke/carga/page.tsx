@@ -35,6 +35,7 @@ import {
   registrarRecepcion, getRecepcionesDia, subirFotoMedicion, getPuntosMedicion,
   type PuntoMedicion, type Recepcion,
 } from '@/lib/services/combustible-cierre'
+import { EsperandoSesion } from '@/components/layout/esperando-sesion'
 
 const hoyISO = () => {
   const d = new Date()
@@ -154,7 +155,7 @@ export default function CargaEdsPage() {
   }
 
   if (verificando) {
-    return <div className="flex min-h-screen items-center justify-center bg-gray-50"><Spinner className="h-8 w-8" /></div>
+    return <EsperandoSesion />
   }
   if (sinSesionOffline) return <SinSesionOffline />
 

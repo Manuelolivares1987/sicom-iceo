@@ -41,6 +41,7 @@ import {
 } from '@/lib/services/faena-entrega'
 // [MIG696] Sin señal: abrir usa lo guardado; las dos firmas quedan en cola.
 import { abrirEntregaOffline, firmarOffline, recibirOffline } from '@/lib/offline/faena-entrega-offline'
+import { EsperandoSesion } from '@/components/layout/esperando-sesion'
 
 const miles = (n: number | null | undefined) =>
   n == null || Number.isNaN(Number(n)) ? '—' : Number(n).toLocaleString('es-CL', { maximumFractionDigits: 0 })
@@ -216,7 +217,7 @@ export default function EntregaTurnoPage() {
   }
 
   if (verificando) {
-    return <div className="flex min-h-screen items-center justify-center bg-gray-50"><Spinner className="h-8 w-8" /></div>
+    return <EsperandoSesion />
   }
   if (sinSesionOffline) return <SinSesionOffline />
 

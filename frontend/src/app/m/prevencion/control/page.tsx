@@ -29,6 +29,7 @@ import {
 } from '@/hooks/use-prevencion-reportabilidad'
 import type { ReportabilidadEstado } from '@/lib/services/prevencion-reportabilidad'
 import { descargarBlob, generarEntregable } from '@/lib/entregables/prevencion-generar'
+import { EsperandoSesion } from '@/components/layout/esperando-sesion'
 
 const ROLES_CONTROL = ['administrador', 'prevencionista', 'jefe_operaciones', 'subgerente_operaciones']
 
@@ -64,7 +65,7 @@ export default function PrevencionControlPage() {
   const [progreso, setProgreso] = useState('')
 
   if (verificando) {
-    return <div className="flex min-h-screen items-center justify-center bg-gray-50"><Spinner className="h-8 w-8" /></div>
+    return <EsperandoSesion />
   }
   if (sinSesionOffline) return <SinSesionOffline />
 

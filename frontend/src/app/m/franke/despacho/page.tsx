@@ -48,6 +48,7 @@ import {
   sincronizar, getDiaOffline, pendientesCount,
   type DespachoPendiente,
 } from '@/lib/offline/combustible-faena-offline'
+import { EsperandoSesion } from '@/components/layout/esperando-sesion'
 
 const FAENA = 'FAE-FRANCKE'
 const K = (s: string) => `franke-${s}`
@@ -250,7 +251,7 @@ export default function FrankeDespachoPage() {
   }
 
   if (verificando) {
-    return <div className="flex min-h-screen items-center justify-center bg-gray-50"><Spinner className="h-8 w-8" /></div>
+    return <EsperandoSesion />
   }
   if (sinSesionOffline) return <SinSesionOffline />
 

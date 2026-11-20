@@ -43,6 +43,7 @@ import {
   getAgendaOffline, getItemsOffline, guardarPautaOffline, guardarFotoLocal,
   urlFotoLocal, pendientesCount,
 } from '@/lib/offline/faena-pauta-offline'
+import { EsperandoSesion } from '@/components/layout/esperando-sesion'
 
 const hoyISO = () => {
   const d = new Date()
@@ -362,7 +363,7 @@ export default function EjecutarPautaPage() {
   }
 
   if (verificando) {
-    return <div className="flex min-h-screen items-center justify-center bg-gray-50"><Spinner className="h-8 w-8" /></div>
+    return <EsperandoSesion />
   }
   if (sinSesionOffline) return <SinSesionOffline />
 

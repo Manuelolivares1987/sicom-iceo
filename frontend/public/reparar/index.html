@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#16a34a">
+<title>Reparar SICOM</title>
+<!--
+  Link de reparación para mandar por WhatsApp (20-11-2026).
+  Es HTML plano a propósito: no usa ni un archivo de la app, así que funciona
+  aunque el teléfono tenga guardada una versión vieja que se queda en la ruedita.
+  Borra SOLO la caché de la app y su service worker. NO toca IndexedDB ni
+  localStorage: lo guardado sin señal (pautas, despachos, bitácora) y la sesión
+  se conservan.
+-->
+<style>
+  body { margin: 0; font-family: system-ui, -apple-system, Roboto, sans-serif; background: #f9fafb; color: #111827; }
+  main { max-width: 420px; margin: 0 auto; padding: 32px 20px; text-align: center; }
+  h1 { font-size: 20px; margin: 0 0 8px; }
+  p { font-size: 15px; line-height: 1.45; color: #374151; }
+  .paso { text-align: left; background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 12px 14px; margin: 16px 0; font-size: 14px; }
+  .ok { color: #15803d; } .err { color: #b91c1c; }
+  a.btn { display: block; margin-top: 18px; background: #16a34a; color: #fff; text-decoration: none; font-weight: 600; padding: 14px; border-radius: 10px; }
+  .chico { font-size: 12px; color: #6b7280; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Reparando la app…</h1>
+  <p id="estado">Un momento, no cierres esta pantalla.</p>
+  <div class="paso" id="pasos"></div>
+  <a class="btn" id="seguir" href="/login/" style="display:none">Entrar a SICOM</a>
+  <p class="chico">Lo que tengas guardado sin señal no se borra. No cierres sesión.</p>
+</main>
+<script>
+(function () {
+  var pasos = document.getElementById('pasos');
+  var linea = function (txt, cls) { var d = document.createElement('div'); d.textContent = txt; if (cls) d.className = cls; pasos.appendChild(d); };
+  // Destino: ?a=/m/franke/ (solo rutas internas).
+  var a = new URLSearchParams(location.search).get('a') || '/m/franke/';
+  if (!/^\/[A-Za-z0-9\/_\-]*$/.test(a)) a = '/m/franke/';
+  var destino = '/login/?next=' + encodeURIComponent(a) + '&v=' + Date.now();
+  var btn = document.getElementById('seguir');
+  btn.href = destino;
+
+  function terminar(okTodo) {
+    document.getElementById('estado').textContent = okTodo
+      ? 'Listo. La app se va a abrir con la versión nueva.'
+      : 'Listo. Aprieta el botón para entrar.';
+    btn.style.display = 'block';
+    if (okTodo) setTimeout(function () { location.replace(destino); }, 1500);
+  }
+
+  if (!navigator.onLine) {
+    linea('Sin señal: no se borró nada (sin señal la app guardada es la única que abre).', 'err');
+    linea('Vuelve a abrir este link cuando tengas señal o wifi.');
+    document.getElementById('estado').textContent = 'Necesitas señal para reparar.';
+    return;
+  }
+
+  var tareas = [];
+  if ('serviceWorker' in navigator) {
+    tareas.push(navigator.serviceWorker.getRegistrations().then(function (regs) {
+      return Promise.all(regs.map(function (r) { return r.unregister(); })).then(function () {
+        linea('✓ Versión vieja de la app desactivada (' + regs.length + ')', 'ok');
+      });
+    }).catch(function () { linea('No se pudo desactivar la versión vieja', 'err'); }));
+  }
+  if ('caches' in window) {
+    tareas.push(caches.keys().then(function (keys) {
+      return Promise.all(keys.map(function (k) { return caches.delete(k); })).then(function () {
+        linea('✓ Archivos viejos borrados (' + keys.length + ' grupos)', 'ok');
+      });
+    }).catch(function () { linea('No se pudieron borrar los archivos viejos', 'err'); }));
+  }
+  linea('✓ Pendientes sin señal y sesión: se conservan', 'ok');
+  Promise.all(tareas).then(function () { terminar(true); }, function () { terminar(false); });
+  // Pase lo que pase, el botón aparece.
+  setTimeout(function () { btn.style.display = 'block'; }, 6000);
+})();
+</script>
+</body>
+</html>

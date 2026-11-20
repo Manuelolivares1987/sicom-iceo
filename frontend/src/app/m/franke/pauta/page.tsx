@@ -41,6 +41,7 @@ import {
 import {
   getAgendaOffline, descargarTodo, ultimaDescarga, sincronizar, pendientesCount,
 } from '@/lib/offline/faena-pauta-offline'
+import { EsperandoSesion } from '@/components/layout/esperando-sesion'
 
 const hoyISO = () => {
   const d = new Date()
@@ -193,7 +194,7 @@ export default function FrankePautaAgendaPage() {
   const hechasHoy = diarias.filter((a) => a.ejecucion_hoy_estado === 'cerrada' || a.ejecucion_hoy_estado === 'no_aplica').length
 
   if (verificando) {
-    return <div className="flex min-h-screen items-center justify-center bg-gray-50"><Spinner className="h-8 w-8" /></div>
+    return <EsperandoSesion />
   }
   if (sinSesionOffline) return <SinSesionOffline />
 
