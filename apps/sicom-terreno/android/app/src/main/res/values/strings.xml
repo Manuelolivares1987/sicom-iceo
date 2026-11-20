@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">SICOM Terreno</string>
+    <string name="title_activity_main">SICOM Terreno</string>
+    <string name="package_name">cl.pilladoempresas.sicomterreno</string>
+    <string name="custom_url_scheme">cl.pilladoempresas.sicomterreno</string>
+</resources>
