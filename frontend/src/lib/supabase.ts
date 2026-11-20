@@ -64,8 +64,8 @@ export const supabase = createClient(
  * así que esto permite arrancar la app igual y trabajar con lo descargado.
  */
 export function leerSesionPersistida(): { user: SupabaseUser; expirada: boolean } | null {
-  if (typeof localStorage === 'undefined') return null
   try {
+    if (typeof localStorage === 'undefined') return null
     for (let i = 0; i < localStorage.length; i++) {
       const k = localStorage.key(i)
       if (!k || !k.startsWith('sb-') || !k.endsWith('-auth-token')) continue
