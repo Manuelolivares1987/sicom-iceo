@@ -1,6 +1,6 @@
 {
   "appId": "cl.pilladoempresas.sicomterreno",
-  "appName": "SICOM Terreno",
+  "appName": "SICOM",
   "webDir": "www",
   "server": {
     "url": "https://pilladoiceo.netlify.app/m/",

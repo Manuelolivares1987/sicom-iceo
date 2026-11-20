@@ -43,7 +43,7 @@ export function TerrenoGlobal() {
   if (sugerirApp && !sesionPerdida) {
     return (
       <div className="sticky top-0 z-40 flex items-center justify-between gap-2 bg-gray-900 px-3 py-2 text-xs text-white shadow-sm">
-        <span>Instale la app <b>SICOM Terreno</b>: abre al instante y funciona sin señal.</span>
+        <span>Instale la app <b>SICOM</b>: abre al instante y funciona sin señal.</span>
         <span className="flex shrink-0 items-center gap-1">
           <a href="/instalar/" className="rounded bg-green-600 px-2 py-1 font-semibold">Instalar</a>
           <button type="button" onClick={cerrarSugerencia} aria-label="Cerrar" className="px-1.5 py-1 text-gray-300">✕</button>
