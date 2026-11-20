@@ -135,10 +135,20 @@ export default function FrankePautaAgendaPage() {
 
   // Lo programado que ya venció o está por vencer va primero: es lo que hay que
   // ir a buscar, no lo que se hace igual todos los días.
-  const programadas = useMemo(
-    () => agenda.filter((a) => a.pauta_tipo === 'programada' && (a.senal === 'vencida' || a.senal === 'por_vencer')),
-    [agenda],
-  )
+  // [MIG720] Escalera con absorción: si en un camión tocan el SL y el SM1, la
+  // visita es UNA y es el SM1 (trae el SL completo). Se muestra solo el nivel
+  // mayor que toca por equipo; pedirle al mecánico dos servicios el mismo día
+  // es pedirle que haga el aceite dos veces.
+  const programadas = useMemo(() => {
+    const tocan = agenda.filter((a) => a.pauta_tipo === 'programada' && (a.senal === 'vencida' || a.senal === 'por_vencer'))
+    const mayor = new Map<string, PautaAgenda>()
+    for (const a of tocan) {
+      const prev = mayor.get(a.activo_id)
+      const nivel = (x: PautaAgenda) => x.disparo_horas ?? x.disparo_km ?? 0
+      if (!prev || nivel(a) > nivel(prev)) mayor.set(a.activo_id, a)
+    }
+    return tocan.filter((a) => mayor.get(a.activo_id) === a)
+  }, [agenda])
   // El equipo que la ficha declara fuera de servicio no se le exige al mecánico
   // todos los días. El HHWB-42 lleva meses en el taller de Coquimbo: pedirle que
   // entre a marcarlo «no está en faena» cada mañana es la clase de trabajo
@@ -153,10 +163,20 @@ export default function FrankePautaAgendaPage() {
     [agenda],
   )
   const diarias = enFaena
-  const otrasProgramadas = useMemo(
-    () => agenda.filter((a) => a.pauta_tipo === 'programada' && a.senal !== 'vencida' && a.senal !== 'por_vencer'),
-    [agenda],
-  )
+  // Próximas: solo la siguiente de cada equipo (la que vence primero) y
+  // nada de un equipo que ya tiene un servicio pendiente arriba.
+  const otrasProgramadas = useMemo(() => {
+    const conPendiente = new Set(programadas.map((a) => a.activo_id))
+    const resto = agenda.filter((a) => a.pauta_tipo === 'programada' && a.senal !== 'vencida' && a.senal !== 'por_vencer'
+      && !conPendiente.has(a.activo_id))
+    const primero = new Map<string, PautaAgenda>()
+    const cuanto = (x: PautaAgenda) => x.faltan_horas ?? x.faltan_km ?? Number.POSITIVE_INFINITY
+    for (const a of resto) {
+      const prev = primero.get(a.activo_id)
+      if (!prev || cuanto(a) < cuanto(prev)) primero.set(a.activo_id, a)
+    }
+    return resto.filter((a) => primero.get(a.activo_id) === a)
+  }, [agenda, programadas])
 
   const hechasHoy = diarias.filter((a) => a.ejecucion_hoy_estado === 'cerrada' || a.ejecucion_hoy_estado === 'no_aplica').length
 

@@ -35,6 +35,8 @@ export type PautaAgenda = {
   origen_ultima: 'plan' | 'ejecucion'
   faltan_horas: number | null
   faltan_km: number | null
+  /** [MIG720] días hasta el tope calendario (lo que ocurra primero). */
+  faltan_dias?: number | null
   senal: 'diaria' | 'vencida' | 'por_vencer' | 'al_dia' | 'sin_datos'
   ejecucion_hoy_id: string | null
   ejecucion_hoy_estado: 'borrador' | 'cerrada' | 'no_aplica' | null
@@ -159,6 +161,8 @@ export function textoSenal(a: PautaAgenda): string {
   if (a.pauta_tipo === 'diaria') return 'Todos los días'
   if (a.senal === 'sin_datos') return 'Falta la última mantención'
   if (a.senal === 'vencida') return 'Vencida'
+  // [MIG720] Si manda el calendario (vence antes por días que por horas), se dice en días.
+  if (a.faltan_dias != null && a.faltan_dias <= 7) return a.faltan_dias <= 0 ? 'Vencida' : `Vence en ${a.faltan_dias} días`
   if (a.faltan_horas != null) return `Faltan ${Math.round(a.faltan_horas).toLocaleString('es-CL')} h`
   if (a.faltan_km != null) return `Faltan ${Math.round(a.faltan_km).toLocaleString('es-CL')} km`
   return 'Al día'
