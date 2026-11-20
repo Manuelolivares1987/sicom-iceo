@@ -14,6 +14,7 @@
 // ============================================================================
 
 import { haySesionServidor } from '@/lib/supabase'
+import { esTransitorio, esDuplicado } from '@/lib/offline/bandeja'
 import Dexie, { type Table } from 'dexie'
 import { supabase } from '@/lib/supabase'
 import {
@@ -74,8 +75,10 @@ function conTimeout<T>(p: PromiseLike<T>, ms = 10000): Promise<T> {
   })
 }
 /** Error del servidor con código = regla de negocio (no se arregla reintentando). */
-const esRechazo = (e: unknown) => !!e && typeof e === 'object' && 'code' in e && typeof (e as { code: unknown }).code === 'string'
-  && (e as { code: string }).code !== '' && !String((e as { message?: string }).message ?? '').toLowerCase().includes('fetch')
+// [F3, 20-11-2026] Un error de señal o de sesión (42501 «No autorizado», JWT
+// vencido, red) NO es un rechazo: antes quedaba «rechazada» para siempre.
+const esRechazo = (e: unknown) => !esTransitorio(e) && !esDuplicado(e) && !!e && typeof e === 'object' && 'code' in e
+  && typeof (e as { code: unknown }).code === 'string' && (e as { code: string }).code !== ''
 const mensaje = (e: unknown) => (e instanceof Error ? e.message : typeof e === 'object' && e && 'message' in e ? String((e as { message: unknown }).message) : String(e))
 
 const K_CAT = (codigoBodega: string) => `catalogo:${codigoBodega}`
@@ -166,6 +169,7 @@ async function subirUna(p: OperacionPendiente): Promise<{ enviado: boolean; rech
     await bodegaDB().pending.delete(p.local_id)
     return { enviado: true, resultado }
   } catch (e) {
+    if (esDuplicado(e)) { await bodegaDB().pending.delete(p.local_id); return { enviado: true } }
     if (esRechazo(e)) {
       await bodegaDB().pending.update(p.local_id, { sync_status: 'rechazada', intentos: p.intentos + 1, ultimo_error: mensaje(e) })
       return { enviado: false, rechazo: mensaje(e) }

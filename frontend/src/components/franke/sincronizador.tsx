@@ -42,6 +42,13 @@ import {
 import {
   sincronizar as sincronizarEntrega, pendientesCount as entregaPendientes,
 } from '@/lib/offline/faena-entrega-offline'
+// [F3] Bandeja única (carga del camión y lo que venga) + movimientos de despacho
+// + todo lo de la faena bajado al teléfono.
+import { sincronizarBandeja, contarBandeja, EVENTO_BANDEJA } from '@/lib/offline/bandeja'
+import '@/lib/offline/franke-carga'
+import { sincronizarMovimientos, movimientosPendientesCount } from '@/lib/offline/combustible-faena-offline'
+import { precargarFaena } from '@/lib/offline/franke-precarga'
+import Link from 'next/link'
 
 export function SincronizadorFranke() {
   const online = useNetworkStatus()
@@ -54,7 +61,8 @@ export function SincronizadorFranke() {
 
   const contar = useCallback(async () => {
     try {
-      setPendientes((await pautasPendientes()) + (await despachosPendientes()) + (await bodegaPendientes()) + (await bitacoraPendientes()) + (await entregaPendientes()))
+      setPendientes((await pautasPendientes()) + (await despachosPendientes()) + (await bodegaPendientes()) + (await bitacoraPendientes())
+        + (await entregaPendientes()) + (await contarBandeja()) + (await movimientosPendientesCount()))
     } catch { /* IndexedDB no disponible: no es motivo para romper la pantalla */ }
   }, [])
 
@@ -65,8 +73,9 @@ export function SincronizadorFranke() {
     try {
       // [MIG694] La bodega de faena también sube su cola desde acá.
       // [MIG696] Y la bitácora del turno.
-      const [a, b, c, d, e] = await Promise.all([sincronizarPautas(), sincronizarDespachos(), sincronizarBodega(), sincronizarBitacora(), sincronizarEntrega()])
-      const ok = a.ok + b.ok + c.ok + d.ok + e.ok
+      const [a, b, c, d, e, f, g] = await Promise.all([sincronizarPautas(), sincronizarDespachos(), sincronizarBodega(), sincronizarBitacora(),
+        sincronizarEntrega(), sincronizarBandeja(), sincronizarMovimientos()])
+      const ok = a.ok + b.ok + c.ok + d.ok + e.ok + f + g.ok
       if (c.rechazadas > 0) toast.error(`${c.rechazadas} registro(s) de bodega no se aceptaron: revíselos en Bodega.`)
       if (ok > 0 && avisar) {
         toast.success(`Volvió la señal: se subieron ${ok} registro(s) que estaban esperando.`)
@@ -87,13 +96,25 @@ export function SincronizadorFranke() {
   // mecánico tiene a medio llenar: eso vive en su borrador).
   useEffect(() => {
     if (!online) return
-    void getFaenaId().then((id) => (id ? refrescarSiViejo(id) : false)).catch(() => undefined)
+    // [F3] Antes solo las pautas; ahora todo lo de la faena (cada 30 min).
+    void precargarFaena().catch(() => undefined)
   }, [online])
+
+  // La cuenta se actualiza apenas algo entra o sale de la bandeja.
+  useEffect(() => {
+    const al = () => { void contar() }
+    window.addEventListener(EVENTO_BANDEJA, al)
+    return () => window.removeEventListener(EVENTO_BANDEJA, al)
+  }, [contar])
 
   useEffect(() => {
     // El teléfono en el bolsillo con la pantalla apagada no dispara «online»:
     // la señal vuelve y el aparato no se entera hasta que alguien lo mira.
-    const alVolver = () => { if (document.visibilityState === 'visible') void subir(true) }
+    const alVolver = () => {
+      if (document.visibilityState !== 'visible') return
+      void subir(true)
+      void precargarFaena().catch(() => undefined)
+    }
     document.addEventListener('visibilitychange', alVolver)
     const cada2min = setInterval(() => void subir(false), 120_000)
     // La cuenta se refresca aparte y más seguido: lo que encola es OTRA
@@ -109,10 +130,11 @@ export function SincronizadorFranke() {
 
   if (pendientes === 0) return null
 
+  // Un toque: a «Pendientes», donde se ve qué espera y por qué.
   return (
-    <button
-      onClick={() => void subir(true)}
-      disabled={!online || subiendo}
+    <Link
+      href="/m/franke/pendientes"
+      onClick={() => { if (online) void subir(true) }}
       className="fixed bottom-20 left-3 z-40 flex items-center gap-2 rounded-full border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-900 shadow-lg disabled:opacity-70"
     >
       {online
@@ -123,6 +145,6 @@ export function SincronizadorFranke() {
         : online
           ? `Subir ${pendientes}`
           : `${pendientes} sin subir`}
-    </button>
+    </Link>
   )
 }
