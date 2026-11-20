@@ -4,6 +4,7 @@
 import { useEffect } from 'react'
 import { esErrorDeChunk, recuperarVersion } from '@/lib/recuperar-version'
 import { repararApp } from '@/components/layout/redireccion-segura'
+import { detalleError } from '@/lib/detalle-error'
 
 export default function GlobalError({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
   useEffect(() => {
@@ -25,6 +26,11 @@ export default function GlobalError({ error, reset }: { error: Error & { digest?
         <button type="button" onClick={() => repararApp()} style={{ padding: '12px 16px', width: 260, borderRadius: 8, background: '#fff', border: '1px solid #d1d5db' }}>
           Reparar app
         </button>
+        {/* [20-11-2026] El detalle exacto, para que una foto del teléfono baste
+            para saber qué falló (no se podía reproducir desde la oficina). */}
+        <p style={{ fontSize: 11, color: '#6b7280', maxWidth: 320, wordBreak: 'break-word', marginTop: 8 }}>
+          {detalleError(error)}
+        </p>
       </body>
     </html>
   )

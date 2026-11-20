@@ -5,6 +5,7 @@
 import { useEffect } from 'react'
 import { esErrorDeChunk, recuperarVersion } from '@/lib/recuperar-version'
 import { repararApp } from '@/components/layout/redireccion-segura'
+import { detalleError } from '@/lib/detalle-error'
 
 export default function ErrorPantalla({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
   const deChunk = esErrorDeChunk(error)
@@ -31,6 +32,7 @@ export default function ErrorPantalla({ error, reset }: { error: Error & { diges
           Reparar app
         </button>
       </div>
+      <p className="max-w-xs break-words text-[11px] text-gray-500">{detalleError(error)}</p>
     </div>
   )
 }
