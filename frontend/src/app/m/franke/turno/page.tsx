@@ -35,6 +35,8 @@ import {
   type DiaCiclo, type EquipoStatus, type StatusCamiones,
 } from '@/lib/services/faena-entrega'
 import { cn } from '@/lib/utils'
+import { conRespaldo } from '@/lib/offline/terreno-cache'
+import { estaEnLinea } from '@/lib/conectividad'
 
 const FAENA_FRANKE = 'FAE-FRANCKE'
 
@@ -54,20 +56,24 @@ export default function TurnoFrankePage() {
 
   const { data: cal, isLoading, refetch } = useQuery({
     queryKey: ['ciclo-franke', faenaId],
-    queryFn: () => getCalendarioCiclo(faenaId!),
+    // [F3] Sin señal: el último calendario guardado en el teléfono.
+    queryFn: () => conRespaldo(`franke-turno-cal:${faenaId}`, () => getCalendarioCiclo(faenaId!)),
+    networkMode: 'always',
     enabled: !!faenaId,
     staleTime: 60_000,
   })
 
   const { data: status } = useQuery({
     queryKey: ['status-camiones', faenaId, cal?.ciclo_id],
-    queryFn: () => getStatusCamiones(faenaId!, cal?.ciclo_id),
+    queryFn: () => conRespaldo(`franke-turno-status:${faenaId}:${cal?.ciclo_id ?? ''}`, () => getStatusCamiones(faenaId!, cal?.ciclo_id)),
+    networkMode: 'always',
     enabled: !!faenaId && !!cal?.hay_ciclo && verStatus,
     staleTime: 30_000,
   })
 
   const abrir = async () => {
     if (!faenaId) return
+    if (!estaEnLinea()) { toast.error('Abrir el turno necesita señal (una vez cada 7 días). Todo lo demás funciona sin señal.'); return }
     setAbriendo(true)
     try {
       const r = await abrirCicloTurno({ faenaId })

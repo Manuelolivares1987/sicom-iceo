@@ -74,9 +74,15 @@ export type RespuestaGuardada = Respuesta & { id: string; nc_id: string | null }
 
 export const TURNOS_FRANKE = ['Día', 'Noche'] as const
 
+// [F3, 20-11-2026] El id de una faena no cambia nunca: se guarda en el teléfono
+// y se responde al instante. Antes cada pantalla lo pedía a la red al abrir y,
+// con «barras sin datos», la bitácora o la entrega quedaban colgadas hasta 60 s.
 export async function getFaenaId(codigo = FAENA_FRANKE): Promise<string | null> {
+  const k = `sicom-faena-id:${codigo}`
+  try { const c = localStorage.getItem(k); if (c) return c } catch { /* sin storage */ }
   const { data, error } = await supabase.from('faenas').select('id').eq('codigo', codigo).maybeSingle()
   if (error) throw error
+  if (data?.id) { try { localStorage.setItem(k, data.id) } catch { /* noop */ } }
   return data?.id ?? null
 }
 

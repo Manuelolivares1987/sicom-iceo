@@ -66,10 +66,15 @@ export type CatalogoFaena = {
   descargado_at: string
 }
 
+// [F3, 20-11-2026] La faena (id, código, nombre) no cambia: se guarda en el
+// teléfono y se responde al instante, con o sin señal.
 export async function getFaenaPorCodigo(codigo: string): Promise<FaenaComb | null> {
+  const k = `sicom-faena:${codigo}`
+  try { const c = localStorage.getItem(k); if (c) return JSON.parse(c) as FaenaComb } catch { /* sin storage */ }
   const { data, error } = await supabase.from('faenas').select('id, codigo, nombre')
     .eq('codigo', codigo).maybeSingle()
   if (error) throw error
+  if (data) { try { localStorage.setItem(k, JSON.stringify(data)) } catch { /* noop */ } }
   return (data ?? null) as FaenaComb | null
 }
 

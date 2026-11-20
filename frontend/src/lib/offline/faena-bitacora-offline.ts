@@ -11,6 +11,7 @@
 // ============================================================================
 
 import { haySesionServidor } from '@/lib/supabase'
+import { esTransitorio, esDuplicado } from '@/lib/offline/bandeja'
 import Dexie, { type Table } from 'dexie'
 import { supabase } from '@/lib/supabase'
 import { compressImage } from '@/lib/image/compress'
@@ -84,8 +85,10 @@ function conTimeout<T>(p: PromiseLike<T>, ms = 10000): Promise<T> {
     Promise.resolve(p).then((v) => { clearTimeout(t); resolve(v) }, (e) => { clearTimeout(t); reject(e) })
   })
 }
-const esRechazo = (e: unknown) => !!e && typeof e === 'object' && 'code' in e && typeof (e as { code: unknown }).code === 'string'
-  && (e as { code: string }).code !== '' && !String((e as { message?: string }).message ?? '').toLowerCase().includes('fetch')
+// [F3, 20-11-2026] Un error de señal o de sesión (42501 «No autorizado», JWT
+// vencido, red) NO es un rechazo: antes quedaba «rechazada» para siempre.
+const esRechazo = (e: unknown) => !esTransitorio(e) && !esDuplicado(e) && !!e && typeof e === 'object' && 'code' in e
+  && typeof (e as { code: unknown }).code === 'string' && (e as { code: string }).code !== ''
 const mensaje = (e: unknown) => (e instanceof Error ? e.message : typeof e === 'object' && e && 'message' in e ? String((e as { message: unknown }).message) : String(e))
 const K = (faenaId: string) => `bitacora:${faenaId}`
 
@@ -191,6 +194,7 @@ async function subirUna(o: OpBitacora): Promise<{ enviado: boolean; rechazo?: st
     await db().pending.delete(o.local_id)
     return { enviado: true }
   } catch (e) {
+    if (esDuplicado(e)) { await db().pending.delete(o.local_id); return { enviado: true } }
     if (esRechazo(e)) {
       await db().pending.update(o.local_id, { sync_status: 'rechazada', intentos: o.intentos + 1, ultimo_error: mensaje(e) })
       return { enviado: false, rechazo: mensaje(e) }

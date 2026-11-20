@@ -36,6 +36,9 @@ import {
   type PuntoMedicion, type Recepcion,
 } from '@/lib/services/combustible-cierre'
 import { EsperandoSesion } from '@/components/layout/esperando-sesion'
+import { conRespaldo } from '@/lib/offline/terreno-cache'
+import { encolarCarga, cargasLocalesDelDia, type CargaLocal } from '@/lib/offline/franke-carga'
+import { EVENTO_BANDEJA, esTransitorio } from '@/lib/offline/bandeja'
 
 const hoyISO = () => {
   const d = new Date()
@@ -61,6 +64,8 @@ export default function CargaEdsPage() {
   const [faenaId, setFaenaId] = useState<string | null>(null)
   const [camiones, setCamiones] = useState<PuntoMedicion[]>([])
   const [delDia, setDelDia] = useState<Recepcion[]>([])
+  // [F3] Cargas guardadas en el teléfono que todavía no suben (⏱).
+  const [locales, setLocales] = useState<CargaLocal[]>([])
   const [cargando, setCargando] = useState(true)
   const [guardando, setGuardando] = useState(false)
 
@@ -82,16 +87,24 @@ export default function CargaEdsPage() {
       const f = await getFaenaId(FAENA_FRANKE)
       if (!f) { toast.error('No se encontró la faena Franke.'); return }
       setFaenaId(f)
-      const puntos = await getPuntosMedicion(f)
+      // [F3] Con o sin señal: lo último guardado si la red no contesta.
+      const puntos = await conRespaldo(`franke-carga-puntos:${f}`, () => getPuntosMedicion(f))
       // En Franke el combustible entra al camión, no a un estanque fijo.
       setCamiones(puntos.filter((p) => p.tipo === 'movil'))
-      setDelDia(await getRecepcionesDia(f, fecha))
+      setDelDia(await conRespaldo(`franke-carga-dia:${f}:${fecha}`, () => getRecepcionesDia(f, fecha)).catch(() => []))
+      setLocales(await cargasLocalesDelDia(fecha))
     } catch (e) {
       toast.error(errorMessage(e, 'No se pudo cargar'))
     } finally { setCargando(false) }
   }, [fecha, toast])
 
   useEffect(() => { void cargar() }, [cargar])
+  // Al subir algo de la bandeja: refrescar la lista.
+  useEffect(() => {
+    const al = () => { void cargasLocalesDelDia(fecha).then(setLocales) }
+    window.addEventListener(EVENTO_BANDEJA, al)
+    return () => window.removeEventListener(EVENTO_BANDEJA, al)
+  }, [fecha])
 
   const litrosMedidor = useMemo(() => {
     const a = Number(meterIni), b = Number(meterFin)
@@ -118,9 +131,7 @@ export default function CargaEdsPage() {
       return
     }
     setGuardando(true)
-    try {
-      const fotoUrl = foto ? await subirFotoMedicion(foto.file) : null
-      const r = await registrarRecepcion({
+    const entrada = {
         faenaId, fecha,
         destinos: [{ estanque_id: camionId, litros: litrosMedidor ?? litrosGuia }],
         // En Franke no hay guía de proveedor: hay un ticket de surtidor.
@@ -131,7 +142,7 @@ export default function CargaEdsPage() {
         hora: horaAhora(),
         recibidoPor: perfil?.nombre_completo ?? null,
         observacion: obs.trim() || null,
-        fotoGuia: fotoUrl,
+        fotoGuia: null as string | null,
         sinFotoMotivo: !foto ? sinFotoMotivo.trim() : null,
         confirmar: true,
         clientUuid: `carga-${fecha}-${folio.trim()}`,
@@ -141,7 +152,19 @@ export default function CargaEdsPage() {
         folioTicket: Number(folio.trim()),
         meterInicial: meterIni !== '' ? Number(meterIni) : null,
         meterFinal: meterFin !== '' ? Number(meterFin) : null,
-      })
+    }
+    // [F3] Sin señal (o si la red falla a medio camino): queda en el teléfono
+    // y sube sola. El identificador carga-<fecha>-<folio> evita duplicarla.
+    const alTelefono = async () => {
+      await encolarCarga(entrada, foto?.file ?? null, `Carga ${camion?.patente ?? camion?.nombre ?? ''} · folio ${folio.trim()} · ${miles(litrosGuia)} L`)
+      toast.success('Guardada en el teléfono. Se sube sola cuando haya señal.')
+      limpiar()
+      setLocales(await cargasLocalesDelDia(fecha))
+    }
+    try {
+      if (!online) { await alTelefono(); return }
+      const fotoUrl = foto ? await subirFotoMedicion(foto.file) : null
+      const r = await registrarRecepcion({ ...entrada, fotoGuia: fotoUrl })
       toast.success(
         r.diferencia_surtidor_medidor != null && Math.abs(r.diferencia_surtidor_medidor) > 0
           ? `Carga registrada. El surtidor marcó ${miles(litrosGuia)} L y el camión recibió ${miles(r.litros_medidor)} L: ${r.diferencia_surtidor_medidor > 0 ? '+' : ''}${miles(r.diferencia_surtidor_medidor)} L de diferencia.`
@@ -150,7 +173,11 @@ export default function CargaEdsPage() {
       limpiar()
       setDelDia(await getRecepcionesDia(faenaId, fecha))
     } catch (e) {
-      toast.error(errorMessage(e, 'No se pudo registrar la carga'))
+      if (esTransitorio(e)) {
+        try { await alTelefono() } catch { toast.error('No se pudo guardar en el teléfono') }
+      } else {
+        toast.error(errorMessage(e, 'No se pudo registrar la carga'))
+      }
     } finally { setGuardando(false) }
   }
 
@@ -332,7 +359,20 @@ export default function CargaEdsPage() {
             </p>
           </div>
           <div className="mt-3 space-y-2">
-            {delDia.length === 0 && (
+            {locales.map((r) => (
+              <div key={r.id} className={cn('flex items-center gap-2 rounded-lg border p-2.5',
+                                            r.estado === 'rechazada' ? 'border-red-300 bg-red-50' : 'border-amber-300 bg-amber-50')}>
+                <span className="w-12 shrink-0 font-mono text-xs font-bold tabular-nums text-gray-500">{r.guia ?? '—'}</span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold text-gray-900">{r.camion ?? '—'}</p>
+                  <p className="truncate text-[11px] text-gray-600">
+                    {r.estado === 'rechazada' ? `No se aceptó: ${r.error ?? ''}` : '⏱ Guardada en el teléfono · se sube sola'}
+                  </p>
+                </div>
+                <span className="shrink-0 font-mono text-sm font-bold tabular-nums text-gray-900">{miles(r.litros_guia)} L</span>
+              </div>
+            ))}
+            {delDia.length === 0 && locales.length === 0 && (
               <p className="py-3 text-center text-sm text-gray-400">Todavía no hay cargas hoy.</p>
             )}
             {delDia.map((r) => (
