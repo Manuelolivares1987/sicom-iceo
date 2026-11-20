@@ -6,11 +6,13 @@ import { useEffect } from 'react'
 import { esErrorDeChunk, recuperarVersion } from '@/lib/recuperar-version'
 import { repararApp } from '@/components/layout/redireccion-segura'
 import { detalleError } from '@/lib/detalle-error'
+import { reportarError } from '@/lib/reportar-error'
 
 export default function ErrorPantalla({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
   const deChunk = esErrorDeChunk(error)
   useEffect(() => {
     console.error('[SICOM] error de pantalla', error)
+    reportarError('pantalla', error)
     if (deChunk) recuperarVersion()
   }, [error, deChunk])
 
