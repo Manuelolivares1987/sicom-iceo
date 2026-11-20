@@ -51,10 +51,12 @@ export type PautaItem = {
   bloque: string
   texto: string
   ayuda: string | null
-  tipo_respuesta: 'ok_nok' | 'numero' | 'texto'
+  tipo_respuesta: 'ok_nok' | 'numero' | 'texto' | 'firma'
   unidad: string | null
   obligatorio: boolean
   foto_si_nok: boolean
+  /** [MIG721] Registro: foto del tablero, foto de lo realizado o firma (siempre, no solo si NO OK). */
+  foto_obligatoria?: boolean
   critico: boolean
   repuesto: string | null
 }

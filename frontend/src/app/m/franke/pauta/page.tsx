@@ -177,6 +177,18 @@ export default function FrankePautaAgendaPage() {
     }
     return resto.filter((a) => primero.get(a.activo_id) === a)
   }, [agenda, programadas])
+  // Todos los niveles programados de cada equipo, de menor a mayor.
+  const porEquipo = useMemo(() => {
+    const m = new Map<string, PautaAgenda[]>()
+    for (const a of agenda) {
+      if (a.pauta_tipo !== 'programada') continue
+      m.set(a.activo_id, [...(m.get(a.activo_id) ?? []), a])
+    }
+    const nivel = (x: PautaAgenda) => x.disparo_horas ?? x.disparo_km ?? 0
+    return Array.from(m.entries())
+      .filter(([, ls]) => ls.length > 1)
+      .map(([id, ls]) => [id, ls.sort((x, y) => nivel(x) - nivel(y))] as [string, PautaAgenda[]])
+  }, [agenda])
 
   const hechasHoy = diarias.filter((a) => a.ejecucion_hoy_estado === 'cerrada' || a.ejecucion_hoy_estado === 'no_aplica').length
 
@@ -295,6 +307,34 @@ export default function FrankePautaAgendaPage() {
           </section>
         )}
 
+        {/* Elegir otro nivel: la agenda sugiere uno, pero si el supervisor o el
+            mecánico deciden hacer otro (un SL en vez del SM1, o adelantar un
+            SM2), se abre acá. Al cerrarse avanza la escalera igual, y lo hecho
+            en Coquimbo también cuenta. */}
+        {porEquipo.length > 0 && (
+          <section>
+            <h2 className="mb-2 flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-gray-500">
+              <Wrench className="h-4 w-4" /> Hacer otro servicio
+            </h2>
+            <div className="space-y-2">
+              {porEquipo.map(([activoId, niveles]) => (
+                <div key={activoId} className="rounded-xl border border-gray-200 bg-white px-4 py-3">
+                  <p className="mb-2 text-sm font-bold text-gray-900">{niveles[0].patente ?? niveles[0].activo_codigo}</p>
+                  <div className="flex flex-wrap gap-2">
+                    {niveles.map((a) => (
+                      <Link key={a.pauta_id}
+                            href={`/m/franke/pauta/${a.pauta_id}/${a.activo_id}?turno=${encodeURIComponent(turno)}`}
+                            className="rounded-lg border-2 border-gray-300 px-3 py-2 text-sm font-semibold text-gray-800 active:bg-gray-100">
+                        {nivelCorto(a)}
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
         {/* Dejar el teléfono listo antes de subir al patio. Es lo que hay que
             tocar el lunes con señal; después la antena da lo mismo. */}
         <section className="rounded-xl border border-gray-200 bg-white p-4">
@@ -337,6 +377,14 @@ export default function FrankePautaAgendaPage() {
       </main>
     </div>
   )
+}
+
+/** «SM1 600 h» a partir del nombre de la pauta («Servicio SM1 600 h · Mack…»). */
+function nivelCorto(a: PautaAgenda): string {
+  const m = a.pauta_nombre?.match(/(S[LM]\d?|PM\d?)/)
+  const n = a.disparo_horas ? `${Math.round(a.disparo_horas).toLocaleString('es-CL')} h`
+          : a.disparo_km ? `${Math.round(a.disparo_km).toLocaleString('es-CL')} km` : ''
+  return [m?.[1], n].filter(Boolean).join(' ')
 }
 
 function Tarjeta({ a, turno }: { a: PautaAgenda; turno: string }) {
