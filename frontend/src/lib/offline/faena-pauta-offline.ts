@@ -24,6 +24,7 @@
 // ============================================================================
 import Dexie, { type Table } from 'dexie'
 import { compressImage } from '@/lib/image/compress'
+import { estaEnLinea } from '@/lib/conectividad'
 import {
   getAgenda, getItems, guardarPauta, subirFotoPauta,
   type PautaAgenda, type PautaItem, type Respuesta, type GuardarPautaInput,
@@ -73,7 +74,10 @@ const nuevoId = () =>
     ? crypto.randomUUID()
     : `${Date.now()}-${Math.random().toString(36).slice(2)}`
 
-const isOnline = () => (typeof navigator === 'undefined' ? true : navigator.onLine)
+// [19-11-2026] Conexión REAL (sondeo a Supabase), no navigator.onLine: con
+// antena sin datos o Wi-Fi de campamento el teléfono dice «online» y cada
+// intento quedaba colgado.
+const isOnline = () => (typeof navigator === 'undefined' ? true : navigator.onLine && estaEnLinea())
 
 /** Techo de tiempo: con antena sin datos la petición no falla, se cuelga. */
 function conTimeout<T>(p: Promise<T>, ms = 8000): Promise<T> {
@@ -137,7 +141,9 @@ export async function ultimaDescarga(faenaId: string): Promise<string | null> {
 
 // ── Fotos ───────────────────────────────────────────────────────────────────
 export async function guardarFotoLocal(file: File | Blob): Promise<string> {
-  const blob = await compressImage(file, { maxDim: 1600, quality: 0.75 })
+  // [MIG721] Con foto de lo realizado en cada trabajo, un SM3 lleva ~25 fotos:
+  // 1280 px / 0,7 (≈150–200 KB) sigue sirviendo de evidencia y sube con poca señal.
+  const blob = await compressImage(file, { maxDim: 1280, quality: 0.7 })
   const blob_id = nuevoId()
   await pautaDB().blobs.put({ blob_id, blob })
   return blob_id
@@ -224,7 +230,14 @@ export async function sincronizar(): Promise<{
         let url = i.foto_url ?? null
         if (!url && i.foto_blob) {
           const blob = await getFotoLocal(i.foto_blob)
-          if (blob) url = await conTimeout(subirFotoPauta(blob), 30000)
+          if (blob) {
+            url = await conTimeout(subirFotoPauta(blob), 30000)
+            // [MIG721] La foto que ya subió queda anotada en la cola: si la
+            // señal se corta en la foto 12 de 25, el próximo intento sigue
+            // desde la 13 en vez de volver a subir todo.
+            i.foto_url = url
+            await pautaDB().pending.update(p.local_id, { items: p.items })
+          }
         }
         items.push({
           item_id: i.item_id, resultado: i.resultado ?? null, valor: i.valor ?? null,
@@ -247,4 +260,17 @@ export async function sincronizar(): Promise<{
     }
   }
   return { ok, error, ultimo }
+}
+
+/**
+ * [MIG721] Con señal, si lo bajado al teléfono tiene más de `maxHoras`, se
+ * vuelve a bajar solo. Una pauta cambiada en la oficina (fotos y firma
+ * nuevas) llenada con la versión vieja rebota al subir.
+ */
+export async function refrescarSiViejo(faenaId: string, maxHoras = 6): Promise<boolean> {
+  if (!isOnline()) return false
+  const u = await ultimaDescarga(faenaId)
+  if (u && Date.now() - new Date(u).getTime() < maxHoras * 3600_000) return false
+  await descargarTodo(faenaId)
+  return true
 }
