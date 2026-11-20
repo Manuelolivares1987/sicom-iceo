@@ -1,0 +1,106 @@
+# ============================================================================
+# SICOM Terreno — app Android (Capacitor) firmada con la llave de Pillado.
+# Compila al cambiar apps/sicom-terreno/** en main (o a mano) y publica el APK
+# en la release fija «sicom-terreno»:
+#   https://github.com/Manuelolivares1987/sicom-iceo/releases/download/sicom-terreno/sicom-terreno.apk
+# La app carga https://pilladoiceo.netlify.app/m/ en su propio WebView: las
+# mejoras de la web llegan solas; solo se recompila si cambia la app nativa.
+# ============================================================================
+name: App Android (SICOM Terreno)
+
+on:
+  workflow_dispatch:
+  # En un PR solo se valida que compile (sin firmar ni publicar).
+  pull_request:
+    paths:
+      - 'apps/sicom-terreno/**'
+      - '.github/workflows/app-android.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'apps/sicom-terreno/**'
+      - '.github/workflows/app-android.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: app-android
+  cancel-in-progress: false
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: apps/sicom-terreno
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/sicom-terreno/package-lock.json
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+
+      - name: Dependencias y copia de la configuración a Android
+        run: |
+          npm ci
+          npx cap sync android
+
+      - name: Validar compilación (PR, sin firma)
+        if: github.event_name == 'pull_request'
+        working-directory: apps/sicom-terreno/android
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon assembleRelease
+          ls -la app/build/outputs/apk/release/
+
+      - name: Llave de firma (secretos)
+        if: github.event_name != 'pull_request'
+        env:
+          KEYSTORE_B64: ${{ secrets.SICOM_KEYSTORE_B64 }}
+        run: |
+          if [ -z "$KEYSTORE_B64" ]; then
+            echo "::error::Falta el secreto SICOM_KEYSTORE_B64 (ver apps/sicom-terreno/README.md)"; exit 1
+          fi
+          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/sicom-terreno.p12"
+
+      - name: Compilar APK firmado
+        if: github.event_name != 'pull_request'
+        working-directory: apps/sicom-terreno/android
+        env:
+          SICOM_KEYSTORE: ${{ runner.temp }}/sicom-terreno.p12
+          SICOM_KEYSTORE_PASS: ${{ secrets.SICOM_KEYSTORE_PASS }}
+          SICOM_KEY_ALIAS: ${{ secrets.SICOM_KEY_ALIAS }}
+          SICOM_VERSION_CODE: ${{ github.run_number }}
+          SICOM_VERSION_NAME: 1.0.${{ github.run_number }}
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon assembleRelease
+          cp app/build/outputs/apk/release/app-release.apk "$RUNNER_TEMP/sicom-terreno.apk"
+          "$ANDROID_HOME"/build-tools/$(ls "$ANDROID_HOME"/build-tools | sort -V | tail -1)/apksigner verify --print-certs "$RUNNER_TEMP/sicom-terreno.apk" | head -3
+
+      - name: Publicar en la release «sicom-terreno»
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view sicom-terreno >/dev/null 2>&1 || \
+            gh release create sicom-terreno --title "SICOM Terreno (Android)" \
+              --notes "App Android de las apps de faena. Instalar desde https://pilladoiceo.netlify.app/instalar/" --latest=false
+          gh release upload sicom-terreno "$RUNNER_TEMP/sicom-terreno.apk" --clobber
+          gh release edit sicom-terreno --notes "Versión 1.0.${{ github.run_number }} · $(date -u +%Y-%m-%d). Instalar desde https://pilladoiceo.netlify.app/instalar/" 
+
+      - uses: actions/upload-artifact@v4
+        if: github.event_name != 'pull_request'
+        with:
+          name: sicom-terreno-apk
+          path: ${{ runner.temp }}/sicom-terreno.apk

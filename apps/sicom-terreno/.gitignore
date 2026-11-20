@@ -1,0 +1,3 @@
+node_modules/
+# El .gitignore raíz ignora *.html; estas páginas son parte de la app.
+!www/*.html

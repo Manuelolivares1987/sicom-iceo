@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SICOM Terreno</title>
+<style>
+ body{margin:0;font-family:system-ui,-apple-system,Roboto,sans-serif;background:#f9fafb;color:#111827}
+ main{max-width:420px;margin:0 auto;padding:48px 20px;text-align:center}
+ h1{font-size:20px;margin:0 0 8px} p{font-size:15px;line-height:1.45;color:#374151}
+ button{display:block;width:100%;margin-top:20px;padding:14px;border:0;border-radius:10px;background:#16a34a;color:#fff;font-size:16px;font-weight:600}
+ .chico{font-size:12px;color:#6b7280}
+</style></head>
+<body><main>
+ <h1>No se pudo conectar</h1>
+ <p>La primera vez que se abre en este teléfono, SICOM Terreno necesita señal o wifi para bajar la app. Después funciona sin señal.</p>
+ <button onclick="location.replace('https://pilladoiceo.netlify.app/m/')">Reintentar</button>
+ <p class="chico">Se reintenta solo cada 15 segundos.</p>
+</main>
+<script>setInterval(function(){ if (navigator.onLine) location.replace('https://pilladoiceo.netlify.app/m/') }, 15000)</script>
+</body></html>
