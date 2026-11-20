@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import { usePermissions } from '@/hooks/use-permissions'
+import { useAuth } from '@/contexts/auth-context'
 
 /**
  * La puerta de vuelta desde una app de terreno.
@@ -21,8 +22,12 @@ import { usePermissions } from '@/hooks/use-permissions'
  */
 export function VolverAlPanel() {
   const { esOperadorTallerSolo, esOperadorCombustibleSolo, esOperadorCalamaSolo } = usePermissions()
+  const { perfil } = useAuth()
 
   if (esOperadorTallerSolo() || esOperadorCombustibleSolo() || esOperadorCalamaSolo()) return null
+  // [19-11-2026] El mecánico de una faena con app (Franke) tampoco tiene panel:
+  // el panel lo devuelve a su app, así que el botón no llevaba a ningún lado.
+  if (perfil?.rol === 'tecnico_mantenimiento' && perfil?.faena?.app_movil) return null
 
   return (
     <Link

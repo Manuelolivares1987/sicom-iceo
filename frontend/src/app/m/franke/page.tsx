@@ -9,7 +9,7 @@
 // ============================================================================
 
 import Link from 'next/link'
-import { ClipboardList, ChevronRight, Fuel, ArrowLeftRight, Gauge, CalendarDays, ScanBarcode, MessagesSquare } from 'lucide-react'
+import { ClipboardList, ChevronRight, Fuel, ArrowLeftRight, Gauge, CalendarDays, ScanBarcode, MessagesSquare, Bot } from 'lucide-react'
 import { useAuth } from '@/contexts/auth-context'
 import { useExigirSesion } from '@/hooks/use-exigir-sesion'
 import { SinSesionOffline } from '@/components/enex/sin-sesion-offline'
@@ -58,6 +58,16 @@ const ACCESOS = [
     bajada: 'Agua, repuestos y EPP con el lector · sacar, recibir, contar',
     // [MIG712] el mecánico de faena saca repuestos/filtros a su camión
     roles: ['supervisor', 'tecnico_mantenimiento', 'operador_taller', 'jefe_operaciones', 'bodeguero', 'administrador'],
+  },
+  // [19-11-2026] El copiloto del taller ya estaba permitido para Franke
+  // (MIG714) pero sin botón: el mecánico no tenía cómo llegar a él.
+  {
+    href: '/m/taller/copiloto',
+    icono: Bot,
+    titulo: 'Copiloto del taller',
+    bajada: 'Síntoma, foto o código de falla: diagnóstico con los manuales',
+    roles: ['tecnico_mantenimiento', 'operador_taller', 'jefe_mantenimiento',
+            'supervisor', 'jefe_operaciones', 'administrador'],
   },
   {
     href: '/m/franke/entrega',
