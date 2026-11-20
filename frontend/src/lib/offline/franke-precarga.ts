@@ -17,7 +17,8 @@ import { descargarCatalogo } from '@/lib/offline/combustible-faena-offline'
 import { getBitacora } from '@/lib/offline/faena-bitacora-offline'
 import { cacheGuardar } from '@/lib/offline/terreno-cache'
 import { getPuntosMedicion } from '@/lib/services/combustible-cierre'
-import { getCalendarioCiclo } from '@/lib/services/faena-entrega'
+import { getCalendarioCiclo, periodoSugerido } from '@/lib/services/faena-entrega'
+import { guardarPlantilla } from '@/lib/offline/faena-entrega-offline'
 
 const CLAVE = 'sicom-franke-precarga'
 const CADA_MS = 30 * 60_000
@@ -51,6 +52,16 @@ export function precargarFaena(forzar = false): Promise<EstadoPrecarga | null> {
     await paso('Bitácora', () => getBitacora(faenaId, false))
     await paso('Carga del camión', async () => cacheGuardar(`franke-carga-puntos:${faenaId}`, await getPuntosMedicion(faenaId)))
     await paso('Turno', async () => cacheGuardar(`franke-turno-cal:${faenaId}`, await getCalendarioCiclo(faenaId)))
+    // [F4] Para poder abrir la entrega de turno sin señal. Solo supervisores:
+    // al resto el servidor le dice «no autorizado» y no es una falla.
+    try {
+      const { desde, hasta } = periodoSugerido()
+      await guardarPlantilla(faenaId, desde, hasta)
+      ok.push('Entrega de turno')
+    } catch (e) {
+      const c = typeof e === 'object' && e && 'code' in e ? String((e as { code: unknown }).code) : ''
+      if (c !== '42501') fallaron.push('Entrega de turno')
+    }
     const r = { at: new Date().toISOString(), ok, fallaron }
     try { localStorage.setItem(CLAVE, JSON.stringify(r)) } catch { /* noop */ }
     return r

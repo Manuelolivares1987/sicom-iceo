@@ -26,6 +26,7 @@ import { haySesionServidor } from '@/lib/supabase'
 import Dexie, { type Table } from 'dexie'
 import { compressImage } from '@/lib/image/compress'
 import { estaEnLinea } from '@/lib/conectividad'
+import { esTransitorio } from '@/lib/offline/bandeja'
 import {
   getAgenda, getItems, guardarPauta, subirFotoPauta,
   type PautaAgenda, type PautaItem, type Respuesta, type GuardarPautaInput,
@@ -234,7 +235,7 @@ export async function sincronizar(): Promise<{
         if (!url && i.foto_blob) {
           const blob = await getFotoLocal(i.foto_blob)
           if (blob) {
-            url = await conTimeout(subirFotoPauta(blob), 30000)
+            url = await conTimeout(subirFotoPauta(blob, i.foto_blob), 30000)
             // [MIG721] La foto que ya subió queda anotada en la cola: si la
             // señal se corta en la foto 12 de 25, el próximo intento sigue
             // desde la 13 en vez de volver a subir todo.
@@ -255,8 +256,11 @@ export async function sincronizar(): Promise<{
       ok += 1
     } catch (e) {
       error += 1
+      // [F4] Señal o sesión: sigue «pendiente» y se reintenta sola. Solo lo
+      // que el servidor rechaza por una regla (falta una foto, un ítem…) queda
+      // «error», a la vista en Pendientes para que el mecánico lo corrija.
       await pautaDB().pending.update(p.local_id, {
-        sync_status: 'error',
+        sync_status: esTransitorio(e) ? 'pending' : 'error',
         intentos: (p.intentos ?? 0) + 1,
         ultimo_error: e instanceof Error ? e.message : String(e),
       })
