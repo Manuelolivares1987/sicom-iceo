@@ -5,10 +5,12 @@ import { useEffect } from 'react'
 import { esErrorDeChunk, recuperarVersion } from '@/lib/recuperar-version'
 import { repararApp } from '@/components/layout/redireccion-segura'
 import { detalleError } from '@/lib/detalle-error'
+import { reportarError } from '@/lib/reportar-error'
 
 export default function GlobalError({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
   useEffect(() => {
     console.error('[SICOM] error global', error)
+    reportarError('global', error)
     if (esErrorDeChunk(error)) recuperarVersion()
   }, [error])
 
