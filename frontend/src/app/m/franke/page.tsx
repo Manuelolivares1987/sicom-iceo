@@ -9,7 +9,8 @@
 // ============================================================================
 
 import Link from 'next/link'
-import { ClipboardList, ChevronRight, Fuel, ArrowLeftRight, Gauge, CalendarDays, ScanBarcode, MessagesSquare } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { ClipboardList, ChevronRight, Fuel, ArrowLeftRight, Gauge, CalendarDays, ScanBarcode, MessagesSquare, Bot, LogOut } from 'lucide-react'
 import { useAuth } from '@/contexts/auth-context'
 import { useExigirSesion } from '@/hooks/use-exigir-sesion'
 import { SinSesionOffline } from '@/components/enex/sin-sesion-offline'
@@ -59,6 +60,16 @@ const ACCESOS = [
     // [MIG712] el mecánico de faena saca repuestos/filtros a su camión
     roles: ['supervisor', 'tecnico_mantenimiento', 'operador_taller', 'jefe_operaciones', 'bodeguero', 'administrador'],
   },
+  // [19-11-2026] El copiloto del taller ya estaba permitido para Franke
+  // (MIG714) pero sin botón: el mecánico no tenía cómo llegar a él.
+  {
+    href: '/m/taller/copiloto',
+    icono: Bot,
+    titulo: 'Copiloto del taller',
+    bajada: 'Síntoma, foto o código de falla: diagnóstico con los manuales',
+    roles: ['tecnico_mantenimiento', 'operador_taller', 'jefe_mantenimiento',
+            'supervisor', 'jefe_operaciones', 'administrador'],
+  },
   {
     href: '/m/franke/entrega',
     icono: ArrowLeftRight,
@@ -81,7 +92,8 @@ const ACCESOS = [
 
 export default function FrankeMobileHome() {
   const { verificando, sinSesionOffline } = useExigirSesion()
-  const { perfil } = useAuth()
+  const { perfil, signOut } = useAuth()
+  const router = useRouter()
 
   if (verificando) {
     return <div className="flex min-h-screen items-center justify-center bg-gray-50"><Spinner className="h-8 w-8" /></div>
@@ -92,12 +104,24 @@ export default function FrankeMobileHome() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <header className="border-b border-gray-200 bg-white px-4 pb-5 pt-[max(1.25rem,env(safe-area-inset-top))]">
-        <p className="text-lg font-bold leading-tight text-gray-900">Faena Franke</p>
-        <p className="text-xs text-gray-500">
-          Contrato FRK 220/2024 · CM Cenizas
-          {perfil?.nombre_completo ? ` · ${perfil.nombre_completo}` : ''}
-        </p>
+      <header className="flex items-start justify-between gap-3 border-b border-gray-200 bg-white px-4 pb-5 pt-[max(1.25rem,env(safe-area-inset-top))]">
+        <div className="min-w-0">
+          <p className="text-lg font-bold leading-tight text-gray-900">Faena Franke</p>
+          <p className="text-xs text-gray-500">
+            Contrato FRK 220/2024 · CM Cenizas
+            {perfil?.nombre_completo ? ` · ${perfil.nombre_completo}` : ''}
+          </p>
+        </div>
+        {/* [19-11-2026] No había cómo salir: el teléfono de faena se comparte
+            entre turnos. signOut avisa si queda trabajo sin enviar. */}
+        <button
+          type="button"
+          onClick={async () => { if (await signOut()) router.replace('/login') }}
+          className="flex shrink-0 items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-2 text-xs font-medium text-gray-700 active:bg-gray-100"
+        >
+          <LogOut className="h-4 w-4" />
+          Cerrar sesión
+        </button>
       </header>
 
       <main className="space-y-3 px-4 py-5">
