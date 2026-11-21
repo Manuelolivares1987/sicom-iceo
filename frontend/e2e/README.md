@@ -27,6 +27,8 @@ el informe con capturas y trazas queda como artefacto `informe-e2e-terreno`.
 | `otras-apps.spec.ts` | **Romeral, Taller, ENEX, Prevención, Calama y vendedor Franke**: cada una con su tipo de trabajador, abre desde el ícono y en modo avión en todas sus pantallas |
 | `otras-apps-flujos.spec.ts` | Romeral: despacho sin señal con foto inicial y final del medidor (sube una vez). Taller: abrir sin señal una OT que nunca se abrió con señal |
 | `enex.spec.ts` | **ENEX**: servicio de mantención completo sin señal (actividad OK con fotos de antes y después, firma del técnico y del mandante, cierre «cumplida»), sube una vez; respuesta perdida → el agente reintenta (cada 1 min) sin duplicar ni re-subir fotos/firmas |
+| `prevencion.spec.ts` | **Prevención** — inspección APR: se prepara con señal, se llena sin señal con foto, sobrevive a cerrar la app y se envía al volver la señal (sin señal avisa y no pierde nada); respuesta perdida → «Enviar de nuevo» no duplica ni re-sube la foto |
+| `calama.spec.ts` | **Calama** (operador OOCC): «Descargar jornadas» con señal; sin señal abre su OT desde el ícono y registra la llegada a faena con foto y GPS; sube una vez al volver la señal |
 | `actualizacion.spec.ts` | **Versión nueva** con pendientes en el teléfono: se aplica (sola al abrir o con «Actualizar»), no pierde nada y sigue abriendo sin señal. Va sola al final: cambia `public/sw.js` y lo restaura |
 
 ## Agregar una prueba
