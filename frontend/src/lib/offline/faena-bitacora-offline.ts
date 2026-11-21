@@ -101,11 +101,25 @@ export async function getBitacora(faenaId: string, forzar = false): Promise<{ da
       const { data, error } = await conTimeout(supabase.rpc('rpc_faena_comunicacion', { p_faena_id: faenaId, p_dias: 7 }), 15000)
       if (error) throw error
       const ahora = new Date().toISOString()
-      await db().cache.put({ key: K(faenaId), value: data, updated_at: ahora })
-      return { data: data as Bitacora, guardada_at: ahora }
+      const limpia = normalizar(data)
+      await db().cache.put({ key: K(faenaId), value: limpia, updated_at: ahora })
+      return { data: limpia, guardada_at: ahora }
     } catch { /* se usa lo guardado */ }
   }
-  return { data: (row?.value as Bitacora) ?? null, guardada_at: row?.updated_at ?? null }
+  return { data: row?.value ? normalizar(row.value) : null, guardada_at: row?.updated_at ?? null }
+}
+
+/** [E2E 20-11-2026] Una respuesta incompleta (sin listas) tumbaba la pantalla
+ *  con «Cannot read properties of undefined (reading 'filter')». Las listas
+ *  siempre existen, aunque vengan vacías. */
+function normalizar(d: unknown): Bitacora {
+  const b = (d ?? {}) as Partial<Bitacora>
+  const lista = <T,>(x: T[] | null | undefined): T[] => (Array.isArray(x) ? x : [])
+  return {
+    generado_at: b.generado_at ?? new Date().toISOString(), mi_turno: b.mi_turno ?? null, ciclo: b.ciclo ?? null,
+    novedades: lista(b.novedades), por_leer: lista(b.por_leer), pendientes: lista(b.pendientes), equipos: lista(b.equipos),
+    resumen: b.resumen ?? { novedades: 0, criticas: 0, pendientes_abiertos: 0, pendientes_cerrados: 0, bodega_bajo_minimo: 0, combustible_lt: null },
+  }
 }
 
 /** Mezcla lo bajado con lo que está en la cola, para verlo al tiro. */

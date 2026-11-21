@@ -26,3 +26,8 @@ public/workbox-*.js
 public/workbox-*.js.map
 public/fallback-*.js
 public/swe-worker-*.js
+
+# Pruebas E2E
+/test-results/
+/playwright-report/
+/blob-report/
