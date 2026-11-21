@@ -26,7 +26,7 @@ import {
   ESTADO_LABEL, RESULTADO_LABEL, getFaenasInspeccion, getHabilitacion, getMisInspecciones, getPlantilla,
 } from '@/lib/services/prevencion-inspeccion'
 import {
-  borrarBorrador, fotosPendientes, guardarBorrador, listarBorradores,
+  borrarBorrador, fotosPendientes, guardarBorrador, listarBorradores, pendienteDeEnvio, EVENTO_INSPECCION,
   type BorradorInspeccion,
 } from '@/lib/offline/inspeccion-apr-db'
 import { avanceBorrador } from '@/components/prevencion/inspeccion-apr-form'
@@ -61,7 +61,13 @@ export default function InspeccionAprHome() {
   const { data: faenas } = useQuery({ queryKey: ['prev-insp-faenas'], queryFn: getFaenasInspeccion, enabled: esApr })
   const { data: enviadas } = useQuery({ queryKey: ['prev-insp-mias'], queryFn: () => getMisInspecciones(20), enabled: esApr })
 
-  useEffect(() => { listarBorradores().then(setBorradores).catch(() => setBorradores([])) }, [])
+  useEffect(() => {
+    const cargar = () => { listarBorradores().then(setBorradores).catch(() => setBorradores([])) }
+    cargar()
+    // [21-11-2026] El envío automático cambia el estado: la lista se actualiza sola.
+    window.addEventListener(EVENTO_INSPECCION, cargar)
+    return () => window.removeEventListener(EVENTO_INSPECCION, cargar)
+  }, [])
 
   if (verificando) return <EsperandoSesion />
   if (sinSesionOffline) return <SinSesionOffline />
@@ -160,9 +166,11 @@ export default function InspeccionAprHome() {
                       <ChevronRight className="h-4 w-4 text-gray-400" />
                     </Link>
                     <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                      {b.ultimo_envio
-                        ? <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-bold text-blue-700">enviada · {b.ultimo_envio.estado.replaceAll('_', ' ')}</span>
-                        : <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800">sin enviar</span>}
+                      {b.error_envio
+                        ? <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-bold text-red-700">no se aceptó: {b.error_envio}</span>
+                        : pendienteDeEnvio(b)
+                        ? <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800">⏱ se envía sola con señal</span>
+                        : <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-bold text-blue-700">✓✓ enviada · {b.ultimo_envio!.estado.replaceAll('_', ' ')}</span>}
                       {pend > 0 && <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-800">{pend} foto(s) en teléfono</span>}
                       <button onClick={() => descartar(b)} className="ml-auto p-1 text-gray-300 hover:text-red-500" title="Quitar del teléfono">
                         <Trash2 className="h-4 w-4" />

@@ -4,6 +4,7 @@ import { useRequireAuth } from '@/hooks/use-require-auth'
 import { Spinner } from '@/components/ui/spinner'
 import { VolverAlPanel } from '@/components/layout/volver-al-panel'
 import { GuardFaenaMovil } from '@/components/layout/guard-faena-movil'
+import { CalamaAlDia } from '@/components/calama-mobile/calama-al-dia'
 
 export default function MobileCalamaLayout({
   children,
@@ -28,6 +29,8 @@ export default function MobileCalamaLayout({
       <VolverAlPanel />
       {/* [MIG714] quien está acotado a su faena no entra a otras apps */}
       <GuardFaenaMovil />
+      {/* [21-11-2026] Baja jornadas y sube lo pendiente solo, con señal. */}
+      <CalamaAlDia />
     </div>
   )
 }

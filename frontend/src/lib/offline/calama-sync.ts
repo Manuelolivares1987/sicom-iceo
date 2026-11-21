@@ -116,6 +116,10 @@ export async function prepareCalamaOffline(opts?: { fecha?: string }): Promise<{
       }
     })
 
+  // (Se lee ANTES de la transacción: «eventos» no es parte de ella.)
+  const conPendientes = new Set((await db.eventos.toArray())
+    .filter((e) => e.sync_status !== 'synced')
+    .map((e) => e.jornada_id))
   await db.transaction('rw', db.jornadas, db.settings, async () => {
     // Eliminar jornadas locales obsoletas (que el server ya no devuelve),
     // preservando las que tengan acciones pendientes para no perder
@@ -127,7 +131,25 @@ export async function prepareCalamaOffline(opts?: { fecha?: string }): Promise<{
         await db.jornadas.delete(j.local_id)
       }
     }
-    await db.jornadas.bulkPut(localJornadas)
+    // [21-11-2026] La descarga ahora corre SOLA cada vez que hay señal. Una
+    // jornada con algo hecho en el teléfono que todavía no sube (llegada,
+    // inicio, evento…) conserva lo local: si no, el teléfono «olvidaba» la
+    // llegada y el operador la registraba dos veces.
+    const porId = new Map(existing.map((j) => [j.local_id, j]))
+    const fusion = localJornadas.map((j) => {
+      const prev = porId.get(j.local_id)
+      if (!prev || !conPendientes.has(j.local_id)) return j
+      return {
+        ...j,
+        estado_plan_local: prev.estado_plan_local,
+        llegada_faena_at: prev.llegada_faena_at ?? j.llegada_faena_at,
+        inicio_at: prev.inicio_at, cierre_at: prev.cierre_at,
+        avance_pct: Math.max(prev.avance_pct ?? 0, j.avance_pct ?? 0),
+        sync_status: prev.sync_status,
+        updated_local_at: prev.updated_local_at,
+      }
+    })
+    await db.jornadas.bulkPut(fusion)
     await db.settings.put({
       key: 'state',
       last_download_at: now,
@@ -599,4 +621,29 @@ async function refreshSyncedJornadas(): Promise<void> {
       sync_status: 'synced',
     })
   }
+}
+
+// ============================================================================
+// [21-11-2026] DESCARGA Y SUBIDA SOLAS («cero señal» en el rajo)
+// ----------------------------------------------------------------------------
+// El operador ya no aprieta «Descargar jornadas»: cada vez que el teléfono
+// tiene señal (al abrir, al volver la señal, al volver a la app y cada 15 min)
+// primero sube lo pendiente y después baja sus jornadas. En el rajo, sin señal,
+// trabaja con lo último bajado.
+// ============================================================================
+let autoEnCurso: Promise<void> | null = null
+export async function ultimaDescargaCalama(): Promise<string | null> {
+  try { return ((await calamaDB().settings.get('state')) as { last_download_at?: string } | undefined)?.last_download_at ?? null } catch { return null }
+}
+export function mantenerCalamaAlDia(forzar = false): Promise<void> {
+  if (autoEnCurso) return autoEnCurso
+  autoEnCurso = (async () => {
+    if (!haySesionServidor()) return
+    await syncCalamaPending().catch(() => undefined)
+    const ultima = await ultimaDescargaCalama()
+    const vieja = !ultima || Date.now() - new Date(ultima).getTime() > (forzar ? 60_000 : 15 * 60_000)
+    if (vieja) await prepareCalamaOffline().catch(() => undefined)
+    try { window.dispatchEvent(new Event('sicom:calama-local')) } catch { /* sin window */ }
+  })().finally(() => { autoEnCurso = null })
+  return autoEnCurso
 }

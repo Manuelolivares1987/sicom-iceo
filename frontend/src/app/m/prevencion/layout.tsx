@@ -1,5 +1,6 @@
 import SugerenciaWidget from '@/components/sugerencias/sugerencia-widget'
 import { SalidaTerrenoPrevencion } from '@/components/prevencion/salida-terreno'
+import { EnvioAutomaticoInspecciones } from '@/components/prevencion/envio-automatico-inspecciones'
 
 export default function PrevencionMobileLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -10,6 +11,8 @@ export default function PrevencionMobileLayout({ children }: { children: React.R
       <SugerenciaWidget />
       {/* Cerrar sesión para todos; «Volver al panel» sólo para quien tiene panel. */}
       <SalidaTerrenoPrevencion />
+      {/* [21-11-2026] Las inspecciones APR se envían solas al haber señal. */}
+      <EnvioAutomaticoInspecciones />
     </div>
   )
 }

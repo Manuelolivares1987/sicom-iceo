@@ -28,7 +28,7 @@ import {
 } from '@/lib/services/prevencion-inspeccion'
 import {
   borrarFotoLocal, fotosPendientes, guardarBorrador, guardarFotoLocal, leerFotoLocal,
-  respuestaVacia,
+  respuestaVacia, leerBorrador, mutarBorrador, editando, EVENTO_INSPECCION, pendienteDeEnvio,
   type BorradorInspeccion, type FotoRef, type PersonaLocal, type RespuestaLocal,
 } from '@/lib/offline/inspeccion-apr-db'
 
@@ -312,6 +312,125 @@ function EncuestaFatiga({ f, onCambiar }: { f: FatigaRespuestas, onCambiar: (f: 
   )
 }
 
+
+// ── Validación y envío (también los usa el envío automático) ────────────────
+
+/** Lo que impide enviar. Vacío = se puede enviar (aunque falten puntos: va como avance). */
+export function problemasInspeccion(b: BorradorInspeccion): string[] {
+  const out: string[] = []
+  if (!b.trabajo.trim()) out.push('Falta describir el trabajo inspeccionado (Datos).')
+  if (!b.personas.length) out.push('Falta la cuadrilla (al menos un trabajador).')
+  for (const p of b.plantilla) {
+    if (respuestaAutomatica(b, p) !== undefined) continue
+    const r = b.respuestas[p.codigo]
+    if (!r) continue
+    if (r.respuesta === 'cumple' && p.evidencia === 'foto' && !r.fotos.length) {
+      out.push(`${p.codigo}: «cumple» sin foto.`)
+    }
+    if (r.respuesta === 'no_cumple' && !r.desv_descripcion.trim()) {
+      out.push(`${p.codigo}: «no cumple» sin desviación descrita.`)
+    }
+  }
+  return out
+}
+
+/**
+ * Envía la inspección guardada en el teléfono (idempotente por cliente_uuid).
+ * Trabaja SIEMPRE sobre lo último guardado (mutarBorrador), no sobre una copia:
+ * así el envío automático y el APR escribiendo al mismo tiempo no se pisan.
+ * La foto local se borra recién cuando la base confirmó la inspección.
+ */
+export async function enviarBorradorInspeccion(id: string, progreso?: (t: string | null) => void) {
+  const inicial = await leerBorrador(id)
+  if (!inicial) throw new Error('La inspección ya no está en el teléfono.')
+  // 1) Fotos pendientes, una por una; cada subida queda anotada al tiro.
+  const total = fotosPendientes(inicial)
+  let n = 0
+  for (const codigo of Object.keys(inicial.respuestas)) {
+    for (const f of inicial.respuestas[codigo].fotos) {
+      if (f.subida || !f.local_id) continue
+      n++
+      progreso?.(`Subiendo foto ${n} de ${total}…`)
+      const blob = await leerFotoLocal(f.local_id)
+      if (!blob) continue
+      const file = new File([blob], f.nombre.replace(/\.[^.]+$/, '') + '.jpg', { type: blob.type || 'image/jpeg' })
+      const ev = await subirFotoInspeccion(file, inicial.faena_id, inicial.fecha)
+      await mutarBorrador(id, (d) => {
+        const r = d.respuestas[codigo]
+        if (!r) return d
+        const fotos = r.fotos.map((x) => (x.local_id === f.local_id ? { ...x, subida: ev } : x))
+        return { ...d, respuestas: { ...d.respuestas, [codigo]: { ...r, fotos } } }
+      })
+    }
+  }
+  // 2) La inspección completa en una llamada, con lo último guardado.
+  progreso?.('Enviando la inspección…')
+  const actual = (await leerBorrador(id))!
+  const marca = actual.updated_at
+  let res: { id: string, estado: string, resultado: string }
+  try {
+    res = await guardarInspeccion({
+      cliente_uuid: actual.cliente_uuid,
+      faena_id: actual.faena_id,
+      fecha: actual.fecha,
+      hora_inicio: actual.hora_inicio || null,
+      instalacion: actual.instalacion || null,
+      area_sector: actual.area_sector || null,
+      trabajo: actual.trabajo,
+      supervisor: actual.supervisor || null,
+      trabajo_cruzado: actual.trabajo_cruzado,
+      empresas_cruzadas: actual.empresas_cruzadas || null,
+      observacion: actual.observacion || null,
+      personas: actual.personas.map((p) => ({
+        personal_id: p.personal_id, es_conductor: p.es_conductor,
+        fatiga: p.es_conductor ? p.fatiga : undefined,
+      })),
+      items: actual.plantilla.map((p) => {
+        const r = actual.respuestas[p.codigo]
+        return {
+          item_codigo: p.codigo,
+          respuesta: r?.respuesta ?? null,
+          observacion: r?.observacion || null,
+          evidencias: (r?.fotos ?? []).filter((f) => f.subida).map((f) => f.subida!),
+        }
+      }),
+      desviaciones: actual.plantilla
+        .filter((p) => actual.respuestas[p.codigo]?.respuesta === 'no_cumple')
+        .map((p) => {
+          const r = actual.respuestas[p.codigo]
+          return {
+            item_codigo: p.codigo,
+            descripcion: r.desv_descripcion,
+            accion: r.desv_accion || undefined,
+            responsable: r.desv_responsable || undefined,
+            fecha_compromiso: r.desv_fecha || undefined,
+            criticidad: r.desv_criticidad,
+          }
+        }),
+    })
+  } catch (e) {
+    // [21-11-2026] «Ya está cerrada» con NUESTRO cliente_uuid y sin saber que la
+    // cerramos = el cierre anterior llegó y se perdió la respuesta: es éxito.
+    const m = e instanceof Error ? e.message : String(e)
+    if (/ya está cerrada/i.test(m) && actual.ultimo_envio?.estado !== 'cerrada') {
+      res = { id: actual.servidor_id ?? '', estado: 'cerrada', resultado: actual.ultimo_envio?.resultado ?? 'enviada' }
+    } else throw e
+  }
+  const final = await mutarBorrador(id, (d) => ({
+    ...d,
+    servidor_id: res.id || d.servidor_id,
+    ultimo_envio: { at: new Date().toISOString(), estado: res.estado, resultado: res.resultado },
+    // Si el APR siguió escribiendo mientras se enviaba, queda pendiente otra vuelta.
+    cambios_sin_enviar: d.updated_at !== marca,
+    error_envio: null,
+  }))
+  // 3) Recién ahora se sueltan las fotos que ya están en la base.
+  for (const r of Object.values(final?.respuestas ?? {})) {
+    for (const f of r.fotos) if (f.subida && f.local_id) await borrarFotoLocal(f.local_id).catch(() => undefined)
+  }
+  return res
+}
+
 // ── Formulario principal ─────────────────────────────────────────────────────
 
 export function InspeccionAprForm({ inicial, onPdf, volver }: {
@@ -328,7 +447,9 @@ export function InspeccionAprForm({ inicial, onPdf, volver }: {
   // apaga, la inspección sigue ahí.
   const actualizar = useCallback((fn: (prev: BorradorInspeccion) => BorradorInspeccion) => {
     setB((prev) => {
-      const next = fn(prev)
+      // [21-11-2026] Un cambio del APR = hay algo nuevo que enviar.
+      const next = { ...fn(prev), cambios_sin_enviar: true, error_envio: null }
+      editando.set(next.cliente_uuid, Date.now())
       guardarBorrador(next).catch(() => {})
       return next
     })
@@ -398,108 +519,37 @@ export function InspeccionAprForm({ inicial, onPdf, volver }: {
     }))
 
   // ── Validación y envío ──
-  const problemas = useMemo(() => {
-    const out: string[] = []
-    if (!b.trabajo.trim()) out.push('Falta describir el trabajo inspeccionado (Datos).')
-    if (!b.personas.length) out.push('Falta la cuadrilla (al menos un trabajador).')
-    for (const p of b.plantilla) {
-      if (respuestaAutomatica(b, p) !== undefined) continue
-      const r = b.respuestas[p.codigo]
-      if (!r) continue
-      if (r.respuesta === 'cumple' && p.evidencia === 'foto' && !r.fotos.length) {
-        out.push(`${p.codigo}: «cumple» sin foto.`)
-      }
-      if (r.respuesta === 'no_cumple' && !r.desv_descripcion.trim()) {
-        out.push(`${p.codigo}: «no cumple» sin desviación descrita.`)
-      }
+  const problemas = useMemo(() => problemasInspeccion(b), [b])
+
+  // [21-11-2026] Abierta en el editor: el envío automático espera a que deje de
+  // escribir; y si otro (el envío automático) cambia lo guardado, se recarga.
+  useEffect(() => {
+    editando.set(b.cliente_uuid, editando.get(b.cliente_uuid) ?? 0)
+    const al = async (e: Event) => {
+      if ((e as CustomEvent<{ id: string }>).detail?.id !== b.cliente_uuid) return
+      const fresco = await leerBorrador(b.cliente_uuid).catch(() => undefined)
+      if (fresco) setB(fresco)
     }
-    return out
-  }, [b])
+    window.addEventListener(EVENTO_INSPECCION, al)
+    return () => { editando.delete(b.cliente_uuid); window.removeEventListener(EVENTO_INSPECCION, al) }
+  }, [b.cliente_uuid])
 
   const enviar = async () => {
     if (problemas.length) { setPaso(ultimo); return toast.error(problemas[0]) }
-    if (!navigator.onLine) return toast.error('Sin señal. La inspección queda guardada en el teléfono: envíela al tener conexión.')
-    let actual = b
+    if (!navigator.onLine) return toast.error('Sin señal. La inspección queda guardada en el teléfono y se envía sola cuando vuelva la señal.')
     try {
-      // 1) Fotos pendientes al bucket, una por una; cada subida queda anotada
-      //    en el borrador, así un corte a mitad no repite las ya enviadas.
-      const total = fotosPendientes(actual)
-      let n = 0
-      for (const codigo of Object.keys(actual.respuestas)) {
-        const r = actual.respuestas[codigo]
-        for (let i = 0; i < r.fotos.length; i++) {
-          const f = r.fotos[i]
-          if (f.subida || !f.local_id) continue
-          n++
-          setEnviando(`Subiendo foto ${n} de ${total}…`)
-          const blob = await leerFotoLocal(f.local_id)
-          if (!blob) continue
-          const file = new File([blob], f.nombre.replace(/\.[^.]+$/, '') + '.jpg', { type: blob.type || 'image/jpeg' })
-          const ev = await subirFotoInspeccion(file, actual.faena_id, actual.fecha)
-          const fotos = actual.respuestas[codigo].fotos.map((x, j) => j === i ? { subida: ev, nombre: x.nombre } : x)
-          actual = { ...actual, respuestas: { ...actual.respuestas, [codigo]: { ...actual.respuestas[codigo], fotos } } }
-          await guardarBorrador(actual)
-          await borrarFotoLocal(f.local_id)
-        }
-      }
-      setB(actual)
-
-      // 2) La inspección completa en una llamada (idempotente).
-      setEnviando('Enviando la inspección…')
-      const res = await guardarInspeccion({
-        cliente_uuid: actual.cliente_uuid,
-        faena_id: actual.faena_id,
-        fecha: actual.fecha,
-        hora_inicio: actual.hora_inicio || null,
-        instalacion: actual.instalacion || null,
-        area_sector: actual.area_sector || null,
-        trabajo: actual.trabajo,
-        supervisor: actual.supervisor || null,
-        trabajo_cruzado: actual.trabajo_cruzado,
-        empresas_cruzadas: actual.empresas_cruzadas || null,
-        observacion: actual.observacion || null,
-        personas: actual.personas.map((p) => ({
-          personal_id: p.personal_id, es_conductor: p.es_conductor,
-          fatiga: p.es_conductor ? p.fatiga : undefined,
-        })),
-        items: actual.plantilla.map((p) => {
-          const r = actual.respuestas[p.codigo]
-          return {
-            item_codigo: p.codigo,
-            respuesta: r?.respuesta ?? null,
-            observacion: r?.observacion || null,
-            evidencias: (r?.fotos ?? []).filter((f) => f.subida).map((f) => f.subida!),
-          }
-        }),
-        desviaciones: actual.plantilla
-          .filter((p) => actual.respuestas[p.codigo]?.respuesta === 'no_cumple')
-          .map((p) => {
-            const r = actual.respuestas[p.codigo]
-            return {
-              item_codigo: p.codigo,
-              descripcion: r.desv_descripcion,
-              accion: r.desv_accion || undefined,
-              responsable: r.desv_responsable || undefined,
-              fecha_compromiso: r.desv_fecha || undefined,
-              criticidad: r.desv_criticidad,
-            }
-          }),
-      })
-      actual = {
-        ...actual,
-        servidor_id: res.id,
-        ultimo_envio: { at: new Date().toISOString(), estado: res.estado, resultado: res.resultado },
-      }
-      await guardarBorrador(actual)
-      setB(actual)
+      const res = await enviarBorradorInspeccion(b.cliente_uuid, setEnviando)
+      const fresco = await leerBorrador(b.cliente_uuid)
+      if (fresco) setB(fresco)
       toast.success(
         res.estado === 'cerrada' ? 'Inspección cerrada y enviada'
         : res.estado === 'pendiente_cierre_art' ? 'Enviada. Falta el cierre de la ART al volver a Calama'
         : 'Avance enviado',
       )
     } catch (e: any) {
-      setB(actual)
-      toast.error(e?.message ?? 'No se pudo enviar. Quedó guardada en el teléfono.')
+      const fresco = await leerBorrador(b.cliente_uuid).catch(() => undefined)
+      if (fresco) setB(fresco)
+      toast.error(e?.message ?? 'No se pudo enviar. Quedó guardada en el teléfono y se reintenta sola.')
     } finally {
       setEnviando(null)
     }
@@ -708,6 +758,16 @@ export function InspeccionAprForm({ inicial, onPdf, volver }: {
             {av.pend > 0 && !problemas.length && (
               <p className="rounded-xl bg-gray-100 p-3 text-[12px] text-gray-700">
                 Quedan {av.pend} punto{av.pend === 1 ? '' : 's'} sin responder. Puede enviar el avance y completar después.
+              </p>
+            )}
+            {b.error_envio && (
+              <p className="rounded-xl border border-red-300 bg-red-50 p-3 text-[12px] text-red-800">
+                La base no aceptó el último envío: {b.error_envio}
+              </p>
+            )}
+            {!problemas.length && pendienteDeEnvio(b) && !b.error_envio && (
+              <p className="rounded-xl bg-emerald-50 p-3 text-[12px] text-emerald-900">
+                ⏱ Se envía sola apenas haya señal (no hace falta apretar nada). Si tiene señal ahora, puede enviarla ya.
               </p>
             )}
             {fotosSinEnviar > 0 && (
