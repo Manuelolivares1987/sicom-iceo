@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { leerFirmasJornada, leerRechazosJornada, leerEvidenciasJornada } from '@/lib/offline/calama-lectura'
 import {
   rpcIniciarJornada, rpcRegistrarEventoJornada, rpcFinalizarJornada,
   rpcRegistrarAceptacionJornada, rpcRegistrarRechazoJornada,
@@ -7,7 +8,6 @@ import {
   rpcResetearJornadaPrueba, rpcEliminarJornadaPrueba,
   rpcRegistrarLlegadaFaena, rpcObtenerEstadoJornada,
   rpcRegularizarLlegadaFaena, rpcRegistrarFotoAntesRegularizada,
-  getFirmasJornada, getRechazosJornada, getEvidenciasJornada,
 } from '@/lib/services/calama-jornada'
 
 const KEY = {
@@ -39,11 +39,10 @@ export function useFirmasJornada(planOtId: string | null | undefined) {
   return useQuery({
     queryKey: KEY.firmas(planOtId ?? ''),
     queryFn: async () => {
-      const { data, error } = await getFirmasJornada(planOtId!)
-      if (error) throw error
-      return data
+      return leerFirmasJornada(planOtId!)
     },
     enabled: !!planOtId,
+    networkMode: 'always', // [21-11-2026] sin señal muestra lo guardado
   })
 }
 
@@ -51,11 +50,10 @@ export function useRechazosJornada(planOtId: string | null | undefined) {
   return useQuery({
     queryKey: KEY.rechazos(planOtId ?? ''),
     queryFn: async () => {
-      const { data, error } = await getRechazosJornada(planOtId!)
-      if (error) throw error
-      return data
+      return leerRechazosJornada(planOtId!)
     },
     enabled: !!planOtId,
+    networkMode: 'always'
   })
 }
 
@@ -113,11 +111,10 @@ export function useEvidenciasJornada(planOtId: string | null | undefined) {
   return useQuery({
     queryKey: KEY.evidencias(planOtId ?? ''),
     queryFn: async () => {
-      const { data, error } = await getEvidenciasJornada(planOtId!)
-      if (error) throw error
-      return data
+      return leerEvidenciasJornada(planOtId!)
     },
     enabled: !!planOtId,
+    networkMode: 'always'
   })
 }
 

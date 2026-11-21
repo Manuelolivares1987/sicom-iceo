@@ -8,6 +8,7 @@
 import { haySesionServidor } from '@/lib/supabase'
 import { supabase } from '@/lib/supabase'
 import { calamaDB } from './calama-db'
+import { precargarLecturasCalama } from './calama-lectura'
 import { genClientUuid } from '@/lib/services/calama-jornada'
 import { withTimeout } from '@/lib/upload/with-timeout'
 import type {
@@ -642,7 +643,12 @@ export function mantenerCalamaAlDia(forzar = false): Promise<void> {
     await syncCalamaPending().catch(() => undefined)
     const ultima = await ultimaDescargaCalama()
     const vieja = !ultima || Date.now() - new Date(ultima).getTime() > (forzar ? 60_000 : 15 * 60_000)
-    if (vieja) await prepareCalamaOffline().catch(() => undefined)
+    if (vieja) {
+      await prepareCalamaOffline().catch(() => undefined)
+      // Lo que se MIRA de cada OT (faena, rechazos, fotos, firmas) también queda guardado.
+      const js = await calamaDB().jornadas.toArray().catch(() => [])
+      await precargarLecturasCalama(js).catch(() => undefined)
+    }
     try { window.dispatchEvent(new Event('sicom:calama-local')) } catch { /* sin window */ }
   })().finally(() => { autoEnCurso = null })
   return autoEnCurso

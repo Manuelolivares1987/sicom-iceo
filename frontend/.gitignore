@@ -31,3 +31,5 @@ public/swe-worker-*.js
 /test-results/
 /playwright-report/
 /blob-report/
+/test-results-android/
+/playwright-report-android/

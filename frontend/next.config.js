@@ -202,6 +202,18 @@ const withPWA = require('@ducanh2912/next-pwa').default({
 
 const nextConfig = {
   trailingSlash: true,
+  // [21-11-2026] La app SICOM corre en el «Android System WebView» del teléfono,
+  // que en equipos sin actualizar es antiguo (Android 10 de fábrica = v74). Next
+  // traduce NUESTRO código para navegadores viejos, pero no las librerías: estas
+  // traían `?.`/`??` (WebView ≥ 80) y la app no arrancaba («SyntaxError:
+  // Unexpected token .»). Hallado por la prueba en emulador Android 10.
+  // (pdfjs-dist queda fuera: es solo del panel de oficina y trae su propio «legacy».)
+  transpilePackages: [
+    '@tanstack/query-core', '@tanstack/react-query', 'tailwind-merge', 'zod',
+    '@supabase/supabase-js', '@supabase/realtime-js', '@supabase/phoenix', '@supabase/auth-js',
+    '@supabase/postgrest-js', '@supabase/storage-js', '@supabase/functions-js',
+    '@ducanh2912/next-pwa', 'react-leaflet', '@react-leaflet/core', 'yoga-layout', 'iceberg-js',
+  ],
   // Versión del build (Netlify da COMMIT_REF): la precarga de terreno se rehace
   // con cada versión nueva.
   env: {
