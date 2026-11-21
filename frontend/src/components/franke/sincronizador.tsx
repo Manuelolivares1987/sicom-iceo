@@ -48,6 +48,7 @@ import { sincronizarBandeja, contarBandeja, EVENTO_BANDEJA } from '@/lib/offline
 import '@/lib/offline/franke-carga'
 import { sincronizarMovimientos, movimientosPendientesCount } from '@/lib/offline/combustible-faena-offline'
 import { precargarFaena } from '@/lib/offline/franke-precarga'
+import { EVENTO_CONECTIVIDAD } from '@/lib/conectividad'
 import Link from 'next/link'
 
 export function SincronizadorFranke() {
@@ -58,6 +59,7 @@ export function SincronizadorFranke() {
   // Sin esto, dos disparos casi simultáneos —volver la señal y volver a la
   // app— intentan subir la misma pauta dos veces.
   const enCurso = useRef(false)
+  const otraVuelta = useRef(false)
 
   const contar = useCallback(async () => {
     try {
@@ -66,8 +68,11 @@ export function SincronizadorFranke() {
     } catch { /* IndexedDB no disponible: no es motivo para romper la pantalla */ }
   }, [])
 
-  const subir = useCallback(async (avisar: boolean) => {
-    if (enCurso.current || !navigator.onLine) return
+  const subir = useCallback(async (avisar: boolean): Promise<void> => {
+    // Si llega otro disparo mientras sube, se hace una vuelta más al terminar
+    // (antes se perdía: lo que no alcanzó a entrar esperaba 2 min).
+    if (enCurso.current) { otraVuelta.current = true; return }
+    if (!navigator.onLine) return
     enCurso.current = true
     setSubiendo(true)
     try {
@@ -82,7 +87,10 @@ export function SincronizadorFranke() {
       }
       await contar()
     } catch { /* se reintenta en el próximo disparo */ }
-    finally { enCurso.current = false; setSubiendo(false) }
+    finally {
+      enCurso.current = false; setSubiendo(false)
+      if (otraVuelta.current) { otraVuelta.current = false; void subir(avisar) }
+    }
   }, [toast, contar])
 
   useEffect(() => { void contar() }, [contar])
@@ -90,6 +98,16 @@ export function SincronizadorFranke() {
   useEffect(() => {
     if (online) void subir(true)
   }, [online, subir])
+
+  // [E2E 20-11-2026] Al volver la señal, el navegador avisa «online» ANTES de
+  // que el sondeo confirme que hay red de verdad: las pautas (que esperan esa
+  // confirmación) se saltaban y quedaban hasta 2 min esperando. Se sube de
+  // nuevo apenas la conectividad queda confirmada.
+  useEffect(() => {
+    const al = (e: Event) => { if ((e as CustomEvent<{ enLinea: boolean }>).detail?.enLinea) void subir(true) }
+    window.addEventListener(EVENTO_CONECTIVIDAD, al)
+    return () => window.removeEventListener(EVENTO_CONECTIVIDAD, al)
+  }, [subir])
 
   // [MIG721] Las pautas del teléfono al día: con señal y si lo bajado tiene
   // más de 6 h, se vuelve a bajar en silencio (no reemplaza lo que el

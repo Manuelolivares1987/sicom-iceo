@@ -18,7 +18,7 @@ function servidorEntrega(fake: FakeSupabase) {
   })
 }
 
-test('abre una entrega NUEVA en modo avión con lo bajado con señal', async ({ page, context, conSesion, fake, erroresJs }) => {
+test('abre una entrega NUEVA en modo avión con lo bajado con señal', async ({ page, modoAvion, context, conSesion, fake, erroresJs }) => {
   servidorEntrega(fake)
   await conSesion()
   await prepararSinSenal(page)
@@ -26,7 +26,7 @@ test('abre una entrega NUEVA en modo avión con lo bajado con señal', async ({ 
   await expect.poll(() => fake.rpcLlamadas('rpc_faena_entrega_plantilla').length, { timeout: 30_000 }).toBeGreaterThan(0)
   await page.waitForTimeout(500) // que termine de guardarse en el teléfono
 
-  await context.setOffline(true)
+  await modoAvion(true)
   await page.goto('/m/franke/entrega/')
   await page.getByRole('button', { name: /Abrir la entrega/ }).click()
   await expect(page.getByText(/se armó en el teléfono/)).toBeVisible()
@@ -38,11 +38,11 @@ test('abre una entrega NUEVA en modo avión con lo bajado con señal', async ({ 
   expect(erroresJs).toEqual([])
 })
 
-test('sin datos de ese periodo y sin señal: lo dice claro (no muestra otra semana)', async ({ page, context, conSesion, fake }) => {
+test('sin datos de ese periodo y sin señal: lo dice claro (no muestra otra semana)', async ({ page, modoAvion, context, conSesion, fake }) => {
   servidorEntrega(fake)
   await conSesion()
   await prepararSinSenal(page)
-  await context.setOffline(true)
+  await modoAvion(true)
   await page.goto('/m/franke/entrega/')
   // Un periodo de hace un año: el teléfono no lo tiene.
   const fechas = page.locator('input[type="date"]')

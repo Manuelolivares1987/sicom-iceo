@@ -14,17 +14,17 @@ const PANTALLAS = [
 ]
 
 test.describe('arranque sin señal', () => {
-  test('la primera vez con señal lleva a Franke y deja todo guardado', async ({ page, conSesion, erroresJs }) => {
+  test('la primera vez con señal lleva a Franke y deja todo guardado', async ({ page, modoAvion, conSesion, erroresJs }) => {
     await conSesion()
     await prepararSinSenal(page)
     await sinPantallaDeError(page)
     expect(erroresJs).toEqual([])
   })
 
-  test('en modo avión abre desde el ícono (/m/) y todas las pantallas de Franke', async ({ page, context, conSesion, erroresJs }) => {
+  test('en modo avión abre desde el ícono (/m/) y todas las pantallas de Franke', async ({ page, modoAvion, context, conSesion, erroresJs }) => {
     await conSesion()
     await prepararSinSenal(page)
-    await context.setOffline(true)
+    await modoAvion(true)
     await page.goto('/m/')
     await page.waitForURL(/\/m\/franke\/?$/)
     for (const p of PANTALLAS) {
@@ -38,7 +38,7 @@ test.describe('arranque sin señal', () => {
     expect(erroresJs).toEqual([])
   })
 
-  test('con la sesión vencida y sin señal igual abre (no pide clave)', async ({ page, context, conSesion, fake }) => {
+  test('con la sesión vencida y sin señal igual abre (no pide clave)', async ({ page, modoAvion, context, conSesion, fake }) => {
     await conSesion()
     await prepararSinSenal(page)
     // Pasa la noche: el token vence y no hay señal para renovarlo.
@@ -46,9 +46,9 @@ test.describe('arranque sin señal', () => {
       const s = JSON.parse(localStorage.getItem(k) ?? '{}')
       s.expires_at = Math.floor(Date.now() / 1000) - 3600
       localStorage.setItem(k, JSON.stringify(s))
-    }, 'sb-supabase-auth-token')
+    }, 'sb-e2e-auth-token')
     fake.refrescoFalla = true
-    await context.setOffline(true)
+    await modoAvion(true)
     await page.goto('/m/')
     await page.waitForURL(/\/m\/franke\/?$/)
     await expect(page.getByRole('heading').or(page.getByText(/Franke/)).first()).toBeVisible()
@@ -57,7 +57,7 @@ test.describe('arranque sin señal', () => {
   })
 })
 
-test('Chrome con datos del sitio bloqueados: explica qué hacer en vez de caerse', async ({ page, context }) => {
+test('Chrome con datos del sitio bloqueados: explica qué hacer en vez de caerse', async ({ page, modoAvion, context }) => {
   await context.addInitScript(() => {
     const err = () => { throw new DOMException("Failed to read the 'localStorage' property from 'Window': Access is denied for this document.", 'SecurityError') }
     Object.defineProperty(window, 'localStorage', { get: err, configurable: true })
@@ -67,7 +67,7 @@ test('Chrome con datos del sitio bloqueados: explica qué hacer en vez de caerse
   await expect(page.getByText(/La app no pudo abrir/)).toHaveCount(0)
 })
 
-test('/instalar/ ofrece la app y /reparar/ limpia y lleva a entrar', async ({ page }) => {
+test('/instalar/ ofrece la app y /reparar/ limpia y lleva a entrar', async ({ page, modoAvion }) => {
   await page.goto('/instalar/')
   await expect(page.getByRole('link', { name: /Descargar|Instalar/i }).first()).toBeVisible()
   // En Netlify /reparar/ sirve el index.html; next start no sirve índices de public/.

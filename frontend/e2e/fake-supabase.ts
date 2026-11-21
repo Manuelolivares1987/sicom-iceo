@@ -1,7 +1,7 @@
 // ============================================================================
 // Supabase simulado para las pruebas E2E de terreno
 // ----------------------------------------------------------------------------
-// La app de prueba se compila con NEXT_PUBLIC_SUPABASE_URL=http://supabase.test:
+// La app de prueba se compila con NEXT_PUBLIC_SUPABASE_URL=https://e2e.supabase.co:
 // un host que no existe. Todo lo que la app le pide a «Supabase» (sesión,
 // tablas, funciones, fotos) lo contesta esta clase desde memoria. Así las
 // pruebas nunca tocan la base real ni usan claves de nadie.
@@ -14,8 +14,8 @@
 // ============================================================================
 import type { BrowserContext, Route, Request } from '@playwright/test'
 
-export const SUPABASE = 'http://supabase.test'
-export const STORAGE_KEY = 'sb-supabase-auth-token'
+export const SUPABASE = 'https://e2e.supabase.co'
+export const STORAGE_KEY = 'sb-e2e-auth-token'
 
 export const FAENA_ID = '11111111-1111-4111-8111-111111111111'
 export const USUARIO_ID = '22222222-2222-4222-8222-222222222222'
@@ -34,6 +34,8 @@ export class FakeSupabase {
   perderRespuesta = new Set<string>()
   /** Si está caído, todo responde 503 (servidor o red con problemas). */
   caido = false
+  /** Modo avión: nada llega (ni lo que pide el service worker). */
+  sinRed = false
   refrescoFalla = false
 
   constructor() {
@@ -80,6 +82,7 @@ export class FakeSupabase {
     const json = (status: number, body: unknown, extra: Record<string, string> = {}) =>
       route.fulfill({ status, headers: { ...cors, 'content-type': 'application/json', ...extra }, body: JSON.stringify(body) })
 
+    if (this.sinRed) { this.llamadas.pop(); return route.abort('internetdisconnected') }
     if (req.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: cors })
     if (this.caido) return json(503, { message: 'Service Unavailable' })
 
