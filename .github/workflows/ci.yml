@@ -35,7 +35,7 @@ jobs:
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder-anon-key
 
   # App de terreno (Franke) en un Android simulado: sin señal, cortes de red,
-  # sesión vencida, Chrome bloqueado. Supabase SIMULADO (http://supabase.test):
+  # sesión vencida, Chrome bloqueado. Supabase SIMULADO (https://e2e.supabase.co):
   # ninguna prueba toca la base real. Ver frontend/e2e/README.md.
   e2e-terreno:
     runs-on: ubuntu-latest
@@ -56,7 +56,7 @@ jobs:
       - name: Build con Supabase simulado
         run: npm run build
         env:
-          NEXT_PUBLIC_SUPABASE_URL: http://supabase.test
+          NEXT_PUBLIC_SUPABASE_URL: https://e2e.supabase.co
           NEXT_PUBLIC_SUPABASE_ANON_KEY: e2e-anon
       - name: Navegador
         run: npx playwright install --with-deps chromium

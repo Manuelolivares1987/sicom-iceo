@@ -216,14 +216,14 @@ export async function sincronizar(): Promise<{ ok: number; failed: number }> {
       if (!urlIni && p.foto_ini_blob) {
         const b = await getFotoLocal(p.foto_ini_blob)
         if (b) {
-          urlIni = await conTimeout(subirFotoMedidor(b), 30_000)
+          urlIni = await conTimeout(subirFotoMedidor(b, p.foto_ini_blob), 30_000)
           await combDB().pending.update(p.local_id, { fotoMeterInicial: urlIni })
         }
       }
       if (!urlFin && p.foto_fin_blob) {
         const b = await getFotoLocal(p.foto_fin_blob)
         if (b) {
-          urlFin = await conTimeout(subirFotoMedidor(b), 30_000)
+          urlFin = await conTimeout(subirFotoMedidor(b, p.foto_fin_blob), 30_000)
           await combDB().pending.update(p.local_id, { fotoMeterFinal: urlFin })
         }
       }

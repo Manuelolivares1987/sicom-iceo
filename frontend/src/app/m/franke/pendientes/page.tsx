@@ -45,6 +45,8 @@ export default function PendientesPage() {
   const [subiendo, setSubiendo] = useState(false)
   const [bajando, setBajando] = useState(false)
   const [confirmar, setConfirmar] = useState<string | null>(null)
+  // [E2E] Hasta la primera revisión no se sabe: antes decía «Todo subido» un instante.
+  const [revisado, setRevisado] = useState(false)
 
   const refrescar = useCallback(async () => {
     setOnline(estaEnLinea())
@@ -63,6 +65,7 @@ export default function PendientesPage() {
       { nombre: 'Bitácora del turno', href: '/m/franke/bitacora', n: await seguro(bitacora), rechazadas: rechBitacora },
       { nombre: 'Entrega de turno', href: '/m/franke/entrega', n: await seguro(entrega), rechazadas: rechEntrega },
     ])
+    setRevisado(true)
   }, [])
 
   useEffect(() => {
@@ -91,7 +94,7 @@ export default function PendientesPage() {
     try { await precargarFaena(true) } finally { setBajando(false); void refrescar() }
   }
 
-  if (verificando) return <EsperandoSesion />
+  if (verificando || !revisado) return <EsperandoSesion />
   if (sinSesionOffline) return <SinSesionOffline />
 
   const sesionOk = haySesionServidor() && !sesionPerdida

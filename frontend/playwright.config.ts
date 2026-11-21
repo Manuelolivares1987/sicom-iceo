@@ -1,8 +1,12 @@
 import { defineConfig, devices } from '@playwright/test'
 
+// Lo que pide el service worker (sondeo de conexión, GET a la base) también
+// pasa por el Supabase simulado; sin esto se escapaba a la red real.
+process.env.PW_EXPERIMENTAL_SERVICE_WORKER_NETWORK_EVENTS = '1'
+
 // Pruebas E2E de la app de terreno (Franke) en un Android simulado.
 // La app se compila con Supabase falso (ver e2e/README.md):
-//   NEXT_PUBLIC_SUPABASE_URL=http://supabase.test npm run build
+//   NEXT_PUBLIC_SUPABASE_URL=https://e2e.supabase.co npm run build
 // y se sirve con `next start`. Ninguna prueba toca la base real.
 const PUERTO = Number(process.env.E2E_PUERTO ?? 3100)
 
@@ -24,7 +28,9 @@ export default defineConfig({
   },
   projects: [
     // Teléfono Android de gama media, como los de faena.
-    { name: 'android', use: { ...devices['Pixel 5'] } },
+    { name: 'android', use: { ...devices['Pixel 5'] }, testIgnore: /actualizacion\.spec\.ts/ },
+    // Cambia el sw.js servido: va sola y al final.
+    { name: 'actualizacion', use: { ...devices['Pixel 5'] }, testMatch: /actualizacion\.spec\.ts/, dependencies: ['android'] },
   ],
   webServer: {
     command: `npx next start -p ${PUERTO}`,
