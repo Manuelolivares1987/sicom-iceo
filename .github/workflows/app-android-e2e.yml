@@ -1,0 +1,115 @@
+# ============================================================================
+# La APP SICOM (APK) probada en un EMULADOR ANDROID de verdad
+# ----------------------------------------------------------------------------
+# Compila una versión de prueba de la app nativa (la misma de apps/sicom-terreno,
+# pero apuntando a http://localhost:3100 con Supabase SIMULADO), la instala en
+# un emulador Android y la maneja como un trabajador: abrir, cortar la red,
+# cerrarla y abrirla SIN red, escribir sin señal, botón atrás, guardar un
+# archivo en Descargas y volver la red. Ninguna prueba toca la base real.
+# Android 10 = el teléfono de Franke (visor web antiguo, sin actualizar);
+# Android 14 = un teléfono al día.
+# ============================================================================
+name: App Android — emulador
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'apps/sicom-terreno/**'
+      - 'frontend/**'
+      - '.github/workflows/app-android-e2e.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'apps/sicom-terreno/**'
+      - 'frontend/**'
+      - '.github/workflows/app-android-e2e.yml'
+
+concurrency:
+  group: app-android-e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  emulador:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    strategy:
+      fail-fast: false
+      matrix:
+        android: [29, 34]
+    name: emulador (Android API ${{ matrix.android }})
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: |
+            frontend/package-lock.json
+            apps/sicom-terreno/package-lock.json
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+
+      - name: Aceleración del emulador (KVM)
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Web con Supabase simulado (localhost:54321)
+        working-directory: frontend
+        run: |
+          npm ci
+          npx tsc -p e2e-android
+          node e2e-android/build.mjs
+
+      - name: App de prueba (la nativa, apuntando a localhost)
+        working-directory: apps/sicom-terreno
+        run: |
+          npm ci
+          node -e "
+            const fs = require('fs'); const c = JSON.parse(fs.readFileSync('capacitor.config.json', 'utf8'));
+            c.server.url = 'http://localhost:3100/m/';
+            c.server.cleartext = true;
+            c.server.allowNavigation = ['localhost'];
+            c.android.allowMixedContent = true;
+            c.android.webContentsDebuggingEnabled = true;
+            fs.writeFileSync('capacitor.config.json', JSON.stringify(c, null, 2));
+            console.log(c);
+          "
+          npx cap sync android
+          # El puente nativo solo atiende a la web de SICOM: en la prueba, localhost.
+          sed -i 's/HOST_SICOM = "pilladoiceo.netlify.app"/HOST_SICOM = "localhost"/' android/app/src/main/java/cl/pilladoempresas/sicomterreno/MainActivity.java
+          grep -n 'HOST_SICOM =' android/app/src/main/java/cl/pilladoempresas/sicomterreno/MainActivity.java
+          sed -i 's/<application/<application android:usesCleartextTraffic="true"/' android/app/src/main/AndroidManifest.xml
+          cd android && chmod +x gradlew && ./gradlew --no-daemon assembleDebug
+          ls -la app/build/outputs/apk/debug/
+
+      - name: Prueba en el emulador
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.android }}
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot
+          script: |
+            adb install -r apps/sicom-terreno/android/app/build/outputs/apk/debug/app-debug.apk
+            adb shell dumpsys package com.google.android.webview | grep -m1 versionName || true
+            cd frontend && SICOM_ANDROID=1 CI=1 npx playwright test -c playwright.android.config.ts || (adb logcat -d > ../logcat.txt; exit 1)
+
+      - name: Informe (si falla)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: informe-app-android-${{ matrix.android }}
+          path: |
+            frontend/playwright-report-android
+            frontend/test-results-android
+            logcat.txt
+          retention-days: 14

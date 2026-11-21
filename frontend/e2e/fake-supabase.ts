@@ -83,6 +83,37 @@ export class FakeSupabase {
     await context.route(`${SUPABASE}/**`, (route) => this.atender(route))
   }
 
+  /**
+   * El mismo simulador, pero como servidor HTTP de verdad (para la app nativa
+   * en el emulador Android, donde no hay page.route): http://localhost:<puerto>.
+   */
+  servirHttp(puerto: number): Promise<import('node:http').Server> {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const http = require('node:http') as typeof import('node:http')
+    const srv = http.createServer((req, res) => {
+      const trozos: Buffer[] = []
+      req.on('data', (c: Buffer) => trozos.push(c))
+      req.on('end', () => {
+        const cuerpo = Buffer.concat(trozos).toString('utf8')
+        const ruta = {
+          request: () => ({
+            url: () => `http://localhost:${puerto}${req.url ?? '/'}`,
+            method: () => req.method ?? 'GET',
+            headers: () => req.headers as Record<string, string>,
+            postData: () => (cuerpo.length ? cuerpo : null),
+          }),
+          fulfill: async (o: { status?: number; headers?: Record<string, string>; body?: string }) => {
+            res.writeHead(o.status ?? 200, o.headers ?? {})
+            res.end(o.body ?? '')
+          },
+          abort: async () => { req.socket.destroy() },
+        }
+        void this.atender(ruta as unknown as Route)
+      })
+    })
+    return new Promise((ok) => srv.listen(puerto, '0.0.0.0', () => ok(srv)))
+  }
+
   private async atender(route: Route) {
     const req = route.request()
     const url = new URL(req.url())
