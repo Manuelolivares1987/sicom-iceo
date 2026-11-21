@@ -34,6 +34,44 @@ jobs:
           NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder-anon-key
 
+  # App de terreno (Franke) en un Android simulado: sin señal, cortes de red,
+  # sesión vencida, Chrome bloqueado. Supabase SIMULADO (http://supabase.test):
+  # ninguna prueba toca la base real. Ver frontend/e2e/README.md.
+  e2e-terreno:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - name: Typecheck de las pruebas
+        run: npx tsc -p e2e
+      - name: Build con Supabase simulado
+        run: npm run build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: http://supabase.test
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: e2e-anon
+      - name: Navegador
+        run: npx playwright install --with-deps chromium
+      - name: Pruebas E2E de terreno
+        run: npx playwright test
+      - name: Informe (si falla)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: informe-e2e-terreno
+          path: |
+            frontend/playwright-report
+            frontend/test-results
+          retention-days: 14
+
   secretos:
     runs-on: ubuntu-latest
     steps:
