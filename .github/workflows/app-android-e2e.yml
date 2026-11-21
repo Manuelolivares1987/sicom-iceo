@@ -36,7 +36,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        android: [29, 34]
+        include:
+          # Android 10 de fábrica: visor web 74, Playwright no se conecta → se
+          # maneja la pantalla con uiautomator (app-ui.spec.ts).
+          - android: 29
+            modo: ui
+          # Android 14: visor moderno → prueba completa (app-nativa.spec.ts).
+          - android: 34
+            modo: cdp
     name: emulador (Android API ${{ matrix.android }})
     steps:
       - uses: actions/checkout@v4
@@ -101,7 +108,7 @@ jobs:
           script: |
             adb install -r apps/sicom-terreno/android/app/build/outputs/apk/debug/app-debug.apk
             adb shell dumpsys package com.google.android.webview | grep -m1 versionName || true
-            cd frontend && SICOM_ANDROID=1 CI=1 npx playwright test -c playwright.android.config.ts || (adb logcat -d > ../logcat.txt; exit 1)
+            cd frontend && SICOM_ANDROID=1 SICOM_ANDROID_MODO=${{ matrix.modo }} CI=1 npx playwright test -c playwright.android.config.ts || (adb logcat -d > ../logcat.txt; exit 1)
 
       - name: Informe (si falla)
         if: failure()

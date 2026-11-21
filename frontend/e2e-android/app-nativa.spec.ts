@@ -22,6 +22,8 @@ const PUERTO_FAKE = 54321
 const CLAVE_SESION = 'sb-localhost-auth-token'
 
 test.describe.configure({ mode: 'serial' })
+// Con el visor antiguo (Android 10 de fábrica) Playwright no se conecta: va app-ui.spec.ts.
+test.skip(process.env.SICOM_ANDROID_MODO === 'ui', 'Visor antiguo: lo cubre app-ui.spec.ts')
 test.setTimeout(240_000)
 
 const adb = (cmd: string) => execSync(`adb ${cmd}`, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim()
