@@ -24,6 +24,8 @@ el informe con capturas y trazas queda como artefacto `informe-e2e-terreno`.
 | `sincronizacion.spec.ts` | Novedad escrita sin señal sube sola; **respuesta perdida** (el servidor guardó, el teléfono no se enteró) → no duplica; servidor caído → espera, no rechaza |
 | `entrega.spec.ts` | [F4] Abrir una entrega **nueva** sin señal con la plantilla; periodo sin datos → mensaje claro |
 | `flujos.spec.ts` | En modo avión y de punta a punta: **carga del camión** con foto del ticket (y respuesta perdida sin duplicar), **despacho** con foto del medidor, **bodega** con el lector, **pauta** NO OK con foto (sin foto no cierra). Se revisa qué llegó al servidor: una vez y con su foto |
+| `otras-apps.spec.ts` | **Romeral, Taller, ENEX, Prevención, Calama y vendedor Franke**: cada una con su tipo de trabajador, abre desde el ícono y en modo avión en todas sus pantallas |
+| `otras-apps-flujos.spec.ts` | Romeral: despacho sin señal con foto inicial y final del medidor (sube una vez). Taller: abrir sin señal una OT que nunca se abrió con señal |
 | `actualizacion.spec.ts` | **Versión nueva** con pendientes en el teléfono: se aplica (sola al abrir o con «Actualizar»), no pierde nada y sigue abriendo sin señal. Va sola al final: cambia `public/sw.js` y lo restaura |
 
 ## Agregar una prueba

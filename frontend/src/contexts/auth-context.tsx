@@ -22,6 +22,9 @@ import type { UsuarioPerfil } from '@/types/database'
  *  operador mirando una pantalla en blanco. */
 const ARRANQUE_TIMEOUT_MS = 6000
 
+/** Rol Calama guardado en el teléfono (para el lanzador /m/ sin red). */
+export const ROL_CALAMA_KEY = 'sicom-rol-calama'
+
 export type RolCalama =
   | 'jefe_sucursal'
   | 'planificador_calama'
@@ -193,7 +196,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (rcErr.code !== '42P01') console.warn('rol_calama fetch warning:', rcErr.message)
         setRolCalama(null)
       } else {
-        setRolCalama((rc?.rol_calama as RolCalama | undefined) ?? null)
+        const r = (rc?.rol_calama as RolCalama | undefined) ?? null
+        setRolCalama(r)
+        // El lanzador /m/ lo lee sin red para abrir /m/calama directo.
+        try { localStorage.setItem(ROL_CALAMA_KEY, JSON.stringify({ id: userId, rol: r })) } catch { /* sin storage */ }
       }
     } catch (e) {
       console.warn('rol_calama lookup failed', e)

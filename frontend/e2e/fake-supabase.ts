@@ -47,6 +47,17 @@ export class FakeSupabase {
     }]
   }
 
+  /** Cambia quién es el usuario de prueba (rol, faena, app de terreno…). */
+  comoPerfil(cambios: Fila, faena?: Fila | null) {
+    const p = this.tablas.usuarios_perfil[0]
+    Object.assign(p, cambios)
+    if (faena !== undefined) {
+      p.faena = faena
+      p.faena_id = faena ? faena.id : null
+      if (faena && !this.tablas.faenas.some((f) => f.id === faena.id)) this.tablas.faenas.push(faena)
+    }
+  }
+
   usuario() {
     return {
       id: USUARIO_ID, aud: 'authenticated', role: 'authenticated', email: 'prueba@e2e.test',
