@@ -609,7 +609,7 @@ export default function MobileOTDetallePage() {
               <div className="text-gray-900 font-medium">{ot.faena?.nombre ?? '—'}</div>
               <div className="text-xs text-gray-500 mt-1 flex items-center gap-2 flex-wrap">
                 <span><strong>Programada:</strong> {ot.fecha_programada}</span>
-                {planOt?.responsable_id && (
+                {(planOt?.responsable_id ?? planOtLocal?.responsable_id) && (
                   <span className="inline-flex items-center gap-1"><User className="h-3 w-3" /> Asignada</span>
                 )}
               </div>
@@ -618,13 +618,14 @@ export default function MobileOTDetallePage() {
         </Card>
 
         {/* Nota planificador */}
-        {planOt?.observaciones && (
+        {/* [21-11-2026] Sin señal, la nota viene de lo guardado en el teléfono. */}
+        {(planOt?.observaciones ?? planOtLocal?.observaciones) && (
           <Card extraClass="border-amber-300 bg-amber-50">
             <div className="flex items-start gap-2">
               <MessageSquare className="h-4 w-4 text-amber-700 mt-0.5 shrink-0" />
               <div className="text-sm">
                 <div className="text-[10px] uppercase font-bold text-amber-800">Nota del planificador</div>
-                <p className="text-amber-900 mt-0.5">{planOt.observaciones}</p>
+                <p className="text-amber-900 mt-0.5">{planOt?.observaciones ?? planOtLocal?.observaciones}</p>
               </div>
             </div>
           </Card>

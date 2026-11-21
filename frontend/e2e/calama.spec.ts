@@ -22,12 +22,16 @@ function servidorCalama(fake: FakeSupabase) {
   fake.tablas.calama_roles_proyecto = [{ usuario_id: USUARIO_ID, rol_calama: 'operador_calama', activo: true }]
   fake.tablas.calama_plan_semanal_ots = [{
     id: JORNADA, plan_semanal_id: 'ps-1', plan_dia_id: DIA, ot_id: OT, zona_proyecto_id: null, responsable_id: USUARIO_ID,
-    prioridad: 1, estado_plan: 'planificada', observaciones: null, horas_planificadas: 8, avance_objetivo_pct: null,
+    prioridad: 1, estado_plan: 'planificada', observaciones: 'Llevar sello de repuesto: el anterior venía fallado', horas_planificadas: 8, avance_objetivo_pct: null,
     secuencia_jornada: 1, visible_en_kanban: true, desprogramada_at: null, anulada_at: null, es_prueba: null,
     llegada_faena_at: null, updated_at: new Date().toISOString(), created_at: new Date().toISOString(),
   }]
   fake.tablas.calama_plan_semanal_dias = [{ id: DIA, fecha: hoy(), nombre_dia: 'Hoy', orden: 1 }]
-  fake.tablas.calama_ordenes_trabajo = [{ id: OT, folio: 'CAL-0091', titulo: 'Cambio de bomba sumergible', avance_pct: 10, estado: 'planificada', fecha_programada: hoy(), faena: { nombre: 'Calama' } }]
+  fake.tablas.calama_ordenes_trabajo = [{ id: OT, folio: 'CAL-0091', titulo: 'Cambio de bomba sumergible', avance_pct: 10, estado: 'planificada', fecha_programada: hoy(), faena_calama_id: 'fc-1' }]
+  fake.tablas.calama_faenas = [{ id: 'fc-1', codigo: 'RT', nombre: 'Radomiro Tomic' }]
+  fake.tablas.calama_rechazos_jornada = [{ id: 'r-1', plan_semanal_ot_id: JORNADA, motivo: 'Falta foto del sello instalado', created_at: new Date().toISOString() }]
+  fake.tablas.calama_firmas_jornada = []
+  fake.tablas.calama_evidencias = []
   fake.rpcs.rpc_calama_preparar_offline_operador = () => ({ jornadas: [] })
   fake.tablas.llegadas = []
   fake.rpcs.rpc_calama_registrar_llegada_faena = (a, db) => {
@@ -104,4 +108,26 @@ test('Calama: la descarga automática NO borra una llegada hecha sin señal que 
   await abrirOtDesdeLista(page)
   await expect(page.getByText('CAL-0091').or(page.getByText('Cambio de bomba sumergible')).first()).toBeVisible()
   await expect(page.getByRole('button', { name: /Registrar llegada/ })).toHaveCount(0)
+})
+
+test('Calama: con la app cerrada y SIN señal, la OT muestra faena, nota del planificador y el rechazo anterior', async ({ page, context, modoAvion, conSesion, fake }) => {
+  servidorCalama(fake)
+  await conSesion()
+  await page.goto('/m/calama/')
+  await page.evaluate(async () => { await navigator.serviceWorker.ready })
+  await page.reload()
+  // Se baja todo solo (jornadas + lo que se mira de cada OT), sin entrar a la OT con señal.
+  await expect.poll(() => fake.llamadas.filter((l) => l.ruta === 'calama_rechazos_jornada').length, { timeout: 40_000 }).toBeGreaterThan(0)
+  await page.waitForTimeout(1500)
+
+  await modoAvion(true)
+  await page.close()
+  const p = await context.newPage()
+  await p.goto('/m/')
+  await p.waitForURL(/\/m\/calama\/?$/)
+  await abrirOtDesdeLista(p)
+  await expect(p.getByText('Radomiro Tomic')).toBeVisible()
+  await expect(p.getByText(/Llevar sello de repuesto/)).toBeVisible()
+  await expect(p.getByText(/Falta foto del sello instalado/)).toBeVisible()
+  await sinPantallaDeError(p)
 })

@@ -86,12 +86,22 @@ test('Android 10 con visor antiguo: entrar, y abrir SIN red desde el ícono', as
     tocar(campos[0]); await esperar(800); escribir('prueba@e2e.test')
     adb('shell input keyevent 111') // cierra el teclado
     tocar(campos[1]); await esperar(800); escribir('clave-de-prueba')
-    adb('shell input keyevent 111')
-    await esperar(800)
-    const boton = pantalla().find((n) => /Iniciar Sesi[oó]n/.test(n.texto))
-    expect(boton).toBeTruthy()
-    tocar(boton!)
-    await esperarTexto(/Franke/, 120_000)
+    // Enviar como el teclado del teléfono («Ir»/Enter); si no, el botón.
+    adb('shell input keyevent 66')
+    await esperar(4000)
+    if (!fake.llamadas.some((l) => l.ruta === 'token')) {
+      adb('shell input keyevent 111')
+      await esperar(800)
+      const boton = pantalla().find((n) => /Iniciar Sesi[oó]n/.test(n.texto))
+      expect(boton).toBeTruthy()
+      tocar(boton!)
+    }
+    try {
+      await esperarTexto(/Franke/, 120_000)
+    } catch (e) {
+      console.log('[android] llamadas al servidor:', JSON.stringify(fake.llamadas.map((l) => `${l.metodo} ${l.ruta}`)))
+      throw e
+    }
     // Dejar que el service worker guarde la app y la precarga baje los datos.
     await expect.poll(() => fake.rpcLlamadas('rpc_faena_comunicacion').length, { timeout: 120_000 }).toBeGreaterThan(0)
     await esperar(45_000)

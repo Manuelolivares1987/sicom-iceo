@@ -86,6 +86,7 @@ jobs:
             c.server.allowNavigation = ['localhost'];
             c.android.allowMixedContent = true;
             c.android.webContentsDebuggingEnabled = true;
+            c.loggingBehavior = 'debug';
             fs.writeFileSync('capacitor.config.json', JSON.stringify(c, null, 2));
             console.log(c);
           "

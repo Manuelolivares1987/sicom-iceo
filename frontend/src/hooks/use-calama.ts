@@ -1,7 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { leerOTCalama, leerSubtareasCalama } from '@/lib/offline/calama-lectura'
 import {
   getPlanificaciones, getPlanificacionById, getZonasPorPlanificacion,
-  getFaenasCalama, getOTs, getOTById, getSubtareasPorOT, getObservacionesPorOT,
+  getFaenasCalama, getOTs, getObservacionesPorOT,
   getMaterialesPorPlan, getContactosPorFaena, getPrecheckPorOT,
   upsertPrecheck, liberarOT, iniciarEjecucionOT, finalizarOT,
   registrarAvanceOT, reportarNoEjecucionOT, getCurvaS, getCurvaSConteo,
@@ -118,11 +119,10 @@ export function useCalamaOT(id: string | null | undefined) {
   return useQuery({
     queryKey: KEY.ot(id ?? ''),
     queryFn: async () => {
-      const { data, error } = await getOTById(id!)
-      if (error) throw error
-      return data
+      return leerOTCalama(id!)
     },
     enabled: !!id,
+    networkMode: 'always', // [21-11-2026] sin señal muestra lo guardado
   })
 }
 
@@ -130,11 +130,10 @@ export function useCalamaSubtareas(otId: string | null | undefined) {
   return useQuery({
     queryKey: KEY.subtareas(otId ?? ''),
     queryFn: async () => {
-      const { data, error } = await getSubtareasPorOT(otId!)
-      if (error) throw error
-      return data ?? []
+      return leerSubtareasCalama(otId!)
     },
     enabled: !!otId,
+    networkMode: 'always'
   })
 }
 
