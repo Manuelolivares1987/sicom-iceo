@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { ultimaDescargaCalama } from '@/lib/offline/calama-sync'
 import { Download, RefreshCw, Trash2, CheckCircle2, AlertTriangle, Loader2, Eraser } from 'lucide-react'
 import { useDownloadJornadas, useSyncPending, useClearCalamaOfflineDB, useDiscardFailedItems, useNetworkStatus, useCalamaOfflineCounters } from '@/hooks/use-calama-offline'
 import { useToast } from '@/contexts/toast-context'
@@ -14,12 +15,19 @@ export function OfflineActions() {
   const { run: discard, pending: discardPending } = useDiscardFailedItems()
   const { counters, refresh } = useCalamaOfflineCounters(0)
   const [showAvanzado, setShowAvanzado] = useState(false)
+  const [ultima, setUltima] = useState<string | null>(null)
+  useEffect(() => {
+    const leer = () => { void ultimaDescargaCalama().then(setUltima) }
+    leer()
+    window.addEventListener('sicom:calama-local', leer)
+    return () => window.removeEventListener('sicom:calama-local', leer)
+  }, [dlPending])
 
   const handleDownload = async () => {
     if (!online) { toast.error('Sin conexion: no se pueden descargar jornadas'); return }
     try {
       const r = await download()
-      toast.success(`${r.jornadas_count} jornadas descargadas para offline`)
+      toast.success(`${r.jornadas_count} jornadas al día en el teléfono`)
       void refresh()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Error al descargar')
@@ -62,13 +70,17 @@ export function OfflineActions() {
 
   return (
     <div className="space-y-2">
+      {/* [21-11-2026] Ya no hay que apretar nada: se baja y se sube solo con señal. */}
+      <p className="text-[11px] text-gray-500">
+        Las jornadas se bajan solas cada vez que hay señal{ultima ? ` · última vez ${new Date(ultima).toLocaleString('es-CL', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}` : ''}. En el rajo funciona sin señal.
+      </p>
       <div className="grid grid-cols-2 gap-2">
         <button
           onClick={handleDownload} disabled={dlPending || !online}
           className="rounded-lg border border-blue-300 bg-blue-50 px-3 py-2 text-xs font-medium text-blue-800 hover:bg-blue-100 disabled:opacity-50 inline-flex items-center justify-center gap-1.5"
         >
           {dlPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-          Descargar jornadas
+          Actualizar ahora
         </button>
         <button
           onClick={handleSync} disabled={syncPending || !online || (counters?.pendientes ?? 0) === 0 && (counters?.errores ?? 0) === 0}

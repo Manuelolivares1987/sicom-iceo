@@ -74,12 +74,14 @@ test('Prevención: inspección APR preparada con señal, llenada sin señal (con
   const enviar = p2.getByRole('button', { name: /Enviar inspección/ })
   await enviar.click()
   await expect(p2.getByText(/Sin señal\. La inspección queda guardada/)).toBeVisible()
+  await expect(p2.getByText(/Se envía sola apenas haya señal/)).toBeVisible()
   expect(fake.tablas.inspecciones_recibidas).toHaveLength(0)
 
+  // [21-11-2026] Vuelve la señal y NADIE aprieta «Enviar»: se envía sola.
   await modoAvion(false)
-  await enviar.click()
-  await expect(p2.getByText(/Inspección cerrada y enviada/)).toBeVisible({ timeout: 30_000 })
-  expect(fake.tablas.inspecciones_recibidas).toHaveLength(1)
+  await expect.poll(() => fake.tablas.inspecciones_recibidas.length, { timeout: 60_000 }).toBe(1)
+  await p2.goto('/m/prevencion/inspeccion/')
+  await expect(p2.getByText(/✓✓ enviada/)).toBeVisible()
   const items = fake.tablas.inspecciones_recibidas[0].items as { item_codigo: string; evidencias: unknown[] }[]
   expect(items.find((i) => i.item_codigo === 'T1')?.evidencias).toHaveLength(1)
   await sinPantallaDeError(p2)

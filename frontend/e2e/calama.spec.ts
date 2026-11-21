@@ -10,6 +10,13 @@ const JORNADA = 'ca000000-0000-4000-8000-0000000000a1'
 const DIA = 'ca000000-0000-4000-8000-0000000000d1'
 const hoy = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Santiago' })
 
+async function abrirOtDesdeLista(page: import('@playwright/test').Page) {
+  await page.goto('/m/calama/')
+  await expect(page.getByText('Cambio de bomba sumergible').first()).toBeVisible()
+  await page.getByRole('link', { name: /Ejecutar/ }).or(page.getByRole('button', { name: /Ejecutar/ })).first().click()
+  await expect(page).toHaveURL(new RegExp(`/m/calama/ot/${OT}`))
+}
+
 function servidorCalama(fake: FakeSupabase) {
   fake.comoPerfil({ rol: 'tecnico_mantenimiento', nombre_completo: 'Operador Calama' }, null)
   fake.tablas.calama_roles_proyecto = [{ usuario_id: USUARIO_ID, rol_calama: 'operador_calama', activo: true }]
@@ -40,9 +47,9 @@ test('Calama: llegada a faena sin señal con foto y GPS, sube una vez', async ({
   await page.reload()
   await expect.poll(() => page.evaluate(() => !!navigator.serviceWorker.controller)).toBe(true)
   await expect(page.getByText('Cambio de bomba sumergible').first()).toBeVisible()
-  await page.getByRole('button', { name: /Descargar jornadas/ }).click()
-  await expect.poll(() => fake.rpcLlamadas('rpc_calama_preparar_offline_operador').length).toBeGreaterThan(0)
-  await page.waitForTimeout(1000)
+  // [21-11-2026] Nadie aprieta «Descargar jornadas»: con señal se baja solo.
+  await expect.poll(() => fake.rpcLlamadas('rpc_calama_preparar_offline_operador').length, { timeout: 30_000 }).toBeGreaterThan(0)
+  await expect(page.getByText(/Las jornadas se bajan solas.*última vez/)).toBeVisible({ timeout: 15_000 })
 
   await modoAvion(true)
   await page.goto('/m/')
@@ -55,17 +62,46 @@ test('Calama: llegada a faena sin señal con foto y GPS, sube una vez', async ({
   await expect(page.getByText(/Guardado en este telefono|Pendiente de sincronizar/i).first()).toBeVisible()
   expect(fake.tablas.llegadas).toHaveLength(0)
 
+  // Vuelve la señal: sube SOLO (sin apretar «Sincronizar»).
   await modoAvion(false)
-  await page.goto('/m/calama/')
-  const sinc = page.getByRole('button', { name: /^Sincronizar$/ })
-  await expect.poll(async () => {
-    if (fake.tablas.llegadas.length) return fake.tablas.llegadas.length
-    if (await sinc.isEnabled().catch(() => false)) await sinc.click().catch(() => undefined)
-    return fake.tablas.llegadas.length
-  }, { timeout: 40_000, intervals: [2000] }).toBe(1)
+  await expect.poll(() => fake.tablas.llegadas.length, { timeout: 40_000 }).toBe(1)
   const l = fake.tablas.llegadas[0] as { foto_llegada_url: string; gps_lat: number }
   expect(l.foto_llegada_url).toContain('calama-evidencias')
   expect(l.gps_lat).toBeCloseTo(-22.456, 2)
   await sinPantallaDeError(page)
   expect(erroresJs).toEqual([])
+})
+
+test('Calama: la descarga automática NO borra una llegada hecha sin señal que todavía no sube', async ({ page, context, modoAvion, conSesion, fake }) => {
+  servidorCalama(fake)
+  await context.grantPermissions(['geolocation'])
+  await context.setGeolocation({ latitude: -22.456, longitude: -68.926, accuracy: 10 })
+  await conSesion()
+  await page.goto('/m/calama/')
+  await page.evaluate(async () => { await navigator.serviceWorker.ready })
+  await page.reload()
+  await expect.poll(() => fake.rpcLlamadas('rpc_calama_preparar_offline_operador').length, { timeout: 30_000 }).toBeGreaterThan(0)
+
+  await modoAvion(true)
+  await abrirOtDesdeLista(page)
+  await page.locator('input[type="file"]').first().setInputFiles(FOTO)
+  await page.getByRole('button', { name: /Registrar llegada/ }).click()
+  await expect(page.getByText(/Guardado en este telefono|Pendiente de sincronizar/i).first()).toBeVisible()
+
+  // Vuelve la señal pero el servidor rechaza la llegada por un rato (503): la
+  // llegada sigue pendiente mientras la descarga automática vuelve a bajar todo.
+  fake.rpcs.rpc_calama_registrar_llegada_faena = () => { throw Object.assign(new Error('Service Unavailable'), { status: 503, code: '503' }) }
+  const descargasAntes = fake.rpcLlamadas('rpc_calama_preparar_offline_operador').length
+  await modoAvion(false)
+  // La descarga automática no se repite antes de 1 min (ahorra datos): se fuerza
+  // con «Actualizar ahora», que es la MISMA descarga protegida.
+  await page.goto('/m/calama/')
+  await page.getByRole('button', { name: /Actualizar ahora/ }).click()
+  await expect.poll(() => fake.rpcLlamadas('rpc_calama_preparar_offline_operador').length, { timeout: 30_000 }).toBeGreaterThan(descargasAntes)
+
+  // Sin señal otra vez: la OT sigue mostrando la llegada hecha (no pide registrarla de nuevo).
+  await modoAvion(true)
+  await abrirOtDesdeLista(page)
+  await expect(page.getByText('CAL-0091').or(page.getByText('Cambio de bomba sumergible')).first()).toBeVisible()
+  await expect(page.getByRole('button', { name: /Registrar llegada/ })).toHaveCount(0)
 })

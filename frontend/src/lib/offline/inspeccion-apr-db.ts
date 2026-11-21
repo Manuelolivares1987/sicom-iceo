@@ -65,6 +65,10 @@ export interface BorradorInspeccion {
   habilitacion: Habilitacion
   /** Lo que respondió la base en el último envío. */
   ultimo_envio: { at: string, estado: string, resultado: string } | null
+  /** [21-11-2026] Hubo cambios del APR después del último envío (se envía sola). */
+  cambios_sin_enviar?: boolean
+  /** [21-11-2026] La base rechazó el envío por una regla (no por señal): se muestra. */
+  error_envio?: string | null
   created_at: string
   updated_at: string
 }
@@ -155,4 +159,26 @@ export async function borrarFotoLocal(id: string): Promise<void> {
 export function fotosPendientes(b: BorradorInspeccion): number {
   return Object.values(b.respuestas).reduce(
     (n, r) => n + r.fotos.filter((f) => !f.subida).length, 0)
+}
+
+// ── Envío automático (21-11-2026) ───────────────────────────────────────────
+/** ¿Falta mandar algo de esta inspección? */
+export const pendienteDeEnvio = (b: BorradorInspeccion) => !b.ultimo_envio || b.cambios_sin_enviar === true
+
+/** Inspecciones abiertas en el editor → cuándo se tocaron por última vez (no se envían a medio escribir). */
+export const editando = new Map<string, number>()
+
+export const EVENTO_INSPECCION = 'sicom:inspeccion'
+export function avisarCambioInspeccion(id: string) {
+  try { window.dispatchEvent(new CustomEvent(EVENTO_INSPECCION, { detail: { id } })) } catch { /* sin window */ }
+}
+
+/** Lee, cambia y guarda (siempre sobre lo último guardado, no sobre una copia vieja). */
+export async function mutarBorrador(id: string, fn: (b: BorradorInspeccion) => BorradorInspeccion): Promise<BorradorInspeccion | undefined> {
+  const actual = await leerBorrador(id)
+  if (!actual) return undefined
+  const next = fn(actual)
+  await guardarBorrador(next)
+  avisarCambioInspeccion(id)
+  return next
 }
