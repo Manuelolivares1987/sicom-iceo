@@ -13,6 +13,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useAuth } from '@/contexts/auth-context'
 import { leerIdentidadEquipo, leerSesionPersistida } from '@/lib/supabase'
 import { ULTIMA_APP_KEY } from '@/components/layout/terreno-global'
+import { ROL_CALAMA_KEY } from '@/contexts/auth-context'
 
 const OFICINA = ['administrador', 'subgerente_operaciones', 'gerente', 'gerente_general', 'jefe_operaciones', 'planificador', 'rrhh']
 
@@ -26,7 +27,7 @@ function destino(): { ruta: string; seguro: boolean } {
     const u = leerSesionPersistida()?.user ?? leerIdentidadEquipo()
     if (!u) return { ruta: '/login/?next=%2Fm%2F', seguro: true }
     const p = JSON.parse(localStorage.getItem('sicom-perfil-cache') ?? 'null') as
-      { id?: string; rol?: string; faena?: { app_movil?: string | null } | null } | null
+      { id?: string; rol?: string; app_terreno?: string | null; faena?: { app_movil?: string | null } | null } | null
     const mio = p?.id === u.id ? p : null
     // La oficina abre el panel aunque alguna vez haya mirado una app de terreno.
     const oficina = !!mio?.rol && OFICINA.includes(mio.rol) && !mio.faena?.app_movil
@@ -34,6 +35,16 @@ function destino(): { ruta: string; seguro: boolean } {
     if (!oficina && ultima && /^\/m\/[a-z0-9-]+\/$/.test(ultima)) return { ruta: ultima, seguro: true }
     const app = mio?.faena?.app_movil
     if (app && app.startsWith('/m/')) return { ruta: app.endsWith('/') ? app : `${app}/`, seguro: true }
+    // [20-11-2026] Las mismas reglas del panel (dashboard/layout), pero decididas
+    // en el teléfono: antes taller/combustible/Calama pasaban por /dashboard/
+    // (no guardado para usar sin señal) y la primera vez sin señal caían en
+    // «Sin conexión».
+    const conBarra = (r: string) => (r.endsWith('/') ? r : `${r}/`)
+    if (mio?.app_terreno && mio.app_terreno.startsWith('/m/')) return { ruta: conBarra(mio.app_terreno), seguro: true }
+    if (mio?.rol === 'operador_taller') return { ruta: '/m/taller/', seguro: true }
+    if (mio?.rol === 'operador_combustible') return { ruta: '/m/romeral/', seguro: true }
+    const rc = JSON.parse(localStorage.getItem(ROL_CALAMA_KEY) ?? 'null') as { id?: string; rol?: string } | null
+    if (rc?.id === u.id && rc.rol === 'operador_calama' && !(mio?.rol && OFICINA.includes(mio.rol))) return { ruta: '/m/calama/', seguro: true }
     return { ruta: '/dashboard/', seguro: !!mio }
   } catch { /* sigue al panel */ }
   return { ruta: '/dashboard/', seguro: true }

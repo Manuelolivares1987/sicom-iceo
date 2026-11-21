@@ -43,17 +43,17 @@ export const test = base.extend<Fixtures>({
 export { expect }
 
 /** Abre la app con señal y espera a que quede lista para funcionar sin señal. */
-export async function prepararSinSenal(page: Page) {
+export async function prepararSinSenal(page: Page, app = '/m/franke/') {
   await page.goto('/m/')
-  await page.waitForURL(/\/m\/franke\/?$/)
+  await page.waitForURL(new RegExp(`${app}?$`)) // '/m/franke/' → la barra final es opcional
   await page.evaluate(async () => { await navigator.serviceWorker.ready })
   // Con el service worker al mando, las páginas de terreno quedan guardadas.
   await page.reload()
   await expect.poll(() => page.evaluate(() => !!navigator.serviceWorker.controller)).toBe(true)
-  await expect.poll(async () => page.evaluate(async () => {
-    const r = await caches.match('/m/franke/')
+  await expect.poll(async () => page.evaluate(async (a) => {
+    const r = await caches.match(a)
     return !!r
-  }), { timeout: 30_000 }).toBe(true)
+  }, app), { timeout: 30_000 }).toBe(true)
 }
 
 /** Lo que nunca debe ver el trabajador. */
