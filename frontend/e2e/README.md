@@ -26,6 +26,7 @@ el informe con capturas y trazas queda como artefacto `informe-e2e-terreno`.
 | `flujos.spec.ts` | En modo avión y de punta a punta: **carga del camión** con foto del ticket (y respuesta perdida sin duplicar), **despacho** con foto del medidor, **bodega** con el lector, **pauta** NO OK con foto (sin foto no cierra). Se revisa qué llegó al servidor: una vez y con su foto |
 | `otras-apps.spec.ts` | **Romeral, Taller, ENEX, Prevención, Calama y vendedor Franke**: cada una con su tipo de trabajador, abre desde el ícono y en modo avión en todas sus pantallas |
 | `otras-apps-flujos.spec.ts` | Romeral: despacho sin señal con foto inicial y final del medidor (sube una vez). Taller: abrir sin señal una OT que nunca se abrió con señal |
+| `enex.spec.ts` | **ENEX**: servicio de mantención completo sin señal (actividad OK con fotos de antes y después, firma del técnico y del mandante, cierre «cumplida»), sube una vez; respuesta perdida → el agente reintenta (cada 1 min) sin duplicar ni re-subir fotos/firmas |
 | `actualizacion.spec.ts` | **Versión nueva** con pendientes en el teléfono: se aplica (sola al abrir o con «Actualizar»), no pierde nada y sigue abriendo sin señal. Va sola al final: cambia `public/sw.js` y lo restaura |
 
 ## Agregar una prueba
