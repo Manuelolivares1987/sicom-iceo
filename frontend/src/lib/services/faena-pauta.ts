@@ -6,6 +6,7 @@
 // en Franke no es la de Romeral, y el día que Romeral tenga la suya se siembra
 // igual sin tocar este archivo.
 // ============================================================================
+import { subirEvidencia } from '@/lib/services/faena-entrega'
 import { supabase } from '@/lib/supabase'
 import { compressImage } from '@/lib/image/compress'
 
@@ -111,13 +112,11 @@ export async function getRespuestas(ejecucionId: string): Promise<RespuestaGuard
   return (data ?? []) as RespuestaGuardada[]
 }
 
-export async function subirFotoPauta(file: File | Blob): Promise<string> {
+/** [MIG723] Con `clave` (id de la foto en el teléfono) la ruta es fija: un reintento no duplica. */
+export async function subirFotoPauta(file: File | Blob, clave?: string | null): Promise<string> {
   const blob = await compressImage(file, { maxDim: 1600, quality: 0.75 })
-  const path = `pauta-faena/${Date.now()}_${Math.floor(Math.random() * 1e6)}.jpg`
-  const { error } = await supabase.storage.from('evidencias-verificacion')
-    .upload(path, blob, { contentType: 'image/jpeg' })
-  if (error) throw error
-  return supabase.storage.from('evidencias-verificacion').getPublicUrl(path).data.publicUrl
+  const path = clave ? `pauta-faena/${clave}.jpg` : `pauta-faena/${Date.now()}_${Math.floor(Math.random() * 1e6)}.jpg`
+  return subirEvidencia(path, blob)
 }
 
 export type GuardarPautaInput = {

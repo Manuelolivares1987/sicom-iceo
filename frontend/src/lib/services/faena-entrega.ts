@@ -97,10 +97,13 @@ export type RespuestaPendiente = {
 export async function abrirEntrega(p: {
   faenaId: string; desde: string; hasta: string
   turnoSaliente: string; turnoEntrante: string
+  /** [MIG723] Id que el teléfono le dio al abrirla sin señal. */
+  id?: string | null
 }): Promise<EntregaAbierta> {
   const { data, error } = await supabase.rpc('rpc_faena_entrega_abrir', {
     p_faena_id: p.faenaId, p_desde: p.desde, p_hasta: p.hasta,
     p_turno_saliente: p.turnoSaliente, p_turno_entrante: p.turnoEntrante,
+    ...(p.id ? { p_id: p.id } : {}),
   })
   if (error) throw error
   return data as EntregaAbierta
@@ -119,6 +122,8 @@ export async function firmarEntrega(p: {
   inventarioCerrado: boolean
   inventarioObservacion?: string | null
   observacion?: string | null
+  /** [MIG723] El reintento del mismo teléfono se da por hecho, no se rechaza. */
+  clientUuid?: string | null
 }) {
   const { data, error } = await supabase.rpc('rpc_faena_entrega_firmar', {
     p_entrega_id: p.entregaId,
@@ -133,6 +138,7 @@ export async function firmarEntrega(p: {
     p_inventario_cerrado: p.inventarioCerrado,
     p_inventario_observacion: p.inventarioObservacion ?? null,
     p_observacion: p.observacion ?? null,
+    ...(p.clientUuid ? { p_client_uuid: p.clientUuid } : {}),
   })
   if (error) throw error
   return data as {
@@ -150,10 +156,12 @@ export async function firmarEntrega(p: {
 export async function recibirEntrega(p: {
   entregaId: string; nombre: string; firmaUrl: string
   reparos?: string | null; observacion?: string | null
+  clientUuid?: string | null
 }) {
   const { data, error } = await supabase.rpc('rpc_faena_entrega_recibir', {
     p_entrega_id: p.entregaId, p_nombre: p.nombre, p_firma_url: p.firmaUrl,
     p_reparos: p.reparos ?? null, p_observacion: p.observacion ?? null,
+    ...(p.clientUuid ? { p_client_uuid: p.clientUuid } : {}),
   })
   if (error) throw error
   return data as { success: boolean; entrega_id: string; estado: string }
@@ -264,13 +272,27 @@ export function mesDe(fecha: Date): { desde: string; hasta: string } {
   }
 }
 
-export async function subirFirma(blob: Blob): Promise<string> {
+/**
+ * [MIG723] Con `clave` (el id de la operación en el teléfono) la ruta es fija:
+ * si la subida anterior llegó pero se perdió la respuesta, el reintento
+ * encuentra el archivo ya subido y usa ese, en vez de dejar copias sueltas.
+ */
+export async function subirFirma(blob: Blob, clave?: string | null): Promise<string> {
   const comprimida = await compressImage(blob, { maxDim: 1200, quality: 0.8 })
-  const path = `entrega-turno/${Date.now()}_${Math.floor(Math.random() * 1e6)}.jpg`
+  const path = clave ? `entrega-turno/${clave}.jpg` : `entrega-turno/${Date.now()}_${Math.floor(Math.random() * 1e6)}.jpg`
+  return subirEvidencia(path, comprimida)
+}
+
+/** Sube a evidencias-verificacion; «ya existe» en una ruta fija = ya subió. */
+export async function subirEvidencia(path: string, blob: Blob): Promise<string> {
   const { error } = await supabase.storage.from('evidencias-verificacion')
-    .upload(path, comprimida, { contentType: 'image/jpeg' })
-  if (error) throw error
+    .upload(path, blob, { contentType: 'image/jpeg' })
+  if (error && !yaExiste(error)) throw error
   return supabase.storage.from('evidencias-verificacion').getPublicUrl(path).data.publicUrl
+}
+const yaExiste = (e: unknown) => {
+  const o = e as { statusCode?: string | number; status?: number; message?: string; error?: string }
+  return String(o?.statusCode ?? o?.status ?? '') === '409' || /already exists|duplicate/i.test(`${o?.message ?? ''} ${o?.error ?? ''}`)
 }
 
 /**
@@ -433,11 +455,24 @@ export async function getContextoEntrega(entregaId: string) {
   return data as ContextoEntrega
 }
 
-export async function declararEntrega(d: DeclaracionEntrega) {
+export async function declararEntrega(d: DeclaracionEntrega, clientUuid?: string | null) {
   const { data, error } = await supabase.rpc('rpc_faena_entrega_declarar', {
     p_entrega_id: d.entregaId, p_camiones: d.camiones, p_terceros_hubo: d.tercerosHubo, p_terceros: d.terceros,
     p_seguridad_sin_novedad: d.seguridadSinNovedad, p_seguridad_detalle: d.seguridadDetalle, p_verbal_modo: d.verbalModo,
+    ...(clientUuid ? { p_client_uuid: clientUuid } : {}),
   })
   if (error) throw error
   return data as { ok: boolean; litros_total: number }
+}
+
+/**
+ * [MIG723] Lo necesario para abrir la entrega SIN señal: equipos, pendientes,
+ * resumen y camiones del periodo. Solo lectura (no crea la entrega). Se baja
+ * con señal (precarga) y se usa si en el momento no hay señal.
+ */
+export type PlantillaEntrega = Omit<EntregaAbierta, 'entrega_id' | 'entrega'> & { contexto: ContextoEntrega }
+export async function getPlantillaEntrega(faenaId: string, desde: string, hasta: string) {
+  const { data, error } = await supabase.rpc('rpc_faena_entrega_plantilla', { p_faena_id: faenaId, p_desde: desde, p_hasta: hasta })
+  if (error) throw error
+  return data as PlantillaEntrega
 }

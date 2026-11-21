@@ -81,6 +81,8 @@ export default function EntregaTurnoPage() {
   const [reparos, setReparos] = useState('')
 
   const [sinSenal, setSinSenal] = useState<string | null>(null)
+  // [F4] Abierta sin señal con la plantilla: todavía no existe en el sistema.
+  const [local, setLocal] = useState(false)
   // [MIG697] Miércoles: litros por camión, otras empresas, seguridad, entrega verbal.
   const [ctx, setCtx] = useState<ContextoEntrega | null>(null)
   const [litrosCam, setLitrosCam] = useState<Record<string, { litros: string; metodo: string }>>({})
@@ -104,6 +106,7 @@ export default function EntregaTurnoPage() {
       })
       const d = r.data
       setSinSenal(r.sin_senal ? r.guardada_at : null)
+      setLocal(!!r.local)
       const c = r.contexto
       setCtx(c)
       setLitrosCam(Object.fromEntries((c?.camiones ?? []).map((k) => [k.estanque_id, { litros: k.fisico != null ? String(k.fisico) : '', metodo: k.metodo ?? 'cuentalitros' }])))
@@ -244,8 +247,10 @@ export default function EntregaTurnoPage() {
       </header>
       {sinSenal && (
         <p className="mx-4 mt-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
-          Sin señal: se muestra la entrega guardada en el teléfono el {new Date(sinSenal).toLocaleString('es-CL', { dateStyle: 'short', timeStyle: 'short' })}.
-          Las firmas quedan guardadas y suben solas cuando vuelva la señal.
+          {local
+            ? <>Sin señal: la entrega se armó en el teléfono con los datos bajados el {new Date(sinSenal).toLocaleString('es-CL', { dateStyle: 'short', timeStyle: 'short' })}. Se crea en el sistema sola cuando vuelva la señal.</>
+            : <>Sin señal: se muestra la entrega guardada en el teléfono el {new Date(sinSenal).toLocaleString('es-CL', { dateStyle: 'short', timeStyle: 'short' })}.</>}
+          {' '}Las firmas quedan guardadas y suben solas cuando vuelva la señal.
         </p>
       )}
 

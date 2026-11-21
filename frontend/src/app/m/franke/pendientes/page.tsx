@@ -22,7 +22,7 @@ import {
 } from '@/lib/offline/bandeja'
 import '@/lib/offline/franke-carga'
 import { precargarFaena, ultimaPrecarga, type EstadoPrecarga } from '@/lib/offline/franke-precarga'
-import { pendientesCount as pautas, sincronizar as subirPautas } from '@/lib/offline/faena-pauta-offline'
+import { pendientesCount as pautas, pendientes as colaPautas, sincronizar as subirPautas } from '@/lib/offline/faena-pauta-offline'
 import {
   pendientesCount as despachos, movimientosPendientesCount as movimientos, sincronizar as subirDespachos, sincronizarMovimientos,
 } from '@/lib/offline/combustible-faena-offline'
@@ -51,11 +51,13 @@ export default function PendientesPage() {
     setPrecarga(ultimaPrecarga())
     setOps(await listarBandeja())
     const seguro = async (f: () => Promise<number>) => { try { return await f() } catch { return 0 } }
+    // [F4] La pauta queda «error» solo cuando el servidor la rechaza por una regla (no por señal).
+    const rechPautas = (await colaPautas().catch(() => [])).filter((o) => o.sync_status === 'error').length
     const rechBodega = (await pendientesBodega().catch(() => [])).filter((o) => o.sync_status === 'rechazada').length
     const rechBitacora = (await colaBitacora().catch(() => [])).filter((o) => o.sync_status === 'rechazada').length
     const rechEntrega = (await colaEntrega().catch(() => [])).filter((o) => o.sync_status === 'rechazada').length
     setModulos([
-      { nombre: 'Revisión de equipos (pautas)', href: '/m/franke/pauta', n: await seguro(pautas), rechazadas: 0 },
+      { nombre: 'Revisión de equipos (pautas)', href: '/m/franke/pauta', n: await seguro(pautas), rechazadas: rechPautas },
       { nombre: 'Despacho de combustible', href: '/m/franke/despacho', n: (await seguro(despachos)) + (await seguro(movimientos)), rechazadas: 0 },
       { nombre: 'Bodega', href: '/m/franke/bodega', n: await seguro(bodega), rechazadas: rechBodega },
       { nombre: 'Bitácora del turno', href: '/m/franke/bitacora', n: await seguro(bitacora), rechazadas: rechBitacora },
