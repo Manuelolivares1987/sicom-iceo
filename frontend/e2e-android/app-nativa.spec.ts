@@ -89,7 +89,14 @@ async function telefonoAndroid(): Promise<Telefono> {
       reverse()
       await esperar(5000)
     },
-    atras: async () => { adb('shell input keyevent 4'); await esperar(1500) },
+    // Como en cualquier teléfono, si el teclado está abierto el primer «atrás»
+    // solo lo cierra: se cierra antes para probar la navegación.
+    atras: async () => {
+      if (/mInputShown=true|isInputViewShown=true/.test(adb('shell dumpsys input_method'))) {
+        adb('shell input keyevent 4'); await esperar(800)
+      }
+      adb('shell input keyevent 4'); await esperar(1500)
+    },
     enPrimerPlano: async () => adb('shell dumpsys activity activities').split('\n')
       .some((l) => /mResumedActivity|topResumedActivity/.test(l) && l.includes(PKG)),
     archivoEnDescargas: async (nombre) => adb('shell ls /sdcard/Download/SICOM/ 2>/dev/null || true').includes(nombre),
@@ -171,6 +178,9 @@ test('la app SICOM: arranque en frío SIN red, trabajo sin señal, botón atrás
     const page = await tel.abrir()
     await page.goto(`${WEB}/m/franke/`)
     await page.goto(`${WEB}/m/franke/bodega/`)
+    // Que la pantalla termine de abrir antes de apretar atrás.
+    await expect(page.getByText(/bodega/i).first()).toBeVisible({ timeout: 30_000 })
+    await esperar(1500)
     await tel.atras()
     await expect(page).toHaveURL(/\/m\/franke\/?$/)
     if (ANDROID) {

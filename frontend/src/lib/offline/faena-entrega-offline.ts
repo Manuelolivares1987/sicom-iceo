@@ -22,6 +22,7 @@
 //     firma) la entrega de otra semana.
 // ============================================================================
 
+import { uuidV4 } from '@/lib/uuid'
 import { haySesionServidor } from '@/lib/supabase'
 import { esTransitorio, esDuplicado } from '@/lib/offline/bandeja'
 import Dexie, { type Table } from 'dexie'
@@ -61,7 +62,7 @@ class EntregaDB extends Dexie {
 let _db: EntregaDB | null = null
 const db = () => { if (!_db) _db = new EntregaDB(); return _db }
 const isOnline = () => (typeof navigator === 'undefined' ? true : navigator.onLine)
-const nuevoId = () => (typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`)
+const nuevoId = () => uuidV4()
 function conTimeout<T>(p: PromiseLike<T>, ms = 12000): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const t = setTimeout(() => reject(new Error('timeout de red')), ms)

@@ -277,7 +277,7 @@ export default function MobileOTDetallePage() {
           {online ? (
             <>Esta jornada fue <strong>sacada del programa</strong> y ya no esta disponible para ejecucion.</>
           ) : (
-            <>No tienes esta jornada descargada para trabajar sin conexion. Conectate a internet y presiona "Descargar jornadas".</>
+            <>Esta jornada todavía no está en el teléfono. Apenas tenga señal se baja sola (o apriete «Actualizar ahora» en la lista).</>
           )}
         </p>
         <button onClick={() => router.push('/m/calama')} className="rounded bg-amber-600 px-4 py-2 text-white text-sm">

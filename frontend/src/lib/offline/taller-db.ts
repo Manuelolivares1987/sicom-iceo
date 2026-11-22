@@ -12,12 +12,17 @@ export type TallerBlob = { blob_id: string; blob: Blob; mime: string }
 
 /** Cambio pendiente de sincronizar. */
 import type { MedicionItem } from '@/lib/services/taller-plan-semanal'
+import { uuidV4 } from '@/lib/uuid'
 
 export type TallerPending = {
   local_id: string
   client_uuid: string
   ot_id: string
-  kind: 'item' | 'timing' | 'recurso' | 'nota'
+  kind: 'item' | 'timing' | 'recurso' | 'nota' | 'medidores'
+  /** [22-11-2026] kind='medidores': lo anotado sin señal (horómetro/km/cuenta litros). */
+  horometro?: number | null
+  kilometraje?: number | null
+  cuenta_litros?: number | null
   // kind = 'item' (marcar resultado / observación / foto de una tarea)
   instance_item_id?: string
   instance_id?: string
@@ -54,6 +59,10 @@ export type TallerPending = {
   // kind = 'nota' (nota con foto del operador como anexo, MIG249)
   nota_texto?: string | null
   nota_autor?: string | null
+  /** [22-11-2026] Fotos/firmas YA subidas (blob_id → URL). Si el paso siguiente
+   *  falla, el reintento reutiliza la URL en vez de volver a subir el archivo
+   *  (un cierre trabado llegó a subir la misma firma 1.340 veces en un día). */
+  subidas?: Record<string, string>
   // control
   sync_status: 'pending' | 'error'
   retries: number
@@ -84,6 +93,10 @@ export type TallerPlanPending = {
   observaciones?: string | null
   // común (control de cambios)
   motivo?: string | null
+  /** [22-11-2026] Fotos/firmas YA subidas (blob_id → URL). Si el paso siguiente
+   *  falla, el reintento reutiliza la URL en vez de volver a subir el archivo
+   *  (un cierre trabado llegó a subir la misma firma 1.340 veces en un día). */
+  subidas?: Record<string, string>
   // control
   sync_status: 'pending' | 'error'
   retries: number
@@ -130,6 +143,5 @@ export async function clearTallerDB(): Promise<void> {
 }
 
 export function newId(): string {
-  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID()
-  return `id_${Date.now()}_${Math.floor(Math.random() * 1e9)}`
+  return uuidV4()
 }

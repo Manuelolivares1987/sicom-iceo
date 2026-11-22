@@ -15,6 +15,7 @@ import {
   type CatalogoFaena, type CombDespacho, type DespachoInput,
 } from '@/lib/services/combustible-faena'
 import { compressImage } from '@/lib/image/compress'
+import { uuidV4 } from '@/lib/uuid'
 
 export type DespachoPendiente = DespachoInput & {
   local_id: string
@@ -117,9 +118,7 @@ export function combDB(): CombFaenaDB {
 }
 
 export function nuevoId(): string {
-  return (typeof crypto !== 'undefined' && crypto.randomUUID)
-    ? crypto.randomUUID()
-    : `${Date.now()}-${Math.random().toString(36).slice(2)}`
+  return uuidV4()
 }
 
 const isOnline = () => (typeof navigator === 'undefined' ? true : navigator.onLine)

@@ -2,6 +2,7 @@
 // Cache de pendientes + ítems de pauta, cola de ejecuciones pendientes de
 // sincronizar y blobs de fotos/firmas.
 
+import { uuidV4 } from '@/lib/uuid'
 import Dexie, { type Table } from 'dexie'
 
 export type EnexCacheRow = { key: string; value: unknown; updated_at: string }
@@ -136,6 +137,5 @@ export function enexDB(): EnexTerrenoDB {
 }
 
 export function newId(): string {
-  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID()
-  return `id_${Date.now()}_${Math.floor(Math.random() * 1e9)}`
+  return uuidV4()
 }

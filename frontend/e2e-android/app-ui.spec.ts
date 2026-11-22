@@ -84,8 +84,15 @@ test('Android 10 con visor antiguo: entrar, y abrir SIN red desde el ícono', as
     const campos = pantalla().filter((n) => n.clase === 'android.widget.EditText')
     expect(campos.length).toBeGreaterThanOrEqual(2)
     tocar(campos[0]); await esperar(800); escribir('prueba@e2e.test')
-    adb('shell input keyevent 111') // cierra el teclado
-    tocar(campos[1]); await esperar(800); escribir('clave-de-prueba')
+    // Al campo de la clave con TAB, como el «siguiente» del teclado: tocarlo por
+    // posición fallaba cuando el teclado movía la pantalla (se escribía todo en
+    // el correo).
+    adb('shell input keyevent 61'); await esperar(800)
+    const correo = pantalla().filter((n) => n.clase === 'android.widget.EditText')[0]
+    if (correo && /clave-de-prueba/.test(correo.texto)) throw new Error('La clave quedó en el campo del correo')
+    escribir('clave-de-prueba')
+    await esperar(500)
+    console.log('[android] campos:', JSON.stringify(pantalla().filter((n) => n.clase === 'android.widget.EditText').map((n) => n.texto)))
     // Enviar como el teclado del teléfono («Ir»/Enter); si no, el botón.
     adb('shell input keyevent 66')
     await esperar(4000)

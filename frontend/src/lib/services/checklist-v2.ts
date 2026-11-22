@@ -250,11 +250,19 @@ export async function actualizarItem(itemId: string, patch: Partial<ChecklistV2I
   }
   const body: Record<string, unknown> = { respondido_at: new Date().toISOString() }
   for (const [k, v] of Object.entries(allowed)) if (v !== undefined) body[k] = v
-  const { error } = await supabase
+  // [22-11-2026] Con .select: si la regla del servidor no deja cambiar el ítem
+  // (p. ej. la OT ya pasó a revisión), el UPDATE no da error, solo no toca
+  // ninguna fila. Antes la app lo daba por guardado, borraba la foto del
+  // teléfono y la foto nunca aparecía en la oficina.
+  const { data, error } = await supabase
     .from('checklist_v2_instance_item')
     .update(body)
     .eq('id', itemId)
+    .select('id')
   if (error) throw error
+  if (!data || data.length === 0) {
+    throw new Error('El servidor no guardó este cambio: la OT ya no admite cambios desde el teléfono (quedó finalizada, en revisión o cerrada). La foto sigue guardada en el teléfono: avise al jefe de taller.')
+  }
 }
 
 export async function subirFotoItem(

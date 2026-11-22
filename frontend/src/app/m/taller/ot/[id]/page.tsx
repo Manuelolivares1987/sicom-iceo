@@ -537,14 +537,14 @@ function MedidoresSection({ otId, online, onGuardado }: {
               )}
             </p>
           )}
-          <button type="button" disabled={guardar.isPending || !online}
+          <button type="button" disabled={guardar.isPending}
                   onClick={() => enviar(false)}
                   className="mt-2 w-full rounded-lg bg-amber-600 py-2.5 text-sm font-semibold text-white disabled:opacity-50">
             {guardar.isPending ? 'Guardando…' : 'Guardar medidores'}
           </button>
           {!online && (
             <p className="mt-1 text-[11px] text-amber-800">
-              Sin señal no se pueden guardar todavía: anótalos cuando vuelva la conexión.
+              Sin señal: se guardan en el teléfono y suben solos con señal. El checklist se abre igual.
             </p>
           )}
         </>
@@ -921,7 +921,7 @@ function PendientesSubida({ otId, items }: { otId: string; items: ChecklistV3Ite
         <ul className="mt-2 space-y-1.5">
           {errores.map((p) => (
             <li key={p.local_id} className="rounded-lg border border-red-200 bg-white px-2.5 py-2 text-xs">
-              <div className="font-medium text-gray-800">{nombreItem(p.instance_item_id)}</div>
+              <div className="font-medium text-gray-800">{p.kind === 'medidores' ? 'Medidores del equipo' : nombreItem(p.instance_item_id)}</div>
               <div className="mt-0.5 break-words text-red-700">{p.last_error ?? 'Error desconocido'}</div>
               <div className="mt-1.5 flex justify-end">
                 {confirmar === p.local_id ? (

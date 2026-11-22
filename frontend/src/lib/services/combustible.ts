@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase'
+import { uuidV4 } from '@/lib/uuid'
 
 // ── Tipos ────────────────────────────────────────────────
 
@@ -480,7 +481,7 @@ export async function uploadBlobEvidenciaCombustible(
       : blob.type === 'image/webp' ? 'webp'
       : blob.type === 'image/png'  ? 'png'
       : 'bin')
-  const path = `${opts.tipo}/${opts.contextoId}/${Date.now()}-${crypto.randomUUID()}.${ext}`
+  const path = `${opts.tipo}/${opts.contextoId}/${Date.now()}-${uuidV4()}.${ext}`
   const { error } = await supabase.storage
     .from('evidencias-combustible')
     .upload(path, blob, { cacheControl: '3600', upsert: false, contentType: blob.type || 'image/jpeg' })
