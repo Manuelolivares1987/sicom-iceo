@@ -9,6 +9,7 @@
 // el teléfono o el escritorio, sin navegar el panel completo.
 // ============================================================================
 
+import { usePrecargaDiferida } from '@/hooks/use-precarga-diferida'
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import {
@@ -28,7 +29,12 @@ import {
   useConsolidadoMes, useFaenasPrevencion, useMonitoreoMes, useSupervisoresFaena,
 } from '@/hooks/use-prevencion-reportabilidad'
 import type { ReportabilidadEstado } from '@/lib/services/prevencion-reportabilidad'
-import { descargarBlob, generarEntregable } from '@/lib/entregables/prevencion-generar'
+
+// [22-11-2026] El generador de PDF/Excel pesa ~400 kB: antes se cargaba al abrir
+// la pantalla (590-645 kB vs ~230 kB del resto de terreno). Ahora se carga al
+// usarlo, y se baja en segundo plano apenas la pantalla queda quieta para que
+// después funcione también sin señal (queda en la caché del teléfono).
+const cargarPdf = () => import('@/lib/entregables/prevencion-generar')
 import { EsperandoSesion } from '@/components/layout/esperando-sesion'
 
 const ROLES_CONTROL = ['administrador', 'prevencionista', 'jefe_operaciones', 'subgerente_operaciones']
@@ -42,6 +48,7 @@ function mesActualISO(): string {
 }
 
 export default function PrevencionControlPage() {
+  usePrecargaDiferida(cargarPdf)
   const { verificando, sinSesionOffline } = useExigirSesion()
   const { perfil } = useAuth()
   const toast = useToast()
@@ -93,6 +100,7 @@ export default function PrevencionControlPage() {
     setGenerando(it.item_id)
     setProgreso('Preparando…')
     try {
+      const { generarEntregable, descargarBlob } = await cargarPdf()
       const { blob, filename } = await generarEntregable({
         plantilla: it.plantilla, itemNombre: it.nombre,
         faenaId: faenaEfectiva, faenaNombre, anio, mes,
@@ -112,7 +120,7 @@ export default function PrevencionControlPage() {
     <div className="min-h-screen bg-gray-50 pb-24">
       <header className="border-b border-gray-200 bg-white px-4 pb-4 pt-[max(1.25rem,env(safe-area-inset-top))]">
         <div className="flex items-center gap-2">
-          <Link href="/m/prevencion" className="text-gray-400"><ArrowLeft className="h-5 w-5" /></Link>
+          <Link aria-label="Volver" href="/m/prevencion" className="text-gray-400"><ArrowLeft className="h-5 w-5" /></Link>
           <div>
             <p className="flex items-center gap-2 text-lg font-bold leading-tight text-gray-900">
               <ShieldCheck className="h-5 w-5 text-pillado-green-500" />

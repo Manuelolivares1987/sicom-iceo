@@ -227,7 +227,7 @@ export default function EnexTerrenoHome() {
           <h1 className="text-base font-bold leading-tight">Terreno ENEX</h1>
           <p className="text-[11px] text-gray-500">Mantención y calibración de instalaciones</p>
         </div>
-        <button onClick={() => refetch()} className="text-gray-400"><RefreshCw className={`h-4 w-4 ${isFetching ? 'animate-spin' : ''}`} /></button>
+        <button onClick={() => refetch()} aria-label="Actualizar" className="text-gray-500"><RefreshCw className={`h-4 w-4 ${isFetching ? 'animate-spin' : ''}`} /></button>
       </div>
 
       {/* Selector de mundo del supervisor (combustible / lubricantes) */}
@@ -250,7 +250,7 @@ export default function EnexTerrenoHome() {
                 <p className={`text-sm font-bold ${activo ? (m === 'combustible' ? 'text-blue-800' : 'text-emerald-800') : 'text-gray-700'}`}>
                   {MUNDO_LABEL[m]}
                 </p>
-                <p className="text-[10px] text-gray-500">{conteoMundo[m]} por ejecutar</p>
+                <p className="text-[10px] text-gray-600">{conteoMundo[m]} por ejecutar</p>
               </div>
               {activo && <Check className={`h-4 w-4 ${m === 'combustible' ? 'text-blue-600' : 'text-emerald-600'}`} />}
             </button>
@@ -266,7 +266,7 @@ export default function EnexTerrenoHome() {
       </div>
       {/* La descarga para trabajar sin señal es automática (al abrir, cada 10
           minutos y al volver la red): el botón «Descargar el mes» sobraba. */}
-      {descargaMsg && <p className="text-center text-[11px] text-green-600">{descargaMsg}</p>}
+      {descargaMsg && <p className="text-center text-[11px] text-green-700">{descargaMsg}</p>}
 
       {pendientesSync > 0 && <BandejaPorEnviar />}
       <ListoSinSenal anio={anio} mes={mes} pendientes={pendientesSync} />
@@ -340,7 +340,7 @@ export default function EnexTerrenoHome() {
                 <ul className="mt-1 space-y-0.5">
                   {g.tareas.map((t) => (
                     <li key={t.id} className="flex items-start gap-1.5 text-[11px] text-gray-600">
-                      <span className="font-mono text-gray-400">{t.codigo_item}</span>
+                      <span className="font-mono text-gray-500">{t.codigo_item}</span>
                       <span className="flex-1">{t.actividad ?? '—'}</span>
                       {t.estado === 'hecha' && <CheckCircle2 className="h-3 w-3 flex-shrink-0 text-green-600" />}
                       {t.estado === 'no_realizada' && <span className="flex-shrink-0 text-[10px] text-orange-700">no se hizo</span>}
@@ -374,7 +374,7 @@ export default function EnexTerrenoHome() {
       {isLoading ? (
         <div className="flex justify-center py-10"><Spinner /></div>
       ) : diasVisibles.length === 0 ? (
-        <div className="py-10 text-center text-sm text-gray-400">
+        <div className="py-10 text-center text-sm text-gray-500">
           {vista === 'hoy' ? (
             <>
               <Sun className="mx-auto mb-2 h-8 w-8 text-gray-300" />
@@ -450,7 +450,7 @@ export default function EnexTerrenoHome() {
                     </div>
                   )}
                   {p.pauta_borrador && (
-                    <div className="mt-1 flex items-center gap-1 text-[10px] text-amber-600"><AlertTriangle className="h-3 w-3" /> pauta en borrador</div>
+                    <div className="mt-1 flex items-center gap-1 text-[10px] text-amber-700"><AlertTriangle className="h-3 w-3" /> pauta en borrador</div>
                   )}
                   {!p.pauta_id && (
                     <div className="mt-1 flex items-center gap-1 text-[10px] text-red-600"><AlertTriangle className="h-3 w-3" /> sin pauta asignada — avisa al supervisor</div>

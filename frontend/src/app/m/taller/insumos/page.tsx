@@ -125,7 +125,7 @@ export default function InsumosTallerPage() {
   return (
     <div className="space-y-3 p-3 pb-24">
       <div className="flex items-center gap-2">
-        <Link href="/m/taller" className="rounded-lg border border-gray-300 p-2">
+        <Link aria-label="Volver" href="/m/taller" className="rounded-lg border border-gray-300 p-2">
           <ChevronLeft className="h-4 w-4 text-gray-600" />
         </Link>
         <div className="min-w-0 flex-1">
@@ -150,7 +150,7 @@ export default function InsumosTallerPage() {
               <option key={c.id} value={c.id}>{c.nombre}</option>
             ))}
           </select>
-          {cargandoCecos && <span className="text-[10px] text-gray-400">Cargando…</span>}
+          {cargandoCecos && <span className="text-[10px] text-gray-500">Cargando…</span>}
         </label>
 
         <div className="mt-3">
@@ -185,7 +185,7 @@ export default function InsumosTallerPage() {
           <>
             <label className="mt-3 block">
               <span className="text-[11px] font-bold text-gray-700">
-                ¿Para qué? <span className="font-normal text-gray-400">— opcional</span>
+                ¿Para qué? <span className="font-normal text-gray-500">— opcional</span>
               </span>
               <input value={comentario} onChange={(e) => setComentario(e.target.value)}
                      placeholder="Se acabaron los del pañol"
@@ -210,7 +210,7 @@ export default function InsumosTallerPage() {
           Lo que se pidió
         </h2>
         {mios.length === 0 ? (
-          <p className="rounded-xl border border-dashed border-gray-300 p-6 text-center text-xs text-gray-400">
+          <p className="rounded-xl border border-dashed border-gray-300 p-6 text-center text-xs text-gray-500">
             Todavía no hay pedidos de insumos.
           </p>
         ) : (
@@ -312,7 +312,8 @@ function AgregarInsumo({ onAdd }: { onAdd: (l: Linea) => void }) {
                className="w-20 rounded border border-gray-300 px-2 py-2 text-right text-sm tabular-nums" />
         <button type="button" onClick={agregar}
                 disabled={!Number(String(cant).replace(',', '.')) || (!prod && q.trim().length < 3)}
-                className="shrink-0 rounded bg-orange-600 px-2.5 text-white disabled:opacity-50">
+                aria-label="Agregar a la lista"
+                className="shrink-0 rounded bg-orange-700 px-2.5 text-white disabled:opacity-50">
           <Plus className="h-4 w-4" />
         </button>
       </div>
@@ -325,7 +326,7 @@ function AgregarInsumo({ onAdd }: { onAdd: (l: Linea) => void }) {
                     className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs hover:bg-gray-50">
               <span className="font-mono text-[10px] text-gray-500">{r.codigo}</span>
               <span className="min-w-0 flex-1 truncate">{r.nombre}</span>
-              {r.unidad_medida && <span className="shrink-0 text-[10px] text-gray-400">{r.unidad_medida}</span>}
+              {r.unidad_medida && <span className="shrink-0 text-[10px] text-gray-500">{r.unidad_medida}</span>}
             </button>
           ))}
         </div>

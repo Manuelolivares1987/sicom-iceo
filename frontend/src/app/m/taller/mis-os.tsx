@@ -268,7 +268,7 @@ function TarjetaOS(p: {
                     className="mt-1 w-full rounded border border-gray-300 px-2 py-1.5 text-sm" />
           <div className="mt-2 flex gap-2">
             <button onClick={p.onTerminar} disabled={p.ocupado}
-                    className="flex-1 rounded-md bg-green-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">
+                    className="flex-1 rounded-md bg-green-700 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">
               Confirmar que terminé
             </button>
             <button onClick={p.onCancelarTerminar}
@@ -286,7 +286,7 @@ function TarjetaOS(p: {
             </button>
           ) : (
             <button onClick={p.onEmpezar} disabled={p.ocupado || bloqueado}
-                    className="flex flex-1 items-center justify-center gap-1.5 rounded-md bg-orange-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">
+                    className="flex flex-1 items-center justify-center gap-1.5 rounded-md bg-orange-700 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">
               <Play className="h-4 w-4" /> Empezar
             </button>
           )}
@@ -363,7 +363,7 @@ export function OsDelTaller() {
         )
       })}
       {abierto && (
-        <p className="text-[10px] text-gray-400">
+        <p className="text-[10px] text-gray-500">
           Para mover el reloj de una OS entra con tu propia cuenta: el tiempo que se mide es el que se reparte.
         </p>
       )}

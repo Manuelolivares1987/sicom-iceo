@@ -540,7 +540,7 @@ function MedidoresSection({ otId, online, onGuardado }: {
           )}
           <button type="button" disabled={guardar.isPending}
                   onClick={() => enviar(false)}
-                  className="mt-2 w-full rounded-lg bg-amber-600 py-2.5 text-sm font-semibold text-white disabled:opacity-50">
+                  className="mt-2 w-full rounded-lg bg-amber-700 py-2.5 text-sm font-semibold text-white disabled:opacity-50">
             {guardar.isPending ? 'Guardando…' : 'Guardar medidores'}
           </button>
           {!online && (
@@ -637,16 +637,16 @@ function RecursosSection({ otId, online, prefill, onPrefillConsumido }: {
       <div className="flex items-center justify-between">
         <h2 className="flex items-center gap-1.5 text-sm font-semibold text-gray-800">
           <Package className="h-4 w-4 text-orange-600" /> Repuestos y materiales
-          {lista.length > 0 && <span className="text-xs font-normal text-gray-400">({lista.length})</span>}
+          {lista.length > 0 && <span className="text-xs font-normal text-gray-500">({lista.length})</span>}
         </h2>
         <button onClick={() => setAbierto((v) => !v)}
-                className="flex items-center gap-1 rounded-lg bg-orange-600 px-2.5 py-1.5 text-xs font-semibold text-white">
+                className="flex items-center gap-1 rounded-lg bg-orange-700 px-2.5 py-1.5 text-xs font-semibold text-white">
           <Plus className="h-3.5 w-3.5" /> Pedir
         </button>
       </div>
 
       {lista.length === 0 && !abierto && (
-        <p className="mt-2 text-xs text-gray-400">¿Necesitas repuestos para reparar? Pídelos aquí y el jefe los valida.</p>
+        <p className="mt-2 text-xs text-gray-500">¿Necesitas repuestos para reparar? Pídelos aquí y el jefe los valida.</p>
       )}
 
       {lista.length > 0 && (
@@ -714,7 +714,7 @@ function RecursosSection({ otId, online, prefill, onPrefillConsumido }: {
                     <button key={p.id} onClick={() => { setProd(p); setResultados([]) }}
                             className="flex w-full items-center gap-2 border-b border-gray-100 bg-white px-2.5 py-2 text-left text-xs last:border-0 active:bg-gray-50">
                       <span className="flex-1">{p.nombre}</span>
-                      {p.codigo && <span className="font-mono text-[10px] text-gray-400">{p.codigo}</span>}
+                      {p.codigo && <span className="font-mono text-[10px] text-gray-500">{p.codigo}</span>}
                     </button>
                   ))}
                 </div>
@@ -752,12 +752,12 @@ function RecursosSection({ otId, online, prefill, onPrefillConsumido }: {
             <input ref={fotoRef} type="file" accept="image/*" capture="environment" className="hidden"
                    onChange={(e) => { const f = e.target.files?.[0]; if (f) agregarFoto(f); e.target.value = '' }} />
             {fotos.length === 0 && (
-              <span className="text-[10px] text-gray-400">Foto de la pieza (útil si no existe en bodega)</span>
+              <span className="text-[10px] text-gray-500">Foto de la pieza (útil si no existe en bodega)</span>
             )}
           </div>
 
           <button onClick={pedir} disabled={!puedesPedir || solicitar.isPending}
-                  className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-orange-600 py-2.5 text-sm font-semibold text-white disabled:opacity-50">
+                  className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-orange-700 py-2.5 text-sm font-semibold text-white disabled:opacity-50">
             {solicitar.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Package className="h-4 w-4" />}
             Pedir al jefe de taller
           </button>
@@ -807,7 +807,7 @@ function NotasSection({ otId }: { otId: string }) {
       <div className="flex items-center justify-between">
         <h2 className="flex items-center gap-1.5 text-sm font-semibold text-gray-800">
           <StickyNote className="h-4 w-4 text-blue-600" /> Notas / anexos
-          {lista.length > 0 && <span className="text-xs font-normal text-gray-400">({lista.length})</span>}
+          {lista.length > 0 && <span className="text-xs font-normal text-gray-500">({lista.length})</span>}
         </h2>
         <button onClick={() => setAbierto((v) => !v)}
                 className="flex items-center gap-1 rounded-lg bg-blue-600 px-2.5 py-1.5 text-xs font-semibold text-white">
@@ -816,7 +816,7 @@ function NotasSection({ otId }: { otId: string }) {
       </div>
 
       {lista.length === 0 && !abierto && (
-        <p className="mt-2 text-xs text-gray-400">¿Se escapó algo del checklist? Deja una nota con foto para el jefe de taller.</p>
+        <p className="mt-2 text-xs text-gray-500">¿Se escapó algo del checklist? Deja una nota con foto para el jefe de taller.</p>
       )}
 
       {abierto && (
@@ -874,7 +874,7 @@ function NotasSection({ otId }: { otId: string }) {
                   })}
                 </div>
               )}
-              <p className="mt-0.5 text-[10px] text-gray-400">
+              <p className="mt-0.5 text-[10px] text-gray-500">
                 {n.autor ? `${n.autor} · ` : ''}{new Date(n.created_at).toLocaleString('es-CL')}
               </p>
             </div>
@@ -1267,13 +1267,13 @@ export default function MecanicoOTPage() {
       <div className="flex gap-2">
         {estado === 'asignada' && (
           <button onClick={() => doTiming('iniciar')} disabled={timing.isPending || medidoresPendientes}
-                  className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-green-600 py-3 text-sm font-semibold text-white disabled:opacity-50">
+                  className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-green-700 py-3 text-sm font-semibold text-white disabled:opacity-50">
             <Play className="h-4 w-4" /> Iniciar jornada
           </button>
         )}
         {otAbierta && !yoTrabajando && (
           <button onClick={() => doTiming('iniciar')} disabled={timing.isPending}
-                  className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-green-600 py-3 text-sm font-semibold text-white disabled:opacity-50">
+                  className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-green-700 py-3 text-sm font-semibold text-white disabled:opacity-50">
             <Play className="h-4 w-4" />
             {!miReloj && tecnicoId && relojes.length > 0 ? 'Sumarme' : 'Reanudar'}
           </button>
@@ -1377,7 +1377,7 @@ export default function MecanicoOTPage() {
           </p>
         ) : listoParaCliente ? (
           <button type="button" onClick={() => setRevCliente(true)}
-                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-green-600 px-4 py-3 text-sm font-bold text-white active:bg-green-700">
+                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-green-700 px-4 py-3 text-sm font-bold text-white active:bg-green-700">
             <CheckCircle2 className="h-5 w-5" /> Cliente: revisar y firmar
           </button>
         ) : (
@@ -1394,7 +1394,7 @@ export default function MecanicoOTPage() {
       {isLoading ? (
         <div className="flex justify-center py-8"><Spinner /></div>
       ) : total === 0 ? (
-        <p className="py-8 text-center text-sm text-gray-400">Esta OT no tiene checklist (¿se cargó con conexión?).</p>
+        <p className="py-8 text-center text-sm text-gray-500">Esta OT no tiene checklist (¿se cargó con conexión?).</p>
       ) : (
         <div aria-disabled={medidoresPendientes}
              className={medidoresPendientes ? 'pointer-events-none select-none space-y-3 opacity-50' : 'space-y-3'}>
@@ -1422,10 +1422,10 @@ export default function MecanicoOTPage() {
               {g.items.map((it) => (
                 <div key={it.instance_item_id} className="rounded-xl border border-gray-200 bg-white p-3">
                   <div className="flex items-start gap-1.5">
-                    {it.codigo && <span className="text-[10px] font-mono text-gray-400">{it.codigo}</span>}
+                    {it.codigo && <span className="text-[10px] font-mono text-gray-500">{it.codigo}</span>}
                     <p className="flex-1 text-sm text-gray-800">{it.descripcion}</p>
                     {it.tiempo_min != null && (
-                      <span className="flex items-center gap-0.5 text-[10px] text-gray-400"><Clock className="h-3 w-3" />{it.tiempo_min}m</span>
+                      <span className="flex items-center gap-0.5 text-[10px] text-gray-500"><Clock className="h-3 w-3" />{it.tiempo_min}m</span>
                     )}
                   </div>
                   <div className="mt-1 flex flex-wrap gap-1">

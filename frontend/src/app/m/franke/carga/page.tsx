@@ -192,7 +192,7 @@ export default function CargaEdsPage() {
     <div className="min-h-screen bg-gray-50 pb-28">
       <header className="sticky top-0 z-10 border-b border-gray-200 bg-white px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))]">
         <div className="flex items-center gap-3">
-          <Link href="/m/franke" className="shrink-0 rounded-lg p-1.5 text-gray-500 hover:bg-gray-100">
+          <Link aria-label="Volver" href="/m/franke" className="shrink-0 rounded-lg p-1.5 text-gray-500 hover:bg-gray-100">
             <ArrowLeft className="h-5 w-5" />
           </Link>
           <div className="min-w-0 flex-1">
@@ -373,7 +373,7 @@ export default function CargaEdsPage() {
               </div>
             ))}
             {delDia.length === 0 && locales.length === 0 && (
-              <p className="py-3 text-center text-sm text-gray-400">Todavía no hay cargas hoy.</p>
+              <p className="py-3 text-center text-sm text-gray-500">Todavía no hay cargas hoy.</p>
             )}
             {delDia.map((r) => (
               <div key={r.id} className="flex items-center gap-2 rounded-lg border border-gray-200 p-2.5">

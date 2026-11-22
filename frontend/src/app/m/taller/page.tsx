@@ -324,7 +324,7 @@ export default function MecanicoHomePage() {
 
   const chip = (activo: boolean) =>
     `rounded-full border px-2.5 py-1 text-xs transition ${
-      activo ? 'border-orange-600 bg-orange-600 font-medium text-white'
+      activo ? 'border-orange-700 bg-orange-700 font-medium text-white'
              : 'border-gray-300 bg-white text-gray-700 active:bg-gray-100'}`
 
   const puedeDescargar = (esOperador || mecanico) && misOts.length > 0 && online
@@ -334,7 +334,7 @@ export default function MecanicoHomePage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-orange-600 text-white">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-orange-700 text-white">
             <Wrench className="h-5 w-5" />
           </div>
           <div>
@@ -386,7 +386,7 @@ export default function MecanicoHomePage() {
           )}
         </div>
       </div>
-      {descargaMsg && <p className="text-center text-xs text-green-600">{descargaMsg}</p>}
+      {descargaMsg && <p className="text-center text-xs text-green-700">{descargaMsg}</p>}
 
       {/* [MIG479 · Fase 3] Lo primero de la pantalla es lo que me toca ahora.
           Se muestra sólo si la cuenta está vinculada a un técnico: con la
@@ -452,7 +452,7 @@ export default function MecanicoHomePage() {
           {ESTADOS.map((e) => (
             <button key={e.key} onClick={() => setEstadoFiltro(e.key)} className={chip(estadoFiltro === e.key)}>
               {e.label}{' '}
-              <span className={estadoFiltro === e.key ? 'text-white/80' : 'text-gray-400'}>
+              <span className={estadoFiltro === e.key ? 'text-white' : 'text-gray-400'}>
                 {conteoPorEstado[e.key]}
               </span>
             </button>
@@ -476,7 +476,7 @@ export default function MecanicoHomePage() {
               <button onClick={() => setSoloMias(false)} className={chip(!soloMias)}>Todas</button>
               <button onClick={() => setSoloMias(true)} className={chip(soloMias)}>
                 {esOperador ? 'Sólo las mías' : `Sólo ${mecanico.split(' ')[0]}`}{' '}
-                <span className={soloMias ? 'text-white/80' : 'text-gray-400'}>{conMiNombre}</span>
+                <span className={soloMias ? 'text-white' : 'text-gray-400'}>{conMiNombre}</span>
               </button>
             </div>
           )}
@@ -489,14 +489,14 @@ export default function MecanicoHomePage() {
               return (
                 <button key={m} onClick={() => elegir(m)}
                         className={`rounded-full border px-2.5 py-1 text-xs transition ${
-                          mecanico === m ? 'border-orange-600 bg-orange-600 font-medium text-white'
-                          : n === 0 ? 'border-gray-200 bg-gray-50 text-gray-400'
+                          mecanico === m ? 'border-orange-600 bg-orange-700 font-medium text-white'
+                          : n === 0 ? 'border-gray-200 bg-gray-50 text-gray-500'
                                     : 'border-gray-300 bg-white text-gray-700 active:bg-gray-100'}`}>
-                  {m} <span className={mecanico === m ? 'text-white/80' : 'text-gray-400'}>{n}</span>
+                  {m} <span className={mecanico === m ? 'text-white' : 'text-gray-400'}>{n}</span>
                 </button>
               )
             })}
-            <p className="w-full pt-1 text-[10px] text-gray-400">
+            <p className="w-full pt-1 text-[10px] text-gray-500">
               El número es cuántas OTs liberadas trae ese nombre en la cuadrilla. Tócalo de nuevo para soltarlo.
             </p>
           </div>
@@ -538,10 +538,10 @@ export default function MecanicoHomePage() {
               <button key={fechaISO} type="button"
                       onClick={() => setDiaSeleccionado(esSeleccionado ? null : fechaISO)}
                       className={`flex flex-col items-center rounded-lg border py-1.5 transition-colors ${
-                        esSeleccionado ? 'border-orange-600 bg-orange-600 text-white'
+                        esSeleccionado ? 'border-orange-600 bg-orange-700 text-white'
                         : esHoy ? 'border-orange-300 bg-orange-50 text-orange-900'
                         : tieneOTs ? 'border-gray-300 bg-white text-gray-800'
-                        : 'border-gray-200 bg-gray-50 text-gray-400'}`}>
+                        : 'border-gray-200 bg-gray-50 text-gray-500'}`}>
                 <span className="text-[9px] font-semibold uppercase leading-none tracking-wide">
                   {DIAS_INICIAL[idx]}
                 </span>
@@ -549,7 +549,7 @@ export default function MecanicoHomePage() {
                   {Number(fechaISO.slice(8, 10))}
                 </span>
                 <span className={`mt-0.5 font-mono text-[9px] leading-none ${
-                  esSeleccionado ? 'text-white/90' : tieneOTs ? 'text-gray-700' : 'text-gray-400'}`}>
+                  esSeleccionado ? 'text-white' : tieneOTs ? 'text-gray-700' : 'text-gray-400'}`}>
                   {tieneOTs ? conteo : '—'}
                 </span>
               </button>
@@ -586,7 +586,7 @@ export default function MecanicoHomePage() {
               : soloMias && mecanico
                 ? (esOperador ? 'OTs con mi nombre' : `OTs de ${mecanico}`)
                 : 'OTs liberadas a ejecución'}
-          <span className="ml-1.5 font-normal text-gray-400">{otsEnVista.length + osDelDia.length}</span>
+          <span className="ml-1.5 font-normal text-gray-500">{otsEnVista.length + osDelDia.length}</span>
         </h2>
         <button onClick={() => refetch()} aria-label="Actualizar"
                 className="text-gray-400 hover:text-gray-600" disabled={isFetching}>
@@ -625,24 +625,24 @@ export default function MecanicoHomePage() {
       {isLoading ? (
         <div className="flex justify-center py-8"><Spinner /></div>
       ) : otsEnVista.length === 0 && osDelDia.length > 0 ? (
-        <p className="pb-2 text-center text-[11px] text-gray-400">
+        <p className="pb-2 text-center text-[11px] text-gray-500">
           Sin OTs programadas este día — las órdenes de servicio de arriba son el trabajo del día.
         </p>
       ) : otsEnVista.length === 0 ? (
-        <div className="py-8 text-center text-sm text-gray-400">
+        <div className="py-8 text-center text-sm text-gray-500">
           {/* El vacío tiene que decir cuál de los filtros lo dejó vacío, y
               ofrecer soltarlo. Antes decía «no hay OTs» y punto. */}
           {diaSeleccionado ? (
             <>
               <p>Nada programado para el {formatDiaCorto(diaSeleccionado)}.</p>
-              <button onClick={() => setDiaSeleccionado(null)} className="mt-2 text-xs font-medium text-orange-600 underline">
+              <button onClick={() => setDiaSeleccionado(null)} className="mt-2 text-xs font-medium text-orange-700 underline">
                 Ver todo otra vez
               </button>
             </>
           ) : !enSemanaActual ? (
             <>
               <p>La semana del {rangoSemanaLabel(weekStart, weekEnd)} no tiene OTs.</p>
-              <button onClick={() => setWeekOffset(0)} className="mt-2 text-xs font-medium text-orange-600 underline">
+              <button onClick={() => setWeekOffset(0)} className="mt-2 text-xs font-medium text-orange-700 underline">
                 Volver a hoy
               </button>
             </>
@@ -652,14 +652,14 @@ export default function MecanicoHomePage() {
                 No hay OTs «{ESTADOS.find((e) => e.key === estadoFiltro)?.label.toLowerCase()}»
                 {soloMias && mecanico ? ` de ${mecanico}` : ''}.
               </p>
-              <button onClick={() => setEstadoFiltro('todas')} className="mt-2 text-xs font-medium text-orange-600 underline">
+              <button onClick={() => setEstadoFiltro('todas')} className="mt-2 text-xs font-medium text-orange-700 underline">
                 Ver todos los estados
               </button>
             </>
           ) : soloMias && mecanico ? (
             <>
               <p>Ninguna OT liberada trae el nombre de {mecanico}.</p>
-              <button onClick={() => setSoloMias(false)} className="mt-2 text-xs font-medium text-orange-600 underline">
+              <button onClick={() => setSoloMias(false)} className="mt-2 text-xs font-medium text-orange-700 underline">
                 Ver todas
               </button>
             </>

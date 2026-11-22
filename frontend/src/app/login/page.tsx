@@ -181,6 +181,7 @@ export default function LoginPage() {
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
                   tabIndex={-1}
                 >
                   {showPassword ? (
@@ -201,7 +202,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={isSubmitting}
-              className="flex w-full items-center justify-center gap-2 rounded-lg bg-pillado-green-500 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-pillado-green-600 focus:outline-none focus:ring-2 focus:ring-pillado-green-500 focus:ring-offset-2 active:bg-pillado-green-700 disabled:cursor-not-allowed disabled:opacity-60"
+              className="flex w-full items-center justify-center gap-2 rounded-lg bg-pillado-green-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-pillado-green-700 focus:outline-none focus:ring-2 focus:ring-pillado-green-500 focus:ring-offset-2 active:bg-pillado-green-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {isSubmitting ? (
                 <div className="h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent" />

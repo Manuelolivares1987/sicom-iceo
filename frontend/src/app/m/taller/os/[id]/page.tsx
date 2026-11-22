@@ -171,7 +171,7 @@ function ActividadCard({ a, otId, onCambio }: {
                        onChange={(e) => { const f = e.target.files?.[0]; if (f) setRepFoto(f); e.target.value = '' }} />
                 <button type="button" disabled={solicitar.isPending || !Number(repCant) || repDesc.trim().length < 3}
                         onClick={pedirRepuesto}
-                        className="ml-auto rounded-lg bg-orange-600 px-3 py-2 text-[11px] font-semibold text-white disabled:opacity-50">
+                        className="ml-auto rounded-lg bg-orange-700 px-3 py-2 text-[11px] font-semibold text-white disabled:opacity-50">
                   {solicitar.isPending ? 'Enviando…' : 'Pedir al jefe'}
                 </button>
                 <button type="button" onClick={() => setPidiendo(false)} className="text-gray-500">
@@ -350,7 +350,7 @@ export default function OsDetallePage() {
                       className="mt-1 w-full rounded border border-gray-300 px-2 py-1.5 text-sm" />
             <div className="mt-2 flex gap-2">
               <button onClick={() => terminar.mutate()} disabled={terminar.isPending}
-                      className="flex-1 rounded-md bg-green-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">
+                      className="flex-1 rounded-md bg-green-700 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">
                 Confirmar que terminé
               </button>
               <button onClick={() => setTerminando(false)}
@@ -366,7 +366,7 @@ export default function OsDetallePage() {
               </button>
             ) : (
               <button onClick={() => empezar.mutate()} disabled={empezar.isPending || !!mia?.bloqueo}
-                      className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-orange-600 py-3 text-sm font-semibold text-white disabled:opacity-50">
+                      className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-orange-700 py-3 text-sm font-semibold text-white disabled:opacity-50">
                 <Play className="h-4 w-4" /> Empezar
               </button>
             )}

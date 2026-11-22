@@ -644,7 +644,7 @@ function CopilotoInner() {
     <div className="flex h-dvh flex-col bg-gray-50">
       {/* Header */}
       <header className="flex items-center gap-2 border-b bg-white px-3 py-3">
-        <Link href={otId ? `/m/taller/ot/${otId}` : '/m/taller'} className="text-gray-500">
+        <Link aria-label="Volver" href={otId ? `/m/taller/ot/${otId}` : '/m/taller'} className="text-gray-500">
           <ArrowLeft className="h-5 w-5" />
         </Link>
         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-indigo-100">
@@ -707,7 +707,7 @@ function CopilotoInner() {
       {/* Chat */}
       <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto px-3 py-4">
         {cargandoConv && (
-          <p className="flex items-center justify-center gap-2 py-6 text-xs text-gray-400"><Loader2 className="h-4 w-4 animate-spin" /> Cargando la conversación…</p>
+          <p className="flex items-center justify-center gap-2 py-6 text-xs text-gray-500"><Loader2 className="h-4 w-4 animate-spin" /> Cargando la conversación…</p>
         )}
         {!cargandoConv && mensajes.length === 0 && (
           <div className="mx-auto mt-6 max-w-sm text-center">
@@ -766,9 +766,9 @@ function CopilotoInner() {
                     )}
                     {m.texto
                       ? <RespuestaMarkdown texto={m.texto} onCita={(n) => onCita(i, n)} />
-                      : (enviando && ultimo ? <span className="text-gray-400">…</span> : null)}
+                      : (enviando && ultimo ? <span className="text-gray-500">…</span> : null)}
                     {enviando && ultimo && estado && m.texto && (
-                      <p className="mt-1 flex items-center gap-1.5 text-[11px] text-gray-400">
+                      <p className="mt-1 flex items-center gap-1.5 text-[11px] text-gray-500">
                         <Loader2 className="h-3 w-3 animate-spin" /> {estado}
                       </p>
                     )}
@@ -792,7 +792,7 @@ function CopilotoInner() {
                 {m.rol === 'assistant' && m.consultaId && m.texto && (!enviando || !ultimo) && (
                   <div className="mt-2 border-t pt-1.5">
                     <div className="flex items-center gap-2">
-                      <span className="text-[10px] text-gray-400">¿Te sirvió?</span>
+                      <span className="text-[10px] text-gray-500">¿Te sirvió?</span>
                       <button onClick={() => marcarFeedback(i, 'util')}
                               className={`rounded p-1 ${m.feedback === 'util' ? 'bg-green-100 text-green-600' : 'text-gray-400'}`}>
                         <ThumbsUp className="h-3.5 w-3.5" />
@@ -854,7 +854,7 @@ function CopilotoInner() {
                     {a.estado === 'listo' && a.path && (
                       <button onClick={() => (a.proponer ? guardarAporte(a, false) : (setFAporte(''), setAporteDe(a)))}
                               aria-label="Aportar a biblioteca" title="Aportar a biblioteca"
-                              className={`absolute bottom-0.5 left-0.5 rounded p-0.5 text-white ${a.proponer ? 'bg-green-600' : 'bg-black/60'}`}>
+                              className={`absolute bottom-0.5 left-0.5 rounded p-0.5 text-white ${a.proponer ? 'bg-green-700' : 'bg-black/60'}`}>
                         <BookPlus className="h-3 w-3" />
                       </button>
                     )}
@@ -1018,7 +1018,7 @@ function CopilotoInner() {
                 <b>{e.patente ?? e.codigo}</b> <span className="text-xs text-gray-500">{e.nombre}</span>
               </button>
             ))}
-            {!equipos.length && <p className="px-3 py-3 text-xs text-gray-400">Sin resultados</p>}
+            {!equipos.length && <p className="px-3 py-3 text-xs text-gray-500">Sin resultados</p>}
           </div>
           <p className="text-[11px] text-gray-500">
             Con el equipo elegido el copiloto filtra los manuales por su marca y modelo y usa su ficha técnica e historial.

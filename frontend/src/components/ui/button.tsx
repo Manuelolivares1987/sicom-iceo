@@ -11,11 +11,12 @@ const buttonVariants = cva(
     variants: {
       variant: {
         primary:
-          'bg-pillado-green-500 text-white hover:bg-pillado-green-600 active:bg-pillado-green-700',
+          // [22-11-2026] 600 de base: el 500 con letra blanca da 4,3:1 y WCAG AA pide 4,5:1.
+          'bg-pillado-green-600 text-white hover:bg-pillado-green-700 active:bg-pillado-green-800',
         secondary:
           'bg-pillado-orange-500 text-white hover:bg-pillado-orange-600 active:bg-pillado-orange-700',
         outline:
-          'border-2 border-pillado-green-500 text-pillado-green-500 bg-transparent hover:bg-pillado-green-50 active:bg-pillado-green-100',
+          'border-2 border-pillado-green-600 text-pillado-green-700 bg-transparent hover:bg-pillado-green-50 active:bg-pillado-green-100',
         danger:
           'bg-red-600 text-white hover:bg-red-700 active:bg-red-800',
         ghost:

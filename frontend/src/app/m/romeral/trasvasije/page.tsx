@@ -167,7 +167,7 @@ export default function TrasvasijePage() {
   return (
     <div className="space-y-3 p-3 pb-24">
       <div className="flex items-center gap-2">
-        <Link href="/m/romeral" className="rounded-lg border border-gray-300 p-2">
+        <Link aria-label="Volver" href="/m/romeral" className="rounded-lg border border-gray-300 p-2">
           <ChevronLeft className="h-4 w-4 text-gray-600" />
         </Link>
         <div className="min-w-0 flex-1">
@@ -330,12 +330,12 @@ function Selector({ titulo, lista, valor, excluir, onElegir }: {
                   {Number(e.stock_teorico_lt ?? 0).toLocaleString('es-CL')} L
                 </p>
                 {enVivo != null && Math.abs(enVivo - Number(e.stock_teorico_lt ?? 0)) >= 1 && (
-                  <p className="text-[10px] tabular-nums text-gray-400">
+                  <p className="text-[10px] tabular-nums text-gray-500">
                     ~{enVivo.toLocaleString('es-CL')} estimado
                   </p>
                 )}
                 {!e.tiene_momento_cero && (
-                  <p className="text-[10px] font-semibold text-amber-600">sin momento cero</p>
+                  <p className="text-[10px] font-semibold text-amber-700">sin momento cero</p>
                 )}
               </div>
             </button>

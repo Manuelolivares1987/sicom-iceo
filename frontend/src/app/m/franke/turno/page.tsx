@@ -93,7 +93,7 @@ export default function TurnoFrankePage() {
   return (
     <div className="space-y-3 p-3 pb-24">
       <div className="flex items-center gap-2">
-        <Link href="/m/franke" className="rounded-lg border border-gray-300 p-2">
+        <Link aria-label="Volver" href="/m/franke" className="rounded-lg border border-gray-300 p-2">
           <ChevronLeft className="h-4 w-4 text-gray-600" />
         </Link>
         <div className="min-w-0 flex-1">
@@ -186,14 +186,14 @@ export default function TurnoFrankePage() {
             {abriendo ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
             Entró un turno nuevo — abrirlo hoy
           </button>
-          <p className="text-center text-[10px] leading-snug text-gray-400">
+          <p className="text-center text-[10px] leading-snug text-gray-500">
             Al abrir el turno nuevo, el anterior se cierra solo. Su status queda guardado.
           </p>
         </>
       )}
 
       {perfil?.nombre_completo && (
-        <p className="text-center text-[10px] text-gray-400">{perfil.nombre_completo}</p>
+        <p className="text-center text-[10px] text-gray-500">{perfil.nombre_completo}</p>
       )}
     </div>
   )
@@ -300,7 +300,7 @@ function Status({ s }: { s: StatusCamiones }) {
         </div>
       )}
 
-      <p className="text-center text-[10px] text-gray-400">
+      <p className="text-center text-[10px] text-gray-500">
         Calculado de los siete días, no escrito a mano.
       </p>
     </div>

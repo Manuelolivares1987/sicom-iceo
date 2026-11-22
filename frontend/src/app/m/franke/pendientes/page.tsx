@@ -124,7 +124,7 @@ export default function PendientesPage() {
     <div className="min-h-screen bg-gray-50 pb-24">
       <header className="sticky top-0 z-10 border-b border-gray-200 bg-white px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))]">
         <div className="flex items-center gap-3">
-          <Link href="/m/franke" className="shrink-0 rounded-lg p-1.5 text-gray-500 hover:bg-gray-100"><ArrowLeft className="h-5 w-5" /></Link>
+          <Link aria-label="Volver" href="/m/franke" className="shrink-0 rounded-lg p-1.5 text-gray-500 hover:bg-gray-100"><ArrowLeft className="h-5 w-5" /></Link>
           <div className="min-w-0 flex-1">
             <p className="text-base font-bold leading-tight text-gray-900">Pendientes</p>
             <p className="text-xs text-gray-500">Lo que está en el teléfono esperando subir</p>
@@ -144,7 +144,7 @@ export default function PendientesPage() {
           <div className="mt-3 flex gap-2">
             {!sesionOk && online && (
               <a href="/login/?next=%2Fm%2Ffranke%2Fpendientes%2F"
-                 className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-amber-600 py-2.5 text-sm font-bold text-white">
+                 className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-amber-700 py-2.5 text-sm font-bold text-white">
                 <LogIn className="h-4 w-4" /> Entrar
               </a>
             )}

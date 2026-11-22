@@ -383,7 +383,7 @@ export default function EjecutarPautaPage() {
     <div className="min-h-screen bg-gray-50 pb-40">
       <header className="sticky top-0 z-20 border-b border-gray-200 bg-white px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))]">
         <div className="flex items-center gap-3">
-          <Link href="/m/franke/pauta" className="shrink-0 rounded-lg p-1.5 text-gray-500 hover:bg-gray-100">
+          <Link aria-label="Volver" href="/m/franke/pauta" className="shrink-0 rounded-lg p-1.5 text-gray-500 hover:bg-gray-100">
             <ArrowLeft className="h-5 w-5" />
           </Link>
           <div className="min-w-0 flex-1">
@@ -578,7 +578,7 @@ function ItemFila({
           )}
         </p>
         {item.unidad && (
-          <span className="shrink-0 font-mono text-[11px] text-gray-400">{item.unidad}</span>
+          <span className="shrink-0 font-mono text-[11px] text-gray-500">{item.unidad}</span>
         )}
       </div>
       {item.ayuda && <p className="text-xs leading-snug text-gray-500">{item.ayuda}</p>}
