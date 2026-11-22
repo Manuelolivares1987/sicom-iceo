@@ -1,5 +1,6 @@
 'use client'
 
+import { todayISO } from '@/lib/utils'
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import {
@@ -31,7 +32,6 @@ function fmtLt(n: number | null | undefined) {
   if (n == null) return '—'
   return `${n.toLocaleString('es-CL', { maximumFractionDigits: 1 })} L`
 }
-function todayISO()       { return new Date().toISOString().slice(0, 10) }
 function hace30diasISO()  {
   const d = new Date(); d.setDate(d.getDate() - 30); return d.toISOString().slice(0, 10)
 }

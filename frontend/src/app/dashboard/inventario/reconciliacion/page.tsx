@@ -13,7 +13,7 @@ import { Spinner } from '@/components/ui/spinner'
 import {
   Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
 } from '@/components/ui/table'
-import { formatCLP, formatDate, formatDateTime, cn } from '@/lib/utils'
+import { formatCLP, formatDate, formatDateTime, cn, todayISO } from '@/lib/utils'
 import {
   useReconciliacionResumen,
   useReconciliacionStockFifo,
@@ -276,7 +276,7 @@ function TabStockFifo() {
           <Button
             variant="outline" size="sm"
             disabled={rows.length === 0}
-            onClick={() => exportCsv(`reconciliacion-stock-fifo-${new Date().toISOString().slice(0,10)}.csv`, rows as unknown as Record<string, unknown>[])}
+            onClick={() => exportCsv(`reconciliacion-stock-fifo-${todayISO()}.csv`, rows as unknown as Record<string, unknown>[])}
           >
             <Download className="h-4 w-4 mr-1" /> Exportar CSV
           </Button>
@@ -403,7 +403,7 @@ function TabCombustible() {
           <Button
             variant="outline" size="sm"
             disabled={rows.length === 0}
-            onClick={() => exportCsv(`reconciliacion-combustible-${new Date().toISOString().slice(0,10)}.csv`, rows as unknown as Record<string, unknown>[])}
+            onClick={() => exportCsv(`reconciliacion-combustible-${todayISO()}.csv`, rows as unknown as Record<string, unknown>[])}
           >
             <Download className="h-4 w-4 mr-1" /> Exportar CSV
           </Button>
@@ -554,7 +554,7 @@ function TabMovimientosExcepcionales() {
           <Button
             variant="outline" size="sm"
             disabled={rows.length === 0}
-            onClick={() => exportCsv(`mov-excepcionales-${new Date().toISOString().slice(0,10)}.csv`, rows as unknown as Record<string, unknown>[])}
+            onClick={() => exportCsv(`mov-excepcionales-${todayISO()}.csv`, rows as unknown as Record<string, unknown>[])}
           >
             <Download className="h-4 w-4 mr-1" /> Exportar CSV
           </Button>

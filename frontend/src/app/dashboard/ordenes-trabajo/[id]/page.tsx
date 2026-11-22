@@ -71,7 +71,7 @@ import {
   TableHead,
   TableCell,
 } from '@/components/ui/table'
-import { formatCLP, formatDate, formatDateTime, getEstadoOTColor, getEstadoOTLabel } from '@/lib/utils'
+import { formatCLP, formatDate, formatDateTime, getEstadoOTColor, getEstadoOTLabel, todayISO } from '@/lib/utils'
 import {
   useOrdenTrabajo,
   useEvidenciasOT,
@@ -2990,7 +2990,7 @@ function OrdenesDeServicioPanel({ otId }: { otId: string }) {
             <div>
               {/* [MIG507] Planificar es ponerle día. */}
               <label className="text-xs font-medium">📅 Día programado</label>
-              <input type="date" value={fechaOS} min={new Date().toISOString().slice(0, 10)}
+              <input type="date" value={fechaOS} min={todayISO()}
                      onChange={(e) => setFechaOS(e.target.value)}
                      className="mt-0.5 w-full rounded border border-gray-300 px-2 py-1.5 text-sm" />
             </div>

@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase'
 import { compressImage } from '@/lib/image/compress'
+import { todayISO } from '@/lib/utils'
 
 // ============================================================================
 // Reportabilidad de Prevención por faena (MIG546)
@@ -281,8 +282,10 @@ export function updateRegistro(id: string, patch: Partial<PrevencionRegistro>) {
   return supabase.from('prevencion_registros').update(patch).eq('id', id).select().single()
 }
 
+// [22-11-2026] Con .select: pasadas 24 h la regla no deja borrar y antes salía
+// «Registro eliminado» sin haberse borrado.
 export function deleteRegistro(id: string) {
-  return supabase.from('prevencion_registros').delete().eq('id', id)
+  return supabase.from('prevencion_registros').delete().eq('id', id).select('id')
 }
 
 // [MIG561] Prevención audita lo cargado: marca revisado (o lo quita) con
@@ -613,7 +616,7 @@ export function marcarEnviada(params: {
         mes: params.mes,
         observacion: params.observacion ?? null,
         archivos: params.archivos,
-        fecha_envio: new Date().toISOString().slice(0, 10),
+        fecha_envio: todayISO(),
       },
       { onConflict: 'item_id,anio,mes' },
     )

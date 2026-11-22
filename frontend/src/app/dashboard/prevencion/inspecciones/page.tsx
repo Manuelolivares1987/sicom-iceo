@@ -22,7 +22,7 @@ import { Modal } from '@/components/ui/modal'
 import { Spinner } from '@/components/ui/spinner'
 import { useRequireAuth } from '@/hooks/use-require-auth'
 import { useToast } from '@/hooks/use-toast'
-import { cn } from '@/lib/utils'
+import { cn, todayISO } from '@/lib/utils'
 import { supabase } from '@/lib/supabase'
 import {
   ESTADO_LABEL, ESTADO_REQ_LABEL, RESULTADO_LABEL,
@@ -51,7 +51,7 @@ function primerDiaMes(offset = 0) {
   const d = new Date(); d.setMonth(d.getMonth() + offset, 1)
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`
 }
-const hoyISO = () => new Date().toISOString().slice(0, 10)
+const hoyISO = () => todayISO()
 
 function Kpi({ label, value, sub, tone }: { label: string, value: string | number, sub?: string, tone?: 'bad' | 'warn' | 'ok' }) {
   return (

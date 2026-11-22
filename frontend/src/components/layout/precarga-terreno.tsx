@@ -19,6 +19,7 @@ import { useEffect } from 'react'
 import { useAuth } from '@/contexts/auth-context'
 import { estaEnLinea, EVENTO_CONECTIVIDAD } from '@/lib/conectividad'
 import { supabase } from '@/lib/supabase'
+import { todayISO } from '@/lib/utils'
 
 const PANTALLAS: Record<string, string[]> = {
   '/m/franke': ['', 'pauta', 'bitacora', 'bodega', 'despacho', 'carga', 'entrega', 'turno', 'guia'],
@@ -57,7 +58,7 @@ export function PrecargaTerreno() {
     if (ROLES_PREVENCION.includes(perfil.rol)) add('/m/prevencion')
     if (apps.size === 0) return
 
-    const firma = `${VERSION}|${perfil.id}|${new Date().toISOString().slice(0, 10)}|${Array.from(apps).sort().join(',')}`
+    const firma = `${VERSION}|${perfil.id}|${todayISO()}|${Array.from(apps).sort().join(',')}`
     let hecha = false
     try { hecha = localStorage.getItem(CLAVE) === firma } catch { /* sin storage */ }
     if (hecha) return

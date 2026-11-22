@@ -40,7 +40,7 @@ import {
   registrarIngresoBodega, getIngresosRecientes, rutValido, formatearRut,
   type ProveedorBusqueda, type ProductoBusqueda, type DocTipo, type IngresoResult,
 } from '@/lib/services/bodega-ingreso'
-import { cn, formatCLP } from '@/lib/utils'
+import { cn, formatCLP, todayISO } from '@/lib/utils'
 import { RUBROS, rubroCorto, tipoDeRubro } from '@/lib/bodega-rubros'
 
 const ROLES_INGRESO = ['administrador', 'subgerente_operaciones', 'jefe_mantenimiento', 'supervisor',
@@ -65,7 +65,7 @@ type Linea = {
   abierta: boolean
 }
 
-const hoy = () => new Date().toISOString().slice(0, 10)
+const hoy = () => todayISO()
 const num = (s: string) => Number(String(s).replace(/\./g, '').replace(',', '.'))
 
 function useDebounced(value: string, ms = 250) {

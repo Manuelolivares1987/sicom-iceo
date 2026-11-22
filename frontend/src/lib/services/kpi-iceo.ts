@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase'
 import type { MedicionKPI, ICEOPeriodo } from '@/types/database'
+import { todayISO } from '@/lib/utils'
 
 export async function getMedicionesKPI(
   contratoId: string,
@@ -10,7 +11,9 @@ export async function getMedicionesKPI(
   let query = supabase
     .from('mediciones_kpi')
     .select('*, kpi:kpi_definiciones(*)')
-    .eq('contrato_id', contratoId)
+  // [22-11-2026] Sin contrato = todos (Reportes los pedía con '' y la base
+  // rechazaba el uuid vacío: esos reportes nunca se generaban).
+  if (contratoId) query = query.eq('contrato_id', contratoId)
 
   if (faenaId) query = query.eq('faena_id', faenaId)
   if (periodoInicio) query = query.gte('periodo_inicio', periodoInicio)
@@ -47,7 +50,9 @@ export async function getICEOHistorico(
   let query = supabase
     .from('iceo_periodos')
     .select('*')
-    .eq('contrato_id', contratoId)
+  // [22-11-2026] Sin contrato = todos (Reportes los pedía con '' y la base
+  // rechazaba el uuid vacío: esos reportes nunca se generaban).
+  if (contratoId) query = query.eq('contrato_id', contratoId)
 
   if (faenaId) query = query.eq('faena_id', faenaId)
 
@@ -67,8 +72,8 @@ export async function calcularKPIs(
   const { data, error } = await supabase.rpc('rpc_calcular_iceo_periodo', {
     p_contrato_id: contratoId,
     p_faena_id: faenaId ?? null,
-    p_periodo_inicio: periodoInicio ?? new Date().toISOString().slice(0, 10),
-    p_periodo_fin: periodoFin ?? new Date().toISOString().slice(0, 10),
+    p_periodo_inicio: periodoInicio ?? todayISO(),
+    p_periodo_fin: periodoFin ?? todayISO(),
   })
 
   return { data, error }
@@ -83,8 +88,8 @@ export async function calcularICEO(
   const { data, error } = await supabase.rpc('rpc_calcular_iceo_periodo', {
     p_contrato_id: contratoId,
     p_faena_id: faenaId ?? null,
-    p_periodo_inicio: periodoInicio ?? new Date().toISOString().slice(0, 10),
-    p_periodo_fin: periodoFin ?? new Date().toISOString().slice(0, 10),
+    p_periodo_inicio: periodoInicio ?? todayISO(),
+    p_periodo_fin: periodoFin ?? todayISO(),
   })
 
   return { data, error }

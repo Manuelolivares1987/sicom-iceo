@@ -13,12 +13,12 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { useToast } from '@/hooks/use-toast'
-import { cn } from '@/lib/utils'
+import { cn, todayISO } from '@/lib/utils'
 import {
   useAmbientalConceptos, useFaenasPrevencion, useUpsertAmbiental,
 } from '@/hooks/use-prevencion-reportabilidad'
 
-function hoyISO() { return new Date().toISOString().slice(0, 10) }
+function hoyISO() { return todayISO() }
 function mesActualISO() { return hoyISO().slice(0, 7) }
 
 export function AmbientalForm({ onGuardado, onCancelar }: {

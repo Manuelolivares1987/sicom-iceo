@@ -18,7 +18,7 @@ import { Spinner } from '@/components/ui/spinner'
 import { useRequireAuth } from '@/hooks/use-require-auth'
 import { useAuth } from '@/contexts/auth-context'
 import { useToast } from '@/hooks/use-toast'
-import { cn } from '@/lib/utils'
+import { cn, todayISO } from '@/lib/utils'
 import { useFaenasPrevencion } from '@/hooks/use-prevencion-reportabilidad'
 import { EppEntregaForm } from '@/components/prevencion/epp-entrega-form'
 import { descargarComprobanteEpp } from '@/components/prevencion/pdf-comprobante-epp'
@@ -37,7 +37,7 @@ export default function EppPanelPage() {
   const toast = useToast()
   const qc = useQueryClient()
   const [desde, setDesde] = useState(primerDiaMes(-2))
-  const [hasta, setHasta] = useState(new Date().toISOString().slice(0, 10))
+  const [hasta, setHasta] = useState(todayISO())
   const [faenaId, setFaenaId] = useState<string | null>(null)
   const [q, setQ] = useState('')
   const [nueva, setNueva] = useState(false)

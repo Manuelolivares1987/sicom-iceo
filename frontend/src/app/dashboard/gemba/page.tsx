@@ -5,7 +5,7 @@ import { Footprints, Plus, ClipboardCheck, AlertTriangle, Clock, TrendingUp } fr
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
-import { cn } from '@/lib/utils'
+import { cn, todayISO } from '@/lib/utils'
 import { useRequireAuth } from '@/hooks/use-require-auth'
 import { usePermissions } from '@/hooks/use-permissions'
 import { useAuth } from '@/contexts/auth-context'
@@ -243,7 +243,7 @@ export default function GembaPage() {
             <ul className="space-y-2">
               {hallazgosAbiertos.map((h) => {
                 const vencido = !!h.fecha_compromiso &&
-                  h.fecha_compromiso < new Date().toISOString().slice(0, 10)
+                  h.fecha_compromiso < todayISO()
                 return (
                   <li key={h.id}>
                     <Link href={`/dashboard/gemba/${h.recorrido_id}`}

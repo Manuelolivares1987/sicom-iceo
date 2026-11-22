@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, BarChart, Bar, XAxis, YAxis } from 'recharts'
 import { supabase } from '@/lib/supabase'
 import { AvisoFueraDeCalculo, type FueraDeCalculo } from '@/components/fiabilidad/aviso-fuera-de-calculo'
+import { todayISO } from '@/lib/utils'
 
 // ── Estados ────────────────────────────────────────────────
 const COLOR: Record<string, string> = {
@@ -61,7 +62,7 @@ const lt = (v: number | null | undefined) => Math.round(Number(v || 0)).toLocale
 const fmtPct = (v: number | null | undefined, d = 1) => v == null ? '—' : `${(Number(v) * 100).toFixed(d)}%`
 const fmtNum = (v: number | null | undefined, d = 1) => v == null ? '—' : Number(v).toFixed(d)
 const firstOfMonth = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01` }
-const todayStr = () => new Date().toISOString().slice(0, 10)
+const todayStr = () => todayISO()
 
 function colorDisp(v: number): string {
   if (v >= 0.92) return 'text-green-600'; if (v >= 0.85) return 'text-blue-600'
