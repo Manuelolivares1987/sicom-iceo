@@ -1,3 +1,5 @@
+// Completa crypto.randomUUID en visores antiguos (Android 10 de fábrica).
+import '@/lib/uuid'
 import { createClient, type User as SupabaseUser } from '@supabase/supabase-js'
 import { reportarExitoRed, reportarFalloRed } from '@/lib/conectividad'
 

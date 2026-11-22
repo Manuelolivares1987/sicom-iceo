@@ -12,6 +12,7 @@ export type TallerBlob = { blob_id: string; blob: Blob; mime: string }
 
 /** Cambio pendiente de sincronizar. */
 import type { MedicionItem } from '@/lib/services/taller-plan-semanal'
+import { uuidV4 } from '@/lib/uuid'
 
 export type TallerPending = {
   local_id: string
@@ -142,6 +143,5 @@ export async function clearTallerDB(): Promise<void> {
 }
 
 export function newId(): string {
-  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID()
-  return `id_${Date.now()}_${Math.floor(Math.random() * 1e9)}`
+  return uuidV4()
 }

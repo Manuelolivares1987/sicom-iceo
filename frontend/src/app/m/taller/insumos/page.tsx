@@ -39,6 +39,7 @@ import {
   type CecoTaller, type OTRecursoSeguimiento,
 } from '@/lib/services/ot-recursos'
 import { cn } from '@/lib/utils'
+import { uuidV4 } from '@/lib/uuid'
 
 type ProductoLite = { id: string; codigo: string | null; nombre: string; unidad_medida: string | null }
 type Linea = {
@@ -106,7 +107,7 @@ export default function InsumosTallerPage() {
           unidad: l.unidad,
           comentario: comentario.trim() || null,
           solicitadoNombre: perfil?.nombre_completo ?? null,
-          clientUuid: crypto.randomUUID(),
+          clientUuid: uuidV4(),
         })
       }
       toast.success(

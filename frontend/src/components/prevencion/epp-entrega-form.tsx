@@ -20,6 +20,7 @@ import { useFaenasPrevencion } from '@/hooks/use-prevencion-reportabilidad'
 import {
   MOTIVO_EPP, getCatalogoEpp, getPersonasEpp, registrarEntregaEpp, subirFirmaEpp,
 } from '@/lib/services/prevencion-epp'
+import { uuidV4 } from '@/lib/uuid'
 
 function hoy() {
   const d = new Date()
@@ -49,7 +50,7 @@ export function EppEntregaForm({ faenaIdInicial, onGuardado, onCancelar }: {
   const [sel, setSel] = useState<Record<string, Sel>>({})
   const [firma, setFirma] = useState<string | null>(null)
   const [guardando, setGuardando] = useState(false)
-  const [clienteUuid] = useState(() => crypto.randomUUID())
+  const [clienteUuid] = useState(() => uuidV4())
 
   const persona = (personas ?? []).find((p) => p.id === personaId)
   const filtradas = useMemo(() => {

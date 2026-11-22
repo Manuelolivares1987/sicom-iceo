@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase'
 import { withTimeout } from '@/lib/upload/with-timeout'
+import { uuidV4 } from '@/lib/uuid'
 
 // Timeout para uploads a Storage. En faena con señal debil un upload puede
 // quedar colgado indefinidamente; este corte transforma "spinner infinito"
@@ -148,8 +149,7 @@ export async function uploadFirmaJornada(params: {
 
 // crypto.randomUUID es estandar; fallback simple por si.
 export function genClientUuid(): string {
-  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID()
-  return 'cuid-' + Math.random().toString(36).slice(2) + Date.now().toString(36)
+  return uuidV4()
 }
 
 // ============================================================================

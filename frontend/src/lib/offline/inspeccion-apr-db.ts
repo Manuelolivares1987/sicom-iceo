@@ -16,6 +16,7 @@ import type { EvidenciaArchivo } from '@/lib/services/prevencion-reportabilidad'
 import type {
   FatigaRespuestas, Habilitacion, PuntoPlantilla, Respuesta,
 } from '@/lib/services/prevencion-inspeccion'
+import { uuidV4 } from '@/lib/uuid'
 
 export interface FotoRef {
   /** Foto ya subida al bucket. */
@@ -139,7 +140,7 @@ export async function borrarBorrador(id: string): Promise<void> {
 
 export async function guardarFotoLocal(clienteUuid: string, blob: Blob, nombre: string): Promise<string> {
   const db = await getDB()
-  const id = crypto.randomUUID()
+  const id = uuidV4()
   await db.put('fotos', { id, cliente_uuid: clienteUuid, blob, nombre, created_at: new Date().toISOString() })
   return id
 }

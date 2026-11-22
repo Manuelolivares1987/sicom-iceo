@@ -32,6 +32,7 @@ import {
 import { avanceBorrador } from '@/components/prevencion/inspeccion-apr-form'
 import { descargarPdfInspeccion } from '@/components/prevencion/pdf-inspeccion-apr'
 import { EsperandoSesion } from '@/components/layout/esperando-sesion'
+import { uuidV4 } from '@/lib/uuid'
 
 const ROLES_APR = ['administrador', 'prevencionista', 'jefe_operaciones', 'subgerente_operaciones']
 
@@ -81,7 +82,7 @@ export default function InspeccionAprHome() {
       const [plantilla, habilitacion] = await Promise.all([getPlantilla(), getHabilitacion(f.grupo_personal)])
       const ahora = new Date()
       const b: BorradorInspeccion = {
-        cliente_uuid: crypto.randomUUID(),
+        cliente_uuid: uuidV4(),
         servidor_id: null,
         faena_id: f.faena_id,
         faena_nombre: f.nombre,

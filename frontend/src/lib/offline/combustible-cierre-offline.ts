@@ -22,6 +22,7 @@ import {
   type Pendiente, type ResumenDelDia,
 } from '@/lib/services/combustible-cierre'
 import { compressImage } from '@/lib/image/compress'
+import { uuidV4 } from '@/lib/uuid'
 
 /** El turno completo tal como está en el teléfono. */
 export type BorradorCierre = {
@@ -76,10 +77,7 @@ function db(): CierreDB {
   return _db
 }
 
-const uuid = () =>
-  typeof crypto !== 'undefined' && 'randomUUID' in crypto
-    ? crypto.randomUUID()
-    : `${Date.now()}-${Math.random().toString(36).slice(2)}`
+const uuid = () => uuidV4()
 
 export const claveCierre = (faenaId: string, fecha: string, turno: string) =>
   `${faenaId}|${fecha}|${turno}`

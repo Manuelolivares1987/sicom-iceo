@@ -41,9 +41,15 @@ jobs:
           # maneja la pantalla con uiautomator (app-ui.spec.ts).
           - android: 29
             modo: ui
+            target: google_apis
           # Android 14: visor moderno → prueba completa (app-nativa.spec.ts).
+          # Imagen SIN servicios de Google: en el emulador, al cortar la red, Play
+          # services se cae y Android cierra las apps que dependen de él (la
+          # nuestra, por el teclado) — «Target page closed». No pasa en un
+          # teléfono real.
           - android: 34
             modo: cdp
+            target: default
     name: emulador (Android API ${{ matrix.android }})
     steps:
       - uses: actions/checkout@v4
@@ -103,7 +109,7 @@ jobs:
         with:
           api-level: ${{ matrix.android }}
           arch: x86_64
-          target: google_apis
+          target: ${{ matrix.target }}
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot
           script: |

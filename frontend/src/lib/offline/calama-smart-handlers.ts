@@ -11,6 +11,7 @@
 // ON CONFLICT para no duplicar. syncCalamaPending() reusa el mismo
 // client_uuid al reenviar.
 
+import { uuidV4 } from '@/lib/uuid'
 import { supabase } from '@/lib/supabase'
 import {
   enqueueEvento, saveEvidencia, saveFirma,
@@ -43,8 +44,7 @@ function looksLikeNetworkError(err: unknown): boolean {
 
 // Generar client_uuid una sola vez por accion.
 function newCid(): string {
-  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID()
-  return 'cuid-' + Math.random().toString(36).slice(2) + Date.now().toString(36)
+  return uuidV4()
 }
 
 // ── Subidas Storage usadas en modo online ─────────────────────────────────

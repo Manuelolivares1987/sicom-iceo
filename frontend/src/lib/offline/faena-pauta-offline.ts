@@ -31,6 +31,7 @@ import {
   getAgenda, getItems, guardarPauta, subirFotoPauta,
   type PautaAgenda, type PautaItem, type Respuesta, type GuardarPautaInput,
 } from '@/lib/services/faena-pauta'
+import { uuidV4 } from '@/lib/uuid'
 
 export type PautaPendiente = Omit<GuardarPautaInput, 'items'> & {
   local_id: string
@@ -71,10 +72,7 @@ export function pautaDB(): PautaDB {
   return _db
 }
 
-const nuevoId = () =>
-  (typeof crypto !== 'undefined' && crypto.randomUUID)
-    ? crypto.randomUUID()
-    : `${Date.now()}-${Math.random().toString(36).slice(2)}`
+const nuevoId = () => uuidV4()
 
 // [19-11-2026] Conexión REAL (sondeo a Supabase), no navigator.onLine: con
 // antena sin datos o Wi-Fi de campamento el teléfono dice «online» y cada
