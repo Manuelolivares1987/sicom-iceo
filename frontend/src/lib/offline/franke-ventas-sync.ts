@@ -2,13 +2,26 @@
 // Patron Calama: online-first -> si falla por red, encola local; sync al
 // reconectar. Idempotente via client_uuid (dedup en rpc_registrar_venta_franke).
 
+import { esFallaDeRed } from './bandeja'
+import { estaEnLinea } from '@/lib/conectividad'
 import { haySesionServidor } from '@/lib/supabase'
 import { frankeDB, type LocalVentaFranke, type LocalBlobVF } from './franke-ventas-db'
 import { supabase } from '@/lib/supabase'
 import { uploadBlobEvidenciaCombustible } from '@/lib/services/combustible'
 
+// [22-11-2026] Señal confirmada (sondeo), no navigator.onLine (que dice «sí» con
+// barras y sin datos).
 export function isOnline(): boolean {
-  return typeof navigator === 'undefined' ? true : navigator.onLine
+  return typeof navigator === 'undefined' ? true : estaEnLinea()
+}
+
+/** Toda llamada con techo de tiempo: con «barras sin datos» antes se colgaba
+ *  (no aparecían camiones, «Enviar» giraba para siempre). */
+export function conTimeout<T>(p: PromiseLike<T>, ms: number, que = 'la operación'): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error(`Tiempo de espera agotado (${que})`)), ms)
+    Promise.resolve(p).then((v) => { clearTimeout(t); resolve(v) }, (e) => { clearTimeout(t); reject(e) })
+  })
 }
 function uuid(): string {
   return typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID()
@@ -80,12 +93,12 @@ export async function smartRegistrarVentaFranke(v: VentaFrankeInput): Promise<{ 
   if (isOnline()) {
     try {
       const urls = {
-        firma: await uploadBlob(v.firma, v.estanque_movil_id),
-        foto_patente: await uploadBlob(v.foto_patente, v.estanque_movil_id),
-        foto_medidor_inicial: await uploadBlob(v.foto_medidor_inicial, v.estanque_movil_id),
-        foto_medidor_final: await uploadBlob(v.foto_medidor_final, v.estanque_movil_id),
+        firma: await conTimeout(uploadBlob(v.firma, v.estanque_movil_id), 30_000, 'firma'),
+        foto_patente: await conTimeout(uploadBlob(v.foto_patente, v.estanque_movil_id), 30_000, 'foto'),
+        foto_medidor_inicial: await conTimeout(uploadBlob(v.foto_medidor_inicial, v.estanque_movil_id), 30_000, 'foto'),
+        foto_medidor_final: await conTimeout(uploadBlob(v.foto_medidor_final, v.estanque_movil_id), 30_000, 'foto'),
       }
-      const { data, error } = await supabase.rpc('rpc_registrar_venta_franke', buildRpcParams(cid, v, urls))
+      const { data, error } = await conTimeout(supabase.rpc('rpc_registrar_venta_franke', buildRpcParams(cid, v, urls)), 20_000, 'registro')
       if (error) throw error
       return { ok: true, mode: 'online', client_uuid: cid, folio: (data as any)?.folio, message: 'Venta registrada.' }
     } catch (e) {
@@ -124,7 +137,15 @@ async function enqueueVenta(client_uuid: string, v: VentaFrankeInput) {
   })
 }
 
-export async function syncFrankePending(): Promise<{ ok: number; err: number }> {
+let ventasEnCurso: Promise<{ ok: number; err: number }> | null = null
+export function syncFrankePending(): Promise<{ ok: number; err: number }> {
+  // [22-11-2026] Una sola vuelta a la vez (la pantalla y el agente del layout).
+  if (ventasEnCurso) return ventasEnCurso
+  ventasEnCurso = syncFrankePendingUnaVez().finally(() => { ventasEnCurso = null })
+  return ventasEnCurso
+}
+
+async function syncFrankePendingUnaVez(): Promise<{ ok: number; err: number }> {
   // [20-11-2026] Sin sesión válida no se sube: el servidor lo rechazaría como anónimo.
   if (!haySesionServidor()) return { ok: 0, err: 0 }
   if (!isOnline()) return { ok: 0, err: 0 }
@@ -133,19 +154,26 @@ export async function syncFrankePending(): Promise<{ ok: number; err: number }> 
   let ok = 0, err = 0
   for (const venta of pend) {
     try {
-      const urls: Record<string, string | null> = {}
+      // Cada foto/firma se sube UNA vez: la URL queda anotada antes de seguir.
+      const urls: Record<string, string | null> = { ...((venta as { urls?: Record<string, string | null> }).urls ?? {}) }
       for (const ref of venta.blob_refs) {
+        if (urls[ref.key]) continue
         const rec = await db.blobs.get(ref.blob_id)
-        if (rec) { const { url } = await uploadBlobEvidenciaCombustible(rec.blob, { tipo: 'generico', contextoId: String(venta.payload.estanque_movil_id), ext: 'jpg' }); urls[ref.key] = url }
+        if (rec) {
+          const { url } = await conTimeout(uploadBlobEvidenciaCombustible(rec.blob, { tipo: 'generico', contextoId: String(venta.payload.estanque_movil_id), ext: 'jpg' }), 30_000, 'foto')
+          urls[ref.key] = url
+          await db.ventas.update(venta.local_id, { urls } as Partial<LocalVentaFranke>)
+        }
       }
       const params = buildRpcParams(venta.client_uuid, venta.payload as unknown as VentaFrankeInput, urls)
-      const { data, error } = await supabase.rpc('rpc_registrar_venta_franke', params)
+      const { data, error } = await conTimeout(supabase.rpc('rpc_registrar_venta_franke', params), 20_000, 'registro')
       if (error) throw error
       await db.ventas.update(venta.local_id, { sync_status: 'synced', synced_at: new Date().toISOString(), server_folio: (data as any)?.folio ?? null, last_error: null })
       for (const ref of venta.blob_refs) await db.blobs.delete(ref.blob_id)
       ok++
     } catch (e) {
-      await db.ventas.update(venta.local_id, { sync_status: 'error', retries: venta.retries + 1, last_error: e instanceof Error ? e.message : 'error' })
+      // Señal: sigue pendiente (sube sola). Solo un rechazo del sistema es error.
+      await db.ventas.update(venta.local_id, { sync_status: esFallaDeRed(e) ? 'pending' : 'error', retries: venta.retries + 1, last_error: e instanceof Error ? e.message : 'error' })
       err++
     }
   }

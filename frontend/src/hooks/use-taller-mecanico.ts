@@ -3,6 +3,7 @@
 import { useEffect } from 'react'
 import { estaEnLinea, EVENTO_CONECTIVIDAD } from '@/lib/conectividad'
 import { esTransitorio } from '@/lib/offline/bandeja'
+import { conRespaldo } from '@/lib/offline/terreno-cache'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNetworkStatus } from '@/hooks/use-calama-offline'
 import { supabase } from '@/lib/supabase'
@@ -273,9 +274,10 @@ export function useMedidoresOT(otId: string | null) {
         cuenta_litros: local.cuenta_litros ?? m.cuenta_litros, anotado_por_persona: true,
       } : m)
       try {
-        return encima(await leerMedidoresServidor(otId!))
+        // Guardado en el teléfono: sobrevive a reiniciar la app sin señal.
+        return encima(await conRespaldo(`taller:medidores:${otId}`, () => leerMedidoresServidor(otId!)))
       } catch {
-        // Sin señal: lo último que se vio (o nada: el checklist no se bloquea a ciegas).
+        // Nunca bajado: lo último en memoria (o nada: el checklist no se bloquea a ciegas).
         return encima(qc.getQueryData<MedidoresOT | null>(['mec-medidores', otId]) ?? null)
       }
     },

@@ -21,6 +21,8 @@
  * puede atribuir.
  */
 
+import { queueOS } from '@/lib/offline/taller-mecanico-sync'
+import { conRespaldo } from '@/lib/offline/terreno-cache'
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -28,7 +30,7 @@ import { Play, Pause, CheckCircle2, ChevronRight, ChevronDown, Clock, AlertTrian
 import { Spinner } from '@/components/ui/spinner'
 import { MotivoPausaModal } from '@/components/mantenimiento/motivo-pausa-modal'
 import {
-  getMisOS, getMiTecnicoId, getOSAbiertas, iniciarOS, pausarOS, finalizarOS,
+  getMisOS, getMiTecnicoId, getOSAbiertas,
   type MiOS, ESTADO_OS_LABEL,
 } from '@/lib/services/taller-os'
 
@@ -61,14 +63,16 @@ export function MisOrdenesDeServicio({ online }: { online: boolean }) {
 
   const { data: tecnicoId } = useQuery({
     queryKey: ['mi-tecnico'],
-    queryFn: getMiTecnicoId,
+    queryFn: () => conRespaldo('taller:mi-tecnico', getMiTecnicoId),
+    networkMode: 'always',
     staleTime: 10 * 60_000,
     retry: false,
   })
 
   const { data: oss = [], isLoading } = useQuery({
     queryKey: ['mis-os'],
-    queryFn: getMisOS,
+    queryFn: () => conRespaldo('taller:mis-os', getMisOS),
+    networkMode: 'always',
     enabled: !!tecnicoId,
     // El reloj corre en el servidor: refrescar cada minuto mantiene el contador
     // honesto sin inventar el tiempo en el teléfono.
@@ -87,22 +91,27 @@ export function MisOrdenesDeServicio({ online }: { online: boolean }) {
 
   const refrescar = () => {
     qc.invalidateQueries({ queryKey: ['mis-os'] })
-    qc.invalidateQueries({ queryKey: ['taller-mecanico-ots'] })
+    qc.invalidateQueries({ queryKey: ['mec-ots'] })
+    qc.invalidateQueries({ queryKey: ['mec-pending'] })
   }
 
   const empezar = useMutation({
-    mutationFn: (osId: string) => iniciarOS(osId, tecnicoId!),
+    // [22-11-2026] A la cola: funciona sin señal y sube solo.
+    networkMode: 'always',
+    mutationFn: (osId: string) => queueOS({ osId, accion: 'iniciar', tecnicoId: tecnicoId ?? null }),
     onSuccess: refrescar,
   })
   // [MIG672] Pausar pregunta por qué: primero se elige la OS, luego el motivo.
   const [pausando, setPausando] = useState<string | null>(null)
   const parar = useMutation({
     mutationFn: (p: { osId: string; tipo: string; texto: string | null }) =>
-      pausarOS(p.osId, tecnicoId!, p.texto, p.tipo),
+      queueOS({ osId: p.osId, accion: 'pausar', tecnicoId: tecnicoId ?? null, motivoTipo: p.tipo, texto: p.texto }),
+    networkMode: 'always',
     onSuccess: () => { setPausando(null); refrescar() },
   })
   const terminar = useMutation({
-    mutationFn: (p: { osId: string; obs: string }) => finalizarOS(p.osId, p.obs || null),
+    networkMode: 'always',
+    mutationFn: (p: { osId: string; obs: string }) => queueOS({ osId: p.osId, accion: 'finalizar', tecnicoId: tecnicoId ?? null, texto: p.obs || null }),
     onSuccess: () => { setTerminando(null); setObservacion(''); refrescar() },
   })
 
@@ -258,7 +267,7 @@ function TarjetaOS(p: {
                     placeholder="Lo que quede acá lo lee el jefe de taller al revisar"
                     className="mt-1 w-full rounded border border-gray-300 px-2 py-1.5 text-sm" />
           <div className="mt-2 flex gap-2">
-            <button onClick={p.onTerminar} disabled={p.ocupado || !p.online}
+            <button onClick={p.onTerminar} disabled={p.ocupado}
                     className="flex-1 rounded-md bg-green-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">
               Confirmar que terminé
             </button>
@@ -271,17 +280,17 @@ function TarjetaOS(p: {
       ) : (
         <div className="mt-2 flex gap-2">
           {os.trabajando ? (
-            <button onClick={p.onParar} disabled={p.ocupado || !p.online}
+            <button onClick={p.onParar} disabled={p.ocupado}
                     className="flex flex-1 items-center justify-center gap-1.5 rounded-md border border-orange-300 bg-white px-3 py-2 text-sm font-semibold text-orange-700 disabled:opacity-50">
               <Pause className="h-4 w-4" /> Parar
             </button>
           ) : (
-            <button onClick={p.onEmpezar} disabled={p.ocupado || bloqueado || !p.online}
+            <button onClick={p.onEmpezar} disabled={p.ocupado || bloqueado}
                     className="flex flex-1 items-center justify-center gap-1.5 rounded-md bg-orange-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">
               <Play className="h-4 w-4" /> Empezar
             </button>
           )}
-          <button onClick={p.onPedirTerminar} disabled={p.ocupado || !p.online}
+          <button onClick={p.onPedirTerminar} disabled={p.ocupado}
                   className="flex items-center justify-center gap-1.5 rounded-md border border-green-300 bg-white px-3 py-2 text-sm font-semibold text-green-700 disabled:opacity-50">
             <CheckCircle2 className="h-4 w-4" /> Terminé
           </button>

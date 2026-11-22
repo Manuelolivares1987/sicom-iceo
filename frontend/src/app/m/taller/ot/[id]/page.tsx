@@ -1,5 +1,6 @@
 'use client'
 
+import { conRespaldo } from '@/lib/offline/terreno-cache'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
@@ -1085,7 +1086,10 @@ export default function MecanicoOTPage() {
    */
   const { data: tecnicos } = useQuery({
     queryKey: ['taller-tecnicos-activos'],
-    queryFn: getTecnicosActivos,
+    // [22-11-2026] Guardado en el teléfono: tras reiniciar sin señal no había
+    // lista → sin «tu nombre» no se podía iniciar, y pausar paraba a toda la cuadrilla.
+    queryFn: () => conRespaldo('taller:tecnicos', getTecnicosActivos),
+    networkMode: 'always',
     staleTime: 30 * 60_000,
   })
   const tecnicoId = useMemo(() => {
@@ -1128,12 +1132,14 @@ export default function MecanicoOTPage() {
     timing.mutate({ accion: 'pausar', userId, tecnicoId, motivoTipo, observaciones: texto })
   }
   // [MIG472] El backend contesta «faltan N tareas» en vez de negarse en seco.
-  const pidePendientes = timing.isError && (timing.error as Error).name === 'PENDIENTES'
+  // [22-11-2026] El motivo se pide ANTES (también sin señal). Antes solo lo pedía
+  // el servidor al sincronizar: sin señal la OT salía de la lista y el cierre
+  // quedaba trabado en la cola, sin forma de explicarlo.
+  const pidePendientes = pendientesOblig > 0 || (timing.isError && (timing.error as Error).name === 'PENDIENTES')
 
   function abrirFinalizar() {
     if (noOkSinFoto > 0 || fotosEntrega.length > 0) { setWarnFoto(true); return }
     setWarnFoto(false)
-    if (pendientesOblig > 0 && !confirm(`Quedan ${pendientesOblig} tareas obligatorias sin marcar. ¿Finalizar igual?`)) return
     // Limpiar el error de una acción anterior (p.ej. un pausar fallido) para
     // que no aparezca dentro del modal como "No se pudo finalizar".
     timing.reset()
@@ -1590,7 +1596,9 @@ export default function MecanicoOTPage() {
             {pidePendientes && (
               <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2.5">
                 <p className="text-xs font-medium text-amber-900">
-                  {(timing.error as Error).message}
+                  {timing.isError && (timing.error as Error).name === 'PENDIENTES'
+                    ? (timing.error as Error).message
+                    : `Quedan ${pendientesOblig} tareas obligatorias sin marcar.`}
                 </p>
                 <label className="mt-2 block text-[11px] font-medium text-amber-900">
                   ¿Por qué quedaron sin hacer?

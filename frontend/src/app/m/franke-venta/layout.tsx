@@ -1,3 +1,4 @@
+import { SincronizadorVentas } from '@/components/franke/sincronizador-ventas'
 import { VolverAlPanel } from '@/components/layout/volver-al-panel'
 
 // La venta de Franke era la única app de terreno sin layout propio, y por eso
@@ -7,6 +8,7 @@ export default function FrankeVentaMobileLayout({ children }: { children: React.
     <>
       {children}
       <VolverAlPanel />
+      <SincronizadorVentas />
     </>
   )
 }

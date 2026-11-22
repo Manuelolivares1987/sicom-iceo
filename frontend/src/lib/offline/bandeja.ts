@@ -96,6 +96,14 @@ export function esTransitorio(e: unknown): boolean {
 }
 export const esDuplicado = (e: unknown) => codigo(e) === '23505'
 
+/** [22-11-2026] Solo la red caída o lenta (más estricto que esTransitorio: un
+ *  error sin código armado por la app —p. ej. «falta la foto»— NO es señal). */
+export function esFallaDeRed(e: unknown): boolean {
+  const c = codigo(e), m = msg(e).toLowerCase()
+  return /^5\d\d$/.test(c) || c.startsWith('PGRST3') || c === '401' || c === '408'
+    || /failed to fetch|fetch failed|networkerror|network|timeout|tiempo|abort|load failed|conexi|jwt|token|sin señal/.test(m)
+}
+
 // ── Envío ───────────────────────────────────────────────────────────────────
 let enCurso: Promise<number> | null = null
 let otraVuelta = false
