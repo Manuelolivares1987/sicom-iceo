@@ -18,7 +18,10 @@ export type TallerPending = {
   local_id: string
   client_uuid: string
   ot_id: string
-  kind: 'item' | 'timing' | 'recurso' | 'nota' | 'medidores'
+  kind: 'item' | 'timing' | 'recurso' | 'nota' | 'medidores' | 'os'
+  /** [22-11-2026] kind='os': reloj de una Orden de Servicio (ot_id = «os:<id>»). */
+  os_id?: string
+  os_accion?: 'iniciar' | 'pausar' | 'finalizar'
   /** [22-11-2026] kind='medidores': lo anotado sin señal (horómetro/km/cuenta litros). */
   horometro?: number | null
   kilometraje?: number | null

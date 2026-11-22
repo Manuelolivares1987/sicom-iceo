@@ -7,6 +7,7 @@
 // Cada despacho lleva un client_uuid: si el envío se reintenta, el servidor
 // devuelve el mismo registro en vez de duplicar el litraje.
 
+import { esFallaDeRed } from './bandeja'
 import { haySesionServidor } from '@/lib/supabase'
 import Dexie, { type Table } from 'dexie'
 import {
@@ -240,7 +241,7 @@ export async function sincronizar(): Promise<{ ok: number; failed: number }> {
     } catch (e) {
       failed++
       await combDB().pending.update(p.local_id, {
-        sync_status: 'error', intentos: (p.intentos ?? 0) + 1,
+        sync_status: esFallaDeRed(e) ? 'pending' : 'error', intentos: (p.intentos ?? 0) + 1,
         ultimo_error: (e as Error).message,
       })
     }
@@ -401,7 +402,7 @@ export async function sincronizarMovimientos(): Promise<{ ok: number; failed: nu
     } catch (e) {
       failed++
       await combDB().movimientos.update(m.local_id, {
-        sync_status: 'error', intentos: (m.intentos ?? 0) + 1,
+        sync_status: esFallaDeRed(e) ? 'pending' : 'error', intentos: (m.intentos ?? 0) + 1,
         ultimo_error: (e as Error).message,
       })
     }

@@ -30,9 +30,10 @@ import {
 import {
   getCatalogoOffline, descargarCatalogo, ultimaDescarga, guardarDespacho, guardarFotoLocal,
   sincronizar, getDiaOffline, descartarPendiente, pendientesCount,
-  sincronizarMovimientos, movimientosPendientesCount,
+  sincronizarMovimientos, movimientosPendientesCount, combDB, movimientosPendientes, descartarMovimiento,
   type DespachoPendiente,
 } from '@/lib/offline/combustible-faena-offline'
+import { RechazadosTerreno, type Rechazado } from '@/components/terreno/rechazados'
 
 const hoyISO = () => {
   const d = new Date()
@@ -97,6 +98,7 @@ export default function RomeralTerrenoPage() {
 
   const [servidor, setServidor] = useState<CombDespacho[]>([])
   const [locales, setLocales] = useState<DespachoPendiente[]>([])
+  const [rechazados, setRechazados] = useState<Rechazado[]>([])
 
   useEffect(() => { setFecha(hoyISO()) }, [])
 
@@ -123,6 +125,16 @@ export default function RomeralTerrenoPage() {
     // operador tiene que verlo en el mismo lugar donde ya mira.
     const [d, m] = await Promise.all([pendientesCount(), movimientosPendientesCount()])
     setPorSubir(d + m)
+    // [22-11-2026] Lo que el sistema rechazó, con el motivo y para descartar.
+    const despErr = (await combDB().pending.toArray().catch(() => [])).filter((o) => o.sync_status === 'error')
+    const movErr = (await movimientosPendientes().catch(() => [])).filter((o) => o.sync_status === 'error')
+    setRechazados([
+      ...despErr.map((o) => ({ id: `d-${o.local_id}`, titulo: `Carga · ${o.equipo_nombre ?? o.camion_nombre ?? ''}`,
+        detalle: new Date(o.created_at).toLocaleString('es-CL'), motivo: o.ultimo_error,
+        onDescartar: () => descartarPendiente(o.local_id) })),
+      ...movErr.map((o) => ({ id: `m-${o.local_id}`, titulo: o.resumen, detalle: new Date(o.created_at).toLocaleString('es-CL'),
+        motivo: o.ultimo_error, onDescartar: () => descartarMovimiento(o.local_id) })),
+    ])
   }, [])
 
   useEffect(() => {
@@ -272,6 +284,7 @@ export default function RomeralTerrenoPage() {
 
   return (
     <div className="space-y-3 p-3 pb-24">
+      <RechazadosTerreno items={rechazados} onCambio={() => { if (cat && fecha) void refrescar(cat.faena.id, fecha) }} />
       {/* Encabezado */}
       <div className="flex items-center gap-2">
         <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-orange-600 text-white">

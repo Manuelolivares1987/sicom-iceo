@@ -1,3 +1,4 @@
+import { traerTodo, inicioDelDia, finDelDia } from './paginar'
 import { supabase } from '@/lib/supabase'
 
 // ====== ADMIN ==============================================================
@@ -118,32 +119,24 @@ export type FiltrosPortal = {
 }
 
 export async function cargarTransaccionesCliente(filtros: FiltrosPortal = {}): Promise<TransaccionCombustibleCliente[]> {
-  let q = supabase
-    .from('v_combustible_movimientos_cliente')
-    .select('*')
-    .order('fecha', { ascending: false })
-    .limit(500)
-
-  if (filtros.fechaDesde) q = q.gte('fecha', filtros.fechaDesde + 'T00:00:00')
-  if (filtros.fechaHasta) q = q.lte('fecha', filtros.fechaHasta + 'T23:59:59')
-
-  const { data, error } = await q
-  if (error) throw error
-  let rows = (data ?? []) as TransaccionCombustibleCliente[]
-  if (filtros.patente) {
-    const q2 = filtros.patente.toLowerCase()
-    rows = rows.filter((r) =>
-      (r.activo_patente ?? '').toLowerCase().includes(q2) ||
-      (r.externo_patente ?? '').toLowerCase().includes(q2)
-    )
-  }
-  if (filtros.empresa) {
-    const q2 = filtros.empresa.toLowerCase()
-    rows = rows.filter((r) =>
-      (r.externo_empresa ?? '').toLowerCase().includes(q2) ||
-      (r.activo_cliente  ?? '').toLowerCase().includes(q2)
-    )
-  }
+  // [22-11-2026] Antes: .limit(500) y patente/empresa filtradas DESPUÉS en el
+  // navegador → un cliente con más de 500 despachos veía totales en pesos
+  // menores a los reales. Ahora filtra en el servidor y trae todas las páginas.
+  const limpia = (t: string) => t.replace(/[%,()*]/g, ' ').trim()
+  const rows = await traerTodo<TransaccionCombustibleCliente>((desde, hasta) => {
+    let q = supabase
+      .from('v_combustible_movimientos_cliente')
+      .select('*')
+      .order('fecha', { ascending: false })
+      .range(desde, hasta)
+    if (filtros.fechaDesde) q = q.gte('fecha', inicioDelDia(filtros.fechaDesde))
+    if (filtros.fechaHasta) q = q.lte('fecha', finDelDia(filtros.fechaHasta))
+    const pat = filtros.patente ? limpia(filtros.patente) : ''
+    if (pat) q = q.or(`activo_patente.ilike.*${pat}*,externo_patente.ilike.*${pat}*`)
+    const emp = filtros.empresa ? limpia(filtros.empresa) : ''
+    if (emp) q = q.or(`externo_empresa.ilike.*${emp}*,activo_cliente.ilike.*${emp}*`)
+    return q as unknown as PromiseLike<{ data: TransaccionCombustibleCliente[] | null; error: unknown }>
+  })
   return rows
 }
 

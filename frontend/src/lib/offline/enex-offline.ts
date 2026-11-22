@@ -580,6 +580,20 @@ export type EnexBandejaRow = {
   etiqueta?: string
 }
 
+/** [22-11-2026] Descarta de «Por enviar» algo que el sistema rechazó (no la
+ *  señal): antes solo había «Reintentar» y quedaba reintentándose para siempre. */
+export async function descartarEnex(localId: string): Promise<void> {
+  const db = enexDB()
+  const p = await db.pending.get(localId)
+  if (p) {
+    for (const b of blobIdsDe(p)) await db.blobs.delete(b).catch(() => undefined)
+    await db.pending.delete(localId)
+    return
+  }
+  const ops = await db.cache.where('key').startsWith('op:').toArray()
+  for (const c of ops) if ((c.value as EnexOp).id === localId) await db.cache.delete(c.key)
+}
+
 export async function getBandejaEnex(): Promise<EnexBandejaRow[]> {
   const db = enexDB()
   const rows = (await db.pending.toArray()).sort((a, b) => a.created_at.localeCompare(b.created_at))

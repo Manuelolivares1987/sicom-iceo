@@ -22,9 +22,11 @@ import {
 } from '@/lib/offline/bandeja'
 import '@/lib/offline/franke-carga'
 import { precargarFaena, ultimaPrecarga, type EstadoPrecarga } from '@/lib/offline/franke-precarga'
-import { pendientesCount as pautas, pendientes as colaPautas, sincronizar as subirPautas } from '@/lib/offline/faena-pauta-offline'
+import { pendientesCount as pautas, pendientes as colaPautas, sincronizar as subirPautas, descartarPendiente as descartarPauta } from '@/lib/offline/faena-pauta-offline'
+import { RechazadosTerreno, type Rechazado } from '@/components/terreno/rechazados'
 import {
   pendientesCount as despachos, movimientosPendientesCount as movimientos, sincronizar as subirDespachos, sincronizarMovimientos,
+  combDB, movimientosPendientes, descartarPendiente as descartarDespacho, descartarMovimiento,
 } from '@/lib/offline/combustible-faena-offline'
 import { pendientesCount as bodega, pendientesBodega, sincronizar as subirBodega } from '@/lib/offline/bodega-faena-offline'
 import { pendientesCount as bitacora, colaBitacora, sincronizar as subirBitacora } from '@/lib/offline/faena-bitacora-offline'
@@ -47,6 +49,7 @@ export default function PendientesPage() {
   const [confirmar, setConfirmar] = useState<string | null>(null)
   // [E2E] Hasta la primera revisión no se sabe: antes decía «Todo subido» un instante.
   const [revisado, setRevisado] = useState(false)
+  const [rechazados, setRechazados] = useState<Rechazado[]>([])
 
   const refrescar = useCallback(async () => {
     setOnline(estaEnLinea())
@@ -54,13 +57,25 @@ export default function PendientesPage() {
     setOps(await listarBandeja())
     const seguro = async (f: () => Promise<number>) => { try { return await f() } catch { return 0 } }
     // [F4] La pauta queda «error» solo cuando el servidor la rechaza por una regla (no por señal).
-    const rechPautas = (await colaPautas().catch(() => [])).filter((o) => o.sync_status === 'error').length
+    const pautasErr = (await colaPautas().catch(() => [])).filter((o) => o.sync_status === 'error')
+    const rechPautas = pautasErr.length
+    // [22-11-2026] Despachos y movimientos rechazados: antes «esperando señal» para siempre.
+    const despErr = (await combDB().pending.toArray().catch(() => [])).filter((o) => o.sync_status === 'error')
+    const movErr = (await movimientosPendientes().catch(() => [])).filter((o) => o.sync_status === 'error')
+    setRechazados([
+      ...pautasErr.map((o) => ({ id: `p-${o.local_id}`, titulo: `Pauta · ${o.equipo_nombre ?? ''}`, detalle: o.pauta_nombre ?? null,
+        motivo: o.ultimo_error, onDescartar: () => descartarPauta(o.local_id) })),
+      ...despErr.map((o) => ({ id: `d-${o.local_id}`, titulo: `Despacho · ${o.equipo_nombre ?? o.camion_nombre ?? ''}`,
+        detalle: new Date(o.created_at).toLocaleString('es-CL'), motivo: o.ultimo_error, onDescartar: () => descartarDespacho(o.local_id) })),
+      ...movErr.map((o) => ({ id: `m-${o.local_id}`, titulo: o.resumen, detalle: new Date(o.created_at).toLocaleString('es-CL'),
+        motivo: o.ultimo_error, onDescartar: () => descartarMovimiento(o.local_id) })),
+    ])
     const rechBodega = (await pendientesBodega().catch(() => [])).filter((o) => o.sync_status === 'rechazada').length
     const rechBitacora = (await colaBitacora().catch(() => [])).filter((o) => o.sync_status === 'rechazada').length
     const rechEntrega = (await colaEntrega().catch(() => [])).filter((o) => o.sync_status === 'rechazada').length
     setModulos([
       { nombre: 'Revisión de equipos (pautas)', href: '/m/franke/pauta', n: await seguro(pautas), rechazadas: rechPautas },
-      { nombre: 'Despacho de combustible', href: '/m/franke/despacho', n: (await seguro(despachos)) + (await seguro(movimientos)), rechazadas: 0 },
+      { nombre: 'Despacho de combustible', href: '/m/franke/despacho', n: (await seguro(despachos)) + (await seguro(movimientos)), rechazadas: despErr.length + movErr.length },
       { nombre: 'Bodega', href: '/m/franke/bodega', n: await seguro(bodega), rechazadas: rechBodega },
       { nombre: 'Bitácora del turno', href: '/m/franke/bitacora', n: await seguro(bitacora), rechazadas: rechBitacora },
       { nombre: 'Entrega de turno', href: '/m/franke/entrega', n: await seguro(entrega), rechazadas: rechEntrega },
@@ -142,6 +157,8 @@ export default function PendientesPage() {
             )}
           </div>
         </section>
+
+        <RechazadosTerreno items={rechazados} onCambio={() => { void refrescar() }} />
 
         <section className="rounded-xl border border-gray-200 bg-white">
           {modulos.map((m) => (
