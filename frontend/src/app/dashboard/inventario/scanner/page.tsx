@@ -90,12 +90,17 @@ export default function ScannerPage() {
     setCodigo('')
     if (!c) return
     setBuscando(true)
+    let volverAPistola = true
     try {
       const p = await buscarPorCodigo(c)
-      if (p) { agregar(p); setDesconocido(null) } else { setDesconocido(c); setQAsignar(''); setCandidatos([]) }
+      if (p) { agregar(p); setDesconocido(null) } else {
+        // Código desconocido: el cursor queda en el buscador para asignarlo
+        // (antes volvía a la pistola y lo escrito caía ahí).
+        setDesconocido(c); setQAsignar(''); setCandidatos([]); volverAPistola = false
+      }
     } catch (e) {
       toast.error(errorMessage(e, 'No se pudo buscar el código'))
-    } finally { setBuscando(false); enfocar() }
+    } finally { setBuscando(false); if (volverAPistola) enfocar() }
   }
 
   useEffect(() => {

@@ -229,7 +229,7 @@ export default function FrankeVentaPage() {
 
       <div className="fixed bottom-0 inset-x-0 bg-white border-t p-3">
         <button onClick={enviar} disabled={enviando}
-          className="w-full max-w-xl mx-auto block rounded-lg bg-orange-600 text-white py-3 font-medium disabled:opacity-60 flex items-center justify-center gap-2">
+          className="w-full max-w-xl mx-auto block rounded-lg bg-orange-700 text-white py-3 font-medium disabled:opacity-60 flex items-center justify-center gap-2">
           {enviando ? <Loader2 className="h-5 w-5 animate-spin" /> : <Truck className="h-5 w-5" />} Registrar venta
         </button>
       </div>

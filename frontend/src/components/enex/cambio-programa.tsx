@@ -183,7 +183,7 @@ export function CambioPrograma({ mundo, hoy, pend, planHoy, zonasDia, onClose }:
                     <Undo2 className="h-3 w-3" /> Deshacer
                   </button>
                 ) : (
-                  <button disabled={busy !== null} onClick={() => noSeHizo(p)} className="rounded-lg bg-orange-600 px-2 py-1 text-[11px] font-semibold text-white disabled:opacity-50">
+                  <button disabled={busy !== null} onClick={() => noSeHizo(p)} className="rounded-lg bg-orange-700 px-2 py-1 text-[11px] font-semibold text-white disabled:opacity-50">
                     {busy === p.programacion_id ? '…' : 'No se hizo'}
                   </button>
                 )}
@@ -197,7 +197,7 @@ export function CambioPrograma({ mundo, hoy, pend, planHoy, zonasDia, onClose }:
                     {m && !m.hacer && <span className="block text-[10px] text-orange-700">No se hizo: {m.motivo}</span>}
                   </span>
                   {!(m && !m.hacer) && (
-                    <button disabled={busy !== null} onClick={() => zonaNoSeHizo(z)} className="rounded-lg bg-orange-600 px-2 py-1 text-[11px] font-semibold text-white disabled:opacity-50">
+                    <button disabled={busy !== null} onClick={() => zonaNoSeHizo(z)} className="rounded-lg bg-orange-700 px-2 py-1 text-[11px] font-semibold text-white disabled:opacity-50">
                       {busy === z.lugar_id ? '…' : 'No se hizo'}
                     </button>
                   )}

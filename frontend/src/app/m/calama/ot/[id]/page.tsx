@@ -264,7 +264,7 @@ export default function MobileOTDetallePage() {
     return (
       <div className="p-4 text-center">
         <p className="text-sm text-red-700">OT no encontrada o sin permisos.</p>
-        <button onClick={() => router.push('/m/calama')} className="mt-3 rounded bg-amber-600 px-4 py-2 text-white text-sm">Volver</button>
+        <button onClick={() => router.push('/m/calama')} className="mt-3 rounded bg-amber-700 px-4 py-2 text-white text-sm">Volver</button>
       </div>
     )
   }
@@ -282,7 +282,7 @@ export default function MobileOTDetallePage() {
             <>Esta jornada todavía no está en el teléfono. Apenas tenga señal se baja sola (o apriete «Actualizar ahora» en la lista).</>
           )}
         </p>
-        <button onClick={() => router.push('/m/calama')} className="rounded bg-amber-600 px-4 py-2 text-white text-sm">
+        <button onClick={() => router.push('/m/calama')} className="rounded bg-amber-700 px-4 py-2 text-white text-sm">
           Volver a mis jornadas
         </button>
       </div>
@@ -683,7 +683,7 @@ export default function MobileOTDetallePage() {
                 <div className="text-[10px] uppercase font-bold text-orange-800">Falta registro de llegada a faena</div>
                 <p className="text-orange-900 text-xs mt-0.5">La jornada se inicio sin llegada formal. Regulariza con foto, GPS y motivo.</p>
                 <button onClick={() => { setRegulFoto(null); setRegulMotivo('Inicio en otro dispositivo'); setShowRegulLlegada(true) }}
-                  className="mt-2 rounded bg-orange-600 text-white px-3 py-1.5 text-xs font-medium">
+                  className="mt-2 rounded bg-orange-700 text-white px-3 py-1.5 text-xs font-medium">
                   Regularizar llegada
                 </button>
               </div>
@@ -698,7 +698,7 @@ export default function MobileOTDetallePage() {
                 <div className="text-[10px] uppercase font-bold text-orange-800">Falta foto ANTES</div>
                 <p className="text-orange-900 text-xs mt-0.5">La jornada se inicio sin foto del estado inicial. Regulariza con foto, GPS y motivo.</p>
                 <button onClick={() => { setRegulFoto(null); setRegulMotivo('Inicio en otro dispositivo'); setShowRegulAntes(true) }}
-                  className="mt-2 rounded bg-orange-600 text-white px-3 py-1.5 text-xs font-medium">
+                  className="mt-2 rounded bg-orange-700 text-white px-3 py-1.5 text-xs font-medium">
                   Regularizar foto antes
                 </button>
               </div>
@@ -856,7 +856,7 @@ export default function MobileOTDetallePage() {
                   {[25, 50, 75, 100].map((v) => (
                     <button key={v} onClick={() => setAvanceValor(v)}
                       className={`flex-1 rounded border py-1.5 text-xs font-medium ${
-                        avanceValor === v ? 'bg-amber-600 text-white border-amber-600' : 'bg-white border-gray-200 text-gray-700'
+                        avanceValor === v ? 'bg-amber-700 text-white border-amber-600' : 'bg-white border-gray-200 text-gray-700'
                       }`}>{v}%</button>
                   ))}
                 </div>
@@ -905,7 +905,7 @@ export default function MobileOTDetallePage() {
                       className="flex-1 rounded border border-gray-300 px-3 py-2 text-xs">Cancelar</button>
                     <button onClick={handleRegistrarInterferencia}
                       disabled={!interfObs.trim() || !interfFoto?.blob || busy}
-                      className="flex-1 rounded bg-orange-600 text-white px-3 py-2 text-xs font-bold disabled:opacity-50">
+                      className="flex-1 rounded bg-orange-700 text-white px-3 py-2 text-xs font-bold disabled:opacity-50">
                       {busy ? 'Guardando...' : 'Registrar'}
                     </button>
                   </div>
@@ -1154,7 +1154,7 @@ export default function MobileOTDetallePage() {
                 <button onClick={() => { setShowPausa(false); setPausaFoto(null) }}
                   className="flex-1 rounded border border-gray-300 px-3 py-2 text-sm">Cancelar</button>
                 <button onClick={handleConfirmarPausa} disabled={!pausaFoto?.blob || busy}
-                  className="flex-1 rounded bg-amber-600 text-white px-3 py-2 text-sm font-bold disabled:opacity-50">
+                  className="flex-1 rounded bg-amber-700 text-white px-3 py-2 text-sm font-bold disabled:opacity-50">
                   {busy ? 'Pausando...' : 'Confirmar pausa'}
                 </button>
               </div>
@@ -1174,7 +1174,7 @@ export default function MobileOTDetallePage() {
                 <button onClick={() => { setShowReanudar(false); setReanudarFoto(null) }}
                   className="flex-1 rounded border border-gray-300 px-3 py-2 text-sm">Cancelar</button>
                 <button onClick={handleConfirmarReanudar} disabled={!reanudarFoto?.blob || busy}
-                  className="flex-1 rounded bg-green-600 text-white px-3 py-2 text-sm font-bold disabled:opacity-50">
+                  className="flex-1 rounded bg-green-700 text-white px-3 py-2 text-sm font-bold disabled:opacity-50">
                   {busy ? 'Reanudando...' : 'Confirmar reanudacion'}
                 </button>
               </div>
@@ -1197,7 +1197,7 @@ export default function MobileOTDetallePage() {
                 <button onClick={() => { setShowRegulLlegada(false); setRegulFoto(null) }}
                   className="flex-1 rounded border border-gray-300 px-3 py-2 text-sm">Cancelar</button>
                 <button onClick={handleRegularizarLlegada} disabled={!regulFoto?.blob || !regulMotivo.trim() || busy}
-                  className="flex-1 rounded bg-orange-600 text-white px-3 py-2 text-sm font-bold disabled:opacity-50">
+                  className="flex-1 rounded bg-orange-700 text-white px-3 py-2 text-sm font-bold disabled:opacity-50">
                   {busy ? '...' : 'Regularizar'}
                 </button>
               </div>
@@ -1220,7 +1220,7 @@ export default function MobileOTDetallePage() {
                 <button onClick={() => { setShowRegulAntes(false); setRegulFoto(null) }}
                   className="flex-1 rounded border border-gray-300 px-3 py-2 text-sm">Cancelar</button>
                 <button onClick={handleRegularizarFotoAntes} disabled={!regulFoto?.blob || !regulMotivo.trim() || busy}
-                  className="flex-1 rounded bg-orange-600 text-white px-3 py-2 text-sm font-bold disabled:opacity-50">
+                  className="flex-1 rounded bg-orange-700 text-white px-3 py-2 text-sm font-bold disabled:opacity-50">
                   {busy ? '...' : 'Regularizar'}
                 </button>
               </div>

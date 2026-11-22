@@ -322,7 +322,7 @@ export default function BodegaFrankePage() {
 
         <section className="mx-4 mt-3">
           {!online ? (
-            <p className="text-xs text-gray-400">Crear productos nuevos requiere señal.</p>
+            <p className="text-xs text-gray-500">Crear productos nuevos requiere señal.</p>
           ) : !nuevo ? (
             <button onClick={() => setNuevo({ nombre: '', categoria: 'ferreteria', unidad: 'un' })} className="text-xs font-medium text-gray-500 underline">
               ¿El producto no existe en el sistema? Crearlo

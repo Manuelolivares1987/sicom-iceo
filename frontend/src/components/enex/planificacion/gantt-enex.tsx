@@ -381,7 +381,7 @@ export function GanttEnex({ rows, faenas, instalaciones, ventana, hoy, puedeEdit
                                  + (reemplazos.length ? `\nEn reemplazo de ${reemplazos[0].reemplaza_instalacion ?? 'otra tarea'} (pedido ESM)` : '')}
                           className={`relative block h-5 w-full rounded text-[9px] font-bold leading-5 ${noHecho.length === rs.length ? 'bg-orange-100 text-orange-800 line-through ring-1 ring-inset ring-orange-400' : ESTILO[peor]} ${reemplazos.length ? 'ring-2 ring-inset ring-violet-500' : ''}`}>
                           {codigo}
-                          {noHecho.length > 0 && <span className="absolute -left-0.5 -top-1 rounded-sm bg-orange-600 px-0.5 text-[7px] leading-[9px] text-white">NH</span>}
+                          {noHecho.length > 0 && <span className="absolute -left-0.5 -top-1 rounded-sm bg-orange-700 px-0.5 text-[7px] leading-[9px] text-white">NH</span>}
                           {rp.length > 0 && <span className="absolute -right-0.5 -top-1 rounded-sm bg-orange-500 px-0.5 text-[7px] leading-[9px] text-white">RP</span>}
                           {desplazadas.length > 0 && noHecho.length === 0 && <span className="absolute -left-0.5 -top-1 rounded-sm bg-violet-600 px-0.5 text-[7px] leading-[9px] text-white">CT</span>}
                         </button>

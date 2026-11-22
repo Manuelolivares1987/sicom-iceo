@@ -332,7 +332,7 @@ export default function MobileCalamaPage() {
               <h1 className="text-lg font-bold flex items-center gap-1.5">
                 <ClipboardCheck className="h-5 w-5" /> Mis OTs Calama
               </h1>
-              <p className="text-xs text-white/90 truncate">
+              <p className="text-xs text-white truncate">
                 {perfil?.nombre_completo ?? 'Operador'} · {new Date().toLocaleDateString('es-CL', { day: '2-digit', month: 'short', weekday: 'short' })}
               </p>
             </div>
@@ -426,13 +426,13 @@ export default function MobileCalamaPage() {
                 <p className="mt-1 text-sm text-gray-500">
                   Esta vista muestra solo OTs asignadas a tu usuario.
                 </p>
-                <p className="mt-2 text-xs text-gray-400">
+                <p className="mt-2 text-xs text-gray-500">
                   Como <span className="font-mono">{rol}</span>, gestiona desde:
                 </p>
                 <div className="mt-2 flex flex-col gap-1.5 items-stretch">
                   <Link
                     href="/dashboard/operacion-calama/plan-semanal"
-                    className="rounded bg-amber-600 text-white px-3 py-2 text-sm font-medium"
+                    className="rounded bg-amber-700 text-white px-3 py-2 text-sm font-medium"
                   >
                     Plan semanal
                   </Link>
@@ -499,7 +499,7 @@ export default function MobileCalamaPage() {
                     esSeleccionado ? 'bg-amber-700 text-white border-amber-700'
                     : esHoy ? 'bg-amber-50 border-amber-300 text-amber-900'
                     : tieneOTs ? 'bg-white border-gray-300 text-gray-800'
-                    : 'bg-gray-50 border-gray-200 text-gray-400'
+                    : 'bg-gray-50 border-gray-200 text-gray-500'
                   }`}
                 >
                   <span className="text-[9px] uppercase font-semibold tracking-wide leading-none">
@@ -509,7 +509,7 @@ export default function MobileCalamaPage() {
                     {Number(fechaISO.slice(8, 10))}
                   </span>
                   <span className={`text-[9px] mt-0.5 font-mono leading-none ${
-                    esSeleccionado ? 'text-white/90'
+                    esSeleccionado ? 'text-white'
                     : tieneOTs ? 'text-gray-700' : 'text-gray-400'
                   }`}>
                     {tieneOTs ? conteo : '—'}
@@ -617,8 +617,8 @@ export default function MobileCalamaPage() {
 
 function Counter({ label, value, highlight }: { label: string; value: number; highlight?: boolean }) {
   return (
-    <div className={`rounded-lg px-2 py-1 text-center ${highlight ? 'bg-white text-amber-700 font-bold' : 'bg-white/10'}`}>
-      <div className="text-[9px] uppercase opacity-90">{label}</div>
+    <div className={`rounded-lg px-2 py-1 text-center ${highlight ? 'bg-white text-amber-700 font-bold' : 'bg-amber-800'}`}>
+      <div className="text-[9px] uppercase">{label}</div>
       <div className="text-base font-bold leading-tight">{value}</div>
     </div>
   )

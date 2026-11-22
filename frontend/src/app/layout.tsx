@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from 'next'
+import { Inter } from 'next/font/google'
 import './globals.css'
 import { QueryProvider } from '@/contexts/query-provider'
 import { AuthProvider } from '@/contexts/auth-context'
@@ -10,6 +11,8 @@ import { TerrenoGlobal } from '@/components/layout/terreno-global'
 import { ActualizacionApp } from '@/components/layout/actualizacion-app'
 import { GuardaAlmacenamiento } from '@/components/layout/guarda-almacenamiento'
 import { PuenteApp } from '@/components/layout/puente-app'
+
+const inter = Inter({ subsets: ['latin'], weight: ['300', '400', '500', '600', '700', '800'], display: 'swap', variable: '--font-inter' })
 
 export const metadata: Metadata = {
   title: 'SICOM-ICEO | Pillado Empresas',
@@ -45,8 +48,8 @@ export const viewport: Viewport = {
   themeColor: '#16a34a',
   width: 'device-width',
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
+  // [22-11-2026] Se permite el zoom (WCAG 1.4.4): bloquearlo impedía agrandar
+  // la letra a quien la necesita. Los campos usan 16 px y no hacen auto-zoom.
   viewportFit: 'cover',
 }
 
@@ -56,7 +59,7 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="es">
+    <html lang="es" className={inter.variable}>
       <body>
         <RecuperacionChunks />
         <ConectividadInit />

@@ -572,7 +572,7 @@ export function EjecutarServicio({ progId }: { progId: string }) {
               <span>{trabajadas.length} de {items.length} actividades trabajadas
                 {faltanFotos.length > 0 && <span className="text-amber-700"> · {faltanFotos.length} sin evidencia</span>}
               </span>
-              {!online && <span className="flex items-center gap-1 text-amber-600"><WifiOff className="h-3 w-3" /> sin señal</span>}
+              {!online && <span className="flex items-center gap-1 text-amber-700"><WifiOff className="h-3 w-3" /> sin señal</span>}
             </div>
             <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-gray-200">
               <div className="h-full bg-blue-500 transition-all"

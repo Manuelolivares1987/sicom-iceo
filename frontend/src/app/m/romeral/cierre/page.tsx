@@ -94,7 +94,7 @@ function CampoNumero({
           placeholder="0"
           className="h-16 w-full rounded-xl border-2 border-gray-300 px-4 text-right text-3xl font-bold tabular-nums text-gray-900 focus:border-emerald-500 focus:outline-none focus:ring-4 focus:ring-emerald-500/20"
         />
-        <span className="w-8 shrink-0 text-lg font-semibold text-gray-400">{sufijo}</span>
+        <span className="w-8 shrink-0 text-lg font-semibold text-gray-500">{sufijo}</span>
       </div>
     </label>
   )
@@ -308,7 +308,7 @@ function BotonGrande({
   icono?: any
 }) {
   const estilos = {
-    primario: 'bg-emerald-600 text-white hover:bg-emerald-700 active:bg-emerald-800',
+    primario: 'bg-emerald-700 text-white hover:bg-emerald-800 active:bg-emerald-900',
     secundario: 'border-2 border-gray-300 bg-white text-gray-700 hover:bg-gray-50',
     peligro: 'border-2 border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100',
   }
@@ -561,7 +561,7 @@ export default function CierreRomeralPage() {
   const Barra = (
     <header className="sticky top-0 z-10 border-b border-gray-200 bg-white px-4 py-3">
       <div className="mx-auto flex max-w-lg items-center gap-3">
-        <Link href="/m/romeral" className="shrink-0 rounded-lg p-1.5 text-gray-500 hover:bg-gray-100">
+        <Link aria-label="Volver" href="/m/romeral" className="shrink-0 rounded-lg p-1.5 text-gray-500 hover:bg-gray-100">
           <ArrowLeft className="h-5 w-5" />
         </Link>
         <div className="min-w-0 flex-1">
@@ -625,6 +625,7 @@ export default function CierreRomeralPage() {
                 value={medidoPor}
                 onChange={(e) => setMedidoPor(e.target.value)}
                 placeholder="Nombre y apellido"
+                aria-label="Quién mide (nombre y apellido)"
                 autoComplete="name"
                 className="mt-2 h-14 w-full rounded-xl border-2 border-gray-300 px-4 text-lg focus:border-emerald-500 focus:outline-none focus:ring-4 focus:ring-emerald-500/20"
               />
@@ -662,6 +663,7 @@ export default function CierreRomeralPage() {
               <span className="block text-base font-semibold text-gray-800">Día</span>
               <input
                 type="date"
+                aria-label="Día del cierre"
                 value={fecha}
                 onChange={(e) => setFecha(e.target.value)}
                 className="mt-2 h-14 w-full rounded-xl border-2 border-gray-300 px-4 text-lg focus:border-emerald-500 focus:outline-none"
@@ -684,9 +686,9 @@ export default function CierreRomeralPage() {
         {Barra}
         <main className="mx-auto max-w-lg space-y-5 px-4 py-6">
           <div className="rounded-xl border border-gray-200 bg-white p-5 text-center">
-            <p className="text-sm font-semibold uppercase tracking-wide text-gray-400">Recorrido terminado</p>
+            <p className="text-sm font-semibold uppercase tracking-wide text-gray-500">Recorrido terminado</p>
             <p className="mt-2 text-4xl font-bold tabular-nums text-gray-900">
-              {resumen.medidos}<span className="text-2xl text-gray-400"> de {total}</span>
+              {resumen.medidos}<span className="text-2xl text-gray-500"> de {total}</span>
             </p>
             <p className="mt-1 text-base text-gray-600">puntos medidos</p>
             {resumen.saltados > 0 && (
@@ -1073,7 +1075,7 @@ export default function CierreRomeralPage() {
           </div>
         </div>
 
-        <p className="text-center text-sm text-gray-400">
+        <p className="text-center text-sm text-gray-500">
           Cada número queda guardado en el teléfono apenas lo escribe.
         </p>
       </main>
