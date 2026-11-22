@@ -15,7 +15,7 @@ describe('uuidV4 en un teléfono con visor antiguo (sin crypto.randomUUID)', () 
     const { uuidV4 } = await import('../uuid')
     const ids = new Set(Array.from({ length: 500 }, () => uuidV4()))
     expect(ids.size).toBe(500)
-    for (const id of ids) expect(id).toMatch(UUID)
+    for (const id of Array.from(ids)) expect(id).toMatch(UUID)
     // El código que llama crypto.randomUUID() directo ya no se cae.
     expect(typeof globalThis.crypto.randomUUID).toBe('function')
     expect(globalThis.crypto.randomUUID()).toMatch(UUID)
