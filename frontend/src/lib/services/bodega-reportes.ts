@@ -1,3 +1,4 @@
+import { paginado } from './paginar'
 import { supabase } from '@/lib/supabase'
 
 // ── Tipos ───────────────────────────────────────────────────────────────────
@@ -136,6 +137,8 @@ export interface FiltrosStockValorizado {
 }
 
 export async function getStockValorizado(filtros?: FiltrosStockValorizado) {
+  // [22-11-2026] Todas las páginas: el CSV salía cortado en 1.000 filas sin avisar.
+  return paginado<StockValorizadoRow>(() => {
   let q = supabase.from('v_bodega_stock_valorizado_actual').select('*')
   if (filtros?.categoria && filtros.categoria !== 'todos') q = q.eq('categoria', filtros.categoria)
   if (filtros?.bodega_id) q = q.eq('bodega_id', filtros.bodega_id)
@@ -143,24 +146,22 @@ export async function getStockValorizado(filtros?: FiltrosStockValorizado) {
     q = q.or(`producto_nombre.ilike.%${filtros.search}%,producto_codigo.ilike.%${filtros.search}%`)
   }
   if (filtros?.solo_con_stock) q = q.gt('cantidad_stock', 0)
-  const { data, error } = await q.order('valor_fifo', { ascending: false })
-  return { data: data as StockValorizadoRow[] | null, error }
+  return q.order('valor_fifo', { ascending: false })
+  })
 }
 
 export async function getCostosPorOT() {
-  const { data, error } = await supabase
+  return paginado<CostoOTRow>(() => supabase
     .from('v_bodega_costo_salidas_por_ot')
     .select('*')
-    .order('costo_total_fifo', { ascending: false })
-  return { data: data as CostoOTRow[] | null, error }
+    .order('costo_total_fifo', { ascending: false }))
 }
 
 export async function getCostosPorCECO() {
-  const { data, error } = await supabase
+  return paginado<CostoCECORow>(() => supabase
     .from('v_bodega_costo_salidas_por_ceco')
     .select('*')
-    .order('costo_total_fifo', { ascending: false })
-  return { data: data as CostoCECORow[] | null, error }
+    .order('costo_total_fifo', { ascending: false }))
 }
 
 export async function getKardexProducto(productoId: string, bodegaId?: string | null) {
@@ -174,8 +175,9 @@ export async function getKardexProducto(productoId: string, bodegaId?: string | 
 }
 
 export async function getMermasAjustes(tipo?: 'todos' | 'merma' | 'ajuste_negativo' | 'ajuste_positivo') {
-  let q = supabase.from('v_bodega_mermas_ajustes').select('*')
-  if (tipo && tipo !== 'todos') q = q.eq('tipo', tipo)
-  const { data, error } = await q.order('fecha', { ascending: false })
-  return { data: data as MermaAjusteRow[] | null, error }
+  return paginado<MermaAjusteRow>(() => {
+    let q = supabase.from('v_bodega_mermas_ajustes').select('*')
+    if (tipo && tipo !== 'todos') q = q.eq('tipo', tipo)
+    return q.order('fecha', { ascending: false })
+  })
 }

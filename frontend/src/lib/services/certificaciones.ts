@@ -1,3 +1,4 @@
+import { paginado } from './paginar'
 import { supabase } from '@/lib/supabase'
 import { todayISO } from '@/lib/utils'
 import type { Certificacion } from '@/types/database'
@@ -38,17 +39,21 @@ export async function getAllCertificaciones(filters?: {
   tipo?: string
   faena_id?: string
 }) {
-  let query = supabase
-    .from('certificaciones')
-    .select('*, activo:activos(id, codigo, nombre, tipo, faena_id, faena:faenas(nombre))')
-    .order('fecha_vencimiento', { ascending: true })
-
-  if (filters?.estado) query = query.eq('estado', filters.estado)
-  if (filters?.tipo) query = query.eq('tipo', filters.tipo)
-  if (filters?.faena_id) query = query.eq('activo.faena_id', filters.faena_id)
-
-  const { data, error } = await query
-  return { data, error }
+  // [22-11-2026] Todas las páginas (son ~1.230: el Excel salía cortado en 1.000)
+  // y el filtro por faena con !inner (sin él no filtraba filas, solo vaciaba el activo).
+  return paginado<Record<string, unknown>>(() => {
+    let query = supabase
+      .from('certificaciones')
+      .select(filters?.faena_id
+        ? '*, activo:activos!inner(id, codigo, nombre, tipo, faena_id, faena:faenas(nombre))'
+        : '*, activo:activos(id, codigo, nombre, tipo, faena_id, faena:faenas(nombre))')
+      .order('fecha_vencimiento', { ascending: true })
+      .order('id')
+    if (filters?.estado) query = query.eq('estado', filters.estado)
+    if (filters?.tipo) query = query.eq('tipo', filters.tipo)
+    if (filters?.faena_id) query = query.eq('activo.faena_id', filters.faena_id)
+    return query
+  })
 }
 
 // Get certification stats

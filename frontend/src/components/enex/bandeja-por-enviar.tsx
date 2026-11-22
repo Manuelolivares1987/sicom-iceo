@@ -8,7 +8,8 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { CloudOff, Loader2, AlertTriangle, RefreshCw, Clock } from 'lucide-react'
-import { getBandejaEnex, syncEnexPending, type EnexBandejaRow } from '@/lib/offline/enex-offline'
+import { getBandejaEnex, syncEnexPending, descartarEnex, type EnexBandejaRow } from '@/lib/offline/enex-offline'
+import { esFallaDeRed } from '@/lib/offline/bandeja'
 
 function hace(iso: string | null): string {
   if (!iso) return ''
@@ -19,7 +20,10 @@ function hace(iso: string | null): string {
   return h < 24 ? `hace ${h} h` : `hace ${Math.round(h / 24)} d`
 }
 
-function Fila({ r }: { r: EnexBandejaRow }) {
+function Fila({ r, onDescartado }: { r: EnexBandejaRow; onDescartado: () => void }) {
+  const [confirmar, setConfirmar] = useState(false)
+  // Rechazo del sistema (no la señal): se puede descartar.
+  const rechazo = r.estado === 'error' && !!r.motivo && !esFallaDeRed(new Error(r.motivo))
   const color = r.estado === 'error' ? 'border-red-200 bg-red-50' : r.estado === 'enviando' ? 'border-blue-200 bg-blue-50' : 'border-amber-200 bg-amber-50'
   return (
     <Link href={`/m/enex/servicio/?id=${r.programacion_id}`} className={`block rounded-lg border p-2 ${color}`}>
@@ -36,7 +40,21 @@ function Fila({ r }: { r: EnexBandejaRow }) {
         {' · '}guardado {hace(r.guardado_at)}
       </p>
       {r.estado === 'error' && r.motivo && (
-        <p className="mt-0.5 text-[11px] text-red-700">{r.motivo} · intento {r.intentos} — se reintenta solo</p>
+        <p className="mt-0.5 text-[11px] text-red-700">{r.motivo} · intento {r.intentos}{rechazo ? ' — el sistema no lo aceptó' : ' — se reintenta solo'}</p>
+      )}
+      {rechazo && (
+        <div className="mt-1 flex justify-end text-[11px]" onClick={(e) => { e.preventDefault(); e.stopPropagation() }}>
+          {confirmar ? (
+            <span className="flex items-center gap-2">
+              <span className="text-gray-600">¿Descartar? Se pierde lo que no subió.</span>
+              <button type="button" onClick={async () => { await descartarEnex(r.local_id); setConfirmar(false); onDescartado() }}
+                className="rounded bg-red-600 px-2 py-0.5 font-semibold text-white">Sí, descartar</button>
+              <button type="button" onClick={() => setConfirmar(false)} className="text-gray-500">No</button>
+            </span>
+          ) : (
+            <button type="button" onClick={() => setConfirmar(true)} className="text-gray-500 underline">Descartar</button>
+          )}
+        </div>
       )}
     </Link>
   )
@@ -75,7 +93,9 @@ export function BandejaPorEnviar() {
         Está guardado en este teléfono. No desinstales la app ni borres los datos del navegador hasta que esta lista quede vacía.
       </p>
       <div className="mt-2 space-y-1.5">
-        {filas.map((r) => <Fila key={r.local_id} r={r} />)}
+        {filas.map((r) => <Fila key={r.local_id} r={r} onDescartado={() => {
+          qc.invalidateQueries({ queryKey: ['enex-bandeja'] }); qc.invalidateQueries({ queryKey: ['enex-pending-count'] })
+        }} />)}
       </div>
     </div>
   )

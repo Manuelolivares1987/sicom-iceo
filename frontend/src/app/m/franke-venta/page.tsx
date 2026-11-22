@@ -1,5 +1,6 @@
 'use client'
 
+import { estaEnLinea } from '@/lib/conectividad'
 import { useEffect, useMemo, useState } from 'react'
 import {
   Fuel, Truck, Wifi, WifiOff, RefreshCw, CheckCircle2, AlertTriangle, Camera, MapPin,
@@ -13,6 +14,7 @@ import {
   cacheCamionesFranke, getCamionesCacheFranke,
   cacheCatalogoFranke, getCatalogoCacheFranke, type VentaFrankeInput,
 } from '@/lib/offline/franke-ventas-sync'
+import { conTimeout } from '@/lib/offline/franke-ventas-sync'
 
 type CatalogoItem = { cliente: string; equipo_codigo: string | null; equipo_tipo: string | null }
 
@@ -59,11 +61,12 @@ export default function FrankeVentaPage() {
 
   useEffect(() => {
     ;(async () => {
-      if (navigator.onLine) {
-        const { data } = await getCamionesFranke()
+      // [22-11-2026] Con techo de tiempo: con «barras sin datos» se colgaba.
+      if (estaEnLinea()) {
+        const { data } = await conTimeout(getCamionesFranke(), 8000, 'camiones').catch(() => ({ data: null }))
         if (data?.length) { setCamiones(data); await cacheCamionesFranke(data) }
         else setCamiones(await getCamionesCacheFranke())
-        const { data: cat } = await getCatalogoDespachoFranke()
+        const { data: cat } = await conTimeout(getCatalogoDespachoFranke(), 8000, 'catálogo').catch(() => ({ data: null }))
         if (cat?.length) { setCatalogo(cat as CatalogoItem[]); await cacheCatalogoFranke(cat) }
         else setCatalogo(await getCatalogoCacheFranke())
         const c = await getFrankeCounters()

@@ -1,3 +1,4 @@
+import { paginado } from './paginar'
 import { supabase } from '@/lib/supabase'
 import type { Producto, StockBodega, MovimientoInventario, TipoMovimiento } from '@/types/database'
 import type { Database } from '@/types/database'
@@ -67,15 +68,15 @@ export async function getProductoByCodigoBarras(codigo: string) {
 // ── Stock ────────────────────────────────────────────────────────────
 
 export async function getStockBodega(filters?: StockFilters) {
-  let query = supabase
-    .from('stock_bodega')
-    .select('*, producto:productos(*), bodega:bodegas(*)')
-
-  if (filters?.bodega_id) {
-    query = query.eq('bodega_id', filters.bodega_id)
-  }
-
-  const { data, error } = await query.order('producto_id')
+  // [22-11-2026] Todas las páginas: el filtro de categoría y «bajo mínimo» se
+  // aplica después y antes podía omitir productos más allá de las 1.000 filas.
+  const { data, error } = await paginado<StockBodega>(() => {
+    let query = supabase
+      .from('stock_bodega')
+      .select('*, producto:productos(*), bodega:bodegas(*)')
+    if (filters?.bodega_id) query = query.eq('bodega_id', filters.bodega_id)
+    return query.order('producto_id').order('bodega_id')
+  })
 
   if (error || !data) {
     return { data: data as StockBodega[] | null, error }
@@ -95,11 +96,10 @@ export async function getStockBodega(filters?: StockFilters) {
 }
 
 export async function getValorizacionTotal(faenaId?: string) {
-  let query = supabase
+  const { data, error } = await paginado<unknown>(() => supabase
     .from('stock_bodega')
     .select('valor_total, bodega:bodegas(faena_id)')
-
-  const { data, error } = await query
+    .order('producto_id').order('bodega_id'))
 
   if (error || !data) {
     return { data: null, error }

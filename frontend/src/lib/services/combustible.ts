@@ -1,3 +1,4 @@
+import { paginado } from './paginar'
 import { exigirFilas } from './escritura'
 import { supabase } from '@/lib/supabase'
 import { uuidV4 } from '@/lib/uuid'
@@ -249,10 +250,13 @@ export async function getMovimientos(filtros?: MovimientoFiltros) {
   if (filtros?.vehiculo_activo_id) q = q.eq('vehiculo_activo_id', filtros.vehiculo_activo_id)
   if (filtros?.fecha_desde) q = q.gte('fecha_hora', filtros.fecha_desde)
   if (filtros?.fecha_hasta) q = q.lte('fecha_hora', filtros.fecha_hasta)
-  if (filtros?.limit) q = q.limit(filtros.limit)
-
-  const { data, error } = await q
-  return { data: data as MovimientoCombustible[] | null, error }
+  if (filtros?.limit) {
+    const { data, error } = await q.limit(filtros.limit)
+    return { data: data as MovimientoCombustible[] | null, error }
+  }
+  // [22-11-2026] Sin límite pedido = TODAS las páginas (antes cortaba en 1.000).
+  const base = q
+  return paginado<MovimientoCombustible>(() => base)
 }
 
 export interface RegistrarMovimientoPayload {

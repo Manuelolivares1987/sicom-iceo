@@ -4,6 +4,7 @@
 // - Overlay: aplica lo pendiente sobre la cache para que la UI refleje lo local.
 // - Sync: sube fotos y aplica los cambios contra Supabase al reconectar.
 
+import { iniciarOS, pausarOS, finalizarOS } from '@/lib/services/taller-os'
 import { haySesionServidor } from '@/lib/supabase'
 import { supabase } from '@/lib/supabase'
 import { getChecklistV3OT, type ChecklistV3Item } from '@/lib/services/taller-plan-semanal'
@@ -327,6 +328,28 @@ export async function queueNota(params: {
 // [22-11-2026] Medidores SIN señal. El checklist se abre solo con medidores
 // anotados (MIG496); antes, sin señal no se podían guardar y el mecánico que
 // llegaba a una visita sin cobertura quedaba con la OT entera bloqueada.
+// [22-11-2026] Orden de Servicio sin señal: empezar / parar / terminar quedan en
+// la cola (antes eran botones apagados sin señal). ot_id = «os:<id>» agrupa los
+// cambios de esa OS (y la cola de una OS se detiene en su primer fallo).
+export async function queueOS(p: {
+  osId: string; accion: 'iniciar' | 'pausar' | 'finalizar'
+  tecnicoId: string | null; motivoTipo?: string | null; texto?: string | null
+}): Promise<void> {
+  const db = tallerDB()
+  const row: TallerPending = {
+    local_id: newId(), client_uuid: newId(), ot_id: `os:${p.osId}`, kind: 'os',
+    os_id: p.osId, os_accion: p.accion, tecnico_id: p.tecnicoId,
+    motivo_tipo: p.motivoTipo ?? null, observaciones: p.texto ?? null,
+    sync_status: 'pending', retries: 0, last_error: null, created_at: new Date().toISOString(),
+  }
+  await db.pending.put(row)
+  if (isOnline()) {
+    try { await syncTallerPending() } catch { /* queda en cola */ }
+    const after = await db.pending.get(row.local_id)
+    if (after?.sync_status === 'error') throw new Error(after.last_error ?? 'El servidor rechazó la acción')
+  }
+}
+
 export async function queueMedidores(otId: string, v: { horometro: number | null; kilometraje: number | null; cuentaLitros?: number | null }): Promise<void> {
   const db = tallerDB()
   // Uno solo por OT: el último que se anotó manda.
@@ -601,6 +624,16 @@ async function syncTallerPendingUnaVuelta(): Promise<{ ok: number; failed: numbe
           instanceItemId: p.instance_item_id ?? null,
         })
         for (const bid of p.fotos_blob_ids ?? []) await db.blobs.delete(bid)
+      } else if (p.kind === 'os') {
+        if (p.os_accion === 'iniciar') {
+          if (!p.tecnico_id) throw new Error('Falta elegir quién trabaja (tu nombre) para empezar la OS.')
+          await iniciarOS(p.os_id!, p.tecnico_id)
+        } else if (p.os_accion === 'pausar') {
+          if (!p.tecnico_id) throw new Error('Falta elegir quién trabaja (tu nombre) para parar la OS.')
+          await pausarOS(p.os_id!, p.tecnico_id, p.observaciones ?? null, p.motivo_tipo ?? null)
+        } else {
+          await finalizarOS(p.os_id!, p.observaciones ?? null)
+        }
       } else if (p.kind === 'medidores') {
         const { data, error } = await supabase.rpc('rpc_taller_registrar_medidores', {
           p_ot_id: p.ot_id, p_horometro: p.horometro ?? null, p_kilometraje: p.kilometraje ?? null,

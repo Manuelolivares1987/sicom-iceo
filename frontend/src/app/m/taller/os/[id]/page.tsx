@@ -13,7 +13,10 @@
 // de repuesto va amarrado al hallazgo y lo evalúa el jefe (ciclo MIG197/497).
 // La nota general va a las notas de la OT, que el jefe puede convertir en NC.
 
-import { useEffect, useRef, useState } from 'react'
+import { queueOS } from '@/lib/offline/taller-mecanico-sync'
+import { getTecnicosActivos } from '@/lib/services/taller-plan-semanal'
+import { conRespaldo } from '@/lib/offline/terreno-cache'
+import { useEffect, useRef, useState, useMemo } from 'react'
 import { MotivoPausaModal } from '@/components/mantenimiento/motivo-pausa-modal'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
@@ -27,7 +30,7 @@ import {
   useNetworkStatus, useMarcarItem, useSolicitarRecurso, useAgregarNota,
 } from '@/hooks/use-taller-mecanico'
 import {
-  getOSDetalle, getMisOS, getMiTecnicoId, iniciarOS, pausarOS, finalizarOS,
+  getOSDetalle, getMisOS, getMiTecnicoId,
   ESTADO_OS_LABEL, type OSActividad,
 } from '@/lib/services/taller-os'
 
@@ -207,20 +210,41 @@ export default function OsDetallePage() {
     setDesdePanel(new URLSearchParams(window.location.search).get('desde') === 'panel')
   }, [])
 
+  // [22-11-2026] Todo guardado en el teléfono: la OS abre sin señal.
   const { data: os, isLoading, error } = useQuery({
     queryKey: ['os-detalle', osId],
-    queryFn: () => getOSDetalle(osId),
+    queryFn: () => conRespaldo(`taller:os:${osId}`, () => getOSDetalle(osId)),
     enabled: !!osId,
     retry: false,
+    networkMode: 'always',
   })
-  const { data: tecnicoId } = useQuery({
-    queryKey: ['mi-tecnico'], queryFn: getMiTecnicoId, staleTime: 10 * 60_000, retry: false,
+  const { data: miTecnico } = useQuery({
+    queryKey: ['mi-tecnico'], queryFn: () => conRespaldo('taller:mi-tecnico', getMiTecnicoId),
+    staleTime: 10 * 60_000, retry: false, networkMode: 'always',
   })
+  // Cuenta compartida del taller: el técnico es el nombre elegido en la portada
+  // («Soy: …»), igual que en la OT. Antes, sin cuenta propia no salían los botones.
+  const { data: tecnicos } = useQuery({
+    queryKey: ['taller-tecnicos-activos'], queryFn: () => conRespaldo('taller:tecnicos', getTecnicosActivos),
+    staleTime: 30 * 60_000, networkMode: 'always',
+  })
+  const nombreLocal = typeof window !== 'undefined' ? (localStorage.getItem('taller-mecanico') ?? '').trim().toLowerCase() : ''
+  const primerNombre = nombreLocal.split(/\s+/)[0] ?? ''
+  const tecnicoLocal = useMemo(() => {
+    if (!nombreLocal || !tecnicos?.length) return null
+    return (tecnicos.find((x) => x.nombre.toLowerCase() === nombreLocal)
+      ?? tecnicos.find((x) => x.nombre.toLowerCase().split(/\s+/)[0] === primerNombre))?.id ?? null
+  }, [tecnicos, nombreLocal, primerNombre])
+  const tecnicoId = miTecnico ?? tecnicoLocal
   const { data: misOs = [] } = useQuery({
-    queryKey: ['mis-os'], queryFn: getMisOS, enabled: !!tecnicoId,
-    refetchInterval: online ? 60_000 : false, retry: false,
+    queryKey: ['mis-os'], queryFn: () => conRespaldo('taller:mis-os', getMisOS), enabled: !!miTecnico,
+    refetchInterval: online ? 60_000 : false, retry: false, networkMode: 'always',
   })
   const mia = misOs.find((o) => o.os_id === osId)
+  // Lo hecho en el teléfono manda hasta que sube (sin señal el servidor no sabe).
+  const [trabajandoLocal, setTrabajandoLocal] = useState<boolean | null>(null)
+  const trabajando = trabajandoLocal ?? !!mia?.trabajando
+  const [avisoLocal, setAvisoLocal] = useState<string | null>(null)
 
   // Nota general al jefe (va a las notas de la OT: él la evalúa y puede
   // convertirla en NC — el «volver a evaluar» que pidió Manuel).
@@ -242,18 +266,26 @@ export default function OsDetallePage() {
   }
   const [terminando, setTerminando] = useState(false)
   const [obs, setObs] = useState('')
-  const empezar = useMutation({ mutationFn: () => iniciarOS(osId, tecnicoId!), onSuccess: refrescar })
+  const guardadoAviso = () => { if (!online) setAvisoLocal('Guardado en el teléfono: sube solo apenas haya señal.') }
+  const empezar = useMutation({
+    networkMode: 'always',
+    mutationFn: () => queueOS({ osId, accion: 'iniciar', tecnicoId: tecnicoId ?? null }),
+    onSuccess: () => { setTrabajandoLocal(true); guardadoAviso(); refrescar() },
+  })
   // [MIG672] Pausar pregunta por qué.
   const [pausando, setPausando] = useState(false)
   const parar = useMutation({
-    mutationFn: (p: { tipo: string; texto: string | null }) => pausarOS(osId, tecnicoId!, p.texto, p.tipo),
-    onSuccess: () => { setPausando(false); refrescar() },
+    networkMode: 'always',
+    mutationFn: (p: { tipo: string; texto: string | null }) => queueOS({ osId, accion: 'pausar', tecnicoId: tecnicoId ?? null, motivoTipo: p.tipo, texto: p.texto }),
+    onSuccess: () => { setPausando(false); setTrabajandoLocal(false); guardadoAviso(); refrescar() },
   })
   const terminar = useMutation({
-    mutationFn: () => finalizarOS(osId, obs.trim() || null),
-    onSuccess: () => { setTerminando(false); setObs(''); refrescar() },
+    networkMode: 'always',
+    mutationFn: () => queueOS({ osId, accion: 'finalizar', tecnicoId: tecnicoId ?? null, texto: obs.trim() || null }),
+    onSuccess: () => { setTerminando(false); setObs(''); setTrabajandoLocal(false); guardadoAviso(); refrescar() },
   })
   const accionError = empezar.error ?? parar.error ?? terminar.error
+  const esMia = !!os && (os.mi_asignada || (!!primerNombre && os.asignados.some((a) => a.toLowerCase().startsWith(primerNombre))))
 
   if (isLoading) return <div className="flex justify-center py-16"><Spinner /></div>
   if (error || !os) {
@@ -309,7 +341,7 @@ export default function OsDetallePage() {
       </div>
 
       {/* Reloj — solo si la OS es mía (el tiempo que se mide es el que se reparte) */}
-      {os.mi_asignada && tecnicoId && (
+      {esMia && tecnicoId && (
         terminando ? (
           <div className="rounded-xl border border-gray-200 bg-white p-3">
             <label className="text-[11px] font-medium text-gray-700">¿Qué hiciste? (opcional)</label>
@@ -317,7 +349,7 @@ export default function OsDetallePage() {
                       placeholder="Lo que quede acá lo lee el jefe de taller"
                       className="mt-1 w-full rounded border border-gray-300 px-2 py-1.5 text-sm" />
             <div className="mt-2 flex gap-2">
-              <button onClick={() => terminar.mutate()} disabled={terminar.isPending || !online}
+              <button onClick={() => terminar.mutate()} disabled={terminar.isPending}
                       className="flex-1 rounded-md bg-green-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">
                 Confirmar que terminé
               </button>
@@ -327,18 +359,18 @@ export default function OsDetallePage() {
           </div>
         ) : (
           <div className="flex gap-2">
-            {mia?.trabajando ? (
-              <button onClick={() => setPausando(true)} disabled={parar.isPending || !online}
+            {trabajando ? (
+              <button onClick={() => setPausando(true)} disabled={parar.isPending}
                       className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-orange-300 bg-white py-3 text-sm font-semibold text-orange-700 disabled:opacity-50">
                 <Pause className="h-4 w-4" /> Parar
               </button>
             ) : (
-              <button onClick={() => empezar.mutate()} disabled={empezar.isPending || !!mia?.bloqueo || !online}
+              <button onClick={() => empezar.mutate()} disabled={empezar.isPending || !!mia?.bloqueo}
                       className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-orange-600 py-3 text-sm font-semibold text-white disabled:opacity-50">
                 <Play className="h-4 w-4" /> Empezar
               </button>
             )}
-            <button onClick={() => setTerminando(true)} disabled={!online}
+            <button onClick={() => setTerminando(true)}
                     className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-green-300 bg-white py-3 text-sm font-semibold text-green-700 disabled:opacity-50">
               <CheckCircle2 className="h-4 w-4" /> Terminé
             </button>
