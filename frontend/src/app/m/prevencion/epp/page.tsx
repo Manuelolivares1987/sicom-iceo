@@ -2,6 +2,7 @@
 
 // Entrega de EPP desde el teléfono (MIG687): supervisor o prevención.
 
+import { usePrecargaDiferida } from '@/hooks/use-precarga-diferida'
 import { useState } from 'react'
 import Link from 'next/link'
 import { useQuery } from '@tanstack/react-query'
@@ -12,11 +13,17 @@ import { SinSesionOffline } from '@/components/enex/sin-sesion-offline'
 import { Spinner } from '@/components/ui/spinner'
 import { useToast } from '@/hooks/use-toast'
 import { EppEntregaForm } from '@/components/prevencion/epp-entrega-form'
-import { descargarComprobanteEpp } from '@/components/prevencion/pdf-comprobante-epp'
+
+// [22-11-2026] El generador de PDF/Excel pesa ~400 kB: antes se cargaba al abrir
+// la pantalla (590-645 kB vs ~230 kB del resto de terreno). Ahora se carga al
+// usarlo, y se baja en segundo plano apenas la pantalla queda quieta para que
+// después funcione también sin señal (queda en la caché del teléfono).
+const cargarPdf = () => import('@/components/prevencion/pdf-comprobante-epp')
 import { MOTIVO_EPP, getEntregasEpp } from '@/lib/services/prevencion-epp'
 import { EsperandoSesion } from '@/components/layout/esperando-sesion'
 
 export default function EppMovilPage() {
+  usePrecargaDiferida(cargarPdf)
   const { verificando, sinSesionOffline } = useExigirSesion()
   const { perfil } = useAuth()
   const toast = useToast()
@@ -82,7 +89,7 @@ export default function EppMovilPage() {
                           disabled={pdfId === e.id}
                           onClick={async () => {
                             setPdfId(e.id)
-                            try { await descargarComprobanteEpp(e) } catch (err: any) { toast.error(err?.message ?? 'No se pudo generar el PDF') }
+                            try { await (await cargarPdf()).descargarComprobanteEpp(e) } catch (err: any) { toast.error(err?.message ?? 'No se pudo generar el PDF') }
                             finally { setPdfId(null) }
                           }}>
                     {pdfId === e.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}

@@ -8,6 +8,7 @@
 // en faena aunque no haya conexión, y se envía al volver.
 // ============================================================================
 
+import { usePrecargaDiferida } from '@/hooks/use-precarga-diferida'
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -30,7 +31,12 @@ import {
   type BorradorInspeccion,
 } from '@/lib/offline/inspeccion-apr-db'
 import { avanceBorrador } from '@/components/prevencion/inspeccion-apr-form'
-import { descargarPdfInspeccion } from '@/components/prevencion/pdf-inspeccion-apr'
+
+// [22-11-2026] El generador de PDF/Excel pesa ~400 kB: antes se cargaba al abrir
+// la pantalla (590-645 kB vs ~230 kB del resto de terreno). Ahora se carga al
+// usarlo, y se baja en segundo plano apenas la pantalla queda quieta para que
+// después funcione también sin señal (queda en la caché del teléfono).
+const cargarPdf = () => import('@/components/prevencion/pdf-inspeccion-apr')
 import { EsperandoSesion } from '@/components/layout/esperando-sesion'
 import { uuidV4 } from '@/lib/uuid'
 
@@ -48,6 +54,7 @@ const RES_CLASE: Record<string, string> = {
 }
 
 export default function InspeccionAprHome() {
+  usePrecargaDiferida(cargarPdf)
   const { verificando, sinSesionOffline } = useExigirSesion()
   const { perfil } = useAuth()
   const router = useRouter()
@@ -209,7 +216,7 @@ export default function InspeccionAprHome() {
                             onClick={async () => {
                               setPdfId(i.id)
                               try {
-                                await descargarPdfInspeccion(i.id, (faenas ?? []).find((f) => f.faena_id === i.faena_id)?.nombre ?? 'Faena')
+                                await (await cargarPdf()).descargarPdfInspeccion(i.id, (faenas ?? []).find((f) => f.faena_id === i.faena_id)?.nombre ?? 'Faena')
                               } catch (e: any) { toast.error(e?.message ?? 'No se pudo generar el PDF') }
                               finally { setPdfId(null) }
                             }}>

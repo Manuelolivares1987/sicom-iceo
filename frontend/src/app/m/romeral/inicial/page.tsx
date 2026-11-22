@@ -161,7 +161,7 @@ export default function MomentoCeroPage() {
   return (
     <div className="space-y-3 p-3 pb-24">
       <div className="flex items-center gap-2">
-        <Link href="/m/romeral" className="rounded-lg border border-gray-300 p-2">
+        <Link aria-label="Volver" href="/m/romeral" className="rounded-lg border border-gray-300 p-2">
           <ChevronLeft className="h-4 w-4 text-gray-600" />
         </Link>
         <div className="min-w-0 flex-1">
@@ -228,7 +228,7 @@ export default function MomentoCeroPage() {
 
           <label className="block">
             <span className="text-[11px] font-bold text-gray-700">
-              Observación <span className="font-normal text-gray-400">— opcional</span>
+              Observación <span className="font-normal text-gray-500">— opcional</span>
             </span>
             <input value={obs} onChange={(e) => setObs(e.target.value)}
                    placeholder="Quién acompañó la medición, condiciones"
@@ -296,7 +296,7 @@ function FilaEstanque({ e, l, falta, onChange }: {
         </label>
         <label className="block">
           <span className="text-[10px] font-bold text-gray-600">
-            Varilla cm <span className="font-normal text-gray-400">— opcional</span>
+            Varilla cm <span className="font-normal text-gray-500">— opcional</span>
           </span>
           <input value={lec.cm} inputMode="decimal"
                  onChange={(ev) => onChange({ cm: ev.target.value.replace(/[^\d.,]/g, '') })}

@@ -175,7 +175,7 @@ export default function RecepcionRomeralPage() {
     <div className="min-h-screen bg-gray-50 pb-10">
       <header className="sticky top-0 z-10 border-b border-gray-200 bg-white px-4 py-3">
         <div className="mx-auto flex max-w-lg items-center gap-3">
-          <Link href="/m/romeral" className="shrink-0 rounded-lg p-1.5 text-gray-500 hover:bg-gray-100">
+          <Link aria-label="Volver" href="/m/romeral" className="shrink-0 rounded-lg p-1.5 text-gray-500 hover:bg-gray-100">
             <ArrowLeft className="h-5 w-5" />
           </Link>
           <div className="min-w-0 flex-1">

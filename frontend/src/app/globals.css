@@ -1,4 +1,5 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+/* [22-11-2026] Inter viene de next/font (app/layout.tsx): alojada en la app, no
+   bloquea el primer dibujo (~2 s en 4G lenta) y se ve también sin señal. */
 
 @tailwind base;
 @tailwind components;
@@ -7,9 +8,18 @@
 /* ─── Base ────────────────────────────────────────────────────── */
 body {
   @apply bg-gray-50 text-gray-900 antialiased;
-  font-family: 'Inter', system-ui, sans-serif;
+  font-family: var(--font-inter), 'Inter', system-ui, sans-serif;
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
+}
+
+/* [22-11-2026] Con el zoom permitido, iPhone acerca la pantalla al tocar un
+   campo con letra < 16 px. En pantallas táctiles los campos van a 16 px (además
+   se leen mejor en terreno). !important: gana a las clases text-sm sueltas. */
+@media (pointer: coarse) {
+  input:not([type='checkbox']):not([type='radio']):not([type='range']), select, textarea {
+    font-size: 16px !important;
+  }
 }
 
 /* ─── Custom Scrollbar (green themed) ─────────────────────────── */

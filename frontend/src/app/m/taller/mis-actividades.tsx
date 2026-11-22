@@ -88,7 +88,7 @@ function Tarjeta({ a, online }: { a: MiActividad; online: boolean }) {
           {error && <p className="rounded bg-red-50 p-2 text-xs text-red-800">{error}</p>}
 
           {a.evidencia === 'foto' ? (
-            <label className={`flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-lg bg-orange-600 px-3 text-sm font-semibold text-white ${!online || ocupado ? 'pointer-events-none opacity-50' : ''}`}>
+            <label className={`flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-lg bg-orange-700 px-3 text-sm font-semibold text-white ${!online || ocupado ? 'pointer-events-none opacity-50' : ''}`}>
               {fotos.isPending ? <Spinner size="sm" /> : <Camera className="h-4 w-4" />}
               Subir foto y cerrar
               <input
@@ -124,7 +124,7 @@ function Tarjeta({ a, online }: { a: MiActividad; online: boolean }) {
               <button
                 type="button" disabled={!online || ocupado || !archivo || !emision || !vencimiento}
                 onClick={() => { setError(null); certificado.mutate() }}
-                className="flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-orange-600 px-3 text-sm font-semibold text-white disabled:opacity-50"
+                className="flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-orange-700 px-3 text-sm font-semibold text-white disabled:opacity-50"
               >
                 {certificado.isPending ? <Spinner size="sm" /> : <FileUp className="h-4 w-4" />}
                 Enviar al jefe de taller

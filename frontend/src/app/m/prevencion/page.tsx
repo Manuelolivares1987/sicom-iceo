@@ -190,11 +190,11 @@ export default function PrevencionMobileHome() {
         {/* [MIG685] Inspección de terreno APR: la registra prevención. */}
         {!!perfil?.rol && ROLES_CONTROL.includes(perfil.rol) && (
           <Link href="/m/prevencion/inspeccion"
-                className="flex w-full items-center gap-3 rounded-xl border-2 border-pillado-green-600 bg-pillado-green-500 p-4 text-white active:scale-[0.99]">
+                className="flex w-full items-center gap-3 rounded-xl border-2 border-pillado-green-700 bg-pillado-green-600 p-4 text-white active:scale-[0.99]">
             <ClipboardCheck className="h-6 w-6 shrink-0" />
             <div className="min-w-0 flex-1 text-left">
               <p className="text-base font-bold">Inspección de terreno APR</p>
-              <p className="text-xs opacity-80">Traslado · ingreso · documentos · ejecución · cierre — funciona sin señal</p>
+              <p className="text-xs">Traslado · ingreso · documentos · ejecución · cierre — funciona sin señal</p>
             </div>
             <ChevronRight className="h-5 w-5 shrink-0 opacity-70" />
           </Link>
@@ -291,7 +291,7 @@ export default function PrevencionMobileHome() {
                 </li>
               ))}
             </ul>
-            <p className="mt-1 text-[11px] text-gray-400">
+            <p className="mt-1 text-[11px] text-gray-500">
               ¿Se equivocó? Vuelva a registrar el mismo día y faena: se corrige solo.
             </p>
           </div>
@@ -359,7 +359,7 @@ export default function PrevencionMobileHome() {
                       <p className="text-[11px] text-gray-500">{r.fecha_actividad}</p>
                     </div>
                     {(r.evidencias?.length ?? 0) > 0 && (
-                      <span className="flex items-center gap-0.5 text-xs text-gray-400">
+                      <span className="flex items-center gap-0.5 text-xs text-gray-500">
                         <Paperclip className="h-3 w-3" />{r.evidencias.length}
                       </span>
                     )}

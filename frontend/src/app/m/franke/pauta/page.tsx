@@ -372,7 +372,7 @@ export default function FrankePautaAgendaPage() {
           </div>
         )}
 
-        <p className="pt-2 text-center text-xs text-gray-400">
+        <p className="pt-2 text-center text-xs text-gray-500">
           Lo que salga NO OK pide foto y queda como no conformidad con dueño.
         </p>
       </main>

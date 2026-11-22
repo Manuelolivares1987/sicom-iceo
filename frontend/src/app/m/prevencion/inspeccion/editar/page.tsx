@@ -14,7 +14,9 @@ import { SinSesionOffline } from '@/components/enex/sin-sesion-offline'
 import { useToast } from '@/hooks/use-toast'
 import { leerBorrador, type BorradorInspeccion } from '@/lib/offline/inspeccion-apr-db'
 import { InspeccionAprForm } from '@/components/prevencion/inspeccion-apr-form'
-import { descargarPdfInspeccion } from '@/components/prevencion/pdf-inspeccion-apr'
+import { usePrecargaDiferida } from '@/hooks/use-precarga-diferida'
+// [22-11-2026] El PDF se carga al usarlo (y en segundo plano): ver inspeccion/page.tsx.
+const cargarPdf = () => import('@/components/prevencion/pdf-inspeccion-apr')
 import { EsperandoSesion } from '@/components/layout/esperando-sesion'
 
 function Editor() {
@@ -47,7 +49,7 @@ function Editor() {
         </Link>
       )}
       onPdf={async (sid) => {
-        try { await descargarPdfInspeccion(sid, b.faena_nombre) }
+        try { await (await cargarPdf()).descargarPdfInspeccion(sid, b.faena_nombre) }
         catch (e: any) { toast.error(e?.message ?? 'No se pudo generar el PDF') }
       }}
     />
@@ -55,6 +57,7 @@ function Editor() {
 }
 
 export default function EditarInspeccionPage() {
+  usePrecargaDiferida(cargarPdf)
   const { verificando, sinSesionOffline } = useExigirSesion()
   if (verificando) return <EsperandoSesion />
   if (sinSesionOffline) return <SinSesionOffline />

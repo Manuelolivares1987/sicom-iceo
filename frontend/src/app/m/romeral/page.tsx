@@ -287,7 +287,7 @@ export default function RomeralTerrenoPage() {
       <RechazadosTerreno items={rechazados} onCambio={() => { if (cat && fecha) void refrescar(cat.faena.id, fecha) }} />
       {/* Encabezado */}
       <div className="flex items-center gap-2">
-        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-orange-600 text-white">
+        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-orange-700 text-white">
           <Fuel className="h-5 w-5" />
         </div>
         <div className="flex-1">
@@ -359,7 +359,7 @@ export default function RomeralTerrenoPage() {
         <Ruler className="h-4 w-4 shrink-0 text-gray-400" />
         <div className="min-w-0 flex-1">
           <p className="text-xs font-semibold text-gray-600">Momento cero</p>
-          <p className="text-[10px] text-gray-400">Con qué parte la faena. Se declara una sola vez.</p>
+          <p className="text-[10px] text-gray-500">Con qué parte la faena. Se declara una sola vez.</p>
         </div>
         <ChevronRight className="h-4 w-4 shrink-0 text-gray-300" />
       </Link>
@@ -475,7 +475,7 @@ export default function RomeralTerrenoPage() {
         </button>
       </div>
       {descarga && (
-        <p className="text-center text-[10px] text-gray-400">
+        <p className="text-center text-[10px] text-gray-500">
           {cat.equipos.length} equipos y {cat.ubicaciones.length} lugares en el teléfono ·
           {' '}actualizado {new Date(descarga).toLocaleDateString('es-CL')}
         </p>
@@ -521,20 +521,20 @@ export default function RomeralTerrenoPage() {
                   {d.turno ? ` · ${d.turno}` : ''}
                 </p>
                 {d.meter_inicial != null && d.meter_final != null && (
-                  <p className="text-[10px] text-gray-400">
+                  <p className="text-[10px] text-gray-500">
                     medidor {Number(d.meter_inicial).toLocaleString('es-CL')} → {Number(d.meter_final).toLocaleString('es-CL')}
                   </p>
                 )}
               </div>
               <div className="text-right">
                 <p className="text-base font-bold text-gray-800">{Number(d.litros).toLocaleString('es-CL')} L</p>
-                <p className="flex items-center justify-end gap-1 text-[10px] text-green-600"><Check className="h-3 w-3" /> guardada</p>
+                <p className="flex items-center justify-end gap-1 text-[10px] text-green-700"><Check className="h-3 w-3" /> guardada</p>
               </div>
             </div>
           </div>
         ))}
         {servidor.length === 0 && locales.length === 0 && (
-          <p className="py-10 text-center text-sm text-gray-400">
+          <p className="py-10 text-center text-sm text-gray-500">
             Todavía no hay cargas hoy. Aprieta el botón naranjo para anotar la primera.
           </p>
         )}
@@ -542,7 +542,7 @@ export default function RomeralTerrenoPage() {
 
       {/* Botón grande de nueva carga */}
       <button onClick={abrirNueva}
-              className="fixed bottom-4 left-3 right-3 flex items-center justify-center gap-2 rounded-2xl bg-orange-600 py-4 text-base font-bold text-white shadow-lg active:bg-orange-700">
+              className="fixed bottom-4 left-3 right-3 flex items-center justify-center gap-2 rounded-2xl bg-orange-700 py-4 text-base font-bold text-white shadow-lg active:bg-orange-700">
         <Plus className="h-5 w-5" /> Nueva carga
       </button>
 
@@ -765,7 +765,7 @@ export default function RomeralTerrenoPage() {
                      className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm" />
             </div>
 
-            <p className="flex items-center gap-1.5 text-[11px] text-gray-400">
+            <p className="flex items-center gap-1.5 text-[11px] text-gray-500">
               <MapPin className="h-3.5 w-3.5" />
               {camionLabel} · Turno {turno} · {operador}
             </p>
@@ -775,7 +775,7 @@ export default function RomeralTerrenoPage() {
             <button onClick={guardar}
                     disabled={guardando || litrosFinales == null || litrosFinales <= 0
                               || ((!fotoIni || !fotoFin) && !sinFotoMotivo.trim())}
-                    className="flex w-full items-center justify-center gap-2 rounded-2xl bg-orange-600 py-4 text-base font-bold text-white disabled:opacity-40">
+                    className="flex w-full items-center justify-center gap-2 rounded-2xl bg-orange-700 py-4 text-base font-bold text-white disabled:opacity-40">
               {guardando ? <Spinner className="h-5 w-5" /> : <Check className="h-5 w-5" />}
               Guardar carga{litrosFinales ? ` · ${litrosFinales.toLocaleString('es-CL')} L` : ''}
             </button>
