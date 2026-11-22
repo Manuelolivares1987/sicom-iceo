@@ -1,5 +1,4 @@
 import type { Metadata, Viewport } from 'next'
-import { Inter } from 'next/font/google'
 import './globals.css'
 import { QueryProvider } from '@/contexts/query-provider'
 import { AuthProvider } from '@/contexts/auth-context'
@@ -11,8 +10,7 @@ import { TerrenoGlobal } from '@/components/layout/terreno-global'
 import { ActualizacionApp } from '@/components/layout/actualizacion-app'
 import { GuardaAlmacenamiento } from '@/components/layout/guarda-almacenamiento'
 import { PuenteApp } from '@/components/layout/puente-app'
-
-const inter = Inter({ subsets: ['latin'], weight: ['300', '400', '500', '600', '700', '800'], display: 'swap', variable: '--font-inter' })
+import { FuenteInter } from '@/components/layout/fuente-inter'
 
 export const metadata: Metadata = {
   title: 'SICOM-ICEO | Pillado Empresas',
@@ -59,8 +57,13 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="es" className={inter.variable}>
+    <html lang="es">
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+      </head>
       <body>
+        <FuenteInter />
         <RecuperacionChunks />
         <ConectividadInit />
         <ActualizacionApp />

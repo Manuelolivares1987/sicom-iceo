@@ -11,6 +11,7 @@ const ROMERAL = { id: '33333333-3333-4333-8333-333333333333', codigo: 'FAE-CMP-R
 
 const PANTALLAS: Array<{ ruta: string; preparar: (f: FakeSupabase) => void }> = [
   { ruta: '/login/', preparar: () => undefined },
+  { ruta: '/crear-clave/?u=11111111-1111-4111-8111-111111111111&t=x', preparar: () => undefined },
   ...['', 'pauta/', 'despacho/', 'bodega/', 'bitacora/', 'entrega/', 'carga/', 'turno/', 'pendientes/'].map((p) => ({
     ruta: `/m/franke/${p}`, preparar: (f: FakeSupabase) => sembrarFranke(f),
   })),
@@ -38,7 +39,7 @@ type Violacion = { id: string; impact: string; help: string; nodes: Array<{ targ
 for (const p of PANTALLAS) {
   test(`a11y ${p.ruta}`, async ({ page, fake, conSesion }) => {
     p.preparar(fake)
-    if (p.ruta !== '/login/') await conSesion()
+    if (!p.ruta.startsWith('/login/') && !p.ruta.startsWith('/crear-clave/')) await conSesion()
     await page.goto(p.ruta)
     await page.waitForLoadState('networkidle').catch(() => undefined)
     await page.waitForTimeout(800)

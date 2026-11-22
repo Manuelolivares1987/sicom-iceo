@@ -463,7 +463,8 @@ const navGroups: NavGroup[] = [
     items: [
       { label: 'Auditoría', href: '/dashboard/auditoria', icon: Eye, module: 'auditoria' },
       { label: 'Administración', href: '/dashboard/admin', icon: Settings, module: 'admin' },
-      { label: 'Perfiles y Roles', href: '/dashboard/admin/perfiles-roles', icon: ShieldCheck, module: 'admin', badge: 'Nuevo' },
+      { label: 'Cuentas (crear y dar acceso)', href: '/dashboard/admin/cuentas', icon: ShieldCheck, module: 'admin', badge: 'Nuevo' },
+      { label: 'Perfiles y Roles', href: '/dashboard/admin/perfiles-roles', icon: ShieldCheck, module: 'admin' },
       { label: 'Plantillas de checklist (OT)', href: '/dashboard/admin/checklist-templates', icon: ClipboardCheck, module: 'admin' },
       { label: 'GPS', href: '/dashboard/admin/gps', icon: Truck, module: 'admin' },
       { label: 'Geocercas', href: '/dashboard/admin/geocercas', icon: AlertTriangle, module: 'admin', badge: 'Nuevo' },

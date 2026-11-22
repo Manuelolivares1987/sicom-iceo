@@ -1,5 +1,5 @@
-/* [22-11-2026] Inter viene de next/font (app/layout.tsx): alojada en la app, no
-   bloquea el primer dibujo (~2 s en 4G lenta) y se ve también sin señal. */
+/* [22-11-2026] Inter la pide components/layout/fuente-inter.tsx DESPUÉS del
+   primer dibujo (antes bloqueaba ~2 s en 4G lenta); sin red, letra del sistema. */
 
 @tailwind base;
 @tailwind components;
@@ -8,7 +8,7 @@
 /* ─── Base ────────────────────────────────────────────────────── */
 body {
   @apply bg-gray-50 text-gray-900 antialiased;
-  font-family: var(--font-inter), 'Inter', system-ui, sans-serif;
+  font-family: 'Inter', system-ui, sans-serif;
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
 }
