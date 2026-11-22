@@ -22,7 +22,14 @@ interface LoginForm {
 function destinoTrasEntrar(): string {
   if (typeof window === 'undefined') return '/dashboard/'
   const next = new URLSearchParams(window.location.search).get('next')
-  if (next && next.startsWith('/') && !next.startsWith('//')) return next
+  // [22-11-2026] Mismo sitio de verdad: «/\otro.com» pasaba el filtro anterior
+  // y el navegador lo trata como //otro.com (redirección a otro sitio).
+  if (next && next.startsWith('/')) {
+    try {
+      const u = new URL(next, window.location.origin)
+      if (u.origin === window.location.origin) return u.pathname + u.search + u.hash
+    } catch { /* inválido: se ignora */ }
+  }
   // [20-11-2026] El lanzador /m/ manda a cada uno a su app (o al panel).
   return '/m/'
 }

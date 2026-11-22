@@ -326,6 +326,10 @@ export function useGuardarMedidores(otId: string) {
         return { success: true, offline: true }
       }
       if (!estaEnLinea()) return enCola()
+      const borrarLocales = async () => {
+        const l = await getMedidoresLocales(otId)
+        if (l) await descartarPendiente(l.local_id)
+      }
       const { data, error } = await supabase.rpc('rpc_taller_registrar_medidores', {
         p_ot_id: otId,
         p_horometro: v.horometro,
@@ -337,6 +341,7 @@ export function useGuardarMedidores(otId: string) {
         if (esTransitorio(error) && !/permission|not authorized|no autorizado/i.test(error.message ?? '')) return enCola()
         throw error
       }
+      if (!(data as R | null)?.requiere_confirmacion) await borrarLocales().catch(() => undefined)
       return data as R
     },
     onSuccess: () => {

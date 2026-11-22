@@ -23,7 +23,7 @@ import {
   type ProveedorBusqueda,
 } from '@/lib/services/bodega-ingreso'
 import { RUBROS, TIPOS_PROVEEDOR, rubroCorto, tipoDeRubro } from '@/lib/bodega-rubros'
-import { cn } from '@/lib/utils'
+import { cn, todayISO } from '@/lib/utils'
 
 const ROLES_EDITAN = ['administrador', 'subgerente_operaciones', 'jefe_mantenimiento', 'supervisor', 'operador_abastecimiento', 'bodeguero']
 const PAGE = 50
@@ -80,7 +80,7 @@ export default function ProveedoresPage() {
       ...todos.map((p) => [p.codigo, p.rut, p.nombre, p.rubro, p.giro, p.tipo, p.rubro_confianza, p.activo ? 'si' : 'no'].map(esc).join(';'))].join('\n')
     const a = document.createElement('a')
     a.href = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' }))
-    a.download = `proveedores_${new Date().toISOString().slice(0, 10)}.csv`
+    a.download = `proveedores_${todayISO()}.csv`
     a.click()
   }
 

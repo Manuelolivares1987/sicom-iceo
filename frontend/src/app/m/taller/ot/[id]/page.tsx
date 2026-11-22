@@ -1496,7 +1496,7 @@ export default function MecanicoOTPage() {
                                 <img src={u} alt={`evidencia ${idx + 1}`} className="h-20 w-20 rounded-lg border object-cover" />
                               )}
                               {/* Quitar una foto equivocada: directo al servidor, solo con conexión */}
-                              {online && (
+                              {online && !u.startsWith('blob:') && (
                                 <button type="button" title="Quitar esta foto"
                                         disabled={quitarFoto.isPending}
                                         onClick={() => quitarFoto.mutate({ instanceItemId: it.instance_item_id, url: u })}

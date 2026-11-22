@@ -1,3 +1,4 @@
+import { exigirFilas } from './escritura'
 import { supabase } from '@/lib/supabase'
 
 export type ProductoCategoria = { codigo: string; nombre: string; activo: boolean }
@@ -19,9 +20,11 @@ export async function crearCategoria(nombre: string) {
 }
 
 export async function actualizarCategoria(codigo: string, patch: { nombre?: string; activo?: boolean }) {
-  const { error } = await supabase.from('producto_categorias')
+  const { data: filas, error } = await supabase.from('producto_categorias')
     .update({ ...patch, updated_at: new Date().toISOString() }).eq('codigo', codigo)
+    .select('id')
   if (error) throw error
+  exigirFilas(filas, 'el cambio de la categoría')
 }
 
 // Slug a partir del nombre: minúsculas, sin acentos, _ entre palabras.

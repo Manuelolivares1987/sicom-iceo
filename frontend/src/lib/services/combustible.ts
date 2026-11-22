@@ -1,5 +1,7 @@
+import { exigirFilas } from './escritura'
 import { supabase } from '@/lib/supabase'
 import { uuidV4 } from '@/lib/uuid'
+import { todayISO } from '@/lib/utils'
 
 // ── Tipos ────────────────────────────────────────────────
 
@@ -339,21 +341,25 @@ export async function crearVehiculoExterno(input: VehiculoExternoInput) {
 }
 
 export async function actualizarVehiculoExterno(id: string, input: VehiculoExternoInput) {
-  const { error } = await supabase
+  const { data: filas, error } = await supabase
     .from('vehiculos_autorizados_externos')
     .update(normalizarInput(input))
     .eq('id', id)
+    .select('id')
   if (error) throw error
+  exigirFilas(filas, 'el cambio de la patente')
 }
 
 export async function setVehiculoExternoActivo(id: string, activo: boolean) {
   const patch: Record<string, unknown> = { activo }
-  patch.fecha_revocacion = activo ? null : new Date().toISOString().slice(0, 10)
-  const { error } = await supabase
+  patch.fecha_revocacion = activo ? null : todayISO()
+  const { data: filas, error } = await supabase
     .from('vehiculos_autorizados_externos')
     .update(patch)
     .eq('id', id)
+    .select('id')
   if (error) throw error
+  exigirFilas(filas, 'el cambio de la patente')
 }
 
 export async function registrarMovimiento(payload: RegistrarMovimientoPayload) {

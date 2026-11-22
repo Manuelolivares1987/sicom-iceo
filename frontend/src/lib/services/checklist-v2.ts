@@ -290,11 +290,15 @@ export async function quitarFotoItem(itemId: string, url: string): Promise<void>
   const lista = ((data?.foto_urls as string[] | null) ?? []).filter(Boolean)
   const actuales = lista.length ? lista : (data?.foto_url ? [data.foto_url as string] : [])
   const restantes = actuales.filter((u) => u !== url)
-  const { error: e2 } = await supabase
+  const { data: quitada, error: e2 } = await supabase
     .from('checklist_v2_instance_item')
     .update({ foto_urls: restantes.length ? restantes : null, foto_url: restantes[0] ?? null })
     .eq('id', itemId)
+    .select('id')
   if (e2) throw e2
+  // Si el servidor no dejó cambiar el ítem, NO se borra el archivo (quedaría
+  // una imagen rota en la oficina).
+  if (!quitada || quitada.length === 0) throw new Error('La OT ya no admite cambios desde el teléfono: la foto no se quitó.')
   try {
     const m = url.match(/\/object\/public\/([^/]+)\/(.+)$/)
     if (m) await supabase.storage.from(m[1]).remove([decodeURIComponent(m[2])])

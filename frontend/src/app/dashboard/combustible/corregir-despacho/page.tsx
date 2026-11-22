@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input'
 import { Spinner } from '@/components/ui/spinner'
 import { Badge } from '@/components/ui/badge'
 import { Modal } from '@/components/ui/modal'
-import { errorMessage } from '@/lib/utils'
+import { errorMessage, todayISO } from '@/lib/utils'
 import { useToast } from '@/contexts/toast-context'
 import {
   cargarTransaccionesCliente, corregirPatenteDespacho,
@@ -24,7 +24,6 @@ import { supabase } from '@/lib/supabase'
 
 type ActivoMin = { id: string; codigo: string | null; patente: string | null; nombre: string | null }
 
-function todayISO()       { return new Date().toISOString().slice(0, 10) }
 function hace30diasISO()  {
   const d = new Date(); d.setDate(d.getDate() - 30); return d.toISOString().slice(0, 10)
 }

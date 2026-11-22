@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { fmtClp, fmtNum } from '@/lib/costos-operacion'
 import { getCamionesDetallePpto, getKitItemsPpto, getParametrosExcelPpto, type CamionDetallePpto } from '@/lib/services/presupuesto'
 import { ComposicionEquipo } from '@/components/costos/presupuesto-composicion'
+import { todayISO } from '@/lib/utils'
 
 // ============================================================================
 // Presupuesto por camión (MIG702): primero los contratos de servicio de Pillado,
@@ -54,7 +55,7 @@ export function PresupuestoPorCamion() {
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `Presupuesto mantencion 2027 por equipo (${new Date().toISOString().slice(0, 10)}).xlsx`
+      a.download = `Presupuesto mantencion 2027 por equipo (${todayISO()}).xlsx`
       a.click()
       URL.revokeObjectURL(url)
     } catch (e) {

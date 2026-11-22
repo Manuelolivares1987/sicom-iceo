@@ -20,6 +20,7 @@ import { useAuth } from '@/contexts/auth-context'
 import {
   plantillasDeRol, seccionesDelDia, contarItems, nombreDia, CADENCIA_LABEL,
 } from '@/lib/services/gemba'
+import { todayISO } from '@/lib/utils'
 
 const CARGO_LABEL: Record<string, string> = {
   prevencionista: 'Prevencionista de Riesgos',
@@ -38,7 +39,7 @@ export default function NuevoGembaPage() {
   const { data: faenas } = useFaenasActivas()
   const crear = useCreateGembaRecorrido()
 
-  const hoy = new Date().toISOString().split('T')[0]
+  const hoy = todayISO()
   const ahora = new Date().toTimeString().slice(0, 5)
 
   const [plantillaId, setPlantillaId] = useState('')

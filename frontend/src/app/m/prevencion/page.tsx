@@ -21,7 +21,7 @@ import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Modal } from '@/components/ui/modal'
 import { useToast } from '@/hooks/use-toast'
-import { cn } from '@/lib/utils'
+import { cn, todayISO } from '@/lib/utils'
 import { RegistroTerrenoForm } from '@/components/prevencion/registro-terreno-form'
 import { RegistroEditarForm } from '@/components/prevencion/registro-editar-form'
 import { AmbientalForm } from '@/components/prevencion/ambiental-form'
@@ -64,7 +64,7 @@ export default function PrevencionMobileHome() {
   const { data: ambConceptos } = useAmbientalConceptos()
   const [ambientalOpen, setAmbientalOpen] = useState(false)
   const [subFaena, setSubFaena] = useState('')
-  const [subFecha, setSubFecha] = useState(() => new Date().toISOString().slice(0, 10))
+  const [subFecha, setSubFecha] = useState(() => todayISO())
   const [subHombres, setSubHombres] = useState('')
   const [subMujeres, setSubMujeres] = useState('0')
   // [MIG556] La subida es conteo simple TAL CUAL en todas las faenas: el

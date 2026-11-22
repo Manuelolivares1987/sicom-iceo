@@ -11,6 +11,7 @@
 // ON CONFLICT para no duplicar. syncCalamaPending() reusa el mismo
 // client_uuid al reenviar.
 
+import { estaEnLinea } from '@/lib/conectividad'
 import { uuidV4 } from '@/lib/uuid'
 import { supabase } from '@/lib/supabase'
 import {
@@ -33,13 +34,26 @@ export type SmartResult = {
 }
 
 function isOnline(): boolean {
-  return typeof navigator === 'undefined' ? true : navigator.onLine
+  return typeof navigator === 'undefined' ? true : estaEnLinea()
 }
 
 function looksLikeNetworkError(err: unknown): boolean {
   if (!err) return false
   const msg = err instanceof Error ? err.message : String(err)
-  return /Failed to fetch|NetworkError|TypeError|fetch failed|ECONNRESET|ENOTFOUND|Load failed|connection|offline|timeout/i.test(msg)
+  // [22-11-2026] + abort: el límite de 60 s aborta la llamada («AbortError») y
+  // antes eso salía como error rojo en vez de guardarse en el teléfono.
+  return /Failed to fetch|NetworkError|TypeError|fetch failed|ECONNRESET|ENOTFOUND|Load failed|connection|offline|timeout|abort/i.test(msg)
+}
+
+// [22-11-2026] Ir directo al servidor SOLO si hay señal confirmada y esa jornada
+// no tiene nada esperando en la cola. Si no, el servidor rechaza (p. ej.
+// «Iniciar» con la llegada todavía en el teléfono → «Llegada no registrada»).
+async function directoPosible(jornadaId: string): Promise<boolean> {
+  if (!isOnline()) return false
+  try {
+    const pend = await calamaDB().eventos.where('sync_status').anyOf(['pending', 'error']).toArray()
+    return !pend.some((e) => e.jornada_id === jornadaId)
+  } catch { return true }
 }
 
 // Generar client_uuid una sola vez por accion.
@@ -111,7 +125,7 @@ export async function smartLlegadaFaena(args: {
   observacion?: string;
 }): Promise<SmartResult> {
   const cid = newCid()
-  if (isOnline()) {
+  if (await directoPosible(args.jornada_id)) {
     try {
       const up = await uploadEvidenciaToStorage({ blob: args.blob, otId: args.ot_id, planOtId: args.jornada_id, momento: 'llegada' })
       const { error } = await supabase.rpc('rpc_calama_registrar_llegada_faena', {
@@ -166,7 +180,7 @@ export async function smartIniciarJornada(args: {
   observacion?: string;
 }): Promise<SmartResult> {
   const cid = newCid()
-  if (isOnline()) {
+  if (await directoPosible(args.jornada_id)) {
     try {
       const up = await uploadEvidenciaToStorage({ blob: args.foto_antes, otId: args.ot_id, planOtId: args.jornada_id, momento: 'antes' })
       const { error } = await supabase.rpc('rpc_calama_iniciar_jornada', {
@@ -224,7 +238,7 @@ export async function smartRegistrarEvento(args: {
 }): Promise<SmartResult> {
   const cid = newCid()
   const wantPhoto = !!args.foto
-  if (isOnline()) {
+  if (await directoPosible(args.jornada_id)) {
     try {
       let foto_url: string | undefined; let foto_storage_path: string | undefined
       if (wantPhoto) {
@@ -244,7 +258,7 @@ export async function smartRegistrarEvento(args: {
       })
       if (error) throw error
       const patch: Parameters<typeof patchLocalJornada>[1] = {}
-      if (args.tipo === 'pause') patch.estado_plan_local = 'pausada'
+      if (args.tipo === 'pause' || args.tipo === 'interferencia') patch.estado_plan_local = 'pausada'
       if (args.tipo === 'resume') patch.estado_plan_local = 'en_ejecucion'
       if (args.tipo === 'avance' && args.avance != null) patch.avance_pct = args.avance
       if (Object.keys(patch).length) await patchLocalJornada(args.jornada_id, patch)
@@ -286,7 +300,7 @@ export async function smartRegistrarEvento(args: {
     blob_refs,
   })
   const patch: Parameters<typeof patchLocalJornada>[1] = {}
-  if (args.tipo === 'pause') patch.estado_plan_local = 'pausada'
+  if (args.tipo === 'pause' || args.tipo === 'interferencia') patch.estado_plan_local = 'pausada'
   if (args.tipo === 'resume') patch.estado_plan_local = 'en_ejecucion'
   if (args.tipo === 'avance' && args.avance != null) patch.avance_pct = args.avance
   if (Object.keys(patch).length) await patchLocalJornada(args.jornada_id, patch)
@@ -311,7 +325,7 @@ export async function smartFinalizarJornada(args: {
   // mismos valores y la sync offline no duplique tras un fallo post-RPC.
   const cidFoto = newCid()
   const cidFirma = newCid()
-  if (isOnline()) {
+  if (await directoPosible(args.jornada_id)) {
     try {
       const upFoto  = await uploadEvidenciaToStorage({ blob: args.foto_despues, otId: args.ot_id, planOtId: args.jornada_id, momento: 'despues' })
       const upFirma = await uploadFirmaToStorage({ blob: args.firma_operador, otId: args.ot_id, planOtId: args.jornada_id, contexto: 'cierre_operador' })
@@ -393,7 +407,7 @@ export async function smartAceptarJornada(args: {
   observacion?: string;
 }): Promise<SmartResult> {
   const cid = newCid()
-  if (isOnline()) {
+  if (await directoPosible(args.jornada_id)) {
     try {
       const upFirma = await uploadFirmaToStorage({ blob: args.firma_mandante, otId: args.ot_id, planOtId: args.jornada_id, contexto: 'aceptacion' })
       const { error } = await supabase.rpc('rpc_calama_registrar_aceptacion_jornada', {
@@ -454,7 +468,7 @@ export async function smartRechazarJornada(args: {
   observacion?: string;
 }): Promise<SmartResult> {
   const cid = newCid()
-  if (isOnline()) {
+  if (await directoPosible(args.jornada_id)) {
     try {
       const fotosUploaded: Array<{ url: string; storage_path: string; client_uuid: string }> = []
       for (const f of args.fotos_rechazo ?? []) {

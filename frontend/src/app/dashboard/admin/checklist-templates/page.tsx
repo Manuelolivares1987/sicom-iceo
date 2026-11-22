@@ -19,6 +19,7 @@ import { Input } from '@/components/ui/input'
 import { Spinner } from '@/components/ui/spinner'
 import { useToast } from '@/hooks/use-toast'
 import { supabase } from '@/lib/supabase'
+import { todayISO } from '@/lib/utils'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -282,7 +283,7 @@ export default function ChecklistTemplatesPage() {
     const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' })
     const a = document.createElement('a')
     a.href = URL.createObjectURL(blob)
-    a.download = `plantillas_checklist_${new Date().toISOString().slice(0, 10)}.csv`
+    a.download = `plantillas_checklist_${todayISO()}.csv`
     a.click()
     URL.revokeObjectURL(a.href)
   }

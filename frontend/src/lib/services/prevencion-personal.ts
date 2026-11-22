@@ -1,3 +1,4 @@
+import { exigirFilas } from './escritura'
 import { supabase } from '@/lib/supabase'
 
 // ============================================================================
@@ -219,11 +220,13 @@ export async function actualizarExamen(i: ActualizarExamenInput) {
   if (i.observacion !== undefined) patch.observacion = i.observacion || null
   if (i.observacionBloqueante !== undefined) patch.observacion_bloqueante = i.observacionBloqueante
 
-  const { error } = await supabase
+  const { data: filas, error } = await supabase
     .from('prevencion_examenes')
     .update(patch)
     .eq('id', i.examenId)
+    .select('id')
   if (error) throw error
+  exigirFilas(filas, 'el cambio del examen o de la persona')
 }
 
 // ============================================================================
@@ -307,7 +310,7 @@ export async function getTiposExamen() {
 export async function marcarNoAplica(examenId: string, motivo: string) {
   const m = motivo.trim()
   if (!m) throw new Error('Indica por qué no aplica: queda como respaldo ante auditoría.')
-  const { error } = await supabase
+  const { data: filas, error } = await supabase
     .from('prevencion_examenes')
     .update({
       aplica: false,
@@ -317,16 +320,20 @@ export async function marcarNoAplica(examenId: string, motivo: string) {
       observacion_bloqueante: false,
     })
     .eq('id', examenId)
+    .select('id')
   if (error) throw error
+  exigirFilas(filas, 'el cambio del examen o de la persona')
 }
 
 /** Vuelve a exigir algo que estaba exento. */
 export async function marcarAplica(examenId: string) {
-  const { error } = await supabase
+  const { data: filas, error } = await supabase
     .from('prevencion_examenes')
     .update({ aplica: true, motivo_no_aplica: null })
     .eq('id', examenId)
+    .select('id')
   if (error) throw error
+  exigirFilas(filas, 'el cambio del examen o de la persona')
 }
 
 /** Agrega a la persona un tipo que no tenía registrado. */
@@ -346,11 +353,13 @@ export async function agregarExamen(personalId: string, tipoCodigo: string) {
  * marcarNoAplica, que sí deja constancia.
  */
 export async function eliminarExamen(examenId: string) {
-  const { error } = await supabase
+  const { data: filas, error } = await supabase
     .from('prevencion_examenes')
     .delete()
     .eq('id', examenId)
+    .select('id')
   if (error) throw error
+  exigirFilas(filas, 'el cambio del examen o de la persona')
 }
 
 export type ActualizarPersonaInput = {
@@ -381,11 +390,13 @@ export async function actualizarPersona(i: ActualizarPersonaInput) {
   if (i.activo !== undefined) patch.activo = i.activo
   if (i.observacion !== undefined) patch.observacion = i.observacion || null
 
-  const { error } = await supabase
+  const { data: filas, error } = await supabase
     .from('prevencion_personal')
     .update(patch)
     .eq('id', i.personalId)
+    .select('id')
   if (error) throw error
+  exigirFilas(filas, 'el cambio del examen o de la persona')
 }
 
 

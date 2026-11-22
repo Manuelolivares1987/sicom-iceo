@@ -13,7 +13,7 @@ import { Modal, ModalFooter } from '@/components/ui/modal'
 import { SignaturePad } from '@/components/ui/signature-pad'
 import { useToast } from '@/contexts/toast-context'
 import { supabase } from '@/lib/supabase'
-import { formatDate } from '@/lib/utils'
+import { formatDate, todayISO } from '@/lib/utils'
 import {
   getCertificadoTipos, getCertificadosActivo, getNcAbiertasActivo, getTecnicosTaller,
   emitirCertificado, type CertificadoTipo,
@@ -117,7 +117,7 @@ export function CarpetaCertificados({ activoId, acciones }: {
   const bloqueado = ncAbiertas > 0
 
   function abrirModal() {
-    const hoy = new Date().toISOString().slice(0, 10)
+    const hoy = todayISO()
     setTipoCodigo(''); setFecha(hoy); setVenceEl('')
     setHorometro(activo?.horas_uso_actual != null ? String(activo.horas_uso_actual) : '')
     setVigenciaHoras(String(intervalo))

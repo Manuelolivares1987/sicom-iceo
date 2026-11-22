@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Modal } from '@/components/ui/modal'
 import { Spinner } from '@/components/ui/spinner'
-import { cn } from '@/lib/utils'
+import { cn, todayISO } from '@/lib/utils'
 import { useRequireAuth } from '@/hooks/use-require-auth'
 import { usePermissions } from '@/hooks/use-permissions'
 import { useToast } from '@/hooks/use-toast'
@@ -147,7 +147,7 @@ export default function GembaRecorridoPage() {
       await updHallazgo.mutateAsync({
         id: hid,
         estado,
-        fecha_cierre: estado === 'cerrada' ? new Date().toISOString().split('T')[0] : null,
+        fecha_cierre: estado === 'cerrada' ? todayISO() : null,
       })
     } catch {
       toast.error('No se pudo actualizar el hallazgo')
@@ -323,7 +323,7 @@ export default function GembaRecorridoPage() {
             <ul className="space-y-2">
               {hallazgos.map((h) => {
                 const vencido = h.estado !== 'cerrada' && !!h.fecha_compromiso &&
-                  h.fecha_compromiso < new Date().toISOString().slice(0, 10)
+                  h.fecha_compromiso < todayISO()
                 return (
                   <li key={h.id} className={cn('rounded-lg border p-3',
                     vencido ? 'border-red-200 bg-red-50/50' : 'border-gray-200')}>

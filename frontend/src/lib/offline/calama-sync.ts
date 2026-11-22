@@ -129,7 +129,7 @@ export async function prepareCalamaOffline(opts?: { fecha?: string }): Promise<{
     const newIds = new Set(localJornadas.map((j) => j.local_id))
     const existing = await db.jornadas.toArray()
     for (const j of existing) {
-      if (!newIds.has(j.local_id) && j.sync_status !== 'pending') {
+      if (!newIds.has(j.local_id) && !conPendientes.has(j.local_id)) {
         await db.jornadas.delete(j.local_id)
       }
     }
@@ -549,7 +549,9 @@ export async function syncCalamaPending(): Promise<SyncResult> {
         // problema de red. Marcar 'conflict' para que la UI lo distinga.
         const isConflict = /no admite cambios|estado .* no|no encontrado|no autorizado|no se mueve|no se quita|no se cancela|no se desprograma|requiere correccion|aceptada|cerrada|llegada a faena no/i
           .test(error.message)
-        const newStatus: SyncStatus = isConflict ? 'conflict' : (esTransitorio(error) ? 'pending' : 'error')
+        // [22-11-2026] Toda regla de negocio (no es la señal) es conflicto: se muestra
+        // y no traba los eventos siguientes de la jornada para siempre.
+        const newStatus: SyncStatus = esTransitorio(error) && !isConflict ? 'pending' : 'conflict'
         await db.eventos.update(evento.local_id, {
           sync_status: newStatus, retries: evento.retries + 1, last_error: error.message,
         })

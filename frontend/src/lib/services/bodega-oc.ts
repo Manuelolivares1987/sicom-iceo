@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase'
+import { todayISO } from '@/lib/utils'
 
 // ── Tipos ───────────────────────────────────────────────────────────────────
 
@@ -405,7 +406,7 @@ export async function crearOC(payload: CrearOCPayload) {
     p_proveedor_id: payload.proveedor_id,
     p_items: items,
     p_numero_oc: payload.numero_oc ?? null,
-    p_fecha_oc: payload.fecha_oc ?? new Date().toISOString().slice(0, 10),
+    p_fecha_oc: payload.fecha_oc ?? todayISO(),
     p_observacion: payload.observacion ?? null,
   })
   if (error) return { data: null, error }

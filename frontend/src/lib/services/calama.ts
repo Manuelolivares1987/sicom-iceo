@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase'
+import { todayISO } from '@/lib/utils'
 
 // ============================================================================
 // Tipos
@@ -641,7 +642,7 @@ export async function getDashboardKPIs(): Promise<{ data: DashboardKPIs | null; 
 
     const otsList = (ots ?? []) as Array<{ estado: CalamaOTEstado; fecha_programada: string }>
     const plans = (planificaciones ?? []) as CalamaPlanificacion[]
-    const hoy = new Date().toISOString().slice(0, 10)
+    const hoy = todayISO()
 
     const porEstadoMap = new Map<CalamaOTEstado, number>()
     let atrasadas = 0

@@ -1,5 +1,6 @@
 'use client'
 
+import { parseDateLocal } from '@/lib/utils'
 import { useState, useEffect, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
@@ -206,7 +207,7 @@ export default function ICEOPage() {
     return [...historico]
       .sort((a, b) => a.periodo_inicio.localeCompare(b.periodo_inicio))
       .map((h) => {
-        const d = new Date(h.periodo_inicio)
+        const d = parseDateLocal(h.periodo_inicio)
         return {
           mes: SHORT_MONTHS[d.getMonth()],
           iceo: h.iceo_final,

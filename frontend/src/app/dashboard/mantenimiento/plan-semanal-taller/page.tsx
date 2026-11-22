@@ -66,6 +66,7 @@ import { getConceptosBono, setConceptoOT } from '@/lib/services/taller-bono'
 import { setMetaOT } from '@/lib/services/taller-os'
 import { getCierresPorValidar, validarCierre } from '@/lib/services/taller-planificacion'
 import { usePermissions } from '@/hooks/use-permissions'
+import { todayISO } from '@/lib/utils'
 
 type Tab = 'kanban' | 'cobertura' | 'cumplimiento'
 
@@ -319,7 +320,7 @@ export default function PlanSemanalTallerPage() {
   // navegadores: se ignora el tap si acaba de soltarse un arrastre.
   const dragEndAt = useRef(0)
   const fechaTapDefault = () => {
-    const hoy = new Date().toISOString().slice(0, 10)
+    const hoy = todayISO()
     return (dias ?? []).some((d) => d.fecha === hoy) ? hoy : ((dias ?? [])[0]?.fecha ?? hoy)
   }
   const tapProgramar = (t: DropTarget) => {
