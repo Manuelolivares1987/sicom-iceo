@@ -34,7 +34,9 @@ import {
 } from '@/hooks/use-calama-jornada'
 import { usePermissions } from '@/hooks/use-permissions'
 import { lunesDe, jornadaActiva } from '@/lib/services/calama-plan-semanal'
-import { exportarPlanSemanalExcel, descargarBlob } from '@/lib/export/plan-semanal-excel'
+// [22-11-2026] Carga diferida: este módulo (PDF/Excel/Word) pesa cientos de kB y
+// solo se usa al apretar el botón; antes se bajaba al abrir la pantalla.
+const cargarPlanSemanalExcel = () => import('@/lib/export/plan-semanal-excel')
 import { zonaCodeFromFolio, excelCodigoFromFolio, type CalamaOTConRelaciones } from '@/lib/services/calama'
 import { EstadoBadge } from '@/components/calama/gantt-table'
 
@@ -551,7 +553,7 @@ export default function PlanSemanalPage() {
                     (zonas ?? []).map((z) => [z.codigo_zona, z.nombre] as const),
                   )
                   const planificacion = (planificaciones ?? []).find((p) => p.id === planificacionId)
-                  const blob = await exportarPlanSemanalExcel({
+                  const blob = await (await cargarPlanSemanalExcel()).exportarPlanSemanalExcel({
                     titulo: `Plan semanal Calama${planificacion ? ' — ' + planificacion.nombre : ''}`,
                     fechaInicio: semanaIso,
                     fechaFin: (dias && dias.length > 0) ? dias[dias.length - 1].fecha : semanaIso,
@@ -589,7 +591,7 @@ export default function PlanSemanalPage() {
                     mostrarMacroZona: true,
                     scopeNombre: planificacion?.nombre ?? null,
                   })
-                  descargarBlob(blob, `plan_calama_${semanaIso}.xlsx`)
+                  ;(await cargarPlanSemanalExcel()).descargarBlob(blob, `plan_calama_${semanaIso}.xlsx`)
                   toast.success('Plan exportado')
                 } catch (err) {
                   toast.error((err as Error).message)

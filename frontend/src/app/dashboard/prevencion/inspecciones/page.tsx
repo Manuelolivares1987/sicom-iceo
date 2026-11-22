@@ -31,7 +31,9 @@ import {
   type InspeccionResumen,
 } from '@/lib/services/prevencion-inspeccion'
 import type { EvidenciaArchivo } from '@/lib/services/prevencion-reportabilidad'
-import { descargarPdfInspeccion } from '@/components/prevencion/pdf-inspeccion-apr'
+// [22-11-2026] Carga diferida: este módulo (PDF/Excel/Word) pesa cientos de kB y
+// solo se usa al apretar el botón; antes se bajaba al abrir la pantalla.
+const cargarPdfInspeccionApr = () => import('@/components/prevencion/pdf-inspeccion-apr')
 
 type Tab = 'resumen' | 'inspecciones' | 'desviaciones' | 'habilitacion'
 
@@ -157,7 +159,7 @@ export default function InspeccionesAprPage() {
 
   const pdf = async (i: InspeccionResumen) => {
     setPdfId(i.id)
-    try { await descargarPdfInspeccion(i.id, nombreFaena(i.faena_id)) }
+    try { await (await cargarPdfInspeccionApr()).descargarPdfInspeccion(i.id, nombreFaena(i.faena_id)) }
     catch (e: any) { toast.error(e?.message ?? 'No se pudo generar el PDF') }
     finally { setPdfId(null) }
   }

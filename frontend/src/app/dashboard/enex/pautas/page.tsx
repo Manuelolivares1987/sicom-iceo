@@ -22,7 +22,9 @@ import {
   TIPO_CAMPO_LABEL, TIPO_INSTALACION_LABEL,
   type EnexPauta, type EnexPautaItem, type TipoCampo, type Periodicidad,
 } from '@/lib/services/enex'
-import { descargarPautasEnexPdf } from '@/components/enex/pdf-pauta-enex'
+// [22-11-2026] Carga diferida: este módulo (PDF/Excel/Word) pesa cientos de kB y
+// solo se usa al apretar el botón; antes se bajaba al abrir la pantalla.
+const cargarPdfPautaEnex = () => import('@/components/enex/pdf-pauta-enex')
 
 const PERIODICIDADES: Periodicidad[] = ['trimestral', 'mensual', 'semestral', 'anual', 'requerimiento']
 const TIPOS_CAMPO: TipoCampo[] = ['ok_nook', 'medicion', 'si_no', 'texto']
@@ -40,7 +42,7 @@ export default function EnexPautasPage() {
 
   async function descargarTodas() {
     setDescargando(true)
-    try { await descargarPautasEnexPdf() } catch (e) { toast.error((e as Error).message) } finally { setDescargando(false) }
+    try { await (await cargarPdfPautaEnex()).descargarPautasEnexPdf() } catch (e) { toast.error((e as Error).message) } finally { setDescargando(false) }
   }
 
   return (
@@ -108,7 +110,7 @@ function PautaDetalle({ pauta }: { pauta: EnexPauta }) {
 
   async function descargarPdf() {
     setDescargando(true)
-    try { await descargarPautasEnexPdf(pauta.id) } catch (e) { toast.error((e as Error).message) } finally { setDescargando(false) }
+    try { await (await cargarPdfPautaEnex()).descargarPautasEnexPdf(pauta.id) } catch (e) { toast.error((e as Error).message) } finally { setDescargando(false) }
   }
 
   const grupos = useMemo(() => {

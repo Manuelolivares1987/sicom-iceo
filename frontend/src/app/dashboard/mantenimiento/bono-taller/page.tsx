@@ -33,7 +33,9 @@ import {
   useCerrarPeriodo, useReabrirPeriodo, useCartolaBono, useOTSinDueno,
 } from '@/hooks/use-taller-bono'
 import { clp, corteDelMes, CONCEPTO_LABEL, getTrabajosExcel } from '@/lib/services/taller-bono'
-import { descargarBlob } from '@/lib/export/plan-semanal-excel'
+// [22-11-2026] Carga diferida: este módulo (PDF/Excel/Word) pesa cientos de kB y
+// solo se usa al apretar el botón; antes se bajaba al abrir la pantalla.
+const cargarPlanSemanalExcel = () => import('@/lib/export/plan-semanal-excel')
 
 // [MIG460] Mientras dure la marcha blanca el cálculo del bono no se le muestra
 // al taller. El candado de verdad vive en el RPC (tabla `taller_bono_acceso`);
@@ -101,7 +103,7 @@ export default function BonoTallerPage() {
         disponibilidadPct: cerrado?.disponibilidad_pct ?? disp?.disponibilidad_pct ?? null,
         lineas, trabajos, sinDueno,
       })
-      descargarBlob(blob, `Bono_taller_${corte.desde}_al_${corte.hasta}.xlsx`)
+      ;(await cargarPlanSemanalExcel()).descargarBlob(blob, `Bono_taller_${corte.desde}_al_${corte.hasta}.xlsx`)
     } catch (e) {
       toast.error((e as Error).message)
     } finally {

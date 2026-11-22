@@ -13,9 +13,10 @@ import { Modal, ModalFooter } from '@/components/ui/modal'
 import { Input } from '@/components/ui/input'
 import { useRequireAuth } from '@/hooks/use-require-auth'
 import { supabase } from '@/lib/supabase'
-import {
-  parseCalamaExcel, type CalamaImportPreview, type LineaNegocioCalama,
-} from '@/lib/importers/calama-excel-importer'
+import { type CalamaImportPreview, type LineaNegocioCalama } from '@/lib/importers/calama-excel-importer'
+// [22-11-2026] Carga diferida: este módulo (PDF/Excel/Word) pesa cientos de kB y
+// solo se usa al apretar el botón; antes se bajaba al abrir la pantalla.
+const cargarCalamaExcelImporter = () => import('@/lib/importers/calama-excel-importer')
 
 type FaenaCalama = 'CENTINELA' | 'LOMAS_BAYAS' | 'SPENCE'
 
@@ -281,7 +282,7 @@ export default function ImportarCalamaPage() {
     setImportResult(null)
     setParsing(true)
     try {
-      const p = await parseCalamaExcel(file)
+      const p = await (await cargarCalamaExcelImporter()).parseCalamaExcel(file)
       setPreview(p)
       const sugFaena = p.faenas_detectadas[0]?.codigo as FaenaCalama | undefined
       const sugLinea = p.lineas_negocio_detectadas[0]?.codigo

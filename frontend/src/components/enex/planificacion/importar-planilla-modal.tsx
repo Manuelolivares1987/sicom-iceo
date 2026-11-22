@@ -20,7 +20,9 @@ import {
   type EnexFaena, type EnexInstalacion, type EnexPanelRow, type TipoServicio,
 } from '@/lib/services/enex'
 import { leerHojaPlanilla, emparejar, normalizarNombre, type HojaPlanilla } from '@/lib/enex-avance'
-import { hojaAMatriz } from '@/lib/enex-planilla-excel'
+// [22-11-2026] Carga diferida: este módulo (PDF/Excel/Word) pesa cientos de kB y
+// solo se usa al apretar el botón; antes se bajaba al abrir la pantalla.
+const cargarEnexPlanillaExcel = () => import('@/lib/enex-planilla-excel')
 
 type Hoja = HojaPlanilla & { nombre: string; faenaIds: string[] }
 type Item = { instalacion_id: string; tipo_servicio: TipoServicio; fecha: string; observacion: string | null; cantidad?: number }
@@ -65,6 +67,7 @@ export function ImportarPlanillaModal({ faenas, instalaciones, hoy, onClose, onD
       const wb = new ExcelJS.Workbook()
       await wb.xlsx.load(await file.arrayBuffer())
       const out: Hoja[] = []
+      const { hojaAMatriz } = await cargarEnexPlanillaExcel()
       wb.eachSheet((ws) => {
         const h = leerHojaPlanilla(hojaAMatriz(ws), Number(hoy.slice(0, 4)))
         if (h.filas.some((f) => f.entradas.length > 0)) out.push({ ...h, nombre: ws.name, faenaIds: faenasDeHoja(ws.name, faenas) })

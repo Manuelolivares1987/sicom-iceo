@@ -5,7 +5,9 @@
 // ============================================================================
 import { supabase } from '@/lib/supabase'
 import { getInformeParaWord, getHallazgosParaWord } from '@/lib/services/informe-recepcion'
-import { generarInformeRecobroWord, descargarBlob } from '@/lib/docx/informe-recobro-word'
+// [22-11-2026] Carga diferida: este módulo (PDF/Excel/Word) pesa cientos de kB y
+// solo se usa al apretar el botón; antes se bajaba al abrir la pantalla.
+const cargarInformeRecobroWord = () => import('@/lib/docx/informe-recobro-word')
 
 export type TipoPartida = 'repuesto' | 'mano_obra' | 'servicio_externo' | 'otro'
 
@@ -169,7 +171,7 @@ export async function descargarWordRecobroOT(r: RecobroOT, otFolio: string | nul
   const [cab, hallazgos] = await Promise.all([getInformeParaWord(inf.id), getHallazgosParaWord(inf.id)])
   if (!cab) throw new Error('No se pudo leer el informe')
   const cobrables = r.partidas.filter((p) => p.cobrable_cliente)
-  const blob = await generarInformeRecobroWord(
+  const blob = await (await cargarInformeRecobroWord()).generarInformeRecobroWord(
     {
       folio: cab.folio,
       cliente_nombre: cab.cliente_nombre,
@@ -213,5 +215,5 @@ export async function descargarWordRecobroOT(r: RecobroOT, otFolio: string | nul
     },
   )
   const borrador = inf.estado !== 'emitido' ? ' BORRADOR' : ''
-  descargarBlob(blob, `Recobro ${cab.patente ?? cab.activo_codigo ?? ''} ${inf.folio ?? ''}${borrador}.docx`.replace(/\s+/g, ' ').trim())
+  ;(await cargarInformeRecobroWord()).descargarBlob(blob, `Recobro ${cab.patente ?? cab.activo_codigo ?? ''} ${inf.folio ?? ''}${borrador}.docx`.replace(/\s+/g, ' ').trim())
 }

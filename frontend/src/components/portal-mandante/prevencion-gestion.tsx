@@ -13,7 +13,9 @@ import { useQuery } from '@tanstack/react-query'
 import { AlertTriangle, Camera, ChevronDown, ChevronRight, FileDown, Loader2 } from 'lucide-react'
 import { Spinner } from '@/components/ui/spinner'
 import { cn } from '@/lib/utils'
-import { descargarPdfDesdeDetalle } from '@/components/prevencion/pdf-inspeccion-apr'
+// [22-11-2026] Carga diferida: este módulo (PDF/Excel/Word) pesa cientos de kB y
+// solo se usa al apretar el botón; antes se bajaba al abrir la pantalla.
+const cargarPdfInspeccionApr = () => import('@/components/prevencion/pdf-inspeccion-apr')
 import {
   getInspeccionPortal, getPrevencionPortal, urlsFotosPortal,
   type ActividadPortal,
@@ -107,7 +109,7 @@ export function PrevencionGestion({ token, acceso, anio, mes }: {
     setPdfId(id); setErrPdf(null)
     try {
       const d = await getInspeccionPortal(token, acceso, id)
-      await descargarPdfDesdeDetalle(d, faena, (paths) => urlsFotosPortal(token, acceso, paths).catch(() => ({})))
+      await (await cargarPdfInspeccionApr()).descargarPdfDesdeDetalle(d, faena, (paths) => urlsFotosPortal(token, acceso, paths).catch(() => ({})))
     } catch (e: any) {
       setErrPdf(e?.message ?? 'No se pudo generar el informe')
     } finally { setPdfId(null) }

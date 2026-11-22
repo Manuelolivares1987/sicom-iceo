@@ -21,7 +21,9 @@ import { useToast } from '@/hooks/use-toast'
 import { cn, todayISO } from '@/lib/utils'
 import { useFaenasPrevencion } from '@/hooks/use-prevencion-reportabilidad'
 import { EppEntregaForm } from '@/components/prevencion/epp-entrega-form'
-import { descargarComprobanteEpp } from '@/components/prevencion/pdf-comprobante-epp'
+// [22-11-2026] Carga diferida: este módulo (PDF/Excel/Word) pesa cientos de kB y
+// solo se usa al apretar el botón; antes se bajaba al abrir la pantalla.
+const cargarPdfComprobanteEpp = () => import('@/components/prevencion/pdf-comprobante-epp')
 import { MOTIVO_EPP, anularEntregaEpp, getEntregasEpp, type EppEntrega } from '@/lib/services/prevencion-epp'
 
 const ROLES_ADMIN = ['administrador', 'prevencionista', 'jefe_operaciones', 'subgerente_operaciones']
@@ -80,7 +82,7 @@ export default function EppPanelPage() {
 
   const pdf = async (e: EppEntrega) => {
     setPdfId(e.id)
-    try { await descargarComprobanteEpp(e) } catch (err: any) { toast.error(err?.message ?? 'No se pudo generar el PDF') }
+    try { await (await cargarPdfComprobanteEpp()).descargarComprobanteEpp(e) } catch (err: any) { toast.error(err?.message ?? 'No se pudo generar el PDF') }
     finally { setPdfId(null) }
   }
 
