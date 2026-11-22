@@ -206,6 +206,12 @@ function filtrar(filas: Fila[], q: URLSearchParams): Fila[] {
     if (['select', 'order', 'limit', 'offset'].includes(k)) return
     const m = /^eq\.(.*)$/.exec(v)
     if (m) r = r.filter((f) => String(f[k]) === decodeURIComponent(m[1]))
+    const il = /^ilike\.(.*)$/.exec(v)
+    if (il) {
+      const patron = decodeURIComponent(il[1]).split('%').map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('.*')
+      const re = new RegExp('^' + patron + '$', 'i')
+      r = r.filter((f) => re.test(String(f[k] ?? '')))
+    }
   })
   const lim = Number(q.get('limit'))
   return lim > 0 ? r.slice(0, lim) : r

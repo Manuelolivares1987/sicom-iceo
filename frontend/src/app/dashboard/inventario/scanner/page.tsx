@@ -1,350 +1,304 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import Link from 'next/link'
-import { ScanBarcode, Camera, Package, Minus, Plus, CheckCircle2, XCircle } from 'lucide-react'
+// ============================================================================
+// Scanner de bodega (rehecho 22-11-2026)
+// ----------------------------------------------------------------------------
+// Pistola (o cámara) → la lista se arma sola (el mismo código suma +1) →
+// Salida (CECO + OT opcional, FIFO) o Entrada (proveedor + documento).
+// Registra con las MISMAS funciones de la oficina (ver lib/services/bodega-scanner).
+// Si el código no está en el catálogo, se asigna a un producto en el momento.
+// ============================================================================
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { ScanBarcode, Camera, Minus, Plus, Trash2, Link2, PackageMinus, PackagePlus } from 'lucide-react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Badge } from '@/components/ui/badge'
-import { Spinner } from '@/components/ui/spinner'
-import { useRequireAuth } from '@/hooks/use-require-auth'
 import { BarcodeScanner } from '@/components/ui/barcode-scanner'
-import { supabase } from '@/lib/supabase'
-import { cn } from '@/lib/utils'
+import { useRequireAuth } from '@/hooks/use-require-auth'
+import { useToast } from '@/contexts/toast-context'
+import { useCECO, useOTsValidasSalida } from '@/hooks/use-bodega-salida-fifo'
+import {
+  getBodegasParaIngreso, buscarProveedores, registrarIngresoBodega,
+  type DocTipo, type ProveedorBusqueda,
+} from '@/lib/services/bodega-ingreso'
+import {
+  buscarPorCodigo, buscarParaAsignar, asignarCodigoBarras, stockEnBodega, registrarSalidaScanner,
+  type ProductoScan,
+} from '@/lib/services/bodega-scanner'
+import { cn, errorMessage, todayISO } from '@/lib/utils'
 
-type Producto = {
-  id: string
-  codigo: string
-  codigo_barras: string | null
-  nombre: string
-  unidad_medida: string
-  stock_total: number
-  stocks: Array<{ bodega_id: string; bodega: string; cantidad: number; costo_promedio: number }>
-}
-
-type Tipo = 'entrada' | 'salida'
+type Modo = 'salida' | 'entrada'
+type Linea = { p: ProductoScan; cantidad: number; costo: string }
+const DOCS: Array<{ v: DocTipo; l: string }> = [
+  { v: 'factura', l: 'Factura' }, { v: 'guia', l: 'Guía' }, { v: 'boleta', l: 'Boleta' }, { v: 'vale', l: 'Vale' }, { v: 'otro', l: 'Otro' },
+]
 
 export default function ScannerPage() {
   useRequireAuth()
+  const toast = useToast()
+  const qc = useQueryClient()
+  const pistola = useRef<HTMLInputElement>(null)
 
-  const [scannerOn, setScannerOn] = useState(false)
-  const [codigoInput, setCodigoInput] = useState('')
-  const [producto, setProducto] = useState<Producto | null>(null)
-  const [bodegaSel, setBodegaSel] = useState<string>('')
-  const [cantidad, setCantidad] = useState('1')
-  const [tipo, setTipo] = useState<Tipo>('salida')
-  const [loading, setLoading] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const [historial, setHistorial] = useState<Array<{ codigo: string; nombre: string; cantidad: number; tipo: Tipo; ts: string }>>([])
-  const [errorMsg, setErrorMsg] = useState<string | null>(null)
-  const [successMsg, setSuccessMsg] = useState<string | null>(null)
+  const [modo, setModo] = useState<Modo>('salida')
+  const [bodegaId, setBodegaId] = useState('')
+  const [codigo, setCodigo] = useState('')
+  const [camara, setCamara] = useState(false)
+  const [lineas, setLineas] = useState<Linea[]>([])
+  const [buscando, setBuscando] = useState(false)
+  const [desconocido, setDesconocido] = useState<string | null>(null)
+  const [qAsignar, setQAsignar] = useState('')
+  const [candidatos, setCandidatos] = useState<ProductoScan[]>([])
+  const [guardando, setGuardando] = useState(false)
+  // salida
+  const [cecoId, setCecoId] = useState('')
+  const [otId, setOtId] = useState('')
+  const [motivo, setMotivo] = useState('')
+  const [entregadoA, setEntregadoA] = useState('')
+  // entrada
+  const [qProv, setQProv] = useState('')
+  const [proveedores, setProveedores] = useState<ProveedorBusqueda[]>([])
+  const [proveedor, setProveedor] = useState<ProveedorBusqueda | null>(null)
+  const [docTipo, setDocTipo] = useState<DocTipo>('factura')
+  const [docNumero, setDocNumero] = useState('')
+  const [docFecha, setDocFecha] = useState(todayISO())
 
-  // Fetch producto por código (barras o código interno)
-  const buscarProducto = async (codigo: string) => {
-    setLoading(true)
-    setErrorMsg(null)
-    setProducto(null)
+  const { data: bodegas } = useQuery({ queryKey: ['scanner-bodegas'], queryFn: getBodegasParaIngreso, staleTime: 5 * 60_000 })
+  const { data: cecos } = useCECO()
+  const { data: ots } = useOTsValidasSalida()
+  const ids = useMemo(() => lineas.map((l) => l.p.id), [lineas])
+  const { data: stock } = useQuery({
+    queryKey: ['scanner-stock', bodegaId, ids.join(',')],
+    queryFn: () => stockEnBodega(bodegaId, ids),
+    enabled: !!bodegaId && ids.length > 0,
+  })
+
+  useEffect(() => { try { const b = localStorage.getItem('scanner-bodega'); if (b) setBodegaId(b) } catch { /* */ } }, [])
+  useEffect(() => { try { if (bodegaId) localStorage.setItem('scanner-bodega', bodegaId) } catch { /* */ } }, [bodegaId])
+  const enfocar = () => setTimeout(() => pistola.current?.focus(), 50)
+
+  const agregar = (p: ProductoScan) => {
+    setLineas((ls) => {
+      const i = ls.findIndex((l) => l.p.id === p.id)
+      if (i >= 0) return ls.map((l, j) => (j === i ? { ...l, cantidad: l.cantidad + 1 } : l))
+      return [{ p, cantidad: 1, costo: p.costo_unitario_actual ? String(p.costo_unitario_actual) : '' }, ...ls]
+    })
+  }
+
+  const leer = async (raw: string) => {
+    const c = raw.trim()
+    setCodigo('')
+    if (!c) return
+    setBuscando(true)
     try {
-      const q = codigo.trim()
-      if (!q) return
-      const { data, error } = await supabase
-        .from('productos')
-        .select('id, codigo, codigo_barras, nombre, unidad_medida')
-        .or(`codigo.eq.${q},codigo_barras.eq.${q}`)
-        .maybeSingle()
-      if (error) throw error
-      if (!data) {
-        setErrorMsg(`No se encontró producto con código "${q}"`)
-        return
-      }
-      // Traer stocks por bodega
-      const { data: stocks, error: stErr } = await supabase
-        .from('stock_bodega')
-        .select('bodega_id, cantidad, costo_promedio, bodega:bodegas(nombre)')
-        .eq('producto_id', data.id)
-        .gt('cantidad', 0)
-      if (stErr) throw stErr
-      const stockList = (stocks ?? []).map((s: any) => ({
-        bodega_id: s.bodega_id as string,
-        bodega: s.bodega?.nombre ?? '—',
-        cantidad: Number(s.cantidad),
-        costo_promedio: Number(s.costo_promedio),
-      }))
-      const totalStock = stockList.reduce((acc, s) => acc + s.cantidad, 0)
-      setProducto({
-        id: data.id,
-        codigo: data.codigo,
-        codigo_barras: data.codigo_barras,
-        nombre: data.nombre,
-        unidad_medida: data.unidad_medida,
-        stock_total: totalStock,
-        stocks: stockList,
-      })
-      // Auto-select primera bodega con stock
-      if (stockList.length > 0) setBodegaSel(stockList[0].bodega_id)
-    } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : 'Error')
-    } finally {
-      setLoading(false)
-    }
+      const p = await buscarPorCodigo(c)
+      if (p) { agregar(p); setDesconocido(null) } else { setDesconocido(c); setQAsignar(''); setCandidatos([]) }
+    } catch (e) {
+      toast.error(errorMessage(e, 'No se pudo buscar el código'))
+    } finally { setBuscando(false); enfocar() }
   }
 
-  const handleScan = (codigo: string) => {
-    if (loading || saving) return
-    setScannerOn(false)
-    setCodigoInput(codigo)
-    buscarProducto(codigo)
-  }
-
-  const handleSubmit = async () => {
-    if (!producto) return
-    const qty = Number(cantidad)
-    if (!qty || qty <= 0) {
-      setErrorMsg('Cantidad debe ser mayor a cero')
-      return
-    }
-    if (tipo === 'salida' && !bodegaSel) {
-      setErrorMsg('Selecciona una bodega')
-      return
-    }
-    if (tipo === 'entrada' && !bodegaSel) {
-      setErrorMsg('Selecciona bodega destino')
-      return
-    }
-
-    setSaving(true)
-    setErrorMsg(null)
-    setSuccessMsg(null)
-    try {
-      const delta = tipo === 'salida' ? -qty : qty
-      const bodegaTarget = bodegaSel
-
-      // Verificar stock
-      const { data: actual } = await supabase
-        .from('stock_bodega')
-        .select('cantidad, costo_promedio')
-        .eq('bodega_id', bodegaTarget)
-        .eq('producto_id', producto.id)
-        .maybeSingle()
-
-      const stockActual = Number(actual?.cantidad ?? 0)
-      const costoProm = Number(actual?.costo_promedio ?? 0)
-      const nuevoStock = stockActual + delta
-
-      if (nuevoStock < 0) {
-        throw new Error(`Stock insuficiente (disponible ${stockActual})`)
-      }
-
-      // Crear movimiento
-      const { error: movErr } = await supabase.from('movimientos_inventario').insert({
-        bodega_id: bodegaTarget,
-        producto_id: producto.id,
-        tipo_movimiento: tipo === 'salida' ? 'salida_consumo' : 'entrada_compra',
-        cantidad: qty,
-        costo_unitario: costoProm,
-        costo_total: qty * costoProm,
-        observacion: `Scanner ${tipo}`,
-      })
-      if (movErr) throw movErr
-
-      // Upsert stock
-      const { error: stErr } = await supabase.from('stock_bodega').upsert(
-        {
-          bodega_id: bodegaTarget,
-          producto_id: producto.id,
-          cantidad: nuevoStock,
-          costo_promedio: costoProm,
-          ultimo_movimiento: new Date().toISOString(),
-        },
-        { onConflict: 'bodega_id,producto_id' },
-      )
-      if (stErr) throw stErr
-
-      setSuccessMsg(`${tipo === 'salida' ? 'Salida' : 'Entrada'} registrada: ${qty} ${producto.unidad_medida} de ${producto.nombre}`)
-      setHistorial((h) => [
-        { codigo: producto.codigo, nombre: producto.nombre, cantidad: qty, tipo, ts: new Date().toLocaleTimeString('es-CL') },
-        ...h,
-      ].slice(0, 20))
-
-      // Refrescar stocks
-      await buscarProducto(codigoInput)
-    } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : 'Error')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  // Submit al presionar Enter en el input
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Enter' && codigoInput && !loading && document.activeElement?.tagName === 'INPUT') {
-        const el = document.activeElement as HTMLInputElement
-        if (el.type === 'text') buscarProducto(codigoInput)
+    if (!desconocido || qAsignar.trim().length < 2) { setCandidatos([]); return }
+    const t = setTimeout(() => { buscarParaAsignar(qAsignar).then(setCandidatos).catch(() => setCandidatos([])) }, 300)
+    return () => clearTimeout(t)
+  }, [qAsignar, desconocido])
+
+  useEffect(() => {
+    if (qProv.trim().length < 2) { setProveedores([]); return }
+    const t = setTimeout(() => { buscarProveedores(qProv).then(setProveedores).catch(() => setProveedores([])) }, 300)
+    return () => clearTimeout(t)
+  }, [qProv])
+
+  const asignar = async (p: ProductoScan) => {
+    if (!desconocido) return
+    try {
+      await asignarCodigoBarras(p.id, desconocido)
+      toast.success(`Código ${desconocido} asignado a ${p.nombre}`)
+      agregar({ ...p, codigo_barras: desconocido })
+      setDesconocido(null)
+      enfocar()
+    } catch (e) { toast.error(errorMessage(e, 'No se pudo asignar el código')) }
+  }
+
+  const faltaStock = modo === 'salida' && !!stock && lineas.some((l) => (stock[l.p.id] ?? 0) < l.cantidad)
+  const puede = !!bodegaId && lineas.length > 0 && !guardando && (modo === 'salida'
+    ? !!cecoId && motivo.trim().length >= 5 && !faltaStock
+    : !!proveedor && !!docNumero.trim())
+
+  const registrar = async () => {
+    if (!puede) return
+    setGuardando(true)
+    try {
+      if (modo === 'salida') {
+        const r = await registrarSalidaScanner({
+          bodega_id: bodegaId, ceco_id: cecoId, ot_id: otId || null, motivo: motivo.trim(),
+          entregado_a: entregadoA.trim() || null,
+          items: lineas.map((l) => ({ producto_id: l.p.id, cantidad: l.cantidad, unidad: l.p.unidad_medida })),
+        })
+        toast.success(`Salida registrada${r.folio ? ` (${r.folio})` : ''}`)
+      } else {
+        const r = await registrarIngresoBodega({
+          proveedor_id: proveedor!.id, bodega_id: bodegaId, doc_tipo: docTipo, doc_numero: docNumero.trim(),
+          doc_fecha: docFecha || null,
+          items: lineas.map((l) => ({
+            producto_id: l.p.id, cantidad: l.cantidad, unidad: l.p.unidad_medida,
+            costo_unitario: l.costo.trim() === '' ? null : Number(l.costo),
+          })),
+        })
+        toast.success(`Entrada registrada (${r.folio})`)
       }
-    }
-    window.addEventListener('keypress', onKey)
-    return () => window.removeEventListener('keypress', onKey)
-  }, [codigoInput, loading])
+      setLineas([]); setMotivo(''); setEntregadoA(''); setDocNumero('')
+      for (const k of ['stock-bodega', 'movimientos', 'bodega-reportes', 'valorizacion-total', 'bodega-salida', 'scanner-stock']) {
+        qc.invalidateQueries({ queryKey: [k] })
+      }
+      enfocar()
+    } catch (e) {
+      toast.error(errorMessage(e, 'No se pudo registrar'))
+    } finally { setGuardando(false) }
+  }
 
   return (
-    <div className="space-y-4">
-      <div className="rounded-2xl bg-gradient-to-r from-cyan-600 to-blue-600 p-5 text-white shadow-lg">
-        <h1 className="text-xl font-bold flex items-center gap-2">
-          <ScanBarcode className="h-6 w-6" />
-          Pistola Inventario (Scanner)
-        </h1>
-        <p className="text-sm text-white/80 mt-1">
-          Escanea un código de barras o escríbelo. Apto para pistolas USB (teclado) y cámara móvil.
-        </p>
+    <div className="mx-auto max-w-3xl space-y-4 p-4">
+      <div className="flex items-center gap-2">
+        <ScanBarcode className="h-6 w-6 text-slate-700" />
+        <h1 className="text-xl font-bold text-gray-900">Scanner de bodega</h1>
       </div>
 
-      {/* Toggle Entrada / Salida */}
-      <div className="flex gap-2">
-        <Button
-          variant={tipo === 'salida' ? 'primary' : 'secondary'}
-          onClick={() => setTipo('salida')}
-          className="flex-1"
-        >
-          <Minus className="h-4 w-4" />
-          Salida / Rebajar
-        </Button>
-        <Button
-          variant={tipo === 'entrada' ? 'primary' : 'secondary'}
-          onClick={() => setTipo('entrada')}
-          className="flex-1"
-        >
-          <Plus className="h-4 w-4" />
-          Entrada / Ingresar
-        </Button>
-      </div>
-
-      {/* Scanner cámara */}
-      {scannerOn && (
-        <BarcodeScanner active onScan={handleScan} onClose={() => setScannerOn(false)} />
-      )}
-
-      {/* Input código + cámara */}
       <Card>
-        <CardContent className="p-3 space-y-2">
-          <div className="flex gap-2">
-            <Input
-              autoFocus
-              placeholder="Escanea o escribe código…"
-              value={codigoInput}
-              onChange={(e) => setCodigoInput(e.target.value)}
-              className="flex-1 font-mono text-lg"
-            />
-            <Button variant="primary" onClick={() => buscarProducto(codigoInput)} loading={loading}>
-              Buscar
-            </Button>
-            <Button variant="secondary" onClick={() => setScannerOn((v) => !v)}>
-              <Camera className="h-4 w-4" />
-              {scannerOn ? 'Cerrar' : 'Cámara'}
-            </Button>
+        <CardContent className="space-y-3 pt-4">
+          <div className="grid grid-cols-2 gap-2">
+            {(['salida', 'entrada'] as Modo[]).map((m) => (
+              <button key={m} type="button" onClick={() => { setModo(m); enfocar() }}
+                className={cn('flex items-center justify-center gap-2 rounded-lg border py-2.5 text-sm font-semibold',
+                  modo === m ? (m === 'salida' ? 'border-red-500 bg-red-50 text-red-700' : 'border-green-600 bg-green-50 text-green-700') : 'border-gray-200 text-gray-600')}>
+                {m === 'salida' ? <PackageMinus className="h-4 w-4" /> : <PackagePlus className="h-4 w-4" />}
+                {m === 'salida' ? 'Salida' : 'Entrada'}
+              </button>
+            ))}
           </div>
-          <p className="text-[11px] text-gray-500">
-            La pistola USB emula un teclado + Enter. Si usas móvil, toca "Cámara".
-          </p>
+          <label className="block text-xs font-medium text-gray-600">Bodega
+            <select value={bodegaId} onChange={(e) => setBodegaId(e.target.value)}
+              className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm">
+              <option value="">Elige la bodega…</option>
+              {(bodegas ?? []).map((b) => <option key={b.id} value={b.id}>{b.codigo} · {b.nombre}</option>)}
+            </select>
+          </label>
+          <form onSubmit={(e) => { e.preventDefault(); void leer(codigo) }} className="flex gap-2">
+            <Input ref={pistola} autoFocus value={codigo} onChange={(e) => setCodigo(e.target.value)}
+              placeholder="Pistolea o escribe el código y Enter" aria-label="Código" className="flex-1" />
+            <Button type="button" variant="outline" onClick={() => setCamara((v) => !v)} aria-label="Cámara">
+              <Camera className="h-4 w-4" />
+            </Button>
+          </form>
+          {buscando && <p className="text-xs text-gray-500">Buscando…</p>}
+          {camara && <BarcodeScanner active onScan={(c) => { setCamara(false); void leer(c) }} onClose={() => setCamara(false)} />}
         </CardContent>
       </Card>
 
-      {errorMsg && (
-        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-          {errorMsg}
-        </div>
-      )}
-      {successMsg && (
-        <div className="rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-700 flex items-center gap-2">
-          <CheckCircle2 className="h-5 w-5" /> {successMsg}
-        </div>
+      {desconocido && (
+        <Card className="border-amber-300 bg-amber-50">
+          <CardContent className="space-y-2 pt-4">
+            <p className="text-sm font-semibold text-amber-900">El código {desconocido} no está en el catálogo</p>
+            <p className="text-xs text-amber-800">Busca el producto y asígnaselo: la próxima vez se reconoce solo.</p>
+            <Input value={qAsignar} onChange={(e) => setQAsignar(e.target.value)} placeholder="Nombre o código interno del producto" autoFocus />
+            <ul className="max-h-56 divide-y overflow-auto rounded-lg border bg-white">
+              {candidatos.map((p) => (
+                <li key={p.id} className="flex items-center justify-between gap-2 px-3 py-2 text-sm">
+                  <span className="min-w-0"><span className="font-medium">{p.nombre}</span> <span className="text-xs text-gray-500">{p.codigo}{p.codigo_barras ? ` · ya tiene ${p.codigo_barras}` : ''}</span></span>
+                  <Button size="sm" onClick={() => void asignar(p)}><Link2 className="mr-1 h-3.5 w-3.5" /> Asignar</Button>
+                </li>
+              ))}
+            </ul>
+            <button type="button" onClick={() => { setDesconocido(null); enfocar() }} className="text-xs text-gray-600 underline">Cancelar</button>
+          </CardContent>
+        </Card>
       )}
 
-      {/* Producto encontrado */}
-      {producto && (
-        <Card className="border-blue-300">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base flex items-center justify-between">
-              <span className="flex items-center gap-2">
-                <Package className="h-5 w-5" />
-                {producto.nombre}
-              </span>
-              <Badge className="bg-indigo-100 text-indigo-800">
-                Stock total: {producto.stock_total} {producto.unidad_medida}
-              </Badge>
-            </CardTitle>
-            <div className="text-xs text-gray-500 font-mono mt-1">
-              {producto.codigo}
-              {producto.codigo_barras && <span className="ml-2">· {producto.codigo_barras}</span>}
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div>
-              <label className="text-xs font-medium text-gray-600">Bodega</label>
-              <select
-                className="h-10 w-full rounded border border-gray-300 px-2 text-sm"
-                value={bodegaSel}
-                onChange={(e) => setBodegaSel(e.target.value)}
-              >
-                <option value="">Seleccionar…</option>
-                {producto.stocks.map((s) => (
-                  <option key={s.bodega_id} value={s.bodega_id}>
-                    {s.bodega} — stock: {s.cantidad} {producto.unidad_medida}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="text-xs font-medium text-gray-600">
-                Cantidad a {tipo === 'salida' ? 'rebajar' : 'ingresar'} ({producto.unidad_medida})
+      <Card>
+        <CardHeader><CardTitle className="text-base">Lista ({lineas.length})</CardTitle></CardHeader>
+        <CardContent>
+          {lineas.length === 0 ? <p className="text-sm text-gray-500">Pistolea los productos: aparecen acá.</p> : (
+            <ul className="divide-y">
+              {lineas.map((l) => {
+                const disp = stock?.[l.p.id]
+                const corto = modo === 'salida' && disp !== undefined && disp < l.cantidad
+                return (
+                  <li key={l.p.id} className="flex flex-wrap items-center gap-2 py-2">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium text-gray-900">{l.p.nombre}</p>
+                      <p className={cn('text-xs', corto ? 'font-semibold text-red-600' : 'text-gray-500')}>
+                        {l.p.codigo} · {l.p.unidad_medida}{bodegaId && modo === 'salida' ? ` · disponible ${disp ?? 0}` : ''}
+                      </p>
+                    </div>
+                    {modo === 'entrada' && (
+                      <Input value={l.costo} onChange={(e) => setLineas((ls) => ls.map((x) => (x.p.id === l.p.id ? { ...x, costo: e.target.value } : x)))}
+                        inputMode="decimal" placeholder="$ unit." aria-label="Costo unitario" className="w-24" />
+                    )}
+                    <div className="flex items-center gap-1">
+                      <Button size="sm" variant="outline" aria-label="Menos" onClick={() => setLineas((ls) => ls.map((x) => (x.p.id === l.p.id ? { ...x, cantidad: Math.max(1, x.cantidad - 1) } : x)))}><Minus className="h-3.5 w-3.5" /></Button>
+                      <Input value={String(l.cantidad)} inputMode="decimal" aria-label="Cantidad" className="w-16 text-center"
+                        onChange={(e) => { const n = Number(e.target.value.replace(',', '.')); if (!Number.isNaN(n)) setLineas((ls) => ls.map((x) => (x.p.id === l.p.id ? { ...x, cantidad: n } : x))) }} />
+                      <Button size="sm" variant="outline" aria-label="Más" onClick={() => setLineas((ls) => ls.map((x) => (x.p.id === l.p.id ? { ...x, cantidad: x.cantidad + 1 } : x)))}><Plus className="h-3.5 w-3.5" /></Button>
+                      <Button size="sm" variant="ghost" aria-label="Quitar" onClick={() => setLineas((ls) => ls.filter((x) => x.p.id !== l.p.id))}><Trash2 className="h-3.5 w-3.5 text-red-600" /></Button>
+                    </div>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="space-y-3 pt-4">
+          {modo === 'salida' ? (
+            <>
+              <label className="block text-xs font-medium text-gray-600">Centro de costo *
+                <select value={cecoId} onChange={(e) => setCecoId(e.target.value)} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm">
+                  <option value="">Elige el CECO…</option>
+                  {(cecos ?? []).map((c) => <option key={c.id} value={c.id}>{c.codigo} · {c.nombre}</option>)}
+                </select>
               </label>
-              <Input
-                type="number" step="1" min="0.001"
-                value={cantidad}
-                onChange={(e) => setCantidad(e.target.value)}
-              />
-            </div>
-            <Button
-              variant="primary"
-              size="lg"
-              onClick={handleSubmit}
-              loading={saving}
-              className="w-full"
-            >
-              {tipo === 'salida' ? <Minus className="h-5 w-5" /> : <Plus className="h-5 w-5" />}
-              Confirmar {tipo}
-            </Button>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Historial de la sesión */}
-      {historial.length > 0 && (
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Últimos movimientos en esta sesión</CardTitle>
-          </CardHeader>
-          <CardContent className="divide-y text-sm">
-            {historial.map((h, i) => (
-              <div key={i} className="flex items-center gap-2 py-1.5">
-                {h.tipo === 'salida' ? <Minus className="h-4 w-4 text-red-600" /> : <Plus className="h-4 w-4 text-green-600" />}
-                <span className="font-mono text-xs text-gray-500">{h.codigo}</span>
-                <span className="flex-1 truncate">{h.nombre}</span>
-                <span className={cn('font-semibold', h.tipo === 'salida' ? 'text-red-700' : 'text-green-700')}>
-                  {h.tipo === 'salida' ? '−' : '+'}{h.cantidad}
-                </span>
-                <span className="text-[10px] text-gray-400">{h.ts}</span>
+              <label className="block text-xs font-medium text-gray-600">OT (opcional)
+                <select value={otId} onChange={(e) => setOtId(e.target.value)} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm">
+                  <option value="">Sin OT (solo CECO)</option>
+                  {(ots ?? []).map((o) => <option key={o.id} value={o.id}>{o.folio}{o.faena_nombre ? ` · ${o.faena_nombre}` : ''}</option>)}
+                </select>
+              </label>
+              <Input value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Motivo * (mínimo 5 letras)" />
+              <Input value={entregadoA} onChange={(e) => setEntregadoA(e.target.value)} placeholder="Entregado a (opcional)" />
+              {faltaStock && <p className="text-xs font-semibold text-red-600">Hay productos con menos stock que lo que se quiere sacar.</p>}
+            </>
+          ) : (
+            <>
+              <div>
+                <Input value={proveedor ? `${proveedor.nombre}${proveedor.rut ? ` · ${proveedor.rut}` : ''}` : qProv}
+                  onChange={(e) => { setProveedor(null); setQProv(e.target.value) }} placeholder="Proveedor * (nombre o RUT)" />
+                {!proveedor && proveedores.length > 0 && (
+                  <ul className="mt-1 max-h-48 divide-y overflow-auto rounded-lg border bg-white">
+                    {proveedores.map((p) => (
+                      <li key={p.id}><button type="button" onClick={() => { setProveedor(p); setProveedores([]) }} className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50">{p.nombre} <span className="text-xs text-gray-500">{p.rut ?? ''}</span></button></li>
+                    ))}
+                  </ul>
+                )}
               </div>
-            ))}
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Link a cargar maestro */}
-      <div className="text-center text-xs text-gray-500">
-        ¿Nuevo producto? <Link href="/dashboard/inventario/cargar-maestro" className="text-blue-600 hover:underline">Carga el maestro desde Excel</Link>
-      </div>
+              <div className="grid grid-cols-3 gap-2">
+                <select value={docTipo} onChange={(e) => setDocTipo(e.target.value as DocTipo)} aria-label="Tipo de documento" className="rounded-lg border border-gray-300 px-2 py-2 text-sm">
+                  {DOCS.map((d) => <option key={d.v} value={d.v}>{d.l}</option>)}
+                </select>
+                <Input value={docNumero} onChange={(e) => setDocNumero(e.target.value)} placeholder="N° documento *" />
+                <Input type="date" value={docFecha} max={todayISO()} onChange={(e) => setDocFecha(e.target.value)} aria-label="Fecha del documento" />
+              </div>
+              <p className="text-[11px] text-gray-500">Sin precio, la línea entra con costo provisional (se corrige al llegar la factura).</p>
+            </>
+          )}
+          <Button className="w-full" disabled={!puede} onClick={() => void registrar()}>
+            {guardando ? 'Registrando…' : modo === 'salida' ? `Registrar salida (${lineas.length})` : `Registrar entrada (${lineas.length})`}
+          </Button>
+          {!bodegaId && <p className="text-xs text-amber-700">Elige la bodega para registrar.</p>}
+        </CardContent>
+      </Card>
     </div>
   )
 }
