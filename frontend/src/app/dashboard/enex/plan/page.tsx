@@ -23,7 +23,10 @@ import {
   eliminarPlanTarea, cambiarEstadoPlan, lunesDe, MESES,
   type EnexPlanTarea, type EnexTareaImport, type EnexPlanEstado,
 } from '@/lib/services/enex'
-import { leerPlanExcel, type PlanPreview } from '@/lib/importers/enex-plan-importer'
+import { type PlanPreview } from '@/lib/importers/enex-plan-importer'
+// [22-11-2026] Carga diferida: este módulo (PDF/Excel/Word) pesa cientos de kB y
+// solo se usa al apretar el botón; antes se bajaba al abrir la pantalla.
+const cargarEnexPlanImporter = () => import('@/lib/importers/enex-plan-importer')
 
 const DIAS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
 
@@ -124,7 +127,7 @@ export default function EnexPlanPage() {
   async function elegirArchivo(f: File) {
     try {
       const anio = Number(semana.slice(0, 4))
-      const p = await leerPlanExcel(f, anio)
+      const p = await (await cargarEnexPlanImporter()).leerPlanExcel(f, anio)
       setPreview(p)
       if (p.validas === 0) toast.error('No se reconoció ninguna fila del archivo')
     } catch (e) { toast.error(`No se pudo leer el archivo: ${(e as Error).message}`) }

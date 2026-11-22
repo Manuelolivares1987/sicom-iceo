@@ -28,7 +28,9 @@ import {
   TIPO_INSTALACION_LABEL, MESES, clp,
   type EnexPanelRow, type EnexInstalacion, type TipoServicio,
 } from '@/lib/services/enex'
-import { generarYGuardarInformeEnex } from '@/components/enex/pdf-informe-enex'
+// [22-11-2026] Carga diferida: este módulo (PDF/Excel/Word) pesa cientos de kB y
+// solo se usa al apretar el botón; antes se bajaba al abrir la pantalla.
+const cargarPdfInformeEnex = () => import('@/components/enex/pdf-informe-enex')
 import { ReprogramacionModal } from '@/components/enex/reprogramacion-modal'
 
 const hoy = () => { const d = new Date(); return { anio: d.getFullYear(), mes: d.getMonth() + 1 } }
@@ -431,7 +433,7 @@ function CeldaModal({ anio, mes, inst, servicio, row, onClose, onDone }: {
       // Cumplida → generar y guardar el informe PDF con formato del mandante.
       if (r.cumplida) {
         getEjecucionIdDeProgramacion(row.programacion_id)
-          .then((eid) => (eid ? generarYGuardarInformeEnex(eid) : null))
+          .then(async (eid) => (eid ? (await cargarPdfInformeEnex()).generarYGuardarInformeEnex(eid) : null))
           .then((url) => { if (url) toast.success('Informe PDF generado y guardado') })
           .catch(() => toast.error('El informe PDF no se pudo generar — reintenta desde el detalle'))
       }
@@ -444,7 +446,7 @@ function CeldaModal({ anio, mes, inst, servicio, row, onClose, onDone }: {
     if (!row?.ejecucion_id) return
     setBusy(true)
     try {
-      const url = await generarYGuardarInformeEnex(row.ejecucion_id)
+      const url = await (await cargarPdfInformeEnex()).generarYGuardarInformeEnex(row.ejecucion_id)
       toast.success('Informe PDF generado y guardado')
       window.open(url, '_blank')
       onDone()

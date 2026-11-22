@@ -29,8 +29,12 @@ import {
 import {
   subirFirmaInforme, getInformeParaWord, getHallazgosParaWord, actualizarCabeceraInforme,
 } from '@/lib/services/informe-recepcion'
-import { generarInformeRecobroWord, descargarBlob } from '@/lib/docx/informe-recobro-word'
-import { generarPDFInforme } from '@/components/recepcion/pdf-informe'
+// [22-11-2026] Carga diferida: este módulo (PDF/Excel/Word) pesa cientos de kB y
+// solo se usa al apretar el botón; antes se bajaba al abrir la pantalla.
+const cargarInformeRecobroWord = () => import('@/lib/docx/informe-recobro-word')
+// [22-11-2026] Carga diferida: este módulo (PDF/Excel/Word) pesa cientos de kB y
+// solo se usa al apretar el botón; antes se bajaba al abrir la pantalla.
+const cargarPdfInforme = () => import('@/components/recepcion/pdf-informe')
 import { cn } from '@/lib/utils'
 
 const ROLES_CON_PERMISO = new Set([
@@ -117,7 +121,7 @@ export default function EmitirInformeRecepcionPage() {
         encargado_firma_url: firmaUrl,
         emitido_en: new Date().toISOString(),
       }
-      const blob = await generarPDFInforme({
+      const blob = await (await cargarPdfInforme()).generarPDFInforme({
         informe: informeActualizado as any,
         activo: activoData ?? { patente: null, codigo: null, nombre: null },
         hallazgos,
@@ -479,7 +483,7 @@ function SeccionWord({ informeId, bloqueado }: { informeId: string; bloqueado: b
         getHallazgosParaWord(informeId),
       ])
       if (!informe) throw new Error('No se pudo leer el informe')
-      const blob = await generarInformeRecobroWord(
+      const blob = await (await cargarInformeRecobroWord()).generarInformeRecobroWord(
         {
           folio: informe.folio,
           cliente_nombre: informe.cliente_nombre,
@@ -511,7 +515,7 @@ function SeccionWord({ informeId, bloqueado }: { informeId: string; bloqueado: b
         })),
       )
       const nombre = `informe_${informe.patente ?? informe.activo_codigo ?? 'equipo'} Devolucion.docx`
-      descargarBlob(blob, nombre)
+      ;(await cargarInformeRecobroWord()).descargarBlob(blob, nombre)
       setMsg(`Descargado: ${nombre}`)
     } catch (e) {
       setMsg(e instanceof Error ? e.message : 'Error al generar el Word')

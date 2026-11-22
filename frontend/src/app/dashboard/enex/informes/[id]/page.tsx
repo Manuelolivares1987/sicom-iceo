@@ -28,7 +28,9 @@ import {
   getEjecucionReporte, getPautaItems, getEjecucionItems, guardarInformeEnex, subirFotoInformeEnex,
   type EnexPautaItem, type EnexInformeItemEdit,
 } from '@/lib/services/enex'
-import { generarYGuardarInformeEnex } from '@/components/enex/pdf-informe-enex'
+// [22-11-2026] Carga diferida: este módulo (PDF/Excel/Word) pesa cientos de kB y
+// solo se usa al apretar el botón; antes se bajaba al abrir la pantalla.
+const cargarPdfInformeEnex = () => import('@/components/enex/pdf-informe-enex')
 
 type Act = { resultado: string; valor: string; obs: string; antes: string[]; despues: string[] }
 const vacia = (): Act => ({ resultado: '', valor: '', obs: '', antes: [], despues: [] })
@@ -276,7 +278,7 @@ export default function EditarInformeEnexPage() {
     setGenerando(true)
     setAvance('')
     try {
-      const url = await generarYGuardarInformeEnex(ejecucionId, (hechas, total) =>
+      const url = await (await cargarPdfInformeEnex()).generarYGuardarInformeEnex(ejecucionId, (hechas, total) =>
         setAvance(`${hechas}/${total} fotos`))
       refetch()
       qc.invalidateQueries({ queryKey: ['enex-informes'] })

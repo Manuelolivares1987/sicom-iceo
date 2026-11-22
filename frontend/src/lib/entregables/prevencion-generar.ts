@@ -12,8 +12,12 @@ import {
   type DotacionInstalacion, type FaenaConfigDatos, type IndicadoresFila,
   type PrevencionRegistro,
 } from '@/lib/services/prevencion-reportabilidad'
-import { generarInformeFrankeExcel } from './prevencion-informe-franke-excel'
-import { generarPptEvidencias } from './prevencion-ppt-evidencias'
+// [22-11-2026] Carga diferida: este módulo (PDF/Excel/Word) pesa cientos de kB y
+// solo se usa al apretar el botón; antes se bajaba al abrir la pantalla.
+const cargarPrevencionInformeFrankeExcel = () => import('./prevencion-informe-franke-excel')
+// [22-11-2026] Carga diferida: este módulo (PDF/Excel/Word) pesa cientos de kB y
+// solo se usa al apretar el botón; antes se bajaba al abrir la pantalla.
+const cargarPrevencionPptEvidencias = () => import('./prevencion-ppt-evidencias')
 
 export type PlantillaEntregable =
   | 'e200' | 'grp_cmp' | 'informe_franke' | 'ppt_evidencias'
@@ -159,7 +163,7 @@ export async function generarEntregable(params: {
     onProgreso?.('Cargando indicadores del año…')
     const { data: ind, error } = await getIndicadoresAnio(faenaId, anio)
     if (error) throw error
-    const blob = await generarInformeFrankeExcel({
+    const blob = await (await cargarPrevencionInformeFrankeExcel()).generarInformeFrankeExcel({
       config, indicadoresAnio: (ind ?? []) as IndicadoresFila[], gestion, registros: regs, anio, mes,
     })
     return { blob, filename: `Informe_Gestion_${slug(faenaNombre)}_${anio}-${mm}.xlsx` }
@@ -188,7 +192,7 @@ export async function generarEntregable(params: {
     const tipos = TIPOS_PPT_POR_ITEM[itemNombre]
     const filtrados = tipos ? regs.filter((r) => tipos.includes(r.tipo_codigo)) : regs
     onProgreso?.('Armando la presentación con las fotos del mes…')
-    const blob = await generarPptEvidencias({
+    const blob = await (await cargarPrevencionPptEvidencias()).generarPptEvidencias({
       config, registros: filtrados, titulo: itemNombre, faenaNombre, anio, mes,
       onProgreso: (h, t) => onProgreso?.(`Foto ${h} de ${t}…`),
     })

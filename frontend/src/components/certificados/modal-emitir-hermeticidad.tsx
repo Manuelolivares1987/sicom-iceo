@@ -25,7 +25,9 @@ import {
   getFirmantesAutorizados, type FirmanteAutorizado,
   GRUPOS_HERMETICIDAD, OBLIGATORIOS_HERMETICIDAD, type DatosPrevios,
 } from '@/lib/services/certificados'
-import { descargarCertificadoHermeticidad } from './pdf-hermeticidad'
+// [22-11-2026] Carga diferida: este módulo (PDF/Excel/Word) pesa cientos de kB y
+// solo se usa al apretar el botón; antes se bajaba al abrir la pantalla.
+const cargarPdfHermeticidad = () => import('./pdf-hermeticidad')
 import { todayISO } from '@/lib/utils'
 
 const LOGO = '/images/logo_empresa_2.png'
@@ -132,7 +134,7 @@ export function ModalEmitirHermeticidad({ activoId, patente, onClose, onListo }:
       // Se baja al toque: quien lo emitió lo necesita ahora, no después.
       try {
         const completo = await getCertificadoEmitido(r.id)
-        await descargarCertificadoHermeticidad(completo, LOGO)
+        await (await cargarPdfHermeticidad()).descargarCertificadoHermeticidad(completo, LOGO)
       } catch {
         toast.error('El certificado quedó emitido, pero el PDF no se pudo generar. Se puede descargar desde el equipo.')
       }

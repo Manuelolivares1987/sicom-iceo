@@ -20,7 +20,9 @@ import {
 } from '@/lib/services/enex'
 import { ventanaTrimestre, inicioTrimestreContractual, isoDe } from '@/lib/enex-avance'
 import { armarInformeTrimestral } from '@/lib/enex-informe-trimestral'
-import { descargarInformeTrimestral } from '@/components/enex/pdf-informe-trimestral-enex'
+// [22-11-2026] Carga diferida: este módulo (PDF/Excel/Word) pesa cientos de kB y
+// solo se usa al apretar el botón; antes se bajaba al abrir la pantalla.
+const cargarPdfInformeTrimestralEnex = () => import('@/components/enex/pdf-informe-trimestral-enex')
 
 type Ancla = 'calendario' | 'contractual'
 const pct = (n: number | null) => (n == null ? '—' : `${n.toLocaleString('es-CL', { maximumFractionDigits: 1 })} %`)
@@ -107,7 +109,7 @@ export default function InformeTrimestralPage() {
     if (!informe || !faena || !ventana) return
     setGenerando(true)
     try {
-      await descargarInformeTrimestral({
+      await (await cargarPdfInformeTrimestralEnex()).descargarInformeTrimestral({
         inf: informe, faena, periodo, desde: ventana.desde, hasta: ventana.hasta, comentarios,
         elaboradoPor: perfil?.nombre_completo ?? '', emitido: hoy,
       })

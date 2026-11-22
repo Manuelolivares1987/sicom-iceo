@@ -11,7 +11,9 @@ import {
   Truck, Mail, Pencil, Plus, Clock, Camera, ExternalLink, ListChecks, Upload, Package, X, Search,
   Smartphone, FileWarning, XCircle, Info,
 } from 'lucide-react'
-import { exportarPlanSemanalExcel, descargarBlob } from '@/lib/export/plan-semanal-excel'
+// [22-11-2026] Carga diferida: este módulo (PDF/Excel/Word) pesa cientos de kB y
+// solo se usa al apretar el botón; antes se bajaba al abrir la pantalla.
+const cargarPlanSemanalExcel = () => import('@/lib/export/plan-semanal-excel')
 import { buildPlanSemanalTallerEmailHtml } from '@/lib/email/plan-semanal-taller-email'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -444,7 +446,7 @@ export default function PlanSemanalTallerPage() {
             disabled={!jornadas || jornadas.length === 0}
             onClick={async () => {
               try {
-                const blob = await exportarPlanSemanalExcel({
+                const blob = await (await cargarPlanSemanalExcel()).exportarPlanSemanalExcel({
                   titulo: 'Plan semanal del taller',
                   fechaInicio: semanaIso,
                   fechaFin: dias?.[6]?.fecha ?? semanaIso,
@@ -480,7 +482,7 @@ export default function PlanSemanalTallerPage() {
                   } : null,
                   scopeNombre: 'Taller (global)',
                 })
-                descargarBlob(blob, `plan_taller_${semanaIso}.xlsx`)
+                ;(await cargarPlanSemanalExcel()).descargarBlob(blob, `plan_taller_${semanaIso}.xlsx`)
                 toast.success('Plan exportado')
               } catch (err) {
                 toast.error((err as Error).message)

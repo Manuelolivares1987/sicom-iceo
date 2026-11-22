@@ -13,7 +13,9 @@ import { SignaturePad } from '@/components/ui/signature-pad'
 import { useToast } from '@/contexts/toast-context'
 import { reprogramar, subirFirmaEnex, REPROG_RESPONSABLE, REPROG_CAUSA, type EnexPanelRow } from '@/lib/services/enex'
 import { inicioTrimestreContractual, ventanaTrimestre, ultimoDiaMes } from '@/lib/enex-avance'
-import { generarReprogramacionPdf } from '@/components/enex/pdf-reprogramacion-enex'
+// [22-11-2026] Carga diferida: este módulo (PDF/Excel/Word) pesa cientos de kB y
+// solo se usa al apretar el botón; antes se bajaba al abrir la pantalla.
+const cargarPdfReprogramacionEnex = () => import('@/components/enex/pdf-reprogramacion-enex')
 
 // Registro de reprogramación (formato ESM/PILLADO) → guarda + genera PDF para ENEX.
 export function ReprogramacionModal({ row, nombre, limitarTrimestre = false, fechaInicial = '', onClose, onDone }: {
@@ -56,7 +58,7 @@ export function ReprogramacionModal({ row, nombre, limitarTrimestre = false, fec
       })
       toast.success('Reprogramación registrada — generando PDF para ENEX…')
       try {
-        await generarReprogramacionPdf(r.reprogramacion_id)
+        await (await cargarPdfReprogramacionEnex()).generarReprogramacionPdf(r.reprogramacion_id)
         toast.success('Registro PDF generado y descargado')
       } catch { toast.error('Registrado, pero el PDF no se generó — reintenta desde Recobros y reprogramación') }
       onDone()

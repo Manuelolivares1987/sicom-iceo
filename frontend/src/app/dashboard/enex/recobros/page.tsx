@@ -21,7 +21,9 @@ import {
   getRecobros, getReprogramaciones, REPROG_RESPONSABLE, REPROG_CAUSA,
   TIPO_INSTALACION_LABEL, SERVICIO_LABEL_SHORT,
 } from '@/lib/services/enex'
-import { generarReprogramacionPdf } from '@/components/enex/pdf-reprogramacion-enex'
+// [22-11-2026] Carga diferida: este módulo (PDF/Excel/Word) pesa cientos de kB y
+// solo se usa al apretar el botón; antes se bajaba al abrir la pantalla.
+const cargarPdfReprogramacionEnex = () => import('@/components/enex/pdf-reprogramacion-enex')
 
 function fmtFecha(iso?: string | null): string {
   if (!iso) return '—'
@@ -55,7 +57,7 @@ export default function EnexRecobrosPage() {
   async function descargarPdf(id: string, urlExistente?: string | null) {
     setGenerando(id)
     try {
-      const url = urlExistente ?? await generarReprogramacionPdf(id)
+      const url = urlExistente ?? await (await cargarPdfReprogramacionEnex()).generarReprogramacionPdf(id)
       if (urlExistente) window.open(url, '_blank')
       toast.success('Registro PDF listo')
     } catch (e) { toast.error((e as Error).message) } finally { setGenerando(null) }

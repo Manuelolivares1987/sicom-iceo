@@ -21,7 +21,9 @@ import {
   getFaenas, getInformesMes, getRequerimientosCount, MESES, crearLinkFirma,
   type EnexPanelRow, type TipoServicio,
 } from '@/lib/services/enex'
-import { generarYGuardarInformeEnex } from '@/components/enex/pdf-informe-enex'
+// [22-11-2026] Carga diferida: este módulo (PDF/Excel/Word) pesa cientos de kB y
+// solo se usa al apretar el botón; antes se bajaba al abrir la pantalla.
+const cargarPdfInformeEnex = () => import('@/components/enex/pdf-informe-enex')
 import { RequerimientosModal } from '@/components/enex/requerimientos-modal'
 import { descargarInformesZip } from '@/lib/enex/descargar-informes-zip'
 
@@ -121,7 +123,7 @@ export default function EnexInformesPage() {
     for (let i = 0; i < faltan.length; i++) {
       const r = faltan[i]
       setLoteAvance(`${i + 1}/${faltan.length}`)
-      try { await generarYGuardarInformeEnex(r.ejecucion_id!); ok++ }
+      try { await (await cargarPdfInformeEnex()).generarYGuardarInformeEnex(r.ejecucion_id!); ok++ }
       catch { errores.push(r.instalacion) }
     }
     setLoteAvance(null)
@@ -139,7 +141,7 @@ export default function EnexInformesPage() {
     setGenerando(r.ejecucion_id)
     setAvance('')
     try {
-      const url = await generarYGuardarInformeEnex(r.ejecucion_id, (hechas, total) =>
+      const url = await (await cargarPdfInformeEnex()).generarYGuardarInformeEnex(r.ejecucion_id, (hechas, total) =>
         setAvance(`${hechas}/${total} fotos`))
       toast.success('Informe PDF generado')
       if (w && !w.closed) w.location.href = url

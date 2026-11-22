@@ -3,7 +3,10 @@
 import { useEffect, useState } from 'react'
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts'
 import { supabase } from '@/lib/supabase'
-import { generarReporteFlotaPDF, type ReporteFlotaData } from '@/components/flota/reporte-flota-pdf'
+import { type ReporteFlotaData } from '@/components/flota/reporte-flota-pdf'
+// [22-11-2026] Carga diferida: este módulo (PDF/Excel/Word) pesa cientos de kB y
+// solo se usa al apretar el botón; antes se bajaba al abrir la pantalla.
+const cargarReporteFlotaPdf = () => import('@/components/flota/reporte-flota-pdf')
 
 const COLOR: Record<string, string> = {
   A: '#16A34A', C: '#15803D', L: '#4F46E5', U: '#0891B2', D: '#2563EB',
@@ -31,7 +34,7 @@ export default function ReporteFlotaPublicoPage() {
     if (!data) return
     setDescargando(true)
     try {
-      const blob = await generarReporteFlotaPDF(data)
+      const blob = await (await cargarReporteFlotaPdf()).generarReporteFlotaPDF(data)
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
