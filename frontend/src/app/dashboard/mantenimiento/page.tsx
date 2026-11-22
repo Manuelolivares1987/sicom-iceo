@@ -1,5 +1,6 @@
 'use client'
 
+import { parseDateLocal } from '@/lib/utils'
 import { useState, useMemo, useEffect, useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useRouter } from 'next/navigation'
@@ -55,7 +56,7 @@ import { CrearOTModal } from '@/components/ot/crear-ot-modal'
 function diasHasta(fecha: string): number {
   const hoy = new Date()
   hoy.setHours(0, 0, 0, 0)
-  const target = new Date(fecha)
+  const target = parseDateLocal(fecha)
   target.setHours(0, 0, 0, 0)
   return Math.ceil((target.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24))
 }

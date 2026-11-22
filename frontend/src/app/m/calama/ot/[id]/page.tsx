@@ -222,8 +222,10 @@ export default function MobileOTDetallePage() {
   // Estado para los botones Pausar/Reanudar dentro del paso "ejecutar".
   // ejecucion viene del server (useEjecucionActivaPorOT) y es undefined sin red.
   // Sin fallback, los botones quedan ocultos y el operador no puede pausar.
+  // [22-11-2026] Si el teléfono ejecutó acciones, manda lo local: sin señal la
+  // consulta del servidor queda con el dato viejo y Pausar/Reanudar se invertían.
   const estadoEjec: string | null =
-    (ejecucion?.estado as string | undefined)
+    (dispositivoEjecuto ? undefined : (ejecucion?.estado as string | undefined))
     ?? (estadoPlanEffective === 'en_ejecucion' ? 'en_ejecucion'
         : estadoPlanEffective === 'pausada' ? 'pausada'
         : null)
@@ -457,6 +459,9 @@ export default function MobileOTDetallePage() {
   const handleRegistrarInterferencia = async () => {
     if (!planOtId) return
     if (!interfObs.trim()) { toast.error('Observacion obligatoria'); return }
+    // El servidor exige la foto (MIG33): sin ella, la interferencia guardada sin
+    // señal quedaba rechazada y trababa la jornada.
+    if (!interfFoto?.blob) { toast.error('Foto obligatoria'); return }
     setBusy(true)
     try {
       const geo = await refreshGeo()
@@ -549,9 +554,11 @@ export default function MobileOTDetallePage() {
   }
 
   const handleVolverAEjecutar = () => {
-    // Permite al operador volver al paso 'cerrar' tras un rechazo, sin perder el ciclo.
-    setPasoForzado('cerrar')
-    setFotoDespues(null); setFirmaOperador(null); setObsCierre('')
+    // [22-11-2026] Tras un rechazo NO hay ejecución abierta: cerrar directo
+    // rebotaba («No hay ejecucion activa que cerrar») y, sin señal, trababa la
+    // jornada. Se vuelve a iniciar (foto ANTES) → corregir → cerrar.
+    setPasoForzado('preparar')
+    setFotoAntes(null); setFotoDespues(null); setFirmaOperador(null); setObsCierre('')
   }
 
   // ── Render helpers ────────────────────────────────────────────────────────
@@ -885,7 +892,7 @@ export default function MobileOTDetallePage() {
                     className="w-full rounded border border-orange-300 px-3 py-2 text-sm" />
                   {planOtId && (
                     <PhotoCapture
-                      label="Foto evidencia (opcional)"
+                      label="Foto evidencia (obligatoria)"
                       momento="interferencia"
                       otId={ot.id}
                       planOtId={planOtId}
@@ -897,7 +904,7 @@ export default function MobileOTDetallePage() {
                     <button onClick={() => { setShowInterferencia(false); setInterfObs(''); setInterfQuienInforma(''); setInterfFoto(null) }}
                       className="flex-1 rounded border border-gray-300 px-3 py-2 text-xs">Cancelar</button>
                     <button onClick={handleRegistrarInterferencia}
-                      disabled={!interfObs.trim() || busy}
+                      disabled={!interfObs.trim() || !interfFoto?.blob || busy}
                       className="flex-1 rounded bg-orange-600 text-white px-3 py-2 text-xs font-bold disabled:opacity-50">
                       {busy ? 'Guardando...' : 'Registrar'}
                     </button>
@@ -1108,7 +1115,7 @@ export default function MobileOTDetallePage() {
             )}
             <div className="mt-3">
               <BotonGrande onClick={handleVolverAEjecutar} variant="amber">
-                <RotateCcw className="h-5 w-5" /> Corregir y volver a cerrar
+                <RotateCcw className="h-5 w-5" /> Corregir: iniciar de nuevo
               </BotonGrande>
             </div>
           </Card>

@@ -36,7 +36,7 @@ export function errorMessage(err: unknown, fallback = 'Error desconocido'): stri
 // Para DATE de Postgres (YYYY-MM-DD), new Date(str) lo interpreta como
 // UTC-medianoche y al formatear a es-CL (UTC-4) retrocede un dia. Aqui
 // parseamos la fecha pura como medianoche LOCAL para evitar ese shift.
-function parseDateLocal(input: string | Date): Date {
+export function parseDateLocal(input: string | Date): Date {
   if (input instanceof Date) return input
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(input)
   if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))

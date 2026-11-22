@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { ArrowRight, AlertTriangle } from 'lucide-react'
 import type { CalamaOTConRelaciones } from '@/lib/services/calama'
 import { zonaCodeFromFolio, excelCodigoFromFolio, desviacionPp } from '@/lib/services/calama'
+import { todayISO } from '@/lib/utils'
 
 type Props = {
   ots: CalamaOTConRelaciones[]
@@ -12,7 +13,7 @@ type Props = {
 }
 
 export function GanttTable({ ots, hoy, maxRows }: Props) {
-  const today = hoy ?? new Date().toISOString().slice(0, 10)
+  const today = hoy ?? todayISO()
   const filas = maxRows ? ots.slice(0, maxRows) : ots
 
   if (filas.length === 0) {

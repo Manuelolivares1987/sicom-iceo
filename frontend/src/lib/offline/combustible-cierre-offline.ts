@@ -235,6 +235,17 @@ export async function subirBorrador(
   pendientes?: { pendiente_id: string; respuesta: string; comentario?: string | null }[] | null,
 ) {
   await subirFotosPendientes(b)
+  // [22-11-2026] Si alguna foto no subió, NO se manda el cierre: antes llegaba
+  // firmado con «local:…» (una ruta que solo existe en el teléfono), quedaba
+  // como subido y esas fotos se perdían para siempre.
+  const sinSubir = [...Object.values(b.puntos), ...Object.values(b.medidores)]
+    .filter((x) => esFotoLocal(x.foto_url)).length
+  if (sinSubir > 0) {
+    b.sync_status = 'error'
+    b.ultimo_error = `Faltan ${sinSubir} foto(s) por subir: se reintenta sola con señal.`
+    await db().borradores.put(b)
+    throw new Error(b.ultimo_error)
+  }
   const input: CierreInput = {
     faenaId: b.faena_id,
     fecha: b.fecha,
@@ -384,10 +395,13 @@ export async function recepcionesPendientes() {
 export async function sincronizarRecepciones(): Promise<{ subidas: number; errores: string[] }> {
   // [20-11-2026] Sin sesión válida no se sube: el servidor lo rechazaría como anónimo.
   if (!haySesionServidor()) return { subidas: 0, errores: [] }
+  if (recepcionesEnCurso) return { subidas: 0, errores: [] }
   const lista = await colaRecepciones()
   if (!lista.length) return { subidas: 0, errores: [] }
+  recepcionesEnCurso = true
 
   const quedan: RecepcionPendiente[] = []
+  const subidasIds = new Set<string>()
   const errores: string[] = []
   let subidas = 0
 
@@ -408,11 +422,21 @@ export async function sincronizarRecepciones(): Promise<{ subidas: number; error
         confirmar: r.confirmar, clientUuid: r.client_uuid, sinSenal: true,
       })
       subidas++
+      subidasIds.add(r.client_uuid)
     } catch (e) {
       errores.push(`${r.guia ?? r.camion ?? r.fecha}: ${e instanceof Error ? e.message : 'error'}`)
       quedan.push({ ...r, intento_error: e instanceof Error ? e.message : 'error' })
     }
   }
-  await guardarCola(quedan)
+  // [22-11-2026] Se relee la cola: lo encolado MIENTRAS se subía (minutos, por la
+  // foto) antes se borraba al guardar solo «quedan».
+  try {
+    const errPorId = new Map(quedan.map((q) => [q.client_uuid, q.intento_error]))
+    const actual = await colaRecepciones()
+    await guardarCola(actual
+      .filter((r) => !subidasIds.has(r.client_uuid))
+      .map((r) => (errPorId.has(r.client_uuid) ? { ...r, intento_error: errPorId.get(r.client_uuid) } : r)))
+  } finally { recepcionesEnCurso = false }
   return { subidas, errores }
 }
+let recepcionesEnCurso = false

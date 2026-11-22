@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase'
+import { todayISO } from '@/lib/utils'
 
 // Get all active maintenance plans with asset and pauta info
 export async function getPlanesMantenmiento(filters?: {
@@ -44,7 +45,7 @@ export async function getPautasFabricante(modeloId?: string) {
 
 // Get upcoming maintenance (next N days)
 export async function getProximasMantenimientos(dias: number = 30) {
-  const hoy = new Date().toISOString().slice(0, 10)
+  const hoy = todayISO()
   const limite = new Date(Date.now() + dias * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
 
   const { data, error } = await supabase
@@ -77,7 +78,7 @@ export async function getContratoParaFaena(faenaId: string) {
 
 // Get overdue maintenance (past proxima_ejecucion_fecha)
 export async function getMantenimientosVencidos() {
-  const hoy = new Date().toISOString().slice(0, 10)
+  const hoy = todayISO()
 
   const { data, error } = await supabase
     .from('planes_mantenimiento')

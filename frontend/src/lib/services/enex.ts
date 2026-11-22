@@ -1,3 +1,4 @@
+import { exigirFilas } from './escritura'
 // Módulo Calama-ENEX (MIG206) — control + KPI de cumplimiento del contrato de
 // mantención de instalaciones de combustibles/lubricantes ENEX/ESM.
 import { supabase } from '@/lib/supabase'
@@ -176,11 +177,13 @@ export async function crearInstalacion(p: {
 export async function actualizarFrecuencias(instalacionId: string, p: {
   frecuenciaMantencion?: string | null; frecuenciaCalibracion?: string | null
 }) {
-  const { error } = await supabase.from('enex_instalaciones').update({
+  const { data: filas, error } = await supabase.from('enex_instalaciones').update({
     frecuencia_mantencion: p.frecuenciaMantencion ?? null,
     frecuencia_calibracion: p.frecuenciaCalibracion ?? null,
   }).eq('id', instalacionId)
+    .select('id')
   if (error) throw error
+  exigirFilas(filas, 'el cambio')
 }
 
 // ── Panel mensual + KPI ───────────────────────────────────────────────────

@@ -77,7 +77,9 @@ export default function EjecutarPautaPage() {
   const pautaId = params?.pautaId ?? search.get('p') ?? ''
   const activoId = params?.activoId ?? search.get('a') ?? ''
   const turno = search.get('turno') || 'Día'
-  const fecha = hoyISO()
+  // [22-11-2026] Fecha fija al abrir: el turno noche que pasa la medianoche
+  // seguía con otra fecha (y otro borrador) a mitad de la pauta.
+  const [fecha] = useState(hoyISO)
 
   const [faenaId, setFaenaId] = useState<string | null>(null)
   const [cab, setCab] = useState<PautaAgenda | null>(null)
@@ -132,11 +134,12 @@ export default function EjecutarPautaPage() {
       // Lo que ya está en el servidor manda sobre el borrador local: si otro
       // cerró la pauta, no se pisa con lo que quedó en este teléfono. Sin señal
       // no hay servidor que consultar, y ahí manda el borrador.
+      let servidor: Estado = {}
       let base: Estado = {}
       if (fila?.ejecucion_hoy_id && online) {
         try {
           for (const r of await getRespuestas(fila.ejecucion_hoy_id)) {
-            base[r.item_id] = {
+            servidor[r.item_id] = {
               resultado: (r.resultado === 'ok' || r.resultado === 'nok') ? r.resultado : undefined,
               valor: r.valor != null ? String(r.valor) : undefined,
               texto: r.texto ?? undefined,
@@ -146,12 +149,17 @@ export default function EjecutarPautaPage() {
           }
         } catch { /* sin respuesta del servidor: se sigue con el borrador */ }
       }
-      if (Object.keys(base).length === 0) {
-        try {
-          const raw = localStorage.getItem(K_DRAFT)
-          if (raw) base = JSON.parse(raw) as Estado
-        } catch { /* modo privado */ }
-      }
+      // [22-11-2026] Lo contestado en el teléfono (borrador) manda sobre lo del
+      // servidor, ítem por ítem: es lo más nuevo. Antes, al volver la señal se
+      // recargaba la pauta con lo del servidor y se perdían los ítems hechos sin
+      // señal. Solo si la pauta ya está cerrada manda el servidor.
+      let borrador: Estado = {}
+      try {
+        const raw = localStorage.getItem(K_DRAFT)
+        if (raw) borrador = JSON.parse(raw) as Estado
+      } catch { /* modo privado */ }
+      const yaCerrada = fila?.ejecucion_hoy_estado === 'cerrada' || fila?.ejecucion_hoy_estado === 'no_aplica'
+      base = yaCerrada && Object.keys(servidor).length ? servidor : { ...servidor, ...borrador }
       // Las fotos que quedaron en el teléfono se vuelven a mostrar: sin esto,
       // al reabrir la pauta el hallazgo parece no tener foto y el mecánico la
       // saca de nuevo.
@@ -168,7 +176,8 @@ export default function EjecutarPautaPage() {
     } finally { setCargando(false) }
   }, [pautaId, activoId, toast, K_DRAFT, online])
 
-  useEffect(() => { void cargar() }, [cargar])
+  // Se carga UNA vez: la señal que va y viene no debe recargar la pauta a mitad.
+  useEffect(() => { if (!cargado.current) void cargar() }, [cargar])
 
   useEffect(() => {
     if (!cargado.current) return

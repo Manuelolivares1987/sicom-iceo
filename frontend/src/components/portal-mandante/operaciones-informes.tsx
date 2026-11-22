@@ -12,7 +12,7 @@ import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { FileDown } from 'lucide-react'
 import { Spinner } from '@/components/ui/spinner'
-import { cn } from '@/lib/utils'
+import { cn, todayISO } from '@/lib/utils'
 import { MESES, getOperacionesPortal } from './portal-mandante-api'
 
 const fmt = (s: string | null) => s ? new Date(s.slice(0, 10) + 'T12:00:00').toLocaleDateString('es-CL', { day: '2-digit', month: 'short' }) : '—'
@@ -36,7 +36,7 @@ export function OperacionesInformes({ token, acceso, anio, mes }: {
 
   const lista = useMemo(() => (data?.servicios ?? []).filter((s) => tipo === 'todos' || s.tipo_servicio === tipo), [data, tipo])
   const resumen = useMemo(() => {
-    const hoy = new Date().toISOString().slice(0, 10)
+    const hoy = todayISO()
     const vencidos = lista.filter((s) => !s.fecha_programada || s.fecha_programada <= hoy)
     const hechos = vencidos.filter((s) => ['ejecutada', 'cumplida'].includes(s.estado))
     return {

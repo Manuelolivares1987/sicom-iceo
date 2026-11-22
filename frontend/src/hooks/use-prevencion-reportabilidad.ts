@@ -194,8 +194,9 @@ export function useDeleteRegistro() {
   const invalidar = useInvalidarRegistros()
   return useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await deleteRegistro(id)
+      const { data, error } = await deleteRegistro(id)
       if (error) throw error
+      if (!data || data.length === 0) throw new Error('No se borró: pasadas 24 h solo prevención puede borrar un registro.')
     },
     onSuccess: invalidar,
   })

@@ -1,3 +1,4 @@
+import { exigirFilas } from './escritura'
 import { supabase } from '@/lib/supabase'
 import { subirEvidencia, urlEvidencia, type EvidenciaArchivo } from '@/lib/services/prevencion-reportabilidad'
 
@@ -285,14 +286,16 @@ export async function getDesviaciones(params: { estado?: 'abierta' | 'cerrada' |
 
 export async function cerrarDesviacion(id: string, observacion: string, evidencias: EvidenciaArchivo[]) {
   const { data: u } = await supabase.auth.getUser()
-  const { error } = await supabase.from('prevencion_inspeccion_desviaciones').update({
+  const { data: filas, error } = await supabase.from('prevencion_inspeccion_desviaciones').update({
     estado: 'cerrada',
     cierre_observacion: observacion,
     cierre_evidencias: evidencias,
     cerrada_por: u.user?.id ?? null,
     cerrada_at: new Date().toISOString(),
   }).eq('id', id)
+    .select('id')
   if (error) throw error
+  exigirFilas(filas, 'el cierre de la desviación')
 }
 
 // ── Etiquetas compartidas ────────────────────────────────────────────────────

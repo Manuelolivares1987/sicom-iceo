@@ -192,7 +192,9 @@ export default function RomeralTerrenoPage() {
     // El medidor inicial viene del final de la carga anterior: así corre la
     // corrida y el operador no lo escribe dos veces.
     let ini = ''
-    try { ini = localStorage.getItem(K_METER) ?? '' } catch { /* no-op */ }
+    // [22-11-2026] Por camión: antes era uno solo y al cambiar de camión venía
+    // el medidor del otro (litros mal calculados).
+    try { ini = localStorage.getItem(`${K_METER}:${camionId || camionOtro}`) ?? '' } catch { /* no-op */ }
     setMeterIni(ini); setMeterFin(''); setLitrosManual('')
     setEquipo(null); setEquipoTexto(''); setCecoTexto(''); setBuscar(''); setUbicacionId(''); setObs('')
     setTipoMov('venta'); setDestinoId('')
@@ -242,7 +244,7 @@ export default function RomeralTerrenoPage() {
         foto_fin_blob: blobFin,
       })
       // El medidor final queda listo para la próxima carga
-      if (num(meterFin) != null) { try { localStorage.setItem(K_METER, meterFin) } catch { /* no-op */ } }
+      if (num(meterFin) != null) { try { localStorage.setItem(`${K_METER}:${camionId || camionOtro}`, meterFin) } catch { /* no-op */ } }
       setAbierto(false)
       await refrescar(cat.faena.id, fecha)
       toast.success(enviado ? 'Carga registrada' : 'Guardada en el teléfono — sube sola con señal')

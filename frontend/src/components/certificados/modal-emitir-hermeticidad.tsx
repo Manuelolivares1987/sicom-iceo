@@ -26,9 +26,10 @@ import {
   GRUPOS_HERMETICIDAD, OBLIGATORIOS_HERMETICIDAD, type DatosPrevios,
 } from '@/lib/services/certificados'
 import { descargarCertificadoHermeticidad } from './pdf-hermeticidad'
+import { todayISO } from '@/lib/utils'
 
 const LOGO = '/images/logo_empresa_2.png'
-const hoyISO = () => new Date().toISOString().slice(0, 10)
+const hoyISO = () => todayISO()
 
 /** fecha de prueba + N meses, sin pasarse de fin de mes. */
 function sumarMeses(iso: string, meses: number): string {

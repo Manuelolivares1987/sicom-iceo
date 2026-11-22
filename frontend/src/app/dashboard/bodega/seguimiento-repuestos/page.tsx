@@ -24,6 +24,7 @@ import {
 import { buscarProductos, } from '@/lib/services/ot-materiales'
 import { enviarCorreoCompras } from '@/lib/services/correo-compras'
 import { listarProveedoresActivos } from '@/lib/services/bodega-oc'
+import { todayISO } from '@/lib/utils'
 
 type Filtro = 'pedidos' | 'por_comprar' | 'en_compra' | 'recibido' | 'todos'
 type ProductoLite = { id: string; codigo: string | null; nombre: string; unidad_medida: string | null }
@@ -74,7 +75,7 @@ function EquiposEsperando({ filas, seleccionado, onSel }: {
 }) {
   const equipos = useMemo(() => {
     const m = new Map<string, EquipoEsperando>()
-    const hoy = new Date().toISOString().slice(0, 10)
+    const hoy = todayISO()
     for (const f of filas) {
       if (!esperaRepuesto(f)) continue
       const clave = f.activo_codigo ?? f.activo_patente ?? f.ot_folio

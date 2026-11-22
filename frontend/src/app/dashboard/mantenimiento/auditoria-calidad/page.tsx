@@ -33,7 +33,7 @@ import {
 import { subirFirma } from '@/lib/services/verificacion'
 import { subirFotoItemAuditoria, getInformesSalida } from '@/lib/services/informe-salida'
 import { supabase } from '@/lib/supabase'
-import { cn } from '@/lib/utils'
+import { cn, todayISO } from '@/lib/utils'
 import { etiquetaEstadoActivo } from '@/lib/alertas-labels'
 
 type Res = 'ok' | 'no_ok' | 'na' | 'pendiente'
@@ -480,7 +480,7 @@ function PlanSemanalCalidad({ puedeAuditar, equipos, onIniciarAuditoria }: {
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-7 gap-2 self-start">
           {dias.map((fecha) => {
             const delDia = tareas.filter((t) => t.fecha === fecha)
-            const esHoy = fecha === new Date().toISOString().slice(0, 10)
+            const esHoy = fecha === todayISO()
             return (
               <div key={fecha} className={cn('rounded-lg border bg-white p-2 min-h-[120px]', esHoy && 'border-emerald-400 bg-emerald-50/40')}>
                 <div className="mb-2 flex items-center justify-between">

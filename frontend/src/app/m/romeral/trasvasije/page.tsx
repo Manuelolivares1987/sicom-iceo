@@ -21,6 +21,7 @@
 // confirmar.
 // ============================================================================
 
+import { conRespaldo } from '@/lib/offline/terreno-cache'
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -35,7 +36,7 @@ import {
   FAENA_ROMERAL, type EstanqueAhora,
 } from '@/lib/services/combustible-faena'
 import { guardarTrasvasije, guardarFotoLocal } from '@/lib/offline/combustible-faena-offline'
-import { cn } from '@/lib/utils'
+import { cn, todayISO } from '@/lib/utils'
 
 const TURNOS = ['dia', 'noche'] as const
 
@@ -67,10 +68,11 @@ export default function TrasvasijePage() {
   }, [perfil, operador])
 
   const cargar = async () => {
-    const f = await getFaenaPorCodigo(FAENA_ROMERAL)
+    // [22-11-2026] Sin señal, con lo último bajado (antes no abría).
+    const f = await conRespaldo('romeral:faena', () => getFaenaPorCodigo(FAENA_ROMERAL))
     if (!f) throw new Error('No se encontró la faena Romeral')
     setFaenaId(f.id)
-    setEstanques(await getEstanquesAhora(f.id))
+    setEstanques(await conRespaldo(`romeral:estanques-ahora:${f.id}`, () => getEstanquesAhora(f.id)))
   }
 
   useEffect(() => {
@@ -132,7 +134,7 @@ export default function TrasvasijePage() {
       const litrosTxt = Number(litrosFinales).toLocaleString('es-CL')
       const { enviado } = await guardarTrasvasije({
         faenaId,
-        fecha: new Date().toISOString().slice(0, 10),
+        fecha: todayISO(),
         turno,
         origenId: origen.id,
         destinoId: destino.id,

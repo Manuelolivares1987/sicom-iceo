@@ -17,7 +17,7 @@ import { Button } from '@/components/ui/button'
 import { Select } from '@/components/ui/select'
 import { useToast } from '@/hooks/use-toast'
 import { exportToCSV, exportToExcel } from '@/lib/export'
-import { formatCLP, formatDate, formatPercent } from '@/lib/utils'
+import { formatCLP, formatDate, formatPercent, todayISO } from '@/lib/utils'
 import { getOrdenesTrabajo } from '@/lib/services/ordenes-trabajo'
 import { getStockBodega, getMovimientos } from '@/lib/services/inventario'
 import { getPlanesMantenmiento } from '@/lib/services/mantenimiento'
@@ -321,7 +321,7 @@ function ReportCard({ config }: { config: ReportConfig }) {
         toast.warning('No hay datos para exportar')
         return
       }
-      const timestamp = new Date().toISOString().slice(0, 10)
+      const timestamp = todayISO()
       const filename = `${config.id}_${timestamp}`
       if (format === 'csv') {
         exportToCSV(rows, filename, config.columns)
@@ -424,7 +424,7 @@ function HistorialActivoCard() {
       const rows = filtered.map(flattenOT)
       const activo = activos.find((a) => a.id === selectedActivo)
       const activoCodigo = activo?.codigo || 'activo'
-      const timestamp = new Date().toISOString().slice(0, 10)
+      const timestamp = todayISO()
       const filename = `historial_${activoCodigo}_${timestamp}`
       if (format === 'csv') {
         exportToCSV(rows, filename, columns)

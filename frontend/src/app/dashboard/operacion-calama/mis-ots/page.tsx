@@ -13,6 +13,7 @@ import { Info } from 'lucide-react'
 import { useEffect } from 'react'
 import { excelCodigoFromFolio, zonaCodeFromFolio } from '@/lib/services/calama'
 import { EstadoBadge } from '@/components/calama/gantt-table'
+import { todayISO } from '@/lib/utils'
 
 type FiltroTiempo = 'hoy' | 'semana' | 'pendientes' | 'en_ejecucion' | 'finalizadas' | 'todas'
 
@@ -44,7 +45,7 @@ export default function MisOTsPage() {
   const { data: ots } = useCalamaOTs()
 
   const otsByid = useMemo(() => new Map((ots ?? []).map((o) => [o.id, o])), [ots])
-  const hoy = new Date().toISOString().slice(0, 10)
+  const hoy = todayISO()
   const inicioSemana = useMemo(() => {
     const d = new Date()
     const dow = d.getDay()

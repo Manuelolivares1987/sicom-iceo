@@ -472,6 +472,17 @@ export async function queueTiming(
 }
 
 // ── Sync ─────────────────────────────────────────────────────────────────────
+// Solo la red caída/lenta es «pendiente». Un error sin código (los que arma esta
+// misma app: «el servidor no guardó», «quedan tareas obligatorias», «revisa el
+// medidor») es un aviso que el mecánico TIENE que ver.
+function esFallaDeRed(e: unknown): boolean {
+  const x = e as { message?: string; code?: string | number; status?: number }
+  const m = String(x?.message ?? e ?? '')
+  const c = String(x?.code ?? x?.status ?? '')
+  return /^5\d\d$/.test(c) || c.startsWith('PGRST3') || c === '401'
+    || /failed to fetch|fetch failed|networkerror|network|timeout|tiempo de espera|abort|load failed|conexi|jwt|token/i.test(m)
+}
+
 // Sube un archivo del pendiente UNA sola vez: la URL queda anotada en el
 // pendiente antes de seguir, así un reintento no vuelve a mandarlo.
 async function subirUnaVez(p: TallerPending, blobId: string, subir: () => Promise<string>): Promise<string> {
@@ -510,7 +521,13 @@ async function syncTallerPendingUnaVuelta(): Promise<{ ok: number; failed: numbe
   const db = tallerDB()
   const items = (await db.pending.toArray()).sort((a, b) => a.created_at.localeCompare(b.created_at))
   let ok = 0, failed = 0
+  // [22-11-2026] Si un cambio de una OT falla, los siguientes de ESA OT esperan
+  // a la próxima vuelta (en orden). Antes seguía: un NO OK que falló se
+  // reaplicaba después encima del OK, y el «finalizar» cerraba la OT con fotos
+  // todavía en el teléfono, que después ya no se podían guardar.
+  const otsTrabadas = new Set<string>()
   for (const p of items) {
+    if (otsTrabadas.has(p.ot_id)) continue
     try {
       if (p.kind === 'item') {
         // Fotos pendientes: nuevas (array) o legado (una sola).
@@ -528,6 +545,15 @@ async function syncTallerPendingUnaVuelta(): Promise<{ ok: number; failed: numbe
         // [MIG496] Firmas del cierre de recepción: subir y anotar la URL en
         // mediciones bajo su campo (firma_operador_url / firma_taller_url).
         let mediciones = p.mediciones
+        // [22-11-2026] El overlay local deja «blob:…» en firmas aún no subidas;
+        // si se reenvían, pisan la URL real que subió otro pendiente.
+        if (mediciones && !Array.isArray(mediciones) && typeof mediciones === 'object') {
+          const limpio: Record<string, unknown> = {}
+          for (const [k, v] of Object.entries(mediciones as Record<string, unknown>)) {
+            if (!(typeof v === 'string' && v.startsWith('blob:'))) limpio[k] = v
+          }
+          mediciones = limpio as MedicionItem
+        }
         if (p.firmas_blob_ids?.length) {
           const cap: Record<string, unknown> = { ...((mediciones && !Array.isArray(mediciones) ? mediciones : {}) as object) }
           for (const f of p.firmas_blob_ids) {
@@ -538,8 +564,11 @@ async function syncTallerPendingUnaVuelta(): Promise<{ ok: number; failed: numbe
         }
         if (nuevasUrls.length && p.instance_item_id) {
           // Anexar a las evidencias que ya tenga el ítem (no pisar las previas).
-          const { data: cur } = await supabase
+          const { data: cur, error: errCur } = await supabase
             .from('checklist_v2_instance_item').select('foto_urls').eq('id', p.instance_item_id).single()
+          // [22-11-2026] Sin esto, una lectura cortada dejaba prev=[] y la
+          // escritura borraba las fotos que el ítem ya tenía en el servidor.
+          if (errCur) throw errCur
           const prev = ((cur?.foto_urls as string[] | null) ?? []).filter(Boolean)
           const merged = [...prev, ...nuevasUrls.filter((u) => !prev.includes(u))]
           await actualizarItem(p.instance_item_id, {
@@ -646,8 +675,12 @@ async function syncTallerPendingUnaVuelta(): Promise<{ ok: number; failed: numbe
         continue
       }
       failed++
+      otsTrabadas.add(p.ot_id)
+      // Señal que se cae: sigue «pendiente» (sube sola). Solo un rechazo real
+      // queda como error a la vista del mecánico.
       await db.pending.update(p.local_id, {
-        sync_status: 'error', retries: (p.retries || 0) + 1, last_error: msg,
+        sync_status: esFallaDeRed(e) ? 'pending' : 'error',
+        retries: (p.retries || 0) + 1, last_error: msg,
       })
     }
   }

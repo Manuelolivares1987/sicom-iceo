@@ -12,6 +12,7 @@ import {
   type EnexPauta, type EnexPautaItem,
 } from '@/lib/services/enex'
 import { aDataUrl } from './pdf-informe-enex'
+import { todayISO } from '@/lib/utils'
 
 const S = StyleSheet.create({
   page: { padding: 28, fontSize: 9, fontFamily: 'Helvetica', color: '#111827' },
@@ -189,7 +190,7 @@ export async function descargarPautasEnexPdf(pautaId?: string): Promise<void> {
     new Promise<never>((_, rej) => setTimeout(() => rej(new Error('La generación del PDF tardó demasiado — reintenta')), 45_000)),
   ])
 
-  const hoy = new Date().toISOString().slice(0, 10)
+  const hoy = todayISO()
   const nombre = seleccion.length === 1
     ? `Pauta_${seleccion[0].codigo}_${hoy}.pdf`
     : `Pautas_ENEX_validacion_${hoy}.pdf`

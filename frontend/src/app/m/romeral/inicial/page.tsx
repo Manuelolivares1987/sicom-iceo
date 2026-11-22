@@ -23,6 +23,7 @@
 // Si no se puede sacar, hay que escribir por qué. Ninguna de las dos es opcional.
 // ============================================================================
 
+import { conRespaldo } from '@/lib/offline/terreno-cache'
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -37,7 +38,7 @@ import {
   getFaenaPorCodigo, getEstanquesFaena, FAENA_ROMERAL, type EstanqueFaena,
 } from '@/lib/services/combustible-faena'
 import { guardarMomentoCero, guardarFotoLocal } from '@/lib/offline/combustible-faena-offline'
-import { cn } from '@/lib/utils'
+import { cn, todayISO } from '@/lib/utils'
 
 type Lectura = {
   litros: string
@@ -57,7 +58,7 @@ export default function MomentoCeroPage() {
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const [fecha, setFecha] = useState(() => new Date().toISOString().slice(0, 10))
+  const [fecha, setFecha] = useState(() => todayISO())
   const [medidoPor, setMedidoPor] = useState('')
   const [lecturas, setLecturas] = useState<Record<string, Lectura>>({})
   const [firma, setFirma] = useState('')
@@ -72,9 +73,10 @@ export default function MomentoCeroPage() {
     let cancel = false
     ;(async () => {
       try {
-        const f = await getFaenaPorCodigo(FAENA_ROMERAL)
+        // [22-11-2026] Sin señal, con lo último bajado (antes no abría).
+        const f = await conRespaldo('romeral:faena', () => getFaenaPorCodigo(FAENA_ROMERAL))
         if (!f) throw new Error('No se encontró la faena Romeral')
-        const es = await getEstanquesFaena(f.id)
+        const es = await conRespaldo(`romeral:estanques:${f.id}`, () => getEstanquesFaena(f.id))
         if (cancel) return
         setFaenaId(f.id)
         setEstanques(es)

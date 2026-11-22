@@ -12,14 +12,14 @@ import {
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
-import { cn } from '@/lib/utils'
+import { cn, todayISO } from '@/lib/utils'
 import { useToast } from '@/hooks/use-toast'
 import { useGembaHallazgos, useUpdateGembaHallazgo } from '@/hooks/use-gemba'
 import type { GembaHallazgo } from '@/lib/services/gemba'
 
 type Filtro = 'pendientes' | 'vencidos' | 'sin_plazo' | 'cerrados' | 'todos'
 
-const hoyIso = () => new Date().toISOString().slice(0, 10)
+const hoyIso = () => todayISO()
 
 export const estaVencido = (h: GembaHallazgo) =>
   h.estado !== 'cerrada' && !!h.fecha_compromiso && h.fecha_compromiso < hoyIso()

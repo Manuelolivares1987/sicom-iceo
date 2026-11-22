@@ -21,6 +21,7 @@ import { useToast } from '@/contexts/toast-context'
 import { getTallerTecnicos } from '@/lib/services/taller-plan-semanal'
 import { planificarOsDesdeNc } from '@/lib/services/taller-os'
 import type { NcRecepcion } from '@/lib/services/no-conformidades'
+import { todayISO } from '@/lib/utils'
 
 export function PlanificarOsModal({ patente, ncs, preSeleccion, onClose, onDone }: {
   patente: string
@@ -50,7 +51,7 @@ export function PlanificarOsModal({ patente, ncs, preSeleccion, onClose, onDone 
   const [horas, setHoras] = useState('')
   // [MIG507] Planificar ES ponerle día: obligatorio, y no puede ser pasado.
   const [fecha, setFecha] = useState('')
-  const hoy = new Date().toISOString().slice(0, 10)
+  const hoy = todayISO()
   const [titulo, setTitulo] = useState(`Corrección NC · ${patente}`)
   // [MIG499] «Incluso puede existir una OS para un externo»: sin técnicos
   // nuestros, con proveedor y motivo. La autoriza gerencia y no paga bono.

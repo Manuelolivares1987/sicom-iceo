@@ -7,6 +7,7 @@
 // más los pendientes diferidos y los documentos con su vencimiento.
 // ============================================================================
 
+import { parseDateLocal } from '@/lib/utils'
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { Printer, ShieldCheck, AlertTriangle, XCircle, MinusCircle, CheckCircle2 } from 'lucide-react'
@@ -18,12 +19,12 @@ const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
 
 function fechaLarga(iso?: string | null): string {
   if (!iso) return '—'
-  const d = new Date(iso)
+  const d = parseDateLocal(iso)
   return `${String(d.getDate()).padStart(2, '0')} de ${MESES[d.getMonth()]} de ${d.getFullYear()}`
 }
 function fechaCorta(iso?: string | null): string {
   if (!iso) return '—'
-  const d = new Date(iso)
+  const d = parseDateLocal(iso)
   return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`
 }
 function tituloBloque(b: string): string {

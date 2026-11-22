@@ -14,7 +14,7 @@ import { Spinner } from '@/components/ui/spinner'
 import {
   Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
 } from '@/components/ui/table'
-import { formatCLP, formatDate, formatDateTime, cn } from '@/lib/utils'
+import { formatCLP, formatDate, formatDateTime, cn, todayISO } from '@/lib/utils'
 import {
   useResumenFinanciero, useStockValorizado, useCostosPorOT,
   useCostosPorCECO, useKardexProducto, useMermasAjustes,
@@ -204,7 +204,7 @@ function TabStock() {
           <Button
             variant="outline" size="sm"
             disabled={!rows || rows.length === 0}
-            onClick={() => rows && exportCsv(`stock-valorizado-${new Date().toISOString().slice(0,10)}.csv`, rows as unknown as Record<string, unknown>[])}
+            onClick={() => rows && exportCsv(`stock-valorizado-${todayISO()}.csv`, rows as unknown as Record<string, unknown>[])}
           >
             <Download className="h-4 w-4 mr-1" /> Exportar CSV
           </Button>
@@ -303,7 +303,7 @@ function TabCostosOT() {
             )}
           </CardTitle>
           <Button variant="outline" size="sm" disabled={!rows || rows.length === 0}
-            onClick={() => rows && exportCsv(`costos-ot-${new Date().toISOString().slice(0,10)}.csv`, rows as unknown as Record<string, unknown>[])}>
+            onClick={() => rows && exportCsv(`costos-ot-${todayISO()}.csv`, rows as unknown as Record<string, unknown>[])}>
             <Download className="h-4 w-4 mr-1" /> Exportar CSV
           </Button>
         </div>
@@ -370,7 +370,7 @@ function TabCostosCECO() {
             )}
           </CardTitle>
           <Button variant="outline" size="sm" disabled={rowsConSalidas.length === 0}
-            onClick={() => exportCsv(`costos-ceco-${new Date().toISOString().slice(0,10)}.csv`, rowsConSalidas as unknown as Record<string, unknown>[])}>
+            onClick={() => exportCsv(`costos-ceco-${todayISO()}.csv`, rowsConSalidas as unknown as Record<string, unknown>[])}>
             <Download className="h-4 w-4 mr-1" /> Exportar CSV
           </Button>
         </div>
@@ -426,7 +426,7 @@ function TabKardex() {
           <CardTitle>Kardex valorizado por producto</CardTitle>
           <Button variant="outline" size="sm"
             disabled={!rows || rows.length === 0}
-            onClick={() => rows && exportCsv(`kardex-${productoId}-${new Date().toISOString().slice(0,10)}.csv`, rows as unknown as Record<string, unknown>[])}>
+            onClick={() => rows && exportCsv(`kardex-${productoId}-${todayISO()}.csv`, rows as unknown as Record<string, unknown>[])}>
             <Download className="h-4 w-4 mr-1" /> Exportar CSV
           </Button>
         </div>
@@ -538,7 +538,7 @@ function TabMermas() {
             )}
           </CardTitle>
           <Button variant="outline" size="sm" disabled={!rows || rows.length === 0}
-            onClick={() => rows && exportCsv(`mermas-ajustes-${new Date().toISOString().slice(0,10)}.csv`, rows as unknown as Record<string, unknown>[])}>
+            onClick={() => rows && exportCsv(`mermas-ajustes-${todayISO()}.csv`, rows as unknown as Record<string, unknown>[])}>
             <Download className="h-4 w-4 mr-1" /> Exportar CSV
           </Button>
         </div>

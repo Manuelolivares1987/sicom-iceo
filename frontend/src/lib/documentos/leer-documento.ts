@@ -1,3 +1,4 @@
+import { todayISO } from '@/lib/utils'
 // ============================================================================
 // El sistema lee el papel cuando lo subes.
 // ----------------------------------------------------------------------------
@@ -317,7 +318,7 @@ export async function leerDocumento(
   }
 
   if (vencimiento) {
-    const hoy = new Date().toISOString().slice(0, 10)
+    const hoy = todayISO()
     avisos.push(
       vencimiento < hoy
         ? {
