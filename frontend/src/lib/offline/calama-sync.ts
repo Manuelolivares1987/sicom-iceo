@@ -11,6 +11,7 @@ import { calamaDB } from './calama-db'
 import { precargarLecturasCalama } from './calama-lectura'
 import { genClientUuid } from '@/lib/services/calama-jornada'
 import { withTimeout } from '@/lib/upload/with-timeout'
+import { esTransitorio } from './bandeja'
 import type {
   LocalJornada, LocalEvidencia, LocalFirma, LocalEvento,
   LocalBlob, SyncStatus,
@@ -356,10 +357,18 @@ export async function getOfflineCounters() {
 // SUBIR BLOBS A STORAGE
 // ============================================================================
 
+// Storage contesta 409 / «already exists» cuando el archivo ya quedó arriba.
+function yaExiste(e: unknown): boolean {
+  const x = e as { statusCode?: string | number; status?: number; message?: string }
+  return String(x?.statusCode ?? x?.status ?? '') === '409' || /already exists|Duplicate/i.test(String(x?.message ?? ''))
+}
+
 async function uploadEvidenciaBlob(local: LocalEvidencia, blob: Blob): Promise<{ url: string; storage_path: string }> {
   const ext = (blob.type.split('/')[1] || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '')
-  const ts = Date.now()
-  const path = `ot-${local.ot_id}/jornada-${local.jornada_id}/${local.momento}-${ts}-${local.local_id}.${ext}`
+  // [22-11-2026] Nombre FIJO por foto (como Franke): si la subida llegó pero la
+  // respuesta se perdió, el reintento recibe «ya existe» y se da por subida, en
+  // vez de volver a mandar la foto entera con señal débil.
+  const path = `ot-${local.ot_id}/jornada-${local.jornada_id}/${local.momento}-${local.local_id}.${ext}`
   const { error } = await withTimeout(
     supabase.storage.from('calama-evidencias').upload(path, blob, {
       upsert: false, contentType: blob.type || 'image/jpeg',
@@ -367,14 +376,13 @@ async function uploadEvidenciaBlob(local: LocalEvidencia, blob: Blob): Promise<{
     UPLOAD_TIMEOUT_MS,
     'evidencia',
   )
-  if (error) throw error
+  if (error && !yaExiste(error)) throw error
   const { data } = supabase.storage.from('calama-evidencias').getPublicUrl(path)
   return { url: data.publicUrl, storage_path: path }
 }
 
 async function uploadFirmaBlob(local: LocalFirma, blob: Blob): Promise<{ url: string; storage_path: string }> {
-  const ts = Date.now()
-  const path = `ot-${local.ot_id}/jornada-${local.jornada_id}/${local.contexto}-${ts}-${local.local_id}.png`
+  const path = `ot-${local.ot_id}/jornada-${local.jornada_id}/${local.contexto}-${local.local_id}.png`
   const { error } = await withTimeout(
     supabase.storage.from('calama-firmas').upload(path, blob, {
       upsert: false, contentType: 'image/png',
@@ -382,7 +390,7 @@ async function uploadFirmaBlob(local: LocalFirma, blob: Blob): Promise<{ url: st
     UPLOAD_TIMEOUT_MS,
     'firma',
   )
-  if (error) throw error
+  if (error && !yaExiste(error)) throw error
   const { data } = supabase.storage.from('calama-firmas').getPublicUrl(path)
   return { url: data.publicUrl, storage_path: path }
 }
@@ -436,8 +444,9 @@ export async function syncCalamaPending(): Promise<SyncResult> {
       })
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Error subida evidencia'
+      // Señal que se cae a medio subir: sigue pendiente (no «con error»).
       await db.evidencias.update(ev.local_id, {
-        sync_status: 'error', retries: ev.retries + 1, last_error: msg,
+        sync_status: esTransitorio(e) ? 'pending' : 'error', retries: ev.retries + 1, last_error: msg,
       })
       errors.push({ tipo: 'evidencia_blob', local_id: ev.local_id, mensaje: msg })
       err++
@@ -462,8 +471,9 @@ export async function syncCalamaPending(): Promise<SyncResult> {
       })
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Error subida firma'
+      // Señal que se cae a medio subir: sigue pendiente (no «con error»).
       await db.firmas.update(fi.local_id, {
-        sync_status: 'error', retries: fi.retries + 1, last_error: msg,
+        sync_status: esTransitorio(e) ? 'pending' : 'error', retries: fi.retries + 1, last_error: msg,
       })
       errors.push({ tipo: 'firma_blob', local_id: fi.local_id, mensaje: msg })
       err++
@@ -539,7 +549,7 @@ export async function syncCalamaPending(): Promise<SyncResult> {
         // problema de red. Marcar 'conflict' para que la UI lo distinga.
         const isConflict = /no admite cambios|estado .* no|no encontrado|no autorizado|no se mueve|no se quita|no se cancela|no se desprograma|requiere correccion|aceptada|cerrada|llegada a faena no/i
           .test(error.message)
-        const newStatus: SyncStatus = isConflict ? 'conflict' : 'error'
+        const newStatus: SyncStatus = isConflict ? 'conflict' : (esTransitorio(error) ? 'pending' : 'error')
         await db.eventos.update(evento.local_id, {
           sync_status: newStatus, retries: evento.retries + 1, last_error: error.message,
         })
@@ -554,7 +564,7 @@ export async function syncCalamaPending(): Promise<SyncResult> {
         // misma jornada (ej. colacion despues de una interferencia vieja
         // sin foto) quedan trabados. Que el usuario descarte el conflict
         // manualmente con el boton "Descartar errores acumulados".
-        if (newStatus === 'error') {
+        if (newStatus !== 'conflict') {
           jornadasFallidas.add(evento.jornada_id)
         }
         err++

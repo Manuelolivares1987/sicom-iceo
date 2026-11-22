@@ -171,6 +171,9 @@ test('la app SICOM: arranque en frío SIN red, trabajo sin señal, botón atrás
     const page = await tel.abrir()
     await page.goto(`${WEB}/m/franke/`)
     await page.goto(`${WEB}/m/franke/bodega/`)
+    // Que la pantalla termine de abrir antes de apretar atrás.
+    await expect(page.getByText(/bodega/i).first()).toBeVisible({ timeout: 30_000 })
+    await esperar(1500)
     await tel.atras()
     await expect(page).toHaveURL(/\/m\/franke\/?$/)
     if (ANDROID) {

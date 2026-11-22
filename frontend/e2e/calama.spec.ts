@@ -131,3 +131,101 @@ test('Calama: con la app cerrada y SIN señal, la OT muestra faena, nota del pla
   await expect(p.getByText(/Falta foto del sello instalado/)).toBeVisible()
   await sinPantallaDeError(p)
 })
+
+// ── Calama igual que Franke (22-11-2026) ────────────────────────────────────
+test('Calama: con la sesión vencida y SIN señal abre desde el ícono (no pide clave)', async ({ page, modoAvion, conSesion, fake, erroresJs }) => {
+  servidorCalama(fake)
+  await conSesion()
+  await page.goto('/m/calama/')
+  await page.evaluate(async () => { await navigator.serviceWorker.ready })
+  await page.reload()
+  await expect.poll(() => fake.rpcLlamadas('rpc_calama_preparar_offline_operador').length, { timeout: 30_000 }).toBeGreaterThan(0)
+  await page.waitForTimeout(1500)
+  // Pasa la noche en el rajo: el token vence y no hay señal para renovarlo.
+  await page.evaluate((k) => {
+    const s = JSON.parse(localStorage.getItem(k) ?? '{}')
+    s.expires_at = Math.floor(Date.now() / 1000) - 3600
+    localStorage.setItem(k, JSON.stringify(s))
+  }, 'sb-e2e-auth-token')
+  fake.refrescoFalla = true
+  await modoAvion(true)
+  await page.goto('/m/')
+  await page.waitForURL(/\/m\/calama\/?$/)
+  await expect(page.getByText('Cambio de bomba sumergible').first()).toBeVisible()
+  await expect(page).not.toHaveURL(/login/)
+  await abrirOtDesdeLista(page)
+  await expect(page.getByRole('button', { name: /Registrar llegada/ })).toBeVisible()
+  await sinPantallaDeError(page)
+  expect(erroresJs).toEqual([])
+})
+
+test('Calama: jornada COMPLETA sin señal (llegada, inicio, avance, cierre con firma) sube sola, en orden y una vez', async ({ page, context, modoAvion, conSesion, fake, erroresJs }) => {
+  test.slow()
+  servidorCalama(fake)
+  const orden: string[] = []
+  const vistos = new Set<string>()
+  const registrar = (nombre: string) => (a: Record<string, unknown>) => {
+    const p = (a.p_payload ?? {}) as Record<string, unknown>
+    const id = String(p.client_uuid ?? p.client_uuid_evidencia ?? p.client_uuid_foto ?? JSON.stringify(p))
+    if (!vistos.has(id)) { vistos.add(id); orden.push(nombre) }
+    return { success: true }
+  }
+  fake.rpcs.rpc_calama_registrar_llegada_faena = registrar('llegada')
+  fake.rpcs.rpc_calama_iniciar_jornada = registrar('iniciar')
+  fake.rpcs.rpc_calama_registrar_evento_jornada = registrar('avance')
+  fake.rpcs.rpc_calama_finalizar_jornada = registrar('finalizar')
+  await context.grantPermissions(['geolocation'])
+  await context.setGeolocation({ latitude: -22.456, longitude: -68.926, accuracy: 10 })
+  await conSesion()
+  await page.goto('/m/calama/')
+  await page.evaluate(async () => { await navigator.serviceWorker.ready })
+  await page.reload()
+  await expect.poll(() => fake.rpcLlamadas('rpc_calama_preparar_offline_operador').length, { timeout: 30_000 }).toBeGreaterThan(0)
+  await page.waitForTimeout(1500)
+
+  await modoAvion(true)
+  await abrirOtDesdeLista(page)
+  await test.step('llegada a faena', async () => {
+    await page.locator('input[type="file"]').first().setInputFiles(FOTO)
+    await page.getByRole('button', { name: /Registrar llegada/ }).click()
+  })
+  await test.step('iniciar jornada con foto ANTES', async () => {
+    await expect(page.getByRole('button', { name: /Iniciar jornada/ })).toBeVisible()
+    await page.locator('input[type="file"]').first().setInputFiles(FOTO)
+    await page.getByRole('button', { name: /Iniciar jornada/ }).click()
+  })
+  await test.step('guardar avance 50%', async () => {
+    await expect(page.getByRole('button', { name: /Guardar avance/ })).toBeVisible()
+    await page.getByRole('button', { name: '50%', exact: true }).click()
+    await page.getByRole('button', { name: /Guardar avance \(50%\)/ }).click()
+    await page.waitForTimeout(800)
+  })
+  await test.step('cerrar jornada con foto DESPUÉS y firma del operador', async () => {
+    await page.getByRole('button', { name: /^Cerrar jornada$/ }).click()
+    await page.locator('input[type="file"]').first().setInputFiles(FOTO)
+    const lienzo = page.locator('canvas').first()
+    const b = (await lienzo.boundingBox())!
+    await page.mouse.move(b.x + 20, b.y + 20); await page.mouse.down()
+    await page.mouse.move(b.x + 120, b.y + 60, { steps: 8 }); await page.mouse.move(b.x + 200, b.y + 30, { steps: 8 })
+    await page.mouse.up()
+    await page.getByRole('button', { name: 'Guardar firma' }).click()
+    // Avance final 50% (lo guardado): cierre parcial pide comentario.
+    await page.getByPlaceholder(/Observacion de cierre/).fill('Queda el sello para mañana')
+    await page.getByRole('button', { name: /Cerrar jornada \(50%\)/ }).click()
+  })
+  // Sin señal, nada llegó al servidor; el teléfono lo muestra pendiente.
+  await page.waitForTimeout(1000)
+  expect(orden).toEqual([])
+  await sinPantallaDeError(page)
+
+  // Vuelve la señal y se pierde la respuesta del inicio: igual queda todo una vez y en orden.
+  fake.perderRespuesta.add('rpc_calama_iniciar_jornada')
+  await modoAvion(false)
+  await expect.poll(() => orden.length, { timeout: 150_000, intervals: [2000] }).toBe(4)
+  expect(orden).toEqual(['llegada', 'iniciar', 'avance', 'finalizar'])
+  // Fotos y firma subidas a su lugar (una por archivo, sin duplicados).
+  const subidas = (fake.tablas.__storage ?? []).map((f) => String(f.path))
+  expect(subidas.filter((p) => p.includes('calama-firmas')).length).toBe(1)
+  expect(subidas.filter((p) => p.includes('calama-evidencias')).length).toBe(3)
+  expect(erroresJs).toEqual([])
+})

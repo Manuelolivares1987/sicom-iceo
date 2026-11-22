@@ -79,3 +79,70 @@ test('Taller: en modo avión abre una OT que nunca se abrió con señal', async 
   await expect(page.getByText('OT-2026-0777').first()).toBeVisible()
   await sinPantallaDeError(page)
 })
+
+// [22-11-2026] «Sacan fotos y no se ven en otro dispositivo»: el 12-11 el
+// servidor no dejó guardar la foto en la tarea (la OT ya había cambiado de
+// estado) SIN dar error; la app la daba por subida y la borraba del teléfono.
+test('Taller: foto sin señal en una tarea; si el servidor no la guarda, NO se pierde y sube una sola vez', async ({ page, modoAvion, conSesion, fake, erroresJs }) => {
+  test.slow()
+  const ITEM = 'i0000000-0000-4000-8000-000000000001'
+  const INST = 'n0000000-0000-4000-8000-000000000001'
+  fake.comoPerfil({ rol: 'operador_taller', nombre_completo: 'Mecánico Taller' }, null)
+  fake.tablas.v_taller_mecanico_ots = [{
+    ot_id: OT_ID, ot_folio: 'OT-2026-0777', ot_tipo: 'correctivo', ot_estado: 'en_ejecucion', ot_prioridad: 'normal',
+    preparacion_ok_at: new Date().toISOString(), fecha_programada: hoy(), activo_id: 'a1', activo_codigo: 'HHWB-44', activo_nombre: 'Mack',
+    activo_patente: 'HHWB-44', cuadrilla: null, responsable_id: null, responsable: 'Mecánico Taller', asignada_a_mi: true,
+    checklist_total: 1, checklist_completados: 0, tiempo_estimado_total_min: 60, horas_planificadas: null,
+    fecha_entrega_plan: null, fecha_grupo: hoy(), relojes: [],
+  }]
+  fake.tablas.v_taller_ot_checklist_v3 = [{
+    instance_item_id: ITEM, instance_id: INST, ot_id: OT_ID, instance_estado: 'en_progreso', bloque: 'b01_reparacion', bloque_orden: 1, orden: 1,
+    codigo: null, descripcion: 'Cambio de bujes de Bugy de ambos lados', tiempo_min: 60, tiempo_editado: false, requiere_foto: false,
+    obligatorio: false, critico: false, categoria_calidad: null, resultado: null, observacion: null, foto_url: null, foto_urls: null,
+    excluido: false, es_custom: true, mediciones: null, tipo_respuesta: 'ok_no_ok', valor_numerico: null, observado: false,
+  }]
+  fake.tablas.checklist_v2_instance_item = [{ id: ITEM, instance_id: INST, resultado: null, foto_url: null, foto_urls: [] }]
+  // Medidores sin anotar: la visita parte SIN señal y se anotan en el teléfono.
+  fake.tablas.checklist_v2_instance = [{ id: INST, ot_id: OT_ID, horometro: null, kilometraje: null, cuenta_litros: null,
+    medidores_por: null, activo_id: 'a1', activos: { tipo: 'grua', tipo_equipamiento: null } }]
+  fake.tablas.medidores = []
+  fake.rpcs.rpc_taller_registrar_medidores = (a, db) => {
+    db.tablas.medidores.push({ hm: a.p_horometro })
+    Object.assign(db.tablas.checklist_v2_instance[0], { horometro: a.p_horometro, medidores_por: 'u-1' })
+    return { success: true }
+  }
+  fake.rpcs.rpc_taller_reanudar_ejecucion_ot = () => ({ sin_ejecucion: true })
+  fake.rpcs.rpc_taller_iniciar_ejecucion_ot = () => ({ success: true })
+  const fotosSubidas = () => (fake.tablas.__storage ?? []).map((f) => String(f.path)).filter((p) => p.includes(`checklist-v2/${INST}/${ITEM}`))
+  await conSesion()
+  await prepararSinSenal(page, '/m/taller/')
+  await page.getByText('OT-2026-0777').first().click()
+  await expect(page.getByText('Cambio de bujes de Bugy de ambos lados')).toBeVisible()
+
+  await modoAvion(true)
+  await expect(page.getByText(/El checklist está bloqueado/)).toBeVisible()
+  await page.getByText('Horómetro (h)').locator('xpath=..').locator('input').fill('1234')
+  await page.getByRole('button', { name: 'Guardar medidores' }).click()
+  await expect(page.getByText(/El checklist está bloqueado/)).toHaveCount(0)
+  await page.getByRole('button', { name: 'OK', exact: true }).first().click()
+  await page.locator('input[type="file"][multiple]').last().setInputFiles(FOTO)
+  await expect(page.getByText(/todavía en este teléfono/)).toBeVisible()
+  expect(fotosSubidas()).toHaveLength(0)
+
+  // Vuelve la señal, pero el servidor no deja guardar la tarea (sin dar error).
+  fake.escrituraBloqueada.add('checklist_v2_instance_item')
+  await modoAvion(false)
+  await expect(page.getByText(/El servidor no guardó este cambio/).first()).toBeVisible({ timeout: 60_000 })
+  await expect(page.getByText(/todavía en este teléfono/)).toBeVisible()
+  expect(fake.tablas.checklist_v2_instance_item[0].foto_urls).toEqual([])
+
+  // El jefe lo destraba: al reintentar sube y la foto queda en la tarea, UNA vez.
+  fake.escrituraBloqueada.delete('checklist_v2_instance_item')
+  await page.reload()
+  await expect.poll(() => (fake.tablas.checklist_v2_instance_item[0].foto_urls as string[]).length, { timeout: 60_000 }).toBe(1)
+  expect(fake.tablas.medidores).toEqual([{ hm: 1234 }])
+  expect(fotosSubidas()).toHaveLength(1)
+  expect(String((fake.tablas.checklist_v2_instance_item[0].foto_urls as string[])[0])).toContain(fotosSubidas()[0])
+  await sinPantallaDeError(page)
+  expect(erroresJs).toEqual([])
+})

@@ -32,6 +32,8 @@ export class FakeSupabase {
   sinManejar = new Set<string>()
   /** Nombres de RPC cuya PRÓXIMA respuesta se pierde (el servidor sí la procesa). */
   perderRespuesta = new Set<string>()
+  /** Tablas donde un UPDATE «pasa» sin tocar filas (como cuando RLS no deja). */
+  escrituraBloqueada = new Set<string>()
   /** Si está caído, todo responde 503 (servidor o red con problemas). */
   caido = false
   /** Modo avión: nada llega (ni lo que pide el service worker). */
@@ -175,6 +177,14 @@ export class FakeSupabase {
         return json(200, res[0])
       }
       return json(200, res, { 'content-range': `0-${Math.max(res.length - 1, 0)}/${res.length}` })
+    }
+    // PATCH como PostgREST: cambia las filas que calzan y devuelve SOLO esas.
+    // Con la tabla en «escrituraBloqueada» imita a RLS: ningún error, cero filas.
+    if (req.method() === 'PATCH' && filas) {
+      if (this.escrituraBloqueada.has(tabla)) return json(200, [])
+      const tocadas = filtrar(filas, url.searchParams)
+      for (const f of tocadas) Object.assign(f, (cuerpo ?? {}) as object)
+      return json(200, tocadas)
     }
     // Escrituras directas a tablas: se guardan tal cual.
     const nuevas = (Array.isArray(cuerpo) ? cuerpo : [cuerpo]).filter(Boolean) as Fila[]

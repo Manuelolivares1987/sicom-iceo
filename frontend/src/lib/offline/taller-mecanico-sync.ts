@@ -324,6 +324,32 @@ export async function queueNota(params: {
 }
 
 // ── Encolar cambios ──────────────────────────────────────────────────────────
+// [22-11-2026] Medidores SIN señal. El checklist se abre solo con medidores
+// anotados (MIG496); antes, sin señal no se podían guardar y el mecánico que
+// llegaba a una visita sin cobertura quedaba con la OT entera bloqueada.
+export async function queueMedidores(otId: string, v: { horometro: number | null; kilometraje: number | null; cuentaLitros?: number | null }): Promise<void> {
+  const db = tallerDB()
+  // Uno solo por OT: el último que se anotó manda.
+  const previos = (await db.pending.where('ot_id').equals(otId).toArray()).filter((p) => p.kind === 'medidores')
+  for (const p of previos) await db.pending.delete(p.local_id)
+  await db.pending.put({
+    local_id: newId(), client_uuid: newId(), ot_id: otId, kind: 'medidores',
+    horometro: v.horometro, kilometraje: v.kilometraje, cuenta_litros: v.cuentaLitros ?? null,
+    sync_status: 'pending', retries: 0, last_error: null,
+    // Conserva su lugar en la cola: el servidor los necesita antes que las tareas.
+    created_at: previos[0]?.created_at ?? new Date().toISOString(),
+  } as TallerPending)
+  if (isOnline()) { try { await syncTallerPending() } catch { /* queda en cola */ } }
+}
+
+/** Medidores anotados en el teléfono que todavía no suben (o null). */
+export async function getMedidoresLocales(otId: string): Promise<TallerPending | null> {
+  try {
+    const rows = (await tallerDB().pending.where('ot_id').equals(otId).toArray()).filter((p) => p.kind === 'medidores')
+    return rows[rows.length - 1] ?? null
+  } catch { return null }
+}
+
 export async function queueItem(params: {
   otId: string
   instanceItemId: string
@@ -446,7 +472,38 @@ export async function queueTiming(
 }
 
 // ── Sync ─────────────────────────────────────────────────────────────────────
-export async function syncTallerPending(): Promise<{ ok: number; failed: number }> {
+// Sube un archivo del pendiente UNA sola vez: la URL queda anotada en el
+// pendiente antes de seguir, así un reintento no vuelve a mandarlo.
+async function subirUnaVez(p: TallerPending, blobId: string, subir: () => Promise<string>): Promise<string> {
+  const ya = p.subidas?.[blobId]
+  if (ya) return ya
+  const url = await subir()
+  p.subidas = { ...(p.subidas ?? {}), [blobId]: url }
+  await tallerDB().pending.update(p.local_id, { subidas: p.subidas })
+  return url
+}
+
+// [22-11-2026] Una sola subida a la vez (como Franke). Antes la pantalla, la
+// lista y cada acción llamaban a esto por su cuenta y dos vueltas simultáneas
+// subían la misma foto dos veces. Lo que pide subir mientras otra vuelta corre
+// recibe esa misma vuelta y, al terminar, se hace una más.
+let syncEnCurso: Promise<{ ok: number; failed: number }> | null = null
+let syncOtraVuelta = false
+export function syncTallerPending(): Promise<{ ok: number; failed: number }> {
+  if (syncEnCurso) { syncOtraVuelta = true; return syncEnCurso }
+  syncEnCurso = (async () => {
+    let r = await syncTallerPendingUnaVuelta()
+    while (syncOtraVuelta) {
+      syncOtraVuelta = false
+      const r2 = await syncTallerPendingUnaVuelta()
+      r = { ok: r.ok + r2.ok, failed: r2.failed }
+    }
+    return r
+  })().finally(() => { syncEnCurso = null })
+  return syncEnCurso
+}
+
+async function syncTallerPendingUnaVuelta(): Promise<{ ok: number; failed: number }> {
   // [20-11-2026] Sin sesión válida no se sube: el servidor lo rechazaría como anónimo.
   if (!haySesionServidor()) return { ok: 0, failed: 0 }
   if (!isOnline()) return { ok: 0, failed: 0 }
@@ -465,7 +522,7 @@ export async function syncTallerPending(): Promise<{ ok: number; failed: number 
             // Antes una foto que ya no estaba en el teléfono se saltaba en
             // silencio: el resultado subía y la foto se perdía sin aviso.
             if (!b) throw new Error('La foto ya no está guardada en el teléfono: vuelve a tomarla y descarta este pendiente.')
-            nuevasUrls.push(await subirFotoItem(p.instance_id, p.instance_item_id, b.blob))
+            nuevasUrls.push(await subirUnaVez(p, bid, () => subirFotoItem(p.instance_id!, p.instance_item_id!, b.blob)))
           }
         }
         // [MIG496] Firmas del cierre de recepción: subir y anotar la URL en
@@ -475,7 +532,7 @@ export async function syncTallerPending(): Promise<{ ok: number; failed: number 
           const cap: Record<string, unknown> = { ...((mediciones && !Array.isArray(mediciones) ? mediciones : {}) as object) }
           for (const f of p.firmas_blob_ids) {
             const b = await db.blobs.get(f.blob_id)
-            if (b) cap[f.campo] = await subirFirmaMecanico(b.blob)
+            if (b) cap[f.campo] = await subirUnaVez(p, f.blob_id, () => subirFirmaMecanico(b.blob))
           }
           mediciones = cap as MedicionItem
         }
@@ -484,7 +541,7 @@ export async function syncTallerPending(): Promise<{ ok: number; failed: number 
           const { data: cur } = await supabase
             .from('checklist_v2_instance_item').select('foto_urls').eq('id', p.instance_item_id).single()
           const prev = ((cur?.foto_urls as string[] | null) ?? []).filter(Boolean)
-          const merged = [...prev, ...nuevasUrls]
+          const merged = [...prev, ...nuevasUrls.filter((u) => !prev.includes(u))]
           await actualizarItem(p.instance_item_id, {
             resultado: p.resultado, observacion: p.observacion ?? undefined, observado: p.observado,
             foto_urls: merged, foto_url: merged[0], mediciones,
@@ -503,7 +560,7 @@ export async function syncTallerPending(): Promise<{ ok: number; failed: number 
         const fotosUrls: string[] = []
         for (const bid of p.fotos_blob_ids ?? []) {
           const b = await db.blobs.get(bid)
-          if (b) fotosUrls.push(await subirFotoRecurso(p.ot_id, b.blob))
+          if (b) fotosUrls.push(await subirUnaVez(p, bid, () => subirFotoRecurso(p.ot_id, b.blob)))
         }
         await solicitarRecurso({
           otId: p.ot_id, cantidad: p.cantidad ?? 0,
@@ -515,12 +572,22 @@ export async function syncTallerPending(): Promise<{ ok: number; failed: number 
           instanceItemId: p.instance_item_id ?? null,
         })
         for (const bid of p.fotos_blob_ids ?? []) await db.blobs.delete(bid)
+      } else if (p.kind === 'medidores') {
+        const { data, error } = await supabase.rpc('rpc_taller_registrar_medidores', {
+          p_ot_id: p.ot_id, p_horometro: p.horometro ?? null, p_kilometraje: p.kilometraje ?? null,
+          p_confirmado: false, p_cuenta_litros: p.cuenta_litros ?? null,
+        })
+        if (error) throw error
+        const r = data as { requiere_confirmacion?: boolean; motivo?: string } | null
+        // El número no calza con el historial del equipo: que lo revise la
+        // persona (queda a la vista en «todavía en este teléfono»).
+        if (r?.requiere_confirmacion) throw new Error(`Medidores: ${r.motivo ?? 'revisa el número'}. Vuelve a anotarlos con señal.`)
       } else if (p.kind === 'nota') {
         // Subir las fotos de la nota, luego insertarla (idempotente por client_uuid).
         const fotosUrls: string[] = []
         for (const bid of p.fotos_blob_ids ?? []) {
           const b = await db.blobs.get(bid)
-          if (b) fotosUrls.push(await subirFotoNota(p.ot_id, b.blob))
+          if (b) fotosUrls.push(await subirUnaVez(p, bid, () => subirFotoNota(p.ot_id, b.blob)))
         }
         await agregarNotaOT({
           otId: p.ot_id, texto: p.nota_texto ?? '',
@@ -532,7 +599,7 @@ export async function syncTallerPending(): Promise<{ ok: number; failed: number 
         let firmaUrl: string | null = null
         if (p.firma_blob_id) {
           const b = await db.blobs.get(p.firma_blob_id)
-          if (b) firmaUrl = await subirFirmaMecanico(b.blob)
+          if (b) firmaUrl = await subirUnaVez(p, p.firma_blob_id, () => subirFirmaMecanico(b.blob))
         }
         const { data: fin, error } = await supabase.rpc('rpc_taller_finalizar_mecanico', {
           p_ot_id: p.ot_id, p_firma_tecnico_url: firmaUrl,

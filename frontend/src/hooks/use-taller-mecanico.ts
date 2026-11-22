@@ -1,6 +1,8 @@
 'use client'
 
 import { useEffect } from 'react'
+import { estaEnLinea, EVENTO_CONECTIVIDAD } from '@/lib/conectividad'
+import { esTransitorio } from '@/lib/offline/bandeja'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNetworkStatus } from '@/hooks/use-calama-offline'
 import { supabase } from '@/lib/supabase'
@@ -8,7 +10,7 @@ import type { MedicionItem } from '@/lib/services/taller-plan-semanal'
 import { quitarFotoItem } from '@/lib/services/checklist-v2'
 import {
   getOTs, getChecklistMecanico, queueItem, queueTiming, syncTallerPending, getPendingCount,
-  getPendientesOT, descartarPendiente,
+  getPendientesOT, descartarPendiente, queueMedidores, getMedidoresLocales,
   prepareTallerOffline, getRecursosMecanico, queueRecurso,
   getNotasMecanico, queueNota, type MecanicoOT,
 } from '@/lib/offline/taller-mecanico-sync'
@@ -213,7 +215,7 @@ export function useAutoSyncTaller() {
   const qc = useQueryClient()
   useEffect(() => {
     const trySync = async () => {
-      if (typeof navigator !== 'undefined' && navigator.onLine) {
+      if (estaEnLinea()) {
         await syncTallerPending()
         qc.invalidateQueries({ queryKey: KEY_OTS })
         qc.invalidateQueries({ queryKey: KEY_PENDING })
@@ -221,9 +223,21 @@ export function useAutoSyncTaller() {
         qc.invalidateQueries({ queryKey: ['mec-recursos'] })
       }
     }
+    // [22-11-2026] Como Franke: además de «online» (que con señal débil muchas
+    // veces no llega), al confirmarse la señal, al volver a la app y cada 2 min.
+    const alConectar = (e: Event) => { if ((e as CustomEvent<{ enLinea: boolean }>).detail?.enLinea) void trySync().catch(() => undefined) }
+    const alVolver = () => { if (document.visibilityState === 'visible') void trySync().catch(() => undefined) }
+    const t = setInterval(() => { void trySync().catch(() => undefined) }, 2 * 60_000)
     window.addEventListener('online', trySync)
-    void trySync()
-    return () => window.removeEventListener('online', trySync)
+    window.addEventListener(EVENTO_CONECTIVIDAD, alConectar)
+    document.addEventListener('visibilitychange', alVolver)
+    void trySync().catch(() => undefined)
+    return () => {
+      clearInterval(t)
+      window.removeEventListener('online', trySync)
+      window.removeEventListener(EVENTO_CONECTIVIDAD, alConectar)
+      document.removeEventListener('visibilitychange', alVolver)
+    }
   }, [qc])
 }
 
@@ -246,10 +260,31 @@ export type MedidoresOT = {
 }
 
 export function useMedidoresOT(otId: string | null) {
+  const qc = useQueryClient()
   return useQuery({
     queryKey: ['mec-medidores', otId],
     enabled: !!otId,
+    networkMode: 'always',
     queryFn: async (): Promise<MedidoresOT | null> => {
+      // [22-11-2026] Lo anotado sin señal manda sobre lo del servidor.
+      const local = await getMedidoresLocales(otId!)
+      const encima = (m: MedidoresOT | null): MedidoresOT | null => (m && local ? {
+        ...m, horometro: local.horometro ?? m.horometro, kilometraje: local.kilometraje ?? m.kilometraje,
+        cuenta_litros: local.cuenta_litros ?? m.cuenta_litros, anotado_por_persona: true,
+      } : m)
+      try {
+        return encima(await leerMedidoresServidor(otId!))
+      } catch {
+        // Sin señal: lo último que se vio (o nada: el checklist no se bloquea a ciegas).
+        return encima(qc.getQueryData<MedidoresOT | null>(['mec-medidores', otId]) ?? null)
+      }
+    },
+  })
+}
+
+async function leerMedidoresServidor(otId: string): Promise<MedidoresOT | null> {
+  {
+    {
       const { data, error } = await supabase
         .from('checklist_v2_instance')
         .select('id, horometro, kilometraje, cuenta_litros, medidores_por, activo_id, activos!activo_id(tipo, tipo_equipamiento)')
@@ -272,17 +307,25 @@ export function useMedidoresOT(otId: string | null) {
         exige_cuenta_litros: act?.tipo_equipamiento === 'aljibe_combustible',
         anotado_por_persona: (data as { medidores_por: string | null }).medidores_por != null,
       }
-    },
-  })
+    }
+  }
 }
 
 export function useGuardarMedidores(otId: string) {
   const qc = useQueryClient()
   return useMutation({
+    networkMode: 'always',
     mutationFn: async (v: {
       horometro: number | null; kilometraje: number | null
       cuentaLitros?: number | null; confirmado?: boolean
     }) => {
+      type R = { success: boolean; requiere_confirmacion?: boolean; motivo?: string; offline?: boolean }
+      // [22-11-2026] Sin señal se guardan en el teléfono y suben solos.
+      const enCola = async (): Promise<R> => {
+        await queueMedidores(otId, { horometro: v.horometro, kilometraje: v.kilometraje, cuentaLitros: v.cuentaLitros ?? null })
+        return { success: true, offline: true }
+      }
+      if (!estaEnLinea()) return enCola()
       const { data, error } = await supabase.rpc('rpc_taller_registrar_medidores', {
         p_ot_id: otId,
         p_horometro: v.horometro,
@@ -290,14 +333,18 @@ export function useGuardarMedidores(otId: string) {
         p_confirmado: v.confirmado ?? false,
         p_cuenta_litros: v.cuentaLitros ?? null,
       })
-      if (error) throw error
-      return data as { success: boolean; requiere_confirmacion?: boolean; motivo?: string }
+      if (error) {
+        if (esTransitorio(error) && !/permission|not authorized|no autorizado/i.test(error.message ?? '')) return enCola()
+        throw error
+      }
+      return data as R
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['mec-medidores', otId] })
       // [MIG496] El servidor llena solo el «próximo horómetro de pauta»
       // (B11.04 = horómetro + 300): refrescar el checklist para que se vea.
       qc.invalidateQueries({ queryKey: ['mec-checklist', otId] })
+      qc.invalidateQueries({ queryKey: KEY_PENDING })
     },
   })
 }
