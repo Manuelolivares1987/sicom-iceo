@@ -9,6 +9,7 @@ import { useAuth } from '@/contexts/auth-context'
 import { usePermissions, type Module, type ExtendedModule } from '@/hooks/use-permissions'
 import {
   Bot,
+  HandCoins,
   LayoutDashboard,
   FileText,
   Share2,
@@ -150,6 +151,19 @@ const navGroups: NavGroup[] = [
             badge: 'Nuevo',
             roles: ['administrador', 'gerencia', 'subgerente_operaciones', 'jefe_operaciones', 'jefe_mantenimiento'],
             tooltip: 'Salidas de bodega Softland por equipo, faena y familia',
+          },
+        ],
+      },
+      {
+        label: 'Finanzas',
+        items: [
+          // La base filtra (fn_finanzas_puede_ver, MIG730); `roles` solo esconde
+          // el acceso a quien igual vería el aviso de "sin permiso".
+          {
+            label: 'Cobranza', href: '/dashboard/finanzas/cobranza', icon: HandCoins,
+            badge: 'Nuevo',
+            roles: ['administrador', 'gerencia', 'subgerente_operaciones'],
+            tooltip: 'Cartera de clientes desde Softland: vencido, por vencer y quién paga cómo',
           },
         ],
       },
