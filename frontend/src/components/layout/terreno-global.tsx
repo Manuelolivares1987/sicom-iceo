@@ -13,13 +13,13 @@
 import { useEffect, useState } from 'react'
 import { usePathname } from 'next/navigation'
 import { useAuth } from '@/contexts/auth-context'
-import { enAppTerreno, esAndroid } from '@/lib/app-terreno'
+import { enAppTerreno, esAndroid, guardarUltimaApp } from '@/lib/app-terreno'
 
-export const ULTIMA_APP_KEY = 'sicom-app-terreno'
+export { ULTIMA_APP_KEY } from '@/lib/app-terreno'
 
 export function TerrenoGlobal() {
   const pathname = usePathname() || '/'
-  const { sesionPerdida } = useAuth()
+  const { sesionPerdida, user } = useAuth()
   // [20-11-2026] En Android desde Chrome: sugerir la app instalada (no depende
   // de la configuración del navegador). Se puede cerrar y no vuelve en 7 días.
   const [sugerirApp, setSugerirApp] = useState(false)
@@ -36,9 +36,10 @@ export function TerrenoGlobal() {
   }
 
   useEffect(() => {
+    if (!user?.id) return
     const m = /^\/m\/([a-z0-9-]+)\//.exec(pathname.endsWith('/') ? pathname : `${pathname}/`)
-    if (m) { try { localStorage.setItem(ULTIMA_APP_KEY, `/m/${m[1]}/`) } catch { /* noop */ } }
-  }, [pathname])
+    if (m) guardarUltimaApp(user.id, `/m/${m[1]}/`)
+  }, [pathname, user?.id])
 
   if (sugerirApp && !sesionPerdida) {
     return (

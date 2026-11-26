@@ -12,7 +12,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useAuth } from '@/contexts/auth-context'
 import { leerIdentidadEquipo, leerSesionPersistida } from '@/lib/supabase'
-import { ULTIMA_APP_KEY } from '@/components/layout/terreno-global'
+import { leerUltimaApp } from '@/lib/app-terreno'
 import { ROL_CALAMA_KEY } from '@/contexts/auth-context'
 
 const OFICINA = ['administrador', 'subgerente_operaciones', 'gerente', 'gerente_general', 'jefe_operaciones', 'planificador', 'rrhh']
@@ -31,8 +31,10 @@ function destino(): { ruta: string; seguro: boolean } {
     const mio = p?.id === u.id ? p : null
     // La oficina abre el panel aunque alguna vez haya mirado una app de terreno.
     const oficina = !!mio?.rol && OFICINA.includes(mio.rol) && !mio.faena?.app_movil
-    const ultima = localStorage.getItem(ULTIMA_APP_KEY)
-    if (!oficina && ultima && /^\/m\/[a-z0-9-]+\/$/.test(ultima)) return { ruta: ultima, seguro: true }
+    // La última app de ESTA persona (no la del teléfono): quien entra después
+    // en el mismo equipo va a la suya.
+    const ultima = leerUltimaApp(u.id, p?.id)
+    if (!oficina && ultima) return { ruta: ultima, seguro: true }
     const app = mio?.faena?.app_movil
     if (app && app.startsWith('/m/')) return { ruta: app.endsWith('/') ? app : `${app}/`, seguro: true }
     // [20-11-2026] Las mismas reglas del panel (dashboard/layout), pero decididas

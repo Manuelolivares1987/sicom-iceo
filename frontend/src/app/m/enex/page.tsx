@@ -21,6 +21,7 @@ import { CambioPrograma } from '@/components/enex/cambio-programa'
 import { useNetworkStatus } from '@/hooks/use-calama-offline'
 import { useExigirSesion } from '@/hooks/use-exigir-sesion'
 import { useAuth } from '@/contexts/auth-context'
+import { BotonSalir } from '@/components/layout/boton-salir'
 import { SinSesionOffline } from '@/components/enex/sin-sesion-offline'
 import { BandejaPorEnviar } from '@/components/enex/bandeja-por-enviar'
 import { ListoSinSenal } from '@/components/enex/listo-sin-senal'
@@ -221,13 +222,20 @@ export default function EnexTerrenoHome() {
 
   return (
     <div className="p-3 space-y-3">
+      {/* [26-11-2026] Con quién está conectado y cómo salir: en Calama un
+          supervisor no podía cambiar de cuenta en el teléfono. */}
       <div className="flex items-center gap-2">
-        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-700 text-white"><Building2 className="h-5 w-5" /></div>
-        <div className="flex-1">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-700 text-white"><Building2 className="h-5 w-5" aria-hidden="true" /></div>
+        <div className="min-w-0 flex-1">
           <h1 className="text-base font-bold leading-tight">Terreno ENEX</h1>
           <p className="text-[11px] text-gray-500">Mantención y calibración de instalaciones</p>
+          {perfil?.nombre_completo && <p className="text-[11px] font-medium text-gray-700 break-words">{perfil.nombre_completo}</p>}
         </div>
-        <button onClick={() => refetch()} aria-label="Actualizar" className="text-gray-500"><RefreshCw className={`h-4 w-4 ${isFetching ? 'animate-spin' : ''}`} /></button>
+        <button onClick={() => refetch()} aria-label="Actualizar"
+          className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-gray-500 hover:bg-gray-100 active:bg-gray-200">
+          <RefreshCw className={`h-5 w-5 ${isFetching ? 'animate-spin' : ''}`} aria-hidden="true" />
+        </button>
+        <BotonSalir className="text-gray-500 hover:bg-gray-100 active:bg-gray-200" />
       </div>
 
       {/* Selector de mundo del supervisor (combustible / lubricantes) */}

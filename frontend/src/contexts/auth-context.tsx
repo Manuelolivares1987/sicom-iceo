@@ -15,6 +15,7 @@ import {
   supabase, leerSesionPersistida, guardarIdentidadEquipo, leerIdentidadEquipo, borrarIdentidadEquipo,
 } from '@/lib/supabase'
 import { EVENTO_CONECTIVIDAD } from '@/lib/conectividad'
+import { ULTIMA_APP_KEY } from '@/lib/app-terreno'
 import type { UsuarioPerfil } from '@/types/database'
 
 /** Lo que se espera a que la red valide la sesión antes de arrancar con la
@@ -429,6 +430,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Limpia BD offline de Calama y Taller + perfil cacheado: nunca dejar
     // datos del operador en un dispositivo despues del logout.
     try { localStorage.removeItem(PERFIL_CACHE_KEY) } catch { /* noop */ }
+    // [26-11-2026] Tampoco la app a la que abría ni su rol de Calama: el que
+    // entra después en el mismo teléfono tiene que caer en SU app.
+    try {
+      localStorage.removeItem(ULTIMA_APP_KEY)
+      localStorage.removeItem(ROL_CALAMA_KEY)
+    } catch { /* noop */ }
     try {
       const { clearCalamaDB } = await import('@/lib/offline/calama-db')
       await clearCalamaDB()
