@@ -32,7 +32,7 @@ import {
   useResumenBono, useDisponibilidadPeriodo, usePeriodosBono,
   useCerrarPeriodo, useReabrirPeriodo, useCartolaBono, useOTSinDueno,
 } from '@/hooks/use-taller-bono'
-import { clp, corteDelMes, CONCEPTO_LABEL, getTrabajosExcel } from '@/lib/services/taller-bono'
+import { clp, corteDelMes, CONCEPTO_LABEL, getParametrosExcel, getTrabajosExcel } from '@/lib/services/taller-bono'
 // [22-11-2026] Carga diferida: este módulo (PDF/Excel/Word) pesa cientos de kB y
 // solo se usa al apretar el botón; antes se bajaba al abrir la pantalla.
 const cargarPlanSemanalExcel = () => import('@/lib/export/plan-semanal-excel')
@@ -93,15 +93,16 @@ export default function BonoTallerPage() {
   const descargarExcel = async () => {
     setBajando(true)
     try {
-      const [trabajos, { exportarBonoTrabajosExcel }] = await Promise.all([
+      const [trabajos, parametros, { exportarBonoTrabajosExcel }] = await Promise.all([
         getTrabajosExcel(corte.desde, corte.hasta),
+        getParametrosExcel(corte.desde, corte.hasta),
         import('@/lib/export/bono-trabajos-excel'),
       ])
       const blob = await exportarBonoTrabajosExcel({
         corteNombre: corte.nombre, desde: corte.desde, hasta: corte.hasta,
         cerrado: !!cerrado,
         disponibilidadPct: cerrado?.disponibilidad_pct ?? disp?.disponibilidad_pct ?? null,
-        lineas, trabajos, sinDueno,
+        lineas, trabajos, sinDueno, parametros,
       })
       ;(await cargarPlanSemanalExcel()).descargarBlob(blob, `Bono_taller_${corte.desde}_al_${corte.hasta}.xlsx`)
     } catch (e) {
