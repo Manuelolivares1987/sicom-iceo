@@ -5,10 +5,11 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
   RefreshCw, MapPin, MessageSquare, ChevronRight, AlertTriangle,
-  Calendar, LogOut, ClipboardCheck, CheckCircle2, Play, Pause,
+  Calendar, ClipboardCheck, CheckCircle2, Play, Pause,
   ChevronDown, ChevronUp, ChevronLeft, HardDrive,
 } from 'lucide-react'
 import { Spinner } from '@/components/ui/spinner'
+import { BotonSalir } from '@/components/layout/boton-salir'
 import { useAuth } from '@/contexts/auth-context'
 import { usePermissions } from '@/hooks/use-permissions'
 import { useMisOTsAsignadas, useUsuariosAsignables } from '@/hooks/use-calama-plan-semanal'
@@ -43,7 +44,7 @@ interface SeccionVista {
 // dos veces.
 
 export default function MobileCalamaPage() {
-  const { perfil, signOut } = useAuth()
+  const { perfil } = useAuth()
   const { rol } = usePermissions()
   const esAdminOPlanificador = ['administrador', 'gerencia', 'subgerente_operaciones', 'supervisor', 'planificador', 'jefe_operaciones'].includes(rol ?? '')
   const qc = useQueryClient()
@@ -327,24 +328,27 @@ export default function MobileCalamaPage() {
       {/* Header sticky */}
       <header className="sticky top-0 z-30 bg-amber-700 text-white shadow-md">
         <div className="px-4 py-3">
+          {/* [26-11-2026] min-w-0 + botones que no se encogen: con un nombre
+              largo («Operacion Obras Civiles Calama») los botones quedaban
+              fuera de la pantalla y no había cómo cerrar sesión. El nombre se
+              parte en dos líneas en vez de cortarse (en el teléfono no hay
+              cómo ver el texto cortado). */}
           <div className="flex items-center justify-between gap-2">
-            <div>
+            <div className="min-w-0 flex-1">
               <h1 className="text-lg font-bold flex items-center gap-1.5">
-                <ClipboardCheck className="h-5 w-5" /> Mis OTs Calama
+                <ClipboardCheck className="h-5 w-5 shrink-0" aria-hidden="true" /> Mis OTs Calama
               </h1>
-              <p className="text-xs text-white truncate">
-                {perfil?.nombre_completo ?? 'Operador'} · {new Date().toLocaleDateString('es-CL', { day: '2-digit', month: 'short', weekday: 'short' })}
+              <p className="text-xs text-white break-words">
+                {perfil?.nombre_completo ?? 'Operador'}
+                <span className="whitespace-nowrap"> · {new Date().toLocaleDateString('es-CL', { day: '2-digit', month: 'short', weekday: 'short' })}</span>
               </p>
             </div>
-            <div className="flex items-center gap-1">
+            <div className="flex shrink-0 items-center gap-1">
               <button onClick={refresh} aria-label="Actualizar"
-                className="rounded-full p-2 bg-white/10 hover:bg-white/20 active:bg-white/30">
-                <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+                className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-white/10 hover:bg-white/20 active:bg-white/30">
+                <RefreshCw className={`h-5 w-5 ${isLoading ? 'animate-spin' : ''}`} aria-hidden="true" />
               </button>
-              <button onClick={() => signOut()} aria-label="Cerrar sesion"
-                className="rounded-full p-2 bg-white/10 hover:bg-white/20 active:bg-white/30">
-                <LogOut className="h-4 w-4" />
-              </button>
+              <BotonSalir className="bg-white/10 hover:bg-white/20 active:bg-white/30" />
             </div>
           </div>
         </div>
