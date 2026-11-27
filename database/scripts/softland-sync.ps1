@@ -312,6 +312,50 @@ SELECT c.NumInterOC, c.NumOC, c.FechaOC, c.CodEstado, c.CodAux, a.NomAux, c.Codi
     $cierreOc = Rpc 'rpc_softland_cerrar_oc' @{ p_secreto = $cfg.secreto; p_run = $run; p_desde = $ventanaOC.ToString('yyyy-MM-dd') }
     Log "OC: $($totOc.ocs) ordenes ($($totOc.cambiadas) nuevas o cambiadas, $($totOc.lineas) lineas), $($cierreOc.borradas) borradas"
 
+    # 3b) Cuentas por cobrar (MIG730): cartera de clientes desde 2026. Se manda
+    #     la ventana COMPLETA cada vez; la RPC reemplaza lo que ya no viene.
+    function Leer-Filas($sql, $mapa) {
+        $c = $cn.CreateCommand(); $c.CommandTimeout = 300; $c.CommandText = $sql
+        $rd = $c.ExecuteReader(); $lista = New-Object System.Collections.ArrayList
+        while ($rd.Read()) { [void]$lista.Add((& $mapa $rd)) }
+        $rd.Close(); return ,$lista
+    }
+    $movs = Leer-Filas @"
+SELECT m.CpbAno, m.AreaCod, m.CpbNum, m.MovNum, m.PctCod, m.CodAux, m.TtdCod, m.NumDoc, m.MovTipDocRef, m.MovNumDocRef,
+       m.MovFe, m.MovFv, c.CpbFec, m.MovDebe, m.MovHaber, Glosa = CAST(m.MovGlosa AS varchar(200))
+  FROM pillado.softland.cwmovim m
+  JOIN pillado.softland.cwcpbte c ON c.CpbAno = m.CpbAno AND c.CpbNum = m.CpbNum AND c.AreaCod = m.AreaCod
+ WHERE m.PctCod LIKE '1-1-04-%' AND c.CpbEst = 'V' AND m.CpbAno >= '2026'
+"@ { param($r) [ordered]@{
+        cpb_ano = [int](Txt $r['CpbAno']); area_cod = (Txt $r['AreaCod']); cpb_num = (Txt $r['CpbNum']); mov_num = [int]$r['MovNum']
+        pct_cod = (Txt $r['PctCod']); cod_aux = (Txt $r['CodAux']); ttd_cod = (Txt $r['TtdCod']); num_doc = [int64](Num $r['NumDoc'])
+        tip_ref = (Txt $r['MovTipDocRef']); num_ref = [int64](Num $r['MovNumDocRef'])
+        fecha = (Fecha $r['MovFe']); vence = (Fecha $r['MovFv']); cpb_fec = (Fecha $r['CpbFec'])
+        debe = (Num $r['MovDebe']); haber = (Num $r['MovHaber']); glosa = (Txt $r['Glosa']) } }
+    $rMov = Rpc 'rpc_softland_cargar_cxc' @{ p_secreto = $cfg.secreto; p_tipo = 'mov'; p_filas = @($movs) }
+
+    $lineasCxc = Leer-Filas @"
+SELECT g.Tipo, g.NroInt, l.Linea, g.Folio, g.Fecha, g.CodAux, l.CodProd, Det = CAST(l.DetProd AS varchar(300)), l.CantFacturada, l.TotLinea
+  FROM pillado.softland.iw_gsaen g
+  JOIN pillado.softland.iw_gmovi l ON l.Tipo = g.Tipo AND l.NroInt = g.NroInt
+ WHERE g.Tipo IN ('F','N') AND g.Fecha >= '2026-01-01'
+"@ { param($r) [ordered]@{
+        tipo = (Txt $r['Tipo']); nro_int = [int]$r['NroInt']; n = [int](Num $r['Linea']); folio = [int64](Num $r['Folio'])
+        fecha = (Fecha $r['Fecha']); cod_aux = (Txt $r['CodAux']); cod_prod = (Txt $r['CodProd']); detalle = (Txt $r['Det'])
+        cantidad = (Num $r['CantFacturada']); total = (Num $r['TotLinea']) } }
+    $rLin = Rpc 'rpc_softland_cargar_cxc' @{ p_secreto = $cfg.secreto; p_tipo = 'linea'; p_filas = @($lineasCxc) }
+
+    $aux = Leer-Filas @"
+SELECT a.CodAux, a.RutAux, a.NomAux, a.EMail, MailDte = CAST(a.eMailDTE AS varchar(200)), a.FonAux1, a.DiaPlazo, a.ClaCli
+  FROM pillado.softland.cwtauxi a
+ WHERE a.ClaCli = 'S' OR a.CodAux IN (SELECT DISTINCT m.CodAux FROM pillado.softland.cwmovim m WHERE m.PctCod LIKE '1-1-04-%' AND m.CpbAno >= '2026')
+"@ { param($r) [ordered]@{
+        cod_aux = (Txt $r['CodAux']); rut = (Txt $r['RutAux']); nombre = (Txt $r['NomAux']); email = (Txt $r['EMail'])
+        email_dte = (Txt $r['MailDte']); telefono = (Txt $r['FonAux1']); dia_plazo = [int](Num $r['DiaPlazo'])
+        es_cliente = ((Txt $r['ClaCli']) -eq 'S') } }
+    $rAux = Rpc 'rpc_softland_cargar_cxc' @{ p_secreto = $cfg.secreto; p_tipo = 'aux'; p_filas = @($aux) }
+    Log "CxC: $($rMov.filas) movimientos ($($rMov.borradas) borrados), $($rLin.filas) lineas de factura, $($rAux.filas) clientes"
+
     # 4) Cierre: borra lo anulado en la ventana, refresca el resumen y deja bitacora.
     $stats = @{ docs = $tot.docs; cambiados = $tot.cambiados; lineas = $tot.lineas; equipo = $env:COMPUTERNAME; centros_costo = $ccs.Count
                 ocs = $totOc.ocs; ocs_cambiadas = $totOc.cambiadas; oc_lineas = $totOc.lineas }
