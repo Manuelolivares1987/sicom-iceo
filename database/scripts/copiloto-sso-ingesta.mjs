@@ -36,7 +36,14 @@ const META = {
   '07': { titulo: 'Campus Centinela: plataforma, salud y otros', escaneado: false },
   '08': { titulo: 'Manual de usuario SOFI', escaneado: true },
   '09': { titulo: 'Qué se exige al subir a faena y qué se revisa en la tarea', escaneado: false },
+  '10': { titulo: 'Cursos que Centinela asigna al equipo de Pillado (Calama) y su estado al 26-11-2026', escaneado: false },
+  '11': { titulo: 'EDC adicionales: Fatiga y Somnolencia, Energía Hidráulica, Energía Neumática, Partes Móviles, Soluciones Ácidas y Sustancias Peligrosas, Elementos Combustibles, Espacios Confinados y Libro de Vehículos Livianos', escaneado: false },
+  '12': { titulo: 'Cursos Centinela: ART 360, ART Planificado, RECSS e Introducción a las EDC', escaneado: false },
 }
+
+// Texto de la interfaz del e-learning (cursos 12): no aporta y ensucia la búsqueda.
+const BASURA = /^(Paralelogramo \d+|Punto caliente.*|Multiplicar \d+|arrow ícono \d+|check ícono \d+|Haz clic.*|Desplazar hasta abajo|Debes .* antes de enviar\.|Respuesta no válida|Aceptar|Continuar|Ingresar nombre|Escribe tu nombre.*|¿Quieres continuar donde te quedaste\?|Advertencia|Mensaje de advertencia|```(text)?)$/
+const ESCENA = /^(MsgScene_\w+|PromptScene|[0-9A-Za-z]{11})$/
 
 function cortar(texto) {
   const lineas = texto.split(/\r?\n/)
@@ -61,7 +68,9 @@ function cortar(texto) {
     if (actual.trim()) piezas.push({ seccion, contenido: actual.trim() })
   }
   for (const l of lineas) {
+    if (BASURA.test(l.trim())) continue
     const m = /^(#{1,4})\s+(.*)$/.exec(l)
+    if (m && ESCENA.test(m[2].trim())) continue
     if (m) {
       volcar()
       const nivel = m[1].length
@@ -83,7 +92,7 @@ function leerEnv() {
   }))
 }
 
-const archivos = fs.readdirSync(DIR).filter((f) => /^(0[1-9])_.*\.md$/.test(f)).sort()
+const archivos = fs.readdirSync(DIR).filter((f) => /^(0[1-9]|1[0-9])_.*\.md$/.test(f)).sort()
 const docs = archivos.map((archivo) => {
   const codigo = archivo.slice(0, 2)
   const texto = fs.readFileSync(path.join(DIR, archivo), 'utf8')
