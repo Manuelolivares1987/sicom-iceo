@@ -37,6 +37,7 @@ import { useNetworkStatus } from '@/hooks/use-calama-offline'
 import { useExigirSesion } from '@/hooks/use-exigir-sesion'
 import { SinSesionOffline } from '@/components/enex/sin-sesion-offline'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { InicioSeguroPanel, BarraDetener, RetiroBloqueos, retiroCapturado, useInicioSeguro } from '@/components/enex/inicio-seguro'
 
 function dataUrlToBlob(dataUrl: string): Blob {
   const [meta, b64] = dataUrl.split(',')
@@ -130,6 +131,11 @@ export function EjecutarServicio({ progId }: { progId: string }) {
     queryKey: ['enex-servicio', progId], queryFn: () => getPendienteOffline(progId),
     networkMode: 'always', staleTime: 10_000, enabled: !!progId,
   })
+  // [MIG735] Inicio seguro: sin visto bueno de prevención no se toca la pauta.
+  const { data: inicio, isLoading: buscandoInicio, refetch: refetchInicio } = useInicioSeguro(prog?.programacion_id)
+  const requiereInicio = !!prog && !prog.cumplida
+  const puedeTrabajar = !requiereInicio || inicio?.estado === 'aprobado' || inicio?.estado === 'cerrado'
+  const refrescarInicio = useCallback(() => { void refetchInicio() }, [refetchInicio])
   const { data: items = [], isLoading } = useQuery({
     queryKey: ['enex-pauta-items', prog?.pauta_id], queryFn: () => getPautaItemsOffline(prog!.pauta_id!),
     enabled: !!prog?.pauta_id, networkMode: 'always',
@@ -381,13 +387,15 @@ export function EjecutarServicio({ progId }: { progId: string }) {
   }, [items, filtroActivo, codigosPlan])
 
   const upd = useCallback((id: string, patch: Partial<Estado>) => {
+    if (!puedeTrabajar) return
     arrancarCrono()
     setEstado((p) => ({ ...p, [id]: { ...vacio(), ...p[id], ...patch } }))
-  }, [arrancarCrono])
+  }, [arrancarCrono, puedeTrabajar])
 
   // Las fotos se guardan en el teléfono apenas se sacan: si la app se cierra,
   // no se pierden.
   const agregarFotos = async (id: string, tipo: 'antes' | 'despues', files: FileList) => {
+    if (!puedeTrabajar) return
     arrancarCrono()
     const nuevas: Foto[] = []
     for (const f of Array.from(files)) {
@@ -443,6 +451,11 @@ export function EjecutarServicio({ progId }: { progId: string }) {
   async function guardar(conFirmaMandante: boolean) {
     if (!prog) return
     if (conFirmaMandante && !firmaMand) { toast.error('Falta la firma del mandante'); return }
+    if (conFirmaMandante && inicio?.estado === 'aprobado' && inicio.bloqueos.length > 0 && !retiroCapturado(inicio)) {
+      toast.error('Falta la foto del retiro de bloqueos antes de cerrar')
+      document.querySelector('[data-testid="retiro-bloqueos"]')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      return
+    }
     if (conFirmaMandante && faltaPatente) {
       toast.error('Falta la patente del camión calibrado: anótala arriba antes de cerrar')
       window.scrollTo({ top: 0, behavior: 'smooth' })
@@ -636,6 +649,13 @@ export function EjecutarServicio({ progId }: { progId: string }) {
         </div>
       )}
 
+      {requiereInicio && inicio?.estado === 'aprobado' && <BarraDetener inicio={inicio} onCambio={refrescarInicio} />}
+
+      {!puedeTrabajar ? (
+        buscandoInicio
+          ? <div className="flex justify-center py-6"><Spinner /></div>
+          : <InicioSeguroPanel prog={prog} inicio={inicio ?? null} onCambio={refrescarInicio} />
+      ) : (<>
       <input value={otNumero} onChange={(e) => setOtNumero(e.target.value)} placeholder="N° OT (mandante)"
              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm" />
 
@@ -848,6 +868,8 @@ export function EjecutarServicio({ progId }: { progId: string }) {
         setRepuestos={(r) => { setRepuestos(r); setRepuestosListos(true) }}
       />
 
+      {requiereInicio && inicio?.estado === 'aprobado' && <RetiroBloqueos inicio={inicio} onCambio={refrescarInicio} />}
+
       {/* Firmas */}
       <div className="rounded-xl border border-gray-200 bg-white p-3 space-y-3">
         <SignaturePad label="Firma del técnico" onCapture={setFirmaTec} />
@@ -874,6 +896,7 @@ export function EjecutarServicio({ progId }: { progId: string }) {
           </Button>
         </div>
       </div>
+      </>)}
     </div>
   )
 }

@@ -25,6 +25,8 @@ import { BotonSalir } from '@/components/layout/boton-salir'
 import { SinSesionOffline } from '@/components/enex/sin-sesion-offline'
 import { BandejaPorEnviar } from '@/components/enex/bandeja-por-enviar'
 import { ListoSinSenal } from '@/components/enex/listo-sin-senal'
+import { enviarRetirosPendientes } from '@/components/enex/inicio-seguro'
+import { soyAprobador } from '@/lib/services/inicio-seguro'
 
 const MUNDO_KEY = 'enex-mundo-supervisor'
 
@@ -54,6 +56,9 @@ export default function EnexTerrenoHome() {
   const anio = periodo?.anio ?? 0
   const mes = periodo?.mes ?? 1
   const online = useNetworkStatus()
+  // [MIG735] Retiros de bloqueo fotografiados sin señal: se mandan al volver la señal.
+  useEffect(() => { if (online) void enviarRetirosPendientes() }, [online])
+  const { data: aprobador = false } = useQuery({ queryKey: ['inicio-seguro-aprobador'], queryFn: soyAprobador, enabled: online, staleTime: 30 * 60_000 })
   const [descargaMsg, setDescargaMsg] = useState('')
 
   // Mundo del supervisor (combustible / lubricantes). [MIG648] Lo fija la
@@ -272,6 +277,14 @@ export default function EnexTerrenoHome() {
         <span className="flex-1">Copiloto Prevención · ART, charla 5 min, ¿puede subir?</span>
         <ChevronRight className="h-4 w-4 shrink-0" aria-hidden="true" />
       </Link>
+
+      {aprobador && (
+        <Link href="/m/inicio-seguro/" className="flex min-h-11 items-center gap-2 rounded-xl border border-blue-300 bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-800">
+          <ShieldCheck className="h-4 w-4 shrink-0" aria-hidden="true" />
+          <span className="flex-1">Inicio seguro · dar visto bueno</span>
+          <ChevronRight className="h-4 w-4 shrink-0" aria-hidden="true" />
+        </Link>
+      )}
 
       {/* Estado de conexión / cola */}
       <div className={`flex items-center gap-2 rounded-lg border p-2 text-xs ${online ? 'border-green-200 bg-green-50 text-green-700' : 'border-amber-300 bg-amber-50 text-amber-800'}`}>

@@ -35,6 +35,23 @@ function servidorEnex(fake: FakeSupabase) {
     if (!ya) db.tablas.ejecuciones_enex.push({ client_uuid: a.p_client_uuid, items: a.p_items, firma: a.p_firma_mandante_url, firmante: a.p_firmante_mandante })
     return { success: true, ejecucion_id: 'ej-enex-1', estado: 'cumplida' }
   }
+  // [MIG735] Estos casos prueban la pauta: el inicio seguro ya tiene visto bueno.
+  fake.rpcs.rpc_inicio_seguro_estado = () => INICIO_APROBADO
+}
+
+const INICIO_APROBADO = {
+  id: 'is-1', client_uuid: 'c0000000-0000-4000-8000-0000000000f1', programacion_id: PROG, tarea: 'Mantención',
+  cuadrilla: [], art: {}, psgcc: [], bloqueos: [], sin_bloqueo_motivo: 'Solo inspección visual', estado: 'aprobado',
+  solicitado_at: new Date().toISOString(), decidido_at: new Date().toISOString(), decidido_por_nombre: 'Prevencionista Prueba',
+  comentario: null, detenido_motivo: null, escalado_at: null, minutos_escalamiento: 10,
+}
+
+/** Sin señal la app lee el visto bueno guardado en el teléfono. */
+async function inicioAprobadoEnTelefono(page: Page) {
+  await page.addInitScript(([prog, v]) => {
+    const hoy = new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Santiago' })
+    localStorage.setItem(`inicio-seguro-estado:${prog}:${hoy}`, v)
+  }, [PROG, JSON.stringify(INICIO_APROBADO)] as const)
 }
 
 /** Abre (si hace falta) la actividad y la marca OK. Bloque y actividad pueden venir abiertos. */
@@ -60,6 +77,7 @@ async function firmar(page: Page, n: number) {
 
 test('ENEX: servicio completo en modo avión (fotos antes/después + firma) y sube una vez', async ({ page, modoAvion, conSesion, fake, erroresJs }) => {
   servidorEnex(fake)
+  await inicioAprobadoEnTelefono(page)
   await conSesion()
   await prepararSinSenal(page, '/m/enex/')
   await expect(page.getByText(/disponibles sin internet|listo para trabajar sin señal/)).toBeVisible({ timeout: 30_000 })
