@@ -420,6 +420,10 @@ const navGroups: NavGroup[] = [
     label: 'Compliance',
     items: [
       { label: 'Prevención', href: '/dashboard/prevencion', icon: HardHat, module: 'prevencion' },
+      // [MIG734] Copiloto IA de prevención para Centinela: RECSS, EDC, Lecciones
+      // Aprendidas y el control documental del trabajador (solo lectura).
+      { label: 'Copiloto Prevención', href: '/dashboard/prevencion/copiloto', icon: Bot, module: 'prevencion', badge: 'Nuevo',
+        tooltip: 'IA de prevención para Centinela: ART de la tarea, charla de 5 min y ¿puede subir este trabajador?' },
       // [MIG546] El repositorio que pidió prevención: los supervisores cargan
       // sus RIT/VAT/VCT con evidencia y el consolidado mensual (informe GRP,
       // E-200) sale solo, en vez de pedirse por correo a cada supervisor.

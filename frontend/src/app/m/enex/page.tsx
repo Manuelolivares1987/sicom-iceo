@@ -9,7 +9,7 @@ import { useQuery } from '@tanstack/react-query'
 import {
   Building2, ChevronRight, ChevronLeft, CheckCircle2, Clock, RefreshCw, AlertTriangle,
   WifiOff, CloudOff, Fuel, Droplets, Repeat, Check, CalendarDays, Sun,
-  ClipboardList, Shuffle, Ban,
+  ClipboardList, Shuffle, Ban, ShieldCheck,
 } from 'lucide-react'
 import { Spinner } from '@/components/ui/spinner'
 import {
@@ -265,6 +265,13 @@ export default function EnexTerrenoHome() {
           )
         })}
       </div>
+
+      {/* [MIG734] Copiloto IA de prevención: ART, charla y ¿puede subir? antes de ejecutar. */}
+      <Link href="/m/copiloto-sso/" className="flex min-h-11 items-center gap-2 rounded-xl border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-800">
+        <ShieldCheck className="h-4 w-4 shrink-0" aria-hidden="true" />
+        <span className="flex-1">Copiloto Prevención · ART, charla 5 min, ¿puede subir?</span>
+        <ChevronRight className="h-4 w-4 shrink-0" aria-hidden="true" />
+      </Link>
 
       {/* Estado de conexión / cola */}
       <div className={`flex items-center gap-2 rounded-lg border p-2 text-xs ${online ? 'border-green-200 bg-green-50 text-green-700' : 'border-amber-300 bg-amber-50 text-amber-800'}`}>
