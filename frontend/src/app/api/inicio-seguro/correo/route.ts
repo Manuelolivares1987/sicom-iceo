@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { sendMail, parseRecipients, mailerConfigured } from '@/lib/email/mailer'
+import { nombreEnergia } from '@/lib/inicio-seguro/psgcc'
 import { emailShell, seccionTitulo, MARCA } from '@/lib/email/plantilla'
 
 export const runtime = 'nodejs'
@@ -76,7 +77,7 @@ export async function POST(req: Request) {
     lista(f.cuadrilla.map((c) => `${esc(c.nombre)}${c.habilitado ? '' : ` — <span style="color:${MARCA.ambar}">aviso: falta ${esc(c.pendientes.join(', ') || 'requisito')}</span>`}`)),
     seccionTitulo('Bloqueos', MARCA.verdeOscuro, MARCA.verdeClaro),
     f.bloqueos.length
-      ? lista(f.bloqueos.map((b) => `${esc(b.energia)} · ${esc(b.punto)} — <a href="${esc(b.foto_bloqueo)}">foto bloqueo</a> · <a href="${esc(b.foto_energia_cero)}">foto energía cero</a>`))
+      ? lista(f.bloqueos.map((b) => `${esc(nombreEnergia(b.energia))} · ${esc(b.punto)} — <a href="${esc(b.foto_bloqueo)}">foto bloqueo</a> · <a href="${esc(b.foto_energia_cero)}">foto energía cero</a>`))
       : `<p>Sin bloqueo: ${esc(f.sin_bloqueo_motivo)}</p>`,
     `<p style="color:#555">${f.psgcc.length} controles críticos verificados.</p>`,
   ].join('')

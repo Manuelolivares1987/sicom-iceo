@@ -79,3 +79,5 @@ export const ENERGIAS = [
   { id: 'combustible', nombre: 'Combustible (válvula)' },
   { id: 'neumatica', nombre: 'Neumática' },
 ] as const
+
+export const nombreEnergia = (id: string) => ENERGIAS.find((e) => e.id === id)?.nombre ?? id

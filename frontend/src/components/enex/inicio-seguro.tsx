@@ -88,17 +88,17 @@ function FotoBoton({ blobId, etiqueta, onFoto, onQuitar }: {
   if (blobId && url) return (
     <div className="relative">
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={url} alt={etiqueta} className="h-24 w-full rounded-lg object-cover" />
+      <img src={url} alt={etiqueta} width={320} height={96} className="h-24 w-full rounded-lg object-cover" />
       <span className="absolute left-1 top-1 rounded bg-black/60 px-1 text-[10px] text-white">{etiqueta}</span>
       <button type="button" onClick={onQuitar} aria-label={`Quitar foto ${etiqueta}`}
               className="absolute right-1 top-1 inline-flex h-8 w-8 items-center justify-center rounded-full bg-white/90 text-red-600">
-        <Trash2 className="h-4 w-4" />
+        <Trash2 className="h-4 w-4" aria-hidden="true" />
       </button>
     </div>
   )
   return (
     <label className="flex h-24 cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed border-amber-400 bg-amber-50 text-center text-[11px] font-semibold text-amber-800">
-      <Camera className="h-5 w-5" /> {etiqueta}
+      <Camera className="h-5 w-5" aria-hidden="true" /> {etiqueta}
       <input type="file" accept="image/*" capture="environment" className="sr-only"
              onChange={(e) => { const f = e.target.files?.[0]; if (f) onFoto(f); e.target.value = '' }} />
     </label>
@@ -232,7 +232,7 @@ export function InicioSeguroPanel({ prog, inicio, onCambio }: {
   if (pendiente && inicio) return <EsperandoVistoBueno inicio={inicio} />
   if (detenido && inicio) return (
     <div className="rounded-xl border-2 border-red-400 bg-red-50 p-3 text-sm text-red-800">
-      <p className="flex items-center gap-1.5 font-bold"><Hand className="h-5 w-5" /> Tarea DETENIDA</p>
+      <p className="flex items-center gap-1.5 font-bold"><Hand className="h-5 w-5" aria-hidden="true" /> Tarea DETENIDA</p>
       <p className="mt-1">{inicio.detenido_motivo}</p>
       <p className="mt-2 text-xs">Para retomar, corrige la condición y pide un nuevo visto bueno.</p>
       <button type="button" onClick={() => { const n = borradorVacio(); set({ ...b, clientUuid: n.clientUuid }); borrar(`inicio-seguro-estado:${prog.programacion_id}:${hoy()}`); onCambio() }}
@@ -245,7 +245,7 @@ export function InicioSeguroPanel({ prog, inicio, onCambio }: {
   return (
     <div className="space-y-3" data-testid="inicio-seguro">
       <div className="rounded-xl border-2 border-amber-400 bg-amber-50 p-3">
-        <p className="flex items-center gap-1.5 text-sm font-bold text-amber-900"><ShieldAlert className="h-5 w-5" /> Inicio seguro</p>
+        <p className="flex items-center gap-1.5 text-sm font-bold text-amber-900"><ShieldAlert className="h-5 w-5" aria-hidden="true" /> Inicio seguro</p>
         <p className="mt-1 text-xs text-amber-900">
           Antes de tocar la pauta: cuadrilla, ART, controles críticos y bloqueos con foto. Sin el visto bueno de Hersaly <b>no se inicia</b>.
         </p>
@@ -253,7 +253,7 @@ export function InicioSeguroPanel({ prog, inicio, onCambio }: {
 
       {rechazado && inicio && (
         <div className="rounded-xl border-2 border-red-300 bg-red-50 p-3 text-sm text-red-800" role="alert">
-          <p className="flex items-center gap-1.5 font-bold"><XCircle className="h-5 w-5" /> {inicio.decidido_por_nombre ?? 'Prevención'} pidió corregir</p>
+          <p className="flex items-center gap-1.5 font-bold"><XCircle className="h-5 w-5" aria-hidden="true" /> {inicio.decidido_por_nombre ?? 'Prevención'} pidió corregir</p>
           <p className="mt-1">{inicio.comentario}</p>
           {inicio.client_uuid === b.clientUuid && (
             <button type="button" onClick={() => set({ clientUuid: uuidV4() })}
@@ -265,13 +265,13 @@ export function InicioSeguroPanel({ prog, inicio, onCambio }: {
       <section className={caja}>
         <h2 className={titulo}>1. ¿Qué se va a hacer?</h2>
         <textarea value={b.tarea} onChange={(e) => set({ tarea: e.target.value })} rows={2}
-                  placeholder="Ej. Cambio de filtro en bomba 2 de sala de bombas"
+                  aria-label="Tarea a realizar" placeholder="Ej. Cambio de filtro en bomba 2 de sala de bombas…"
                   className="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
       </section>
 
       <section className={caja}>
-        <h2 className={`${titulo} flex items-center gap-1.5`}><Users className="h-4 w-4" /> 2. Cuadrilla</h2>
-        {personas.length === 0 && <p className="mt-1 text-xs text-gray-500">{online ? 'Cargando…' : 'Sin señal y sin lista guardada: ábrelo una vez con señal.'}</p>}
+        <h2 className={`${titulo} flex items-center gap-1.5`}><Users className="h-4 w-4" aria-hidden="true" /> 2. Cuadrilla</h2>
+        {personas.length === 0 && <p className="mt-1 text-xs text-gray-600">{online ? 'Cargando…' : 'Sin señal y sin lista guardada: ábrelo una vez con señal.'}</p>}
         <div className="mt-2 space-y-1">
           {personas.map((p) => {
             const sel = b.cuadrilla.includes(p.personal_id)
@@ -299,7 +299,7 @@ export function InicioSeguroPanel({ prog, inicio, onCambio }: {
 
       <section className={caja}>
         <h2 className={titulo}>3. Controles críticos (EDC Centinela)</h2>
-        <p className="text-xs text-gray-500">Marca las EDC que aplican a esta tarea.</p>
+        <p className="text-xs text-gray-600">Marca las EDC que aplican a esta tarea.</p>
         <div className="mt-2 space-y-1">
           {(Object.keys(EDC_PSGCC) as EdcId[]).map((e) => {
             const sel = b.edc.includes(e)
@@ -308,7 +308,7 @@ export function InicioSeguroPanel({ prog, inicio, onCambio }: {
                 <input type="checkbox" checked={sel} className="mt-0.5 h-5 w-5"
                        onChange={() => set({ edc: sel ? b.edc.filter((x) => x !== e) : [...b.edc, e] })} />
                 <span className="min-w-0"><span className="font-medium">{EDC_PSGCC[e].nombre}</span>
-                  <span className="block text-[11px] text-gray-500">{EDC_PSGCC[e].cuando}</span></span>
+                  <span className="block text-[11px] text-gray-600">{EDC_PSGCC[e].cuando}</span></span>
               </label>
             )
           })}
@@ -318,13 +318,13 @@ export function InicioSeguroPanel({ prog, inicio, onCambio }: {
             {controles.map((c) => (
               <li key={c.id} className={`rounded-lg border p-2 ${b.psgcc[c.id] === 'no' ? 'border-red-400 bg-red-50' : 'border-gray-200'}`}>
                 <p className="text-sm text-gray-900">{c.pregunta}</p>
-                <p className="text-[10px] text-gray-400">{c.fuente}</p>
+                <p className="text-[10px] text-gray-600">{c.fuente}</p>
                 <div className="mt-1 grid grid-cols-3 gap-1" role="radiogroup" aria-label={c.pregunta}>
                   {(['si', 'no', 'na'] as const).map((v) => (
                     <button key={v} type="button" role="radio" aria-checked={b.psgcc[c.id] === v}
                             onClick={() => set({ psgcc: { ...b.psgcc, [c.id]: v } })}
                             className={`min-h-11 rounded-lg border text-sm font-semibold ${b.psgcc[c.id] === v
-                              ? v === 'si' ? 'border-emerald-600 bg-emerald-600 text-white' : v === 'no' ? 'border-red-600 bg-red-600 text-white' : 'border-gray-600 bg-gray-600 text-white'
+                              ? v === 'si' ? 'border-emerald-600 bg-emerald-700 text-white' : v === 'no' ? 'border-red-600 bg-red-600 text-white' : 'border-gray-600 bg-gray-600 text-white'
                               : 'border-gray-300 bg-white text-gray-700'}`}>
                       {v === 'si' ? 'Sí' : v === 'no' ? 'No' : 'No aplica'}
                     </button>
@@ -346,11 +346,11 @@ export function InicioSeguroPanel({ prog, inicio, onCambio }: {
           <h2 className={titulo}>4. ART</h2>
           <button type="button" onClick={armarArt} disabled={armandoArt || !online}
                   className="inline-flex min-h-11 items-center gap-1 rounded-lg border border-emerald-400 bg-emerald-50 px-3 text-xs font-semibold text-emerald-800 disabled:opacity-40">
-            {armandoArt ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />} Armar con el copiloto
+            {armandoArt ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Sparkles className="h-4 w-4" aria-hidden="true" />} Armar con el copiloto
           </button>
         </div>
         <textarea value={b.art} onChange={(e) => set({ art: e.target.value })} rows={8}
-                  placeholder="Pasos de la tarea, riesgo de cada paso y su control"
+                  aria-label="ART" placeholder="Pasos de la tarea, riesgo de cada paso y su control…"
                   className="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
         {b.artAsistida && <p className="text-[11px] text-amber-700">Armada con el copiloto: la cuadrilla la revisa y la ajusta a lo que ve en terreno.</p>}
         {seleccion.length > 0 && (
@@ -368,14 +368,14 @@ export function InicioSeguroPanel({ prog, inicio, onCambio }: {
       </section>
 
       <section className={caja}>
-        <h2 className={`${titulo} flex items-center gap-1.5`}><Lock className="h-4 w-4" /> 5. Bloqueos y energía cero</h2>
+        <h2 className={`${titulo} flex items-center gap-1.5`}><Lock className="h-4 w-4" aria-hidden="true" /> 5. Bloqueos y energía cero</h2>
         <label className="mt-2 flex min-h-11 items-center gap-2 text-sm">
           <input type="checkbox" className="h-5 w-5" checked={b.sinBloqueo} onChange={(e) => set({ sinBloqueo: e.target.checked })} />
           Esta tarea no interviene ninguna energía
         </label>
         {b.sinBloqueo ? (
           <textarea value={b.sinBloqueoMotivo} onChange={(e) => set({ sinBloqueoMotivo: e.target.value })} rows={2}
-                    placeholder="Explica por qué no hay que bloquear (Hersaly lo revisa)"
+                    aria-label="Motivo sin bloqueo" placeholder="Explica por qué no hay que bloquear (Hersaly lo revisa)…"
                     className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
         ) : (
           <div className="mt-2 space-y-3">
@@ -387,12 +387,12 @@ export function InicioSeguroPanel({ prog, inicio, onCambio }: {
                           className="min-h-11 rounded-lg border border-gray-300 px-2 text-sm">
                     {ENERGIAS.map((en) => <option key={en.id} value={en.id}>{en.nombre}</option>)}
                   </select>
-                  <input value={x.punto} placeholder="Punto de bloqueo (ej. tablero TG-1)" aria-label="Punto de bloqueo"
+                  <input value={x.punto} placeholder="Punto de bloqueo (ej. tablero TG-1)…" aria-label="Punto de bloqueo"
                          onChange={(e) => set({ bloqueos: b.bloqueos.map((y, j) => (j === i ? { ...y, punto: e.target.value } : y)) })}
                          className="min-h-11 min-w-0 flex-1 rounded-lg border border-gray-300 px-2 text-sm" />
                   {b.bloqueos.length > 1 && (
                     <button type="button" aria-label="Quitar bloqueo" onClick={() => set({ bloqueos: b.bloqueos.filter((_, j) => j !== i) })}
-                            className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-red-600"><Trash2 className="h-4 w-4" /></button>
+                            className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-red-600"><Trash2 className="h-4 w-4" aria-hidden="true" /></button>
                   )}
                 </div>
                 <div className="mt-2 grid grid-cols-2 gap-2">
@@ -414,10 +414,10 @@ export function InicioSeguroPanel({ prog, inicio, onCambio }: {
       {faltantes.length > 0 && !algunNo && (
         <p className="text-xs text-gray-600">Falta: {faltantes.join(' · ')}</p>
       )}
-      {!online && <p className="flex items-center gap-1 text-xs text-amber-700"><WifiOff className="h-3.5 w-3.5" /> Sin señal: todo queda guardado en el teléfono. Para pedir el visto bueno hace falta señal.</p>}
+      {!online && <p className="flex items-center gap-1 text-xs text-amber-700"><WifiOff className="h-3.5 w-3.5" aria-hidden="true" /> Sin señal: todo queda guardado en el teléfono. Para pedir el visto bueno hace falta señal.</p>}
       <button type="button" onClick={enviar} disabled={enviando || algunNo || faltantes.length > 0 || (rechazado && inicio?.client_uuid === b.clientUuid)}
               className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-3 text-sm font-bold text-white disabled:opacity-40">
-        {enviando ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />} Pedir visto bueno a Hersaly
+        {enviando ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <ShieldCheck className="h-4 w-4" aria-hidden="true" />} Pedir visto bueno a Hersaly
       </button>
     </div>
   )
@@ -430,7 +430,7 @@ function EsperandoVistoBueno({ inicio }: { inicio: InicioSeguro }) {
   const mm = String(Math.floor(seg / 60)).padStart(2, '0'), ss = String(seg % 60).padStart(2, '0')
   return (
     <div className="rounded-xl border-2 border-blue-400 bg-blue-50 p-4 text-center" data-testid="inicio-seguro-esperando" role="status">
-      <Clock className="mx-auto h-8 w-8 text-blue-600" />
+      <Clock className="mx-auto h-8 w-8 text-blue-600" aria-hidden="true" />
       <p className="mt-2 text-base font-bold text-blue-900">Esperando el visto bueno de Hersaly</p>
       <p className="text-3xl font-bold tabular-nums text-blue-900">{mm}:{ss}</p>
       <p className="mt-2 text-sm font-semibold text-blue-900">NO inicies la tarea todavía.</p>
@@ -458,19 +458,19 @@ export function BarraDetener({ inicio, onCambio }: { inicio: InicioSeguro; onCam
   return (
     <>
       <div className="flex items-center gap-2 rounded-xl border border-emerald-300 bg-emerald-50 p-2 text-xs text-emerald-900">
-        <ShieldCheck className="h-4 w-4 shrink-0" />
+        <ShieldCheck className="h-4 w-4 shrink-0" aria-hidden="true" />
         <span className="min-w-0 flex-1">Visto bueno de {inicio.decidido_por_nombre ?? 'prevención'}{inicio.comentario ? ` · «${inicio.comentario}»` : ''}</span>
         <button type="button" onClick={() => setAbierto(true)}
                 className="inline-flex min-h-11 shrink-0 items-center gap-1 rounded-lg bg-red-600 px-3 text-sm font-bold text-white">
-          <Hand className="h-4 w-4" /> Detener tarea
+          <Hand className="h-4 w-4" aria-hidden="true" /> Detener tarea
         </button>
       </div>
       <dialog ref={ref} onClose={() => setAbierto(false)} className="w-[min(100%-2rem,28rem)] rounded-xl p-0 backdrop:bg-black/50">
         <div className="space-y-3 p-4">
           <p className="text-base font-bold text-red-700">Detener la tarea</p>
           <p className="text-sm text-gray-700">Cualquier persona puede detener si ve un control crítico que falla o una condición insegura.</p>
-          <textarea value={motivo} onChange={(e) => setMotivo(e.target.value)} rows={3} autoFocus
-                    placeholder="¿Qué condición viste?" className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
+          <textarea value={motivo} onChange={(e) => setMotivo(e.target.value)} rows={3} 
+                    aria-label="Motivo de la detención" placeholder="¿Qué condición viste?…" className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
           <div className="grid grid-cols-2 gap-2">
             <button type="button" onClick={() => setAbierto(false)} className="min-h-11 rounded-lg border border-gray-300 text-sm font-semibold">Cancelar</button>
             <button type="button" onClick={detener} disabled={enviando} className="min-h-11 rounded-lg bg-red-600 text-sm font-bold text-white disabled:opacity-40">
@@ -509,8 +509,8 @@ export function RetiroBloqueos({ inicio, onCambio }: { inicio: InicioSeguro; onC
   if (inicio.bloqueos.length === 0) return null
   return (
     <section className="rounded-xl border-2 border-gray-300 bg-white p-3" data-testid="retiro-bloqueos">
-      <h2 className="flex items-center gap-1.5 text-sm font-bold text-gray-900"><LockOpen className="h-4 w-4" /> Retiro de bloqueos</h2>
-      <p className="text-xs text-gray-500">Al terminar, foto de cada punto ya liberado (sin candado ni tarjeta). Es obligatorio para cerrar.</p>
+      <h2 className="flex items-center gap-1.5 text-sm font-bold text-gray-900"><LockOpen className="h-4 w-4" aria-hidden="true" /> Retiro de bloqueos</h2>
+      <p className="text-xs text-gray-600">Al terminar, foto de cada punto ya liberado (sin candado ni tarjeta). Es obligatorio para cerrar.</p>
       <div className="mt-2 grid grid-cols-2 gap-2">
         {inicio.bloqueos.map((x, i) => (
           <div key={i}>
@@ -523,7 +523,7 @@ export function RetiroBloqueos({ inicio, onCambio }: { inicio: InicioSeguro; onC
       </div>
       <button type="button" onClick={enviar} disabled={!completo || enviando || !online}
               className="mt-2 flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-gray-900 text-sm font-semibold text-white disabled:opacity-40">
-        {enviando ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+        {enviando ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <CheckCircle2 className="h-4 w-4" aria-hidden="true" />}
         {online ? 'Registrar retiro de bloqueos' : 'Sin señal: se registra cuando haya'}
       </button>
     </section>

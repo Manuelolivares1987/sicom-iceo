@@ -100,7 +100,7 @@ test('Inicio seguro: sin visto bueno no se ve la pauta; con visto bueno aparece 
   await expect(page.getByTestId('inicio-seguro')).toHaveCount(0)
 
   await page.getByRole('button', { name: /Detener tarea/ }).click()
-  await page.getByPlaceholder('¿Qué condición viste?').fill('Manómetro no marca cero')
+  await page.getByLabel('Motivo de la detención').fill('Manómetro no marca cero')
   await page.getByRole('button', { name: 'Detener', exact: true }).click()
   await expect(page.getByText('Tarea DETENIDA', { exact: true })).toBeVisible()
   await expect.poll(() => correos).toContain('detencion')
