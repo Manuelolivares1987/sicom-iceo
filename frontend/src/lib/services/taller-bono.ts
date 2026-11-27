@@ -176,6 +176,13 @@ export type BonoTrabajoExcel = {
   aviso: string | null
 }
 
+/** [MIG732] Los parámetros con que se calculó el corte: alimentan las fórmulas del Excel. */
+export async function getParametrosExcel(desde: string, hasta: string) {
+  const { data, error } = await supabase.rpc('rpc_taller_bono_parametros_excel', { p_desde: desde, p_hasta: hasta })
+  if (error) throw new Error(error.message)
+  return data as import('@/lib/export/bono-trabajos-excel').ParametrosBonoExcel
+}
+
 export async function getTrabajosExcel(desde: string, hasta: string) {
   const { data, error } = await supabase.rpc('rpc_taller_bono_trabajos_excel', {
     p_desde: desde, p_hasta: hasta,
