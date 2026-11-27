@@ -591,7 +591,7 @@ export function EjecutarServicio({ progId }: { progId: string }) {
               <div className="h-full bg-blue-500 transition-all"
                    style={{ width: `${items.length ? Math.round((trabajadas.length / items.length) * 100) : 0}%` }} />
             </div>
-            <p className="mt-1 flex items-center gap-1 text-[10px] text-gray-400">
+            <p className="mt-1 flex items-center gap-1 text-[10px] text-gray-600">
               <Save className="h-3 w-3" />
               {borradorAt
                 ? `guardado en el teléfono ${new Date(borradorAt).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })}`
