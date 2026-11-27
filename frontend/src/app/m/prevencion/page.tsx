@@ -217,6 +217,19 @@ export default function PrevencionMobileHome() {
           </button>
         )}
 
+        {/* [MIG734] Copiloto IA de prevención para Centinela. */}
+        <Link href="/m/copiloto-sso/"
+              className="flex w-full items-center gap-3 rounded-xl border-2 border-emerald-600 bg-white p-4 active:scale-[0.99]">
+          <div className="grid h-12 w-12 shrink-0 place-items-center rounded-lg bg-emerald-600 text-white">
+            <ShieldCheck className="h-6 w-6" aria-hidden="true" />
+          </div>
+          <div className="min-w-0 flex-1 text-left">
+            <p className="text-base font-bold text-gray-900">Copiloto Prevención</p>
+            <p className="text-xs text-gray-500">ART de la tarea, charla 5 min, ¿puede subir?</p>
+          </div>
+          <ChevronRight className="h-5 w-5 shrink-0 text-gray-400" aria-hidden="true" />
+        </Link>
+
         {/* [MIG687] Entrega de EPP con firma del trabajador. */}
         {puedeCrear && (
           <Link href="/m/prevencion/epp"
